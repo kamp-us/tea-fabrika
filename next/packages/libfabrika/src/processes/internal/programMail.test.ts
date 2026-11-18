@@ -118,6 +118,7 @@ describe("P41 slice 1: program mail rules", () => {
     // T1041: a `full` with no count, or a `storage` or refusal with one, is not a value of the type,
     // so no reader of a full failure falls back to a guessed count.
     type Failure = typeof MailFailure.Type;
+
     // The error's reason is a MailFailure case, and the error keeps no count beside it.
     expectTypeOf<ProgramMailError["reason"]>().toEqualTypeOf<Failure>();
     expectTypeOf<ProgramMailError>().not.toHaveProperty("unread");

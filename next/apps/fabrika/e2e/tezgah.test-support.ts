@@ -95,6 +95,7 @@ const Opened = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: Vi
 export const tezgahPid = (r: Reader) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${tezgahName(PERSON)}`);
+
     const started = Arr.flatMap(entries, (e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
@@ -216,11 +217,13 @@ export const differences = (view: TezgahView, d: Drawn): ReadonlyArray<string> =
   }
 
   const byId = new Map(Arr.map(view.tiles, (t) => [t.id, t]));
+
   const named = (id: TileId) => {
     const tile = byId.get(id);
 
     return tile === undefined ? `a tile tezgah does not list (${id})` : regionName(tile);
   };
+
   const want = Arr.map(Layout.order(space.layout), named);
   const out: Array<string> = [];
 
@@ -288,6 +291,7 @@ export const settle = (
 
       if (wrong.length === 0 || tries >= 120) {
         expect(wrong, `${label}: ${Formatter.format(view)}`).toEqual([]);
+
         return view;
       }
 
@@ -298,6 +302,7 @@ export const settle = (
 /** The tiles of workspace 1 in reading order. */
 export const shown = (view: TezgahView): ReadonlyArray<Tile> => {
   const space = Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === WORKSPACE));
+
   return space === undefined
     ? []
     : Arr.flatMap(Layout.order(space.layout), (id) => Arr.filter(view.tiles, (t) => t.id === id));
@@ -339,6 +344,7 @@ export const shoot = (page: Page, state: string, layout: Shot) =>
 export const processId = (r: Reader, name: string) =>
   Effect.gen(function* () {
     const entries = yield* r.read(`processes/${name}`);
+
     const started = Arr.flatMap(entries, (e) => {
       const decoded = Schema.decodeUnknownOption(Started)(e);
 
@@ -381,6 +387,7 @@ export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: s
 
       if (check(f) || tries >= 120) {
         expect(check(f), `${label}: DOM focus is ${Formatter.format(f)}`).toBe(true);
+
         return f;
       }
 
@@ -404,6 +411,7 @@ export type FoldDrawn = Drawn & { readonly strips: ReadonlyArray<{ readonly name
 export const foldDrawn = (page: Page): Effect.Effect<FoldDrawn> =>
   Effect.gen(function* () {
     const d = yield* drawn(page);
+
     const strips = yield* parts(
       page
         .getByRole("main")
@@ -446,9 +454,11 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
     const has = left - Arr.filter(fixed, (f) => f).length * STRIP_ACROSS[node.dir];
     const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] === true ? sum : sum + p.percent));
     const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(space.focus));
+
     let shares = Arr.map(node.parts, (p, i) =>
       fixed[i] === true ? STRIP_ACROSS[node.dir] : (has * p.percent) / total,
     );
+
     const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
     if (Option.isSome(lead) && (shares[lead.value] ?? 0) < least) {
@@ -509,6 +519,7 @@ export const stripsHere = (view: TezgahView, main: Box): ReadonlyArray<Tile> => 
 
   for (;;) {
     const { boxes } = foldRule(space, padded(main), strips);
+
     const due = Arr.filter(
       [...boxes],
       ([t, r]) => !strips.has(t) && t !== space.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height),
@@ -581,6 +592,7 @@ export const foldDifferences = (view: TezgahView, d: FoldDrawn): ReadonlyArray<s
 
   const rule = foldRule(space, padded(d.main), new Set(Arr.map(strips, (t) => t.id)));
   const banded = new Set(Arr.flatMap(rule.bands, (b) => b.tiles));
+
   const boxFor = (t: Tile) =>
     (strips.includes(t)
       ? Option.getOrUndefined(Arr.findFirst(d.strips, (s) => s.name === stripName(t)))
@@ -662,6 +674,7 @@ export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
       const bar = document.querySelector(".statusbar");
+
       const tiles = Object.fromEntries(
         [...document.querySelectorAll("main [data-tile], main [data-strip]")].map((el) => {
           const box = el.getBoundingClientRect();
@@ -728,6 +741,7 @@ export const foldSettle = (
 
       if (wrong.length === 0 || tries >= 120) {
         expect(wrong, `${label}: ${Formatter.format(view)} ${Formatter.format(d)}`).toEqual([]);
+
         return { view, d };
       }
 

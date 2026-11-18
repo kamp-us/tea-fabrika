@@ -117,7 +117,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // after, so every other run keeps it. Only depth, SHARD and FILTER belong here: a CHANGED would
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
-    "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
+    "needs.changes.outputs.files||needs.changes.outputs.filter||'next/ kalfa/'", "next's vitest step takes changes' files, else filter, with the fallback next/ kalfa/");
   require(JSON.stringify(Rec.keys(map(testStep?.["env"])).toSorted()) ===
     JSON.stringify([
       "FABRIKA_TEST_DEPTH",

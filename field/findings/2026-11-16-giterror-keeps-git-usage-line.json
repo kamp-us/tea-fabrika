@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-giterror-keeps-git-usage-line",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/git/GitProcess.ts",
+    "line": 20
+  },
+  "says": "In our tooling, the shared Git service's real layer records only the last line of git's output as a GitError's reason, and for git's common fatal errors that line is a usage hint, so the error loses why git refused.",
+  "proof": "On fabrikalfa/port-0113-s02 at 8b7a8b2, `node .agents/skills/lead/scripts/governance.ts no-such-ref` exits 1 and prints `governance: git diff: exited 128: 'git <command> [<revision>...] -- [<file>...]'`. git's own stderr for that call starts with `fatal: ambiguous argument 'no-such-ref...HEAD': unknown revision or path not in the working tree.`, which the reason drops. GitProcess.ts line 20 builds the reason from `lastLine(ran)` (pr/command.ts line 10, the last non-empty line of stdout and stderr).",
+  "cost": "Every later port on Git (plan slices S5 and S9 to S14) reports a refused git call with a usage hint in place of the cause, so a person or the lead re-runs git by hand to learn why.",
+  "head": "8b7a8b24d3269a34940cc57e66a2e1bd2bf57562",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null
+}

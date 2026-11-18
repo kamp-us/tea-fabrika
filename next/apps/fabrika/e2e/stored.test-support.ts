@@ -105,6 +105,7 @@ const scan = (
 
         for (const { name } of tables) {
           const table = `"${pipe(name, Str.replaceAll('"', '""'))}"`;
+
           const keys = Arr.map(
             Arr.filter(
               Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
@@ -129,6 +130,7 @@ const scan = (
                   : value,
               ]),
             );
+
             const key =
               keys.length === 0
                 ? `row ${at}`
@@ -136,6 +138,7 @@ const scan = (
                     Arr.map(keys, (column) => String(row[column])),
                     " ",
                   )}`;
+
             let cells = row;
 
             if (

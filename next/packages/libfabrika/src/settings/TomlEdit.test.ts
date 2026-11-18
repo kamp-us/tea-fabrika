@@ -2,6 +2,10 @@
 // values come from Effect Schema. The model never reads the adapter's edit index.
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
+import * as Codec from "@kalfa/config/Codec";
+import * as Files from "@kalfa/config/Files";
+import { Toml, TomlError } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { runsFor } from "@kampus/vitest";
 import * as ByteSize from "effect/ByteSize";
 import * as DateTime from "effect/DateTime";
@@ -15,12 +19,8 @@ import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as fc from "fast-check";
-import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import { Toml, TomlError } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const check = { arbitrary: { seed: 119120, runs: 100 }, timeout: 30000 };
 
@@ -98,6 +98,7 @@ const freezeAll = (value: unknown): void => {
 const frozen = <A>(value: A): A => {
   const copy = structuredClone(value);
   freezeAll(copy);
+
   return copy;
 };
 
@@ -250,6 +251,7 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, T
 
 // The keys a walk down a path must read as own keys: each one names a member every object inherits.
 const hostile = ["__proto__", "constructor", "toString"] as const;
+
 const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
 
 // What a write through an inherited key would land on: the prototype, its constructor and its
@@ -365,6 +367,7 @@ describe("T877 public TOML edits, next/", () => {
               .slice(0, slot)
               .reduce((n, s, j) => n + s.prefix.length + s.token.length + s.suffix.length + endings[j]!.length, 0) +
             current.prefix.length;
+
           const head = Str.slice(0, at)(text);
           const tail = Str.slice(at + current.token.length)(text);
           const value = frozen(values[i % values.length]!);
@@ -528,6 +531,7 @@ describe("T877 public TOML edits, next/", () => {
 
           if (path.length === 1 && (l.style === "explicit" || l.style === "implicit")) {
             const inserted = (yield* toml.parse(next)).spans.find((s) => same(s.path, path))!;
+
             const commentLine = Str.split(
               Str.slice(
                 0,
@@ -535,6 +539,7 @@ describe("T877 public TOML edits, next/", () => {
               )(next),
               /\r?\n/,
             ).length;
+
             expect(inserted.line).toBeLessThan(commentLine);
           }
 

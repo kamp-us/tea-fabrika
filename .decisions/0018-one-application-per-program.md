@@ -1,7 +1,7 @@
 ---
 id: 0018
 title: Each program in next/ is its own OTP application, so one program past its restart limit stops alone, never the others
-status: amended-in-part by [0020](0020-programs-get-hard-walls.md)
+status: accepted
 date: 2026-11-09
 tags: [supervision, otp, coordination, tier-1, next, restart, application, isolation]
 ---
@@ -40,12 +40,8 @@ flowchart TD
 
 The single root is gone. A crash loop in `counter` stops `counter` and nothing else.
 
-> Amended in part by [0020](0020-programs-get-hard-walls.md): each program's supervisor lives in
-> its own object, and isolation has hard walls (quotas, a CPU limit per isolate) on top of code.
-> The rest of this file holds.
-
 ```ts
-// Sketch, next/. One application per program, under the brain.
+// Sketch, next/. One application per program, under the brain. Its supervisor is an object of its own.
 const counter = {
 	application: "counter",
 	type: "temporary", // OTP's default type: its stop is reported, no other application ends
@@ -74,10 +70,10 @@ terminated" ([`application`](https://www.erlang.org/doc/apps/kernel/application.
 which a supervisor giving up does. Here the brain is the node.
 
 This amends part of 0016: its "one root supervisor per brain, its children the brain's named
-programs" and "the root stops its children and then itself" now read per program. The rest of
-0016 holds: `one_for_one`, child specs with restart types, a restart at once with no backoff,
-`failed` with no `until`, only a person's `[Restart]`, and every difference from OTP written with
-its reason.
+programs" and "the root stops its children and then itself" now read per program.
+
+[0020](0020-programs-get-hard-walls.md) later decided where each program's supervisor lives and
+added hard walls to the isolation this record asks for.
 
 ## Decision
 
@@ -87,7 +83,9 @@ brain (owner, 2026-11-09).**
 - The brain is the node. It runs one application per program and has no supervisor of its own
   over them whose failure stops every program.
 - A program's top-level supervisor has 0016's shape: `one_for_one`, child specs with
-  `permanent`, `transient` or `temporary`, intensity and period, a restart at once.
+  `permanent`, `transient` or `temporary`, intensity and period, and the restart policy 0016 gives.
+- Each program's supervisor lives in a supervisor object of its own, not in the project object
+  ([0020](0020-programs-get-hard-walls.md)).
 - Its children are the names that program runs. Its restart count is its own; another program's
   crashes never count toward it.
 - Past intensity, that supervisor stops its own children in reverse start order, then itself. That
@@ -102,6 +100,8 @@ brain (owner, 2026-11-09).**
   crash loop or stop may block, slow to a stop, or stop any other program (owner, 2026-11-09).
 - No supervisor, count, lock or queue in `next/` is shared across programs in a way that lets one
   program's failure reach another. A shared piece that could needs a written reason the owner reads.
+- Isolation has hard walls on top of code and laws: quotas per program, a supervisor object of its
+  own and a CPU limit per isolate ([0020](0020-programs-get-hard-walls.md)).
 - No later slice adds isolation. A version without it is not a smaller first slice; it is the
   wrong design.
 
@@ -118,10 +118,8 @@ brain (owner, 2026-11-09).**
   from the best known design, not a cut-down one.
 - One program's broken build now costs that program and one ask. The person's other windows keep
   working.
-- Not decided here: where each program's supervisor lives (the project object, as 0016 says for
-  the root, or elsewhere), so long as one program's failure cannot reach another; whether two
-  names of one program share one application or get one each; the numbers. P34c's plan proposes
-  them.
+- Not decided here: whether two names of one program share one application or get one each; the
+  numbers. P34c's plan proposes them.
 - [`docs/direction/follows/otp.md`](../docs/direction/follows/otp.md) gains an "Applications"
   row ([0017](0017-each-model-we-follow-has-one-table.md)).
 

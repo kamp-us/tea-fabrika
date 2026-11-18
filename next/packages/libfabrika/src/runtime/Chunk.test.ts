@@ -27,7 +27,7 @@ const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value)
 
 /** The bytes one item takes alone in a chunk of this send at `seq`. */
 const alone = (send: { readonly id: string; readonly type: string }, item: Schema.Json, seq: number, last: boolean) =>
-  bytes({ type: send.type, items: [item], part: { id: send.id, seq, last } });
+  bytes(Chunk.input(send.type, Schema.Json).make({ items: [item], part: { id: send.id, seq, last } }));
 
 /** Items as programs send them: mostly small JSON, and some rows near a chunk's size. */
 const Fits = fc.oneof(
@@ -68,6 +68,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
     fc.assert(
       fc.property(Send, Size, (send, size) => {
         const answer = Chunk.cut(send, size);
+
         // Too big even with the least a part can add: seq 0 and the shorter `last` word.
         const tooBig = Option.getOrElse(
           Arr.findFirstIndex(send.items, (item) => alone(send, item, 0, true) > size),
@@ -103,7 +104,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
 
         for (const [n, chunk] of chunks.entries()) {
           expect(bytes(chunk), `chunk ${n}'s encoded JSON is at most ${size} bytes`).toBeLessThanOrEqual(size);
-          expect(chunk.type, "each chunk is the reader's input type").toBe(send.type);
+          expect(chunk._tag, "each chunk is the reader's input type").toBe(send.type);
           expect(chunk.part.id, "each chunk carries the send's id").toBe(send.id);
           expect(chunk.part.seq, "seqs run 0 to n-1").toBe(n);
           expect(chunk.part.last, "last is on the final chunk only").toBe(n === chunks.length - 1);
@@ -120,7 +121,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
 
         if (send.items.length === 0) {
           expect(chunks, "an empty list is one chunk with no items").toEqual([
-            { type: send.type, items: [], part: { id: send.id, seq: 0, last: true } },
+            Chunk.input(send.type, Schema.Json).make({ items: [], part: { id: send.id, seq: 0, last: true } }),
           ]);
         }
       }),

@@ -38,6 +38,15 @@ import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  dec: {},
+  inc: {},
+  unknown: {},
+});
+
 /** One step on the real disk, through Effect's FileSystem and Path. */
 const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
   Effect.runPromise(
@@ -111,7 +120,7 @@ it(
             yield* first.call("process.send", {
               pid,
               letter: `progress_${n}`,
-              m: { type: "add", name: item },
+              m: { ...Tag.cases.add.make({}), name: item },
               sentAt: SENT,
               seen: 0,
             }),
@@ -473,10 +482,12 @@ const read = async (client: Client, stream: string, after = 0): Promise<Readonly
 
 const counter = async (c: Client) => {
   const rows = await read(c, "processes/counter:1");
+
   // SAFETY: a `started` row's body is the start record, whose `name` is the process's name.
   const started = Option.getOrUndefined(
     Arr.findLast(rows, (r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1"),
   );
+
   expect(started, "instance must start the real counter:1").toBeDefined();
   // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
   expect(started!.body).toMatchObject({ program: "fabrika/counter" });
@@ -485,7 +496,7 @@ const counter = async (c: Client) => {
   return (started!.body as { process: string }).process;
 };
 
-const send = (c: Client, pid: string, letter: string, m: Schema.Json = { type: "inc" }, seen = 0) =>
+const send = (c: Client, pid: string, letter: string, m: Schema.Json = Tag.cases.inc.make({}), seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
 const ratePolicy = { limit: 4, window: 1000 };
@@ -527,6 +538,7 @@ const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: strin
 
     if (refused !== undefined) {
       const last = Arr.reduce(calls, refused, (last, call) => (call.replied > last.replied ? call : last));
+
       return { allowed, refused, last };
     }
   }
@@ -746,6 +758,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
     while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
       const rows = await read(c, stream, seen);
       tags.push(...Arr.map(rows, (row) => row._tag));
+
       // SAFETY: a `restarted` row's body (ProcessEvent in libfabrika's processes/internal/processTable.ts) names the process it came `after`.
       const hit = Option.getOrUndefined(
         Arr.findFirst(rows, (row) => row._tag === "restarted" && (row.body as { after?: string }).after === after),
@@ -792,6 +805,7 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
     const first = await instance(),
       c = await connected(first);
+
     const starts = Arr.filter(await read(c, "gateway/brain"), (row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
@@ -799,6 +813,7 @@ describe("P12 real dev.ts wire", () => {
 
     const second = await instance(first),
       reopened = await connected(second, "reopened");
+
     const now = Arr.filter(await read(reopened, "gateway/brain"), (row) => row._tag === "started");
     expect(now).toHaveLength(2);
     // SAFETY: starts holds only `started` rows, whose body names its `start`.
@@ -811,7 +826,7 @@ describe("P12 real dev.ts wire", () => {
 
     const first = placing(await send(c, pid, "once"));
     expect(placing(await send(c, pid, "once"))).toEqual(first);
-    const changed = await send(c, pid, "once", { type: "dec" });
+    const changed = await send(c, pid, "once", Tag.cases.dec.make({}));
     expect(changed.error?.data?.reason ?? changed.result?.reason).toBe("id_reused");
     const rows = await read(c, "counter:1/inbox");
     expect(rows).toHaveLength(1);
@@ -901,7 +916,7 @@ describe("P12 real dev.ts wire", () => {
     const first = placing(await send(c, pid, "before-wait"));
     const waiting = c.call("ledger.wait", { stream: "counter:1/inbox", after: first.rev });
     await other.call("ledger.read", { stream: "counter:1/inbox", after: 0 });
-    expect(await send(other, pid, "bad-wait", { type: "unknown" })).toMatchObject({
+    expect(await send(other, pid, "bad-wait", Tag.cases.unknown.make({}))).toMatchObject({
       result: { _tag: "refused" },
     });
     expect(placing(await send(other, pid, "before-wait"))).toEqual(first);
@@ -918,9 +933,11 @@ describe("P12 real dev.ts wire", () => {
       pid = await counter(a);
 
     expect(await view(a, pid)).toEqual({ rev: 0, view: { count: 0 } });
+
     const replies = await Promise.all(
       Array.from({ length: 12 }, (_, n) => send(n % 2 !== 0 ? a : b, pid, `burst-${n}`)),
     );
+
     const placed = Arr.map(replies, placing).sort((x, y) => x.pos - y.pos);
     expect(Arr.map(placed, (p) => p.pos)).toEqual(Array.from({ length: 12 }, (_, n) => n + 1));
     let count = 0;
@@ -991,6 +1008,7 @@ describe("P12 real dev.ts wire", () => {
       ...Arr.flatMap(keys, (key) => [key.raw, key.fingerprint]),
       ...Arr.map(connections, (row) => String(row.client)),
     ];
+
     const attributed = (row: object) => Arr.some(identities, (id) => Str.includes(id)(JSON.stringify(row)));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
@@ -1006,10 +1024,12 @@ describe("P12 real dev.ts wire", () => {
 
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
-    const accepted = placing(await send(c, pid, "metadata", { type: "inc" }, seen));
+    const accepted = placing(await send(c, pid, "metadata", Tag.cases.inc.make({}), seen));
+
     const original = Option.getOrUndefined(
       Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),
     );
+
     expect(original).toBeDefined();
     const binding = JSON.parse(String(original!.value));
     // P17a saves the completed answer before replying; a retry reuses this settled binding.
@@ -1020,8 +1040,8 @@ describe("P12 real dev.ts wire", () => {
       sentAt: SENT,
       state: { _tag: "settled", result: accepted },
     });
-    await send(c, pid, "later", { type: "dec" });
-    expect(placing(await send(c, pid, "metadata", { type: "inc" }, seen))).toEqual(accepted);
+    await send(c, pid, "later", Tag.cases.dec.make({}));
+    expect(placing(await send(c, pid, "metadata", Tag.cases.inc.make({}), seen))).toEqual(accepted);
     expect(
       Option.getOrUndefined(
         Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),
@@ -1092,9 +1112,11 @@ describe("P12 real dev.ts wire", () => {
     expect(page, "the page names the script it loads by its build").toContain(
       `<meta name="fabrika-build" content="${scriptHash}">`,
     );
+
     const posted = await exchange(
       HttpClientRequest.post(`${s.url}/elsewhere`, { body: HttpBody.text("{}", "text/plain;charset=UTF-8") }),
     );
+
     expect(posted.text).toBe("fabrika");
     const home = await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" }));
     homes.push(home);
@@ -1138,9 +1160,11 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
+
         const firstStart = Option.getOrThrow(
           Arr.findFirst(yield* Effect.promise(() => read(c, "gateway/brain")), (row) => row._tag === "started"),
         );
+
         const accepted = new Map<string, Placing>();
         yield* Effect.forEach(
           range(10),
@@ -1190,9 +1214,11 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
+
         const firstStart = Option.getOrThrow(
           Arr.findFirst(yield* Effect.promise(() => read(c, "gateway/brain")), (row) => row._tag === "started"),
         );
+
         const firstAnswer = yield* Deferred.make<void>();
 
         const fibers = yield* Effect.forEach(
@@ -1250,6 +1276,7 @@ describe("P12 real dev.ts wire", () => {
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
         expect(inbox).toHaveLength(20);
         expect(new Set(Arr.map(inbox, (r) => r.id)).size).toBe(20);
+
         // When the gateway answered every resend (each letter settled or held), the view is the first call
         // into the object: it wakes a cut step and is the one refusal, so it too waits for the fact.
         const opened = yield* answered(
@@ -1261,6 +1288,7 @@ describe("P12 real dev.ts wire", () => {
         expect(opened.error).toBeUndefined();
         const live = yield* Effect.promise(() => counter(resumed));
         expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
+
         const restarted = Arr.filter(
           restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))),
           // SAFETY: restartedRows keeps only `restarted` rows, whose body names the process it came `after`.

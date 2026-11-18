@@ -24,7 +24,9 @@ const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
  */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 
-const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
+// kalfa/ is read too: the package's README ships inside its archive, and a reader test reads the parser
+// adapter's location as text, so a Markdown change there is no safe Markdown.
+const readTrees = ["programs/", "fixtures/", "packages/", "next/", "kalfa/"];
 
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 
@@ -134,8 +136,7 @@ const lint = (path) => path === ".oxlintrc.json" || path.startsWith("oxlint-plug
  */
 export const readers = [
   "next/apps/fabrika/src/exam/",
-  "next/apps/fabrika/src/settings-generated.integration.test.ts",
-  "next/apps/fabrika/src/build.test.ts",
+  "next/apps/fabrika/src/settings-generated.test.ts",
   "next/apps/fabrika/src/build.integration.test.ts",
   "next/apps/fabrika/src/build-command.integration.test.ts",
   "next/apps/fabrika/src/instance-one-file.integration.test.ts",
@@ -621,8 +622,9 @@ export const recordName = (tree, base) => `tested-${tree}-${base}`;
 
 /**
  * What a run's changes job selected, from what it printed: a job runs only when its flag is exactly
- * "true", so an empty or unknown value counts as a job that did not run. The filter names all of
- * next/ or the reader tests; anything else covers no next/ test.
+ * "true", so an empty or unknown value counts as a job that did not run. The filter names both roots of
+ * the configured `next` project, `next/ kalfa/`, or the reader tests, exactly; anything else, the legacy
+ * one-root `next/` and a missing filter included, covers no ordinary test.
  * @param {Record<string, string | undefined>} printed
  * @returns {Selection}
  */
@@ -632,7 +634,7 @@ export const selectionOf = (printed) => ({
   next: printed["next"] === "true",
   field: printed["field"] === "true",
   build: printed["build"] === "true",
-  scope: printed["filter"] === "next/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
+  scope: printed["filter"] === "next/ kalfa/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
 });
 
 /**
@@ -774,8 +776,8 @@ const matched = async (base, head, run, api) => {
 /** A group a pull request run already tested runs no job but changes and ci-required. @type {Flags} */
 const none = { check: false, typecheck: false, next: false, field: false, build: false };
 
-/** What the next job runs: its path argument, the reader tests or all of next/. @param {Scope} need */
-const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/");
+/** What the next job runs: its path arguments, the reader tests or both roots of the `next` project. @param {Scope} need */
+const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/ kalfa/");
 
 /**
  * The paths a proof could lower: next/ paths that need all of next/ only because nobody proved

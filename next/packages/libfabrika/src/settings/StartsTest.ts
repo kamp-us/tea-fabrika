@@ -1,5 +1,7 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Origin } from "@kalfa/config/Sources";
 import * as Arr from "effect/Array";
 import type * as Config from "effect/Config";
 import * as Digest from "effect/crypto/Digest";
@@ -17,8 +19,6 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
@@ -131,6 +131,7 @@ const chosen = (values: Values) =>
   Rec.fromEntries(
     Rec.keys<string, unknown>(values).map((key) => {
       const path = Declarations.all.settings[key as keyof Values].path;
+
       return [path, Origin.cases.flag.make({ name: `--${path}` })];
     }),
   );
@@ -168,6 +169,7 @@ export const input = Effect.fnUntraced(function* (
       ...chosen(values),
     },
   });
+
   return {
     settings,
     start: r.start,
@@ -206,6 +208,7 @@ export const fixture = Effect.fnUntraced(function* (config: Fixture) {
     },
     config.values,
   );
+
   return {
     ...base,
     name: config.name,
@@ -224,6 +227,7 @@ export const corrupt = (value: Input, choice: number, secret = "invalid") => {
   const snapshot = value.settings;
   const { "instance.port": _port, ...withoutPort } = snapshot.values;
   const { "instance.port": _origin, ...withoutOrigin } = snapshot.origins;
+
   const variants = [
     { ...value, settings: undefined },
     { ...value, settings: { ...snapshot, values: withoutPort } },
@@ -245,6 +249,7 @@ export const corrupt = (value: Input, choice: number, secret = "invalid") => {
     { ...value, port: 18800 },
     { ...value, secrets: { password: secret } },
   ];
+
   return variants[choice % variants.length];
 };
 
@@ -255,6 +260,7 @@ export const sentinel = fc
 export const exclude = (output: unknown, secret: string) => {
   const forms = [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
   const seen = new WeakSet<object>();
+
   const visit = (value: unknown): void => {
     if (Predicate.isString(value)) {
       for (const form of forms) {
@@ -291,6 +297,7 @@ export const exclude = (output: unknown, secret: string) => {
       }
     }
   };
+
   visit(output);
 };
 
@@ -336,6 +343,7 @@ export const receipt = (input: Input): Saved => ({
 });
 
 const Reply = Schema.TaggedStruct("ok", { value: Schema.Unknown });
+
 export const reply = (input: Input) => Reply.make({ value: receipt(input) });
 
 export interface Driver {
@@ -378,6 +386,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               saved.size === 0
                 ? ["record", "lost", "fresh"]
                 : ["record", "lost", "fresh", "repeat", "concurrent", "conflict", "read"];
+
             const move = moves[choice % moves.length];
 
             if (move === "fresh") {
@@ -400,6 +409,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               move === "repeat" || move === "read" || move === "conflict"
                 ? inputs.filter((value) => saved.has(value.start))
                 : inputs;
+
             const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
             const before = driver.counts();
             const absent = !saved.has(current.start);
@@ -412,6 +422,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               // A retry cannot replace the original writer clock, parent, trace or reader position.
               for (const key of ["by", "for", "sentAt", "seen", "parent", "traceId"] as const) {
                 const original = Option.getOrThrow(Option.fromUndefinedOr(current.origin));
+
                 const changed = {
                   ...current,
                   origin: {
@@ -432,6 +443,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                     ),
                   },
                 };
+
                 expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);
                 expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
               }
@@ -462,11 +474,13 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               }
 
               const after = driver.counts();
+
               const deliveries = Match.value(move).pipe(
                 Match.when("concurrent", () => 3),
                 Match.when("lost", () => 2),
                 Match.orElse(() => 1),
               );
+
               expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
               expect(after.appends - before.appends).toBe(absent ? 1 : 0);
             }

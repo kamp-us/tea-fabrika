@@ -57,17 +57,6 @@
 //     leak gate first, on the change, each commit, the title and the description, and refuse on any
 //     hit or on a grep that could not run.
 //
-//   land.ts stack <top-pr>
-//     the lead session, the one way a native stack lands (pr/Stack.ts, ticket 1115); never a bare
-//     `gh stack merge`, and `arm` cannot land a stacked pull request (github/gh-stack#591). Refuses
-//     unless the top is in an open stack whose layers from the bottom up to it are open and ready;
-//     runs `arm`'s gates on each layer, the leak gate on its change, commits and words and the
-//     `## New names` check; refuses unless `ci-required` is a success at each layer's head
-//     (ticket 1119); rereads the selected ordered prefix, its base, branch links and heads; then asks
-//     GitHub's async merge API with the selected top head SHA. A SQUASH merge queue keeps its own
-//     merge method; without a queue, the request is an explicit squash. The result says merged,
-//     enqueued or pending, and never reports a queued or pending request as merged.
-//
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
@@ -99,7 +88,6 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
-import * as Stack from "./pr/Stack.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
@@ -115,7 +103,6 @@ const Check = Schema.Literals([
   "pr",
   "queue",
   "arm",
-  "stack",
 ]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
@@ -736,27 +723,6 @@ const armCommand = Command.make(
   }),
 );
 
-const stackCommand = Command.make(
-  "stack",
-  { top: Argument.Int("top-pr") },
-  Effect.fn("land.stackCommand")(function* ({ top }) {
-    const env = yield* loadEnv;
-
-    const landed = yield* Stack.land({ dir: env.MAIN, top }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
-          PushesProcess.layer(HERE),
-          ChecksGh.layer(env.GH_REPO),
-        ),
-      ),
-      Effect.mapError(refusedAt("stack")),
-    );
-
-    yield* Console.log(Stack.line(landed));
-  }),
-);
-
 /** The branches an open sev0 allows, from the sev log in the main checkout; none when none is open. */
 const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
   const { sev0 } = yield* Level.read(`${main}/runs/sev`).pipe(
@@ -827,7 +793,7 @@ const closeNamed = Command.make(
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, stackCommand, mergeCommand, merged, closeNamed]),
+  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, merged, closeNamed]),
 );
 
 if (import.meta.main) {

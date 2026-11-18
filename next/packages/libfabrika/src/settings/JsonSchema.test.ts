@@ -17,6 +17,8 @@
 // - The oracle for L2 and L4 is Effect's own reader, `SchemaRepresentation.fromJsonSchemaDocument`
 //   with trusted patterns, never a validator of ours.
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as JsonSchema from "@kalfa/config/JsonSchema";
 import * as ByteSize from "effect/ByteSize";
 import * as Exit from "effect/Exit";
 import * as EffectJsonSchema from "effect/JsonSchema";
@@ -30,8 +32,6 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import * as JsonSchema from "./JsonSchema.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 

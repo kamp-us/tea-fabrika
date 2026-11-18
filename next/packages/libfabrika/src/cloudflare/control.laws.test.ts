@@ -80,6 +80,7 @@ const payloads: { readonly [T in Target]: { readonly [M in (typeof allowed)[T][n
 /** The schema the door decodes `method`'s arguments with, or undefined for a name it does not call. */
 const payloadFor = (target: Target, method: string): Payload | undefined => {
   const table: Readonly<Record<string, Payload>> = payloads[target];
+
   return allowedFor(target).has(method) ? table[method] : undefined;
 };
 
@@ -115,12 +116,16 @@ const OTHERS = [
 ] as const;
 
 const Other = Arbitrary.schema(Schema.Union([Schema.Literals(OTHERS), Schema.String]));
+
 const JsonArgs = Arbitrary.schema(Schema.Array(Schema.Json));
+
 const Json = Arbitrary.schema(Schema.Json);
+
 const Noise = Arbitrary.schema(Schema.Literals(["json", "swap", "drop", "extra"]));
 
 /** The request body as JSON, and the arguments the door reads back out of it. */
 const Body = Schema.fromJsonString(Schema.Unknown);
+
 const Received = Schema.fromJsonString(Schema.Struct({ args: Schema.Array(Schema.Unknown) }));
 
 /** The door's answer: a value, or a failure's reason. */
@@ -155,6 +160,7 @@ const unexpected = (name: string) => {
  *  `processObject`, the name lookup the door makes before a Process call, with its own process ID. */
 const platform = () => {
   const calls: Array<Call> = [];
+
   const lost =
     (target: Target, key: string) =>
     (method: string) =>
@@ -162,6 +168,7 @@ const platform = () => {
       calls.push({ target, key, method, args });
       throw new Error(`${target}.${method} is lost in this law`);
     };
+
   const env = Stub.make<Env>(unexpected, {
     PROJECT: Stub.make<Env["PROJECT"]>(unexpected, {
       getByName: (key) =>
@@ -176,6 +183,7 @@ const platform = () => {
       getByName: (key) => Stub.make<DurableObjectStub<RecordBinding>>(lost("record", key)),
     }),
   });
+
   return { env, calls };
 };
 
@@ -190,7 +198,9 @@ const ask = Effect.fnUntraced(function* (env: Env, body: string) {
     Redacted.make(TOKEN),
     {},
   );
+
   const text = yield* Effect.tryPromise({ try: () => response.text(), catch: (cause) => new Unread({ cause }) });
+
   return { status: response.status, answer: yield* Schema.decodeUnknownEffect(Answer)(text) };
 });
 
@@ -210,6 +220,7 @@ const arbitraries = new Map<Payload, Arbitrary.Arbitrary<ReadonlyArray<unknown>>
 const arbitraryFor = (payload: Payload) => {
   const made = arbitraries.get(payload) ?? Arbitrary.schema(payload);
   arbitraries.set(payload, made);
+
   return made;
 };
 
@@ -224,6 +235,7 @@ const valid = Effect.fnUntraced(function* (target: Target, method: string, seed:
 
   const value = yield* sample(arbitraryFor(payload), seed);
   const encoded = yield* Effect.result(Schema.encodeUnknownEffect(payload)(value));
+
   return Result.isSuccess(encoded) ? encoded.success : yield* sample(JsonArgs, seed);
 });
 
@@ -235,6 +247,7 @@ const spoiled = Effect.fnUntraced(function* (target: Target, seed: number) {
   const noise = yield* sample(Noise, seed + 2);
   const one = yield* sample(Json, seed + 3);
   const at = base.length === 0 ? 0 : Math.abs(seed) % base.length;
+
   const args =
     noise === "json"
       ? yield* sample(JsonArgs, seed + 4)
@@ -243,6 +256,7 @@ const spoiled = Effect.fnUntraced(function* (target: Target, seed: number) {
         : noise === "drop" && base.length > 0
           ? base.slice(0, -1)
           : [...base, one];
+
   return { target, method, args };
 });
 
@@ -266,6 +280,7 @@ const cases = new Map<string, (seed: number) => Effect.Effect<Request, unknown>>
           Effect.gen(function* () {
             const name = yield* sample(Other, seed);
             const method = allowedFor(target).has(name) ? "processObject" : name;
+
             return { target, method, args: yield* sample(JsonArgs, seed + 1) };
           }),
       ] as const,
@@ -277,6 +292,7 @@ const cases = new Map<string, (seed: number) => Effect.Effect<Request, unknown>>
         const args = yield* valid("project", "commit", seed);
         const process = yield* sample(Arbitrary.schema(Schema.String), seed + 1);
         const input = args[1];
+
         return {
           target: "project" as const,
           method: "commit",
@@ -318,6 +334,7 @@ const oracle = Effect.fnUntraced(function* (
     Match.when("record", () => JSON.stringify([walk.project, walk.name])),
     Match.exhaustive,
   );
+
   return {
     reached: `${target}.${method}`,
     refused: null,
@@ -343,6 +360,7 @@ describe("L8: the control door calls only the method its request names", () => {
           const category = yield* pick(pending.size > 0 ? [...pending] : required, seed);
           const build = cases.get(category)!;
           const request = yield* build(seed + 1);
+
           const body = yield* Schema.encodeUnknownEffect(Body)({
             target: request.target,
             project: walk.project,
@@ -350,6 +368,7 @@ describe("L8: the control door calls only the method its request names", () => {
             method: request.method,
             args: request.args,
           });
+
           // The arguments as the door reads them out of the body: JSON's own form of the sent ones.
           const received = (yield* Schema.decodeUnknownEffect(Received)(body)).args;
           const expected = yield* oracle(request, received, walk);

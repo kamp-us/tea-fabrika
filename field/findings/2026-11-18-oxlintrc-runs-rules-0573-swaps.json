@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-oxlintrc-runs-rules-0573-swaps",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".oxlintrc.json",
+    "line": 662
+  },
+  "says": "0573 swaps fabrika/no-node-imports for import/no-nodejs-modules and fabrika/no-hand-tag for the anti-slop no-manual-tagged-construction and no-manual-tagged-type, and 0250 and 0214 now name the swapped rules, but the config still runs the old ones. Ticket text: turn on the 0573 rules at zero hits in every next/ and tooling folder, then delete fabrika/no-node-imports and fabrika/no-hand-tag.",
+  "proof": "`rg -n 'no-node-imports|no-hand-tag' .oxlintrc.json` prints fabrika/no-node-imports at lines 662, 752, 838, 1155 and 1251 and fabrika/no-hand-tag at 673, 763, 1166 and 1262.",
+  "cost": "0250 and 0214 say a rule checks the shape that the config does not yet run.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-padding-child-l8-tests",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": "kamp-us/tea-fabrika#1525",
+  "started": "2026-11-16T22:12:42-08:00",
+  "ended": "2026-11-16T22:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Approved mechanical fixture repair in today's lint tooling for next/ tests at base 2b7c2b3f8bfc348fd7f282cac79ebd73d5f9b120. Scheduled full child proof 44024153414 failed T930 L8 because its generated file gained two anti-slop/require-readable-spacing errors under the required next/** glob. The exact L8 baseline reproduced the two errors before const S and export const data beside the intended prefer-schema-arbitrary error. Only the L8 fixture prefix is expanded locally with two blank separators. The generated nonblank program is identical. The shared imports helper, every assertion, expected diagnostic and exit count, generator, seed and case count are unchanged. Approved anti-slop-install-PLAN.md body 8b4b73b90ad6 assigns this test to tests. The mechanical-sweep exception in https://github.com/kamp-us/tea-fabrika/pull/1507 uses checks in place of a review agent. Lead read the candidate and authorized exactly this change.",
+  "note": "Actual commands used pinned Node 26.13.0, nice 19 and one Vitest worker, with TYPESAFE_API_KEY unset for tests. Exact L8 baseline was red twice with 3 blocking instead of 1; the first zero-context git apply was refused, so the shell repeated the unchanged baseline before the corrected apply. Exact repaired L8 passed 1/1 with four property cases. Whole file passed 7/7, then passed 7/7 again in 7.93s after format and lint finished. Initial overlapping format crashed EISDIR in lint.ts while the file test created and removed temporary fixtures; that run is not counted as a pass. Sequential pnpm format passed, then pnpm lint passed 18/18 parts in 44.5s. In-memory generated-text comparison confirmed two blank additions only; other source bytes unchanged. No temp fixture remained. Config, all four whole-scope globs, parent App.test.ts, shared seed setup, layer rules and all ledgers remain byte-for-byte at base. git diff --check and leakgrep passed. No new law or mutation plant, compiler, broad tests, API call, CI dispatch or wait, subagent, rebase, stack operation or push. New full child proof remains pending at the final child head; cancelled next legs establish no failure or success. Only the fixture and this run row are committed through the sanctioned commit-only tests workflow; lead owns the push and complete stack landing. Usage, model and cost are unknown.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3.3,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

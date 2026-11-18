@@ -37,7 +37,7 @@ nothing refuses a new shell or Python file. oxlint reads only `.ts`, `.mjs` and 
 **How this fits older records.**
 
 - [0033](0033-agents-code-follows-next-rules.md): amended in part. Its "moves when next touched"
-  line is replaced by this one; the rest holds.
+  line is replaced by this one.
 - [0040](0040-existing-tools-before-hand-written.md) holds: each port first asks whether an existing,
   widely used tool does the job, before it is rewritten by hand.
 - [0061](0061-resources-are-acquired-in-a-scope.md) holds: a port acquires each process, folder and

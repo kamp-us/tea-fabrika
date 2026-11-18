@@ -68,6 +68,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(
     Effect.gen(function* () {
       const started = yield* Clock.currentTimeMillis;
+
       const child = spawn(
         process.execPath,
         [
@@ -159,6 +160,7 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
     const pids = Arr.flatMap(trace, (r) => (r.pid === undefined ? [] : [r.pid]));
     const ports = Arr.flatMap(trace, (r) => (r.port === undefined ? [] : [r.port]));
     const homes = Arr.flatMap(trace, (r) => (r.home === undefined ? [] : [r.home]));
+
     const look = Effect.gen(function* () {
       const open: Array<number> = [];
 
@@ -177,6 +179,7 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
 
     const gone = (left: Effect.Success<typeof look>) =>
       left.pids.length === 0 && left.ports.length === 0 && left.homes.length === 0;
+
     const deadline = (yield* Clock.currentTimeMillis) + 10_000;
     let left = yield* look;
 
@@ -278,8 +281,10 @@ const walk = async (target: Target, context: TestContext) => {
     ]),
   );
   const kinds = new Set<string>();
+
   const available =
     target === FIRST_WINDOW ? KINDS : Arr.filter(KINDS, (kind) => kind !== "timeout" && kind !== "trace");
+
   await fc.assert(
     fc.asyncProperty(
       fc.array(
@@ -294,6 +299,7 @@ const walk = async (target: Target, context: TestContext) => {
         for (const { pick, kind: pickKind, signal } of steps) {
           // A kind the walks have not reached yet comes first, so a short walk still meets all three.
           const pending = Arr.filter(available, (k) => !kinds.has(k));
+
           const kind =
             pending.length > 0 ? pending[pickKind % pending.length]! : available[pickKind % available.length]!;
 

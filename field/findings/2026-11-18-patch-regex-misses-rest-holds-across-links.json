@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-patch-regex-misses-rest-holds-across-links",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "claude-sonnet-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "docs/plan/quests/rules-and-records-build-PLAN.md",
+    "line": 161
+  },
+  "says": "Plan correction: the plan's rest-holds pattern /\\b(the )?rest\\b[^.]{0,60}\\b(still )?holds\\b/i stops at the first dot, so a line whose links hold `.md` targets is missed; 0414's 'The rest of 0412 and 0413 holds' was a real patch line none of the four counts found, and slice 4 cleaned it as an extra record. Ticket text: in slice 8's patch check, match on the text with Markdown link targets stripped, or widen the gap past dots, and add 0414's old line as an L3 phrasing.",
+  "proof": "`git show 7b63f09b0:.decisions/0414-jev-at-volume-uses-hand-labels.md | sed -n 31,33p` shows 'The rest of [0412](0412-...md) and [0413](0413-...md) holds'; `rg -n -i '\\b(the )?rest\\b[^.]{0,60}\\b(still )?holds\\b'` on that file at 7b63f09b0 prints nothing.",
+  "cost": "slice 9 turns on a check that passes a still-holds line written with links, the common form.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

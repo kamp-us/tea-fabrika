@@ -1,20 +1,21 @@
 ---
 id: 0040
-title: Before we hand-write a check or a tool we try an existing, widely used one, and say in writing why when we do not use it
-status: amended-in-part by [0587](0587-new-helpers-and-names-cite-sources.md)
+title: Before we hand-write a check, a tool or a helper we try an existing, widely used one, and say in writing why when we do not use it
+status: accepted
 date: 2026-11-09
 tags: [tooling, checks, scripts, existing-tools, known-way, edge-cases, trust]
 ---
 
-# 0040: Before we hand-write a check or a tool we try an existing, widely used one, and say in writing why when we do not use it
+# 0040: Before we hand-write a check, a tool or a helper we try an existing, widely used one, and say in writing why when we do not use it
 
-**What this decides:** a plan or pull request that adds a check, a script or a tool first names the
-existing tools it looked at, and either uses one or gives a proven reason it does not fit; a
-hand-written check that stays lists its edge cases before its code, each with a test.
+**What this decides:** a plan or pull request that adds a check, a script, a tool or a helper first
+names the existing tools it looked at, and either uses one or gives a proven reason it does not
+fit; code refuses a plan that leaves the line out; a hand-written check that stays lists its edge
+cases before its code, each with a test.
 
 ```mermaid
 flowchart TD
-  need["a plan or PR needs a check, a script or a tool"] --> looked["name the existing tools looked at, a link each"]
+  need["a plan or PR needs a check, a script, a tool or a helper"] --> looked["name the existing tools looked at, a link each"]
   looked --> fits{"does one fit?"}
   fits -->|"yes"| use["use it, at an exact version"]
   fits -->|"no"| reason["write what it cannot do, with proof"]
@@ -39,6 +40,9 @@ It came up on 2026-11-09, from today's lead tooling and `next/`'s tests in one n
   [703](https://github.com/usirin/tea-fabrika/pull/703).
 - An experiment in flight compares the leak check with existing tools
   ([gitleaks](https://github.com/gitleaks/gitleaks) and its peers). Its answer is not in yet.
+
+[0587](0587-new-helpers-and-names-cite-sources.md), decided on 2026-11-15, widened the rule from
+checks and tools to every new helper and made code refuse a plan that lacks the line.
 
 **The known way.** A widely used tool has already met the edge cases we have not thought of, and
 its users keep finding the rest. Dan McKinley's
@@ -76,11 +80,18 @@ three places:
 
 ## Decision
 
-**Before we hand-write a check, a script or a tool, we try an existing, widely used one first. If
-we do not use it, we say why in writing.**
+**Before we hand-write a check, a script, a tool or a helper, we try an existing, widely used one
+first. If we do not use it, we say why in writing.**
 
-- **Name what was looked at.** A plan or pull request that adds a check, a script or a tool names
-  the existing tools it looked at, with a link each.
+- **Name what was looked at.** A plan or pull request that adds a check, a script, a tool or a
+  helper names the existing tools it looked at, with a link each. A plan carries it as an
+  `## Existing tools` section with one line per new helper: the helper, what was searched, and the
+  existing one found or why none fits.
+- **Code checks that the line exists, and review judges it.** `plancheck.sh` refuses a draft plan
+  whose files table adds a code file with no line there. A new function inside an existing file
+  still gets its line, and review checks that one. Review sends back a plan or a diff that adds a
+  helper with no line, or whose line shows no real search. The checks are
+  [0587](0587-new-helpers-and-names-cite-sources.md)'s.
 - **Use one, or give the reason it does not fit:** what it cannot do, with proof (a run, its docs
   or its source). "We could write it quickly" is not a reason.
 - **A hand-written check that is kept or written lists its edge cases before the code,** and each
@@ -93,21 +104,19 @@ we do not use it, we say why in writing.**
 
 **Binding constraints:**
 
-- No plan or pull request adds a hand-written check, script or tool without the list of existing
-  tools it looked at.
+- No plan or pull request adds a hand-written check, script, tool or helper without the list of
+  existing tools it looked at.
 - No reason for skipping an existing tool rests on how fast ours is to write.
 - No hand-written check lands without its edge cases listed and a test for each.
 
 ## Consequences
 
-- A plan that adds tooling gets a little longer, and its writer spends time reading other tools'
-  docs first. That is the cost.
+- A plan that adds tooling or a helper gets a little longer, and its writer spends time reading
+  other tools' docs first. That is the cost.
 - An existing tool brings a dependency, pinned to an exact version, and sometimes a patch
   ([patch upstream locally](../docs/direction/patch-upstream-locally.md)).
 - A hand-written check may still be the right answer. Then the reason is written down once, where
   the next reader finds it, and the edge cases are tests, not later patches.
 - AGENTS.md gets one bullet under "Before you design anything".
 - Not decided here: which existing checks get replaced. Each is its own experiment, and the leak
-  check's is the one in flight. Also not decided: how many users make a tool "widely used", and
-  whether code checks that a plan carries the list. [0587](0587-new-helpers-and-names-cite-sources.md)
-  decides that one: code checks it, for every new helper.
+  check's is the one in flight. Also not decided: how many users make a tool "widely used".

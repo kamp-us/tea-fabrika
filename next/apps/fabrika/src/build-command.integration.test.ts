@@ -62,6 +62,7 @@ describe("P16 app build command", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
+
       const home = yield* fixture,
         file = path.join(home, "build.ts");
 

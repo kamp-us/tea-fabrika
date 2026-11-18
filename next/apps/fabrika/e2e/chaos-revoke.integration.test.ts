@@ -40,6 +40,13 @@ import { Nemesis } from "@kampus/libfabrika/runtime/Nemesis";
 import * as NemesisLedger from "@kampus/libfabrika/runtime/NemesisLedger";
 import * as RevokeHold from "./chaos-revoke.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  start: {},
+});
+
 const PERSON = "person_0000000000e008000000000001";
 
 const PROJECT = "p17b-revoke";
@@ -206,6 +213,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 
       const opcode = (buffered[0] ?? 0) & 15;
       const short = (buffered[1] ?? 0) & 127;
+
       const header = Match.value(short).pipe(
         Match.when(126, () => 4),
         Match.when(127, () => 10),
@@ -366,6 +374,7 @@ const served = Effect.gen(function* () {
       port,
     }),
   ).pipe(Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(localState()))));
+
   const from = {
     by: root.fingerprint,
     for: PERSON,
@@ -394,8 +403,10 @@ const served = Effect.gen(function* () {
       from,
     ),
   );
+
   const { process: pid } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started);
   const read = (stream: string) => invoke(() => instance.project(PROJECT).read(stream, 0, "p17b-audit"));
+
   return { root, old, other, instance, pid, read, built: built.build };
 }).pipe(Effect.provide(NodeServices.layer));
 
@@ -468,6 +479,7 @@ it.live(
             has: [],
           },
         });
+
         const armored = yield* root.proof(grant);
         expect(yield* RevokeTest.invoke(() => project.grant({ text: grant, armored }))).toMatchObject({
           _tag: "applied",
@@ -478,7 +490,7 @@ it.live(
         const input = (letter: string, name: string) => ({
           pid,
           letter,
-          m: { type: "add", name },
+          m: { ...Tag.cases.add.make({}), name },
           sentAt: RevokeTest.SENT,
           seen: 0,
         });
@@ -492,6 +504,7 @@ it.live(
             // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
             project.route("p90-control", method, params, "p90-control"),
           );
+
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
 
         const delayed = yield* Effect.forkScoped(
@@ -508,6 +521,7 @@ it.live(
         ).toMatchObject({ result: { _tag: "held", process: pid } });
         // Nothing has been written yet. The real request has already passed online membership.
         expect(Arr.filter(yield* rows("gateway/inputs"), (row) => row.by === oldKey.fingerprint)).toHaveLength(1);
+
         const binding = Chaos.Target.make({
           program: "fabrika/checklist",
           name: TARGET,
@@ -566,10 +580,12 @@ it.live(
               sentAt: RevokeTest.SENT,
               saw: { label: "Old test client", location: "local", method: "command", check: "none" },
             });
+
             const armored = yield* root.proof(text);
             expect(yield* RevokeTest.invoke(() => project.grant({ text, armored }))).toMatchObject({
               _tag: "applied",
             });
+
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });
 
@@ -588,7 +604,9 @@ it.live(
         yield* Effect.scoped(
           Effect.gen(function* () {
             const { runner } = yield* world.session(NAME, chaos.name, chaos, handlers);
-            expect((yield* runner.msg(world.letter(1, { type: "start", ...start, most })))._tag).toBe("accepted");
+            expect((yield* runner.msg(world.letter(1, { ...Tag.cases.start.make({}), ...start, most })))._tag).toBe(
+              "accepted",
+            );
 
             for (let n = 0; n < most; n++) {
               const saved = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
@@ -604,9 +622,11 @@ it.live(
         );
         const final = Schema.decodeSync(chaos.state.schema)((yield* world.snapshot(NAME)).model);
         expect(final.phase._tag).toBe("done");
+
         const revoked = Option.getOrUndefined(
           Arr.findFirst(yield* rows("gateway/access"), (row) => row._tag === "revoked"),
         );
+
         expect(revoked).toBeDefined();
 
         if (revoked === undefined) {
@@ -640,6 +660,7 @@ it.live(
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
           Arr.some(entries, (entry) => entry.id === "other-after"),
         );
+
         const sends = Arr.filter(inbox, (row) => row._tag === "send");
         const clientKeys = new Set([oldKey.fingerprint, otherKey.fingerprint]);
         expect(
@@ -656,7 +677,7 @@ it.live(
         for (const row of Arr.filter(sends, (entry) => !clientKeys.has(entry.by))) {
           const { m } = Schema.decodeUnknownSync(
             Schema.Struct({
-              m: Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
+              m: Schema.TaggedStruct("timer", { at: Schema.Int, arrivedAt: Schema.Int }),
             }),
           )(row.body);
 
@@ -673,12 +694,14 @@ it.live(
         const process = yield* rows(pid);
         const after = Arr.filter([...gateway, ...inbox, ...process], (row) => row.rev > revoked.rev);
         expect(Arr.filter(after, (row) => row.by === oldKey.fingerprint)).toEqual([]);
+
         const oldInputs = new Set(
           Arr.map(
             Arr.filter(gateway, (row) => row.by === oldKey.fingerprint),
             (row) => row.id,
           ),
         );
+
         expect(Arr.filter(after, (row) => row.parent !== null && oldInputs.has(row.parent))).toEqual([]);
         expect(Option.getOrUndefined(Arr.findFirst(inbox, (row) => row.id === "old-before"))?.rev).toBeLessThan(
           revoked.rev,

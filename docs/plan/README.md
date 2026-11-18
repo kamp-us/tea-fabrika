@@ -55,6 +55,15 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
+slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
+`governance.ts`, `fieldrow.ts` and `box/RunsFs.ts`, and `pnpm lint` refuses a new tracked shell or
+Python file outside a list that only shrinks (0113). The list now holds 16 scripts. S5 to S8, the
+commit-path ports, the box-runner port and the typecheck-wrapper port remain, so ticket 766 stays
+open. The review left three findings: the hold passes other shell extensions such as `.bash`, its
+"only shrinks" law lets a ported script come back, and `fieldrow.ts` differs from the old script
+on inputs `box.sh` never sends.
+
 *2026-11-18:* [The watcher save-law repair](https://github.com/kamp-us/tea-fabrika/pull/1542), ticket
 1122, in `next/`, fixes the L17/L18 flake. The save-driven law now checks every reply in order,
 accepts a `same` only for a hash that was already loaded, and finishes a save only on its own
@@ -78,9 +87,23 @@ prefix, home variable, version key and list command. Fabrika keeps its existing 
 own binding. The engine stays inside libfabrika; moving it to `@kalfa/config` and adding
 `kalfa config get|set` remain later slices. The dependent
 [readable-spacing child](https://github.com/kamp-us/tea-fabrika/pull/1525), ticket 1057, applies the
-agreed rule scopes while keeping program code, comments and literal contents. The complete pair
-uses its native stack. The PRs link their independent reviews and CI evidence. This slice supplies
+agreed rule scopes while keeping program code, comments and literal contents. The pair lands
+layer by layer, bottom first, with no native stack link (0603). The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
+
+*2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
+`kalfa/config/` as private `@kalfa/config`, used by `next/`. Source at
+`85919fe41730cdc48ba3fbe4bfa53e93e1ba9fbf` passed its independent source recheck.
+The existing tests moved unchanged. The package consumer law is authored, but has not run.
+The independent cache entry is applied. CI discovery and archive delivery remain private
+while the shared CI repair finishes. The approved ordinary-test routing has not run.
+[The extraction draft](https://github.com/kamp-us/tea-fabrika/pull/1583) keeps merge automation off.
+Ordinary draft checks supply no consumer or archive proof.
+No tested archive is available yet. Its
+[approved amendment](./quests/kalfa-config-package-amendment-PLAN.md) keeps the CLI in slice 3.
+After successful CI and landing, another project installs the tested archive with
+`npm install ./kalfa-config-0.0.0.tgz effect@4.1.3`.
+The prerequisite settings and spacing pair lands first.
 
 Today's CI, serving both versions, adds automatic related tooling checks for ready pull requests
 and queue groups, ticket 1155. Since [decision 0602](../../.decisions/0602-integration-laws-leave-merge-line.md)
@@ -160,6 +183,22 @@ ignoring the requested pin, omitting the native pnpm directory and reversing pre
 Each accepted exercise passed before the deliberate break, failed at its intended assertion, then passed after restoration.
 Each product change records its own source-bound fault evidence separately from these tooling fixtures.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
+
+The plant runner moves onto Stryker, in [`@kalfa/quality/stryker`](../../kalfa/quality/README.md)
+([0600](../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)). A plant names a product file, a Stryker
+mutator, the node's text and Stryker's replacement, and the law that must kill it; the runner finds that one place by
+shape, runs Stryker against the law's file alone, and answers `killed` only when the law is among the tests that
+failed. No byte offset or commit is pinned, so a squash merge or a blank line leaves a plant as it was. The catalog is
+[`.github/ci/plants.ts`](../../.github/ci/plants.ts), five plants (`checklist-pid`, `host-pin`, `host-requested-pin`,
+`host-pnpm-path`, `host-env-order`), and the [`plants.yaml`](../../.github/workflows/plants.yaml) workflow runs one on
+disposable CI by hand. The old runner above stays until a run of the new one on main is its proof, then it goes.
+The ten old cases that edited a test file's own fake are dropped, and `host-discovery-timeout` moves code, which no
+Stryker mutator does, so it keeps its recorded one-time plant.
+
+The hourly mutation run reaches libfabrika's laws: it picks a changed file's `name.<kind>.test.ts` siblings, such as
+`name.laws.test.ts` and `name.integration.test.ts`, not only `name.test.ts`, and passes CI's own `CI` marker into its
+container, so `.integration.` laws pass the host guard on GitHub's disposable runner and never on the laptop. A law in
+another folder, a `.visual.` law and a `.types.` law still stay out.
 
 [Checklist L13's fixture repair](https://github.com/kamp-us/tea-fabrika/pull/1543), ticket 1126,
 replaces fixed waits in `next/` with completion of the real Process alarm call, publication and

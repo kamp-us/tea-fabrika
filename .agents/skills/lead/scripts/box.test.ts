@@ -1845,9 +1845,9 @@ describe("T321 K3 step order and rows, today's tooling", () => {
             writeFileSync(events, `${lines.join("\n")}\n`);
 
             const got = spawnSync(
-              "python3",
+              process.execPath,
               [
-                join(import.meta.dirname, "fieldrow.py"),
+                join(import.meta.dirname, "fieldrow.ts"),
                 "--model",
                 "gpt-6.1-sol",
                 events,

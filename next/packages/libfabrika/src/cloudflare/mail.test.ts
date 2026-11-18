@@ -44,6 +44,12 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { mailLayer, wakeups } from "./mail.ts";
 import { type Env, ProjectService, projectLayer } from "./runtime.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  request: {},
+});
+
 const Cases = fc.constantFrom(
   "no_name",
   "forbidden",
@@ -61,7 +67,7 @@ const delivery: Delivery = {
   command: "requester/1/0",
   source: { name: "requester:1", process: "requester" },
   to: "responder:1",
-  m: { type: "request", ref: "r1", value: 7 },
+  m: { ...Tag.cases.request.make({}), ref: "r1", value: 7 },
   from: {
     by: "SHA256:fixture",
     for: "fixture",
@@ -76,6 +82,7 @@ const delivery: Delivery = {
 it.effect("R1: RPC refusals keep their reason; failed transport and undecodable replies remain retryable", () =>
   Effect.gen(function* () {
     const context = yield* Effect.context<never>();
+
     const check = Effect.fnUntraced(function* (choice: typeof Cases extends fc.Arbitrary<infer A> ? A : never) {
       let wakes = 0;
 
@@ -121,6 +128,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
 
       expect(wakes, "no refused or unconfirmed delivery schedules a target").toBe(0);
     });
+
     const property = fc.asyncProperty(Cases, (choice) => Effect.runPromiseWith(context)(check(choice)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
   }),
@@ -163,6 +171,7 @@ for (const flow of [
   it.effect(flow.name, () =>
     Effect.gen(function* () {
       const context = yield* Effect.context<never>();
+
       const check = Effect.fnUntraced(function* (
         fields: typeof ReceiptFields extends fc.Arbitrary<infer A> ? A : never,
         choice: string,
@@ -183,7 +192,7 @@ for (const flow of [
               code: { program: "responder", hash: "mail-test" },
             }),
           },
-          m: { type: "request", ref: secret, value: fields.value },
+          m: { ...Tag.cases.request.make({}), ref: secret, value: fields.value },
           ref: fields.ref,
           grant: { source: delivery.source.name, to: fields.target },
           from: delivery.from,
@@ -447,7 +456,7 @@ const START = await Effect.runPromise(
 const counter = () => {
   const machine = Machine.make({
     model: Schema.Struct({ count: Schema.Int }),
-    msg: Schema.Struct({ type: Schema.Literal("inc") }),
+    msg: Schema.TaggedStruct("inc", {}),
     cmds: [],
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },
@@ -486,6 +495,7 @@ const AckRow = Schema.fromJsonString(Schema.Struct({ process: Schema.String, pos
 /** One booted Project over in-memory SQLite, with `counter:1` started by the boot, as leave.laws boots it. */
 const project = Effect.fnUntraced(function* () {
   const services = yield* Effect.context<never>();
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),

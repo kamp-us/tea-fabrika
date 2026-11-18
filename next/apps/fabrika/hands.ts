@@ -9,6 +9,7 @@
 //   stdout  {"_tag":"waiting","fingerprint":...,"code":...,"until":...}, then
 //           {"_tag":"online","fingerprint":...} or {"_tag":"offline","fingerprint":...}
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { Id } from "@kampus/libfabrika";
 import { start } from "@kampus/libfabrika/client/HandsStart";
 import * as JournalStore from "@kampus/libfabrika/client/JournalStore";
@@ -16,7 +17,6 @@ import * as CommandsNode from "@kampus/libfabrika/node/client/CommandsNode";
 import * as JournalSqlite from "@kampus/libfabrika/node/client/JournalSqlite";
 import * as KeyFile from "@kampus/libfabrika/node/client/KeyFile";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import { Link } from "@kampus/libfabrika/transport/Link";
 import { Record as Rec, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
@@ -59,8 +59,10 @@ const lineFor = (link: Link, fingerprint: string): Line =>
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const env = yield* environment;
   const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),

@@ -105,6 +105,7 @@ export const route = Effect.fn("gateway.tasks")(
 
       // Pointers only: the command stays behind `tasks.take`, the one door work reaches a machine by.
       const listed = yield* tasks.forTarget(identity.key);
+
       const pointers = Arr.flatMap(listed.tasks, ({ state }) =>
         state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
       );

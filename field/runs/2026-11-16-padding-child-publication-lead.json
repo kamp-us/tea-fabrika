@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-padding-child-publication-lead",
+  "corrects": "2026-11-16-padding-child-repair",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1525",
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "next/ mechanical spacing child. The lead completed ordinary merge a714d55fcfa27228aa982df44b0aaf7893d6da8c after reading the resolved diff and original-plan scope. The worker wrote the repair row but its attempted metadata commit was refused by the older helper's staged-format path. No worker commit or push happened. The lead saved that unchanged row using main's repaired commit-only helper. Existing source and all test assertions remain unchanged by publication.",
+  "note": "The earlier row describes the worker's intended commit route, not a completed worker commit. This record distinguishes the actual lead operation. The repaired helper SHA256 was e99779fa3c05be99dc44e524fe8eddc84ca317e0a71eb4a0f1b7ab7aa48fb24f. No step signature or history rewrite was added. Final child branch proof and complete native stack landing remain pending. No local protected law or compiler ran during this publication.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

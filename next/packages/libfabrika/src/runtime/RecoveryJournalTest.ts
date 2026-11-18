@@ -54,6 +54,7 @@ const SEED = 119120;
 const RUNS = runsFor({ fast: 10, full: 40 });
 
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
+
 const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 
 const from = (): From => ({
@@ -70,10 +71,12 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for 
 
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("poison"), key: Schema.String }),
-]);
+const Msg = Schema.TaggedUnion({
+  add: { n: Schema.Int },
+  poison: { key: Schema.String },
+});
+
+const add = Msg.cases.add.make({ n: 1 });
 
 /** An Error whose class is named `name`, as a program's own error class would be. */
 const thrown = (name: string): Error => {
@@ -369,7 +372,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
         return false;
       }
 
-      const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
+      const sent = yield* Mailbox.use((box) => box.send(NAME, id, add, from()));
 
       if (sent._tag !== "placed") {
         return false;
@@ -497,7 +500,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     };
 
     // One good letter, so the live process has a checkpoint a saved letter can sit behind.
-    expect(Exit.isSuccess(yield* w.runner((r) => r.msg(w.letter("good-0", { type: "add", n: 1 }))))).toBe(true);
+    expect(Exit.isSuccess(yield* w.runner((r) => r.msg(w.letter("good-0", add))))).toBe(true);
     a.letters.set("good-0", { errors: [], dead: null, accepted: true });
 
     /** A recovery the runner performs: the next process ID is its successor. */
@@ -511,6 +514,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     for (const [index, cell] of tape.entries()) {
       const open = Arr.filter([...a.letters], ([id, l]) => Str.startsWith("poison")(id) && l.dead === null);
       const dead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
+
       const options = Arr.filter(
         allowed,
         (move) =>
@@ -532,7 +536,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.letters.set(id, known);
           w.controls.throws = true;
           const before = w.controls.steps.get(id) ?? 0;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
 
           if (known.dead !== null) {
@@ -557,7 +561,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 
         case "add": {
           const id = `add-${index}`;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "add", n: 1 })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, add)));
 
           if (Exit.isSuccess(sent)) {
             a.letters.set(id, { errors: [], dead: null, accepted: true });
@@ -593,7 +597,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.letters.set(id, known);
           w.controls.transport = true;
           w.controls.cut = "";
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.transport = false;
           expect(Exit.isFailure(sent), "transport loss fails the call, and decides nothing").toBe(true);
           break;
@@ -646,7 +650,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.steps.set(id, 1);
           w.controls.throws = true;
           w.controls.cut = "";
-          yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           a.exits.push({ process: a.process, reason: crashed("step", cell.error) });
           const status = yield* w.manager((p) => p.status(NAME));
@@ -679,7 +683,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           const before = yield* w.recovery((s) => s.load);
           w.controls.saveFail = true;
           w.controls.throws = true;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.saveFail = false;
           w.controls.throws = false;
           expect(Exit.isFailure(sent), "a failed recovery save fails the call").toBe(true);
@@ -701,7 +705,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           w.controls.error = lost;
           w.controls.dropStore = true;
           w.controls.throws = true;
-          const sent = yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          const sent = yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           w.controls.dropStore = false;
           w.controls.saveFail = false;
@@ -728,7 +732,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.steps.set(id, 1);
           w.controls.loseEntry = cell.pick % 2;
           w.controls.throws = true;
-          yield* w.runner((r) => r.msg(w.letter(id, { type: "poison", key: id })));
+          yield* w.runner((r) => r.msg(w.letter(id, Msg.cases.poison.make({ key: id }))));
           w.controls.throws = false;
           w.controls.loseEntry = null;
           a.exits.push({ process: a.process, reason: crashed("step", cell.error) });
@@ -760,6 +764,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof world>>, a: Account, limit: number) {
   const rows = w.rows();
   const lifecycle = Arr.filter(rows, (row) => row.stream === `processes/${NAME}`);
+
   const exits = Arr.map(
     Arr.map(
       Arr.filter(lifecycle, (row) => row.event === "exited"),
@@ -768,6 +773,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
     ),
     ({ process, reason }) => ({ process, reason }),
   );
+
   // J2, J12: each exit once, in order, with its producer's reason, through every cut and retry.
   expect(exits, "each exit is written once with its slice-1 reason").toEqual(a.exits);
   // J2, J6, J7: one successor per recovery; a cut start or transfer never starts another.

@@ -33,6 +33,12 @@ import {
   world,
 } from "./runner-contract.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const replayRefuse = (spy: { calls: number }): never => {
   spy.calls++;
   throw new Error("refuse must not run on accepted history");
@@ -56,9 +62,11 @@ class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand
 // world unchanged; it reads the world's SQL and ledger.
 const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRunner.Service) {
   const { sql, ledger } = w;
+
   // Ephemeral signing material only. This helper reads no key file.
   const web = <A>(f: () => Promise<A>) =>
     Effect.tryPromise({ try: f, catch: () => WebCryptoError.make({ message: "test crypto failed" }) });
+
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
@@ -130,7 +138,7 @@ const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRu
       schema: Msg,
       personOnly: [],
       raw: [],
-      name: (m) => m.type,
+      name: (m) => m._tag,
     },
     events: { personOnly: [] },
   }).pipe(Layer.provide(env));
@@ -307,7 +315,7 @@ it.effect.prop(
       const request = {
         pid: process,
         letter: id("letter", 1),
-        m: { type: "save", body, base: 0, work: false },
+        m: { ...Tag.cases.save.make({}), body, base: 0, work: false },
         sentAt: "2030-01-01T00:00:00Z",
         seen: 0,
       };

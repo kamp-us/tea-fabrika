@@ -176,6 +176,7 @@ it.effect.prop(
       // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`). A
       // Connection stub whose every call resolves with it, as the object's bridge answers.
       const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) };
+
       const typed = yield* Effect.flip(
         method(
           Stub.make<ConnectionBinding>(
@@ -285,6 +286,7 @@ it.effect.prop(
       const waiting = {
         fetch: (_: Request, init?: RequestInit) => {
           Deferred.doneUnsafe(reached, Effect.succeed(init?.signal ?? undefined));
+
           return Effect.runPromise(Effect.never);
         },
       };
@@ -358,10 +360,12 @@ it.effect.prop(
 
       const captured = RepliesTest.capture();
       const [client = "", method = ""] = Str.split(call, ".");
+
       const service =
         client === "Gateway"
           ? GatewayClient.make(Stub.make<ConnectionBinding>(() => thrower(thrown)))
           : ProcessClient.make(Stub.make<ProcessBinding>(() => thrower(thrown)));
+
       const lost: Effect.Effect<unknown, unknown> = Reflect.apply(
         named(service).get(method)!,
         undefined,

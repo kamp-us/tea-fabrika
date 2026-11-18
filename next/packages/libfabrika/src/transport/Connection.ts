@@ -14,7 +14,9 @@ import * as Semaphore from "effect/Semaphore";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
+
 const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Finite }, parked: {} });
+
 const Retry = Schema.Struct({ reason: RateRefusal.fields.reason, retryAfter: RateRefusal.fields.retryAfter });
 
 const Request = Schema.Struct({
@@ -86,11 +88,14 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
   const turn = Semaphore.makeUnsafe(1);
   const [unloaded] = State.connection.init(null, {});
   const step = (model: State.Model, msg: State.Msg) => applyCell(State.connection, model, msg)[0];
+
   // The saved attachment is the Model: each read starts from it, never from a cached copy.
   const read = Effect.suspend(() => {
     const state = options.read();
+
     return Effect.isEffect(state) ? state : Effect.succeed(state);
-  }).pipe(Effect.map((attached) => step(unloaded, { type: "observed", attached })));
+  }).pipe(Effect.map((attached) => step(unloaded, State.Msg.cases.observed.make({ attached }))));
+
   const save = (model: State.Model) => {
     const attached = State.attachment(model);
 
@@ -98,6 +103,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       options.save(attached);
     }
   };
+
   const respond = (id: string | number, answer: typeof Answer.Type) => {
     if (answer._tag === "parked") {
       return;
@@ -122,22 +128,26 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       ),
     );
   };
+
   const forget = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
-    const next = step(now, { type: "answered", wait });
+    const next = step(now, State.Msg.cases.answered.make({ wait }));
 
     if (next === now) {
       return false;
     }
 
     save(next);
+
     return true;
   });
+
   const remove = Effect.fnUntraced(function* (wait: typeof Wait.Type, answer: typeof Answer.Type) {
     if (yield* forget(wait)) {
       respond(wait.id, answer);
     }
   });
+
   const register = Effect.fnUntraced(function* (
     wait: typeof Wait.Type,
     onRefused: (reason: string) => Effect.Effect<void> = () => Effect.void,
@@ -151,6 +161,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         yield* Effect.annotateCurrentSpan(REFUSED, "rate_limited");
         yield* onRefused("rate_limited");
         yield* forget(wait);
+
         return yield* Effect.fail(error);
       }
 
@@ -170,31 +181,36 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
         if (Result.isSuccess(rate)) {
           const reply = RateRefusal.make(rate.success);
           yield* remove(wait, reply);
+
           return reply;
         }
       }
 
       const reply = Answer.cases.refused.make({ reason });
       yield* remove(wait, reply);
+
       return reply;
     } else if (answer.success._tag === "ready") {
       const reply = Answer.cases.ok.make({ result: { rev: answer.success.rev } });
       yield* remove(wait, reply);
+
       return reply;
     }
 
     return Answer.cases.parked.make({ stream: wait.stream, after: wait.after });
   });
+
   /** Keeps one wait and registers it. It is saved first, so a ring during registration finds it. */
   const hold = Effect.fnUntraced(function* (wait: typeof Wait.Type) {
     const now = yield* read;
-    const next = step(now, { type: "waited", wait });
+    const next = step(now, State.Msg.cases.waited.make({ wait }));
 
     if (next === now) {
       return respond(wait.id, Answer.cases.refused.make({ reason: "too_many_waits" }));
     }
 
     save(next);
+
     return yield* register(wait);
   });
 
@@ -212,6 +228,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     // Outside the turn, so a ring during registration finds it.
     return yield* hold(Wait.make({ id, ...decoded.success }));
   });
+
   /** One call's answer on the socket. A call the door parked on a stream it names, such as a hands
    *  key's `tasks.wait`, is kept and registered again as a parked `ledger.wait` is, so a ring that
    *  came while the call was out still finds it. */
@@ -219,6 +236,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     answer._tag === "parked"
       ? hold(Wait.make({ id, stream: answer.stream, after: answer.after }))
       : Effect.sync(() => respond(id, answer));
+
   const ordinary = Effect.fnUntraced(function* (request: typeof Request.Type) {
     const now = yield* read;
 
@@ -226,7 +244,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
       return respond(request.id, Answer.cases.refused.make({ reason: "no_hello" }));
     }
 
-    const busy = step(now, { type: "started" });
+    const busy = step(now, State.Msg.cases.started.make({}));
 
     if (State.online(busy)) {
       save(busy);
@@ -248,7 +266,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
     }
 
     // The call or reply may replace the attachment. A failed call must clear busy too.
-    const idle = step(yield* read, { type: "finished" });
+    const idle = step(yield* read, State.Msg.cases.finished.make({}));
 
     if (State.online(idle)) {
       save(idle);
@@ -256,6 +274,7 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
     return yield* exit;
   });
+
   return {
     frame: Effect.fn("connection.frame")(function* (text: string) {
       const decoded = decodeRequest(text);

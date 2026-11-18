@@ -1,0 +1,52 @@
+name: plants
+
+# One plant on disposable CI (decisions 0600 and 0594): a Stryker-made mutant named by its code shape,
+# run against the one law that must kill it. The catalog is .github/ci/plants.ts. Only a person starts
+# it, by hand; no push, pull request or schedule does, so it adds no automatic run:
+#
+#   gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path
+#
+# GitHub dispatches only a workflow file the default branch holds, and --ref then picks the branch
+# whose code it runs. The run reads and breaks nothing in the repo: Stryker works in its own copy,
+# and the answer is one JSON line, uploaded. It has no secret and no write permission.
+on:
+  workflow_dispatch:
+    inputs:
+      plant:
+        description: The plant to run, by its name in .github/ci/plants.ts
+        required: true
+        type: choice
+        options: [checklist-pid, host-pin, host-requested-pin, host-pnpm-path, host-env-order]
+
+permissions:
+  contents: read
+
+jobs:
+  plant:
+    runs-on: ubuntu-latest
+    # A plant is one Stryker dry run of one law file and a few mutants: minutes. The old runner's
+    # checklist cases took minutes; a longer run is a hang.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: false
+          lfs: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm install --frozen-lockfile
+      # `inPlace`: a plant whose law and target sit in two packages (checklist-pid) reads the mutated file
+      # only when Stryker mutates in place; the checkout is this job's own and is thrown away.
+      - name: plant
+        env:
+          PLANT: ${{ inputs.plant }}
+          KALFA_QUALITY_STRYKER_IN_PLACE: "true"
+        run: |
+          mkdir -p "$RUNNER_TEMP/plants"
+          nice -n 19 node .github/ci/plants.ts stryker plant "$PLANT" --out "$RUNNER_TEMP/plants/$PLANT.json"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: plant-${{ inputs.plant }}
+          path: ${{ runner.temp }}/plants/${{ inputs.plant }}.json
+          if-no-files-found: ignore

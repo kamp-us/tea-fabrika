@@ -8,6 +8,7 @@ import * as Arr from "effect/Array";
  * local rows only when that equals the hash it worked out itself.
  */
 import * as Context from "effect/Context";
+import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -44,6 +45,7 @@ const hex = (bytes: Uint8Array): string =>
 export const sha256 = Effect.fn(function* (body: Uint8Array) {
   const bytes = new Uint8Array(body);
   const fail = (cause: unknown) => new SinkError({ reason: "storage", held: 0, cause });
+  const crypto = yield* WebCrypto.WebCrypto;
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
   const work = Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
   const digest = yield* work;

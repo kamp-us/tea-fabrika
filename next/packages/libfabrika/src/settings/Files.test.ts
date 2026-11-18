@@ -17,6 +17,11 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as Reference from "@kalfa/config/Reference";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as ByteSize from "effect/ByteSize";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
@@ -31,11 +36,6 @@ import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import * as Reference from "./Reference.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -142,6 +142,7 @@ const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
   it("both files pass only when every key in each is declared, valid and in scope", () => {
     const entries = fc.array(entry, { maxLength: 4 });
+
     return fc.assert(
       fc.asyncProperty(entries, entries, async (repo, person) => {
         const exit = await validate(text(repo), text(person), "1.2.3");
@@ -203,6 +204,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
           Effect.gen(function* () {
             const toml = yield* Toml;
             const document = yield* toml.parse(`[limits]\nrecord = ${Formatter.formatJson(spelling)}\n`);
+
             const files = {
               repo: { file: REPO, document: v.file === "repo" ? document : { value: {}, spans: [] } },
               person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
@@ -218,9 +220,11 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
             });
 
             const saved = yield* Snapshot.make(group, resolved);
+
             const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
               Formatter.formatJson(saved),
             );
+
             const checked = yield* Snapshot.read(group, transported);
 
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
@@ -364,6 +368,7 @@ describe("L10, the three S5 messages, word for word", () => {
         );
       })
       .filter((w) => w !== "port" && w.length > 0);
+
     return fc.assert(
       fc.asyncProperty(typo, async (key) => {
         const exit = await validate(`[instance]\n${key} = 18800\n`, "", "0.0.0");

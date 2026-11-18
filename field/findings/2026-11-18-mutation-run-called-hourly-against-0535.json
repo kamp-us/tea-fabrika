@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-mutation-run-called-hourly-against-0535",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0089-mutation-covers-lane-code.md",
+    "line": 3
+  },
+  "says": "Decisions 0077, 0089 and 0093 call the mutation run hourly, 0535 says it runs every 3 hours, and mutation.yaml has no schedule, so no single home says how often the mutation run starts.",
+  "proof": ".decisions/0089-mutation-covers-lane-code.md:3 \"The hourly mutation run also tests...\"; .decisions/0077-mutation-gaps-carry-a-category.md:38 \"the hourly mutation run\"; .decisions/0093-laws-walk-plants-run-once.md:72, :113 and :131 \"hourly\"; .decisions/0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md:47 \"schedule every 3 hours\" and :65 \"mutation runs every 3 hours\"; .github/workflows/mutation.yaml:13-14 is `on:` then `workflow_dispatch:` with no `schedule:`.",
+  "cost": "An agent planning around mutation gaps reads two intervals for one run, while the workflow starts on neither.",
+  "head": "8e3ee0e254f26d63937cf8838fea2bd1782ca87f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-review",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T22:48:00-08:00",
+  "ended": "2026-11-15T22:58:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send tests",
+  "why": "Slice F of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md at 262d4dc), reviewed at 031b8d8 against base 262d4dc. One blocking class: the new rule fabrika/one-page-runtime (oxlint-plugins/one-page-runtime.ts) compares less than the deleted next/apps/fabrika/src/build.test.ts law did, which the plan's Steps section calls a send-back and 0591's Consequences rule out (the rule proves it catches what the test caught). Run in a scratch RuleTester copy, three real second runtimes pass the rule with no report, and the old law's text checks refuse all three: (1) a second, renamed import of runMain from @kampus/tuval/browser in the same declaration (`import { runMain, runMain as again }`, then `again(page)`); (2) runMain imported under another name from another module (`import { runMain as boot } from \"@effect/platform-browser\"`, then `boot(page)`); (3) a run function read by a computed string key (`Effect[\"runPromise\"](page)`). The cause is the Identifier visitor skipping every ImportSpecifier child (line 60) and reading Identifier nodes only (lines 56 to 73), and the import count counting declarations, not specifiers (lines 75 to 80). M8 holds: the L9 generators are moved unchanged, at the plan's 100 runs. M5 holds: pnpm lint exits 0. Each row's four results (new law green, red under its break, old law green, deletion in its own commit) are in field/runs/2026-11-16-591-f-tests.json. The edits outside the plan's files table are each needed by the deletion and right.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: refuses each planted entry",
+      "plant": "by reading: drop the imports.length check; the 'no import' case expects one IMPORT report and gets none",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: refuses each planted entry",
+      "plant": "by reading: accept any start, not only starts[0]; the 'a second start' case expects one SECOND report and gets none",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/settings-imports.test.ts: L9",
+      "plant": "by reading: drop settings-start.integration.test.ts from the adapter's allowed files; its package-name import then fires where [] is expected",
+      "result": "red"
+    },
+    {
+      "law": "fabrika/one-page-runtime against the old build.test.ts checks",
+      "plant": "run in a scratch RuleTester: an aliased second runMain import, runMain aliased from another module, Effect[\"runPromise\"]",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10.5,
+  "note": "Ran at 031b8d8 under nice -n 19 with --maxWorkers=1: oxlint-plugins/one-page-runtime.test.ts (2 passed), oxlint-plugins/settings-imports.test.ts (1 passed, 44.8 s), next/apps/fabrika/src/settings-generated.test.ts (4 passed), .github/ci/changes.test.ts (57 passed), vitest.shards.test.ts (34 passed), oxlint-plugins/plants.test.ts (236 passed). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: exit 0, 17 parts passed. One pnpm typecheck after pgrep -x tsgo found none: exit 0. loosening.sh 262d4dc 031b8d8: the removed build.test.ts law is truly loosened by the three cases above; the removed expect in changes.test.ts drops only the deleted file's readers entry. Not run: 0178 guard: next/apps/fabrika/src/build.integration.test.ts and next/apps/fabrika/e2e/first-window.visual.test.ts, whose only change is one comment line each.",
+  "step": "review"
+}

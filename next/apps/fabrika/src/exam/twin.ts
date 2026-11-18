@@ -22,7 +22,9 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return body;
   };
+
   const source = (file: string, spec: string) => resolve(dirname(file), pipe(spec, Str.replace(/\.js$/, ".ts")));
+
   const nodes = (node: Tree, visit: (node: Tree) => void): void => {
     if (!Predicate.isObjectOrArray(node)) {
       return;
@@ -379,6 +381,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     const isRemote = (callee: string | null) =>
       callee !== null && (remote.has(callee) || Arr.some([...alchemy], (a) => callee === `${a}.remote`));
+
     nodes(ast, (node) => {
       if (node.type === "VariableDeclarator") {
         const alias = member(node.init);
@@ -433,6 +436,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       if (["Worker", "Workers.Worker"].includes(Arr.join(parts, "."))) {
         const props = unwrap(node.arguments[1]);
         const key = (p: Tree) => (p?.computed === true ? null : (p?.key?.name ?? p?.key?.value));
+
         const literalKeys = (object: Tree): boolean => {
           if (object?.type !== "ObjectExpression") {
             report(object ?? node, "unsupported-case: class-name bindings are not a literal object");
@@ -535,6 +539,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               const called = calledName === null ? [] : Str.split(calledName, ".");
               const first = called[0];
               const imported = first === undefined ? undefined : named.get(first);
+
               const target =
                 first !== undefined && first !== "" && cloud.has(first) ? Arr.join(called.slice(1), ".") : imported;
 
@@ -569,6 +574,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       if (owner === null) {
         report(node, `unsupported-case: unknown Cloudflare.${Arr.join(parts, ".")}`);
+
         return;
       }
 

@@ -141,6 +141,7 @@ const summarize = (hour: number, rows: ReadonlyArray<Measurements>): Array<Metri
   return Arr.map([...pieces], ([piece, group]) => {
     const ms = Arr.map(group, (row) => row.ms).sort((x, y) => x - y);
     const lags = Arr.flatMap(group, (row) => (row.lag === null ? [] : [row.lag]));
+
     return MetricPoint.make({
       piece,
       hour,
@@ -236,12 +237,15 @@ const partKey = (object: string, day: string, part: number): string =>
  *  rows still local. */
 const due = (sql: Sql, object: string, now: number): Array<Part> => {
   const cutoff = Math.floor((now - KEEP) / DAY) * DAY;
+
   const days = Arr.map(
     sql.exec(`SELECT DISTINCT (at / ${DAY}) * ${DAY} AS day FROM measurements WHERE at < ? ORDER BY day`, cutoff),
     (row) => decodeDay(row).day,
   );
+
   return Arr.flatMap(days, (start) => {
     const day = Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(start)));
+
     const [open] = sql.exec(
       `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
 				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
@@ -258,6 +262,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
       start,
       start + DAY,
     );
+
     const last = Arr.reduce(read, -Infinity, (max, row) => Math.max(max, decodeSeq(row).seq));
     const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
     const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
@@ -349,6 +354,7 @@ export const archiveDays = Effect.fn(
       try: () => sql.transaction(() => due(sql, object, now)),
       catch: sinkError,
     });
+
     yield* Effect.forEach(parts, (part) => archivePart(sql, archive, part).pipe(Effect.ignore), {
       concurrency: 1,
       discard: true,

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-gateway-transport-build",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:43:59-08:00",
+  "ended": "2026-11-16T01:51:35-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Mock sweep fold 1, stack layer 7 (decision 0555), two merges onto fabrikalfa/mock-fold-1 at 06fded6e. Merge 1, fabrikalfa/mock-gateway-processes-telemetry-s1 at 3f9f4a04, was aborted: both sides wrote the vi lock's plants and law, M1 of the mock sweep, in different shapes, and git merged them without a marker into duplicate declarations. oxlint-plugins/builtin-plants.ts declares VI_METHODS twice (the slice's array of three import forms at :93, the stack's single plant at :141) and VI_PROPERTIES twice (:113 and :179). oxlint-plugins/plants.test.ts declares viGlobs twice (the stack's {glob, level} at :601, the slice's plain globs at :712) and holds two M1 describes (:717, which reads VI_METHODS as an array, and :814, which reads it as one plant). Which law survives, or what the slice's copy is renamed to, is a call for the lead. Its three marked conflicts had clear answers: the GatewayRevocation.integration.test.ts blocks at :680, :787 and :1152 take the slice's WebCrypto stand-in (the stack's side changed only blank lines), plants.test.ts:27 keeps the stack's advises import, and the pattern doc keeps the stack's newer text. Merge 2, fabrikalfa/mock-transport-s1 at fdb4324d, does not depend on merge 1 and landed as 4a417c6b. Its conflicts: Answer.ts:53 keeps the slice's Routes service and the stack's Schema.decodeResult; Answer.test.ts at :19, :125, :217, :287, :338 and :369 takes the slice's Recorder and Layer.mock laws, since the stack's side there changed only blank lines plus a brand on the Offline class, which the slice deletes. tsconfig.base.json keeps the slice's one allowedUnstableApis item, effect/crypto/WebCrypto (decision 0574).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Fallout fix: pnpm format added 11 blank lines (the stack's spacing rule) to the slice's Answer.test.ts, ErrorCause.test.ts and internal/rejecting.test-support.ts, in commit 21e026f6. loosening.sh over merge 2 (06fded6e to 4a417c6b) prints 9 hits, the same 9 it prints over the slice alone (5c94f12f to fdb4324d), so the slice carried each: 4 unrecognized lines (Answer.test.ts:5, ErrorCause.test.ts:7, ErrorCause.types.test.ts:23, tsconfig.base.json:302) and 5 removed expects in Answer.test.ts, each a vi.fn expect replaced by a Recorder.calls toEqual of the exact calls, none dropped. loosening.sh over the gateway slice alone (b5b68d31 to 3f9f4a04) prints 6 unrecognized lines (.oxlintrc.json:1341, layer-rules.json:395, GatewayRevocation.integration.test.ts:16, telemetry/ErrorCause.test.ts:6, builtin-plants.ts:57, plants.test.ts:27). Docs: no commit. The gateway slice's finding row cites lines only in its own version of .patterns/effect-crypto-through-services.md, which did not land. The fold's version at this head still has wrong citations (Snapshot.ts, dev.ts, grant.ts, Mac.ts, SecureRandom.ts, Built.ts, Gateway.ts, GatewayNonce.ts), most of which the gateway slice's version re-grounds, so they are left for the gateway fold to fix in one pass. Tests at 21e026f6, one file at a time with --maxWorkers=1: transport/Answer.test.ts 18 passed, transport/ErrorCause.test.ts 3 passed, transport/ErrorCause.types.test.ts 1 passed. Not run by this step, as briefed: pnpm lint and pnpm typecheck.",
+  "step": "build"
+}

@@ -17,7 +17,7 @@
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-<state>-<layout>.png`.
-import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
@@ -38,6 +38,12 @@ import {
   statusBar,
   typeId,
 } from "./tezgah.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
 
 /** The law's own limit in ms: a brain, a browser and about twenty waits of at most 30 s each. */
 const LIMIT = 300_000;
@@ -191,7 +197,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
             r,
             pid,
             {
-              type: "did",
+              ...Tag.cases.did.make({}),
               does: "tezgah.split_right",
               from: t1.id,
               tile: typeId("tile", 4_242),
@@ -240,9 +246,11 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           const five = yield* drawnAs((n) => n === 5, "a quarter split right");
           const narrow = focused(five);
           expect(narrow.id, "L21: the quarter's new tile takes focus").not.toBe(quarter.id);
+
           const box = Option.getOrUndefined(
             Arr.findFirst((yield* drawn(page)).regions, (x) => pipe(x.name, Str.endsWith(`, t${narrow.n}`))),
           )?.box;
+
           expect(box?.width ?? 0, "the narrow tile is too narrow to split again").toBeLessThan(2 * 220);
           yield* keys(page, "Control+b", "%");
           yield* Effect.sleep(QUIET);
@@ -269,6 +277,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 // Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
 // tab's own tezgah, which exists.
 const NOBODY = `processes/tezgah:${pipe(typeId("person", 77), Str.slice("person_".length))}`;
+
 const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
 
 describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah once it exists", () => {

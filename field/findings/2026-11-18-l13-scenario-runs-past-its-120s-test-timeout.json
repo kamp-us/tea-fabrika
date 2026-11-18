@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-l13-scenario-runs-past-its-120s-test-timeout",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/electron-launchd.visual.test.ts",
+    "line": 137
+  },
+  "says": "In next/, the host law 'scenario: L13 unsigned Electron's real brain survives controller death, restarts and fully stops' ran past host.yaml's 120 s vitest test timeout on one run, after its guard was ready in 216 ms; two earlier runs of the same code passed in about 75 s. This is not ticket 1167's 5 s guard wait: something in the four brain starts, the crash replacement or the stops took about 55 s longer, and the law records nothing until it ends, so the log cannot say which. Ticket text: L13 scenario exceeds its 120 s test timeout on the macOS host runner with no law-level timeout firing; find which phase stalls, starting by recording each phase's time as it happens.",
+  "proof": "Host run https://github.com/kamp-us/tea-fabrika/actions/runs/44313709458 job 134834156680 (workflow_dispatch, branch fabrikalfa/l13-guard-bundle at 43dcdfb63): 'Error: Test timed out in 120000ms' at electron-launchd.visual.test.ts:137:25, with 'InterruptError: All fibers interrupted without error' at P19Host.check; runs/p19/host.json held only {\"guardMs\":216}; the launchd sampler saw 299 'state = running', 41 'last terminating signal = Killed: 9' and 2 'state = SIGTERMed' lines, against 145, 22 and 0 in the passing run https://github.com/kamp-us/tea-fabrika/actions/runs/44312250473 at 24cea938b, whose code differs only by a field row. No fabrika.brain job was left loaded.",
+  "cost": "A host-gated pull request can go red at random on L13 even with the guard fixed, and the red names only the 120 s limit, so the next sighting teaches nothing more than this one.",
+  "head": "43dcdfb63d40ee577fd359b6869ad97aa41add4a",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1622"
+}

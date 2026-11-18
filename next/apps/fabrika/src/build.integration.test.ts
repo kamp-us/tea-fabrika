@@ -1,5 +1,5 @@
 // P12 and P16, next/. Exercise the real build entry, with real Rolldown and temp folders, so this
-// file runs on the schedule (0536); the entry's format law is in build.test.ts. A Compiler
+// file runs on the schedule (0536); the entry's format law is the lint rule fabrika/one-page-runtime. A Compiler
 // failure must preserve every last-good byte. P16: the app's build hands its selections to
 // libfabrika's one-file build, so only brain.mjs is published, and every failure is BuildError
 // with its `reason`.

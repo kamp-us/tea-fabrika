@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0585, 0556, 0557, 0113, 0069; body 317fe648c7e8
+Approved by the lead agent, builds 0585, 0556, 0557, 0113, 0069; body 31dbd98896b7
 Plancheck-Version: 3
 
 # Plan: fabrika's settings engine becomes @kalfa/config, named by its app, so kalfa tooling reads .kalfa and KALFA_* (ticket 1076)
@@ -318,9 +318,9 @@ amendment overrides the F1 row and the Files table's "import lines only" for tha
 | layer-rules.json | tests | tests | slice 2: the `next-settings` room keeps the files that stay; a `kalfa-config` row if the layer check asks for one |
 | boundary-rules.json | tests | tests | slice 2: `@kalfa/config` may be imported by libfabrika and the app, and imports no `@kampus/*`, if the boundary check reads package edges |
 | .oxlintrc.json | tests | tests | slice 2: every override for `next/**` also covers `kalfa/**`; M2's `no-restricted-imports` for `kalfa/config/**` |
-| vitest.config.ts | tests | tests | slice 2: `kalfa/*/src/**/*.test.ts` joins the `next/` project globs, and `kalfa/**/*.integration.test.ts` the integration ones |
+| vitest.config.ts | tests | tests | slice 2: discover Kalfa source tests in the existing ordinary project and Kalfa resource laws in the existing integration project; discovery patterns are configuration values, not permission to edit every matched file |
 | .github/ci/changes.mjs | tests | tests | slice 2: `kalfa/` joins the trees whose change runs tests |
-| exam-paths.json | tests | tests | slice 2: `kalfa/**/*.test.ts`, `kalfa/**/*Test.ts`, `kalfa/**/*.test-support.ts` and `kalfa/**/tsconfig.json`, as `next/` has |
+| exam-paths.json | tests | tests | slice 2: classify Kalfa tests, shared suites, test support and compiler configuration as exam paths, as next/ has; the package amendment names every actual owned path |
 | kalfa/config/src/Cli.ts | build | 140 | slice 3, new: `make`, `get` and `set` |
 | kalfa/config/src/Kalfa.ts | build | 10 | slice 3, new: the `Kalfa` app other kalfa packages declare with |
 | kalfa/config/src/Cli.test.ts | tests | tests | slice 3: C1 to C4 |

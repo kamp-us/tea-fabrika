@@ -52,6 +52,16 @@ class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique sym
   cause: Schema.Defect(),
 }) {}
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  start: {},
+  start_child: {},
+  start_child_ok: {},
+  throw: {},
+});
+
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
@@ -247,6 +257,7 @@ const world = (
 const helpers = ({ instance, hashes, from }: Fixture) => {
   // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
+
   return {
     start: async (name: string, program: "starter" | "child") => {
       const started = await project().start(
@@ -271,6 +282,7 @@ const Secret = fc
   .map(([word, suffix]) => word + suffix);
 
 const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
+
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
 
@@ -345,7 +357,7 @@ const projectSecrets = Effect.fnUntraced(function* (
     name: "child:secret",
     code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
-    input: { type: "inc" },
+    input: Tag.cases.inc.make({}),
   };
 
   let pid: string | undefined;
@@ -514,6 +526,7 @@ const projectSecrets = Effect.fnUntraced(function* (
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
   expect(Arr.filter(fixture.configured, (c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+
   const recorded = Arr.flatMap(fixture.recorded, (batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,
@@ -584,7 +597,7 @@ const storageCall = Effect.fnUntraced(function* (
     name: "child:storage",
     code: { program: "p42/child", hash: CODE.child.hash },
     requester: Recipient.cases.process.make({ process: project.boot.process }),
-    input: { type: "inc" },
+    input: Tag.cases.inc.make({}),
   };
 
   const start = ProjectService.use((p) => p.processChild(child, fixture.from));
@@ -673,8 +686,12 @@ const storageCall = Effect.fnUntraced(function* (
           "counter:1/inbox",
           `${child.id}/answer`,
           letterLine(fixture.from, {
-            type: "start_child_ok",
-            cmd: { type: "start_child", id: child.id, input: { program: child.code.program, name: child.name } },
+            ...Tag.cases.start_child_ok.make({}),
+            cmd: {
+              ...Tag.cases.start_child.make({}),
+              id: child.id,
+              input: { program: child.code.program, name: child.name },
+            },
             value: { _tag: "started", process: pid, name: child.name, rev },
           }),
         );
@@ -908,7 +925,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             name: "child:cut",
             code: { program: "p42/child", hash: CODE.child.hash },
             requester: Recipient.cases.process.make({ process: boot }),
-            input: { type: "inc" },
+            input: Tag.cases.inc.make({}),
           };
 
           fixture.cut();
@@ -1050,7 +1067,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       for (const [n, ask] of asks.entries()) {
         expect(
-          await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          await client.call("process.send", letter(starter, `desk-s1-${n}`, { ...Tag.cases.start.make({}), ...ask })),
           "the starter takes the founder's letter",
         ).toMatchObject({ result: { _tag: "accepted" } });
       }
@@ -1108,7 +1125,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const sent = await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", {
+          ...Tag.cases.start.make({}),
+          program: "p42/child",
+          name: "child:1",
+          input: Tag.cases.inc.make({}),
+        }),
       );
 
       expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
@@ -1155,11 +1177,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const client = await connect("children");
 
       for (let n = 0; n < 2; n++) {
-        expect(await client.call("process.send", letter(other ?? "", `other-inc-${n}`, { type: "inc" }))).toMatchObject(
-          {
-            result: { _tag: "accepted" },
-          },
-        );
+        expect(
+          await client.call("process.send", letter(other ?? "", `other-inc-${n}`, Tag.cases.inc.make({}))),
+        ).toMatchObject({
+          result: { _tag: "accepted" },
+        });
       }
 
       const otherView = await until(
@@ -1168,7 +1190,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         (frame) => frame.result?.view?.count === 2,
       );
 
-      expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
+      expect(await client.call("process.send", letter(peer, "peer-inc", Tag.cases.inc.make({})))).toMatchObject({
         result: { _tag: "accepted" },
       });
 
@@ -1180,7 +1202,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       await client.call(
         "process.send",
-        letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
+        letter(starter, "start-1", {
+          ...Tag.cases.start.make({}),
+          program: "p42/child",
+          name: "child:1",
+          input: Tag.cases.inc.make({}),
+        }),
       );
 
       const first = String(
@@ -1199,7 +1226,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       );
 
       expect(view, "L10: the child's first letter is its input").toMatchObject({ result: { view: { count: 1 } } });
-      expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
+      expect(await client.call("process.send", letter(first, "inc-1", Tag.cases.inc.make({})))).toMatchObject({
         result: { _tag: "accepted" },
       });
       await until(
@@ -1217,7 +1244,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       expect(starterView.result.view.told).toMatchObject([{ _tag: "started", process: first, name: "child:1" }]);
 
       // A throw restarts it: one restarted fact naming the old life, in the child's own name.
-      await client.call("process.send", letter(first, "throw-1", { type: "throw" }));
+      await client.call("process.send", letter(first, "throw-1", Tag.cases.throw.make({})));
 
       const [restarted] = await until(
         "one restarted fact after the child's throw",

@@ -96,6 +96,7 @@ const ordered = (drawn: ReadonlyArray<typeof Draw.Type>): ReadonlyArray<Step> =>
       Order.mapInput(Order.Number, (entry) => entry.index),
     ),
   );
+
   const said = new Set<Peer>(),
     repaired: Array<Step> = [];
 
@@ -157,6 +158,7 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>, reached:
     Effect.sync(() => new DatabaseSync(":memory:")),
     (opened) => Effect.sync(() => opened.close()),
   );
+
   const sql = nodeSql(db);
   const notices: Array<{ readonly client: string; readonly news: News }> = [];
 
@@ -181,6 +183,7 @@ const world = Effect.fnUntraced(function* (gaps: ReadonlyArray<number>, reached:
   // Every read of the membership stream yields before and after it, a generated number of times, so
   // a hello, a knock and a grant meet at the points where each looks at peer is a member.
   let reads = 0;
+
   const gap = Effect.suspend(() => {
     const times = gaps[reads++ % gaps.length] ?? 0;
 
@@ -392,6 +395,7 @@ const play = Effect.fnUntraced(function* (
 
       const knocking = door.knock(client, { label: `tab ${peer}` }),
         held = mode !== "in a sequence" && mode.raced[{ A: 0, B: 1, C: 2 }[peer]]?.held === true;
+
       const answer = yield* held ? Effect.provideService(knocking, Hold, w.drained) : knocking;
 
       if (answer._tag === "ok") {

@@ -17,7 +17,7 @@
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-focus-<state>-<layout>.png`.
-import { String as Str, pipe, Array as Arr, Effect, Option, Predicate } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Option, Predicate, Schema } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, tile, waiting } from "./p14.test-support.ts";
@@ -38,6 +38,12 @@ import {
   tezgahPid,
   tezgahView,
 } from "./tezgah.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  remove: {},
+});
 
 /** The law's own limit in ms: a brain, two tabs and about forty waits of at most 30 s each. */
 const LIMIT = 420_000;
@@ -95,6 +101,7 @@ const splitBelow = (view: View, above: string, under: string): boolean => {
       node.parts[0]!.inner === above &&
       node.parts[1]!.inner === under) ||
       Arr.some(node.parts, (p) => holds(p.inner)));
+
   return holds(view.workspaces[0]!.layout);
 };
 
@@ -133,6 +140,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           /** DOM focus is inside the region of tile `id` of `view`. */
           const domIn = (on: Page, view: View, id: string, label: string) => {
             const t = Option.getOrThrow(Arr.findFirst(view.tiles, (x) => x.id === id));
+
             return domSettles(on, (f) => f.region === regionName(t), `L30: DOM follows desk focus to ${label}`);
           };
 
@@ -142,6 +150,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
               yield* keys(on, ...pressed);
               const view = yield* at(on, to, () => true, `${Arr.join(pressed, " ")} ${label}`);
               yield* domIn(on, view, to, `${Arr.join(pressed, " ")} ${label}`);
+
               return view;
             });
 
@@ -305,6 +314,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
                 : ["t1 keeps no cursor yet"],
             "L28: tezgah keeps the cursor t1 was left on",
           );
+
           expect(
             Option.getOrUndefined(Arr.findFirst(kept.tiles, (t) => t.id === t1.id))?.cursor,
             "L28: t1's cursor in tezgah's view",
@@ -320,7 +330,12 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
 
           // L28: the row is gone while t1 is left; the return lands at the top of t1.
           yield* move(page, ["Control+b", "o"], t4.id, "away from t1 again");
-          yield* tell(r, yield* processId(r, t1.shows), { type: "remove", name: "milk" }, "letter_tezgah_focus_remove");
+          yield* tell(
+            r,
+            yield* processId(r, t1.shows),
+            { ...Tag.cases.remove.make({}), name: "milk" },
+            "letter_tezgah_focus_remove",
+          );
           yield* promised(() => list.box("milk").waitFor({ state: "detached", timeout: 30_000 }));
           yield* keys(page, "Control+b", ";");
           yield* at(page, t1.id, () => true, "C-b ; back to t1 without its row");
@@ -440,6 +455,7 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             (f) => f.region !== null && f.region !== regionName(t1),
             "Tab leaves t1 for the next tile",
           );
+
           const into = Option.getOrThrow(Arr.findFirst(grid.tiles, (t) => regionName(t) === entered.region));
           yield* at(page, into.id, () => true, `L30: Tab into ${entered.region} focuses it`);
 
@@ -449,8 +465,10 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
           expect((yield* grant(h, yield* waiting(second))).ok, "the second tab is granted").toBe(true);
           yield* at(second, null, (n) => n === 4, "the second tab draws the 2x2");
           const order = shown(grid);
+
           const after =
             order[(Option.getOrThrow(Arr.findFirstIndex(order, (t) => t.id === into.id)) + 1) % order.length]!;
+
           yield* keys(page, "Control+b", "o");
           yield* at(second, after.id, () => true, "L30: the second tab mirrors a key move in the first");
           yield* at(page, after.id, () => true, "the first tab agrees");
@@ -484,10 +502,12 @@ describe("L28, L30: moving between tiles in the tab, on the real brain", () => {
             Effect.gen(function* () {
               const before = yield* tezgahView(r, pid);
               yield* keys(page, ...pressed);
+
               const under = (view: View) =>
                 Option.getOrUndefined(
                   Arr.findFirst(shown(view), (t) => !Arr.some(shown(before), (b) => b.id === t.id)),
                 );
+
               const view = yield* at(
                 page,
                 null,

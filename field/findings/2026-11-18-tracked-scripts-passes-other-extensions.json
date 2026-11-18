@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tracked-scripts-passes-other-extensions",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 43
+  },
+  "says": "In today's tooling, the 0113 lint hold passes a shell or Python file whose name has any extension but .sh or .py (run.bash, run.zsh, run.SH, run.pyw, or run.txt with a #!/bin/sh line), and an extensionless one whose launcher it does not name (#!/usr/bin/env -S uv run --script, #!/bin/busybox sh) or that has no #! line.",
+  "proof": "A scratch node script calling check([...NOT_YET_PORTED, ...paths], text) from oxlint-plugins/tracked-scripts.ts at 8e0929db gave no finding for tools/run.bash, tools/run.zsh, tools/run.SH, tools/run.pyw, tools/run.txt, tools/run.v2, tools/uvtool, tools/busy and tools/noshebang, and new_script for tools/envdash, tools/envS and tools/py2. SCRIPT (line 43) matches only \\.(?:sh|py)$ and BARE (line 46) only names with no dot.",
+  "cost": "A new shell or Python script can enter the repo past the check 0113 says holds it, by naming it .bash or running Python through uv.",
+  "head": "8e0929db6a039bd030568eb03217072472850d97",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1517"
+}

@@ -1,12 +1,12 @@
 ---
 id: 0031
-title: The lead's lane tooling runs on fabrika's own primitives, the Agent interface over ACP now and Program.make next, never a bare CLI call
-status: amended-in-part by [0070](0070-flow-runner-stays-a-machine.md)
+title: The lead's lane tooling runs every agent through fabrika's own Agent interface over ACP, never a bare CLI call, and its runner stays a tea machine until a program can run outside the app
+status: accepted
 date: 2026-11-09
 tags: [lead, tooling, chain, agents, acp, program, libfabrika, dogfood]
 ---
 
-# 0031: The lead's lane tooling runs on fabrika's own primitives, the Agent interface over ACP now and Program.make next, never a bare CLI call
+# 0031: The lead's lane tooling runs every agent through fabrika's own Agent interface over ACP, never a bare CLI call, and its runner stays a tea machine until a program can run outside the app
 
 **What this decides:** `chain.ts` and the lane runner after it are built from the same pieces
 fabrika gives everyone, so the lead's own tooling is fabrika's first outside client and the first to
@@ -18,14 +18,16 @@ flowchart LR
   agents --> acp["ACP adapter"]
   acp --> harness["acp/harness.ts: claude, codex, fake"]
   harness --> cc["Claude Code or Codex, unchanged"]
-  chain -.->|"next"| program["Program.make: a lane program"]
+  chain -.->|"later, 0070"| program["Program.make: a lane program"]
   program --> agents
   ci["CI typecheck over the scripts"] -.->|"breaks first"| chain
 ```
 
 ```ts
-// Sketch. A step is one Agent-interface turn inside a Program. Names may change in the plan
-// that builds it; today's Agents service is `@kampus/fabrika-old`'s, from experiment 156.
+// Sketch. A step is one Agent-interface turn. Names may change in the plan that builds it;
+// today's Agents service is `@kampus/fabrika-old`'s, from experiment 156. The `Program.make` lane
+// at the end is the later shape, not built: until a program can run outside fabrika's app the
+// runner stays a tea machine (0070).
 import {Program} from "@kampus/libfabrika";
 import {Agents} from "@kampus/fabrika-old";
 
@@ -55,7 +57,7 @@ const runStep = (lane: Lane, step: StepName) =>
 		return yield* agents.run(turn).pipe(lastEnded); // Stream of Heard<Answer> to its Ended
 	});
 
-// The lane as a program: the machine moves on the five verbs, the step is a Cmd.
+// The lane as a program, later: the machine moves on the five verbs, the step is a Cmd.
 export const lane = Program.make({
 	name: "lane",
 	machine: laneMachine, // stepping, judging, opening, landing, over
@@ -81,12 +83,14 @@ shapes from ACP), which `summon claude as <name>` uses through `summon/manager.t
 harness (`acp/harness.ts`, `AGENTS = ["claude", "codex", "fake"]`). And `next/`'s libfabrika has
 `Program.make` (ticket 280, [PR 522](https://github.com/usirin/tea-fabrika/pull/522)).
 
-The owner, on 2026-11-09, decided the tooling uses these instead of its own wiring. It builds on:
+The owner, on 2026-11-09, decided the tooling uses these instead of its own wiring. On 2026-11-10,
+[0070](0070-flow-runner-stays-a-machine.md) found that a program cannot run outside fabrika's app
+yet, so the runner stays a tea machine until it can. This record builds on:
 
 - [0026](0026-fabrika-never-owns-the-agent-loop.md): a step runs the user's unmodified harness. The
   ACP harness rows run Claude Code and Codex unchanged, so this holds.
-- [0028](0028-the-parent-holds-every-right.md): the chain still holds every right; the agent behind
-  the turn holds only its model login.
+- [0028](0028-the-parent-holds-every-right.md): the chain holds every right; the agent behind the
+  turn holds only its model login.
 - [0030](0030-copy-clankas-shapes-where-better.md): history events and named Schedules are read from
   the harness's stream, which the Agent interface already gives.
 - [Why libfabrika exists](../docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08):
@@ -97,26 +101,31 @@ The owner, on 2026-11-09, decided the tooling uses these instead of its own wiri
 ## Decision
 
 **The lead's lane tooling dogfoods fabrika's own primitives: every agent it starts goes through the
-Agent interface over the ACP harness, and the lane runner becomes `next/` programs built with
-`Program.make`.**
+Agent interface over the ACP harness, and the lane runner stays a tea machine until a program can
+run outside fabrika's app, then becomes a `next/` program built with `Program.make`.**
 
 - **Agents.** `chain.ts` runs every step agent and its judgment agent as an `Agents.run` turn over
   the ACP adapter, the way `summon` does. Never a bare `claude -p` or `codex exec`, and never
   `packages/pipeline`.
-- **Programs.** Next, the lane runner is built as programs with `Program.make`, not bare tea
-  machines. That shows a program works as a unit of work on its own, outside fabrika's app.
-  *(Amended by [0070](0070-flow-runner-stays-a-machine.md): for now the runner stays a tea machine
-  until a program can run outside the app. The Agents rule above still holds.)*
-- **Breakage is the point.** When `Program.make` or the Agent interface changes and the tooling
-  breaks, that is a finding about the library, not a cost of the tooling. CI's typecheck over the
-  scripts is what shows it first. Fix the library or the tooling in the open; never fork a private
-  copy of the interface into the scripts to stop the breakage.
+- **Programs.** For now the lane (flow) runner is a plain tea machine on tea's Effect engine, not
+  wrapped in `Program.make`: `ProgramRunner.withLoader` needs seven services that only the app's
+  worker wires, so a `Program.make` around the runner would be a declaration nothing runs
+  ([0070](0070-flow-runner-stays-a-machine.md)). It becomes a program when a program can really run
+  outside fabrika's app, as a rethink then against the notes that hold, never a rename of the
+  machine. The proof that a program works as a unit outside the app comes from each tier's slice of
+  programs written outside fabrika's source ([0068](0068-tiers-carry-every-part.md)).
+- **Breakage is the point.** When the Agent interface (or `Program.make`, once the runner is a
+  program) changes and the tooling breaks, that is a finding about the library, not a cost of the
+  tooling. CI's typecheck over the scripts is what shows it first. Fix the library or the tooling in
+  the open; never fork a private copy of the interface into the scripts to stop the breakage.
 - **Order.** First swap chain's agents onto the Agent interface over ACP and run one real lane on
-  it. Only then move the runner onto `Program.make`.
+  it. Only then, and only once a program can run outside the app, move the runner onto
+  `Program.make`.
 
 **Binding constraints:**
 
 - No new `spawn` of `claude` or `codex` in the lead scripts. An agent starts through `Agents`.
+- No `Program.make` in the lead scripts until a program can run without fabrika's app.
 - The scripts stay inside `pnpm typecheck`, so a change to either primitive fails CI there.
 - The lane tooling stays lead tooling: fast-tracked, small changes, merged on green CI with a
   clean leak grep.
@@ -126,8 +135,8 @@ Agent interface over the ACP harness, and the lane runner becomes `next/` progra
 - `drive.ts`'s own Codex and Claude start paths go away step by step, as each moves onto `Agents`.
   Where `drive.ts` does a box job (start, fetch, sign), that stays code the chain calls.
 - The Agent interface lives in today's package (`@kampus/fabrika-old`), and `Program.make` in
-  `next/`. A lane program outside `next/` may use both. `next/` code still never imports today's
-  code; when `next/` has its own Agent interface, the lane program moves to it.
+  `next/`. The lane runner outside `next/` may use both. `next/` code still never imports today's
+  code; when `next/` has its own Agent interface, the lane runner moves to it.
 - A rough edge the tooling finds goes in as a ticket against the library, with the break that
   showed it.
 - Not decided here: the `Answer` shape's exact names, which ACP rows a lane may pick per step, and

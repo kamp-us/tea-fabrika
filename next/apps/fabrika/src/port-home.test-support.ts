@@ -61,6 +61,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
+
   return Arr.map([...new Set([root, Str.slice(1, -1)(Formatter.formatJson(root)), url.href])], (text) => ({
     text,
     bytes: encoder.encode(text),
@@ -79,6 +80,7 @@ const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof H
     const spans = Arr.flatMap(forms, ({ bytes: form }) =>
       Arr.map(offsets(bytes, form), (start) => [start, start + form.length] as const),
     ).sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+
     const merged: Array<[number, number]> = [];
 
     for (const [start, end] of spans) {
@@ -179,6 +181,7 @@ export const machinePaths = Effect.fn("portHome.machinePaths")(function* (
         return yield* cellHits(file, copy, forms);
       }),
     );
+
     hits.push(...cells, ...Arr.filter(raw, (hit) => !Arr.some(cells, (cell) => cell.root === hit.root)));
   }
 

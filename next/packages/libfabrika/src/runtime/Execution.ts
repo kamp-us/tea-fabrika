@@ -32,7 +32,8 @@ const Outcome = Schema.TaggedUnion({
   },
 });
 
-const Typed = Schema.Struct({ type: Schema.String });
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases: any program's Msg or Cmd, so its key is an open string (as for ledger/Log.ts)
+const Typed = Schema.Struct({ _tag: Schema.String });
 
 // Match the deletable failure-content ceiling, half a Durable Object row.
 const MOST_CONTENT = 1_000_000;
@@ -195,11 +196,11 @@ const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
 const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean => {
   const typed = Schema.decodeUnknownOption(Typed)(m);
 
-  if (Option.isNone(typed) || !Rec.has(inputs, typed.value.type)) {
+  if (Option.isNone(typed) || !Rec.has(inputs, typed.value._tag)) {
     return false;
   }
 
-  const port = inputs[typed.value.type];
+  const port = inputs[typed.value._tag];
 
   return (
     port !== undefined &&
@@ -209,7 +210,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
-  const type = Schema.decodeUnknownSync(Typed)(cmd).type;
+  const type = Schema.decodeUnknownSync(Typed)(cmd)._tag;
   const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === type));
 
   if (def === undefined) {
@@ -220,7 +221,8 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 
   if (outcome._tag === "Ok") {
     return Schema.decodeUnknownSync(Schema.Json)({
-      type: def.okType,
+      // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own: tea's `AnyCmdDef` carries no `ok` or `err` maker yet (demlik 951)
+      _tag: def.okType,
       cmd,
       value: encodeAnswer(def.schema.ok, outcome.value),
       at: outcome.at,
@@ -234,7 +236,8 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
   }
 
   return Schema.decodeUnknownSync(Schema.Json)({
-    type: def.errType,
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's answer, keyed `_tag` as tea's own: tea's `AnyCmdDef` carries no `ok` or `err` maker yet (demlik 951)
+    _tag: def.errType,
     cmd,
     error: encodeAnswer(Schema.TaggedStruct(tag, {}), outcome.error),
     at: outcome.at,

@@ -4,6 +4,9 @@
  * person's file, the declared environment names and the declared flags. The whole report is built
  * before anything prints, and it writes nothing and starts nothing.
  */
+
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
 import * as Arr from "effect/Array";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
@@ -15,8 +18,6 @@ import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as Declarations from "../../settings/Declarations.ts";
 import { Fabrika } from "../../settings/Fabrika.ts";
-import * as Print from "../../settings/Print.ts";
-import * as Reference from "../../settings/Reference.ts";
 import * as Load from "./Load.ts";
 
 const declarations = Declarations.all.declarations;

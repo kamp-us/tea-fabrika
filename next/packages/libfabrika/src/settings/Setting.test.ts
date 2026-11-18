@@ -229,6 +229,7 @@ describe("L3, absence gives the default, and an invalid present value never does
           Match.tag("valid", (value) => value.expected),
           Match.orElse(() => "a failure"),
         );
+
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,

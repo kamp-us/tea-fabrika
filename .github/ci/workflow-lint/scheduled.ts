@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC21).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC22).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,6 +124,26 @@ const TESTS_JOB = "tests";
 const TOOLING_LEG = "tooling-";
 
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
+
+// Main's full run keeps the tested @kalfa/config archive (0602's amendment, SC22). Every numbered
+// vitest leg checks its own report with the receipt; the one whose report holds the package law
+// (the receipt says `kept`) uploads exactly the two files that law's run wrote.
+const RECEIPT = "node .github/ci/related.ts --receipt";
+
+const ON_NUMBERED = `!${ON_E2E} && !${ON_TOOLING}`;
+
+const RECEIPT_IF = `success() && ${ON_MAIN} && ${ON_NUMBERED}`;
+
+const ARCHIVE_IF = `success() && ${ON_MAIN} && steps.receipt.outputs.kept == 'true'`;
+
+const DELIVERY = `\${{ runner.temp }}/kalfa-config-package`;
+
+// Both names, the delivery folder's and the archive's, start with this.
+const KEPT = "kalfa-config-";
+
+const ARCHIVE_NAME = `${KEPT}\${{ github.sha }}-attempt-\${{ github.run_attempt }}`;
+
+const ARCHIVE_PATHS = [`${DELIVERY}/kalfa-config-0.0.0.tgz`, `${DELIVERY}/receipt.json`];
 
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
@@ -262,7 +282,10 @@ const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as co
 
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
-// and the three after it at most 7 s, against their 2 minutes of step limits.
+// (chromium's included). A numbered vitest leg runs five steps after `vitest`, with 4 minutes of step
+// limits against these 3 (the plan's call): on four green main full runs (44268160795, 44250937513,
+// 44242548956, 44232082653) they took 35 to 85 s, so a leg reaches this limit only if vitest passes
+// late and a later step hangs.
 const BACKSTOP = 3;
 
 /**
@@ -439,6 +462,85 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
   require(!readsInputs(
     JSON.stringify(rest),
   ), "SC21: only select's set step reads the hand start's inputs, as SCOPE and LAW, so main's runs never read scope");
+};
+
+/**
+ * SC22. Main's full run keeps the tested @kalfa/config archive, once, on the leg that ran the package
+ * law (0602's amendment). In `tests` one `package receipt` step runs right after the vitest step, on
+ * main's ref and the numbered legs, and one `package archive` upload runs right after it, on main's
+ * ref and the receipt's `kept`: each with `success()`, a one-minute limit and no key beyond the ones
+ * named, so no env, token or `continue-on-error` can reach them. No other step of any job runs the
+ * receipt, names the delivery folder or uploads a `kalfa-config-` name.
+ */
+const keptArchive = (jobs: Record<string, unknown>, require: Require): void => {
+  const tests = steps(map(jobs[TESTS_JOB]));
+  const vitest = tests.findIndex((s) => s["run"] === WHOLE_NEXT);
+  const receipts = tests.filter((s) => s["run"] === RECEIPT);
+
+  const uploadsKept = (s: Record<string, unknown>) => {
+    const name = map(s["with"])["name"];
+
+    return uses(s, "actions/upload-artifact") && Predicate.isString(name) && name.startsWith(KEPT);
+  };
+
+  const archives = tests.filter((s) => s["name"] === "package archive" || uploadsKept(s));
+
+  const [receipt] = receipts,
+    [archive] = archives;
+
+  const sameKeys = (step: Record<string, unknown>, keys: readonly string[]) =>
+    JSON.stringify(Rec.keys(step).toSorted()) === JSON.stringify(keys.toSorted());
+
+  require(receipts.length === 1 &&
+    receipt !== undefined &&
+    receipt["name"] === "package receipt" &&
+    receipt["id"] === "receipt" &&
+    compact(receipt["if"]) === compact(RECEIPT_IF) &&
+    receipt["timeout-minutes"] === 1 &&
+    sameKeys(receipt, ["name", "id", "if", "timeout-minutes", "run"]) &&
+    vitest >= 0 &&
+    tests.indexOf(receipt) ===
+      vitest +
+        1, `SC22: ${TESTS_JOB} runs ${RECEIPT} once, as the step named package receipt right after the vitest step, on main's ref and the numbered legs only, within a minute, with no env, token or continue-on-error`);
+
+  const given = map(archive?.["with"]);
+
+  const paths = Predicate.isString(given["path"])
+    ? given["path"]
+        .trim()
+        .split(/\r?\n/)
+        .map((path) => path.trim())
+    : [];
+
+  const days = given["retention-days"];
+
+  require(archives.length === 1 &&
+    archive !== undefined &&
+    receipt !== undefined &&
+    archive["name"] === "package archive" &&
+    uses(archive, "actions/upload-artifact") &&
+    compact(archive["if"]) === compact(ARCHIVE_IF) &&
+    archive["timeout-minutes"] === 1 &&
+    sameKeys(archive, ["name", "if", "timeout-minutes", "uses", "with"]) &&
+    sameKeys(given, ["name", "path", "if-no-files-found", "retention-days"]) &&
+    given["name"] === ARCHIVE_NAME &&
+    JSON.stringify(paths) === JSON.stringify(ARCHIVE_PATHS) &&
+    given["if-no-files-found"] === "error" &&
+    Predicate.isNumber(days) &&
+    Number.isInteger(days) &&
+    days >= 1 &&
+    tests.indexOf(archive) ===
+      tests.indexOf(receipt) +
+        1, `SC22: ${TESTS_JOB} uploads the archive once, as the step named package archive right after the receipt, on main's ref and the receipt's kept, with the two exact paths and the archive's name, if-no-files-found: error, a retention of whole days and a minute's limit`);
+
+  require(Rec.values(jobs).every((job) =>
+    allSteps(map(job)).every(
+      (s) =>
+        s === receipt ||
+        s === archive ||
+        (!(Predicate.isString(s["run"]) && s["run"].includes("--receipt")) && !JSON.stringify(s).includes(KEPT)),
+    ),
+  ), `SC22: no other step of any job runs the receipt, names the delivery folder or uploads a name starting ${KEPT}`);
 };
 
 /**
@@ -870,8 +972,17 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
-      ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),
-    ), "SC9: the test job runs only its install, its whole-suite commands and its time table");
+      [
+        "pnpm install --frozen-lockfile",
+        WHOLE_NEXT,
+        RECEIPT,
+        chromium,
+        WHOLE_E2E,
+        WHOLE_TOOLING,
+        TIME_TABLE,
+      ].toSorted(),
+    ), "SC9: the test job runs only its install, its whole-suite commands, the package receipt and its time table");
+  keptArchive(jobs, require);
 
   // SC10. The test job keeps each leg's Vitest report after a red step, so the report job can name
   // the failing tests.

@@ -63,11 +63,13 @@ const made = vi.hoisted((): { value?: object } => ({}));
 vi.mock("./objects.ts", async (original) => {
   const actual = await original<typeof import("./objects.ts")>();
   const { Layer } = await import("effect");
+
   return {
     ...actual,
     Process: {
       make: (implementation: object) => {
         made.value = implementation;
+
         return Layer.empty;
       },
     },
@@ -96,6 +98,7 @@ const routes = ["starts", "ledger"] as const;
 
 const shell = (env: Env, route: (typeof routes)[number]) => {
   let builds = 0;
+
   const recorded =
     route === "starts"
       ? recordedLayer(env)
@@ -103,15 +106,18 @@ const shell = (env: Env, route: (typeof routes)[number]) => {
           env,
           settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
         );
+
   const ready = Layer.unwrap(
     Effect.sync(() => {
       builds++;
+
       return Layer.effect(
         Probe,
         RecordedStart.useSync((start) => ({ port: start.values.port })),
       ).pipe(Layer.provide(recorded));
     }),
   );
+
   return { service: ObjectService.make(Probe, ready), builds: () => builds };
 };
 
@@ -129,12 +135,14 @@ const damaged = (
   if (recipe._tag === "broken") {
     // A proper prefix of a JSON object is never JSON: its closing brace is gone.
     const text = JSON.stringify(good);
+
     return Str.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)))(text);
   }
 
   if (recipe._tag === "missing") {
     const keys = Rec.keys(good);
     const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
+
     return JSON.stringify(rest);
   }
 
@@ -195,11 +203,13 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const good = {
           ...base,
           name: "p",
           founding: { person: "test-person", founder: "test-public-key", window: null },
         };
+
         const bad = damaged(good, recipe);
 
         // Calling `make` is the shell's construction: it may not throw, and it may not build.
@@ -259,13 +269,16 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const good = {
           ...base,
           name: "p",
           founding: { person: "test-person", founder: "test-public-key", window: null },
         };
+
         let text = damaged(good, recipe);
         let reads = 0;
+
         // A build asks whether the object holds a checkpoint yet (none here), then sets up the
         // object's own accounting (P34c): its two tables and its fault slot, and the guard checks
         // that slot before a call. Each is asked for the object's own name; any other query throws.
@@ -278,12 +291,15 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
             ["SELECT value FROM quota_fault WHERE name=?", descriptor.name],
           ].map((call) => JSON.stringify(call)),
         );
+
         let lookups = 0;
         const values = new Map<string, unknown>([["descriptor", descriptor]]);
+
         const storage = {
           get: (key: string) => Promise.resolve(values.get(key)),
           put: (key: string, value: unknown) => {
             values.set(key, value);
+
             return Promise.resolve();
           },
           delete: unexpected,
@@ -296,11 +312,13 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
               }
 
               lookups++;
+
               return [];
             },
           },
           transactionSync: unexpected,
         };
+
         yield* Effect.acquireRelease(
           Effect.sync(() =>
             vi.spyOn(SpanSink, "layer").mockReturnValue(
@@ -334,19 +352,23 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           ),
           (spy) => Effect.sync(() => spy.mockRestore()),
         );
+
         const project = Stub.make<ProjectBinding>(unexpected, {
           settingsStart: async () => Reply.cases.ok.make({ value: StartsTest.receipt(good) }),
         });
+
         ProcessObject.layer({
           programs: {},
           // The app's checked read, as next/apps/fabrika/src/runtime.ts hands it in, of the law's text.
           input: () =>
             Effect.suspend(() => {
               reads++;
+
               return settings({ INSTANCE: text });
             }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
         });
         const constructor = fake<ProcessConstructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
+
         const state = fromDurableObjectState(
           fake<Parameters<typeof fromDurableObjectState>[0]>({
             id: { name: Formatter.formatJson([good.name, descriptor.name]) },
@@ -354,11 +376,13 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
             abort: unexpected,
           }),
         );
+
         const environment = fake<WorkerEnvironment["Service"]>({
           INSTANCE: text,
           PROJECT: { getByName: () => project },
           MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
         });
+
         const context = fake<RuntimeContext["Service"]>({});
 
         // The Layer's outer Effect is the instance's construction: it may not fail, die or build.
@@ -368,6 +392,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           Effect.provideService(ObjectState, state),
           Effect.provideService(RuntimeContext, context),
         );
+
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);
         expect(lookups, "no storage is read before the first call").toBe(0);
@@ -417,12 +442,15 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         const request = new Request(url, { method, headers: upgrade ? { upgrade: "websocket" } : {} });
         const response = new Response(status === 204 ? null : text, { status });
         const given: Array<Request> = [];
+
         const slot = ObjectService.fromWebHandler((seen) =>
           Effect.sync(() => {
             given.push(seen);
+
             return response;
           }),
         );
+
         // `makeRequestEffect` is typed `any` in its source (Workers/HttpServer.ts). It provides the
         // request itself, and the error-free `toHandled` answers a web Response, so these slots
         // need nothing and cannot fail.
@@ -433,10 +461,12 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         expect(answered, "the answer is the handler's Response, not a copy").toBe(response);
 
         const failing = ObjectService.fromWebHandler(() => Effect.fail(new LedgerError({ reason, message: text })));
+
         const refusing: Effect.Effect<Response, never, never> = makeRequestEffect(
           fake(new Request(url, { method })),
           failing,
         );
+
         const refused: Response = yield* refusing;
         expect(refused.status).toBeGreaterThanOrEqual(500);
         expect(yield* HttpClientResponse.fromWeb(HttpClientRequest.get(url), refused).text).not.toContain(text);

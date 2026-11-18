@@ -50,6 +50,12 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const PROJECT = "desk-s2a";
@@ -122,6 +128,7 @@ const door = async (instance: Instance, key: Key, tab: string) => {
 
   const next = async (match: (frame: any) => boolean) => {
     const found = await until("a frame", async () => Arr.findFirstIndex(frames, match), Option.isSome);
+
     return frames.splice(Option.getOrThrow(found), 1)[0];
   };
 
@@ -202,6 +209,7 @@ const findTezgah = async (instance: Instance) => {
     () => calls(instance).info(),
     (all) => Arr.some(all, (row) => Str.startsWith("tezgah:")(String(row.name))),
   );
+
   const found = Arr.filter(rows, (row) => Str.startsWith("tezgah:")(String(row.name)));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
 
@@ -237,10 +245,12 @@ const open: RunnerTest.Open = Effect.gen(function* () {
     process: (name: string) =>
       Effect.promise(async () => {
         const live = Arr.some(await calls(instance).info(), (row) => row.name === name);
+
         const exited = Arr.map(
           Arr.filter(await calls(instance).facts(`processes/${name}`), (row) => row._tag === "exited"),
           (row) => row.reason,
         );
+
         return { live, exited };
       }),
   };
@@ -255,6 +265,7 @@ const order = (node: any): ReadonlyArray<string> =>
 const shown = (view: any) => {
   const space = (view?.workspaces ?? []).find((w: any) => w.n === 1);
   const ids = space === undefined ? [] : order(space.layout);
+
   return Arr.map(ids, (id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
 };
 
@@ -314,12 +325,15 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               Arr.map(run.getState().tiles, (t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" })).sort(
                 (a, b) => (a.id < b.id ? -1 : 1),
               );
+
             /** The window shows exactly workspace 1's tiles in tezgah's view, each one open. */
             const follows = async (label: string, count: number) => {
               const want = await until(label, view, (v) => shown(v).length === count);
+
               const expected = Arr.map(shown(want), (t) => ({ ...t, open: true })).sort((a, b) =>
                 a.id < b.id ? -1 : 1,
               );
+
               await until(
                 `${label}: the window follows`,
                 async () => tiles(),
@@ -336,7 +350,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               const sent = await socket.call("process.send", {
                 pid: tezgah.pid,
                 letter: `desk-s2a-l12-${++letters}`,
-                m: { type: "did", via: { _tag: "key", keys: "ctrl+b %" }, ...m },
+                m: { ...Tag.cases.did.make({}), via: { _tag: "key", keys: "ctrl+b %" }, ...m },
                 sentAt: SENT,
                 seen: 0,
               });

@@ -899,14 +899,14 @@ it("property: lint rule files alone run check and typecheck, with scope readers"
 
 it("format: each entry of readers is a tracked path that holds a test file", () => {
   // format: the next job's path argument is this list, so a renamed folder would leave the reader
-  // run empty. The six entries the plan and experiment 288 found are all on it, and build.test.ts, the
-  // format law split from build.integration.test.ts (0536).
+  // run empty. The six entries the plan and experiment 288 found are all on it. build.test.ts, the
+  // format law split from build.integration.test.ts (0536), left the list when its law became the
+  // lint rule fabrika/one-page-runtime (0591).
   expect(Array.isArray(ci.readers)).toBe(true);
   expect(ci.readers).toEqual(
     expect.arrayContaining([
       "next/apps/fabrika/src/exam/",
-      "next/apps/fabrika/src/settings-generated.integration.test.ts",
-      "next/apps/fabrika/src/build.test.ts",
+      "next/apps/fabrika/src/settings-generated.test.ts",
       "next/apps/fabrika/src/build.integration.test.ts",
       "next/apps/fabrika/src/build-command.integration.test.ts",
       "next/apps/fabrika/src/instance-one-file.integration.test.ts",
@@ -952,8 +952,11 @@ const envOf = (event: string, draft: boolean) => ({
   DRAFT: String(draft),
 });
 
-/** What a run prints for a scope: the reader paths, or all of next/. */
-const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
+/** The full filter: both roots of the configured `next` project, as Vitest takes them (O3). */
+const FULL = "next/ kalfa/";
+
+/** What a run prints for a scope: the reader paths, or both roots of the `next` project. */
+const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : FULL);
 
 it("property: probe changes no flag: the first pass prints the same flags for any diff text", () =>
   fc.assert(
@@ -1033,7 +1036,7 @@ it.live("scenario: with no parser to import, --same prints what the first pass p
 
       expect(one).toMatchObject({
         next: "true",
-        filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
+        filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? FULL : filterOf("readers"),
       });
     }
 
@@ -1042,11 +1045,11 @@ it.live("scenario: with no parser to import, --same prints what the first pass p
     const env = envOf("pull_request", false);
     expect(yield* promised(() => ci.outputs({ same: true, env, run: broken, load: rejects }))).toMatchObject({
       next: "true",
-      filter: "next/",
+      filter: FULL,
     });
     expect(yield* promised(() => ci.outputs({ same: false, env, run: broken }))).toMatchObject({
       next: "true",
-      filter: "next/",
+      filter: FULL,
     });
   }),
 );
@@ -1564,16 +1567,26 @@ const flagText = fc.oneof(
   fc.string(),
 );
 
+// O3: the full filter is exactly both roots. The legacy one-root `next/`, a missing filter and any
+// other spelling of the roots (reversed, spaced, joined, one alone) are not it.
 const filterText = fc.oneof(
   fc.constantFrom(
+    FULL,
     "next/",
     ci.readers.join(" "),
     "",
     "next",
     "next/ ",
+    " next/ kalfa/",
+    "next/ kalfa/ ",
+    "next/  kalfa/",
+    "kalfa/ next/",
+    "kalfa/",
+    "next/kalfa/",
     ci.readers[0]!,
     ci.readers.toReversed().join(" "),
   ),
+  fc.constant(undefined),
   fc.string(),
 );
 
@@ -1586,7 +1599,7 @@ const printedText = fc.record({
   filter: filterText,
 });
 
-it("property: a printed flag counts as a job that ran only when it is exactly true, and the filter names all of next/ or the reader tests only when it is exactly theirs", () => {
+it("property: a printed flag counts as a job that ran only when it is exactly true, and the filter names all of the ordinary project or the reader tests only when it is exactly theirs", () => {
   fc.assert(
     fc.property(printedText, (printed) => {
       const read = ci.selectionOf(printed);
@@ -1595,7 +1608,7 @@ it("property: a printed flag counts as a job that ran only when it is exactly tr
         expect(read[job], job).toBe(printed[job] === "true");
       }
 
-      const scope = printed.filter === "next/" ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
+      const scope = printed.filter === FULL ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
       expect(read.scope).toBe(scope);
     }),
     options,
@@ -2131,6 +2144,139 @@ it("property: a green historical partial run cannot skip the new automatic proje
     options,
   );
 });
+
+// T1076 O3. The full filter is both roots of the configured `next` project, `next/ kalfa/`: Kalfa's
+// ordinary laws are that project's files too. Plants for the new laws, each run once on changes.mjs
+// and restored: decode the legacy `next/` as all (the record law), print the legacy `next/` as the full
+// filter (the first-pass law), let the parser's pass offer a Kalfa path (the same-program law).
+// The Schemas of these laws: paths by shape, and the printed filters the record may meet.
+const KalfaPath = Schema.String.check(Schema.isPattern(/^kalfa\/config\/src\/[a-z]{1,12}\.ts$/));
+
+const NextPath = Schema.String.check(Schema.isPattern(/^next\/packages\/libfabrika\/src\/[a-z]{1,12}\.ts$/));
+
+const OtherPath = Schema.Union([
+  Schema.String.check(Schema.isPattern(/^docs\/[a-z]{1,12}\.md$/)),
+  Schema.String.check(Schema.isPattern(/^field\/[a-z]{1,12}\.jsonl$/)),
+  Schema.String.check(Schema.isPattern(/^(?:apps|programs|packs|wip|legacy)\/[a-z]{1,12}\.ts$/)),
+  Schema.String.check(Schema.isPattern(/^unknown\/[a-z]{1,12}$/)),
+  Schema.String.check(Schema.isPattern(/^oxlint-plugins\/[a-z]{1,12}\.mjs$/)),
+  Schema.Literals(["pnpm-lock.yaml", ".oxlintrc.json", ".agents/skills/lead/SKILL.md"]),
+]);
+
+const PrintedFilter = Schema.Union([
+  Schema.Literals([
+    FULL,
+    "next/",
+    ci.readers.join(" "),
+    "",
+    "next",
+    "next/ ",
+    " next/ kalfa/",
+    "next/ kalfa/ ",
+    "next/  kalfa/",
+    "kalfa/ next/",
+    "kalfa/",
+    "next/kalfa/",
+    ci.readers[0]!,
+    ci.readers.toReversed().join(" "),
+  ]),
+  Schema.Undefined,
+  Schema.String.check(Schema.isMaxLength(24)),
+]);
+
+const ScopedEvent = Schema.Literals(["pull_request", "merge_group", "push"]);
+
+const Sources = Schema.Array(KalfaPath).check(Schema.isMinLength(1), Schema.isMaxLength(4));
+
+const unique = (paths: readonly string[]) => [...new Set(paths)];
+
+/** Runs an async body as the Effect a property returns, its failures the test's failures. */
+const body = (run: () => Promise<void>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new Error("a property body failed", { cause }) });
+
+// A change that needs all of the ordinary project, and the run's own pass, on a Schema's drawn paths.
+it.effect.prop(
+  "property: the first pass prints the two roots for every change that needs the ordinary project, Kalfa's included",
+  {
+    sources: Sources,
+    others: Schema.Array(Schema.Union([NextPath, OtherPath])).check(Schema.isMaxLength(4)),
+    event: ScopedEvent,
+  },
+  ({ sources, others, event }) =>
+    body(async () => {
+      const changed = unique([...sources, ...others]);
+
+      expect(ci.scope(changed, event)).toBe("all");
+
+      const printed = await ci.outputs({ same: false, env: envOf(event, false), run: git(changed, "") });
+
+      expect(printed["next"]).toBe("true");
+      expect(printed["filter"]).toBe(FULL);
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+it.prop(
+  "property: a ready run records its trees only when it printed the two roots for a change that needs the ordinary project; the legacy next/, a missing filter and a malformed one record nothing",
+  {
+    changed: Schema.Array(Schema.Union([KalfaPath, NextPath])).check(Schema.isMinLength(1), Schema.isMaxLength(6)),
+    filter: PrintedFilter,
+  },
+  ({ changed: drawn, filter }) => {
+    const changed = unique(drawn);
+
+    const needed = neededOf(changed);
+
+    expect(needed).toMatchObject({ next: true, scope: "all" });
+
+    const recorded = (printed: string | undefined) =>
+      ci.record(
+        { ...recordEnv(needed), FILTER: printed } as Record<string, string | undefined>,
+        prGit(changed, { merge: tree.head, base: tree.base }),
+      ).name;
+
+    // Reached in every run: the two roots record, and the drawn filter records only if it is them. A
+    // pinned case below holds the one-root spelling a run printed before Kalfa joined the project.
+    expect(recorded(FULL)).toBe(ci.recordName(tree.head, tree.base));
+    expect(recorded(filter)).toBe(filter === FULL ? ci.recordName(tree.head, tree.base) : null);
+    expect(recorded("next/")).toBeNull();
+    expect(recorded(undefined)).toBeNull();
+  },
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
+
+it.effect.prop(
+  "property: the parser's pass never lowers a change that touches Kalfa to reader-only coverage, and is never offered a Kalfa path",
+  { sources: Sources, others: Schema.Array(NextPath).check(Schema.isMaxLength(4)), event: ScopedEvent },
+  ({ sources, others, event }) =>
+    body(async () => {
+      const changed = unique([...sources, ...others]);
+
+      const offered: string[] = [];
+
+      // A parser that proves every path it is offered is the same program: the readers' scope, if
+      // Kalfa could be offered.
+      const load = () =>
+        Promise.resolve({
+          samePaths: (_base: string, _head: string, paths: readonly string[]) => {
+            offered.push(...paths);
+
+            return [...paths];
+          },
+        });
+
+      const printed = await ci.outputs({
+        same: true,
+        env: envOf(event, false),
+        run: git(changed, "+// a note"),
+        load,
+      });
+
+      expect(offered.filter((path) => path.startsWith("kalfa/"))).toEqual([]);
+      expect(printed).toMatchObject({ next: "true", filter: FULL });
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);
 
 // A change to .gitattributes that only edits `linguist-*` attributes changes how GitHub shows a diff
 // and no byte any job reads, so it runs only what Markdown runs. `eol`, `text`, `filter` and `diff`

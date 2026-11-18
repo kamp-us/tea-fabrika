@@ -26,8 +26,7 @@ flowchart LR
 [0068](0068-tiers-carry-every-part.md) gives each tier a working slice of four core ideas. One is
 programs written outside fabrika's own source. 0068 says what the slice must do, but not how a
 tier knows the slice works for the person who writes such a program. This decision gives that
-check. It amends 0068 in part: a tier plan now names this check for that idea, and the rest of 0068
-still holds.
+check. It amends 0068 in part: a tier plan names this check for that idea.
 
 The tier slices are tracker ticket 665.
 

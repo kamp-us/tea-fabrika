@@ -13,7 +13,11 @@
 // Before it saves, the writer sends counter:1 one input, so the home holds a Process checkpoint. To save it again before a later slice, on the commit before
 // that slice's product code:
 //
-//   T502_PORT_HOME=write pnpm exec vitest run next/apps/fabrika/src/port-home.laws.test.ts
+//   T502_PORT_HOME=write pnpm exec vitest run next/apps/fabrika/src/port-home.laws.integration.test.ts
+//
+// The saved home is older than the code store, and the two T833 laws below need one that is: a home
+// saved again on a build with the code store fails them. So it keeps the Msgs it was saved with,
+// still keyed `type`, as an old home that must still open.
 //
 // A saved home is public, so the writer never saves one that names a machine path. It copies the
 // run's home into a staging folder, makes each Alchemy resource's `props.main` relative to the
@@ -67,6 +71,13 @@ import { localInstance } from "./local-instance.ts";
 import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  inc: {},
+});
 
 const { ROOT, FIXTURE } = Effect.runSync(
   Path.Path.use((path) => {
@@ -132,7 +143,7 @@ const press = Effect.fnUntraced(function* (
   key: typeof TestKey.Type,
   pid: string,
   letter: string,
-  m: { readonly type: string; readonly name?: string },
+  m: { readonly _tag: string; readonly name?: string },
 ) {
   const id = yield* identity(key);
   const url: string = instance.url;
@@ -144,6 +155,7 @@ const press = Effect.fnUntraced(function* (
       const socket = new WebSocket(
         `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(id.fingerprint)}/${tab}`,
       );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -178,6 +190,7 @@ const press = Effect.fnUntraced(function* (
   const ask = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const n = ++serial;
     socket.send(Formatter.formatJson({ jsonrpc: "2.0", id: n, method, params }));
+
     return yield* next((frame) => frame.id === n);
   });
 
@@ -206,7 +219,7 @@ const press = Effect.fnUntraced(function* (
 
 /** Sends a counter one `inc` through `press`, and answers the count its view shows after it. */
 const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: string) =>
-  press(instance, key, pid, letter, { type: "inc" }).pipe(
+  press(instance, key, pid, letter, Tag.cases.inc.make({})).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
         Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Finite }) }) }),
@@ -217,7 +230,7 @@ const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
 
 /** Adds the item `name` to a checklist through `press`, and answers the item names its view shows. */
 const add = (instance: any, key: typeof TestKey.Type, pid: string, letter: string, name: string) =>
-  press(instance, key, pid, letter, { type: "add", name }).pipe(
+  press(instance, key, pid, letter, { ...Tag.cases.add.make({}), name }).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
         Schema.Struct({
@@ -348,6 +361,7 @@ const reopened = Effect.gen(function* () {
 
 /** One Alchemy resource file, read whole so writing it back keeps every field in its place. */
 const Resource = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+
 /** A resource file as Alchemy writes it: `JSON.stringify(state, null, 2)`. */
 const AlchemyState = Schema.fromJsonString(Schema.Unknown, { space: 2 });
 
@@ -383,12 +397,14 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
     // in any other shape fails here rather than be rewritten.
     expect(yield* Schema.encodeEffect(AlchemyState)(resource), `${file} is not in Alchemy's own shape`).toBe(text);
+
     const relative = Option.getOrUndefined(
       Arr.findFirst(
         Arr.map(dists, (dist) => path.relative(dist, main)),
         (one) => !Str.startsWith("..")(one),
       ),
     );
+
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
     // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
     // saved attributes (`alchemy@2.0.0-beta.85`, `src/Local/LocalProvider.ts`, `diff`), and the
@@ -691,6 +707,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
     ),
     (row) => row.value,
   );
+
   const [last] = Arr.flatMap(
     yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
@@ -721,10 +738,12 @@ const reopenedOnItsCode = Effect.gen(function* () {
           yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
           "checklist:1 stepped one real input",
         ).toContain("t833 item");
+
         return Rec.fromEntries(Arr.map(Rec.toEntries(built.programs), ([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
   );
+
   const added = Arr.flatMap(
     yield* rowsUnder(
       home,
@@ -738,6 +757,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
   for (const descriptor of descriptors) {
     const hash = code[descriptor.program];
     expect(hash, `this build has ${descriptor.program}`).toBeDefined();
+
     const moves = Arr.filter(
       added,
       (line) =>
@@ -810,6 +830,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
   const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-u-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
+
   const counter = Option.getOrThrow(
     Arr.findFirst(
       Arr.map(
@@ -822,6 +843,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
       (d) => d.name === "counter:1",
     ),
   );
+
   const checkpoint = Option.getOrUndefined(
     Arr.findFirst(
       Arr.flatMap(
@@ -831,7 +853,9 @@ const upgradedOnItsCode = Effect.gen(function* () {
       (row) => row.process === counter.id,
     ),
   );
+
   expect(checkpoint, "the saved home holds counter:1's checkpoint").toBeDefined();
+
   const [last] = Arr.flatMap(
     yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
@@ -853,6 +877,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
       }),
     { "fabrika/counter": counterAt(2) },
   );
+
   const added = Arr.flatMap(
     yield* rowsUnder(
       home,
@@ -862,6 +887,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
     ),
     (found) => found.rows,
   );
+
   // The open moved counter:1 off its saved build first, as one code.loaded from "open" (0529).
   expect
     .soft(

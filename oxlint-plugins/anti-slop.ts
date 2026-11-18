@@ -10,7 +10,7 @@
 // the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on a folder
 // with no hit of a rule that the rule's list does not name, and on a listed glob that is not a folder
 // of the scope. It keeps no list of its own: the folders still waiting are the scope's folders minus
-// the rule's list.
+// the rule's list. The typecheck port is today's lead tooling and joins as four exact globs.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,11 +41,26 @@ const PLUGINS = [
   { name: "anti-slop-effect", specifier: "vendor/anti-slop/src/effect/index.ts" },
 ];
 
-/** The four globs of the whole scope. A rule's list becomes these once every folder is on it. */
-export const WHOLE: ReadonlyArray<string> = ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
+/** The globs of the whole scope. A rule's list becomes these once every folder is on it. */
+export const WHOLE: ReadonlyArray<string> = ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
 
-/** The folders the zero lock's run reads: the scope, as the four globs name it. */
-const ROOTS = ["next", ".agents", "oxlint-plugins", ".github/ci"];
+/** The typecheck port's four globs, as its lint blocks name them. */
+const TYPECHECK = [
+  "scripts/typecheck.ts",
+  "scripts/typecheck/**",
+  "scripts/typecheck.test.ts",
+  "scripts/typecheck-lock.test.ts",
+];
+
+/** The folders and files the zero lock's run reads. */
+const ROOTS = [
+  "next",
+  "kalfa",
+  ".agents",
+  "oxlint-plugins",
+  ".github/ci",
+  ...Arr.map(TYPECHECK, (glob) => glob.replace(/\/\*\*$/, "")),
+];
 
 const LIBFABRIKA = "next/packages/libfabrika/src";
 
@@ -59,31 +74,36 @@ const subfolders = (root: string, path: string): ReadonlyArray<string> =>
 
 /**
  * The folders of the scope, read from the disk, each as the glob a rule's list names it by: each
- * tooling folder, the files of libfabrika outside a module, each module of libfabrika, each other
- * package, each program and the app. A new folder is one of them from its first file.
+ * tooling folder, the typecheck port, the files of libfabrika outside a module, each module of
+ * libfabrika, each other package, each program and the app. A new folder is one of them from its first file.
  */
 export const folders = (root: string): ReadonlyArray<string> => [
   ".agents/**",
   ".github/ci/**",
   "oxlint-plugins/**",
+  ...TYPECHECK,
   `${LIBFABRIKA}/*`,
   ...subfolders(root, LIBFABRIKA),
   ...Arr.filter(subfolders(root, "next/packages"), (glob) => glob !== "next/packages/libfabrika/**"),
   ...subfolders(root, "next/programs"),
   ...subfolders(root, "next/apps"),
+  ...subfolders(root, "kalfa").flatMap((glob) => [
+    ...subfolders(root, glob.slice(0, -"/**".length)).filter((folder) => folder.endsWith("/src/**")),
+    glob,
+  ]),
 ];
 
 /** What the zero lock asks of one rule's list. */
 interface Lock {
   /** The folders of the scope with no hit of the rule that its list does not name yet. */
   readonly add: ReadonlyArray<string>;
-  /** The globs on its list that are neither a folder of the scope nor one of the four whole-scope globs. */
+  /** The globs on its list that are neither a folder of the scope nor one of the whole-scope globs. */
   readonly refused: ReadonlyArray<string>;
 }
 
-/** A listed glob covers a folder when it names that folder, or is a whole-scope glob above it. */
+/** A listed glob covers its own folder and every folder below it. */
 const covers = (glob: string, folder: string): boolean =>
-  glob === folder || (WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+  glob === folder || (glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
 /** The zero lock for one rule: its list, and the rule's hits in each folder of the scope. */
 export const lock = (
@@ -133,6 +153,15 @@ const levelOf = (setting: Setting): string => (Predicate.isString(setting) ? set
 const written = (setting: Setting): string | ReadonlyArray<unknown> =>
   Predicate.isString(setting) ? setting : [setting[0], ...setting[1]];
 
+/** Count a file's hit in every containing folder, including a package and its source folder. */
+export const countFile = (scope: ReadonlyArray<string>, hits: Map<string, number>, file: string): void => {
+  for (const folder of scope) {
+    if (matchesGlob(file, folder)) {
+      hits.set(folder, (hits.get(folder) ?? 0) + 1);
+    }
+  }
+};
+
 /** `anti-slop/no-runtime-typeof` as oxlint prints its code: `anti-slop(no-runtime-typeof)`. */
 const codeOf = (rule: string): string => `${rule.replace("/", "(")})`;
 
@@ -171,11 +200,10 @@ const count = (
   for (const { code, filename } of report.value.diagnostics) {
     const file = relative(root, resolve(root, filename ?? ""));
     const rule = codes.get(code ?? "");
-    const folder = Arr.findFirst(scope, (glob) => matchesGlob(file, glob));
     const counted = rule === undefined ? undefined : hits.get(rule);
 
-    if (counted !== undefined && Option.isSome(folder) && !Arr.some(ignored, (glob) => matchesGlob(file, glob))) {
-      counted.set(folder.value, (counted.get(folder.value) ?? 0) + 1);
+    if (counted !== undefined && !Arr.some(ignored, (glob) => matchesGlob(file, glob))) {
+      countFile(scope, counted, file);
     }
   }
 

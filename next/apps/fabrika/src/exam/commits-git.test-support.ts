@@ -188,6 +188,7 @@ class Repo {
 
   run(args: string[], env = ENV, cwd = this.dir) {
     const ran = spawnSync("node", [PROGRAM, ...args], { cwd, env, encoding: "utf8" });
+
     const answers = pipe(
       Str.split(ran.stdout, "\n"),
       Arr.filter((l) => pipe(l, Str.startsWith("{"))),
@@ -298,6 +299,7 @@ const squashed = (r: Repo, notes: Array<{ note: object; commit: string }>, moveM
 
   r.git("merge", "--squash", "-q", "pr");
   const squash = r.commit("squash");
+
   const rows = Arr.map(
     notes,
     ({ note, commit }, i): { date: string; run: string; attested: Array<Record<string, unknown>> } => ({
@@ -332,6 +334,7 @@ const log = (r: Repo, rows: object[]) => {
       Arr.join("\n"),
     )}\n`,
   );
+
   return r.commit("log");
 };
 

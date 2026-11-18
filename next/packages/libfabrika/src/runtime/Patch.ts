@@ -22,6 +22,7 @@ export const Patch = Schema.Union([
   Schema.Struct({ op: Schema.Literal("replace"), path: Schema.String, value: Schema.Json }),
   Schema.Struct({ op: Schema.Literal("remove"), path: Schema.String }),
 ]);
+
 /**
  * One RFC 6902 operation, as `Patch` decodes it.
  *
@@ -55,10 +56,12 @@ const same = (a: Schema.Json, b: Schema.Json): boolean => {
   if (isJsonObject(a) && isJsonObject(b)) {
     // `Schema.JsonObject` has no symbol index, which the `Rec` operations ask of their record.
     const entries = Object.entries(a);
+
     return (
       entries.length === Object.keys(b).length &&
       Arr.every(entries, ([key, one]) => {
         const other = own(b, key);
+
         return other !== undefined && same(one, other);
       })
     );
@@ -127,6 +130,7 @@ export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Pat
 };
 
 const decodeOps = Schema.decodeUnknownResult(Schema.Array(Patch));
+
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);

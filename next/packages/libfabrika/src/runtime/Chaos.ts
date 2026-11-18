@@ -256,6 +256,7 @@ export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>):
     restarts(entries),
     (row) => row.name === hit.name && row.after === hit.process && row.rev > hit.after,
   ).sort((left, right) => left.rev - right.rev)[0];
+
   return first === undefined
     ? null
     : { ref: first.ref, rev: first.rev, arrivedAt: first.arrivedAt, process: first.process };

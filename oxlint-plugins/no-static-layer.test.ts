@@ -11,8 +11,8 @@ import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
+import { plant } from "./plant.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
 class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {

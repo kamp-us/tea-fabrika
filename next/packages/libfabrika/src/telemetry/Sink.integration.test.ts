@@ -66,11 +66,14 @@ type Row = SpanRow;
  *  one, last opened first, then removes the folder (0061). */
 const folder = Effect.gen(function* () {
   const scope = yield* Effect.scope;
+
   const dir = yield* Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-sink-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+
   return { dir, connect };
 });
 
@@ -96,8 +99,10 @@ const home = folder.pipe(
 
       return sql;
     };
+
     const bytes = (marker: string) =>
       Arr.filter(readdirSync(dir), (file) => readFileSync(join(dir, file)).includes(marker));
+
     return { dir, db, sql: nodeSql(db), open, part, parts, bytes };
   }),
 );
@@ -922,6 +927,7 @@ const storedStack = Effect.fnUntraced(function* (
         return error;
       },
     );
+
     const fail = Effect.fn("sink.frames")(function* () {
       return yield* Effect.sync(() => {
         // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- A-Sink exercises a thrown Error and its nested cause
@@ -977,9 +983,11 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const line of Arr.filter(Str.split(message, "\n"), (line) => /^\s*at /.test(line))) {
           const frame = Str.trim(line);
+
           const named = Option.getOrUndefined(
             Arr.findFirst(sample.slashed, (name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame)),
           );
+
           const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
           const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
           expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
@@ -1070,12 +1078,14 @@ const strayCases = Arbitrary.schema(StrayInput).pipe(
   Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
     const folder = `${before}${stray}${breaker}${after}`;
     const separator = Str.endsWith("\\")(prefix) ? "\\" : "/";
+
     const root = {
       posix: `/sink-${word}/${folder}/private`,
       url: `file:///sink-${word}/${folder}/private`,
       windows: `C:\\sink-${word}\\${folder}\\private`,
       relative: `${prefix}sink-${word}${separator}${folder}${separator}private`,
     }[rootKind];
+
     const generated = Arr.map(frames, ({ shape, name, line, column }) =>
       frameText({ shape, name, line, column, root, word }),
     );
@@ -1120,9 +1130,11 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
         for (const line of Arr.filter(Str.split(message, /\r\n|\r|\n/), (line) => /^\s*at /.test(line))) {
           // A third error gives the inner's last line ` {`, the mark of a cause that follows.
           const frame = Str.replace(/ \{$/, "")(Str.trim(line));
+
           const named = Option.getOrUndefined(
             Arr.findFirst(sample.slashed, (name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame)),
           );
+
           const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
           const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
           expect(withoutNode, `a stored frame names a folder: ${Formatter.format(line)}`).not.toMatch(/[/\\]/);
@@ -1190,6 +1202,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           ),
         },
       ]);
+
       const lines = Arr.map(Str.split(message, "\n"), (line) => Str.trim(line));
       expect(Arr.filter(lines, (line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
       expect(Arr.filter(lines, (line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
@@ -1208,6 +1221,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           stack: "Error: m\r\n    at fn (/root/a/b/c.ts:1:2)\r\n    at g (/root/x.ts:3:4)\r",
         })),
       );
+
       expect(Option.getOrNull(Str.match(/at fn \(c\.ts:1:2\)\r\n/g)(message))).toHaveLength(3);
       expect(Option.getOrNull(Str.match(/at g \(x\.ts:3:4\)\r/g)(message))).toHaveLength(3);
       expect(message).toContain("at g (x.ts:3:4)\r {");
@@ -1221,6 +1235,7 @@ const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 
 const NOTE_TWO = "note-two-p99";
+
 const a = (n: number) => Str.repeat(n)("a");
 
 class NoteError extends Error {
@@ -1324,6 +1339,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.constant(null),
       fc.bigInt(),
     );
+
     return fc.assert(
       fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
         Effect.runPromise(
@@ -1471,6 +1487,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
   it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", () => {
     const word = fc.stringMatching(/^[A-Z][A-Za-z]{0,15}$/);
+
     return fc.assert(
       fc.asyncProperty(word, word, fc.string({ maxLength: 40 }), (outer, tag, text) => {
         const reason = Object.assign(new Error(`${NOTE}-${text}`), {
@@ -1542,7 +1559,9 @@ const walkHome = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t705-sink-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const db = yield* TestDatabase.make(join(dir, "object.db"));
+
   return { dir, db, sql: nodeSql(db) };
 });
 
@@ -1562,6 +1581,7 @@ describe("T705, the sink's public calls keep their order through one machine", (
           /** Ends one span outside any fiber: its rows are there the moment `runSync` returns. */
           const end = (n: number, word: string, fails: boolean) => {
             arm(fails ? 1 : 0);
+
             const exit = Effect.runSyncExitWith(ambient)(
               step("runner.step", { "fab.n": n, "fab.word": word }).pipe(Effect.provideContext(services)),
             );
@@ -1683,6 +1703,7 @@ const spanFrames = (text: string) =>
     }
 
     const location = frame[2] ?? "";
+
     return [`${frame[1]} (${Arr.lastNonEmpty(Str.split(location, /[/\\]/))})`];
   });
 
@@ -1697,16 +1718,19 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
             reason: Schema.String,
           }) {}
+
           const names = Arr.map(sample.names, (name, depth) => `typed.${name}.${depth}`);
 
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
             return yield* new Typed({ reason: sample.reason });
           });
+
           const outermost = Arr.reduceRight<string, () => Effect.Effect<never, Typed>>(
             names.slice(0, -1),
             innermost,
             (inner, name) => Effect.fn(name)(() => inner()),
           );
+
           const exit = yield* Effect.exit(outermost());
 
           if (!Exit.isFailure(exit)) {

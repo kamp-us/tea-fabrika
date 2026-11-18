@@ -27,6 +27,12 @@ import { mailChunk } from "../../settings/Declarations.ts";
 import type { Sql } from "../../Sql.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  poison: {},
+});
+
 const policy = {
   maxDeliveries: 3,
   intensity: 5,
@@ -44,7 +50,7 @@ const Model = Schema.Struct({ count: Schema.Int });
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("poison") });
+const Msg = Schema.TaggedStruct("poison", {});
 
 // Only the platform base class and the RPC transport are supplied. Box methods are real.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -173,7 +179,7 @@ const world = (cause: unknown, adapter: "node" | "worker" = "node", maxDeliverie
 
   const input = {
     id: "poison",
-    envelope: { id: `in-${X}-1`, by: owner, arrivedAt: 0, input: { type: "poison" } },
+    envelope: { id: `in-${X}-1`, by: owner, arrivedAt: 0, input: Tag.cases.poison.make({}) },
     sentAt: from().sentAt,
     seen: 0,
     span: { traceId: from().traceId, spanId: "00f067aa0ba902b7" },

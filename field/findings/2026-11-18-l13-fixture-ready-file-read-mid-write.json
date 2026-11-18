@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-l13-fixture-ready-file-read-mid-write",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/node/P19Launchd.test-support.ts",
+    "line": 583
+  },
+  "says": "In next/, L13's normal-exit check failed with HostError 'normal-exit-restarted' at its first comparison of fixture-ready.json with the copy it read earlier, with no sign of a restart. The fixture (fixtures/next/p19-launchd/brain.ts) rewrites fixture-ready.json every 50 ms with writeFileString, which empties the file before it writes, and the check reads its copy as soon as the file exists, so the copy can be empty or partial. Likely cause, about 70% sure. Ticket text: L13's normal-exit fixture rewrites its ready file in place while the check reads it; write it once and atomically (a temporary file, then a rename), and compare the decoded pid rather than raw text.",
+  "proof": "Host run https://github.com/kamp-us/tea-fabrika/actions/runs/44318418776 job 134850593104 (pull_request, fabrikalfa/l13-guard-bundle at 08af9f5dc): HostError reason 'normal-exit-restarted' from checked at P19Launchd.test-support.ts:583:12, the line that compares readFileString(fixture-ready.json) with normalReady (read at line 574 right after wait(fs.exists(...))). The phase record named the phase: runs/p19/host.json was {\"guardMs\":207,\"phase\":\"fixture\",\"starts\":[12291,5127,5454,4782],\"stops\":[2165,1657,2360,2020],\"replacementMs\":3328}. The launchd sampler saw no 'state = not running' and no 'last exit code = 0' line, where the passing run https://github.com/kamp-us/tea-fabrika/actions/runs/44312250473 saw 35 of each as the fixture exited and stayed stopped; no fabrika.brain job was left loaded.",
+  "cost": "A host-gated pull request can go red on L13 for a race inside the test's own fixture, which says nothing about launchd's restart policy, the behavior the check is there to prove.",
+  "head": "08af9f5dc38a9617c6c234aca74f0d40bd09e0a8",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1622"
+}

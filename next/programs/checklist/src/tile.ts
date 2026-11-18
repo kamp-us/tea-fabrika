@@ -1,6 +1,6 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Schema, String as Str } from "effect";
-import { checklistMachine } from "./program.ts";
+import { ChecklistMsg, checklistMachine } from "./program.ts";
 
 const press = Cmd.make("press", {
   input: Schema.Struct({ m: Schema.toType(checklistMachine.msg) }),
@@ -8,19 +8,20 @@ const press = Cmd.make("press", {
   err: [],
 });
 
+/** The tile's own inputs: a keystroke in the add field, and its submit. */
+export const TileMsg = Schema.TaggedUnion({ typed: { text: Schema.String }, submit: {} });
+
 /** The add field belongs to this tab. The parent turns its press into a letter. */
 export const tile = Machine.make({
   model: Schema.Struct({ draft: Schema.String.check(Schema.isMaxLength(80)) }),
-  msg: Schema.Union([
-    Schema.Struct({ type: Schema.Literal("typed"), text: Schema.String }),
-    Schema.Struct({ type: Schema.Literal("submit") }),
-  ]),
+  msg: TileMsg,
   cmds: [press],
   init: () => [{ draft: "" }, []],
   update: {
     press_ok: (s) => [s, []],
     press_err: (s) => [s, []],
     typed: (_s, m) => [{ draft: Str.slice(0, 80)(m.text) }, []],
-    submit: (s) => (s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: { type: "add", name: s.draft } })]]),
+    submit: (s) =>
+      s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: ChecklistMsg.cases.add.make({ name: s.draft }) })]],
   },
 });

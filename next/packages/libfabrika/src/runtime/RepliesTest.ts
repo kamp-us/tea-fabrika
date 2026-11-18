@@ -142,6 +142,7 @@ export const capture = () => {
       ],
       "\n",
     );
+
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
     Arr.map(spans, (span) => {
@@ -337,6 +338,7 @@ const walk = (
 
     for (const [n, step] of steps.entries()) {
       const good = Arr.filter([...first.entries()], ([k]) => !corrupt.has(k));
+
       const moves = Arr.filter(enabled, (move) =>
         move === "repeat" || move === "read" || move === "corrupt" || move === "accepted" ? good.length > 0 : true,
       );
@@ -389,6 +391,7 @@ const walk = (
         expect(yield* service.reply(name, id), "a failed write is not a stored reply").toBeNull();
       } else if ((move === "corrupt" || move === "accepted") && chosen !== undefined) {
         const [k, stored] = chosen;
+
         const located = Arr.flatMap(dump(raw), ({ table, row }) =>
           Arr.flatMap(Rec.toEntries(row), ([column, value]) => {
             if (!Predicate.isString(value) || parsed(value)?.["digest"] !== stored.digest) {
@@ -402,9 +405,11 @@ const walk = (
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
         // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+
         const json = yield* Schema.decodeUnknownEffect(
           Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
         )(value);
+
         const secret = step.body;
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
@@ -452,10 +457,12 @@ const walk = (
 
       // After every move: no stored row, printed error or span holds a body (R11).
       const damaged = new Set(corrupt.values());
+
       const cells = Arr.filter(
         Arr.flatMap(dump(raw), ({ row }) => Rec.values(row)),
         (cell): cell is string => Predicate.isString(cell) && !damaged.has(cell),
       );
+
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }
 

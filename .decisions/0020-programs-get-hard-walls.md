@@ -71,7 +71,7 @@ Quotas and CPU limits follow Kubernetes' `ResourceQuota` and container `limits`
 [quotas](https://kubernetes.io/docs/concepts/policy/resource-quotas/)).
 
 This amends part of 0018: its supervisor location, left open there, is now decided, and its
-isolation now needs walls, not only code. The rest of 0018 holds.
+isolation now needs walls, not only code.
 
 ## Decision
 

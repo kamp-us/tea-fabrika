@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-build3",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T01:44:30-08:00",
+  "ended": "2026-11-16T01:58:55-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The fix round's build after the plan's amendment of 2026-11-16 (docs/plan/quests/port-typecheck-PLAN.md, 'a dead .break is broken under its own .break'), in today's tooling. scripts/typecheck/LocksFile.ts: breakStale(path, withChild) now breaks a stale .break by calling itself on it, under .break.break, in place of removing it directly, as Mercurial 7.2.4's _testlock takes .break as a lock of its own with timeout=0; a .break, at any depth, is removed on the way out only while it still names this process (removeIfOurs, which release now shares); the wrong comment about two dead breakers is gone. The 8 hand _tag comparisons became the unions' matchers: LocksFile.ts failedWith uses Predicate.isTagged, the two .break checks and the hold loop use Seen.match, the look under .break uses Seen.guards.stale, Look.ts uses Liveness.match, Typecheck.ts uses Listing.guards.refused. NodeModulesFs.ts:20 stays, inside Effect.catchIf. One call taken at 85%: a stale .break whose own .break.break is held by a live breaker answers busy (the caller sleeps and tries again), not again as the plan's sketch wrote; that is what Mercurial's _testlock does when its inner lock is held (it returns the locker, read as held), and it avoids a loop with no sleep.",
+  "plants": [
+    { "law": "scripts/typecheck-lock.test.ts N7", "plant": "on the fixed code, the stale branch for a .break put back to fs.remove(breaker) then again: both B and C hold ([602, 603], expected length 1)", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "N7 was red at 0df871b21 before the change (both holds returned) and green after. The plant ran once by a copy of the fixed file to the scratchpad, an edit, the run, an edit back, and cmp against the copy, which printed the file identical. Ran in a Linux box with CLAUDE_CODE_REMOTE=true at 0df871b21 plus this change, with maxWorkers=1 and no override: scripts/typecheck.test.ts (5, N1 and N6), scripts/typecheck-lock.test.ts (4, N2, N3, N4, N7), scripts/typecheck.integration.test.ts (7, N5) and scripts/caps.test.ts (29), all green; the 0178 guard refused none. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 failed only on the four known .oxlintrc.json lines from oxlint-plugins/anti-slop.ts's zero lock (scripts/typecheck.ts, scripts/typecheck/**, scripts/typecheck.test.ts, scripts/typecheck-lock.test.ts are not folders of its scope), which wait on a lead ruling; the oxlint run in pnpm format reported 0 blocking. The list ratchet exited 0. The scripts package's typecheck exited 0, and one pnpm typecheck at the end exited 0 with all 31 parts done.",
+  "step": "build"
+}

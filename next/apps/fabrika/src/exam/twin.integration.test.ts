@@ -292,6 +292,7 @@ describe("P12 local twin lint", () => {
       ],
       "\n",
     );
+
     expect(Arr.map(scan("plant.ts", body), (f) => f.reason)).toEqual([
       "no local provider: Cloudflare.Zone.Zone",
       "remote override",
@@ -317,6 +318,7 @@ describe("P12 local twin lint", () => {
       ],
       "\n",
     );
+
     expect(scan("plant.ts", body)).toEqual([]);
   });
   law("plant: aliased constructors, subpath imports and named remote overrides fail closed", ({ alias, name }) => {

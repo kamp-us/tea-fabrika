@@ -19,10 +19,8 @@ export const Model = Schema.TaggedUnion({
   },
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("open"), watch: Client }),
-  Schema.Struct({ type: Schema.Literal("end"), client: Schema.String }),
-]);
+/** @internal A watch opened, or a client's watch ended. */
+export const Msg = Schema.TaggedUnion({ open: { watch: Client }, end: { client: Schema.String } });
 
 /** @internal */
 export const watchers = Machine.make({
@@ -33,6 +31,7 @@ export const watchers = Machine.make({
   update: {
     open: (model, msg) => {
       const held = model._tag === "empty" ? [] : Array.filter(model.clients, (c) => c.client !== msg.watch.client);
+
       return [Model.cases.watching.make({ clients: Array.append(held.slice(-1023), msg.watch) }), []];
     },
     end: (model, msg) => {

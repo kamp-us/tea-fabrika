@@ -70,7 +70,7 @@ it.prop(
         expect(Model.make(final)).toEqual(final);
 
         for (const frame of steps) {
-          if (frame.msg.type !== "l11_phase_ok") {
+          if (frame.msg._tag !== "l11_phase_ok") {
             continue;
           }
 

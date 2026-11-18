@@ -15,6 +15,7 @@ const Failure = Schema.Struct({ reason: Schema.String });
 
 export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
   const { port: _port, person: _person, founder: _founder, window: _window, values: _values, ...rest } = config;
+
   return StartsTest.fixture(config).pipe(Effect.map((input) => ({ ...rest, ...input })));
 };
 
@@ -52,6 +53,7 @@ export const recordWire = Effect.fnUntraced(
     const built = yield* build({ out: path.join(home, "dist") });
     // localInstance sets ALCHEMY_HOME; it goes back as it was when the scope closes.
     yield* keptEnv(["ALCHEMY_HOME"]);
+
     return yield* localInstance(
       built,
       yield* startupFixture({

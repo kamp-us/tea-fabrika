@@ -187,6 +187,7 @@ export const keysProblem = (text: string | null): string | null => {
   }
 
   const missing = Arr.filter(ROLES, (r) => !roles.has(r));
+
   return missing.length === 0 ? null : `no key for ${Arr.join(missing, ", ")}`;
 };
 
@@ -234,6 +235,7 @@ const globRegex = (glob: string) =>
 /** p85: an exam path is on the list, or holds a control character, which never passes quietly. */
 export const examMatcher = (list: ExamList) => {
   const res = Arr.map(list, (row) => globRegex(row.glob));
+
   const control = (path: string) =>
     Arr.some([...path], (ch) =>
       pipe(
@@ -242,6 +244,7 @@ export const examMatcher = (list: ExamList) => {
         Option.exists((code) => code < 0x20 || code === 0x7f),
       ),
     );
+
   return (path: string) => control(path) || Arr.some(res, (re) => re.test(path));
 };
 
@@ -302,6 +305,7 @@ export const staleSteps = (
     }
 
     const top = Math.max(...Arr.map(mine, (s) => s.note.version));
+
     const newest = new Set(
       pipe(
         mine,
@@ -309,11 +313,13 @@ export const staleSteps = (
         Arr.map((s) => signedText(s.note)),
       ),
     );
+
     const chain = pipe(
       used,
       Arr.filter((n) => n.step === role),
       Arr.map(signedText),
     );
+
     const [only] = newest;
     const at = only === undefined ? -1 : chain.indexOf(only);
 
@@ -406,6 +412,7 @@ export const chain = (
   const first = links[0];
   const last = links.at(-1);
   const visited = new Set([first?.from, ...Arr.map(moves, (l) => l.to)]);
+
   const whole =
     first !== undefined &&
     last !== undefined &&
@@ -426,8 +433,10 @@ export const chain = (
   const all = Arr.flatMap(rows, ({ link, signer }): Signed[] =>
     link.step === "person" || signer === "person" ? [] : [{ note: link, signer }],
   );
+
   const steps = Arr.filter(links, (l): l is Link => l.step !== "person");
   const stale = staleSteps(first.ticket, all, steps);
+
   return stale.size === 0 ? [done] : Arr.map([...stale], (step) => stuck("stale_link", squash, { step }));
 };
 
@@ -476,6 +485,7 @@ const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
 });
 
 const nul = (out: string) => Arr.filter(Str.split(out, "\0"), (p) => p !== "");
+
 const words = (out: string) => Arr.filter(Str.split(out, "\n"), (p) => p !== "");
 
 const treeAt = Effect.fnUntraced(function* (rev: string) {
@@ -562,6 +572,7 @@ const personVerifier = Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const allowed = yield* fs.makeTempFileScoped();
       yield* fs.writeFileString(allowed, `${Arr.join(people, "\n")}\n`);
+
       return Effect.fnUntraced(function* (sha: string, link?: PersonLink) {
         // gpg.format chooses how to sign; verification detects the signature's own format.
         const raw = yield* gitMaybe(["cat-file", "commit", sha]);
@@ -635,6 +646,7 @@ const flag = (name: string) => {
 
 const need = Effect.fnUntraced(function* (name: string) {
   const value = flag(name);
+
   return yield* value === undefined || pipe(value, Str.startsWith("-"))
     ? Effect.fail(Failed.make({ message: `${name} is required` }))
     : Effect.succeed(value);
@@ -699,6 +711,7 @@ export const plain = (a: Answer, show: (path: string) => string = quote) => {
   }
 
   const paths = a.paths === undefined ? "" : ` ${pipe(a.paths, Arr.map(show), Arr.join(" "))}`;
+
   return `stuck ${a.reason} ${a.sha}${a.step === undefined ? "" : ` step ${a.step}`}${paths}`;
 };
 
@@ -902,6 +915,7 @@ const headTree = Effect.fnUntraced(function* (squash: string, base: string, comm
   ]);
 
   const tree = yield* treeAt(squash);
+
   return merged === null || tree === null || Str.trim(merged) !== Str.trim(tree)
     ? null
     : pipe(Option.fromNullOr(yield* treeAt(commit)), Option.map(Str.trim), Option.getOrNull);
@@ -1088,6 +1102,7 @@ const signMain = Effect.gen(function* () {
 
   yield* git(["notes", "--ref=fabrika", "add", "-F", "-", head], Formatter.formatJson(note));
   yield* Console.log(Formatter.formatJson({ ...note, commit: head }));
+
   return 0;
 });
 

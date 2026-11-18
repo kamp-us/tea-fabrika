@@ -37,8 +37,10 @@ import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
+import { onePageRuntime } from "./one-page-runtime.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
+import { packageDeps } from "./package-deps.ts";
 import { packageImports } from "./package-imports.ts";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 import { preferNamespaceImport } from "./prefer-namespace-import.ts";
@@ -92,9 +94,11 @@ const plugin: Plugin = {
     "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
     "one-machine-per-file": oneMachinePerFile,
+    "one-page-runtime": onePageRuntime,
     "program-package-layout": programPackageLayout,
     "reflect-disables": reflectDisables,
     "outside-input-constructor": outsideInputConstructor,
+    "package-deps": packageDeps,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,
     "prefer-namespace-import": preferNamespaceImport,

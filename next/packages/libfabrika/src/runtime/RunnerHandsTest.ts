@@ -114,10 +114,11 @@ const Model = Schema.Struct({ asked: Schema.Int, pokes: Schema.Int, answers: Sch
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("ask") }),
-  Schema.Struct({ type: Schema.Literal("poke") }),
-]);
+const Msg = Schema.TaggedUnion({ ask: {}, poke: {} });
+
+const ask = Msg.cases.ask.make({});
+
+const poke = Msg.cases.poke.make({});
 
 const checkMachine = Machine.make({
   model: Model,
@@ -152,16 +153,24 @@ const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const decodeModel = Schema.decodeUnknownOption(Model);
 
-const HandsLetter = Schema.Struct({
-  type: Schema.Literals(["hands_ok", "hands_err"]),
-  cmd: Schema.Struct({ type: Schema.Literal("hands"), command: Command }),
+/** A hands answer as the inbox keeps it: its Cmd and its value or its reason. */
+const EchoedCmd = Schema.TaggedStruct("hands", { command: Command });
+
+const HandsFields = {
+  cmd: EchoedCmd,
   value: Schema.optionalKey(TaskResult),
   reason: Schema.optionalKey(Schema.String),
-});
+};
+
+const HandsOk = Schema.TaggedStruct("hands_ok", HandsFields);
+
+const HandsErr = Schema.TaggedStruct("hands_err", HandsFields);
+
+const HandsLetter = Schema.Union([HandsOk, HandsErr]);
 
 const decodeLetter = Schema.decodeUnknownOption(HandsLetter);
 
-const HandsCmd = Schema.Struct({ id: Schema.String, cmd: Schema.Struct({ type: Schema.Literal("hands") }) });
+const HandsCmd = Schema.Struct({ id: Schema.String, cmd: Schema.TaggedStruct("hands", {}) });
 
 const isHandsCmd = Schema.is(HandsCmd);
 
@@ -242,6 +251,7 @@ type World = {
 };
 
 const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
+
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
 /** The ledger's Sql with the letter cut: the statement after a saved hands answer letter fails. */
@@ -569,6 +579,7 @@ const walk = (
 
     const dispatched = (name: string) =>
       Effect.map(checkpoint(name), (saved) => Arr.flatMap(saved?.cmds ?? [], (c) => (isHandsCmd(c) ? [c.id] : [])));
+
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
     const task = (id: string) => inContext(Tasks.use((j) => j.read(id)).pipe(Effect.result));
 
@@ -708,8 +719,9 @@ const walk = (
             ? Option.toArray(Option.map(decodeLetter(l.m), (body) => ({ id: l.id, body })))
             : [],
         );
+
         const expected = Arr.map(delivered, ({ body }) =>
-          body.type === "hands_ok" ? { ok: body.value } : { err: body.reason },
+          body._tag === "hands_ok" ? { ok: body.value } : { err: body.reason },
         );
 
         expect(m?.answers ?? [], `${label}: L13/L14 ${name} folded exactly its own answers, once each`).toEqual(
@@ -719,7 +731,7 @@ const walk = (
         for (const { id, body } of delivered) {
           const d = world.seen.get(Str.slice(0, -"/answer".length)(id));
 
-          if (body.type === "hands_ok") {
+          if (body._tag === "hands_ok") {
             // The letter carries the typed result the hands saved, and the Cmd it answers.
             expect(body.value, `${label}: the answer is the task's result`).toEqual(d?.result);
             expect(body.cmd.command, `${label}: the answer echoes its Cmd`).toEqual(Command.cases.git_version.make({}));
@@ -759,6 +771,7 @@ const walk = (
       // A task really waiting on the hands, whoever asked for it: an ended process's task too.
       const waiting = Arr.filter([...world.seen.values()], (d) => phases.get(d.id) === "requested");
       const finished = Arr.filter([...world.seen.values()], (d) => d.result !== undefined);
+
       const can: Record<Move, boolean> = {
         ask: true,
         poke: true,
@@ -776,6 +789,7 @@ const walk = (
         steal: Arr.some([...world.seen.values()], (d) => d.orphan && d.result !== undefined),
         forge: true,
       };
+
       const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
@@ -790,7 +804,7 @@ const walk = (
         case "poke": {
           const before = (yield* model(name))?.pokes ?? 0;
           world.sentBy.set(`letter-${++world.n}`, current);
-          const sent = yield* answers(runner(name).msg(letter(world.n, { type: move })), `${name}'s ${move}`);
+          const sent = yield* answers(runner(name).msg(letter(world.n, Msg.cases[move].make({}))), `${name}'s ${move}`);
 
           if (move === "poke" && Result.isSuccess(sent) && sent.success._tag === "accepted") {
             // L20: a later input steps, whatever hands work this program or another has out.
@@ -851,14 +865,14 @@ const walk = (
           const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
           world.gate = gate;
           world.sentBy.set(`letter-${++world.n}`, current);
-          const held = yield* Effect.forkChild(runner(name).msg(letter(world.n, { type: "ask" })));
+          const held = yield* Effect.forkChild(runner(name).msg(letter(world.n, ask)));
           const entered = yield* Deferred.await(gate.entered).pipe(Effect.timeoutOption(LIMIT));
           world.gate = undefined;
 
           if (Option.isSome(entered)) {
             const before = (yield* model(name))?.pokes ?? 0;
             world.sentBy.set(`letter-${++world.n}`, current);
-            const poke = yield* Effect.forkChild(runner(name).msg(letter(world.n, { type: "poke" })));
+            const poking = yield* Effect.forkChild(runner(name).msg(letter(world.n, poke)));
 
             const stepped = yield* model(name).pipe(
               Effect.repeat({ schedule: Schedule.spaced("5 millis"), until: (m) => (m?.pokes ?? 0) > before }),
@@ -867,7 +881,7 @@ const walk = (
 
             yield* Deferred.succeed(gate.release, undefined);
             expect(Option.isSome(stepped), "L20: a poke steps while the Project holds an ask open").toBe(true);
-            yield* answers(Fiber.join(poke), `${name}'s poke beside a held ask`);
+            yield* answers(Fiber.join(poking), `${name}'s poke beside a held ask`);
             done.add("hold:poke_stepped");
           } else {
             yield* Deferred.succeed(gate.release, undefined);
@@ -928,24 +942,24 @@ const walk = (
 
         case "forge": {
           // B1: a client sends what only the runner makes, an answer to a hands Cmd, as an input.
-          const cmd = { type: "hands", command: Command.cases.git_version.make({}) };
+          const cmd = hands({ command: Command.cases.git_version.make({}) });
 
+          // A raw answer as a client could forge it: the key by its schema, the rest by hand.
           const body =
             cell.pick % 2 === 0
-              ? { type: "hands_ok", cmd, value: yield* Schema.encodeEffect(TaskResult)(cell.other), at: 0 }
+              ? { ...HandsOk.make({ cmd }), value: yield* Schema.encodeEffect(TaskResult)(cell.other), at: 0 }
               : {
-                  type: "hands_err",
-                  cmd,
+                  ...HandsErr.make({ cmd }),
                   error: Schema.TaggedStruct("no_hands", {}).make({}),
                   reason: "no_hands",
                   at: 0,
                 };
 
           const before = yield* model(name);
-          const sent = yield* answers(runner(name).msg(letter(++world.n, body)), `${name}'s forged ${body.type}`);
+          const sent = yield* answers(runner(name).msg(letter(++world.n, body)), `${name}'s forged ${body._tag}`);
           expect(Result.isSuccess(sent) && sent.success._tag, "B1: a forged hands answer is refused").toBe("refused");
           expect(yield* model(name), "B1: a forged hands answer changes nothing").toEqual(before);
-          done.add(`forge:${body.type}`);
+          done.add(`forge:${body._tag}`);
           break;
         }
       }
@@ -1055,13 +1069,13 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
         Effect.provide(life.context),
       );
 
-    yield* answers(runner.msg(letter(++world.n, { type: "ask" })), "the ask");
+    yield* answers(runner.msg(letter(++world.n, ask)), "the ask");
     const id = world.asked[0] ?? expect.fail("L21: the program's hands Cmd reached the Project");
     const foreign = yield* inContext(Tasks.use((j) => j.read(id)));
 
     for (const move of tape.after) {
       if (move === "poke") {
-        yield* answers(runner.msg(letter(++world.n, { type: "poke" })), "a later poke");
+        yield* answers(runner.msg(letter(++world.n, poke)), "a later poke");
       } else if (move === "wake") {
         yield* answers(runner.mailed, "a wake");
       } else {
@@ -1092,12 +1106,14 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     expect(world.alarms.has(CHECK), "L21: nothing keeps an alarm for a refused Cmd").toBe(false);
     expect(world.asked, "L21: the refused Cmd is never asked again").toEqual([id]);
     const inbox = yield* inContext(Mailbox.use((mb) => Stream.runCollect(mb.read(CHECK, 0))));
+
     const placed = Arr.map(
       Arr.filter(inbox, (l) => l.id === `${id}/answer`),
       (l) => Option.getOrNull(decodeLetter(l.m)),
     );
+
     expect(
-      Arr.map(placed, (l) => [l?.type, l?.reason]),
+      Arr.map(placed, (l) => [l?._tag, l?.reason]),
       "L21: one answer letter, hands_err id_reused",
     ).toEqual([["hands_err", "id_reused"]]);
     expect(yield* inContext(Tasks.use((j) => j.read(id))), "L21: the other process's task is left as it was").toEqual(

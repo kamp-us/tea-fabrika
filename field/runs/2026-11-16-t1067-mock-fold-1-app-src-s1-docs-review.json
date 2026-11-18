@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-app-src-s1-docs-review",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:12:15-08:00",
+  "ended": "2026-11-16T01:17:28-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of mock sweep fold 1 (stack layer 7, decision 0555) on fabrikalfa/mock-fold-1 at 1c791439, the commits since the reviewed head 299c2819b: merge-ready, one doc_drift finding. Merge 2c635642b (fabrikalfa/mock-app-src-s1 at ab9dd3cff, merge base d821377bb): its diff against the first parent equals d821377bb..ab9dd3cff byte for byte (four files, 158 diff lines), and its diff against the second parent equals d821377bb..299c2819b byte for byte, so nothing is dropped from either side. The slice side is docs only: two cases in .patterns/a-law-watches-calls-with-a-recorder.md, one finding row and two run rows. No code, disable, lock, @effect-diagnostics or list entry enters. The pattern doc keeps its where and when frontmatter, and both new cases' claims hold at the fold head: the real ClientManager recorded through Layer.unwrap with clients after w.env in the merge, and a Recorder built once with Layer.build and handed to the hoisted cli.layer with Layer.succeedContext. Their code blocks match the source, but their line numbers do not: the stack side's commits on Recorder.ts, door.integration.test.ts and file-services.laws.integration.test.ts after d821377bb moved every cited line (Recorder.ts:191 is now 184, :221 now 213; door 3083-3086 now 3281-3284, :3127 now 3327, :3129 now 3329; file-services 86-101 now 89-102, 30-46 now 30-55), and the older citations in the same doc drifted the same way. That is a finding row, not a blocker. The finding and run rows have the shape of their folders and hold no names, machine paths or secrets.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "loosening.sh 299c2819b..1c7914396: 0 hits in 0 exam files. The clone was not shallow. The worktree moved to the branch head with a clean git status. A second loosening.sh over the second-parent range (the whole stack, reviewed in earlier layers) was stopped after 120 seconds as out of scope. No test ran, since the range changes no code. Not run, as briefed: pnpm lint and pnpm typecheck, which the coordinator runs. The first push was refused because the fold moved to 2061cfce7 during the review (the anti-slop mechanical follow-up merged in, then blank lines in three mock-fold test files); this row was committed again on that head, unreviewed by this step, and those blank lines move the door citations two more lines (Recorder.layer(ClientManager at 3284, Recorder.calls at 3329).",
+  "driver_caused": false,
+  "step": "review"
+}

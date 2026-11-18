@@ -350,6 +350,25 @@ The hand-written part, and the generated case that tests each edge in
 fast-check 4.10.2 counts `examples` inside `numRuns`, so `withExamples` adds the generated runs on
 top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
 
+`one-page-runtime` holds the page entry, `next/apps/fabrika/src/entry/browser.tsx`, the one file
+`.oxlintrc.json` turns it on for, to one Effect runtime (P12, L11): it imports `runMain` from
+`@kampus/tuval/browser` once, starts it once as a statement of the module, reads it nowhere else,
+and calls no other `run*`. It took over `next/apps/fabrika/src/build.test.ts`'s format law (0591).
+It counts every import of `runMain`, from any module and under any local name, and searches the
+value of every string literal and the text of every template piece (a template with expressions
+included), wherever it stands, with the old law's two word patterns, `\brun(?!Main\b)[A-Z]\w*` and
+`\brunMain\b`: `Effect["runPromise"]`, `const k = "runPromise"; Effect[k](page)`,
+`Reflect.get(Effect, "runFork")`, ``Effect[`runPromise${x}`]`` and
+`Effect["Effect.runPromise".split(".")[1]]` are each a foreign run, and a string holding the word
+`runMain` is a second runtime, except a `"runMain"` that names an import specifier.
+`one-page-runtime.test.ts` generates the entry in each start spelling and eleven planted breaks (the
+plan's four, and the reviews' renamed second import, `runMain` renamed from another module, a run
+read by a string key, a run named by a string in a variable, a run named by a string passed to
+`Reflect.get`, a run named in a template with an expression, and a run named inside a longer
+string), and plants them at the entry's path with the real config. Count on 2026-11-16, on the real entry:
+0 fires. The `no-restricted-imports` lines that keep the TOML adapter and its parser to their
+callers (T730's L9) are planted, generated, in `settings-imports.test.ts`.
+
 ### libfabrika's modules
 
 Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md), with the words of [0091](../.decisions/0091-modules-and-layers.md) (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.
@@ -364,7 +383,7 @@ Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words
 
 The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
-Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests sit beside each rule in this folder, one `<rule>.test.ts` each, and use `plant.ts`, which lints each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file. They were the exam's tests in `next/apps/fabrika/src/exam/` until 0591 moved them here: no shape check stays in the exam folder.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -530,11 +549,11 @@ those are Alchemy keys that keep their word under an exception; the other 35 are
 It reads the installed providers, prints the finding count and exits nonzero for any
 finding. Its generated plants stay in `twin.test.ts`, with seed 119120.
 
-`pnpm lint:promise-types` adds types to `no-promises`. TypeScript 7.0.2's installed
+`pnpm lint:promise-types` (`promise-types.ts`, here) adds types to `no-promises`. TypeScript 7.0.2's installed
 sync API resolves every `next/` project. Calls, returns and function parameters may
 not carry a Promise or a function returning one outside a marked edge line. Type
 declarations, tests, test support files and today's code are left alone. The scanner does not emit code
-or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
+or run type diagnostics. `promise-types.test.ts` plants imported aliases, inferred
 returns, generic thunks, object methods and line-local edge comments. An edge comment
 covers only the next physical line. History: the initial P12 head scan at `4577f6b0`
 found 103 lines. It recorded false alarms inside wrapped statements whose first line
@@ -545,6 +564,27 @@ because it walked back [no-promises.md](../docs/direction/no-promises.md). The b
 restructured the code to keep each Promise on its marked line. `pnpm lint:promise-types`
 reports 0 findings on the P12 tree at `97245dc7` with the narrowed rule below, with 0
 false alarms. The check runs in `pnpm lint`. Unknown types still need the regular typecheck.
+
+The same command holds two more typed checks since 0591 moved them out of the exam, in the one
+snapshot it opens. `fabrika(secret-types)` (P12) refuses a `randomBytes` call, an Authorization
+header read or a control binding's `props.token` whose type, or the type of an expression around it
+in its statement, does not carry `~effect/Redacted`. `fabrika(tsconfig-scope)` refuses a `next/`
+package whose `typecheck` is not `tsc --noEmit -p .`, a TypeScript file git tracks under `next/` in
+no package, and one its package's own `tsconfig.json` program does not hold. Both were the exam's
+`secret-types.integration.test.ts` and `tsconfig-scope.integration.test.ts`; their planted laws are
+in `promise-types.test.ts`. On 2026-11-16, opening every `next/` project rather than the old two,
+the command reported 0 findings on the tree, the same as the old tests.
+
+Three more pieces left the exam the same day (0591). `pnpm lint:node-kinds` (`node-kinds.ts`)
+checks that every name in `node-kinds.json` is exported by a file its glob matches and bound by that
+string elsewhere in `next/`. `pnpm lint:manifests` (`next-manifests.ts`) checks that each `next/`
+package is private at 0.0.0, with no side effects, a typecheck script and nothing of today's.
+`fabrika/package-deps`, on for `next/**` and its `.agents/` twin, refuses an import a `next/` file's
+package does not list, a subpath outside our package's `exports` map (read by Node's longest-pattern
+rule), a relative path out of the package, `electron` in an app outside `src/entry/electron-main.ts`,
+and a file in no package. It judges `next/` paths only. Each has its own `<name>.test.ts` here with
+the exam's plants; each reported 0 findings on the tree on 2026-11-16. The bundle laws stay in
+`next/apps/fabrika/src/exam/deps.integration.test.ts`.
 
 An untyped or `never` call needs an edge marker only inside an input to Effect's own
 `tryPromise` or `promise`. The checker follows the declaration's symbol, including imported
@@ -624,7 +664,7 @@ The rule stays an **error**. The remaining finding is PR 1's red. It needs no
 advice exception in the lint runner. The seven advice diagnostics in this scan
 are from the existing advice rules.
 
-The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
+The planted test is `effect-functions.test.ts`, beside the rule.
 Nine rejected fixture sites are real violations. Seven allowed forms cover
 inner spans, consumed streams, named functions, untraced helpers, forwarding
 and one-use callbacks. Other fixtures check aliases, today's code and test span

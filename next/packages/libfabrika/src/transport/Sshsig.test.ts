@@ -121,6 +121,7 @@ describe("p27, the saved ssh-keygen vectors", () => {
   it("finds the signer among other keys and garbage, by its key, not its place", () => {
     // Plant: choose the first parseable signer without comparing its blob. Signer equality fails.
     const others = fc.array(fc.oneof(fc.constantFrom(other, ecdsa), fc.string()));
+
     return fc.assert(
       fc.asyncProperty(others, fc.nat(), others, fc.nat(), (before, place, more, barePlace) =>
         Effect.runPromise(
@@ -201,6 +202,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
     ["a body that is not base64", Str.replace("U1NIU0lH", "U1NIU0l!")(goodSig), [signer]],
     ["an empty text", "", [signer]],
   ];
+
   it("refuses malformed blobs and armor with the same answer", () => {
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
     const built = fc
@@ -242,6 +244,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         signers: [signer],
       })),
     );
+
     return fc.assert(
       fc.asyncProperty(malformed, ({ armored, signers }) =>
         Effect.runPromise(
@@ -333,6 +336,7 @@ describe("KeyLine", () => {
     ["a key of 31 bytes", lineFor(keyBlob(goodKey.slice(0, 31)))],
     ["a key blob with a byte after it", lineFor(join8(good.key, Uint8Array.of(0)))],
   ];
+
   it("refuses malformed and non-Ed25519 key lines", () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = fc.oneof(
@@ -344,6 +348,7 @@ describe("KeyLine", () => {
       fc.string().map((s) => `ssh-ed25519 !${s}`),
       wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${base64(good.key)}`),
     );
+
     return fc.assert(
       fc.asyncProperty(invalid, (line) =>
         Effect.runPromise(
@@ -403,6 +408,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
         }),
       );
     });
+
   it("passes the same blob with nothing swapped, so each refusal below is the swap's", () =>
     // Plant: refuse every verified Ed25519 signature. The signer equality must fail.
     fc.assert(
@@ -535,14 +541,17 @@ describe("p27, the armor's own words", () => {
       ),
     ],
   ];
+
   it("refuses changed armor words of the same length", () => {
     // Plant: check marker lengths alone. The changed-marker refusal must fail.
     const changed = fc.tuple(fc.nat(), fc.integer({ min: 1, max: 127 }), fc.boolean()).map(([place, delta, begin]) => {
       const word = begin ? BEGIN : END;
       const at = place % word.length;
       const swap = String.fromCharCode((Option.getOrThrow(Str.charCodeAt(word, at)) + delta) % 128);
+
       return Str.replace(word, `${Str.slice(0, at)(word)}${swap}${Str.slice(at + 1)(word)}`)(goodSig);
     });
+
     return fc.assert(
       fc.asyncProperty(changed, (armored) =>
         Effect.runPromise(
@@ -565,6 +574,7 @@ describe("a key line's parts and its type", () => {
   it("KeyLine takes runs of spaces and tabs and matches the same key", () => {
     // Plant: normalize the returned signer to two space-separated words. Exact equality fails.
     const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => Arr.join(chars, ""));
+
     return fc.assert(
       fc.asyncProperty(gap, gap, (before, after) =>
         Effect.runPromise(
@@ -591,9 +601,11 @@ describe("a key line's parts and its type", () => {
     ["an ECDSA type word over an Ed25519 blob", `ecdsa-sha2-nistp256 ${key}`],
     ["an RSA type word over an Ed25519 blob", `ssh-rsa ${key} signer@fabrika.test`],
   ];
+
   it("KeyLine refuses a different type word and never matches it as a signer", () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${key} ${comment}`);
+
     return fc.assert(
       fc.asyncProperty(invalid, (line) =>
         Effect.runPromise(
@@ -669,6 +681,7 @@ describe("properties", () => {
     const lines = Str.split(goodSig, "\n");
     const body = lines.slice(1, -2); // the rows between BEGIN and END
     const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
     return fc.assert(
       fc.asyncProperty(fc.nat(), fc.nat(), fc.constantFrom(...ALPHABET), (row, col, swap) => {
         const r = row % body.length;
@@ -720,6 +733,7 @@ describe("properties", () => {
             expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
           }),
         );
+
       yield* promised(() =>
         fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
           ...runs,

@@ -80,6 +80,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
   const planted =
     plant === null ? null : { root: roots[plant.kind], full: Arr.join([roots[plant.kind], ...plant.tail], "/") };
+
   // The plant as it lands in a text or a cell, in its generated form.
   const text =
     plant === null || planted === null
@@ -115,6 +116,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     const hit = plant !== null && planted !== null && plant.place === "json" && plant.pick % input.jsons.length === n;
     // A JSON file holds the path as a value, so its file holds it JSON-escaped; a URL stays a URL.
     const value = hit ? (plant.form === "url" ? text : planted.full) : file.value;
+
     const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(
       Arr.reduceRight<(typeof file.keys)[number], unknown>(file.keys, value, (inner, key) => ({
         [key]: inner,
@@ -147,6 +149,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
       for (const [row, word] of table.rows.entries()) {
         const long = Str.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)))(`${word} `);
+
         const target =
           here && plant !== null && planted !== null && plant.at % file.tables.length === t
             ? plant.at % table.rows.length === row
@@ -154,8 +157,10 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
         const cut = ((plant?.at ?? 0) * 37) % long.length;
         const note = target && plant?.place === "cell" ? `${word} ${text}` : word;
+
         const body =
           target && plant?.place === "overflow" ? `${Str.slice(0, cut)(long)}${text}${Str.slice(cut)(long)}` : long;
+
         const data = encoder.encode(target && plant?.place === "blob" ? `${word} ${text}` : word);
         insert.run(note, body, data);
 
@@ -165,6 +170,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
             Match.when("overflow", () => "body"),
             Match.orElse(() => "data"),
           );
+
           expected = {
             file: name,
             place: Place.cases.cell.make({ table: tableName, row, column }),

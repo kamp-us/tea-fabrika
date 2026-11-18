@@ -50,7 +50,7 @@ const Letter = Schema.Struct({
   body: Schema.Struct({ m: Schema.Unknown }),
 });
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Finite });
 
 const View = Schema.Struct({
   rev: Schema.Finite,
@@ -111,7 +111,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             .project(PROJECT)
             .start({ _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } }, from),
         );
+
         const pid = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started)).process;
+
         const beats = yield* until(
           "three beat facts",
           Effect.promise(() => instance.project(PROJECT).read("beats", 0, "audit")).pipe(
@@ -133,6 +135,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Letter))(
           yield* Effect.promise(() => instance.project(PROJECT).read(`${NAME}/inbox`, 0, "audit")),
         );
+
         const timers = Arr.filter(rows, (row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
         expect(new Set(Arr.map(timers, (row) => row.id)).size).toBe(timers.length);
@@ -158,6 +161,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             );
 
             const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
+
             const after = yield* Schema.decodeUnknownEffect(View)(
               yield* Effect.promise(() => instance.process(pid).open("scheduled-job-observer")),
             );

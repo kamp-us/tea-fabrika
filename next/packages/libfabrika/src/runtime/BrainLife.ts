@@ -21,24 +21,22 @@ export const BrainState = Schema.TaggedUnion({
 
 type BrainState = typeof BrainState.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("started"),
+const Msg = Schema.TaggedUnion({
+  started: {
     start: Schema.String,
     after: Schema.NullOr(Schema.String),
     build: Schema.String,
     reason: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("waiting"),
+  },
+  waiting: {
     after: Schema.String,
     until: Schema.Number,
     reason: Schema.String,
-  }),
-  Schema.Struct({ type: Schema.Literal("braked"), after: Schema.String, reason: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("stop") }),
-  Schema.Struct({ type: Schema.Literal("stopped") }),
-]);
+  },
+  braked: { after: Schema.String, reason: Schema.String },
+  stop: {},
+  stopped: {},
+});
 
 const terminal = (s: BrainState) => s._tag === "braked" || s._tag === "stopped";
 

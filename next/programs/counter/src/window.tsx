@@ -4,14 +4,14 @@
 import { defineWindow, type WindowProps } from "@kampus/libfabrika";
 import { Button, Kbd } from "@manti-ui/react";
 import { Array as Arr } from "effect";
-import { counter, counterKeys, counterModel } from "./program.ts";
+import { counter, CounterMsg, counterKeys, counterModel } from "./program.ts";
 
 type Props = WindowProps<typeof counter>;
 
 const ACTIONS = [
-  { m: { type: "inc" }, command: "counter.inc", label: counter.inputs.inc.description },
-  { m: { type: "dec" }, command: "counter.dec", label: counter.inputs.dec.description },
-  { m: { type: "reset" }, command: "counter.reset", label: counter.inputs.reset.description },
+  { m: CounterMsg.cases.inc.make({}), command: "counter.inc", label: counter.inputs.inc.description },
+  { m: CounterMsg.cases.dec.make({}), command: "counter.dec", label: counter.inputs.dec.description },
+  { m: CounterMsg.cases.reset.make({}), command: "counter.reset", label: counter.inputs.reset.description },
 ] as const;
 
 export const CounterWindow = ({ data, press, hint }: Props) => (

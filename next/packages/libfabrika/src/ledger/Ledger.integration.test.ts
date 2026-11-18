@@ -305,6 +305,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 
       return { answers, streams };
     };
+
     return fc.assert(
       fc.asyncProperty(fc.array(command, { maxLength: 30 }), (commands) =>
         Effect.runPromise(
@@ -451,6 +452,7 @@ describe("p93, seen is bounded by the log's head", () => {
       stream: fc.constantFrom("a", "b"),
       offset: fc.integer({ min: -3, max: 2 }),
     });
+
     return fc.assert(
       fc.asyncProperty(fc.array(write, { maxLength: 25 }), (writes) =>
         Effect.runPromise(
@@ -663,9 +665,11 @@ describe("p20, failures are typed, and pass", () => {
               const read = yield* Effect.promise(() => runtime.runPromise(Effect.flip(readAll(value))));
               expect(read.reason).toBe("storage");
               arm();
+
               const waited = yield* Effect.promise(() =>
                 runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9)))),
               );
+
               expect(waited.reason).toBe("storage");
               expect(Arr.map(yield* Effect.promise(() => runtime.runPromise(readAll(value))), (e) => e.id)).toEqual([
                 "w-1",
@@ -762,6 +766,7 @@ describe("p20, failures are typed, and pass", () => {
               expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
               plant(2, "a", "w-2", "saved", value);
               plant(3, "b", "w-3", "", Formatter.formatJson({ note: "n-7f3a" }));
+
               const errors = [
                 yield* Effect.flip(readAll("a")),
                 yield* Effect.flip(readAll("b")),

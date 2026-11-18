@@ -32,6 +32,7 @@ export const Checkpoint = Schema.Struct({
   turn: Schema.NullOr(Schema.Json),
   cmds: Schema.Array(Schema.Json),
 });
+
 /**
  * What a process saves between turns, as `Checkpoint` decodes it.
  *
@@ -45,6 +46,7 @@ export type Checkpoint = typeof Checkpoint.Type;
  * @category schemas
  */
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
+
 /**
  * Where an accepted letter sits in its inbox, as `Placed` decodes it.
  *
@@ -77,6 +79,7 @@ export const RuntimeRecord = Schema.TaggedUnion({
     build: Schema.NonEmptyString,
   },
 });
+
 /**
  * One event the runtime wrote to a process's stream, as `RuntimeRecord` decodes it.
  *
@@ -93,10 +96,15 @@ const TABLES = [
 ];
 
 const encodeActivity = Schema.encodeSync(Schema.fromJsonString(Activity));
+
 const encodeCheckpoint = Schema.encodeUnknownSync(Schema.fromJsonString(Checkpoint));
+
 const decodeCheckpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint));
+
 const decodePlaced = Schema.decodeUnknownSync(Placed);
+
 const decodeRecord = Schema.decodeUnknownResult(RuntimeRecord);
+
 const encodeRecord = Schema.encodeSync(RuntimeRecord);
 
 type ProcessStorage = {
@@ -166,6 +174,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
         const ledger = yield* Ledger;
         const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
         let ready = false;
+
         const tables = () => {
           if (!ready) {
             for (const query of TABLES) {
@@ -175,6 +184,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 
           ready = true;
         };
+
         const failed = (error: unknown) =>
           error instanceof LedgerError
             ? error
@@ -182,21 +192,25 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                 reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
                 cause: error,
               });
+
         // A read changes no row, so it is charged nothing and fails only as the ledger does.
         const read = Effect.fnUntraced(function* <A>(step: () => A) {
           return yield* Effect.try({
             try: () => {
               tables();
+
               return step();
             },
             catch: failed,
           });
         });
+
         const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
           return yield* Effect.clockWith((clock) =>
             Effect.try({
               try: () => {
                 tables();
+
                 return options.accounting === undefined
                   ? step(clock.currentTimeMillisUnsafe())
                   : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
@@ -205,12 +219,15 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             }),
           );
         });
+
         const bytes = (text: string) => new TextEncoder().encode(text).length;
         const get = options.storage?.get;
+
         const readActivity =
           get === undefined
             ? read(() => {
                 const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+
                 return row === undefined
                   ? undefined
                   : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
@@ -224,6 +241,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                       ),
                 ),
               );
+
         // One marker write: its text against the old one, and the key it is kept under the first time.
         const chargeActivity = (key: string, text: string, old: string | undefined, at: number) =>
           options.accounting?.change(
@@ -233,12 +251,14 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             at,
             recovering(sql),
           );
+
         return {
           select: Effect.fn("process.select")(function* (process: string) {
             const selected = ProcessStore.pipe(
               Effect.provide(ProcessStore.layer(sql, { ...options, process })),
               Effect.provideService(Ledger, ledger),
             );
+
             return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
           }),
           readActivity,
@@ -301,6 +321,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                     "",
                   )
                 : row.checkpoint;
+
             return decodeCheckpoint(text);
           }),
           save: (value, placed = []) =>
@@ -324,6 +345,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
 
               sql.transaction(() => {
                 const [old] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
+
                 // A split checkpoint keeps an empty head; charge its whole saved text.
                 const oldText =
                   old === undefined
@@ -340,6 +362,7 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                           "",
                         )
                       : String(old.checkpoint);
+
                 const isRecovery = recovering(sql);
                 options.accounting?.change(
                   "checkpoint",
@@ -402,11 +425,13 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
                 options.process,
                 id,
               );
+
               return row === undefined ? null : decodePlaced(row);
             }),
           placedByAny: (id) =>
             read(() => {
               const [row] = sql.exec("SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1", id);
+
               return row === undefined ? null : decodePlaced(row);
             }),
           record: Effect.fn("process.record")(function* (id: string, event: unknown, from: From) {

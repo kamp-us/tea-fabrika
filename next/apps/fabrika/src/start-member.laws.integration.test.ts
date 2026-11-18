@@ -12,6 +12,13 @@ import { Array as Arr, String as Str, DateTime, Effect, Exit, Option, Schema, Sc
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  start: {},
+});
+
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
@@ -164,6 +171,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const home = yield* childHome([]);
           const first = yield* Scope.make();
           const instance: Instance = yield* Scope.provide(first)(home.boot);
+
           const started = yield* Effect.promise(() =>
             instance.project(PROJECT).start(
               {
@@ -175,15 +183,17 @@ describe("T953: a start is checked against the member who caused it, end to end"
               home.from,
             ),
           );
+
           const starter = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started))
             .process;
+
           yield* Effect.promise(async () => {
             const window = await client(instance, home.key, "member");
 
             try {
               const sent = await window.call(
                 "process.send",
-                letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1" }),
+                letter(starter, "start-1", { ...Tag.cases.start.make({}), program: "p42/child", name: "child:1" }),
               );
 
               expect(sent, "the starter takes the person's letter").toMatchObject({ result: { _tag: "accepted" } });
@@ -193,6 +203,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 () => livePid(instance, "child:1"),
                 (pid) => pid !== undefined,
               );
+
               const line = Option.getOrUndefined(
                 Arr.findFirst(
                   await rows(instance, "processes/child:1"),
@@ -214,9 +225,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const again: Instance = yield* Scope.provide(second)(home.boot);
           yield* Effect.promise(async () => {
             const relations = await rows(again, "permissions/relations");
+
             const brain = Option.getOrUndefined(
               Arr.findFirst(await rows(again, "processes/starter:1"), (row) => row._tag === "started"),
             )?.by;
+
             expect(brain, "the brain signed the starter's started line").toBeDefined();
             expect(
               Arr.map(relations, (row) => ({ by: row.by, _tag: row._tag, body: row.body })),
@@ -253,6 +266,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
           const saw = { label: "agent", location: "test", method: "command", check: "touch" } as const;
+
           const signed = (text: string) =>
             fixture.founder.proof(text).pipe(Effect.map((armored) => ({ text, armored })));
 
@@ -303,10 +317,13 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const boot = project.boot.process;
 
           const sent = yield* call(
-            ProjectService.use((p) => p.route(agent, "process.send", letter(boot, "agent-inc", { type: "inc" }))),
+            ProjectService.use((p) =>
+              p.route(agent, "process.send", letter(boot, "agent-inc", Tag.cases.inc.make({}))),
+            ),
           );
 
           expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });
+
           const incoming = yield* Schema.decodeUnknownEffect(
             Schema.Struct({ id: Schema.String, envelope: Schema.Struct({ id: Schema.String }) }),
           )(fixture.delivered.at(-1));

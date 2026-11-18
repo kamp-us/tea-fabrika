@@ -36,7 +36,7 @@ export const suite = (open: Open) =>
           Effect.gen(function* () {
             const session = yield* open;
             const runner = yield* session.start(inbox, initial);
-            const { type: _type, ...fields } = initial;
+            const { _tag, ...fields } = initial;
             const before = (yield* runner.open("before")).view;
             const letters = yield* session.letters;
 

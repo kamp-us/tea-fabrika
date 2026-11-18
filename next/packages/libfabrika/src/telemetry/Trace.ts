@@ -326,6 +326,7 @@ const MOST_CHARS = 128;
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
 const cut = (text: string): string => {
   const highSurrogate = Option.exists(Str.charCodeAt(text, MOST_CHARS - 1), (code) => code >= 0xd800 && code <= 0xdbff);
+
   return Str.slice(0, highSurrogate ? MOST_CHARS - 1 : MOST_CHARS)(text);
 };
 

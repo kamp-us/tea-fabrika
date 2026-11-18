@@ -138,6 +138,7 @@ const alive = (pid: number) =>
       const [text] = yield* Effect.all([Stream.mkString(Stream.decodeText(ps.stdout)), ps.exitCode], {
         concurrency: 2,
       });
+
       return Str.trim(text) === String(pid);
     }),
   ).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
@@ -266,6 +267,7 @@ describe("the memory restart on real workerd, next/", () => {
             START,
           ),
         );
+
         const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         expect(yield* alive(old), "the first workerd runs").toBe(true);
@@ -300,9 +302,11 @@ describe("the memory restart on real workerd, next/", () => {
           watch(
             async () => {
               const facts = await brain(instance);
+
               const next = Option.getOrUndefined(
                 Arr.findFirst(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start),
               );
+
               return next === undefined ? null : { facts: facts!, next: next.body };
             },
             (found) => found !== null,
@@ -372,6 +376,7 @@ describe("the memory restart on real workerd, next/", () => {
             START,
           ),
         );
+
         const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         sizes.set(old, OVER);
@@ -390,6 +395,7 @@ describe("the memory restart on real workerd, next/", () => {
           watch(
             async () => {
               const facts = await brain(instance);
+
               return Arr.some(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start)
                 ? facts
                 : null;

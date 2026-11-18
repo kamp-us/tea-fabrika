@@ -53,6 +53,7 @@ const socket = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identit
       const ws = new WebSocket(
         `${Str.replace(/^http/, "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
       );
+
       ws.addEventListener("message", (event) => {
         const f = Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data));
         frames.push(f);
@@ -104,6 +105,7 @@ const socket = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identit
   } while (challenge.method !== "challenge");
 
   const { nonce } = yield* Schema.decodeUnknownEffect(Schema.Struct({ nonce: Schema.String }))(challenge.params);
+
   const answer = yield* call("initialize", {
     versions: [1],
     has: ["git"],
@@ -229,6 +231,7 @@ it.live(
           sentAt: SENT,
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
+
         const armored = yield* root.proof(value);
 
         const reply = yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: value, armored }) });
@@ -242,6 +245,7 @@ it.live(
       expect(
         Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true),
       ).toEqual([]);
+
       const taken = yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
@@ -293,6 +297,7 @@ it.live(
         sentAt: SENT,
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
+
       const armored = yield* root.proof(revoke);
 
       yield* HttpClient.post(`${url}/grant`, { body: HttpBody.jsonUnsafe({ text: revoke, armored }) });

@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Exit, Schema } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec, Effect, Exit, Schema, Tracer } from "effect";
+import * as fc from "fast-check";
 
 import { asks } from "./edges.ts";
 
@@ -77,6 +78,7 @@ describe("asks", () => {
         [OTHER]: file(EDGE, CALL),
       },
     );
+
     expect(Arr.map(found, (e) => [e.path, e.line])).toEqual([
       [OTHER, 3],
       [PRODUCT, 5],
@@ -102,6 +104,46 @@ describe("asks", () => {
     const exit = Effect.runSyncExit(asks(new Map(), new Map([[PRODUCT, file(EDGE, "export const = ;")]])));
     expect(Exit.isFailure(exit)).toBe(true);
     expect(JSON.stringify(exit)).toContain(PRODUCT);
+  });
+
+  // From effect-functions' exam file (0591): the span law is on `asks`, no shape check, so it lives here.
+  it("the exam's generated edge reads keep answers and one named function span", () => {
+    fc.assert(
+      fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 12 }), (old) => {
+        const spans: Array<Tracer.NativeSpan> = [];
+
+        const tracer = Tracer.make({
+          span(options) {
+            const span = new Tracer.NativeSpan(options);
+            spans.push(span);
+
+            return span;
+          },
+        });
+
+        const before = new Map<string, string>();
+        const after = new Map<string, string>();
+
+        for (const [index, present] of old.entries()) {
+          const path = `next/test-${index}.ts`;
+          const source = `// oxlint-disable-next-line fabrika/no-promises -- edge: case ${index}\nconst value = 1;`;
+
+          if (present) {
+            before.set(path, source);
+          }
+
+          after.set(path, source);
+        }
+
+        const found = Effect.runSync(asks(before, after).pipe(Effect.withTracer(tracer)));
+        expect(Arr.map(found, (edge) => edge.path).sort()).toEqual(
+          Arr.flatMap(old, (present, index) => (present ? [] : [`next/test-${index}.ts`])).sort(),
+        );
+        expect(Arr.map(spans, (s) => s.name)).toEqual(["exam.asks"]);
+        expect(spans[0]!.status._tag).toBe("Ended");
+      }),
+      { seed: 119120, numRuns: 40 },
+    );
   });
 });
 

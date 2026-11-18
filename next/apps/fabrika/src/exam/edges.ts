@@ -71,6 +71,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
 
     const at = pipe(rest, Str.search(REASON));
     const listed = Option.match(at, { onNone: () => rest, onSome: (start) => pipe(rest, Str.slice(0, start)) });
+
     const rules = pipe(
       Str.split(listed, ","),
       Arr.map((rule) => Str.trim(rule)),
@@ -85,7 +86,9 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
       onNone: () => "",
       onSome: (start) => pipe(rest, Str.slice(start), Str.replace(REASON, ""), Str.trim),
     });
+
     const line = pipe(text, Str.slice(0, comment.start), Str.split("\n")).length;
+
     return [{ path, line, rules: Arr.join(rules, ", "), reason }];
   });
 });
@@ -151,7 +154,9 @@ const lines = (text: string) => Arr.filter(Str.split(text, "\n"), (line) => line
 const notice = (edge: Edge) => {
   const escape = (s: string) =>
     pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
+
   const location = pipe(escape(edge.path), Str.replaceAll(":", "%3A"), Str.replaceAll(",", "%2C"));
+
   return `::notice file=${location},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
 
@@ -162,9 +167,11 @@ const main = Effect.gen(function* () {
   const flag = args.indexOf("--base");
   const against = (flag < 0 ? undefined : args[flag + 1]) ?? "origin/main";
   const top = Str.trim(yield* git(["rev-parse", "--show-toplevel"]));
+
   const at = Effect.fnUntraced(function* (more: ReadonlyArray<string>) {
     return yield* git(["-C", top, ...more]);
   });
+
   const base = Str.trim(yield* at(["merge-base", against, "HEAD"]));
   const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
   const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));
@@ -187,6 +194,7 @@ const main = Effect.gen(function* () {
 
   const head =
     found.length === 0 ? "No new edge comments in this pull request." : "Edges this pull request adds, for the owner:";
+
   yield* Console.log(Arr.join([head, ...Arr.map(found, ask)], "\n"));
   const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
 

@@ -47,17 +47,18 @@ const Model = Schema.Struct({ items: Schema.Array(Item) });
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), name: Name }),
-  Schema.Struct({ type: Schema.Literal("rename"), name: Name, to: Name }),
-  Schema.Struct({ type: Schema.Literal("remove"), name: Name }),
-  Schema.Struct({ type: Schema.Literal("check"), name: Name, note: Schema.optionalKey(Note) }),
-  Schema.Struct({ type: Schema.Literal("uncheck"), name: Name }),
+/** The checklist's inputs; its tile and window make them with `ChecklistMsg.cases.<name>.make`. */
+export const ChecklistMsg = Schema.TaggedUnion({
+  add: { name: Name },
+  rename: { name: Name, to: Name },
+  remove: { name: Name },
+  check: { name: Name, note: Schema.optionalKey(Note) },
+  uncheck: { name: Name },
   // Only the runner sends it, when the alarm `wake` asked for fires.
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int, arrivedAt: Schema.Int }),
-]);
+  timer: { at: Schema.Int, arrivedAt: Schema.Int },
+});
 
-type Msg = typeof Msg.Type;
+type Msg = typeof ChecklistMsg.Type;
 
 /** What the checklist hands on once every item is checked. */
 export const Done = Schema.Struct({ items: Schema.Array(Name) });
@@ -80,7 +81,7 @@ const tick = (state: ItemState, at: number): ItemState =>
 
 export const checklistMachine = Machine.make({
   model: Model,
-  msg: Msg,
+  msg: ChecklistMsg,
   cmds: [],
   init: (loaded) => [loaded ?? { items: [] }, []],
   update: {
@@ -105,15 +106,15 @@ const open = (i: Item) => i.state._tag !== "checked";
 const refuse = (m: Model, msg: Msg): Refusal | null => {
   const has = (name: string) => Arr.some(m.items, (i) => i.name === name);
 
-  if (msg.type === "timer") {
+  if (msg._tag === "timer") {
     return null;
   }
 
-  if (msg.type === "add") {
+  if (msg._tag === "add") {
     return has(msg.name) ? { reason: "taken" } : null;
   }
 
-  if (msg.type === "rename") {
+  if (msg._tag === "rename") {
     return !has(msg.name) ? { reason: "missing" } : has(msg.to) ? { reason: "taken" } : null;
   }
 

@@ -59,6 +59,7 @@ export const Line = Schema.Struct({
   /** The event's fields, kept as JSON. */
   body: Schema.Json,
 });
+
 /**
  * A line: one write as its writer hands it in, before the referee gives it a place.
  *
@@ -83,6 +84,7 @@ export type Line = typeof Line.Type;
 export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | "sentAt" | "traceId">) {
   const span = yield* Effect.currentSpan;
   const sentAt = DateTime.formatIso(yield* DateTime.now);
+
   return { ...from, sentAt, traceId: span.traceId };
 });
 
@@ -122,6 +124,7 @@ export const Entry = Schema.Struct({
   arrivedAt: Schema.Int,
   ...Line.fields,
 });
+
 /**
  * One entry of the log, as `read` gives it back.
  *
@@ -177,6 +180,7 @@ export const Appended = Schema.TaggedUnion({
     ]),
   },
 });
+
 /**
  * An `append`'s answer: `placed` or `refused`.
  *
@@ -191,6 +195,7 @@ export type Appended = typeof Appended.Type;
  * @category schemas
  */
 export const Waited = Schema.TaggedUnion({ ready: { rev: Rev }, parked: {} });
+
 /**
  * A `wait`'s answer: `ready` or `parked`.
  *

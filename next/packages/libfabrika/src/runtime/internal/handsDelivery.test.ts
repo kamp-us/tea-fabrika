@@ -22,7 +22,7 @@ import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";
-import { handsDelivery, State } from "./handsDelivery.ts";
+import { handsDelivery, Replied, State } from "./handsDelivery.ts";
 
 const RUNS = { seed: 119120, numRuns: 100 };
 
@@ -51,7 +51,7 @@ const ctx = stubCtxThrowingProxy<unknown>();
 const lists = arbGuidedSequence(
   handsDelivery,
   ctx,
-  { outside: { replied: fc.record({ type: fc.constant("replied" as const), reply }) } },
+  { outside: { replied: fc.record({ reply }).map((fields) => Replied.make(fields)) } },
   { maxLength: 30 },
 );
 

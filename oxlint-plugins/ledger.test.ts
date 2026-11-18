@@ -2,8 +2,8 @@ import { it } from "@effect/vitest";
 import { Array as Arr, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
+import { plant } from "./plant.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
 class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {

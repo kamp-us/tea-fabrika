@@ -89,9 +89,11 @@ export class Project extends RealProject {
    */
   allRows() {
     const sql = this.ctx.storage.sql;
+
     const tables = Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'").toArray(), (row) =>
       String(row["name"]),
     );
+
     return Rec.fromEntries(
       Arr.map(tables, (table) => [
         table,

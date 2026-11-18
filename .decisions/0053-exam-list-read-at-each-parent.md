@@ -59,7 +59,7 @@ files sit; it does not touch this check.
 
 **How this fits older texts.** [a unit of work is a commit](../docs/direction/a-unit-of-work-is-a-commit.md)
 says a `build` commit that touches an exam path is `stuck`, and that the PR asks the owner to read
-any exam path from the one list. Both still hold. This decision only says which version of the list
+any exam path from the one list. This decision only says which version of the list
 judges each commit. [0010](0010-allow-pull-request-target-for-the-commit-check.md) keeps the check
 running main's copy of its own code; that is not changed.
 
