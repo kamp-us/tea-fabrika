@@ -21,7 +21,7 @@ import {
   Scope,
 } from "effect";
 import { TestClock, TestConsole } from "effect/testing";
-import { type Held, Locks } from "./typecheck/Locks.ts";
+import { type Held, type LockError, Locks } from "./typecheck/Locks.ts";
 import * as LocksFile from "./typecheck/LocksFile.ts";
 import { judge, Liveness, Seen } from "./typecheck/Look.ts";
 import * as ProcessesTest from "./typecheck/ProcessesTest.ts";
@@ -276,14 +276,25 @@ const settle = Effect.gen(function* () {
   }
 });
 
-/** Holder `pid` asks for the lock in a scope of its own, which only the law closes. */
-const take = (d: Disk, table: ProcessesTest.Table, pid: number, got: Map<number, Held>, hook?: Hook) =>
+/**
+ * Holder `pid` asks for the lock in a scope of its own, which only the law closes. `onHeld` runs
+ * once it holds, as a wrapper's first command does.
+ */
+const take = (
+  d: Disk,
+  table: ProcessesTest.Table,
+  pid: number,
+  got: Map<number, Held>,
+  hook?: Hook,
+  onHeld: (held: Held) => Effect.Effect<void, LockError> = () => Effect.void,
+) =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
     const fiber = yield* Effect.forkChild(
       Effect.gen(function* () {
         const held = yield* (yield* Locks).hold(LOCK).pipe(Scope.provide(scope));
         got.set(pid, held);
+        yield* onHeld(held);
       }).pipe(Effect.provide(locksFor(d, table, pid, hook))),
     );
     return { scope, fiber };
@@ -427,6 +438,23 @@ const childEndsMove = (pid: number) =>
       }),
   );
 
+/**
+ * A holder, displaced or not, starts a command and sees it end, as the program does at each command.
+ * A displaced holder's label is gone, so its calls must leave the next holder's `.child` alone.
+ */
+const commandMove = (pid: number) =>
+  move(
+    `command of ${pid} starts and ends`,
+    (w) => w.state.get(pid) === "holding",
+    (w) =>
+      Effect.gen(function* () {
+        w.table.running.set(commandPid(pid), w.disk.now - 1_000);
+        yield* Effect.orDie(w.got.get(pid)!.running(Option.some(commandPid(pid))));
+        w.table.running.delete(commandPid(pid));
+        yield* Effect.orDie(w.got.get(pid)!.running(Option.none()));
+      }),
+  );
+
 const reuseMove = (pid: number) =>
   move(
     `reuse ${pid}, by a process started after its label`,
@@ -468,6 +496,7 @@ const MoveInput = Schema.TaggedUnion({
   cancel: { pid: Holder },
   kill: { pid: Holder, withChild: Schema.Boolean },
   end: { pid: Holder },
+  command: { pid: Holder },
   reuse: { pid: Holder },
   oldWrites: { pid: Holder },
   oldEnds: {},
@@ -482,6 +511,7 @@ const moveFrom = (input: typeof MoveInput.Type): Move =>
     cancel: ({ pid }) => cancelMove(pid),
     kill: ({ pid, withChild }) => killMove(pid, withChild),
     end: ({ pid }) => childEndsMove(pid),
+    command: ({ pid }) => commandMove(pid),
     reuse: ({ pid }) => reuseMove(pid),
     oldWrites: ({ pid }) => oldWritesMove(pid),
     oldEnds: () => oldEndsMove,
@@ -567,7 +597,8 @@ const walk = (cmds: Iterable<Move>) => {
 describe("T766 LocksFile keeps one holder through takes, releases, kills and reused pids, today's tooling", () => {
   const ran = new Set<string>();
   let coverageRegistered = false;
-  // N3. Plants: release another pid's label; break without rereading; make a waiter uninterruptible.
+  // N3. Plants: release another pid's label; break without rereading; make a waiter uninterruptible;
+  // let a command's start or end write or remove `.child` whatever the label names.
   // Effect's Schema array shrinks by removing blocks and shrinking fields. The existing check(world)
   // still decides whether each generated move runs, including after a sequence has been shrunk.
   it.effect.prop(
@@ -577,7 +608,9 @@ describe("T766 LocksFile keeps one holder through takes, releases, kills and reu
       if (!coverageRegistered) {
         coverageRegistered = true;
         ctx.onTestFinished(() =>
-          expect([...ran].toSorted()).toEqual(["cancel", "end", "kill", "old", "release", "reuse", "take"].toSorted()),
+          expect([...ran].toSorted()).toEqual(
+            ["cancel", "command", "end", "kill", "old", "release", "reuse", "take"].toSorted(),
+          ),
         );
       }
 
@@ -611,6 +644,85 @@ describe("T766 LocksFile keeps one holder through takes, releases, kills and reu
       },
     ),
   );
+
+  // T766: the review's walk for the command calls. 501 is displaced by the old script, 502 takes the
+  // lock and dies with command 602 running, and 501 then starts and ends a command: that must leave
+  // 502's `.child` in place, so 503 waits behind 602.
+  it.effect(
+    "pinned: T766 a displaced holder's command start and end leave the next holder's running-child guard intact",
+    () =>
+      Effect.map(
+        walk([
+          takeMove(501),
+          takeMove(502),
+          oldWritesMove(501),
+          oldEndsMove,
+          killMove(502, true),
+          commandMove(501),
+          takeMove(503),
+        ]),
+        (world) => {
+          expect(world.broken, world.broken.join("\n")).toEqual([]);
+          expect(world.got.has(503), "503 waits while 502's command still runs").toBe(false);
+        },
+      ),
+  );
+
+  // T766: the breaker's two removes (`.child` and the label), ordered by a gate. Breaker 602 is held
+  // right after its first remove under `.break`; taker 603 then runs, and if the label is already
+  // gone it takes the lock and starts command 703. When the gate opens and 603's wrapper is killed,
+  // 602 must not take the lock while 703 runs: 603's `.child` has to outlive the breaker's second
+  // remove. A scenario, not a property: N3's walk has no gate between two steps of one breaker.
+  // Plant: remove the label first and `.child` second, as the first build did: both hold.
+  it("scenario: a take between the breaker's two removes keeps the taker's running-child guard", () =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const d = disk();
+        const table = ProcessesTest.table([]);
+        const [breaker, taker, gone, command] = [602, 603, 8, 703];
+        table.running.set(breaker, AT - 60_000);
+        table.running.set(taker, AT - 60_000);
+        d.files.set(LOCK, { text: `${gone}\n`, at: AT - 30_000 });
+        const gate = yield* Deferred.make<void>();
+        // The breaker: its first removal of the label or of `.child` is followed by a wait.
+        const forBreaker = (): Hook => {
+          let waited = false;
+          return (op, path, ok) =>
+            Effect.gen(function* () {
+              if (ok === true && op === "remove" && (path === LOCK || path === `${LOCK}.child`) && !waited) {
+                waited = true;
+                yield* Deferred.await(gate);
+              }
+            });
+        };
+        const got = new Map<number, Held>();
+        yield* take(d, table, breaker, got, forBreaker());
+        yield* settle;
+        // Where the label is already gone the taker holds and runs its command; where the breaker
+        // removed `.child` first, the label still stands and the taker waits.
+        const started = (held: Held) =>
+          Effect.suspend(() => {
+            table.running.set(command, d.now - 1_000);
+            return held.running(Option.some(command));
+          });
+        yield* take(d, table, taker, got, undefined, started);
+        yield* settle;
+        yield* Deferred.succeed(gate, undefined);
+        yield* settle;
+
+        if (got.has(taker)) {
+          // SIGKILL: the wrapper is gone and its scope is never closed; its command runs on.
+          table.running.delete(taker);
+          yield* settle;
+        }
+
+        expect(
+          [got.has(breaker), table.running.has(command)],
+          "the breaker holds while the taker's command 703 still runs",
+        ).not.toEqual([true, true]);
+      }).pipe(Effect.provide(Layer.mergeAll(TestClock.layer(), TestConsole.layer))),
+    ));
 
   // N4. Mercurial's race (`mercurial/lock.py`, `_testlock`: "must do this with another lock held, or
   // can race and break valid lock"), in the two orders that break a lock held by a live process.
