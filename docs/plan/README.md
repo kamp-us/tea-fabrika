@@ -115,6 +115,9 @@ found repeated strict line decoding dominated its time. Reusing successful decod
 unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
 CI's CPU cause remains unproved. These measurements supply no
 branch proof or reliability claim.
+In `next/`, [pull request 1616](https://github.com/kamp-us/tea-fabrika/pull/1616) gives each cut of
+the L11 storage law a copy of one booted Project in place of a cold boot of its own, the test-side
+fix a cloud profile measured at 45 s to 33 s. Its own CI time and its two plants are not yet run.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
 It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.
