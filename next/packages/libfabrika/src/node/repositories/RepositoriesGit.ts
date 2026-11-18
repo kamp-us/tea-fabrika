@@ -40,19 +40,16 @@ const failure = (operation: string, cause: unknown, unknown = false) =>
       : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
 
-/** One variable of this process's environment through Config; unset is `undefined`. */
-const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
 /**
  * What a git command takes from this process's environment, read at each command as process.env
  * was: an empty variable stays empty, and an unset one stays unset.
  */
 const inherited = Config.all({
-  PATH: variable("PATH"),
-  HOME: variable("HOME"),
-  GIT_CONFIG_NOSYSTEM: variable("GIT_CONFIG_NOSYSTEM"),
-  GIT_CONFIG_GLOBAL: variable("GIT_CONFIG_GLOBAL"),
-  SSH_AUTH_SOCK: variable("SSH_AUTH_SOCK"),
+  PATH: Config.String("PATH").pipe(Config.withDefault(undefined)),
+  HOME: Config.String("HOME").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_NOSYSTEM: Config.String("GIT_CONFIG_NOSYSTEM").pipe(Config.withDefault(undefined)),
+  GIT_CONFIG_GLOBAL: Config.String("GIT_CONFIG_GLOBAL").pipe(Config.withDefault(undefined)),
+  SSH_AUTH_SOCK: Config.String("SSH_AUTH_SOCK").pipe(Config.withDefault(undefined)),
 });
 
 const safeConfig = [

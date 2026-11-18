@@ -4,9 +4,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Config, ConfigProvider, Effect, Option, Result } from "effect";
+import { Config, Result } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
+import { readEnv } from "./step-env.ts";
 
 const lines = (text: string): string[] =>
   text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
@@ -32,15 +33,6 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
 };
 
 const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
-
-// A variable read through Effect's Config, when the read runs. An empty variable stays empty, as a
-// read of process.env gave it, and an unset one is undefined.
-const variable = (name: string): string | undefined =>
-  Effect.runSync(
-    Config.String(name)
-      .pipe(Config.option, Config.map(Option.getOrUndefined))
-      .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
-  );
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -246,10 +238,8 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
     }));
 };
 
-const main = (local: boolean) => {
-  const base = variable("BASE") ?? "";
-  const head = variable("HEAD") ?? "";
-  const event = variable("EVENT") ?? "";
+const main = (local: boolean, env: { readonly base: string; readonly head: string; readonly event: string }) => {
+  const { base, head, event } = env;
   let total = 0;
 
   for (const input of local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event)) {
@@ -273,9 +263,20 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // base and head, and check's shallow checkout holds no origin/main.
   const local = process.argv.includes("--local");
 
-  if (local && variable("GITHUB_ACTIONS") === "true") {
+  // The run's variables through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, and an unset BASE, HEAD or EVENT is the empty text.
+  const env = readEnv(
+    Config.all({
+      base: Config.String("BASE").pipe(Config.withDefault("")),
+      head: Config.String("HEAD").pipe(Config.withDefault("")),
+      event: Config.String("EVENT").pipe(Config.withDefault("")),
+      actions: Config.String("GITHUB_ACTIONS").pipe(Config.withDefault(undefined)),
+    }),
+  );
+
+  if (local && env.actions === "true") {
     console.log("field: this CI run's field job checks the added rows");
-  } else if (Result.isFailure(Result.try(() => main(local)))) {
+  } else if (Result.isFailure(Result.try(() => main(local, env)))) {
     console.error(
       local
         ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"

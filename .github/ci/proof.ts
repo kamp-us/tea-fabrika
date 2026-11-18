@@ -35,11 +35,12 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Config, ConfigProvider, DateTime, Effect, Option, Result, Schema } from "effect";
+import { Config, DateTime, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
+import { readEnv, stepFiles } from "./step-env.ts";
 
 export { isTrigger };
 
@@ -217,17 +218,14 @@ export const whole = (name: string, value: string | undefined): number => {
 if (import.meta.main) {
   // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
   // process.env gave it, so `whole` still refuses an empty MOST, LIMIT or RUN_NUMBER.
-  const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
-  const env = Effect.runSync(
+  const env = readEnv(
     Config.all({
-      most: text("MOST"),
-      limit: text("LIMIT"),
-      run: text("RUN_NUMBER"),
-      record: text("RECORD"),
-      output: text("GITHUB_OUTPUT"),
-      summary: text("GITHUB_STEP_SUMMARY"),
-    }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+      most: Config.String("MOST").pipe(Config.withDefault(undefined)),
+      limit: Config.String("LIMIT").pipe(Config.withDefault(undefined)),
+      run: Config.String("RUN_NUMBER").pipe(Config.withDefault(undefined)),
+      record: Config.String("RECORD").pipe(Config.withDefault(undefined)),
+      ...stepFiles,
+    }),
   );
 
   const run = whole("RUN_NUMBER", env.run);

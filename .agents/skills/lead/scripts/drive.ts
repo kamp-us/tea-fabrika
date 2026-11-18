@@ -935,7 +935,7 @@ const tail = (text: string, n = 3) => Arr.join(pipe(text, Str.trim, Str.split("\
  */
 export const variable = (name: string) =>
   Config.String(name)
-    .pipe(Config.option, Config.map(Option.getOrUndefined))
+    .pipe(Config.withDefault(undefined))
     .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
 
 /** How long a step's agent may run, in minutes, before drive stops it and the step is stuck. */

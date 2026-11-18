@@ -29,10 +29,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Record as Rec, Config, ConfigProvider, Effect, Option } from "effect";
+import { Record as Rec, Config } from "effect";
 import { testConfig } from "../../vitest.config.ts";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, readPaths, validSha } from "./changes.mjs";
+import { readEnv, stepFiles } from "./step-env.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
@@ -240,18 +241,15 @@ export const list = (root: string, args: readonly string[]): string[] => {
 if (import.meta.main) {
   // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
   // process.env gave it, so an empty FILTER still means the reader tests alone.
-  const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
-  const env = Effect.runSync(
+  const env = readEnv(
     Config.all({
-      event: text("EVENT"),
-      filter: text("FILTER"),
-      base: text("BASE"),
-      visual: text("VISUAL"),
-      budget: text("BUDGET"),
-      output: text("GITHUB_OUTPUT"),
-      summary: text("GITHUB_STEP_SUMMARY"),
-    }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+      event: Config.String("EVENT").pipe(Config.withDefault(undefined)),
+      filter: Config.String("FILTER").pipe(Config.withDefault(undefined)),
+      base: Config.String("BASE").pipe(Config.withDefault(undefined)),
+      visual: Config.String("VISUAL").pipe(Config.withDefault(undefined)),
+      budget: Config.String("BUDGET").pipe(Config.withDefault(undefined)),
+      ...stepFiles,
+    }),
   );
 
   const root = fileURLToPath(new URL("../../", import.meta.url));

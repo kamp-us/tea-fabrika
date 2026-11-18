@@ -16,26 +16,13 @@ import * as CommandsNode from "@kampus/libfabrika/node/client/CommandsNode";
 import * as JournalSqlite from "@kampus/libfabrika/node/client/JournalSqlite";
 import * as KeyFile from "@kampus/libfabrika/node/client/KeyFile";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import type { Link } from "@kampus/libfabrika/transport/Link";
-import {
-  Array as Arr,
-  Record as Rec,
-  Config,
-  ConfigProvider,
-  Effect,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  Queue,
-  Schema,
-  Stream,
-} from "effect";
+import { Record as Rec, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
+import { environment, present } from "./src/environment.ts";
 
 const VERSION = "0.0.0";
 
@@ -58,22 +45,6 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
   win32: "windows",
 };
 
-/** The entries that hold a value, as one record. */
-const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
-
-/** One variable of this process's environment through Config; unset is `undefined`. */
-const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
-/**
- * The home folder's variable and each declared setting's, through Config. A start reads them when
- * it runs, as process.env was read: an empty variable stays empty, and an unset one is left out.
- */
-const environment = Config.all({
-  home: variable("FABRIKA_HOME"),
-  settings: Config.all(Object.fromEntries(Declarations.all.declarations.map((d) => [d.env, variable(d.env)]))),
-});
-
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>
   link._tag === "waiting_grant"
@@ -85,7 +56,7 @@ const lineFor = (link: Link, fingerprint: string): Line =>
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
-  const env = yield* environment.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+  const env = yield* environment;
   const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
   const loaded = yield* Load.load({
     person: {

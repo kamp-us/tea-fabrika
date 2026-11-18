@@ -679,6 +679,45 @@ is plain: it runs on in-memory stand-ins and starts nothing.
   helper is written. B7 goes in the QuotaRunner suite that exists, B8 in the file that holds the
   stub.
 - No new product helper: each fix uses Effect's own value form and `Effect.suspend`.
+- `next/apps/fabrika/src/environment.ts`, new: `environment` (the home variable and each declared
+  setting's variable, read when the effect runs) and `present`. Read `Config.d.ts` of the installed
+  `effect` (`Config.withDefault`, `Config.option`, `Config.all`): `Config.String(name).pipe(Config.withDefault(undefined))`
+  is the optional read, so no `variable` helper is kept; the nine copies of `Config.option` with
+  `Config.map(Option.getOrUndefined)` became that call, inline. Searched `rg "ConfigProvider.fromEnv"` in
+  `next/apps/fabrika`: `dev.ts` and `hands.ts` wrote the same `present`, `variable` and `environment`
+  lines, which jscpd flags (`.jscpd.json` ignores test and test-support files only). Neither launcher
+  imports the other and no app module held the declared settings' variables, so the shared part lives
+  in one new file the two import.
+- `next/apps/fabrika/src/env.test-support.ts`, `scopedEnv`, `keptEnv`, `noTracking`, private `changeEnv` and
+  `write`: `rg "stubEnv|unstubAllEnvs" next .agents .github` finds `vi.stubEnv` in 10 files, restored with a
+  hand-called `vi.unstubAllEnvs()`. Effect's `ConfigProvider` (`fromEnv` takes an `env` record) only reads, and
+  the code under test (Alchemy, the local instance, a Worker module) reads `process.env` itself, so a
+  law must write it. `vi.stubEnv` fits a plain set and restore and is not used here because the 16
+  callers are Effect laws that restore when their scope closes, `keptEnv` and the `kept` keys save a variable
+  the code under test writes later (`ALCHEMY_HOME`) by reading it first, and `noTracking` is a write that is
+  never put back, which `vi.unstubAllEnvs` would undo. The saved read is the same `Config.withDefault(undefined)` call.
+  Moving the callers to `vi.stubEnv` is a redesign of those laws, not part of this fold.
+- `.agents/skills/lead/scripts/drive.ts`, `variable`: read `Config.d.ts` again. The optional read is
+  `Config.String(name).pipe(Config.withDefault(undefined))`, now written that way. The function stays
+  because drive, chain and gcloop call it 5 times (`rg "variable\(" .agents/skills/lead/scripts`) and each
+  call needs the same `ConfigProvider.fromEnv({ preserveEmptyStrings: true })` provider, so an empty
+  variable stays empty. `.agents` and `.github/ci` import nothing from each other
+  (`rg "\.github/ci" .agents` and `rg "agents/skills" .github/ci` find no import), so each package
+  keeps its own reader and no copy is shared across the two.
+- `.github/ci/step-env.ts`, new: `readEnv` and `stepFiles`. The optional read in `field-check.ts`,
+  `proof.ts` and `legs.ts` is `Config.String(name).pipe(Config.withDefault(undefined))`, written inline.
+  `rg "ConfigProvider.fromEnv" .github/ci` found the same `Effect.runSync` and `.parse(ConfigProvider.fromEnv(...))`
+  glue in all three, and `node .github/ci/copies.ts` (jscpd) flagged the repeated `GITHUB_OUTPUT` and
+  `GITHUB_STEP_SUMMARY` lines in `proof.ts` and `legs.ts`. Effect has no one-call read of the environment,
+  only `Config.parse` with a provider, so the glue is one function and the two output files one record,
+  shared in the folder where `proof.ts` already imports from `legs.ts`.
+- `.agents/skills/lead/scripts/drive.ts`, `StepMinutes` and `withDriveMinutes`: `StepMinutes` is Effect's own
+  `Context.Reference` with a default, read by `drive.ts` and `chain.ts` (`rg "StepMinutes" .agents`), and
+  `withDriveMinutes` is the one place `DRIVE_MINUTES` becomes that reference. Tried
+  `Config.Number("DRIVE_MINUTES").pipe(Config.withDefault(60))` on an unset, an empty, a word and a number
+  (scratch run): it fails on `""` and on `"abc"`, where the code reads `Number(set)` as `process.env` was read
+  before E49, so an empty variable is 0 and a word is NaN. `Config.withDefault` covers only an unset
+  variable, so the small bridge from the variable to the reference stays.
 
 ## What waits, and what clashes
 

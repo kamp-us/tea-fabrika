@@ -14,11 +14,9 @@ import {
   Record as Rec,
   String as Str,
   Config,
-  ConfigProvider,
   Effect,
   FileSystem,
   Layer,
-  Option,
   Path,
   Schema,
   Stream,
@@ -29,6 +27,7 @@ import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 
 import { build } from "./src/build.ts";
+import { environment, present } from "./src/environment.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
 
@@ -54,22 +53,6 @@ const settings = Rec.fromEntries(
 // The saved state of a home: its founding facts. A port saved there by an older start is read
 // only to say that it is no longer used.
 const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Declarations.port.schema) });
-
-/** The entries that hold a value, as one record. */
-const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
-
-/** One variable of this process's environment through Config; unset is `undefined`. */
-const variable = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
-
-/**
- * The home folder's variable and each declared setting's, through Config. A start reads them when
- * it runs, as process.env was read: an empty variable stays empty, and an unset one is left out.
- */
-const environment = Config.all({
-  home: variable("FABRIKA_HOME"),
-  settings: Config.all(Object.fromEntries(declarations.map((d) => [d.env, variable(d.env)]))),
-});
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
@@ -123,7 +106,7 @@ const command = Command.make("dev", flags, (options) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
-        const env = yield* environment.parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
+        const env = yield* environment;
         const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {

@@ -1054,11 +1054,12 @@ describe("P16 copied-file real instance, serial", () => {
   it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
     // The laptop's variables through Config, read when the scenario runs. An empty one stays empty,
     // as a read of process.env gave it, so an empty P16_LOCAL_BAR still skips and an empty CI is off.
-    const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
     const env = Effect.runSync(
-      Config.all({ bar: text("P16_LOCAL_BAR"), brain: text("P16_BRAIN"), ci: text("CI") }).parse(
-        ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
-      ),
+      Config.all({
+        bar: Config.String("P16_LOCAL_BAR").pipe(Config.withDefault(undefined)),
+        brain: Config.String("P16_BRAIN").pipe(Config.withDefault(undefined)),
+        ci: Config.String("CI").pipe(Config.withDefault(undefined)),
+      }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
     );
     const barFile = env.bar;
 

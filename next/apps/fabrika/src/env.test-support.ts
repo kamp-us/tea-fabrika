@@ -3,15 +3,7 @@
 // and a Worker module Alchemy loads (`T502_PORT`). Effect's Config reads a variable and cannot write
 // one, so this file is the one place those laws write it. What a law changes is read first through
 // Config, so it can be put back as it was.
-import { Config, ConfigProvider, Effect, Option } from "effect";
-
-/** One variable as it is now: its text, or `undefined` when unset. An empty one stays empty. */
-const current = (key: string) =>
-  Config.String(key)
-    .pipe(Config.option, Config.map(Option.getOrUndefined))
-    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }))
-    // A text read that may be unset fails only on a broken provider, which is a bug.
-    .pipe(Effect.orDie);
+import { Config, ConfigProvider, Effect } from "effect";
 
 /** Sets one variable, or unsets it when `value` is `undefined`. */
 const write = (key: string, value: string | undefined): void => {
@@ -31,7 +23,16 @@ const changeEnv = (values: Readonly<Record<string, string>>, kept: ReadonlyArray
   Effect.gen(function* () {
     const saved = yield* Effect.forEach(
       [...Object.keys(values), ...kept],
-      (key) => current(key).pipe(Effect.map((value) => [key, value] as const)),
+      // Each is read as it is now: its text, or `undefined` when unset, and an empty one stays empty. A
+      // text read that may be unset fails only on a broken provider, which is a bug.
+      (key) =>
+        Config.String(key)
+          .pipe(Config.withDefault(undefined))
+          .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }))
+          .pipe(
+            Effect.orDie,
+            Effect.map((value) => [key, value] as const),
+          ),
       { concurrency: 1 },
     );
 
