@@ -7,10 +7,10 @@
   "ended": "2026-11-18T18:25:26+00:00",
   "parent": null,
   "active": null,
-  "role": "build",
+  "role": "hand",
   "model": "claude-sonnet-5-5",
   "effort": "high",
-  "outcome": "done",
+  "outcome": "pass",
   "why": "Slice 4 build, batch B (0253 to 0261): eight records fold 0601, 0140 and 0173 and become accepted, 0253, 0256 and 0260 folded with their residues, not handed over; five retitled; one finding row; model sonnet at effort high as spawned. Claude Code subagent transcript: 17 model calls; tokens in 34 uncached, 97,247 5-minute and 0 1-hour cache writes, 1,925,151 cache reads; out 20,320. Dollars are list price (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-08). Billing `subscription` as the caller gave it; the transcript does not record it.",
   "tokens": 145117,
   "tools": 23,
@@ -23,5 +23,6 @@
   "cachedTokens": 1925151,
   "outputTokens": 20320,
   "billing": "subscription",
-  "step": "build"
+  "step": "build",
+  "driver_caused": false
 }

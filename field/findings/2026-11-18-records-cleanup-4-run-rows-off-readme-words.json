@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-records-cleanup-4-run-rows-off-readme-words",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "field/runs/2026-11-18-records-cleanup-4-build1.json",
+    "line": 1
+  },
+  "says": "Today's tooling field rows: the five slice-4 run rows (tests1, build1 to build4) use role 'build' or 'tests' and outcome 'done', which are outside field/README.md's lists, and leave out driver_caused, where slice 3's rows use role 'hand', step, outcome 'pass' and driver_caused false. Ticket text: make the lead's run-row writer use field/README.md's role and outcome words and always write driver_caused.",
+  "proof": "`node .github/ci/field-check.ts --local` at 43b4ba33a65d prints, for each of the five files, 'driver_caused: README metadata is absent', 'role: word outside README list' and 'outcome: word outside README list'; field/runs/2026-11-18-records-cleanup-3-build1.json has role 'hand', outcome 'pass', driver_caused false.",
+  "cost": "Baselines that filter on role, outcome or driver_caused miss or miscount these runs, and driver_caused is not recorded for them.",
+  "head": "43b4ba33a65de273b28bd4f8ade90fb1bc9e2b13",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}
