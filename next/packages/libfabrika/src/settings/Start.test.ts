@@ -106,7 +106,8 @@ describe("instance start envelope, next/", () => {
       const error = new Starts.StartsError({ reason });
       expect(error.reason).toBeInstanceOf(Starts.Missing);
       expect(reason.target).toEqual(target);
-      expect(Object.hasOwn(reason, "cause")).toBe(false);
+      // An error class instance is no record, so its own names are read whole, the hidden ones too.
+      expect(Object.getOwnPropertyNames(reason)).not.toContain("cause");
       expect("cause" in reason).toBe(false);
     },
     StartsTest.options,

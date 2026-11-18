@@ -39,7 +39,7 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
     const msg: Msg = {
       type: "take",
       at: times[pick % times.length]!,
-      policy: pick % 7 === 0 ? (pick % 2 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
+      policy: pick % 7 === 0 ? (pick % 2 !== 0 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
     };
 
     messages.push(msg);

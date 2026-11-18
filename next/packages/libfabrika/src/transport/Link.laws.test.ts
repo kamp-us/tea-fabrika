@@ -18,6 +18,7 @@
 // close or block from outside, or a stale copy of a Msg this walk already delivered on an older dial.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { backoff, CAP, Link, linkMachine, type LinkMsg, linkTimer } from "./Link.ts";
@@ -69,7 +70,7 @@ const moves = (w: Walk, c: Choice): ReadonlyArray<LinkMsg> => {
   const timer = linkTimer(s);
   const out: Array<LinkMsg> = timer === null ? [] : [timer.msg];
   const blocked: LinkMsg = { type: "blocked", reason: `store ${c.word}` };
-  const stale = w.delivered.filter((m) => "dial" in m && m.dial !== currentDial(s));
+  const stale = Arr.filter(w.delivered, (m) => "dial" in m && m.dial !== currentDial(s));
 
   if (stale.length > 0) {
     out.push(stale[c.pick % stale.length]!);
@@ -207,7 +208,7 @@ describe("L1: the link machine", () => {
             asked++;
             expect(next._tag).toBe("dialing");
             expect(currentDial(next)).toBe(m.dial);
-            expect(m.dial).toBeGreaterThan(Math.max(0, ...prev.delivered.map((d) => ("dial" in d ? d.dial : 0))));
+            expect(m.dial).toBeGreaterThan(Math.max(0, ...Arr.map(prev.delivered, (d) => ("dial" in d ? d.dial : 0))));
 
             return;
           }
@@ -242,7 +243,7 @@ describe("L1: the link machine", () => {
           expect(s._tag !== "waiting_grant" || after._tag === "waiting_grant", "a timer admitted a grant wait").toBe(
             true,
           );
-          expect(s._tag !== "waiting_grant" || cmds.some((c) => c.type === "knock"), "renew knocks").toBe(true);
+          expect(s._tag !== "waiting_grant" || Arr.some(cmds, (c) => c.type === "knock"), "renew knocks").toBe(true);
         });
       }),
       opts,

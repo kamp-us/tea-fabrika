@@ -19,11 +19,24 @@
 // `codex-exec-read` run the installed `codex exec` plainly, on the user's own Codex config
 // (./codexexec.ts): a turn there retries on a capacity error and asks once more for a missing answer.
 
-import { layer as nodeServices } from "@effect/platform-node/NodeServices";
+import type { NodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Clock,
+  Context,
+  DateTime,
+  Effect,
+  FileSystem,
+  Formatter,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter, type Sandbox } from "./codexexec.ts";
 
@@ -62,7 +75,7 @@ export type Answer = typeof Answer.Type;
 
 /** Where a step may send the quest: any step but itself. A step that needs another round of itself
  * is not done yet, and a send to itself only loops (2026-11-11, a tests step on Codex). */
-export const sendsFrom = (step: string) => (["tests", "build", "plan"] as const).filter((to) => to !== step);
+export const sendsFrom = (step: string) => Arr.filter(["tests", "build", "plan"] as const, (to) => to !== step);
 
 /** The typed answer one step is offered: `Answer`, with `to` naming only `sendsFrom(step)`. */
 export const answerFor = (step: string) =>
@@ -158,7 +171,9 @@ export class AdaptersMissing extends Schema.TaggedError<AdaptersMissing, { reado
 ) {}
 
 /** How the install ran: its exit code and its last lines. */
-export type Install = (folder: string) => Effect.Effect<{ readonly code: number; readonly said: string }>;
+export type Install = (
+  folder: string,
+) => Effect.Effect<{ readonly code: number; readonly said: string }, never, ChildProcessSpawner.ChildProcessSpawner>;
 
 /** The documented install (adapters/package.json): pinned, apart from the workspace, from its lockfile. */
 const pnpmInstall: Install = (folder) =>
@@ -178,11 +193,10 @@ const pnpmInstall: Install = (folder) =>
       { concurrency: 3 },
     );
 
-    return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
+    return { code: Number(code), said: Arr.join(pipe(`${out}${err}`, Str.trim, Str.split("\n")).slice(-5), " | ") };
   }).pipe(
     Effect.scoped,
     Effect.orElseSucceed(() => ({ code: 127, said: "pnpm could not start" })),
-    Effect.provide(nodeServices),
   );
 
 /**
@@ -195,7 +209,7 @@ const pnpmInstall: Install = (folder) =>
 export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnpmInstall) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = modules.replace(/\/$/, "");
+    const root = pipe(modules, Str.replace(/\/$/, ""));
 
     const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
       fs.exists(`${root}/${s}`).pipe(
@@ -208,13 +222,13 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
       return;
     }
 
-    const ran = yield* install(root.replace(/\/node_modules$/, ""));
+    const ran = yield* install(pipe(root, Str.replace(/\/node_modules$/, "")));
     const still = yield* missing;
 
     if (still.length > 0) {
       return yield* AdaptersMissing.make({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
     }
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /**
  * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
@@ -237,7 +251,7 @@ export const makeStepAgents = (sessionsDir: string, main: string, sandbox?: Sand
     };
 
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /** Tokens into a `Spent`, adding this update's tool call when it is one. */
 const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
@@ -265,9 +279,8 @@ const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
 const appendTo = (events: string, line: object) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs
-      .writeFileString(events, `${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
-      .pipe(Effect.ignore);
+    const at = DateTime.formatIso(yield* DateTime.now);
+    yield* fs.writeFileString(events, `${Formatter.formatJson({ at, ...line })}\n`, { flag: "a" }).pipe(Effect.ignore);
   });
 
 /**
@@ -277,7 +290,10 @@ const appendTo = (events: string, line: object) =>
  * so running out ends the turn `over_time` and the agent's commands are reaped with it. A
  * `codex-exec` row adds its retries and its one ask for a missing answer (`execTurn`).
  */
-export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>> =>
+export const runTurn = <A>(
+  agents: typeof Agent.Agents.Service,
+  ask: TurnAsk<A>,
+): Effect.Effect<Turned<A>, never, NodeServices> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -289,7 +305,7 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
     yield* fs.writeFileString(ask.report, said).pipe(Effect.ignore);
 
     return turned;
-  }).pipe(Effect.provide(nodeServices));
+  });
 
 /** A message that is one JSON object and nothing else: the typed answer, sent alone. */
 const ALONE = /^\{[\s\S]*\}$/;
@@ -303,7 +319,7 @@ const ALONE = /^\{[\s\S]*\}$/;
 export const closingWords = (closing: readonly string[]): string => {
   const last = closing.at(-1) ?? "";
 
-  return ALONE.test(last.trim()) ? closing.join("\n\n") : last;
+  return ALONE.test(Str.trim(last)) ? Arr.join(closing, "\n\n") : last;
 };
 
 /** One turn through the agents service, on `prompt` and `seconds`, with its report (`closingWords`). */
@@ -460,7 +476,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     const until = (yield* Clock.currentTimeMillis) + ask.minutes * 60_000;
     const first = yield* triedOnCapacity(agents, ask, ask.prompt, until);
     const t = first.turned;
-    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && first.said.trim() !== "";
+    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && Str.trim(first.said) !== "";
 
     if (!asks) {
       yield* fs.writeFileString(ask.report, first.said).pipe(Effect.ignore);
@@ -474,7 +490,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     );
     const second = yield* triedOnCapacity(agents, ask, ANSWER_PROMPT, until);
     const spent = plus(t.spent, second.turned.spent);
-    const report = second.said.trim() === "" ? first.said : `${first.said}\n\n${second.said}`;
+    const report = Str.trim(second.said) === "" ? first.said : `${first.said}\n\n${second.said}`;
     yield* fs.writeFileString(ask.report, report).pipe(Effect.ignore);
     const s = second.turned;
 
@@ -583,8 +599,8 @@ export const stepRow = (r: RowAsk): string => {
   const local = (d: Date) => {
     const offset = -d.getTimezoneOffset();
     const sign = offset >= 0 ? "+" : "-";
-    const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
-    const shifted = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
+    const pad = (n: number) => pipe(String(Math.abs(n)), Str.padStart(2, "0"));
+    const shifted = pipe(DateTime.formatIso(DateTime.makeUnsafe(d.getTime() + offset * 60_000)), Str.slice(0, 19));
 
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
@@ -606,7 +622,7 @@ export const stepRow = (r: RowAsk): string => {
   const measured = r.spent.counted !== "none";
 
   return `${encodeRow({
-    date: local(r.started).slice(0, 10),
+    date: pipe(local(r.started), Str.slice(0, 10)),
     run: r.run,
     ticket: r.ticket,
     pr: null,

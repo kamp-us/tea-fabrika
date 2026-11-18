@@ -1,6 +1,6 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
-import { Predicate } from "effect";
 import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";
 
 export const classifyStep: Rule = ({ jobs }, require) => {
@@ -29,7 +29,7 @@ export const classifyStep: Rule = ({ jobs }, require) => {
   require(classify?.["run"] === "node .github/ci/changes.mjs" &&
     !("if" in (classify ?? {})), "changes calls the classifier");
 
-  for (const [key, expected] of Object.entries(classifier)) {
+  for (const [key, expected] of Rec.toEntries(classifier)) {
     require(map(classify?.["env"])[key] === expected, `changes passes event ${key} through env`);
   }
 };

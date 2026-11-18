@@ -1,6 +1,12 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -40,7 +46,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: 119120,
           numRuns,
@@ -91,7 +97,7 @@ describe("P33, signal ids, ownership and delivery", () => {
         expect(JSON.parse(id)[0], "signal id protocol starts with DOWN").toBe("DOWN");
 
         for (const spaces of [" ", "\t", "\n"]) {
-          const spaced = `${spaces}[${spaces}${id.slice(1)}`;
+          const spaced = `${spaces}[${spaces}${Str.slice(1)(id)}`;
           expect(inSignalSpace(spaced), "JSON whitespace does not release a signal id").toBe(true);
         }
       }),
@@ -215,7 +221,7 @@ describe("p79, addressed and independent monitors", () => {
           const mail = signals(store);
           expect(mail).toHaveLength(3);
           expect(new Set(mail.map((row) => row.id)).size).toBe(3);
-          expect(mail.map((row) => row.m).sort((a, b) => a.ref.localeCompare(b.ref))).toEqual(
+          expect(mail.map((row) => row.m).sort((a, b) => Str.localeCompare(b.ref)(a.ref))).toEqual(
             [
               Down.make({
                 ref: other!,
@@ -235,7 +241,7 @@ describe("p79, addressed and independent monitors", () => {
                 reason: CRASHED,
                 to: Recipient.cases.process.make({ process: W }),
               }),
-            ].sort((a, b) => a.ref.localeCompare(b.ref)),
+            ].sort((a, b) => Str.localeCompare(b.ref)(a.ref)),
           );
           expect((yield* fresh(store)).map((letter) => letter.id).sort()).toEqual(
             mail
@@ -440,7 +446,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
         store.reopen();
         const old = yield* fresh(store);
         expect(old).toHaveLength(1);
-        expect(Schema.decodeUnknownSync(Down)(old[0]!.m).process).toBe(A);
+        expect((yield* Schema.decodeUnknownEffect(Down)(old[0]!.m)).process).toBe(A);
         yield* exit(store, B);
         const later = yield* fresh(store, W, old[0]!.rev);
         expect(later.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).process)).toEqual([B]);
@@ -483,7 +489,9 @@ describe("p79, cancellation, replay and stale delivery", () => {
           const owed = later.filter((letter) => letter.id !== "delayed-old");
           expect(owed).toHaveLength(1);
           expect(owed[0]!.id).not.toBe(old.id);
-          expect(Schema.decodeUnknownSync(Down)(owed[0]!.m).to).toEqual(Recipient.cases.process.make({ process: B }));
+          expect((yield* Schema.decodeUnknownEffect(Down)(owed[0]!.m)).to).toEqual(
+            Recipient.cases.process.make({ process: B }),
+          );
         });
       },
     ),
@@ -537,7 +545,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           expect(real).toHaveLength(1);
           // watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
           // take a signal id, so only another writer's raw row could, and it is plain mail.
-          const id = JSON.stringify(["DOWN", toW, ref, 1]);
+          const id = Formatter.formatJson(["DOWN", toW, ref, 1]);
           const m = Down.make({ ref, process: B, reason: CRASHED, to: toW });
           yield* Ledger.use((ledger) =>
             ledger.append("watcher:1/inbox", id, lineFor(from({ by: CLIENT }), { _tag: "send", m })),
@@ -649,7 +657,7 @@ describe("P33, demonitored records reason", () => {
         yield* monitor(store, byExit!, A, X);
         yield* cancel(store, byCancel!);
         yield* exit(store, X);
-        expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.reason]))).toEqual({
+        expect(Rec.fromEntries(demonitored(store).map((body) => [body.ref, body.reason]))).toEqual({
           [byCancel!]: "canceled",
           [byExit!]: "watcher_exited",
         });

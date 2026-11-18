@@ -3,6 +3,7 @@
  * state around each JSON-RPC frame, tracks parked waits and answers them when a stream advances.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -312,12 +313,12 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
           return;
         }
 
-        const next = latest.waits
-          .filter((wait) => wait.stream === stream)
-          .reduce<typeof Wait.Type | undefined>(
-            (first, wait) => (first === undefined || wait.after < first.after ? wait : first),
-            undefined,
-          );
+        const next = Arr.reduce(
+          Arr.filter(latest.waits, (wait) => wait.stream === stream),
+          undefined,
+          (first: typeof Wait.Type | undefined, wait) =>
+            first === undefined || wait.after < first.after ? wait : first,
+        );
 
         if (next === undefined || (yield* register(next, onRefused))._tag === "parked") {
           return;

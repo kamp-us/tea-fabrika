@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e60-step1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:46:48-08:00",
+  "ended": "2026-11-16T00:53:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, step 1 of 4, for slice E60 (unstableApiUsage, 0574), on a branch made from fabrikalfa/test-sqlite-store at eeb8ecdb. The step finds nothing left to delete in its scope: E1 already shipped the rule side. oxlint-plugins/jsdocs.ts does not demand @stability (a tagged block passes, its module and export blocks need only @category), effect-jsdocs.ts holds no missing-tag diagnostic (only the value check invalid-stability, kept because the copied grammar still reads the 16 tagged files), oxlint-plugins/README.md and .patterns/doc-comments.md already say there is no @stability tag here, and fabrika/no-stability-tag deletes the line. A search of every file outside next/packages/libfabrika/src/<module>/ folders finds no @stability doc line in .github/ci, .agents, next/packages/vitest, next/apps, next/programs or libfabrika's top-level files. What remains there is test data, left on purpose: three byte-for-byte vector pairs from PR 1165 in .github/ci/fixtures/same/*.new.txt (saved as .txt so no tool rewrites them; the law needs the pair exact), the word list in .github/ci/program.test.ts, and the planted blocks in oxlint-plugins/jsdocs.test.ts and no-stability-tag.test.ts. So this step changed no source file. Recount with only unstableApiUsage at error, per tsconfig: .agents 320, .github/ci 58, oxlint-plugins 9, next/packages/vitest 33, next/apps/fabrika 1238, programs chaos 43, checklist 42, counter 27, inbox 10, pipeline 73, tezgah 10, libfabrika 4271 (all non-Effect hits there and in the app and programs, 1,000-plus, point at the 16 tagged PR 1366 files in the module folders, which the three later steps own). Every hit in this step's scope is on an Effect unstable part, none on our own tag.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Unstable Effect parts met in the scope tsconfigs (.agents, .github/ci, oxlint-plugins, vitest, app, six programs; distinct sites, libfabrika's module folders not included): @effect/vitest 457, effect/FileSystem 177, effect/Arbitrary 172, @effect/platform-node/NodeServices 151, effect/Path 113, effect/cli/Flag 69, effect/cli/Command 47, effect/process/ChildProcess 38, effect/process/ChildProcessSpawner 37, effect/crypto/SecureRandom 37, @effect/platform-node/NodeRuntime 30, effect/cli/Argument 25, effect/crypto/Digest 19, effect/http/FetchHttpClient 12, effect/http/HttpClient 11, effect/ByteSize 11, effect/PlatformError 9, effect/persistence/RateLimiter 9, @effect/platform-node/NodeFileSystem 9, effect/http/HttpClientRequest 4, effect/Stdio 3, effect/socket/Socket 3, @effect/platform-node/NodePath 3, effect/persistence/KeyValueStore 2, effect/http/HttpServerResponse 2, effect/cli/Prompt 1, @effect/platform-browser/BrowserRuntime 1. Libfabrika's own tsconfig adds, across all its folders (4271 hits in all): effect/Schema 14, effect/testing/TestConsole 6, effect/http/HttpServerRequest 3, effect/http/HttpClientResponse 1, and larger counts of the parts above (effect/Arbitrary 399, effect/crypto/Digest 94, effect/ByteSize 62, effect/PlatformError 31, effect/socket/Socket 30, effect/persistence/RateLimiter 21, effect/persistence/KeyValueStore 18). The integrator names these in allowedUnstableApis; this step set nothing. Left for later steps and the last one: the off override for fabrika/no-stability-tag in .oxlintrc.json that lists the 16 PR 1366 files goes once those files are untagged, and the jsdocs rule's tolerance of a tagged block (its tests MODULE_TAGGED, RIGHT_TAGGED) can go with it. Tests: oxlint-plugins/jsdocs.test.ts 17 passed and oxlint-plugins/no-stability-tag.test.ts 5 passed, at eeb8ecdb. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: all 18 parts passed. No plant: no law was added or changed. Scratch scripts stayed in the scratchpad.",
+  "plants": [],
+  "step": "tests"
+}

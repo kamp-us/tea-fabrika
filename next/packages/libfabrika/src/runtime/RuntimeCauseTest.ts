@@ -19,7 +19,13 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Result, Schema, Match } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -309,7 +315,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           sql.exec(
             "INSERT INTO process_recovery (name, value) VALUES (?, ?)",
             "counter:1",
-            JSON.stringify({ v: 1, name, policy: bad }),
+            Formatter.formatJson({ v: 1, name, policy: bad }),
           );
           const error = yield* Effect.flip(Effect.provide(callRecovery("load"), recoveryStore(sql)));
           expect(error._tag).toBe("RecoveryStoreError");
@@ -731,8 +737,8 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           const saved = yield* openRecovery(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }).load;
 
           const stored = [
-            ...(saved?.receipts ?? []).flatMap((receipt) => receipt.errors),
-            ...(saved?.observations ?? []).flatMap((o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
+            ...Arr.flatMap(saved?.receipts ?? [], (receipt) => receipt.errors),
+            ...Arr.flatMap(saved?.observations ?? [], (o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
           ];
 
           expect(stored.length, "the failed step is stored").toBeGreaterThan(0);

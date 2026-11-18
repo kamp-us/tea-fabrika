@@ -6,6 +6,7 @@
  * The Config keeps Effect's own prototype, so `yield*` and `parse(provider)` behave as Effect's do. The declaration's fields are added to that same object, never copied beside it. `group` joins declarations into one Config and refuses a set that cannot be read together.
  */
 import { Config, Schema, String as Str } from "effect";
+import * as Rec from "effect/Record";
 import type { App } from "./App.ts";
 
 /**
@@ -91,7 +92,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
   },
 ): Setting<C["Type"], S, C> => {
   // Effect reads a string path as one key, so the dotted path is split here.
-  const segments = path.split(".");
+  const segments = Str.split(path, ".");
   const env = [app.prefix, ...segments.map(Str.configCase)].join("_");
   // Config treats a container supplied to a scalar schema as absent. Before defaulting,
   // check every provider shape so a present value, including [], stays a failure.
@@ -189,7 +190,7 @@ export type Values<R extends Record<string, Setting<any>>> = Readonly<Config.Suc
  * @category constructors
  */
 export const group = <const R extends Record<string, Setting<any>>>(app: App, settings: R): Group<Values<R>, R> => {
-  const declarations = Object.values(settings);
+  const declarations = Rec.values(settings);
   const refused = conflict(app, declarations);
 
   if (refused !== undefined) {

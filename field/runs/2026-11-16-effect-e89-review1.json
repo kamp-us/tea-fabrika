@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e89-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:12:17-08:00",
+  "ended": "2026-11-16T01:21:00-08:00",
+  "parent": "2026-11-16-effect-e89-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of judgment slice E89 (globalDate and globalDateInEffect in next/apps/fabrika/src top-level files, libfabrika gateway and settings), in next/, diff eeb8ecdbb..f8f69ef7c: merge-ready, three finding rows, none blocking. A recount with only the two checks at error through --lspconfig over next/apps/fabrika/tsconfig.json and next/packages/libfabrika/tsconfig.json finds 0 hits in the row's folders and 32 in E48's folders, as the build row says; the diff removes 61 clock reads and adds none, and touches nothing outside the row's folders. Behavior holds: Effect 4.1.3's DateTime.nowUnsafe is makeUtc(Date.now()), read at call time, so the polls keep real time and runtime-recovery's turned read at line 2104 still sees vi's faked Date; the two Clock.currentTimeMillis reads in memory-replace.laws.integration.test.ts sit in an it.live generator with no Clock provided, so both ends of the elapsed span read the live clock; formatIso is toDateUtc(self).toISOString() and toDateUtc is new Date(epochMillis), so Gateway.ts's two sentAt strings, the StartsTest generator and the new Date(0) and new Date(42) values are the same values; the gateway's at still comes from its Clock (Gateway.ts:383). No expect count changed in any file, and no disable, ignore, lock, tsconfig or LOCKED line was added, as 0589's amendment says for a judgment slice. Keeping no-wall-clock and no-clock-in-view is right: a probe shows the checker misses Date(), globalThis.Date(), performance.now() and window.performance.now(), all of which ours refuse, so 0573's principle keeps ours; deleting them here would also leave a gap, since no lock lands with this slice. Findings: TomlEdit.test.ts adds DateTime to a barrel import in a library (0577), and the plan's line on E89 and 0573's own verdict on the two rules are now stale.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Read-only apart from this row, on Node 26.13.0 in a fresh worktree with pnpm install --frozen-lockfile. Probe: an untracked file in libfabrika/src/gateway with Date.now(), new Date(), Date(), performance.now(), globalThis.Date(), window.performance.now(), new Date(5), Math.random(), crypto.randomUUID() and the same in an Effect.gen, run once with globalDate, globalDateInEffect, globalRandom and globalTimers at error, then deleted: flagged lines 3, 4, 9, 10 and three in the generator; not lines 5, 6, 7, 8. worker-mail.integration.test.ts:178 keeps a performance.now() that the 0-hit recount passes. Ran one file at a time with maxWorkers 1 and TYPESAFE_API_KEY unset, all green: settings/TomlEdit.test.ts 18, cloudflare/SettingsStarts.test.ts 12 (runs StartsTest.suite), settings/Start.test.ts 5, apps/fabrika/src/grant-readers.laws.test.ts 14, gateway/TaskAccess.test.ts 2. oxfmt --check on the 16 files clean. loosening.sh eeb8ecdbb..HEAD: 16 import-line hits and one removed expect (runtime-recovery's expect(Date.now()) rewritten with the same matcher), no real loosening. git merge-tree with origin/main: clean. With fabrikalfa/effect-e61: TomlEdit.test.ts conflicts on its import line. Needs a box, judged by reading: the eleven changed .integration. files. No pnpm typecheck.",
+  "step": "review"
+}

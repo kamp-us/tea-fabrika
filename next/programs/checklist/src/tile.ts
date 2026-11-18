@@ -1,5 +1,5 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, String as Str } from "effect";
 import { checklistMachine } from "./program.ts";
 
 const press = Cmd.make("press", {
@@ -20,7 +20,7 @@ export const tile = Machine.make({
   update: {
     press_ok: (s) => [s, []],
     press_err: (s) => [s, []],
-    typed: (_s, m) => [{ draft: m.text.slice(0, 80) }, []],
+    typed: (_s, m) => [{ draft: Str.slice(0, 80)(m.text) }, []],
     submit: (s) => (s.draft === "" ? [s, []] : [{ draft: "" }, [press({ m: { type: "add", name: s.draft } })]]),
   },
 });

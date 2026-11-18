@@ -11,6 +11,7 @@
 // The two layers are compared through the check, the only way to read `Tuples`: a test right per
 // relation makes every tuple visible.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -122,7 +123,7 @@ const toBatches = (cells: ReadonlyArray<Cell>): ReadonlyArray<Batch> => {
   let changes: Array<Relation.Change> = [];
   let foreign: Array<Foreign> = [];
 
-  cells.forEach((cell, n) => {
+  Arr.forEach(cells, (cell, n) => {
     const fresh = {
       subject: `person:${choose(PERSONS, cell.person)}`,
       relation: choose(RIGHTS, cell.relation).relation,
@@ -159,9 +160,9 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** Every (person, relation, fabrika) and whether the store's tuples hold it, read through the check. */
 const view = (tuples: Relation.Tuples) =>
-  PERSONS.flatMap((person) =>
-    FABRIKAS.flatMap((id) =>
-      RIGHTS.map(({ relation, right }) => {
+  Arr.flatMap(PERSONS, (person) =>
+    Arr.flatMap(FABRIKAS, (id) =>
+      Arr.map(RIGHTS, ({ relation, right }) => {
         const sender = Sender.cases.person.make({ key: `SHA256:window-${person}`, for: person });
         // Each right answers its own proof's type; only whether one was given is read here.
         const answer: Result.Result<unknown, Rebac.Denied> = right.within(tuples, sender, Mirror.ref("fabrika", id));

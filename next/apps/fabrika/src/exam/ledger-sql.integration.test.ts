@@ -1,4 +1,7 @@
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
+
+import { String as Str, Array as Arr, pipe } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -8,14 +11,14 @@ const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";
 
 describe("ledger SQL stays behind its service", () => {
-  it("refuses ledger table reads and writes outside the service, including aliases and templates", async () => {
-    await fc.assert(
+  it("refuses ledger table reads and writes outside the service, including aliases and templates", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("entries", "rings"),
         fc.constantFrom(" ", "\n", " /* checked */ "),
         fc.boolean(),
         async (table, space, upper) => {
-          const word = upper ? table.toUpperCase() : table;
+          const word = upper ? Str.toUpperCase(table) : table;
 
           const queries = [
             `SELECT * FROM${space}${word} AS e`,
@@ -26,9 +29,11 @@ describe("ledger SQL stays behind its service", () => {
             `UPDATE${space}${word} SET stream=?`,
           ];
 
-          const body = `${queries
-            .map((query) => `sql.exec(${JSON.stringify(query)});`)
-            .join("\n")}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
+          const body = `${pipe(
+            queries,
+            Arr.map((query) => `sql.exec(${JSON.stringify(query)});`),
+            Arr.join("\n"),
+          )}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
 
           const findings = await plant({
             [FILE]: body,
@@ -53,6 +58,5 @@ describe("ledger SQL stays behind its service", () => {
         },
       ),
       { seed: 119120, numRuns: 20 },
-    );
-  });
+    ));
 });

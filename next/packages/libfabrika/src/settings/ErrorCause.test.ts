@@ -11,7 +11,9 @@ import { describe, expect, it } from "@effect/vitest";
 import { SettingsError } from "@kalfa/config/Files";
 import { SnapshotError } from "@kalfa/config/Snapshot";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Schema, Match } from "effect";
+import { Exit, Schema } from "effect";
+import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -87,7 +89,7 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     Object.getOwnPropertyNames(value)
       .filter((key) => key !== "stack")
       .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),

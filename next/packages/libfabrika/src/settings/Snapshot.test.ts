@@ -12,22 +12,23 @@ import * as Files from "@kalfa/config/Files";
 import * as Snapshot from "@kalfa/config/Snapshot";
 import { Toml } from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
-import {
-  ByteSize,
-  Cause,
-  Effect,
-  Exit,
-  Formatter,
-  Layer,
-  Logger,
-  Match,
-  Predicate,
-  References,
-  Schema,
-  Tracer,
-} from "effect";
-import { Digest } from "effect/crypto";
-import { TestConsole } from "effect/testing";
+import * as ByteSize from "effect/ByteSize";
+import * as Cause from "effect/Cause";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as References from "effect/References";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as TestConsole from "effect/testing/TestConsole";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Fabrika.ts";
@@ -66,7 +67,7 @@ StartsTest.law(
       const input = yield* StartsTest.input(recipe);
       const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
 
-      const origins = Object.fromEntries(
+      const origins = Rec.fromEntries(
         Declarations.all.declarations.map((declaration, index) => {
           const source = (choice + index) % 4;
 
@@ -141,7 +142,7 @@ const save = (v: SavedFlow) => {
   const group = Setting.group(settings);
   const values = { record: ByteSize.bytes(v.count), port: v.port, word: v.word };
 
-  const origins = Object.fromEntries(
+  const origins = Rec.fromEntries(
     group.declarations.map((d) => [
       d.path,
       Match.value(v.source).pipe(
@@ -168,29 +169,29 @@ const objectFlow = fc
   })
   .chain((value) =>
     fc
-      .shuffledSubarray(Object.entries(value), {
-        minLength: Object.keys(value).length,
-        maxLength: Object.keys(value).length,
+      .shuffledSubarray(Rec.toEntries(value), {
+        minLength: Rec.keys(value).length,
+        maxLength: Rec.keys(value).length,
       })
       .chain((entries) =>
         fc
           .tuple(
             ...entries.map(([key, inner]) =>
               fc
-                .shuffledSubarray(Object.entries(inner), {
-                  minLength: Object.keys(inner).length,
-                  maxLength: Object.keys(inner).length,
+                .shuffledSubarray(Rec.toEntries(inner), {
+                  minLength: Rec.keys(inner).length,
+                  maxLength: Rec.keys(inner).length,
                 })
-                .map((shuffled) => [key, Object.fromEntries(shuffled)] as const),
+                .map((shuffled) => [key, Rec.fromEntries(shuffled)] as const),
             ),
           )
-          .map((shuffled) => ({ value, reordered: Object.fromEntries(shuffled) })),
+          .map((shuffled) => ({ value, reordered: Rec.fromEntries(shuffled) })),
       ),
   );
 
 describe("T753 complete checked snapshots", () => {
-  it("L4 exact JSON and decoded values survive a checked snapshot round trip", async () => {
-    await fc.assert(
+  it("L4 exact JSON and decoded values survive a checked snapshot round trip", () =>
+    fc.assert(
       fc.asyncProperty(savedFlow, async (v) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
@@ -206,11 +207,10 @@ describe("T753 complete checked snapshots", () => {
         expect(checked.snapshot).toEqual(made);
       }),
       check,
-    );
-  });
+    ));
 
-  it("L5 every declared value and origin is required and extra or renamed keys fail", async () => {
-    await fc.assert(
+  it("L5 every declared value and origin is required and extra or renamed keys fail", () =>
+    fc.assert(
       fc.asyncProperty(
         savedFlow.chain((v) => {
           const { group } = save(v);
@@ -258,20 +258,19 @@ describe("T753 complete checked snapshots", () => {
         },
       ),
       check,
-    );
-  });
+    ));
 
-  it("L6 canonical values alone determine the hash and corrupt values or hashes fail", async () => {
-    await fc.assert(
+  it("L6 canonical values alone determine the hash and corrupt values or hashes fail", () =>
+    fc.assert(
       fc.asyncProperty(fc.record({ scalar: savedFlow, object: objectFlow }), async ({ scalar: v, object }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
 
         const reversed = Setting.group(
-          Object.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
+          Rec.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
         );
 
-        const origins = Object.fromEntries(
+        const origins = Rec.fromEntries(
           flow.group.declarations.map((d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
         );
 
@@ -281,8 +280,8 @@ describe("T753 complete checked snapshots", () => {
 
         const reordered = {
           ...made,
-          values: Object.fromEntries(Object.entries(made.values).reverse()),
-          origins: Object.fromEntries(Object.entries(origins).reverse()),
+          values: Rec.fromEntries(Rec.toEntries(made.values).reverse()),
+          origins: Rec.fromEntries(Rec.toEntries(origins).reverse()),
         };
 
         const checked = await digest(Snapshot.read(flow.group, reordered));
@@ -312,7 +311,7 @@ describe("T753 complete checked snapshots", () => {
         expect(different.hash).not.toBe(made.hash);
 
         for (const corrupted of [
-          { ...made, hash: `${made.hash[0] === "0" ? "1" : "0"}${made.hash.slice(1)}` },
+          { ...made, hash: `${made.hash[0] === "0" ? "1" : "0"}${Str.slice(1)(made.hash)}` },
           { ...made, values: { ...made.values, "instance.port": (v.port % 65535) + 1 } },
           { ...made, values: { ...made.values, "limits.record": String(v.count + 1n) } },
         ]) {
@@ -359,8 +358,7 @@ describe("T753 complete checked snapshots", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 const snapshot = <A>(group: Setting.Group<A>, slots: Sources.Slots) =>
@@ -382,7 +380,7 @@ const declared = fc
 
 const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
   Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       paths.map(([a, b], n) => [
         `s${n}`,
         Setting.make(`${a}.${b}`, {
@@ -398,20 +396,20 @@ const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
   );
 
 describe("the snapshot: encoded values by path, and a hash of the values alone", () => {
-  it("equal values give one hash, whatever source and declaration order; other values another", async () => {
-    await fc.assert(
+  it("equal values give one hash, whatever source and declaration order; other values another", () =>
+    fc.assert(
       fc.asyncProperty(declared, fc.integer({ min: 0, max: 2 }), async ([paths, values], changed) => {
-        const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
+        const flags = Rec.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
 
-        const env = Object.fromEntries(
-          paths.map(([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
+        const env = Rec.fromEntries(
+          paths.map(([a, b], n) => [`FABRIKA_${Str.toUpperCase(a)}_${Str.toUpperCase(b)}`, String(values[n])]),
         );
 
         const fromFlags = await snapshot(portGroup(paths), sources({ flags: Sources.flags(flags) }));
         const fromEnv = await snapshot(portGroup([...paths].reverse()), sources({ env: Sources.env(env) }));
-        expect(fromFlags.values).toEqual(Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
+        expect(fromFlags.values).toEqual(Rec.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
         expect(fromEnv.hash).toBe(fromFlags.hash);
-        expect(Object.values(fromEnv.origins).map((o) => o._tag)).toEqual(paths.map(() => "env"));
+        expect(Rec.values(fromEnv.origins).map((o) => o._tag)).toEqual(paths.map(() => "env"));
 
         const at = changed % paths.length;
         const other = { ...flags, [`${paths[at]![0]}.${paths[at]![1]}`]: String((values[at]! % 65535) + 1) };
@@ -423,17 +421,16 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
         expect(Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(saved))).toEqual(fromFlags);
       }),
       check,
-    );
-  });
+    ));
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 // Made-up secrets with the characters that make the three forms differ.
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Str.slice(0, 3)(word)}`);
 
 /**
  * A value as searchable text. JSON has no bigint, and a decoded byte size is one, so a bigint prints
@@ -487,8 +484,8 @@ const placed = (key: string, word: string) => {
 };
 
 describe("L14 [secrets], only declared settings reach values, errors and spans", () => {
-  it("a secret in an unrelated env field, an unknown file field or under a declared key never reaches an output", async () => {
-    await fc.assert(
+  it("a secret in an unrelated env field, an unknown file field or under a declared key never reaches an output", () =>
+    fc.assert(
       fc.asyncProperty(
         fc
           .tuple(secret, fc.constantFrom("token", "key", "password"))
@@ -544,12 +541,11 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
-it("T753 L9 [secrets] malformed snapshots keep rejected values out of public diagnostics", async () => {
-  await fc.assert(
+it("T753 L9 [secrets] malformed snapshots keep rejected values out of public diagnostics", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ flow: savedFlow, word: secret, field: fc.constantFrom("value", "extra", "origin", "hash") }),
       async ({ flow: v, word, field }) => {
@@ -616,5 +612,4 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
       },
     ),
     check,
-  );
-});
+  ));

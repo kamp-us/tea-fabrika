@@ -190,6 +190,10 @@ patchedDependencies:
   # https://github.com/alchemy-run/alchemy/pull/3240) after 2.0.0-beta.85. Drop this at the
   # release that carries them.
   '@alchemy.run/cloudflare@2.0.0-beta.85': patches/@alchemy.run__cloudflare@2.0.0-beta.85.patch
+  # layerTest binds the loopback address its client dials. Fixed upstream in
+  # https://github.com/Effect-TS/effect/pull/10566, closing
+  # https://github.com/Effect-TS/effect/issues/10560. Drop this at the release that carries it.
+  '@effect/platform-node@4.1.3': patches/@effect__platform-node@4.1.3.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.25.0 || 0.27.0'

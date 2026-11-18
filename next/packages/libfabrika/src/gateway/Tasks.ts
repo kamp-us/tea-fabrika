@@ -2,6 +2,7 @@
  * Task methods over an authenticated connection, called inside the shared write turn.
  */
 import { Effect, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
@@ -105,7 +106,7 @@ export const route = Effect.fn("gateway.tasks")(
       // Pointers only: the command stays behind `tasks.take`, the one door work reaches a machine by.
       const listed = yield* tasks.forTarget(identity.key);
 
-      const pointers = listed.tasks.flatMap(({ state }) =>
+      const pointers = Arr.flatMap(listed.tasks, ({ state }) =>
         state._tag === "absent" ? [] : [{ id: state.request.id, process: state.request.process }],
       );
 
@@ -156,7 +157,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 
@@ -203,7 +204,7 @@ export const route = Effect.fn("gateway.tasks")(
         return no("not_allowed");
       }
 
-      if (!task.state.request.needs.every((need) => has.includes(need))) {
+      if (!Arr.every(task.state.request.needs, (need) => has.includes(need))) {
         return no("lacks_capability");
       }
 

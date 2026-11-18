@@ -3,8 +3,6 @@
  *
  * It starts and ends processes, keeps watches and writes their `DOWN` letters. Every line it
  * writes carries the brain's own writer key, and the process table trusts no other.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -91,7 +89,6 @@ const failed = Effect.fnUntraced(function* (error: Failure) {
  * name. A watch delivers to that caller's `recipient`, unless a brain-side service passes the
  * trusted `as` for a program's watch.
  *
- * @stability unstable
  * @category services
  */
 export class ProcessManager extends Context.Service<
@@ -668,7 +665,6 @@ export class ProcessManager extends Context.Service<
  * across an RPC reaches. A watch takes no `as`, so no object across an RPC names another recipient.
  * There is no `leave`: a session ends where its socket closes, in the owner itself.
  *
- * @stability unstable
  * @category models
  */
 export type ProcessCalls = Omit<
@@ -697,7 +693,6 @@ export type ProcessCalls = Omit<
  * the wrong recipient. A `leave` fails `refused` and writes nothing: only the owner, where the
  * socket closed, ends a session.
  *
- * @stability unstable
  * @category layers
  */
 export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Layer<ProcessManager> =>
@@ -724,7 +719,6 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
  * `caller` is trusted wiring: who calls, and the brain's own writer key. `nextId` makes the id of
  * each new process.
  *
- * @stability unstable
  * @category layers
  */
 export const CoordinationLayer = (

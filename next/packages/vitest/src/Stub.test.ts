@@ -4,6 +4,7 @@
 // stub never hangs.
 // Plant: make the trap answer `then` with a function, and the "awaiting" law below goes red.
 import { expect, it } from "@effect/vitest";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Stub from "./Stub.ts";
 
@@ -44,7 +45,7 @@ const ownAnswer =
     `own:${key}`;
 
 const ownMembers = (keys: ReadonlyArray<string>): Record<string, Method> =>
-  Object.fromEntries(keys.map((key) => [key, ownAnswer(key)]));
+  Rec.fromEntries(keys.map((key) => [key, ownAnswer(key)]));
 
 it("a name outside own answers rest(name) with that name and the call's arguments", () => {
   fc.assert(

@@ -1,5 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
 import { Array as Arr, Schema, SchemaTransformation } from "effect";
+import * as Option from "effect/Option";
 
 const Config = Schema.Struct({
   most: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
@@ -101,11 +102,11 @@ export const Stored = Saved.pipe(
   Schema.decodeTo(
     Model,
     SchemaTransformation.transform<typeof Model.Encoded, typeof Saved.Type>({
-      decode: (saved) => settle(saved, saved.rows.map(toPending)),
+      decode: (saved) => settle(saved, Arr.map(saved.rows, toPending)),
       encode: (s) => {
         const pending: ReadonlyArray<Pending> = s.rows;
 
-        return { rows: pending.map(toRow), most: s.most, ttl: s.ttl };
+        return { rows: Arr.map(pending, toRow), most: s.most, ttl: s.ttl };
       },
     }),
   ),
@@ -119,7 +120,7 @@ const expire = (s: Model, at: number): Model => {
     return s;
   }
 
-  const kept = s.rows.filter((r) => r.until > at);
+  const kept = Arr.filter(s.rows, (r) => r.until > at);
 
   return settle(s, kept);
 };
@@ -140,12 +141,13 @@ export const machine = Machine.make({
     expire: (s, m) => [expire(s, m.at), []],
     knock: (s, m) => {
       const live = expire(s, m.at);
-      const old = live._tag === "empty" ? undefined : live.rows.find((r) => r.key === m.key);
+      const found = live._tag === "empty" ? Option.none() : Arr.findFirst(live.rows, (r) => r.key === m.key);
 
-      if (live._tag === "waiting" && old !== undefined) {
+      if (live._tag === "waiting" && Option.isSome(found)) {
+        const old = found.value;
         const known = old.clients.includes(m.client);
         const clients: Pending["clients"] = known ? old.clients : [...old.clients, m.client];
-        const kept = live.rows.map((r) => (r === old ? { ...old, clients } : r));
+        const kept = Arr.map(live.rows, (r) => (r === old ? { ...old, clients } : r));
 
         return [settle(live, kept), []];
       }
@@ -171,17 +173,18 @@ export const machine = Machine.make({
         return [s, []];
       }
 
-      const row = s.rows.find((r) => r.key === m.key && r.clients.includes(m.client));
+      const found = Arr.findFirst(s.rows, (r) => r.key === m.key && r.clients.includes(m.client));
 
-      if (row === undefined) {
+      if (Option.isNone(found)) {
         return [s, []];
       }
 
-      const clients = row.clients.filter((c) => c !== m.client);
+      const row = found.value;
+      const clients = Arr.filter(row.clients, (c) => c !== m.client);
 
       const kept = Arr.isReadonlyArrayNonEmpty(clients)
-        ? s.rows.map((r) => (r === row ? { ...row, clients } : r))
-        : s.rows.filter((r) => r !== row);
+        ? Arr.map(s.rows, (r) => (r === row ? { ...row, clients } : r))
+        : Arr.filter(s.rows, (r) => r !== row);
 
       return [settle(s, kept), []];
     },
@@ -190,7 +193,7 @@ export const machine = Machine.make({
         return [s, []];
       }
 
-      const kept = s.rows.filter((r) => !m.keys.includes(r.key));
+      const kept = Arr.filter(s.rows, (r) => !m.keys.includes(r.key));
 
       return [settle(s, kept), []];
     },

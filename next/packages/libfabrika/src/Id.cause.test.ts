@@ -27,8 +27,8 @@ const randomThrows = (failure: object) =>
 
 describe("T695, Id.Generator keeps why it could not draw an ID", () => {
   // C1, Id.ts:198. Plant: `catch: (error) => error instanceof IdError ? error : new IdError({ reason: "entropy" })`.
-  it("C1: a generated throw from the random source is `entropy` with the thrown value as its cause", async () => {
-    await fc.assert(
+  it("C1: a generated throw from the random source is `entropy` with the thrown value as its cause", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({ failure: failures, prefix: prefixes, before: fc.nat({ max: 3 }) }),
         ({ failure, prefix, before }) =>
@@ -60,6 +60,5 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
           ),
       ),
       { seed: SEED, numRuns: 100 },
-    );
-  });
+    ));
 });

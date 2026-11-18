@@ -32,24 +32,27 @@ import type { Tagged } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import type { Tracer } from "effect";
-import {
-  Arbitrary,
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Predicate,
-  Result,
-  Schema,
-  Scope,
-  Match,
-} from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import type * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -96,7 +99,7 @@ export type Store = {
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -145,7 +148,7 @@ const DOOR = PIDS.at(-1) ?? "";
 const ROW_LIMIT = 2_000_000;
 
 // A valid 256-character program name adds more bytes to the Cmd than to its first letter.
-const BOUNDARY_PROGRAM = `m${"é".repeat(255)}`;
+const BOUNDARY_PROGRAM = `m${Str.repeat(255)("é")}`;
 
 const PROGRAMS: Record<string, unknown> = {
   starter: childStarter({ name: "starter", declare: true }),
@@ -173,7 +176,7 @@ const STOPPERS: ReadonlyArray<readonly [string, string]> = [
   ["stopc:1", "stopc"],
 ];
 
-const STOPPER_PROGRAMS = new Set(STOPPERS.map(([, program]) => program));
+const STOPPER_PROGRAMS = new Set(Arr.map(STOPPERS, ([, program]) => program));
 
 /** Desk S1, L2: a sender whose key the membership no longer admits, though its letter was delivered. */
 const OUTSIDER_KEY = "SHA256:outsider";
@@ -209,7 +212,7 @@ const FOUNDER_ROW = related("owner", PERSON, "owner");
 /** The world's rows: the founder's, and one `related` row for each drawn person who holds a role. */
 const rows = (people: ReadonlyArray<Drawn>): ReadonlyArray<Relation.Change> => [
   FOUNDER_ROW,
-  ...people.flatMap(({ person, role }, n) => (role === null ? [] : [related(`role-${n}`, person, role)])),
+  ...Arr.flatMap(people, ({ person, role }, n) => (role === null ? [] : [related(`role-${n}`, person, role)])),
 ];
 
 /** The started line's `member`, as the store keeps it. */
@@ -229,7 +232,7 @@ const stopper = (name: string) => {
     Schema.decodeUnknownSync(Schema.Json)({ type, outcome: outcome ?? null });
 
   const keep = (type: string) => (s: Model, m: { value?: unknown; reason?: string }) => [
-    { ...s, answers: [...s.answers, answer(type, type.endsWith("_ok") ? m.value : m.reason)] },
+    { ...s, answers: [...s.answers, answer(type, Str.endsWith("_ok")(type) ? m.value : m.reason)] },
     [],
   ];
 
@@ -273,7 +276,7 @@ let withStoppers: Record<string, unknown> | undefined;
 
 /** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
 const stopperPrograms = (): Record<string, unknown> => {
-  withStoppers ??= { ...PROGRAMS, ...Object.fromEntries([...STOPPER_PROGRAMS].map((p) => [p, stopper(p)])) };
+  withStoppers ??= { ...PROGRAMS, ...Rec.fromEntries(Arr.map([...STOPPER_PROGRAMS], (p) => [p, stopper(p)])) };
 
   return withStoppers;
 };
@@ -297,7 +300,7 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -354,7 +357,7 @@ const faulting = (
       if (
         fault.exited &&
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
+        Arr.some(params, (p) => p === "exited" || (Predicate.isString(p) && Str.includes('"exited"')(p)))
       ) {
         fault.exited = false;
         throw Object.assign(
@@ -363,7 +366,7 @@ const faulting = (
         );
       }
 
-      if (fault.checkpoint && fault.landed && /INSERT INTO process_state/.test(query)) {
+      if (fault.checkpoint === true && fault.landed === true && /INSERT INTO process_state/.test(query)) {
         fault.checkpoint = false;
         throw new Error(fault.message);
       }
@@ -371,8 +374,10 @@ const faulting = (
       if (
         fault.inputCheckpoint !== undefined &&
         /INSERT INTO process_(state|checkpoint_parts)/.test(query) &&
-        params.some(
-          (value) => Predicate.isString(value) && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
+        Arr.some(
+          params,
+          (value) =>
+            Predicate.isString(value) && Str.includes(Str.slice(1, -1)(JSON.stringify(fault.inputCheckpoint)))(value),
         )
       ) {
         fault.inputCheckpoint = undefined;
@@ -388,7 +393,7 @@ const faulting = (
 
       if (
         /^\s*INSERT\b/i.test(query) &&
-        params.some((p) => p === "exited" || (Predicate.isString(p) && p.includes('"exited"')))
+        Arr.some(params, (p) => p === "exited" || (Predicate.isString(p) && Str.includes('"exited"')(p)))
       ) {
         fault.landed = true;
       }
@@ -575,20 +580,21 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       chunk: ANY_CHUNK,
     };
 
-    const layer = world.worker
-      ? Layer.unwrap(
-          Effect.map(ProgramLoader, (loader) =>
-            ProgramRunner.withLoader(
-              descriptor,
-              {
-                load: (name, build) =>
-                  Effect.map(loader.load(name, build), ({ stepper: _stepper, ...loaded }) => loaded),
-              },
-              options,
+    const layer =
+      world.worker === true
+        ? Layer.unwrap(
+            Effect.map(ProgramLoader, (loader) =>
+              ProgramRunner.withLoader(
+                descriptor,
+                {
+                  load: (name, build) =>
+                    Effect.map(loader.load(name, build), ({ stepper: _stepper, ...loaded }) => loaded),
+                },
+                options,
+              ),
             ),
-          ),
-        )
-      : ProgramRunner.layer(descriptor, options);
+          )
+        : ProgramRunner.layer(descriptor, options);
 
     const built = yield* Layer.buildWithScope(layer.pipe(Layer.provide(own)), scope);
     const real = Context.get(built, ProgramRunner);
@@ -802,10 +808,10 @@ const walk = (
     const sync = Effect.fnUntraced(function* (
       asked: ReadonlyArray<{ readonly name: string; readonly requester: string; readonly input?: unknown }>,
     ) {
-      const rows = yield* all(asked.map((a) => a.name));
+      const rows = yield* all(Arr.map(asked, (a) => a.name));
 
       for (const row of rows) {
-        if (row._tag !== "started" || !row.stream.startsWith("processes/") || world.starts.has(row.id)) {
+        if (row._tag !== "started" || !Str.startsWith("processes/")(row.stream) || world.starts.has(row.id)) {
           continue;
         }
 
@@ -818,14 +824,16 @@ const walk = (
         }
 
         const name = String(b["name"]);
-        const ask = asked.find((a) => a.name === name);
+        const ask = Option.getOrUndefined(Arr.findFirst(asked, (a) => a.name === name));
         expect(ask, `L5: ${name} was started only by a Cmd the walk dispatched`).toBeDefined();
         expect(requester, "L5: the requester is the life that ran the step").toBe(ask?.requester);
-        expect(row.id.startsWith(`${ask?.requester}/`), "L5: the start's id is the dispatched Cmd's id").toBe(true);
+        expect(Str.startsWith(`${ask?.requester}/`)(row.id), "L5: the start's id is the dispatched Cmd's id").toBe(
+          true,
+        );
         expect(b["hash"], "L5: the hash is the loader's, never the program's").toBe(BUILD);
 
-        const registered = rows.find(
-          (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name,
+        const registered = Option.getOrUndefined(
+          Arr.findFirst(rows, (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
         );
 
         expect(body(registered)["owner"], "L5: the brain owns a started child").toEqual(Owner.cases.brain.make({}));
@@ -838,7 +846,7 @@ const walk = (
           process: String(b["process"]),
         });
         world.names.set(name, { program: String(b["program"]), pid: String(b["process"]), live: true });
-        const parent = [...world.names].find(([, h]) => h.pid === requester)?.[0];
+        const parent = Option.getOrUndefined(Arr.findFirst([...world.names], ([, h]) => h.pid === requester))?.[0];
 
         if (parent !== undefined) {
           world.parents.set(name, parent);
@@ -848,47 +856,64 @@ const walk = (
 
     const registered = (name: string) =>
       Effect.map(all(), (rows) =>
-        rows.some((e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
+        Arr.some(rows, (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
       );
 
     /** Desk S1: the `started` line a start wrote for `name`, read from the store's raw rows. */
     const startedLine = (name: string) =>
-      Effect.map(all([name]), (rows) => rows.find((e) => e._tag === "started" && body(e)["name"] === name));
+      Effect.map(all([name]), (rows) =>
+        Option.getOrUndefined(Arr.findFirst(rows, (e) => e._tag === "started" && body(e)["name"] === name)),
+      );
 
     /** Desk S1: the drawn people, by whether they hold a role. */
-    const drawn = (holds: boolean) => world.people.filter(({ role }) => (role !== null) === holds);
+    const drawn = (holds: boolean) => Arr.filter(world.people, ({ role }) => (role !== null) === holds);
 
     const exitedRows = (pid: string) =>
-      Effect.map(all(), (rows) => rows.filter((e) => e._tag === "exited" && body(e)["process"] === pid));
+      Effect.map(all(), (rows) => Arr.filter(rows, (e) => e._tag === "exited" && body(e)["process"] === pid));
 
     // Built on each read: `all()` lists the streams of the names known at the time it is called.
-    const head = Effect.suspend(() => Effect.map(all(), (rows) => Math.max(0, ...rows.map((e) => e.rev))));
+    const head = Effect.suspend(() => Effect.map(all(), (rows) => Math.max(0, ...Arr.map(rows, (e) => e.rev))));
     const fresh = (prefix = "merger") => `${prefix}:${1000 + ++world.n}`;
 
     const runnable = () =>
-      [...world.names].filter(([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain").map(([n]) => n);
+      Arr.map(
+        Arr.filter([...world.names], ([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain"),
+        ([n]) => n,
+      );
 
     const starters = () => runnable();
 
     /** Desk S1, L2: a starter, often a child a drawn person's letter started, so it has a member of its own. */
     const requester = (cell: Cell) => {
-      const children = starters().filter((n) => world.members.has(n));
+      const children = Arr.filter(starters(), (n) => world.members.has(n));
 
       return children.length > 0 && cell.shape % 2 === 0 ? choose(children, cell.pick) : choose(starters(), cell.pick);
     };
 
-    const ended = () => [...world.names].filter(([n, h]) => !h.live && world.parents.has(n)).map(([n]) => n);
-    const stoppers = () => STOPPERS.map(([n]) => n).filter((n) => world.names.get(n)?.live === true);
+    const ended = () =>
+      Arr.map(
+        Arr.filter([...world.names], ([n, h]) => !h.live && world.parents.has(n)),
+        ([n]) => n,
+      );
+
+    const stoppers = () =>
+      Arr.filter(
+        Arr.map(STOPPERS, ([n]) => n),
+        (n) => world.names.get(n)?.live === true,
+      );
 
     /** Desk S1, L3: each stopper's children, by state. */
     const stopperChildren = (live: boolean) =>
-      [...world.names].filter(
-        ([n, h]) => h.live === live && STOPPERS.some(([s]) => s === world.parents.get(n) && world.names.get(s)?.live),
+      Arr.filter(
+        [...world.names],
+        ([n, h]) =>
+          h.live === live &&
+          Arr.some(STOPPERS, ([s]) => s === world.parents.get(n) && world.names.get(s)?.live === true),
       );
 
     /** Every process row written after `rev`, outside the inboxes. */
     const processRows = (rev: number) =>
-      Effect.map(all(), (rows) => rows.filter((e) => e.rev > rev && e.stream.startsWith("processes")));
+      Effect.map(all(), (rows) => Arr.filter(rows, (e) => e.rev > rev && Str.startsWith("processes")(e.stream)));
 
     /** What each known name's process state is now, read from the process table. */
     const states = Effect.fnUntraced(function* () {
@@ -901,7 +926,7 @@ const walk = (
       return out;
     });
 
-    for (const [name, program] of [...BOOT, ...(moves.some((m) => STOPS.has(m)) ? STOPPERS : [])]) {
+    for (const [name, program] of [...BOOT, ...(Arr.some(moves, (m) => STOPS.has(m)) ? STOPPERS : [])]) {
       const started = yield* inContext(
         ProcessManager.use((p) =>
           p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
@@ -915,14 +940,15 @@ const walk = (
       const can: Record<Move, boolean> = {
         door_start: starters().length > 0 && next.calls() < PIDS.length - 6,
         mail_start:
-          ["starter:1", "starter:2"].some((n) => world.names.get(n)?.live === true) && next.calls() < PIDS.length - 6,
+          Arr.some(["starter:1", "starter:2"], (n) => world.names.get(n)?.live === true) &&
+          next.calls() < PIDS.length - 6,
         forged: starters().length > 0,
         bad: starters().length > 0,
         undeclared_exit: world.names.get("plain:1")?.live === true,
         undeclared: world.names.get("plain:1")?.live === true,
         exit: runnable().length > 0 && next.calls() < PIDS.length - 6,
         exit_extra: runnable().length > 0,
-        after_exit: [...world.names].some(([, h]) => !h.live && RUNS.has(h.program)),
+        after_exit: Arr.some([...world.names], ([, h]) => !h.live && RUNS.has(h.program)),
         watch: runnable().length > 0,
         start_ended: starters().length > 0 && ended().length > 0,
         retry_saved: world.starts.size > 0,
@@ -942,7 +968,7 @@ const walk = (
         boundary_start: starters().length > 0 && next.calls() < PIDS.length - 6,
       };
 
-      const options = moves.filter((move) => can[move]);
+      const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
         return;
@@ -956,14 +982,14 @@ const walk = (
           const name =
             move === "mail_start"
               ? choose(
-                  ["starter:1", "starter:2"].filter((n) => world.names.get(n)?.live === true),
+                  Arr.filter(["starter:1", "starter:2"], (n) => world.names.get(n)?.live === true),
                   cell.pick,
                 )
               : choose(starters(), cell.pick);
 
           // SAFETY: the name was chosen from world.names: a live starter or a live mail starter.
           const held = world.names.get(name) as Name;
-          const existing = [...world.names].filter(([n, h]) => h.program === "merger" && n !== name);
+          const existing = Arr.filter([...world.names], ([n, h]) => h.program === "merger" && n !== name);
           const target = cell.alt % 3 === 0 && existing.length > 0 ? choose(existing, cell.alt)[0] : fresh();
           const was = world.names.get(target);
 
@@ -1011,7 +1037,7 @@ const walk = (
             });
             expect(tagged(told.outcome), "L5: a fresh start answers started").toBe("started");
             expect(
-              world.starts.size > 0 && [...world.starts.values()].some((s) => s.name === target),
+              world.starts.size > 0 && Arr.some([...world.starts.values()], (s) => s.name === target),
               "the child is recorded",
             ).toBe(true);
             seen.add(move === "mail_start" ? "mailed_start" : "started");
@@ -1032,7 +1058,7 @@ const walk = (
         case "forged": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
-          const extra = Object.fromEntries(cell.extra.map((field) => [field, forged(field, world)]));
+          const extra = Rec.fromEntries(Arr.map(cell.extra, (field) => [field, forged(field, world)]));
           const before = (yield* answers(name)).length;
           yield* door(name, { type: "start", ask: { program: "merger", name: target, extra } });
           expect(yield* lastAnswer(name, before), "L5, L8: a Cmd with fields beyond its operands").toEqual({
@@ -1076,7 +1102,7 @@ const walk = (
             Match.when(6, () => ({
               ask: {
                 program: "merger",
-                name: choose(["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)], cell.alt),
+                name: choose(["", "processes", "Merger:1", "merger/1", "client:x", Str.repeat(257)("m")], cell.alt),
               },
               reason: "bad_name",
               tag: "bad_name",
@@ -1096,9 +1122,10 @@ const walk = (
             outcome: bad.reason,
           });
           expect(
-            (yield* all())
-              .filter((e) => e.rev > revBefore)
-              .filter((e) => e.stream.startsWith("processes") || e.id.startsWith('["start",')),
+            Arr.filter(
+              Arr.filter(yield* all(), (e) => e.rev > revBefore),
+              (e) => Str.startsWith("processes")(e.stream) || Str.startsWith('["start",')(e.id),
+            ),
             `L6: ${bad.tag} writes nothing`,
           ).toEqual([]);
           seen.add(bad.tag);
@@ -1120,11 +1147,11 @@ const walk = (
           yield* door("plain:1", { type: "end", before: [], after: [], twice: false });
           const rows = yield* all();
           expect(
-            rows.filter((row) => row.rev > before && row.stream.startsWith("processes")),
+            Arr.filter(rows, (row) => row.rev > before && Str.startsWith("processes")(row.stream)),
             "L8: an undeclared exit writes no process rows",
           ).toEqual([]);
           expect(yield* exitedRows(held.pid), "L8: an undeclared exit leaves its life live").toEqual([]);
-          const replies = rows.filter((row) => row.id.endsWith("/answer") && row.stream === "plain:1/inbox");
+          const replies = Arr.filter(rows, (row) => Str.endsWith("/answer")(row.id) && row.stream === "plain:1/inbox");
           expect(body(replies.at(-1))["m"]).toMatchObject({ type: "exit_err", reason: "bad_cmd" });
           seen.add("undeclared_exit");
           break;
@@ -1142,7 +1169,7 @@ const walk = (
           const ending = { type: "end", before, after, twice: true };
           const late = { type: "start", ask: { program: "merger", name: fresh() } };
           const pid = held.pid;
-          world.worker = move.startsWith("worker_");
+          world.worker = Str.startsWith("worker_")(move);
           // The public withLoader path has the Worker's declaration and execution, with no pure stepper.
           let current = yield* host(store, world, next.next, scope);
           let runner = yield* current.runner(name);
@@ -1203,25 +1230,25 @@ const walk = (
 
           const rows = yield* store.entries([
             name,
-            ...before.map((a) => a.name),
-            ...after.map((a) => a.name),
+            ...Arr.map(before, (a) => a.name),
+            ...Arr.map(after, (a) => a.name),
             late.ask.name,
           ]);
 
-          const exits = rows.filter((row) => row._tag === "exited" && body(row)["process"] === pid);
+          const exits = Arr.filter(rows, (row) => row._tag === "exited" && body(row)["process"] === pid);
           expect(exits, "L7: one normal exit survives a queued turn or a Worker recovery cut").toHaveLength(1);
           expect(body(exits[0])["reason"]).toEqual(NORMAL);
 
           for (const ask of before) {
             expect(
-              rows.some((row) => row._tag === "started" && body(row)["name"] === ask.name),
+              Arr.some(rows, (row) => row._tag === "started" && body(row)["name"] === ask.name),
               "L7: every Cmd before exit ran",
             ).toBe(true);
           }
 
           for (const ask of [...after, late.ask]) {
             expect(
-              rows.some((row) => row._tag === "registered" && body(row)["name"] === ask.name),
+              Arr.some(rows, (row) => row._tag === "registered" && body(row)["name"] === ask.name),
               "L7: no Cmd or later queued letter after exit ran",
             ).toBe(false);
           }
@@ -1234,7 +1261,7 @@ const walk = (
             "L7: ended life steps no later letter",
           ).toBe(stepped);
           expect(
-            (yield* store.entries([name])).filter((row) => row._tag === "restarted" && body(row)["after"] === pid),
+            Arr.filter(yield* store.entries([name]), (row) => row._tag === "restarted" && body(row)["after"] === pid),
             "L7: normal exit never restarts",
           ).toEqual([]);
           held.live = false;
@@ -1246,18 +1273,19 @@ const walk = (
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const inputBytes = ROW_LIMIT - 400 - (cell.alt % 16);
-          const input = "x".repeat(inputBytes);
+          const input = Str.repeat(inputBytes)("x");
           const ask = { program: BOUNDARY_PROGRAM, name: target, inputBytes };
           const encoder = new TextEncoder();
           expect(
-            encoder.encode(JSON.stringify({ type: "start_child", program: ask.program, name: target, input })).length,
+            encoder.encode(Formatter.formatJson({ type: "start_child", program: ask.program, name: target, input }))
+              .length,
             "L6: this full Cmd exceeds the row limit",
           ).toBeGreaterThan(ROW_LIMIT);
           const before = (yield* answers(name)).length;
           yield* door(name, { type: "start", ask });
           const rows = yield* all([target]);
-          const starts = rows.filter((row) => row._tag === "started" && body(row)["name"] === target);
-          const letters = rows.filter((row) => row.stream === `${target}/inbox`);
+          const starts = Arr.filter(rows, (row) => row._tag === "started" && body(row)["name"] === target);
+          const letters = Arr.filter(rows, (row) => row.stream === `${target}/inbox`);
           expect(starts, "L6: a valid first letter survives an oversized full Cmd").toHaveLength(1);
           expect(letters, "L6: the boundary input is written once").toHaveLength(1);
           // SAFETY: the expect above failed the law unless exactly one letter is there, and inbox rows carry From.
@@ -1273,10 +1301,10 @@ const walk = (
             first.traceId,
             first.build,
             first._tag,
-            JSON.stringify(first.body),
+            Formatter.formatJson(first.body),
           ];
 
-          const size = texts.reduce((total, text) => total + (text === null ? 0 : encoder.encode(text).length), 0);
+          const size = Arr.reduce(texts, 0, (total, text) => total + (text === null ? 0 : encoder.encode(text).length));
           expect(size, "L6: the complete first-letter row fits the limit").toBeLessThanOrEqual(ROW_LIMIT);
           expect(body(first)["m"]).toBe(input);
           expect(first.rev, "L6: the first letter follows the start with no intervening row").toBe(
@@ -1310,17 +1338,17 @@ const walk = (
           // The door letter holds sizes only. Its step emits individually valid Cmds whose sum
           // crosses the platform's row limit before any of them can be performed.
           yield* door(name, { type: "end", before: asks, after: [], twice: false });
-          const rows = yield* all(asks.map((ask) => ask.name));
+          const rows = yield* all(Arr.map(asks, (ask) => ask.name));
           expect((yield* answers(name)).length, "L6: every valid start answers across a large checkpoint").toBe(
             before + asks.length,
           );
 
           for (const ask of asks) {
-            const starts = rows.filter((row) => row._tag === "started" && body(row)["name"] === ask.name);
-            const letters = rows.filter((row) => row.stream === `${ask.name}/inbox`);
+            const starts = Arr.filter(rows, (row) => row._tag === "started" && body(row)["name"] === ask.name);
+            const letters = Arr.filter(rows, (row) => row.stream === `${ask.name}/inbox`);
             expect(starts, "L6: checkpoint size loses no valid start").toHaveLength(1);
             expect(letters, "L6: each input was written once").toHaveLength(1);
-            expect(body(letters[0])["m"]).toBe("x".repeat(ask.inputBytes));
+            expect(body(letters[0])["m"]).toBe(Str.repeat(ask.inputBytes)("x"));
           }
 
           expect(yield* exitedRows(held.pid), "L7: exit still follows every valid start").toHaveLength(1);
@@ -1337,7 +1365,11 @@ const walk = (
           const before = Array.from({ length: cell.alt % 3 }, () => ({ program: "merger", name: fresh() }));
           const after = Array.from({ length: cell.shape % 3 }, () => ({ program: "merger", name: fresh() }));
           const twice = cell.shape % 2 === 0;
-          const children = [...world.parents].filter(([, p]) => p === name).map(([c]) => c);
+
+          const children = Arr.map(
+            Arr.filter([...world.parents], ([, p]) => p === name),
+            ([c]) => c,
+          );
 
           if (move === "cut_exit") {
             world.fault.exited = true;
@@ -1366,7 +1398,7 @@ const walk = (
             seen.add(hit ? "cut_exit" : "cut_missed");
           }
 
-          yield* sync([...before, ...after].map((a) => ({ name: a.name, requester: held.pid })));
+          yield* sync(Arr.map([...before, ...after], (a) => ({ name: a.name, requester: held.pid })));
           const exits = yield* exitedRows(held.pid);
           expect(exits.length, `L7: ${name}'s exit writes one exited`).toBe(1);
           expect(body(exits[0])["reason"], "L7: exit ends its life with normal").toEqual(NORMAL);
@@ -1382,7 +1414,7 @@ const walk = (
           held.live = false;
           const info = yield* inContext(ProcessManager.use((p) => p.info));
           expect(
-            info.some((row) => row.process === held.pid),
+            Arr.some(info, (row) => row.process === held.pid),
             "L7: info drops an exited life",
           ).toBe(false);
 
@@ -1395,14 +1427,17 @@ const walk = (
             );
           }
 
-          for (const watch of world.watches.filter((w) => w.target === held.pid)) {
+          for (const watch of Arr.filter(world.watches, (w) => w.target === held.pid)) {
             // SAFETY: a watch is made only with a watcher from world.names.
-            const watcher = [...world.names].find(([, h]) => h.pid === watch.watcher)?.[0] as string;
+            const watcher = Option.getOrUndefined(
+              Arr.findFirst([...world.names], ([, h]) => h.pid === watch.watcher),
+            )?.[0] as string;
 
-            const downs = (yield* all()).filter(
+            const downs = Arr.filter(
+              yield* all(),
               (e) =>
                 e.stream === `${watcher}/inbox` &&
-                JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                Str.includes('"DOWN"')(JSON.stringify(body(e)["m"] ?? null)) &&
                 // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
@@ -1416,12 +1451,12 @@ const walk = (
           world.watches.splice(
             0,
             world.watches.length,
-            ...world.watches.filter((w) => w.target !== held.pid && w.watcher !== held.pid),
+            ...Arr.filter(world.watches, (w) => w.target !== held.pid && w.watcher !== held.pid),
           );
           const runner = yield* life.runner(name);
           yield* call(runner.due((yield* Clock.currentTimeMillis) + 60_000), `${name}'s alarm`);
           expect(
-            (yield* all()).filter((e) => e._tag === "restarted" && body(e)["after"] === held.pid),
+            Arr.filter(yield* all(), (e) => e._tag === "restarted" && body(e)["after"] === held.pid),
             "L7: nothing restarts a life that exited",
           ).toEqual([]);
           seen.add(before.length > 0 && after.length > 0 ? "exit_between_cmds" : "exit");
@@ -1456,7 +1491,7 @@ const walk = (
 
         case "after_exit": {
           const [name, held] = choose(
-            [...world.names].filter(([, h]) => !h.live && RUNS.has(h.program)),
+            Arr.filter([...world.names], ([, h]) => !h.live && RUNS.has(h.program)),
             cell.pick,
           );
 
@@ -1473,7 +1508,7 @@ const walk = (
 
         case "watch": {
           const target = choose(runnable(), cell.pick);
-          const watchers = [...world.names].filter(([n, h]) => h.live && n !== target);
+          const watchers = Arr.filter([...world.names], ([n, h]) => h.live && n !== target);
 
           if (watchers.length === 0) {
             break;
@@ -1516,7 +1551,10 @@ const walk = (
             outcome: Started.cases.already_present.make({ process: was.pid, name: target }),
           });
           expect(
-            (yield* all()).filter((e) => e.rev > revBefore).filter((e) => e.stream.startsWith("processes")),
+            Arr.filter(
+              Arr.filter(yield* all(), (e) => e.rev > revBefore),
+              (e) => Str.startsWith("processes")(e.stream),
+            ),
             "already_present writes nothing",
           ).toEqual([]);
           seen.add("already_present");
@@ -1578,7 +1616,7 @@ const walk = (
           expect(yield* processRows(revBefore), `L1, L2: ${label}: no process row`).toEqual([]);
           expect(yield* registered(target), `L1, L2: ${label}: no name registered`).toBe(false);
           expect(
-            (yield* all([target])).filter((e) => e.stream === `${target}/inbox`),
+            Arr.filter(yield* all([target]), (e) => e.stream === `${target}/inbox`),
             `L1, L2: ${label}: no first letter`,
           ).toEqual([]);
           seen.add(`${kind}_${program}`);
@@ -1630,14 +1668,17 @@ const walk = (
             }
           }
 
-          for (const watch of world.watches.filter((w) => w.target === child.pid)) {
+          for (const watch of Arr.filter(world.watches, (w) => w.target === child.pid)) {
             // SAFETY: a watch is made only with a watcher from world.names.
-            const watcher = [...world.names].find(([, h]) => h.pid === watch.watcher)?.[0] as string;
+            const watcher = Option.getOrUndefined(
+              Arr.findFirst([...world.names], ([, h]) => h.pid === watch.watcher),
+            )?.[0] as string;
 
-            const downs = (yield* all()).filter(
+            const downs = Arr.filter(
+              yield* all(),
               (e) =>
                 e.stream === `${watcher}/inbox` &&
-                JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                Str.includes('"DOWN"')(JSON.stringify(body(e)["m"] ?? null)) &&
                 // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
@@ -1653,7 +1694,7 @@ const walk = (
           world.watches.splice(
             0,
             world.watches.length,
-            ...world.watches.filter((w) => w.target !== child.pid && w.watcher !== child.pid),
+            ...Arr.filter(world.watches, (w) => w.target !== child.pid && w.watcher !== child.pid),
           );
           child.live = false;
           seen.add("stopped_own");
@@ -1664,7 +1705,7 @@ const walk = (
           // L3: any name but the requester's own children: another stopper's child, a boot process,
           // another stopper, or the requester itself.
           const name = choose(stoppers(), cell.pick);
-          const others = [...world.names].filter(([n, h]) => h.live && world.parents.get(n) !== name);
+          const others = Arr.filter([...world.names], ([n, h]) => h.live && world.parents.get(n) !== name);
           const [target, held] = choose(others, cell.alt);
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
@@ -1740,15 +1781,18 @@ const prop = (
   runs: Runs,
   people: fc.Arbitrary<ReadonlyArray<Drawn>> = NOBODY,
 ) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<Move>();
         const seen = new Set<string>();
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(fc.tuple(people, Tape), (run) => Effect.runPromise(Effect.scoped(law(run))));
+        const property = fc.asyncProperty(fc.tuple(people, Tape), (run) => runPromise(Effect.scoped(law(run))));
         const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1771,9 +1815,11 @@ const capture = Effect.fnUntraced(function* (sql: Sql, makeTracer: Store["tracer
 
   // Inspect the real sink's saved span and failure content, including nested storage causes.
   const exported = () =>
-    sql
-      .exec("SELECT row, content FROM unsent")
-      .flatMap((row) => [JSON.stringify(row), String(row.row), String(row.content)]);
+    Arr.flatMap(sql.exec("SELECT row, content FROM unsent"), (row) => [
+      JSON.stringify(row),
+      String(row.row),
+      String(row.content),
+    ]);
 
   return { tracer, logger, lines, exported };
 });
@@ -1784,7 +1830,7 @@ const Secret = fc
   .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom("", '"', "/%? ", "\n"))
   .map(([word, suffix]) => word + suffix);
 
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string>) =>
   Effect.fnUntraced(function* (secret: string, tape: Iterable<fc.AsyncCommand<object, Walk>>) {
@@ -1842,12 +1888,17 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
           continue;
         }
 
-        outputs.push(JSON.stringify(yield* answers(name)));
+        outputs.push(Formatter.formatJson(yield* answers(name)));
       }
 
       const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));
       // Keep the whole answer, including its Cmd echo, and the sink's stored failure content.
-      outputs.push(...rows.filter((e) => e.id.endsWith("/answer")).map((e) => JSON.stringify(body(e))));
+      outputs.push(
+        ...Arr.map(
+          Arr.filter(rows, (e) => Str.endsWith("/answer")(e.id)),
+          (e) => JSON.stringify(body(e)),
+        ),
+      );
 
       if (Exit.isFailure(outcome)) {
         for (const reason of outcome.cause.reasons) {
@@ -1865,7 +1916,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       for (const output of outputs) {
         for (const form of forms(secret)) {
-          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+          expect(Str.includes(form)(output), `L11: a secret reached an output: ${Str.slice(0, 200)(output)}`).toBe(
+            false,
+          );
         }
       }
     });
@@ -1874,7 +1927,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       if (ask.kind === "storage") {
         const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));
         expect(
-          rows.filter((e) => e._tag === "exited" && body(e)["process"] === world.names.get(ask.name)?.pid),
+          Arr.filter(rows, (e) => e._tag === "exited" && body(e)["process"] === world.names.get(ask.name)?.pid),
           "L11: the failed exit recovers exactly once",
         ).toHaveLength(1);
         // SAFETY: this ask's start was recorded in world.names when it was asked.
@@ -1888,7 +1941,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       expect(told.length, `L11: ${ask.kind} for ${ask.name} was folded exactly once`).toBe(ask.before + 1);
       const rows = yield* store.entries([ask.name]).pipe(Effect.provide(life.context));
       expect(
-        rows.filter((e) => e.stream === `${ask.name}/inbox` && e.id.endsWith("/answer")).length,
+        Arr.filter(rows, (e) => e.stream === `${ask.name}/inbox` && Str.endsWith("/answer")(e.id)).length,
         "L11: the start's whole answer row was written and inspected",
       ).toBeGreaterThan(0);
 
@@ -1905,11 +1958,12 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
     });
 
     const step = Effect.fnUntraced(function* (cell: Cell) {
-      const live = [...world.names]
-        .filter(([name, held]) => held.live && held.program === "starter" && !pending.has(name))
-        .map(([name]) => name);
+      const live = Arr.map(
+        Arr.filter([...world.names], ([name, held]) => held.live && held.program === "starter" && !pending.has(name)),
+        ([name]) => name,
+      );
 
-      const retries = saved.filter((ask) => world.names.get(ask.name)?.live && !pending.has(ask.name));
+      const retries = Arr.filter(saved, (ask) => world.names.get(ask.name)?.live === true && !pending.has(ask.name));
 
       const available = [
         ...(live.length === 0
@@ -1925,7 +1979,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         return;
       }
 
-      const missing = available.filter((move) => !done.has(move));
+      const missing = Arr.filter(available, (move) => !done.has(move));
       const move = choose(missing.length === 0 ? available : missing, cell.move);
       let ask: Asked;
       let outcome: Exit.Exit<unknown, unknown>;
@@ -2039,14 +2093,17 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
   });
 
 const secretsLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "L11: a secret in a Cmd's operands or a storage cause stays out of Cmd answers, spans and logs",
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const seen = new Set<string>();
         const law = secrets(open, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
+        const property = fc.asyncProperty(Secret, Tape, (x, tape) => runPromise(Effect.scoped(law(x, tape))));
 
         const checks = {
           seed: SEED,
@@ -2150,9 +2207,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ["related_start", "unrelated_start", "door_start", "mail_start"],
       ["related_start", "unrelated_start"],
       [
-        ...["owner", "admin", "member"].map((role) => `related_${role}`),
-        ...ANY_PROGRAM.map((program) => `related_${program}`),
-        ...ANY_PROGRAM.map((program) => `unrelated_${program}`),
+        ...Arr.map(["owner", "admin", "member"], (role) => `related_${role}`),
+        ...Arr.map(ANY_PROGRAM, (program) => `related_${program}`),
+        ...Arr.map(ANY_PROGRAM, (program) => `unrelated_${program}`),
       ],
       { fast: 20, full: 200 },
       People,
@@ -2166,8 +2223,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         "related_child",
         "unrelated_child",
         "removed_child",
-        ...ANY_PROGRAM.map((program) => `unrelated_${program}`),
-        ...ANY_PROGRAM.map((program) => `removed_${program}`),
+        ...Arr.map(ANY_PROGRAM, (program) => `unrelated_${program}`),
+        ...Arr.map(ANY_PROGRAM, (program) => `removed_${program}`),
       ],
       { fast: 20, full: 200 },
       People,

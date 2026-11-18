@@ -11,6 +11,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -170,8 +171,8 @@ const same = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && a.every((s, n) => s === b[n]);
 
 describe("L9, TOML paths and lines stay right for every spelling", () => {
-  it("values, and one span per leaf and header with its segments and line", async () => {
-    await fc.assert(
+  it("values, and one span per leaf and header with its segments and line", () =>
+    fc.assert(
       fc.asyncProperty(doc, async (d) => {
         const w = write(d);
         const exit = await parse(w.text);
@@ -190,18 +191,18 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("broken TOML fails with TomlError at the broken line, even beside a version line", async () => {
+  it("broken TOML fails with TomlError at the broken line, even beside a version line", () => {
     // Both forms are ones toml-eslint-parser 1.0.3 reports on their own line: a missing value is
     // reported on the next line, so it is not used here.
     const broken = fc.constantFrom('bad = "never closed', "bad = ]", "bad = 1 2");
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(doc, broken, fc.nat(), async (d, line, at) => {
         const w = write(d);
         const eol = d.crlf ? "\r\n" : "\n";
-        const lines = [`fabrika-version = "9.9.9"`, ...w.text.split(eol).slice(0, -1)];
+        const lines = [`fabrika-version = "9.9.9"`, ...Str.split(w.text, eol).slice(0, -1)];
         const n = 1 + (at % lines.length);
         lines.splice(n, 0, line);
         const exit = await parse(lines.join(eol) + eol);
@@ -289,13 +290,13 @@ const arrays = (groups: ReadonlyArray<typeof Group.Type>) => {
       seen.elements++;
       const taken = fill(table, `[[${group.name}]]`, element.leaves);
 
-      if (element.sub && !taken.has(element.sub.name)) {
+      if (element.sub !== undefined && !taken.has(element.sub.name)) {
         taken.add(element.sub.name);
         fill(own(table, element.sub.name, {}), `[${group.name}.${element.sub.name}]`, element.sub.leaves);
         seen.subs++;
       }
 
-      if (element.items && !taken.has(element.items.name)) {
+      if (element.items !== undefined && !taken.has(element.items.name)) {
         const items = own(table, element.items.name, new Array<object>());
 
         for (const leaves of element.items.elements) {

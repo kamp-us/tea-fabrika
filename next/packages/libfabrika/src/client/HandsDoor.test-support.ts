@@ -8,12 +8,18 @@
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
+
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
+import * as Str from "effect/String";
+
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -45,7 +51,7 @@ const REFUSED_FIRST = [
 export type FinishMode = "ok" | "unavailable" | "garbled" | (typeof REFUSED_FIRST)[number];
 
 const refusedFirst = (mode: FinishMode): mode is (typeof REFUSED_FIRST)[number] =>
-  REFUSED_FIRST.some((reason) => reason === mode);
+  Arr.some(REFUSED_FIRST, (reason) => reason === mode);
 
 /** One call's outcome at the door: a result, a refusal, or a wait that parks on `target:<key>`. */
 export const Outcome = Schema.TaggedUnion({
@@ -141,7 +147,7 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = Predicate.isObjectOrArray(params) ? new Map(Object.entries(params)) : new Map();
+    const p = Predicate.isObject(params) ? new Map(Rec.toEntries(params)) : new Map();
 
     const text = (name: string) => {
       const value = p.get(name);
@@ -150,10 +156,10 @@ export const brain = () => {
     };
 
     if (method === "tasks.list") {
-      const mine = [...tasks.values()].filter((s) => s.request.target === key && open(s));
+      const mine = Arr.filter([...tasks.values()], (s) => s.request.target === key && open(s));
 
       return Outcome.cases.result.make({
-        result: { tasks: mine.map((s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
+        result: { tasks: Arr.map(mine, (s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
       });
     }
 
@@ -167,7 +173,8 @@ export const brain = () => {
     }
 
     if (method === "tasks.take") {
-      const candidates = [...tasks.values()].filter(
+      const candidates = Arr.filter(
+        [...tasks.values()],
         (s) => s.request.process === text("process") && s.request.target === key && open(s),
       );
 
@@ -374,7 +381,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (!call.method.startsWith("tasks.")) {
+    if (!Function.pipe(call.method, Str.startsWith("tasks."))) {
       return;
     }
 
@@ -427,8 +434,8 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
     /** A program asks the client's key: the brain saves it, and each parked wait past its rev is rung. */
     request: (process: string, n: number) => {
       const id = b.request(key, process, n);
-      const ringing = state.parked.filter((p) => b.rev(key) > p.after);
-      state.parked = state.parked.filter((p) => !ringing.includes(p));
+      const ringing = Arr.filter(state.parked, (p) => b.rev(key) > p.after);
+      state.parked = Arr.filter(state.parked, (p) => !ringing.includes(p));
 
       for (const p of ringing) {
         p.on.receive(JSON.stringify({ jsonrpc: "2.0", id: p.id, result: { rev: b.rev(key) } }));

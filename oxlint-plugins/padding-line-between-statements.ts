@@ -25,6 +25,7 @@
 // It has a whitespace autofix, which `pnpm format` applies: a newline after the line where the first
 // statement ends.
 import type { Context, CreateRule } from "@oxlint/plugins";
+import { Array as Arr } from "effect";
 import type { Node } from "./match.ts";
 
 type Source = Context["sourceCode"];
@@ -82,7 +83,7 @@ const isTypeOfValue = (prev: Node, next: Node): boolean => {
     return false;
   }
 
-  return value.declarations.some((d) => d.id.type === "Identifier" && d.id.name === type.id.name);
+  return Arr.some(value.declarations, (d) => d.id.type === "Identifier" && d.id.name === type.id.name);
 };
 
 const isOverload = (prev: Node, next: Node): boolean => {

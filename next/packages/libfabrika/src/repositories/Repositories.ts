@@ -2,9 +2,12 @@
  * One selected repository, read at one commit: its snapshot, its files and the source folders its
  * settings name. This file is the contract only (0095).
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 /**
  * Schema for a branch name under git's ref name rules (`git check-ref-format`): components
@@ -18,8 +21,11 @@ export const Branch = Schema.String.check(
   Schema.makeFilter(
     (s) =>
       s !== "@" &&
-      [...s].every((c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
-      s.split("/").every((p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
+      Arr.every([...s], (c) => Option.exists(Str.charCodeAt(0)(c), (unit) => unit > 32 && unit !== 127)) &&
+      Arr.every(
+        Str.split("/")(s),
+        (p) => !Str.startsWith(".")(p) && !Str.endsWith(".")(p) && !Str.endsWith(".lock")(p),
+      ),
   ),
 );
 

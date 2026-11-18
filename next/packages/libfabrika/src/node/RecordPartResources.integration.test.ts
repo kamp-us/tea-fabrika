@@ -2,12 +2,14 @@
 // folder they acquire (0061). The laws watch the real handles, files and finalizer order.
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type { Sql } from "../Sql.ts";
@@ -42,12 +44,12 @@ const Move = Schema.Union([
 /** Every step the support took, and the checks every law ends with once the outer scope closed. */
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
-  const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
+  const opened = () => Arr.flatMap(events, (e) => (e.step === "opened" ? [e.db] : []));
 
   const closes = (db: ReturnType<typeof opened>[number]) =>
-    events.filter((e) => e.step === "closed" && e.db === db).length;
+    Arr.filter(events, (e) => e.step === "closed" && e.db === db).length;
 
-  const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
+  const folders = () => Arr.flatMap(events, (e) => (e.step === "folder" ? [e.path] : []));
 
   const released = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -58,7 +60,7 @@ const watched = () => {
     }
 
     expect(yield* Effect.forEach(folders(), (path) => fs.exists(path), { concurrency: 1 })).toEqual(
-      folders().map(() => false),
+      Arr.map(folders(), () => false),
     );
   });
 
@@ -89,7 +91,7 @@ const write = (row: string) => (sql: Sql) =>
 const saved = (sql: Sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name = 'saved'").length === 0
     ? []
-    : sql.exec("SELECT row FROM saved ORDER BY rowid").map((r) => r["row"]);
+    : Arr.map(sql.exec("SELECT row FROM saved ORDER BY rowid"), (r) => r["row"]);
 
 describe("T641 record-part stores on node:sqlite", () => {
   it.effect.prop(
@@ -124,7 +126,7 @@ describe("T641 record-part stores on node:sqlite", () => {
                   // Every folder acquired so far is still there while a use runs.
                   const folders = watch.folders();
                   expect(yield* Effect.forEach(folders, (path) => fs.exists(path), { concurrency: 1 })).toEqual(
-                    folders.map(() => true),
+                    Arr.map(folders, () => true),
                   );
                 });
 
@@ -180,7 +182,7 @@ describe("T641 record-part stores on node:sqlite", () => {
     ({ modes, failAt }) =>
       Effect.gen(function* () {
         // Each file store makes a folder, and each store opens one handle: the points that may fail.
-        const points = modes.filter((mode) => mode === "file").length + modes.length;
+        const points = Arr.filter(modes, (mode) => mode === "file").length + modes.length;
         const failing = failAt % points;
         const watch = watched();
         const failure = failingAt(failing, watch.events);
@@ -228,7 +230,7 @@ describe("T641 record-part stores on node:sqlite", () => {
             for (const cut of [...cuts, []]) {
               yield* store.use((sql) =>
                 Effect.gen(function* () {
-                  const [now, ...earlier] = watch.opened().toReversed();
+                  const [now, ...earlier] = Arr.reverse(watch.opened());
                   expect(now!.isOpen).toBe(true);
 
                   for (const db of earlier) {
@@ -236,8 +238,8 @@ describe("T641 record-part stores on node:sqlite", () => {
                   }
 
                   // Each earlier handle closed before this one began to open.
-                  const opening = watch.events.findLastIndex((e) => e.step === "opening");
-                  expect(watch.events.slice(0, opening).filter((e) => e.step === "closed")).toHaveLength(
+                  const opening = Option.getOrThrow(Arr.findLastIndex(watch.events, (e) => e.step === "opening"));
+                  expect(Arr.filter(watch.events.slice(0, opening), (e) => e.step === "closed")).toHaveLength(
                     earlier.length,
                   );
                   expect(saved(sql)).toEqual(kept);
