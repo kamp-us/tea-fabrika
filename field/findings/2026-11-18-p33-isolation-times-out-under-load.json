@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-p33-isolation-times-out-under-load",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/instance-one-file.integration.test.ts",
+    "line": 708
+  },
+  "says": "The next/ law P16 p33 real isolation timed out at Vitest's 60 s limit when its file ran in a shard of 38 next-integration files, though it passed in about 11 to 15 s in a two-file run and on main's own full-run leg, so its pass leans on how loaded the runner is.",
+  "proof": "Throwaway run https://github.com/kamp-us/tea-fabrika/actions/runs/44416548062 at main dcb99bd4d, shard 1 of 4 (vitest --project next-integration --shard 1/4, FABRIKA_TEST_DEPTH full): `Test timed out in 60000ms` at line 708. Runs https://github.com/kamp-us/tea-fabrika/actions/runs/44415751425 and https://github.com/kamp-us/tea-fabrika/actions/runs/44415755034 (two files) pass it in about 10.8 s, and main's run https://github.com/kamp-us/tea-fabrika/actions/runs/44410508388 leg 3 passes it in 14.5 s. The plan for ticket 1180 (docs/plan/quests/t1180-PLAN.md, law E) also notes its inline sealed program is stepped with `{ type: \"read\" }`, a Msg keyed on type after decision 0569, and could not settle why that step does not fail.",
+  "cost": "A change to the shard split in scheduled.yaml or a slower runner can turn main's full run red on this law with no code change, and the stale Msg it may carry stays unseen.",
+  "head": "dcb99bd4dbd59afbe94f04495b26a6614b65cc33",
+  "ticket": "kamp-us/tea-fabrika#1180",
+  "pr": null
+}
