@@ -4,8 +4,6 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Cause, Clock, Context, DateTime, Effect, FileSystem, Option, Path, Ref, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import vitestPackage from "vitest/package.json" with { type: "json" };
-import { parse } from "yaml";
 import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
 import { Failure, Issue } from "./plant-errors.ts";
 import { machine, Model, Observation, type Phase } from "./plant-machine.ts";
@@ -311,12 +309,6 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
 
   const originalHash = yield* digest.digestHex(Digest.sha256, before.bytes);
 
-  const selected = cases[request.case];
-
-  if ("hashes" in selected && (before.mode !== 0o100644 || originalHash !== selected.hashes.source)) {
-    return yield* fail("source_unsupported");
-  }
-
   const prepared = yield* prepare(request.case, before.bytes).pipe(Effect.mapError(() => fail("source_unsupported")));
 
   const expected = yield* derive(request.case, prepared).pipe(Effect.mapError(() => fail("source_unsupported")));
@@ -324,10 +316,6 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
   const preparedHash = yield* digest.digestHex(Digest.sha256, prepared);
 
   const editedHash = yield* digest.digestHex(Digest.sha256, expected);
-
-  if ("hashes" in selected && (preparedHash !== selected.hashes.prepared || editedHash !== selected.hashes.edited)) {
-    return yield* fail("source_unsupported");
-  }
 
   const diffHash = yield* Ref.make<string | null>(null);
 
@@ -428,7 +416,7 @@ const perform = Effect.fn("plant.exercise")(function* (input: unknown, tested?: 
   };
 });
 
-/** The manual core always requires its catalog commit as the actual checkout. */
+/** The manual core always tests the exact source commit from its request. */
 
 export const exercise = (input: unknown) => perform(input);
 
@@ -602,9 +590,7 @@ type Checkout = {
   readonly install: boolean;
 };
 
-/** The same real Git, filesystem and child-process adapter serves both entry points. */
-
-export const execute = Effect.fn("plant.execute")(function* (
+const execute = Effect.fn("plant.execute")(function* (
   environment: RuntimeEnvironment,
   request: Request,
   checkout: Checkout,
@@ -687,7 +673,8 @@ export const execute = Effect.fn("plant.execute")(function* (
 
   if (
     (yield* git(runner, ["rev-parse", "HEAD"])).trim() !== checkout.runnerHead ||
-    (yield* git(source, ["rev-parse", "HEAD"])).trim() !== checkout.head
+    (yield* git(source, ["rev-parse", "HEAD"])).trim() !== checkout.head ||
+    checkout.head !== request.sha
   ) {
     return yield* fail("checkout_mismatch");
   }
@@ -717,84 +704,6 @@ export const execute = Effect.fn("plant.execute")(function* (
   yield* regular;
 
   const original = yield* fs.readFile(target);
-
-  const digest = yield* Digest.Digest;
-
-  // Only this real adapter can use a tested head that differs from the catalog commit.
-
-  if (checkout.head !== request.sha) {
-    yield* git(source, ["merge-base", "--is-ancestor", request.sha, checkout.head]);
-
-    if (
-      (yield* git(source, ["status", "--porcelain=v1", "-z", "--untracked-files=all"])) !== "" ||
-      (yield* regular).mode !== 0o100644 ||
-      !equal(original, new TextEncoder().encode(yield* git(source, ["show", `${request.sha}:${selected.file}`])))
-    ) {
-      return yield* fail("source_dirty_or_wrong_head");
-    }
-
-    const manifests = (files: string) =>
-      files
-        .split("\0")
-        .filter(
-          (file) =>
-            file === "package.json" ||
-            file.endsWith("/package.json") ||
-            file === "pnpm-lock.yaml" ||
-            file === "pnpm-workspace.yaml",
-        )
-        .toSorted();
-
-    const catalogFiles = manifests(yield* git(source, ["ls-tree", "-r", "--name-only", "-z", request.sha]));
-
-    const testedFiles = manifests(yield* git(source, ["ls-tree", "-r", "--name-only", "-z", checkout.head]));
-
-    if (JSON.stringify(catalogFiles) !== JSON.stringify(testedFiles)) {
-      return yield* fail("source_versions_unsupported");
-    }
-
-    for (const file of catalogFiles) {
-      const pinned = new TextEncoder().encode(yield* git(source, ["show", `${request.sha}:${file}`]));
-
-      if (!equal(pinned, yield* fs.readFile(path.join(source, file)))) {
-        return yield* fail("source_versions_unsupported");
-      }
-    }
-
-    const manifest = yield* fs.readFileString(path.join(source, "package.json")).pipe(
-      Effect.flatMap(
-        Schema.decodeUnknownEffect(
-          Schema.fromJsonString(
-            Schema.Struct({
-              packageManager: Schema.String,
-              engines: Schema.Struct({ node: Schema.String }),
-            }),
-          ),
-        ),
-      ),
-    );
-
-    const workspace = Schema.decodeUnknownSync(Schema.Struct({ catalog: Schema.Struct({ vitest: Schema.String }) }))(
-      parse(yield* fs.readFileString(path.join(source, "pnpm-workspace.yaml"))),
-    );
-
-    const installed = yield* child(source, "pnpm", ["--version"], "pnpm-version");
-
-    const pnpm = (yield* fs.readFileString(path.join(scratch, "pnpm-version.out"))).trim();
-
-    if (
-      installed.exit !== 0 ||
-      manifest.packageManager !== `pnpm@${pnpm}` ||
-      manifest.engines.node !== process.versions.node ||
-      workspace.catalog.vitest !== vitestPackage.version
-    ) {
-      return yield* fail("source_versions_unsupported");
-    }
-  }
-
-  if ("hashes" in selected && (yield* digest.digestHex(Digest.sha256, original)) !== selected.hashes.source) {
-    return yield* fail("source_unsupported");
-  }
 
   const prepared = yield* prepare(request.case, original).pipe(Effect.mapError(() => fail("source_unsupported")));
 
