@@ -223,10 +223,11 @@ jobs:
     # A backstop: the leg's test step limit (`next-limit` or `tooling-limit` below) and 3 minutes
     # more, so 20 for a next leg and 33 for a tooling leg (GitHub's docs, "Contexts reference": this
     # key may read `matrix`). In green runs 43765797242, 43734956911 and 43734841211 the steps
-    # before a test step took at most 56 s in all (chromium's included) and the three after it at
-    # most 7 s, against their 2 minutes of step limits. A job that hits this limit ends `cancelled`
-    # and so does its run, so only a hung setup or upload reaches it; the report still names it as a
-    # time-out.
+    # before a test step took at most 56 s in all (chromium's included). A numbered vitest leg runs
+    # five steps after `vitest`, with 4 minutes of step limits against these 3 (the plan's call): on
+    # four green main full runs (44268160795, 44250937513, 44242548956, 44232082653) they took 35 to
+    # 85 s, so a leg reaches this limit only if vitest passes late and a later step hangs. A job
+    # that hits it ends `cancelled` and so does its run; the report still names it as a time-out.
     timeout-minutes: ${{ startsWith(matrix.shard, 'tooling-') && 33 || 20 }}
     # Fail fast, GitHub's own (ticket 990): the first red leg stops every other leg, so they free
     # their runners, and the run still ends `failure`. MAIN_SLOTS legs at once on main, PROOF_SLOTS

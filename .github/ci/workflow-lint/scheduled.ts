@@ -282,7 +282,10 @@ const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as co
 
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
-// and the three after it at most 7 s, against their 2 minutes of step limits.
+// (chromium's included). A numbered vitest leg runs five steps after `vitest`, with 4 minutes of step
+// limits against these 3 (the plan's call): on four green main full runs (44268160795, 44250937513,
+// 44242548956, 44232082653) they took 35 to 85 s, so a leg reaches this limit only if vitest passes
+// late and a later step hangs.
 const BACKSTOP = 3;
 
 /**
