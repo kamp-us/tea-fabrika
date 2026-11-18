@@ -545,7 +545,6 @@ jobs:
       legs: ${{ steps.set.outputs.legs }}
       files: ${{ steps.set.outputs.files }}
       projects: ${{ steps.set.outputs.projects }}
-      archive: ${{ steps.set.outputs.archive }}
       consumer: ${{ steps.set.outputs.consumer }}
     steps:
       - uses: actions/checkout@v7
@@ -595,22 +594,12 @@ jobs:
       - uses: ./.github/actions/pnpm
       - run: pnpm install --frozen-lockfile
       - name: integration
-        id: integration
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'next-integration'
         timeout-minutes: *related-integration-limit
         env:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
-      - name: package receipt
-        id: receipt
-        if: success() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && needs.select.outputs.archive == matrix.shard && steps.integration.outcome == 'success'
-        env:
-          EVENT: ${{ github.event_name }}
-          DRAFT: ${{ github.event.pull_request.draft }}
-          HEAD: ${{ github.sha }}
-          REQUESTED: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}
-        run: node .github/ci/related.ts --receipt
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
         timeout-minutes: *related-tooling-limit
@@ -624,16 +613,6 @@ jobs:
         env:
           FABRIKA_TEST_DEPTH: full
         run: node .github/ci/related.ts --fault
-      - name: package archive
-        if: success() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && needs.select.outputs.archive == matrix.shard && steps.receipt.outcome == 'success'
-        uses: actions/upload-artifact@v7
-        with:
-          name: kalfa-config-${{ github.sha }}-attempt-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/kalfa-config-package/kalfa-config-0.0.0.tgz
-            ${{ runner.temp }}/kalfa-config-package/receipt.json
-          if-no-files-found: error
-          retention-days: 90
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

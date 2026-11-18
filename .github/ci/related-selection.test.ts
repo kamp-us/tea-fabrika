@@ -9,17 +9,18 @@ import { expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { projects } from "../../vitest.config.ts";
 import { classify } from "./changes.mjs";
+import { isTrigger } from "./legs.ts";
 import {
   checkDelivery,
   checkFault,
   confirmed,
   consumerArgs,
-  delivered,
   outputs,
   run,
   select,
   type Sizing,
   wantsChecklistLaw,
+  wantsConsumerLaw,
 } from "./related.ts";
 
 const options = { arbitrary: { seed: 119120, runs: 100, size: 100 } };
@@ -81,9 +82,9 @@ it.prop(
     const emitted = emittedBy(result);
 
     // 0598: the related job holds no group, so the selection carries no group map.
-    expect(Object.keys(emitted)).toEqual(["run", "legs", "files", "projects", "archive", "consumer"]);
+    expect(Object.keys(emitted)).toEqual(["run", "legs", "files", "projects", "consumer"]);
 
-    expect(Object.keys(result).toSorted()).toEqual(["archive", "consumer", "legs", "projects"]);
+    expect(Object.keys(result).toSorted()).toEqual(["consumer", "legs", "projects"]);
 
     expect(emitted["run"]).toBe(String(all.length > 0));
 
@@ -228,7 +229,8 @@ const Event = Schema.Literals(["pull_request", "merge_group", "push"]);
 // on its own env, git and list, with a decoy variable beside the runner's. Plants, each run once on
 // related.ts and restored: `run` reads `env["EVENT"]` (red); reads `process.env["EVENT"]` (red);
 // reads `process.env["GITHUB_EVENT_NAME"]` (red: the property's own event differs from the test
-// process's).
+// process's). The changed `.github/ci/related.ts` is on the fault's route, so P1 rides along, listed
+// alone by the stand-in as Vitest lists it (T1076 D1).
 it.prop(
   "the select step picks by the event the runner set in GITHUB_EVENT_NAME, and lists next-integration only off the merge line",
   { event: Event, decoy: Event, next: Schema.Boolean },
@@ -241,11 +243,17 @@ it.prop(
 
     const tooling = [".github/ci/related-selection.test.ts", ".github/ci/workflow-lint/scheduled.integration.test.ts"];
 
+    const consumer = "scripts/kalfa-config.test.ts";
+
     const { record, lines } = run({
       env: envOf(event, decoy),
       git: gitOf(changed),
       list: (args) => {
         asked.push([...args]);
+
+        if (args.includes(consumer)) {
+          return [consumer];
+        }
 
         return args.includes("next-integration") ? [integration] : tooling;
       },
@@ -262,7 +270,11 @@ it.prop(
 
     const ran = Object.values(record.legs).flat().toSorted();
 
-    expect(ran).toEqual(merging ? [".github/ci/related-selection.test.ts"] : [...tooling, integration].toSorted());
+    expect(ran).toEqual(
+      merging
+        ? [".github/ci/related-selection.test.ts", consumer].toSorted()
+        : [...tooling, integration, consumer].toSorted(),
+    );
 
     expect(lines[0]).toBe("run=true");
   },
@@ -323,43 +335,38 @@ it.prop(
   options,
 );
 
-// T1076 D1, D2 and D5. The delivery of the package's tested archive: P2 (kalfa/config/src/
-// Package.integration.test.ts) builds, packs and installs it, and P1 (scripts/kalfa-config.test.ts) is
-// the root tooling consumer. `--changed` cannot reach either by import, so the selector adds them by
-// path and only after Vitest lists each in its own project. What the build must export from related.ts:
-//   delivered(paths | null): boolean
+// T1076 D1, D2 and D5, after decision 0602: the archive is kept by main's full run, not by a pull request.
+// P1 (scripts/kalfa-config.test.ts) is the root tooling consumer and a plain law. `--changed` cannot reach it
+// by import, so the selector adds it by path, and only after Vitest lists it alone in tooling. P2 (kalfa/
+// config/src/Package.integration.test.ts) builds, packs and installs the package; it is an `.integration.`
+// law, so it runs on main's full run alone and no selector adds it. On each numbered leg of that run the
+// receipt step judges the leg's own report. What related.ts exports for these laws:
+//   wantsConsumerLaw(paths | null): boolean
 //   confirmed(selected, listed, file, needed): string[]
-//   select(...) (0598: no run number, no slots) also returns `archive` and `consumer`, a leg name or "", and outputs() prints both
-//   checkDelivery({ event, draft, head, requested, folder, report }): Delivery   (the `--receipt` mode)
-//   checkFault({ env, before, faulted, after, rerun }): Fault                     (the `--fault` mode)
-// Plants for these laws are run after the build, since the names they break do not exist yet: drop the
-// `kalfa/` rule, a route path or the discovery confirmation from `delivered` and `confirmed`; let
-// `archive` name a tooling leg; accept the faults each case below lists.
+//   select(event, lists, sizing) also returns `consumer`, a tooling leg name or "", and outputs() prints it
+//   checkDelivery({ ref, event, head, listed, folder, report }): Delivery   (the `--receipt` mode)
+//   checkFault({ env, before, faulted, after, rerun }): Fault               (the `--fault` mode)
 const PACKAGE = "kalfa/config/src/Package.integration.test.ts";
 
 const CONSUMER = "scripts/kalfa-config.test.ts";
 
-// The paths whose change keeps the archive: the route that runs it.
-const ROUTE = [
-  ".github/ci/related.ts",
-  ".github/workflows/check.yaml",
-  ".github/ci/workflow-lint/related.ts",
-  ".github/ci/workflow-lint/record.ts",
-] as const;
+// The paths whose change keeps P1 in the run besides the package: the fault's route. The record guard
+// left the route with decision 0602: it holds no delivery rule any more.
+const ROUTE = [".github/ci/related.ts", ".github/workflows/check.yaml", ".github/ci/workflow-lint/related.ts"] as const;
 
 const word = Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/));
 
 const at = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: ROUTE.length - 1 }));
 
 const Change = Schema.Struct({
-  kind: Schema.Literals(["package", "readme", "dist", "route", "next", "docs", "ci", "script"]),
+  kind: Schema.Literals(["package", "readme", "dist", "route", "record", "next", "docs", "ci", "script"]),
   word,
   at,
 });
 
 // A change a git diff can hold without being built output, for the run through a real repository.
 const SourceChange = Schema.Struct({
-  kind: Schema.Literals(["package", "readme", "route", "next", "docs", "ci", "script"]),
+  kind: Schema.Literals(["package", "readme", "route", "record", "next", "docs", "ci", "script"]),
   word,
   at,
 });
@@ -376,6 +383,8 @@ const pathOf = (change: Change): string => {
       return `kalfa/config/dist/${change.word}.js`;
     case "route":
       return ROUTE[change.at]!;
+    case "record":
+      return ".github/ci/workflow-lint/record.ts";
     case "next":
       return `next/packages/libfabrika/src/${change.word}.ts`;
     case "docs":
@@ -387,27 +396,39 @@ const pathOf = (change: Change): string => {
   }
 };
 
-// What keeps the archive, by construction: a package file other than a built one, or the route.
+// What keeps P1, by construction: a package file other than a built one, or the fault's route.
 const keeps = (change: Change) => change.kind === "package" || change.kind === "readme" || change.kind === "route";
 
+// Plants, each run once on related.ts and restored: drop the `kalfa/` rule (red, a package change keeps
+// nothing); drop one route path (red); put the record guard back in the route (red, the record change
+// keeps P1); stop excluding built files (red, a dist change keeps P1).
 it.prop(
-  "D1 the package and its delivery route select P2 and P1; built files, other paths and a known diff do not; unreadable history always does",
+  "D1 the package and the fault's route select P1; built files, the record guard, other paths and a known diff do not; unreadable history always does",
   { changes: Schema.NullOr(Schema.Array(Change).check(Schema.isMaxLength(8))), extra: Change },
   ({ changes, extra }) => {
     const paths = changes?.map(pathOf) ?? null;
 
-    expect(delivered(paths)).toBe(changes === null || changes.some(keeps));
+    expect(wantsConsumerLaw(paths)).toBe(changes === null || changes.some(keeps));
 
     // Coverage in every run: a package or route change always selects, and a list with none of them,
     // however long, never does, so both answers are reached whatever the generator drew.
-    const delivering: Change = { ...extra, kind: keeps(extra) ? extra.kind : "package" };
+    const keeping: Change = { ...extra, kind: keeps(extra) ? extra.kind : "package" };
 
     const quiet = (changes ?? []).filter((change) => !keeps(change));
 
-    expect(delivered([...(changes ?? []).map(pathOf), pathOf(delivering)])).toBe(true);
-    expect(delivered(quiet.map(pathOf))).toBe(false);
-    expect(delivered(null)).toBe(true);
-    expect(delivered([])).toBe(false);
+    expect(wantsConsumerLaw([...(changes ?? []).map(pathOf), pathOf(keeping)])).toBe(true);
+    expect(wantsConsumerLaw(quiet.map(pathOf))).toBe(false);
+    expect(wantsConsumerLaw(null)).toBe(true);
+    expect(wantsConsumerLaw([])).toBe(false);
+
+    // Every route path keeps P1 alone, and the record guard is no route.
+    for (const route of ROUTE) {
+      expect(wantsConsumerLaw([route]), route).toBe(true);
+    }
+
+    expect(wantsConsumerLaw([".github/ci/workflow-lint/record.ts", ".github/ci/workflow-lint/record.test.ts"])).toBe(
+      false,
+    );
   },
   options,
 );
@@ -464,84 +485,137 @@ const emitted = (result: ReturnType<typeof select>) =>
     }),
   );
 
+// Plants, each run once on related.ts and restored: let `consumer` name the first leg of any project
+// (red, a leg of another project); skip the discovery confirmation (red, a wrong list is accepted); drop
+// the owner check (red, P1 in next-integration is accepted); print `archive` again (red, six outputs).
 it.prop(
-  "D1 the selector adds P2 to exactly one integration leg and P1 to exactly one tooling leg, only after Vitest lists each alone, and prints seven outputs",
+  "D1 the selector adds P1 to exactly one tooling leg, only after Vitest lists it alone, on no event adds P2, and prints five outputs",
   {
+    event: Event,
     integration: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
     tooling: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 30 })),
     needed: Schema.Boolean,
     other: word,
   },
-  ({ integration, tooling, needed, other }) => {
+  ({ event, integration, tooling, needed, other }) => {
     const ordinary = Array.from({ length: integration }, (_, index) => `next/a-${index}.integration.test.ts`);
 
     const scripts = Array.from({ length: tooling }, (_, index) => `.github/ci/a-${index}.test.ts`);
 
     // `confirmed` takes what Vitest listed for the one file in its own project, and adds it once.
-    const withPackage = confirmed(ordinary, [PACKAGE], PACKAGE, needed);
-
     const withConsumer = confirmed(scripts, [CONSUMER], CONSUMER, needed);
 
-    expect(withPackage).toEqual([...ordinary, ...(needed ? [PACKAGE] : [])].toSorted());
     expect(withConsumer).toEqual([...scripts, ...(needed ? [CONSUMER] : [])].toSorted());
     expect(
-      confirmed([...ordinary, PACKAGE], [PACKAGE], PACKAGE, needed).filter((file) => file === PACKAGE),
+      confirmed([...scripts, CONSUMER], [CONSUMER], CONSUMER, needed).filter((file) => file === CONSUMER),
     ).toHaveLength(1);
 
     // Not needed: what Vitest listed is not even read, so a wrong list cannot fail a run that skips it.
-    expect(confirmed(ordinary, [], PACKAGE, false)).toEqual(ordinary.toSorted());
-    expect(confirmed(ordinary, [`next/${other}.integration.test.ts`], PACKAGE, false)).toEqual(ordinary.toSorted());
+    expect(confirmed(scripts, [], CONSUMER, false)).toEqual(scripts.toSorted());
+    expect(confirmed(scripts, [`.github/ci/${other}.test.ts`], CONSUMER, false)).toEqual(scripts.toSorted());
 
     // Needed: a law Vitest did not find in that project, found elsewhere, or found with others fails the selector.
-    for (const listed of [[], [`next/${other}.integration.test.ts`], [PACKAGE, `next/${other}.integration.test.ts`]]) {
-      expect(() => confirmed(ordinary, listed, PACKAGE, true)).toThrow();
+    for (const listed of [[], [`.github/ci/${other}.test.ts`], [CONSUMER, `.github/ci/${other}.test.ts`]]) {
       expect(() => confirmed(scripts, listed, CONSUMER, true)).toThrow();
     }
 
-    const result = select({ "next-integration": withPackage, tooling: withConsumer }, sizing);
+    const result = select(event, { "next-integration": () => ordinary, tooling: () => withConsumer }, sizing);
 
     const all = Object.values(result.legs).flat();
 
-    expect(all.toSorted()).toEqual([...withPackage, ...withConsumer].toSorted());
+    // The merge line lists no integration file at all (0602); any other event lists them. P2 is in neither.
+    expect(all.toSorted()).toEqual([...(event === "push" ? ordinary : []), ...withConsumer].toSorted());
     expect(new Set(all).size).toBe(all.length);
+    expect(all).not.toContain(PACKAGE);
 
     if (needed) {
-      expect(Object.values(result.legs).filter((paths) => paths.includes(PACKAGE))).toHaveLength(1);
       expect(Object.values(result.legs).filter((paths) => paths.includes(CONSUMER))).toHaveLength(1);
-      expect(result.projects[result.archive]).toBe("next-integration");
-      expect(result.legs[result.archive]).toContain(PACKAGE);
       expect(result.projects[result.consumer]).toBe("tooling");
       expect(result.legs[result.consumer]).toContain(CONSUMER);
     } else {
-      expect(result.archive).toBe("");
       expect(result.consumer).toBe("");
     }
 
-    // Exactly the six outputs (0598 took slots away, 1569 took plants), the two new ones as the owning leg or empty.
+    // Exactly the five outputs (0598 took slots away, 1569 took plants, 0602 took the archive), the new one
+    // as the owning leg or empty.
     const printed = emitted(result);
 
-    expect(Object.keys(printed).toSorted()).toEqual(["archive", "consumer", "files", "legs", "projects", "run"]);
-    expect(printed["archive"]).toBe(result.archive);
+    expect(Object.keys(printed).toSorted()).toEqual(["consumer", "files", "legs", "projects", "run"]);
     expect(printed["consumer"]).toBe(result.consumer);
+    expect(Object.keys(result).toSorted()).toEqual(["consumer", "legs", "projects"]);
 
     // Any other placement throws, and the nine-leg cap still does.
-    expect(() => select({ "next-integration": [...ordinary, CONSUMER], tooling: scripts }, sizing)).toThrow();
-    expect(() => select({ "next-integration": ordinary, tooling: [...scripts, PACKAGE] }, sizing)).toThrow();
+    expect(() =>
+      select("push", { "next-integration": () => [...ordinary, CONSUMER], tooling: () => scripts }, sizing),
+    ).toThrow();
 
     const heavy = (files: readonly string[]) => Object.fromEntries(files.map((file) => [file, 100]));
 
     const crowded = {
-      "next-integration": [PACKAGE, ...Array.from({ length: 8 }, (_, i) => `next/h-${i}.integration.test.ts`)],
+      "next-integration": Array.from({ length: 9 }, (_, i) => `next/h-${i}.integration.test.ts`),
       tooling: [CONSUMER, ".github/ci/h-1.test.ts", ".github/ci/h-2.test.ts"],
     };
 
     expect(() =>
-      select(crowded, {
-        "next-integration": { most: 9, limit: 100 },
-        tooling: { most: 3, limit: 100 },
-        table: heavy([...crowded["next-integration"], ...crowded.tooling]),
-      }),
+      select(
+        "push",
+        { "next-integration": () => crowded["next-integration"], tooling: () => crowded.tooling },
+        {
+          "next-integration": { most: 9, limit: 100 },
+          tooling: { most: 3, limit: 100 },
+          table: heavy([...crowded["next-integration"], ...crowded.tooling]),
+        },
+      ),
     ).toThrow();
+  },
+  options,
+);
+
+// Plants, each run once on related.ts and restored: add P2 by path again on any event (red, its list is
+// asked for and it lands on a leg); stop adding P1 on the route (red, no consumer on a route change).
+it.prop(
+  "D1 the select step never asks for or adds P2 by path, on any event, whatever changed, and keeps P1 exactly when the package or the fault's route changed or the run is full",
+  { event: Event, changes: Schema.Array(Change).check(Schema.isMaxLength(6)), extra: Change },
+  ({ event, changes, extra }) => {
+    // At least one package change in half the runs by construction, so both answers are reached.
+    const drawn = [...changes, ...(extra.at % 2 === 0 ? [{ ...extra, kind: "package" as const }] : [])];
+
+    const paths = [...new Set(drawn.map(pathOf))];
+
+    const asked: string[][] = [];
+
+    const integration = "next/packages/a/src/b.integration.test.ts";
+
+    const { record } = run({
+      env: envOf(event, "push"),
+      git: gitOf(paths),
+      list: (args) => {
+        asked.push([...args]);
+
+        // A list that would hand the selector P2 or P1 only if it asked for that file by path.
+        if (args.includes(PACKAGE)) {
+          return [PACKAGE];
+        }
+
+        if (args.includes(CONSUMER)) {
+          return [CONSUMER];
+        }
+
+        return args.includes("next-integration") ? [integration] : [".github/ci/q.test.ts"];
+      },
+    });
+
+    const full = paths.some(isTrigger);
+
+    const wanted = full || drawn.some(keeps);
+
+    expect(asked.filter((args) => args.includes(PACKAGE))).toEqual([]);
+    expect(Object.values(record.legs).flat()).not.toContain(PACKAGE);
+
+    expect(asked.filter((args) => args.includes(CONSUMER))).toHaveLength(wanted ? 1 : 0);
+    expect(Object.values(record.legs).flat().includes(CONSUMER)).toBe(wanted);
+    expect(record.consumer === "").toBe(!wanted);
+    expect(record.consumer === "" ? "" : record.projects[record.consumer]).toBe(wanted ? "tooling" : "");
   },
   options,
 );
@@ -579,6 +653,7 @@ writeFileSync(join(home, "bin", "pnpm"), STAND_IN(process.execPath));
 chmodSync(join(home, "bin", "pnpm"), 0o755);
 
 type Selected = {
+  readonly event: typeof Event.Type;
   readonly changes: readonly Change[];
   readonly trigger: boolean;
   readonly hidden: "none" | "package" | "consumer";
@@ -620,6 +695,7 @@ const selectorRun = (given: Selected) => {
 
   const head = git(["rev-parse", "HEAD"]);
 
+  // P2 is a next-integration file Vitest can list, unless the case hides it.
   const integration = [
     ...(given.hidden === "package" ? [] : [PACKAGE]),
     INTEGRATION_READER,
@@ -651,6 +727,7 @@ const selectorRun = (given: Selected) => {
       HOME: dir,
       GIT_DIR: join(dir, ".git"),
       GIT_CONFIG_NOSYSTEM: "1",
+      GITHUB_EVENT_NAME: given.event,
       BASE: base,
       HEAD: head,
       MOST_INTEGRATION: "5",
@@ -676,10 +753,9 @@ const expectSelector = (given: Selected) => {
 
   const needed = given.trigger || given.changes.some(keeps);
 
-  const hidden = (given.hidden === "package" || given.hidden === "consumer") && needed;
-
-  if (hidden) {
-    // A law Vitest cannot find in its project fails the selector, with no output for the jobs to read.
+  // Only a P1 Vitest cannot list fails the selector, with no output for the jobs to read. A P2 it cannot
+  // list is no selector's business: the receipt of main's full run refuses it (D2).
+  if (given.hidden === "consumer" && needed) {
     expect(run.done.status).not.toBe(0);
     expect(run.lines).toEqual([]);
 
@@ -709,37 +785,37 @@ const expectSelector = (given: Selected) => {
 
   const reached = (universe: readonly string[]) => universe.filter((file) => run.reachable.includes(file));
 
+  // The merge line lists no next-integration file at all (0602); P2 is listed only on a full run of the
+  // other events, as any integration file is, and never added for a package change.
   expect(at("next-integration")).toEqual(
-    [
-      ...new Set([
-        ...(full ? run.integration : reached(run.integration)),
-        ...(readers ? [INTEGRATION_READER] : []),
-        ...(needed ? [PACKAGE] : []),
-      ]),
-    ].toSorted(),
+    given.event === "push"
+      ? [
+          ...new Set([
+            ...(full ? run.integration : reached(run.integration)),
+            ...(readers ? [INTEGRATION_READER] : []),
+          ]),
+        ].toSorted()
+      : [],
   );
 
   expect(at("tooling")).toEqual(
     [...new Set([...(full ? run.tooling : reached(run.tooling)), ...(needed ? [CONSUMER] : [])])].toSorted(),
   );
 
-  expect(printed["archive"]).toBeDefined();
-  expect(printed["consumer"]).toBeDefined();
+  expect(Object.keys(printed).toSorted()).toEqual(["consumer", "files", "legs", "projects", "run"]);
 
   if (needed) {
-    expect(legs[printed["archive"]!]?.split(" ")).toContain(PACKAGE);
-    expect(projects[printed["archive"]!]).toBe("next-integration");
     expect(legs[printed["consumer"]!]?.split(" ")).toContain(CONSUMER);
     expect(projects[printed["consumer"]!]).toBe("tooling");
   } else {
-    expect(printed["archive"]).toBe("");
     expect(printed["consumer"]).toBe("");
   }
 };
 
 it.prop(
-  "D1 the selector, run as CI runs it, selects P2 and P1 exactly for a package or route change or a full run, adds the readers for a package change, and fails when Vitest cannot list one",
+  "D1 the selector, run as CI runs it, selects P1 exactly for a package or route change or a full run, never P2 by path, adds the readers for a package change off the merge line, and fails when Vitest cannot list P1",
   {
+    event: Event,
     changes: Schema.Array(SourceChange).check(Schema.isMaxLength(5)),
     trigger: Schema.Boolean,
     hidden: Schema.Literals(["none", "package", "consumer"]),
@@ -751,6 +827,7 @@ it.prop(
 );
 
 const chosen = (kind: Change["kind"], extra: Partial<Selected> = {}): Selected => ({
+  event: "push",
   changes: [{ kind, word: "a", at: 0 }],
   trigger: false,
   hidden: "none",
@@ -761,18 +838,22 @@ const chosen = (kind: Change["kind"], extra: Partial<Selected> = {}): Selected =
 it.each([
   ["a package source change", chosen("package")],
   ["a package README change alone", chosen("readme")],
-  ["a delivery route change", chosen("route", { changes: [{ kind: "route", word: "a", at: 1 }] })],
-  ["a docs change, which keeps no archive", chosen("docs")],
-  ["a next/ change, which adds the readers and no archive", chosen("next")],
-  ["a rerun trigger, which runs everything and so both laws", chosen("docs", { trigger: true })],
-  ["a package change whose P2 Vitest cannot list", chosen("package", { hidden: "package" })],
+  ["a fault route change", chosen("route", { changes: [{ kind: "route", word: "a", at: 1 }] })],
+  ["a record guard change, which is no route", chosen("record")],
+  ["a docs change, which keeps no P1", chosen("docs")],
+  ["a next/ change, which adds the readers and no P1", chosen("next")],
+  ["a rerun trigger, which runs everything and so P1", chosen("docs", { trigger: true })],
+  ["a package change on a pull request, which lists no integration file", chosen("package", { event: "pull_request" })],
+  ["a route change in a queue group", chosen("route", { event: "merge_group" })],
+  ["a package change whose P2 Vitest cannot list, which no selector reads", chosen("package", { hidden: "package" })],
   ["a route change whose P1 Vitest cannot list", chosen("route", { hidden: "consumer" })],
-  ["a docs change, whose missing P2 is never read", chosen("docs", { hidden: "package" })],
+  ["a docs change, whose missing P1 is never read", chosen("docs", { hidden: "consumer" })],
 ])("scenario: D1 the selector as CI runs it for %s", (_name, given) => expectSelector(given));
 
-// D2. The receipt check judges what the integration step left: the event, the folder, the receipt P2
-// wrote and the Vitest report of the same step. Only P2's own passing, unskipped result proves the four
-// installed-copy refusals and the restored positive, so the receipt alone is never enough.
+// D2. The receipt check, on each numbered leg of main's full run, judges what that leg left: the run's ref
+// and event, Vitest's listing of P2, the leg's own report and the delivery folder, if any. Only P2's own
+// passing, unskipped result proves the four installed-copy refusals and the restored positive, so the
+// receipt alone is never enough. The one leg that ran P2 keeps; the others prove P2 ran elsewhere.
 const sha = Schema.String.check(Schema.isPattern(/^[a-f][a-f0-9]{39}$/));
 
 const hex = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -802,17 +883,21 @@ const STAGES = ["build", "pack", "install", "runtime", "imports", "private", "ty
 
 const REFUSALS = ["source", "parser", "declarations", "workspace"] as const;
 
+const MAIN = "refs/heads/main";
+
+/** The events of main's full run: a push, the hourly catch-up and a hand start. */
+const KEEPING = ["push", "schedule", "workflow_dispatch"] as const;
+
 type Plain = Record<string, any>;
 
 type Given = {
+  ref: string | undefined;
   event: string | undefined;
-  draft: string | undefined;
   head: string;
-  requested: string;
+  listed: string[];
   archive: Uint8Array;
   receipt: Plain;
-  receiptBytes: Uint8Array | undefined;
-  extra: Record<string, Uint8Array>;
+  folder: Record<string, Uint8Array> | null;
   report: Plain;
 };
 
@@ -823,7 +908,8 @@ const exportsOf = (): Plain => ({
   "./package.json": "./package.json",
 });
 
-const reportOf = (others: readonly string[]): Plain => ({
+/** A leg's own report: the other laws it ran, and P2 when it is the one leg that ran it. */
+const reportOf = (others: readonly string[], withPackage: boolean): Plain => ({
   success: true,
   numFailedTests: 0,
   numFailedTestSuites: 0,
@@ -833,46 +919,52 @@ const reportOf = (others: readonly string[]): Plain => ({
       status: "passed",
       assertionResults: [{ status: "passed" }],
     })),
-    { name: `/work/${PACKAGE}`, status: "passed", assertionResults: [{ status: "passed" }, { status: "passed" }] },
+    ...(withPackage
+      ? [{ name: `/work/${PACKAGE}`, status: "passed", assertionResults: [{ status: "passed" }, { status: "passed" }] }]
+      : []),
   ],
 });
 
-const goodDelivery = (head: string, requested: string, content: string, others: readonly string[]): Given => {
+/** The one leg that ran P2: its folder of the archive and the receipt P2 wrote, both heads the run's commit. */
+const goodDelivery = (event: string, head: string, content: string, others: readonly string[]): Given => {
   const archive = text(content);
 
+  const receipt = {
+    source: head,
+    requested: head,
+    archive: ARCHIVE,
+    sha256: hex(archive),
+    versions: { node: "v26.0.0", pnpm: "11.0.0", npm: "11.0.0", compiler: "7.0.0" },
+    exports: exportsOf(),
+    stages: Object.fromEntries(STAGES.map((stage) => [stage, "passed"])),
+    negatives: Object.fromEntries(REFUSALS.map((name) => [name, "refused"])),
+  };
+
   return {
-    event: "pull_request",
-    draft: "false",
+    ref: MAIN,
+    event,
     head,
-    requested,
+    listed: [PACKAGE],
     archive,
-    receipt: {
-      source: head,
-      requested,
-      archive: ARCHIVE,
-      sha256: hex(archive),
-      versions: { node: "v26.0.0", pnpm: "11.0.0", npm: "11.0.0", compiler: "7.0.0" },
-      exports: exportsOf(),
-      stages: Object.fromEntries(STAGES.map((stage) => [stage, "passed"])),
-      negatives: Object.fromEntries(REFUSALS.map((name) => [name, "refused"])),
-    },
-    receiptBytes: undefined,
-    extra: {},
-    report: reportOf(others),
+    receipt,
+    folder: { [ARCHIVE]: archive, "receipt.json": text(`${JSON.stringify(receipt, null, 2)}\n`) },
+    report: reportOf(others, true),
   };
 };
 
-/** The folder the step reads: the archive and the receipt, as bytes, plus anything the case adds. */
-const folderOf = (given: Given): Record<string, Uint8Array> => ({
-  [ARCHIVE]: given.archive,
-  "receipt.json": given.receiptBytes ?? text(`${JSON.stringify(given.receipt, null, 2)}\n`),
-  ...given.extra,
+/** Any other numbered leg: P2 ran elsewhere, so no P2 in its report and no folder. */
+const goodAbsent = (event: string, head: string, others: readonly string[]): Given => ({
+  ...goodDelivery(event, head, "", others),
+  folder: null,
+  report: reportOf(others, false),
 });
 
 type Refused = readonly (typeof reasons)[number][];
 
 const reasons = [
   "event",
+  "discovery",
+  "stray",
   "missing",
   "extra",
   "unreadable",
@@ -885,268 +977,346 @@ const reasons = [
 ] as const;
 
 /** One way to break a good delivery, and the reasons the check may give for it. */
-type Case = readonly [
-  name: string,
-  reasons: Refused,
-  mutate: (given: Given, folder: Record<string, Uint8Array>) => void,
-];
+type Case = readonly [name: string, reasons: Refused, mutate: (given: Given) => void];
 
 const results = (given: Given): Plain[] => given.report["testResults"];
 
 const p2 = (given: Given): Plain => results(given).find((entry) => entry["name"].endsWith(PACKAGE))!;
 
-const refusals = (token: string): Case[] => [
-  ...["push", "workflow_dispatch", "schedule", "", token].map((event): Case => [
+/** Writes a changed receipt into the folder, as P2 would have written it. */
+const rewrite = (given: Given, change: (receipt: Plain) => void) => {
+  change(given.receipt);
+  given.folder = { ...given.folder, "receipt.json": text(JSON.stringify(given.receipt)) };
+};
+
+const files = (given: Given): Record<string, Uint8Array> => given.folder!;
+
+/** What refuses a leg whatever it holds: the run's ref and event, P2's listing and a report that failed. */
+const everyLeg = (token: string): Case[] => [
+  ...[
+    "refs/heads/other",
+    `refs/heads/${token}`,
+    "refs/heads/main2",
+    "refs/pull/1/merge",
+    "refs/tags/main",
+    "main",
+    "",
+  ].map((ref): Case => [`the ref is ${ref || "empty"}`, ["event"], (given) => void (given.ref = ref)]),
+  ["the ref is missing", ["event"], (given) => void (given.ref = undefined)],
+  ...["pull_request", "merge_group", "pull_request_target", "", token].map((event): Case => [
     `the event is ${event || "empty"}`,
     ["event"],
     (given) => void (given.event = event),
   ]),
   ["the event is missing", ["event"], (given) => void (given.event = undefined)],
-  ...["true", "", "False", undefined].map((draft): Case => [
-    `a pull request whose draft is ${draft === undefined ? "missing" : JSON.stringify(draft)}`,
-    ["event"],
-    (given) => void (given.draft = draft),
-  ]),
-  ["the archive is missing", ["missing"], (_given, folder) => void delete folder[ARCHIVE]],
-  ["the receipt is missing", ["missing"], (_given, folder) => void delete folder["receipt.json"]],
+  ["P2 is not listed in next-integration", ["discovery"], (given) => void (given.listed = [])],
   [
-    "the folder is empty",
-    ["missing"],
-    (_given, folder) => {
-      for (const name of Object.keys(folder)) {
-        delete folder[name];
-      }
-    },
+    "another file is listed in its place",
+    ["discovery"],
+    (given) => void (given.listed = [`kalfa/config/src/${token}.integration.test.ts`]),
   ],
-  ["an extra file sits beside them", ["extra"], (_given, folder) => void (folder[`${token}.txt`] = text(token))],
+  [
+    "P2 is listed with another file",
+    ["discovery"],
+    (given) => void (given.listed = [PACKAGE, `next/${token}.test.ts`]),
+  ],
+  ["P2 is listed twice", ["discovery"], (given) => void (given.listed = [PACKAGE, PACKAGE])],
+  ["the report is not a report", ["result"], (given) => void (given.report = { success: true })],
+  ["the report says it did not succeed", ["result"], (given) => void (given.report["success"] = false)],
+  ["the report counts a failed test", ["result"], (given) => void (given.report["numFailedTests"] = 1)],
+  ["the report counts a failed suite", ["result"], (given) => void (given.report["numFailedTestSuites"] = 1)],
+];
+
+/** What P2 and its folder get wrong on the leg that ran it. */
+const keeperRefusals = (token: string): Case[] => [
+  ["P2's folder is missing", ["missing"], (given) => void (given.folder = null)],
+  ["the archive is missing", ["missing"], (given) => void delete files(given)[ARCHIVE]],
+  ["the receipt is missing", ["missing"], (given) => void delete files(given)["receipt.json"]],
+  ["the folder is empty", ["missing"], (given) => void (given.folder = {})],
+  ["an extra file sits beside them", ["extra"], (given) => void (files(given)[`${token}.txt`] = text(token))],
   [
     "the archive has another name",
-    ["missing", "extra"],
-    (_given, folder) => {
-      folder["kalfa-config-0.0.1.tgz"] = folder[ARCHIVE]!;
-      delete folder[ARCHIVE];
+    ["missing"],
+    (given) => {
+      files(given)["kalfa-config-0.0.1.tgz"] = files(given)[ARCHIVE]!;
+      delete files(given)[ARCHIVE];
     },
   ],
-  ["the receipt is not JSON", ["unreadable"], (_given, folder) => void (folder["receipt.json"] = text(`{${token}`))],
+  ["the receipt is not JSON", ["unreadable"], (given) => void (files(given)["receipt.json"] = text(`{${token}`))],
   [
     "the archive bytes changed",
     ["digest"],
-    (given, folder) => void (folder[ARCHIVE] = text(`${new TextDecoder().decode(given.archive)}!`)),
+    (given) => void (files(given)[ARCHIVE] = text(`${new TextDecoder().decode(given.archive)}!`)),
   ],
   [
     "the receipt names another digest",
     ["digest"],
-    (given, folder) => {
-      given.receipt["sha256"] = hex(text(`${new TextDecoder().decode(given.archive)}?`));
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    (given) =>
+      rewrite(given, (receipt) => void (receipt["sha256"] = hex(text(`${new TextDecoder().decode(given.archive)}?`)))),
   ],
   [
     "the receipt's source is not the commit checked out",
     ["source"],
-    (given, folder) => {
-      given.receipt["source"] = other(given.head);
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    (given) => rewrite(given, (receipt) => void (receipt["source"] = other(given.head))),
   ],
   [
-    "the receipt's requested head is not the event's",
+    "the receipt's requested head is not the run's commit",
     ["requested"],
-    (given, folder) => {
-      given.receipt["requested"] = other(given.requested);
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    (given) => rewrite(given, (receipt) => void (receipt["requested"] = other(given.head))),
   ],
   [
-    "source and requested are swapped",
-    ["source", "requested"],
-    (given, folder) => {
-      given.receipt["source"] = given.requested;
-      given.receipt["requested"] = given.head;
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    "source and requested are both another commit",
+    ["source"],
+    (given) =>
+      rewrite(given, (receipt) => {
+        receipt["source"] = other(given.head);
+        receipt["requested"] = other(given.head);
+      }),
   ],
   ...STAGES.flatMap((stage): Case[] => [
     [
       `the ${stage} stage failed`,
       ["stage", "unreadable"],
-      (given, folder) => {
-        given.receipt["stages"][stage] = "failed";
-        folder["receipt.json"] = text(JSON.stringify(given.receipt));
-      },
+      (given) => rewrite(given, (receipt) => void (receipt["stages"][stage] = "failed")),
     ],
     [
       `the ${stage} stage is not recorded`,
       ["stage", "unreadable"],
-      (given, folder) => {
-        delete given.receipt["stages"][stage];
-        folder["receipt.json"] = text(JSON.stringify(given.receipt));
-      },
+      (given) => rewrite(given, (receipt) => void delete receipt["stages"][stage]),
     ],
   ]),
+  [
+    "a stage no one asked for is recorded",
+    ["stage", "unreadable"],
+    (given) => rewrite(given, (receipt) => void (receipt["stages"]["extra"] = "passed")),
+  ],
+  [
+    "a refusal no one asked for is recorded",
+    ["stage", "unreadable"],
+    (given) => rewrite(given, (receipt) => void (receipt["negatives"]["extra"] = "refused")),
+  ],
   ...REFUSALS.flatMap((name): Case[] => [
     [
       `the ${name} refusal did not happen`,
       ["stage", "unreadable"],
-      (given, folder) => {
-        given.receipt["negatives"][name] = "accepted";
-        folder["receipt.json"] = text(JSON.stringify(given.receipt));
-      },
+      (given) => rewrite(given, (receipt) => void (receipt["negatives"][name] = "accepted")),
     ],
     [
       `the ${name} refusal is not recorded`,
       ["stage", "unreadable"],
-      (given, folder) => {
-        delete given.receipt["negatives"][name];
-        folder["receipt.json"] = text(JSON.stringify(given.receipt));
-      },
+      (given) => rewrite(given, (receipt) => void delete receipt["negatives"][name]),
     ],
   ]),
   ...["./App", "./Load", "./package.json"].map((key): Case => [
     `the export ${key} is gone`,
     ["exports", "unreadable"],
-    (given, folder) => {
-      delete given.receipt["exports"][key];
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    (given) => rewrite(given, (receipt) => void delete receipt["exports"][key]),
   ]),
   [
     "an export the package does not publish is listed",
     ["exports", "unreadable"],
-    (given, folder) => {
-      given.receipt["exports"]["./Extra"] = { types: "./dist/Extra.d.ts", default: "./dist/Extra.js" };
-      folder["receipt.json"] = text(JSON.stringify(given.receipt));
-    },
+    (given) =>
+      rewrite(
+        given,
+        (receipt) => void (receipt["exports"]["./Extra"] = { types: "./dist/Extra.d.ts", default: "./dist/Extra.js" }),
+      ),
   ],
   [
-    "P2 is not in the report",
-    ["result", "unreadable"],
+    "P2 is not in the leg's report, though the folder is there",
+    ["stray"],
     (given) => void (given.report["testResults"] = results(given).filter((entry) => !entry["name"].endsWith(PACKAGE))),
   ],
-  [
-    "P2 is in the report twice",
-    ["result", "unreadable"],
-    (given) => void results(given).push(structuredClone(p2(given))),
-  ],
+  ["P2 is in the report twice", ["result"], (given) => void results(given).push(structuredClone(p2(given)))],
   ...["failed", "skipped", "pending", "todo"].flatMap((status): Case[] => [
-    [`P2's file result is ${status}`, ["result", "unreadable"], (given) => void (p2(given)["status"] = status)],
+    [`P2's file result is ${status}`, ["result"], (given) => void (p2(given)["status"] = status)],
     [
       `one of P2's assertions is ${status}`,
-      ["result", "unreadable"],
+      ["result"],
       (given) => void (p2(given)["assertionResults"][1]["status"] = status),
     ],
   ]),
-  ["P2 ran no assertion", ["result", "unreadable"], (given) => void (p2(given)["assertionResults"] = [])],
-  ["the report says it did not succeed", ["result", "unreadable"], (given) => void (given.report["success"] = false)],
-  ["the report counts a failed test", ["result", "unreadable"], (given) => void (given.report["numFailedTests"] = 1)],
+  ["P2 ran no assertion", ["result"], (given) => void (p2(given)["assertionResults"] = [])],
+];
+
+/** What a leg that did not run P2 gets wrong. */
+const absentRefusals = (token: string): Case[] => [
   [
-    "the report counts a failed suite",
-    ["result", "unreadable"],
-    (given) => void (given.report["numFailedTestSuites"] = 1),
+    "a folder with the archive and receipt is there",
+    ["stray"],
+    (given) => void (given.folder = { [ARCHIVE]: text(token), "receipt.json": text("{}") }),
+  ],
+  ["an empty folder is there", ["stray"], (given) => void (given.folder = {})],
+  ["a stray file is there", ["stray"], (given) => void (given.folder = { [`${token}.txt`]: text(token) })],
+  [
+    "P2 is in the report twice, with no folder",
+    ["result"],
+    (given) =>
+      void (given.report["testResults"] = [
+        ...results(given),
+        ...Array.from({ length: 2 }, () => ({
+          name: `/work/${PACKAGE}`,
+          status: "passed",
+          assertionResults: [{ status: "passed" }],
+        })),
+      ]),
+  ],
+  [
+    "P2 failed in the report, with no folder",
+    ["result"],
+    (given) =>
+      void (given.report["testResults"] = [
+        ...results(given),
+        { name: `/work/${PACKAGE}`, status: "failed", assertionResults: [{ status: "failed" }] },
+      ]),
+  ],
+  [
+    "P2 was skipped in the report, with no folder",
+    ["result"],
+    (given) =>
+      void (given.report["testResults"] = [
+        ...results(given),
+        { name: `/work/${PACKAGE}`, status: "skipped", assertionResults: [{ status: "skipped" }] },
+      ]),
   ],
 ];
 
-const input = (given: Given, folder: Record<string, Uint8Array>) => ({
+const input = (given: Given) => ({
+  ref: given.ref,
   event: given.event,
-  draft: given.draft,
   head: given.head,
-  requested: given.requested,
-  folder,
+  listed: given.listed,
+  folder: given.folder,
   report: given.report,
 });
 
+// Plants, each run once on related.ts and restored: accept a pull request or queue event (red), a branch
+// ref (red), P2 missing from the listing (red); keep with a folder on a leg whose report has no P2, or
+// keep with P2 in the report and no folder (red); a digest mismatch, `source` or `requested` other than the
+// run's commit, a failed stage, a missing refusal, a skipped or duplicated P2 (each red); say `absent`
+// for a leg with a folder, or without checking the listing (red).
 it.prop(
-  "D2 the receipt check keeps only a ready or queue event, a folder of exactly the archive and receipt, a receipt whose digest, commits, stages, refusals and exports agree, and P2 once, passed and unskipped; every other delivery is refused for a named reason",
+  "D2 the receipt check keeps only on main's ref and a push, schedule or hand-start event, with P2 listed alone and passed once and a folder of exactly the archive and receipt whose digest and both commits agree; says absent only when the report holds no P2 and no folder is there; every other input is refused for a named reason",
   {
     head: sha,
-    requested: sha,
     content: Schema.String,
     token: word,
     others: Schema.Array(word).check(Schema.isMaxLength(3)),
+    event: Schema.Literals(KEEPING),
   },
-  ({ head, requested, content, token, others }) => {
-    // Two different commits, as a merge commit and a pull request head are, even once shrunk.
-    const good = goodDelivery(head, requested === head ? other(head) : requested, content, others);
+  ({ head, content, token, others, event }) => {
+    // Kept on every event of the full run, with `source` and `requested` both the run's commit.
+    for (const each of KEEPING) {
+      const good = goodDelivery(each, head, content, others);
 
-    // Kept: a ready pull request, a queue group with its own draft value, and one commit named twice.
-    for (const [event, draft] of [
-      ["pull_request", "false"],
-      ["merge_group", ""],
-      ["merge_group", undefined],
-    ] as const) {
-      const made = structuredClone(good);
-      const kept = checkDelivery(input({ ...made, event, draft }, folderOf(made)));
+      expect(checkDelivery(input(good))).toEqual({ _tag: "kept", sha256: hex(good.archive), source: head });
 
-      expect(kept).toEqual({ _tag: "kept", sha256: hex(good.archive), source: head });
+      expect(checkDelivery(input(goodAbsent(each, head, others)))).toEqual({ _tag: "absent" });
     }
 
-    const same = goodDelivery(head, head, content, others);
+    // The one thing wrong in each refused delivery is the only difference from the kept (or absent) one.
+    const refuse = (good: Given, cases: readonly Case[]) => {
+      for (const [name, allowed, mutate] of cases) {
+        const given = structuredClone(good);
 
-    expect(checkDelivery(input(same, folderOf(same)))._tag).toBe("kept");
+        mutate(given);
 
-    // The one thing wrong in each refused delivery is the only difference from the kept one.
-    for (const [name, allowed, mutate] of refusals(token)) {
-      const given = structuredClone(good);
-      given.archive = good.archive;
+        const verdict = checkDelivery(input(given));
 
-      const folder = folderOf(given);
+        expect(verdict._tag, name).toBe("refused");
+        expect(allowed, name).toContain(verdict._tag === "refused" ? verdict.reason : undefined);
+      }
+    };
 
-      mutate(given, folder);
+    refuse(goodDelivery(event, head, content, others), [...everyLeg(token), ...keeperRefusals(token)]);
 
-      const verdict = checkDelivery(input(given, folder));
-
-      expect(verdict._tag, name).toBe("refused");
-      expect(allowed, name).toContain(verdict._tag === "refused" ? verdict.reason : undefined);
-    }
+    refuse(goodAbsent(event, head, others), [...everyLeg(token), ...absentRefusals(token)]);
   },
   options,
 );
 
-// The same check as the step runs it: `node related.ts --receipt` reads RUNNER_TEMP's folder and report
-// and the event from the environment. Each run starts a process, so a handful of runs.
+// The same check as the step runs it: `node related.ts --receipt` reads RUNNER_TEMP's folder and report,
+// lists P2 through Vitest (the stand-in above) and reads the runner's own ref, event and commit. A decoy
+// variable sits beside each, so a step that read a name a workflow could set would fail. Each run starts a
+// process, so a handful of runs. Plants, each run once on related.ts and restored: read `process.env.HEAD`
+// for the commit (red); read `process.env.EVENT` for the event (red); print kept=true for a leg with no
+// folder (red).
 it.prop(
-  "D2 the receipt step exits 0 and prints the digest for a good delivery, and exits 1 for a digest, folder, event or requested-head fault",
+  "D2 the receipt step, run as a leg runs it, exits 0 and prints kept=true with the digest for the keeping leg, exits 0 and prints kept=false for another leg, and exits 1 printing no kept for any refusal",
   {
     head: sha,
-    requested: sha,
     content: Schema.String,
-    fault: Schema.Literals(["none", "digest", "extra", "push", "requested"]),
+    leg: Schema.Literals(["keeper", "absent", "digest", "extra", "stray", "event", "ref", "discovery"]),
+    event: Schema.Literals(KEEPING),
     others: Schema.Array(word).check(Schema.isMaxLength(2)),
   },
-  ({ head, requested, content, fault, others }) => {
-    const given = goodDelivery(head, requested, content, others);
+  ({ head, content, leg, event, others }) => {
+    const given =
+      leg === "absent" || leg === "stray"
+        ? goodAbsent(event, head, others)
+        : goodDelivery(event, head, content, others);
 
     const temp = mkdtempSync(join(tmpdir(), "related-receipt-"));
 
     const folder = join(temp, "kalfa-config-package");
 
-    mkdirSync(folder);
-    writeFileSync(join(folder, ARCHIVE), fault === "digest" ? text(`${content}!`) : given.archive);
-    writeFileSync(join(folder, "receipt.json"), JSON.stringify(given.receipt));
-    writeFileSync(join(temp, "related.json"), JSON.stringify(given.report));
+    if (given.folder !== null || leg === "stray") {
+      mkdirSync(folder);
+    }
 
-    if (fault === "extra") {
+    if (given.folder !== null) {
+      writeFileSync(join(folder, ARCHIVE), leg === "digest" ? text(`${content}!`) : given.archive);
+      writeFileSync(join(folder, "receipt.json"), JSON.stringify(given.receipt));
+    }
+
+    if (leg === "extra" || leg === "stray") {
       writeFileSync(join(folder, "other.txt"), "x");
     }
+
+    writeFileSync(join(temp, "results.json"), JSON.stringify(given.report));
+
+    writeFileSync(
+      join(temp, "model.json"),
+      JSON.stringify({
+        root: ROOT,
+        universe: { "next-integration": leg === "discovery" ? [INTEGRATION_READER] : [PACKAGE, INTEGRATION_READER] },
+        reach: [],
+      }),
+    );
+
+    const out = join(temp, "out");
 
     const done = spawnSync(process.execPath, [fileURLToPath(new URL("./related.ts", import.meta.url)), "--receipt"], {
       encoding: "utf8",
       env: {
-        PATH: process.env["PATH"],
+        PATH: `${join(home, "bin")}:${process.env["PATH"]}`,
         HOME: temp,
         RUNNER_TEMP: temp,
-        EVENT: fault === "push" ? "push" : "pull_request",
-        DRAFT: "false",
-        HEAD: head,
-        REQUESTED: fault === "requested" ? other(requested) : requested,
+        GITHUB_REF: leg === "ref" ? "refs/heads/other" : MAIN,
+        GITHUB_EVENT_NAME: leg === "event" ? "pull_request" : event,
+        GITHUB_SHA: head,
+        GITHUB_OUTPUT: out,
+        STAND_IN_MODEL: join(temp, "model.json"),
+        // Names a workflow could set: the step reads the runner's own and none of these.
+        EVENT: "pull_request",
+        HEAD: other(head),
+        REQUESTED: other(head),
       },
     });
 
-    // The digest is printed for a kept delivery and for no other.
-    expect(done.status, done.stderr).toBe(fault === "none" ? 0 : 1);
-    expect(done.stdout.includes(hex(given.archive))).toBe(fault === "none");
+    const printed = existsSync(out) ? readFileSync(out, "utf8").split("\n").filter(Boolean) : [];
+
+    const kept = leg === "keeper";
+
+    const passed = kept || leg === "absent";
+
+    expect(done.status, done.stderr).toBe(passed ? 0 : 1);
+
+    // The digest is printed for a kept delivery and for no other; the output says kept or not kept, and
+    // a refusal prints none.
+    expect(done.stdout.includes(hex(given.archive))).toBe(kept);
+    expect(printed).toEqual(kept ? ["kept=true"] : leg === "absent" ? ["kept=false"] : []);
   },
-  { arbitrary: { seed: 119120, runs: 10, size: 100 } },
+  { arbitrary: { seed: 119120, runs: 16, size: 100 } },
 );
 
 // D5. The fault decision: P1 is proven only when the faulted run fails for the export, the manifest's

@@ -132,10 +132,10 @@ it.prop(
   { arbitrary: { seed: 119120, runs: 400, size: 100 } },
 );
 
-// T1076 D3 and D4, with Q1's negative cases. The real check.yaml must hold the three delivery steps
-// of the related job and the two new select outputs, and each isolated fault is given to the real,
-// accepted workflow alone, so another rule's error cannot mask it. The original generated fault
-// property above and its input domain stay as they are.
+// T1076 D3 and D4, with Q1's negative cases, after decision 0602: main's full run keeps the archive, so
+// the real check.yaml holds the consumer fault step and the one new select output, and no receipt and no
+// archive upload. Each isolated fault is given to the real, accepted workflow alone, so another rule's
+// error cannot mask it. The original generated fault property above and its input domain stay as they are.
 const READY =
   "(github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft))";
 
@@ -184,55 +184,75 @@ const swapped = (text: unknown, from: string, to: string): string => {
   return after;
 };
 
-it("scenario: D3 the real workflow has one receipt step, one consumer fault step and one archive upload, in related alone and in order", () => {
+/** The two steps this lane kept on the merge line before 0602 moved the keep to main's full run. */
+const OLD_RECEIPT = (): Step => ({
+  name: "package receipt",
+  id: "receipt",
+  if: `success() && ${READY} && needs.select.outputs.archive == matrix.shard && steps.integration.outcome == 'success'`,
+  env: {
+    EVENT: `\${{ github.event_name }}`,
+    DRAFT: `\${{ github.event.pull_request.draft }}`,
+    HEAD: `\${{ github.sha }}`,
+    REQUESTED: `\${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}`,
+  },
+  run: "node .github/ci/related.ts --receipt",
+});
+
+const OLD_ARCHIVE = (): Step => ({
+  name: "package archive",
+  if: `success() && ${READY} && needs.select.outputs.archive == matrix.shard && steps.receipt.outcome == 'success'`,
+  uses: "actions/upload-artifact@v7",
+  with: {
+    name: `kalfa-config-\${{ github.sha }}-attempt-\${{ github.run_attempt }}`,
+    path: ARCHIVE_PATHS.join("\n"),
+    "if-no-files-found": "error",
+    "retention-days": 90,
+  },
+});
+
+it("scenario: D3 the real workflow has one consumer fault step in related alone, after tooling, and no receipt and no archive upload", () => {
   expect(lintWorkflow(text)).toEqual([]);
 
   const workflow = parse(text);
 
   const related: Step[] = workflow.jobs.related.steps;
 
-  const receipt = stepOf(workflow, "related", "package receipt");
-
   const fault = stepOf(workflow, "related", "consumer fault");
 
-  const archive = stepOf(workflow, "related", "package archive");
-
-  const order = ["integration", "package receipt", "tooling", "consumer fault", "package archive", "results"].map(
-    (name) => related.findIndex((candidate) => candidate["name"] === name),
+  const order = ["integration", "tooling", "consumer fault", "results"].map((name) =>
+    related.findIndex((candidate) => candidate["name"] === name),
   );
 
   expect(order.every((at) => at >= 0)).toBe(true);
   expect(order).toEqual(order.toSorted((a, b) => a - b));
 
+  // The fault step is related's alone; no job of check.yaml holds a receipt or an archive upload, and
+  // nothing uploads a name starting `kalfa-config-`: main's full run keeps the archive (0602).
   for (const [name, job] of Object.entries<Step>(workflow.jobs)) {
-    const named = (job["steps"] as Step[]).filter((candidate) =>
-      ["package receipt", "consumer fault", "package archive"].includes(candidate["name"]),
-    );
+    const steps: Step[] = job["steps"] ?? [];
 
-    expect(named.length, `${name} holds the delivery steps only if it is related`).toBe(name === "related" ? 3 : 0);
+    expect(
+      steps.filter((candidate) => candidate["name"] === "consumer fault").length,
+      `${name} holds the consumer fault only if it is related`,
+    ).toBe(name === "related" ? 1 : 0);
+
+    expect(
+      steps.filter((candidate) => String(candidate["run"] ?? "").includes("--receipt")),
+      `${name} runs no receipt`,
+    ).toEqual([]);
+
+    expect(
+      steps.filter((candidate) => String(candidate["with"]?.["name"] ?? "").startsWith("kalfa-config-")),
+      `${name} uploads no archive`,
+    ).toEqual([]);
+
+    expect(
+      steps.filter((candidate) => candidate["name"] === "package receipt" || candidate["name"] === "package archive"),
+      `${name} has no package receipt or package archive step`,
+    ).toEqual([]);
   }
 
-  // The receipt: ready pull request or queue group, the owning leg, after a green integration step.
-  expect(stepOf(workflow, "related", "integration")["id"]).toBe("integration");
-  expect(receipt["id"]).toBe("receipt");
-  expect(receipt["run"]).toBe("node .github/ci/related.ts --receipt");
-  expect(receipt["continue-on-error"]).toBeUndefined();
-
-  for (const part of [
-    "success()",
-    READY,
-    "needs.select.outputs.archive==matrix.shard",
-    "steps.integration.outcome=='success'",
-  ]) {
-    expect(squash(receipt["if"]), `receipt needs ${part}`).toContain(squash(part));
-  }
-
-  expect(receipt["env"]).toEqual({
-    EVENT: `\${{ github.event_name }}`,
-    DRAFT: `\${{ github.event.pull_request.draft }}`,
-    HEAD: `\${{ github.sha }}`,
-    REQUESTED: `\${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha || github.sha }}`,
-  });
+  expect(stepOf(workflow, "related", "integration")["id"]).toBeUndefined();
 
   // The consumer fault: the leg that owns P1, at full depth, in the tooling limit, after tooling.
   expect(fault["run"]).toBe("node .github/ci/related.ts --fault");
@@ -244,118 +264,58 @@ it("scenario: D3 the real workflow has one receipt step, one consumer fault step
     expect(squash(fault["if"]), `fault needs ${part}`).toContain(squash(part));
   }
 
-  // The upload: the owning leg, after the receipt passed, exactly the archive and the receipt.
-  expect(archive["uses"]).toBe("actions/upload-artifact@v7");
-  expect(archive["continue-on-error"]).toBeUndefined();
-
-  for (const part of [
-    "success()",
-    READY,
-    "needs.select.outputs.archive==matrix.shard",
-    "steps.receipt.outcome=='success'",
-  ]) {
-    expect(squash(archive["if"]), `upload needs ${part}`).toContain(squash(part));
-  }
-
-  expect(archive["with"]["name"]).toBe(`kalfa-config-\${{ github.sha }}-attempt-\${{ github.run_attempt }}`);
-  expect(
-    String(archive["with"]["path"])
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => line.trim()),
-  ).toEqual(ARCHIVE_PATHS);
-  expect(archive["with"]["if-no-files-found"]).toBe("error");
-  expect(typeof archive["with"]["retention-days"]).toBe("number");
-  expect(Object.keys(archive["with"]).toSorted()).toEqual(["if-no-files-found", "name", "path", "retention-days"]);
-
-  // No token reaches the receipt, the fault or the upload.
-  expect(JSON.stringify([receipt, fault, archive])).not.toMatch(/token/i);
+  // No token reaches the fault, and no step of related is the old receipt's.
+  expect(JSON.stringify(fault)).not.toMatch(/token/i);
+  expect(JSON.stringify(workflow.jobs.related)).not.toContain("select.outputs.archive");
 });
 
-it("scenario: D4 select prints exactly the six outputs from its set step, and related reads them through needs only", () => {
+it("scenario: D4 select prints exactly the five outputs from its set step, and related reads them through needs only", () => {
   expect(lintWorkflow(text)).toEqual([]);
 
   const workflow = parse(text);
 
-  const six = ["archive", "consumer", "files", "legs", "projects", "run"];
+  const five = ["consumer", "files", "legs", "projects", "run"];
 
-  expect(Object.keys(workflow.jobs.select.outputs).toSorted()).toEqual(six);
+  expect(Object.keys(workflow.jobs.select.outputs).toSorted()).toEqual(five);
 
-  for (const key of six) {
+  for (const key of five) {
     expect(workflow.jobs.select.outputs[key]).toBe(`\${{ steps.set.outputs.${key} }}`);
   }
 
   const read = JSON.stringify(workflow.jobs.related);
 
   expect(read).not.toMatch(/steps\.set\./);
-  expect(read).toContain("needs.select.outputs.archive");
   expect(read).toContain("needs.select.outputs.consumer");
 });
 
-// R1 is the related guard's: the three steps, the two outputs and the command list. Q1 is the record
-// guard's: the one upload tuple it permits and no other new upload. Each fault names the guard that
-// must refuse it.
-type Delivery = (workflow: any) => void;
+// R1 is the related guard's: the fault step, the one new output and the command list. Q1 is the record
+// guard, back at its parent's bytes: check.yaml uploads the record, the reports and the timings, and no
+// archive. Each fault names the guard that must refuse it. Plants, each run once on the real file and
+// restored: the old `package receipt` or `package archive` step put back (red for each), and the `archive`
+// output put back (red).
+type Edit = (workflow: any) => void;
 
-const R1_FAULTS: Record<string, Delivery> = {
-  output_archive_missing: (w) => delete w.jobs.select.outputs.archive,
+const R1_FAULTS: Record<string, Edit> = {
   output_consumer_missing: (w) => delete w.jobs.select.outputs.consumer,
-  output_archive_other_step: (w) => (w.jobs.select.outputs.archive = `\${{ steps.other.outputs.archive }}`),
   output_consumer_other_step: (w) => (w.jobs.select.outputs.consumer = `\${{ steps.other.outputs.consumer }}`),
-  output_ninth: (w) => (w.jobs.select.outputs.ninth = `\${{ steps.set.outputs.ninth }}`),
+  output_archive_back: (w) => (w.jobs.select.outputs.archive = `\${{ steps.set.outputs.archive }}`),
+  output_sixth: (w) => (w.jobs.select.outputs.sixth = `\${{ steps.set.outputs.sixth }}`),
   output_read_from_set: (w) => {
-    const receipt = stepOf(w, "related", "package receipt");
+    const fault = stepOf(w, "related", "consumer fault");
 
-    receipt["if"] = swapped(receipt["if"], "needs.select.outputs.archive", "steps.set.outputs.archive");
+    fault["if"] = swapped(fault["if"], "needs.select.outputs.consumer", "steps.set.outputs.consumer");
   },
-  integration_id_missing: (w) => delete stepOf(w, "related", "integration")["id"],
-  receipt_missing: (w) => {
+  old_receipt_back: (w) => {
     const steps: Step[] = w.jobs.related.steps;
 
-    steps.splice(steps.indexOf(stepOf(w, "related", "package receipt")), 1);
+    steps.splice(steps.indexOf(stepOf(w, "related", "integration")) + 1, 0, OLD_RECEIPT());
   },
-  receipt_command: (w) => (stepOf(w, "related", "package receipt")["run"] = "node .github/ci/related.ts"),
-  receipt_event_env: (w) => (stepOf(w, "related", "package receipt")["env"].EVENT = "workflow_dispatch"),
-  receipt_draft_env: (w) => (stepOf(w, "related", "package receipt")["env"].DRAFT = "false"),
-  receipt_head: (w) =>
-    (stepOf(w, "related", "package receipt")["env"].HEAD = `\${{ github.event.pull_request.head.sha }}`),
-  receipt_requested: (w) => (stepOf(w, "related", "package receipt")["env"].REQUESTED = `\${{ github.sha }}`),
-  receipt_swapped_commits: (w) => {
-    const env = stepOf(w, "related", "package receipt")["env"];
-
-    [env.HEAD, env.REQUESTED] = [env.REQUESTED, env.HEAD];
-  },
-  receipt_no_success: (w) => {
-    const receipt = stepOf(w, "related", "package receipt");
-
-    receipt["if"] = without(receipt["if"], "success() && ");
-  },
-  receipt_no_event_clause: (w) => {
-    const receipt = stepOf(w, "related", "package receipt");
-
-    receipt["if"] = without(receipt["if"], ` && ${READY}`);
-  },
-  receipt_unselected_leg: (w) => {
-    const receipt = stepOf(w, "related", "package receipt");
-
-    receipt["if"] = swapped(receipt["if"], "needs.select.outputs.archive == matrix.shard", "true");
-  },
-  receipt_no_integration_outcome: (w) => {
-    const receipt = stepOf(w, "related", "package receipt");
-
-    receipt["if"] = without(receipt["if"], " && steps.integration.outcome == 'success'");
-  },
-  receipt_soft: (w) => (stepOf(w, "related", "package receipt")["continue-on-error"] = true),
-  receipt_token: (w) => (stepOf(w, "related", "package receipt")["env"].GITHUB_TOKEN = `\${{ github.token }}`),
-  receipt_before_integration: (w) =>
-    place(w, "related", stepOf(w, "related", "package receipt"), stepOf(w, "related", "integration"), "before"),
-  receipt_after_tooling: (w) =>
-    place(w, "related", stepOf(w, "related", "package receipt"), stepOf(w, "related", "tooling"), "after"),
   fault_missing: (w) => {
     const steps: Step[] = w.jobs.related.steps;
 
     steps.splice(steps.indexOf(stepOf(w, "related", "consumer fault")), 1);
   },
+  fault_renamed: (w) => (stepOf(w, "related", "consumer fault")["name"] = "package receipt"),
   fault_command: (w) => (stepOf(w, "related", "consumer fault")["run"] = "node .github/ci/related.ts"),
   fault_no_success: (w) => {
     const fault = stepOf(w, "related", "consumer fault");
@@ -373,78 +333,35 @@ const R1_FAULTS: Record<string, Delivery> = {
   fault_token: (w) => (stepOf(w, "related", "consumer fault")["env"].GITHUB_TOKEN = `\${{ github.token }}`),
   fault_before_tooling: (w) =>
     place(w, "related", stepOf(w, "related", "consumer fault"), stepOf(w, "related", "tooling"), "before"),
-  archive_missing: (w) => {
-    const steps: Step[] = w.jobs.related.steps;
+  fault_twice: (w) => {
+    const fault = stepOf(w, "related", "consumer fault");
 
-    steps.splice(steps.indexOf(stepOf(w, "related", "package archive")), 1);
+    w.jobs.related.steps.splice(w.jobs.related.steps.indexOf(fault), 0, structuredClone(fault));
   },
 };
 
-const Q1_FAULTS: Record<string, Delivery> = {
-  archive_wildcard_path: (w) =>
-    (stepOf(w, "related", "package archive")["with"].path = `\${{ runner.temp }}/kalfa-config-package/**`),
-  archive_third_path: (w) =>
-    (stepOf(w, "related", "package archive")["with"].path = [...ARCHIVE_PATHS, `\${{ runner.temp }}/other.json`].join(
-      "\n",
-    )),
-  archive_whole_folder: (w) =>
-    (stepOf(w, "related", "package archive")["with"].path = `\${{ runner.temp }}/kalfa-config-package`),
-  archive_no_archive_path: (w) => (stepOf(w, "related", "package archive")["with"].path = ARCHIVE_PATHS[1]),
-  archive_no_receipt_path: (w) => (stepOf(w, "related", "package archive")["with"].path = ARCHIVE_PATHS[0]),
-  archive_missing_warns: (w) => (stepOf(w, "related", "package archive")["with"]["if-no-files-found"] = "warn"),
-  archive_missing_ignored: (w) => (stepOf(w, "related", "package archive")["with"]["if-no-files-found"] = "ignore"),
-  archive_name_of_another_kind: (w) =>
-    (stepOf(w, "related", "package archive")["with"].name = `tested-\${{ github.sha }}`),
-  archive_name_without_attempt: (w) =>
-    (stepOf(w, "related", "package archive")["with"].name = `kalfa-config-\${{ github.sha }}`),
-  archive_no_success: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    archive["if"] = without(archive["if"], "success() && ");
-  },
-  archive_no_event_clause: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    archive["if"] = without(archive["if"], ` && ${READY}`);
-  },
-  archive_unselected_leg: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    archive["if"] = swapped(archive["if"], "needs.select.outputs.archive == matrix.shard", "true");
-  },
-  archive_no_receipt_outcome: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    archive["if"] = without(archive["if"], " && steps.receipt.outcome == 'success'");
-  },
-  archive_soft: (w) => (stepOf(w, "related", "package archive")["continue-on-error"] = true),
-  archive_token: (w) => (stepOf(w, "related", "package archive")["with"]["github-token"] = `\${{ github.token }}`),
-  archive_before_receipt: (w) =>
-    place(w, "related", stepOf(w, "related", "package archive"), stepOf(w, "related", "package receipt"), "before"),
-  archive_second_upload: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    w.jobs.related.steps.splice(w.jobs.related.steps.indexOf(archive), 0, structuredClone(archive));
-  },
-  archive_in_another_job: (w) => {
+const Q1_FAULTS: Record<string, Edit> = {
+  old_archive_back: (w) => {
     const steps: Step[] = w.jobs.related.steps;
 
-    const [archive] = steps.splice(steps.indexOf(stepOf(w, "related", "package archive")), 1);
-
-    w.jobs.next.steps.splice(-1, 0, archive);
+    steps.splice(steps.indexOf(stepOf(w, "related", "consumer fault")) + 1, 0, OLD_ARCHIVE());
   },
-  other_upload_beside_the_archive: (w) => {
-    const archive = stepOf(w, "related", "package archive");
-
-    w.jobs.related.steps.splice(w.jobs.related.steps.indexOf(archive) + 1, 0, {
-      ...structuredClone(archive),
+  old_archive_in_next: (w) => void w.jobs.next.steps.splice(-1, 0, OLD_ARCHIVE()),
+  old_archive_in_changes: (w) => void w.jobs.changes.steps.push(OLD_ARCHIVE()),
+  another_kalfa_upload: (w) =>
+    void w.jobs.related.steps.splice(-1, 0, {
+      ...OLD_ARCHIVE(),
       name: "another archive",
-      with: { ...archive["with"], name: `other-\${{ github.sha }}`, path: `\${{ runner.temp }}/other.json` },
-    });
+      with: { ...OLD_ARCHIVE().with, name: `kalfa-config-other`, path: `\${{ runner.temp }}/other.json` },
+    }),
+  archive_upload_soft: (w) => {
+    const archive = { ...OLD_ARCHIVE(), "continue-on-error": true };
+
+    w.jobs.related.steps.splice(-1, 0, archive);
   },
 };
 
-const refusing = (faults: Record<string, Delivery>, guard: "R1" | "Q1") =>
+const refusing = (faults: Record<string, Edit>, guard: "R1" | "Q1") =>
   it.each(Object.entries(faults))(`scenario: ${guard} rejects the isolated delivery fault %s`, (_name, apply) => {
     expect(lintWorkflow(text), "the real workflow is accepted before the fault").toEqual([]);
 

@@ -6,11 +6,11 @@
 // required check, never means zero.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Cause, Effect, FileSystem, Option, Path, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Match, Option, Path, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { isIntegration } from "../../oxlint-plugins/test-names.ts";
 import { rowsAt } from "../../vitest.shards.ts";
@@ -18,28 +18,23 @@ import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
 import { isTrigger, legsOf, whole } from "./proof.ts";
 
-// T1076. The package's tested archive and its root consumer. Vitest's `--changed` follows imports, and
-// P2 (it builds and packs the package) and P1 (it imports the package by name) are not imported by
-// anything a change reaches, so a change to the package or to the route that keeps its archive adds
-// them by path, as `wantsChecklistLaw` adds the checklist fixture.
+// T1076. The package's tested archive and its root consumer. P2 (`PACKAGE`) builds, packs and installs
+// the archive; main's full run keeps it (0602), so the merge line never selects it, and the receipt
+// below judges what each numbered leg of that run left. P1 (`CONSUMER`) imports the package by name,
+// and Vitest's `--changed` follows imports, which no change to the package or to the fault's route
+// reaches, so `wantsConsumerLaw` adds it by path, as `wantsChecklistLaw` adds the checklist fixture.
 const KALFA = "kalfa/config";
 
 const PACKAGE = `${KALFA}/src/Package.integration.test.ts`;
 
 const CONSUMER = "scripts/kalfa-config.test.ts";
 
-/** The paths, beside the package, whose change must run P2 and P1: the route that keeps its archive. */
-const DELIVERY = new Set([
-  ".github/ci/related.ts",
-  ".github/workflows/check.yaml",
-  ".github/ci/workflow-lint/related.ts",
-  ".github/ci/workflow-lint/record.ts",
-]);
+/** The paths, beside the package, whose change must run P1 and its fault: the fault's route. */
+const ROUTE = new Set([".github/ci/related.ts", ".github/workflows/check.yaml", ".github/ci/workflow-lint/related.ts"]);
 
-/** Whether a change keeps the archive: the package (built files aside) or its route, or history unreadable. */
-export const delivered = (paths: readonly string[] | null): boolean =>
-  paths === null ||
-  paths.some((path) => (path.startsWith(`${KALFA}/`) && !path.includes("/dist/")) || DELIVERY.has(path));
+/** Whether a change keeps P1 in the run: the package (built files aside) or the fault's route, or history unreadable. */
+export const wantsConsumerLaw = (paths: readonly string[] | null): boolean =>
+  paths === null || paths.some((path) => (path.startsWith(`${KALFA}/`) && !path.includes("/dist/")) || ROUTE.has(path));
 
 /** Adds a law only after Vitest lists it, alone, in its own project; anything else throws. */
 export const confirmed = (
@@ -134,10 +129,13 @@ const passedClean = (suite: typeof Suite.Type | undefined): boolean =>
 
 export type Delivery =
   | { readonly _tag: "kept"; readonly sha256: string; readonly source: string }
+  | { readonly _tag: "absent" }
   | {
       readonly _tag: "refused";
       readonly reason:
         | "event"
+        | "discovery"
+        | "stray"
         | "missing"
         | "extra"
         | "unreadable"
@@ -151,22 +149,64 @@ export type Delivery =
 
 const refused = (reason: Extract<Delivery, { _tag: "refused" }>["reason"]): Delivery => ({ _tag: "refused", reason });
 
+/** The refs and events whose run is main's full run: a push, the hourly catch-up or a hand start on main. */
+const KEEPS_ON = ["push", "schedule", "workflow_dispatch"];
+
 /**
- * What the receipt step keeps: a ready pull request's or a queue group's delivery folder of exactly the
- * archive and its receipt, whose digest, tested commit, requested head, stages, refusals and export keys
- * agree, beside a Vitest report that holds P2 once, passed and unskipped. The receipt's strings are written
- * whatever happened; only P2's own passing result proves its four refusals and the restored positive.
+ * What the receipt step of one numbered leg of main's full run keeps, judged by that leg's own report.
+ * `kept`: P2 ran here, passed once and unskipped, and the delivery folder holds exactly the archive and
+ * its receipt, whose digest, tested commit, requested head (both the run's commit), stages, refusals and
+ * export keys agree. `absent`: P2 ran on another leg, so this report holds no P2 and no folder is lying
+ * about. Anything else is refused, with the reason. The receipt's strings are written whatever happened;
+ * only P2's own passing result proves its four refusals and the restored positive.
  */
 export const checkDelivery = (input: {
+  /** `GITHUB_REF`, which the runner sets on every step. */
+  readonly ref: string | undefined;
+  /** `GITHUB_EVENT_NAME`. */
   readonly event: string | undefined;
-  readonly draft: string | undefined;
+  /** `GITHUB_SHA`, the commit the leg checked out. */
   readonly head: string;
-  readonly requested: string;
-  readonly folder: Readonly<Record<string, Uint8Array>>;
+  /** What `vitest list --project next-integration <P2>` named. */
+  readonly listed: readonly string[];
+  /** The delivery folder's files, or null when there is no folder. */
+  readonly folder: Readonly<Record<string, Uint8Array>> | null;
+  /** The leg's own Vitest report. */
   readonly report: unknown;
 }): Delivery => {
-  if (!(input.event === "merge_group" || (input.event === "pull_request" && input.draft === "false"))) {
+  if (input.ref !== "refs/heads/main" || input.event === undefined || !KEEPS_ON.includes(input.event)) {
     return refused("event");
+  }
+
+  // Every leg proves P2 is a next-integration file: one leg cannot see the others, so a dropped or
+  // renamed P2 turns every numbered leg red, not silently nothing.
+  if (input.listed.length !== 1 || input.listed[0] !== PACKAGE) {
+    return refused("discovery");
+  }
+
+  const report = decodeReport(input.report);
+
+  if (
+    Result.isFailure(report) ||
+    !report.success.success ||
+    report.success.numFailedTests !== 0 ||
+    report.success.numFailedTestSuites !== 0
+  ) {
+    return refused("result");
+  }
+
+  const mine = suitesOf(report.success, PACKAGE);
+
+  if (mine.length > 1 || (mine.length === 1 && !passedClean(mine[0]))) {
+    return refused("result");
+  }
+
+  if (mine.length === 0) {
+    return input.folder === null ? { _tag: "absent" } : refused("stray");
+  }
+
+  if (input.folder === null) {
+    return refused("missing");
   }
 
   const names = Object.keys(input.folder);
@@ -193,11 +233,12 @@ export const checkDelivery = (input: {
     return refused("digest");
   }
 
+  // On main the run's commit is the only head: what P2 tested and what it was asked for are one.
   if (receipt.source !== input.head) {
     return refused("source");
   }
 
-  if (receipt.requested !== input.requested) {
+  if (receipt.requested !== input.head) {
     return refused("requested");
   }
 
@@ -212,23 +253,6 @@ export const checkDelivery = (input: {
 
   if (!sameKeys(Object.keys(receipt.exports), [...SUBPATHS.map((name) => `./${name}`), "./package.json"])) {
     return refused("exports");
-  }
-
-  const report = decodeReport(input.report);
-
-  if (
-    Result.isFailure(report) ||
-    !report.success.success ||
-    report.success.numFailedTests !== 0 ||
-    report.success.numFailedTestSuites !== 0
-  ) {
-    return refused("result");
-  }
-
-  const mine = suitesOf(report.success, PACKAGE);
-
-  if (mine.length !== 1 || !passedClean(mine[0])) {
-    return refused("result");
   }
 
   return { _tag: "kept", sha256: receipt.sha256, source: receipt.source };
@@ -380,23 +404,15 @@ export const select = (event: string | undefined, lists: Lists, sizing: Sizing) 
     throw new Error("related: the selection must fit check.yaml's related max-parallel of nine legs");
   }
 
-  // P2 and P1 each have one owning leg, in their own project: any other placement is a selector error.
-  const owner = (project: Project, file: string): string => {
-    const owners = Object.keys(legs).filter((leg) => projects[leg] === project && legs[leg]?.includes(file));
+  // P1 has one owning leg, in tooling: any other placement is a selector error. P2 is never added by
+  // path (0602), so no leg owns it.
+  const owners = Object.keys(legs).filter((leg) => projects[leg] === "tooling" && legs[leg]?.includes(CONSUMER));
 
-    if (all.includes(file) && owners.length !== 1) {
-      throw new Error(`related: ${file} must sit on exactly one ${project} leg`);
-    }
+  if (all.includes(CONSUMER) && owners.length !== 1) {
+    throw new Error(`related: ${CONSUMER} must sit on exactly one tooling leg`);
+  }
 
-    return owners[0] ?? "";
-  };
-
-  return {
-    legs,
-    projects,
-    archive: owner("next-integration", PACKAGE),
-    consumer: owner("tooling", CONSUMER),
-  };
+  return { legs, projects, consumer: owners[0] ?? "" };
 };
 
 export const outputs = (selection: ReturnType<typeof select>): string[] => [
@@ -404,7 +420,6 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `legs=${JSON.stringify(Object.keys(selection.legs))}`,
   `files=${JSON.stringify(Object.fromEntries(Object.entries(selection.legs).map(([leg, paths]) => [leg, paths.join(" ")])))}`,
   `projects=${JSON.stringify(selection.projects)}`,
-  `archive=${selection.archive}`,
   `consumer=${selection.consumer}`,
 ];
 
@@ -596,24 +611,20 @@ export const run = (step: Step) => {
 
   const event = env["GITHUB_EVENT_NAME"];
 
-  // P2 and P1 by path, on a full run or a change to the package or its route, and only once Vitest lists
-  // each in its own project. Each list stays lazy, so a project the event does not pick is never listed.
-  const need = full || delivered(changed);
+  // P1 by path, on a full run or a change to the package or the fault's route, and only once Vitest lists
+  // it in tooling. P2 is never added by path: main's full run runs it (0602). Each list stays lazy, so a
+  // project the event does not pick is never listed.
+  const need = full || wantsConsumerLaw(changed);
 
   const lists: Lists = {
     "next-integration": () =>
-      confirmed(
-        withReaders(step.list(["--project", "next-integration", ...narrowed]), [
-          // A reader test reads the parser adapter's location under kalfa/config/src as text.
-          ...(!full && changed?.some((path) => path.startsWith("next/") || path.startsWith("kalfa/"))
-            ? step.list(["--project", "next-integration", ...readers])
-            : []),
-          ...(wantsChecklistLaw(changed) ? [checklistFixture] : []),
-        ]),
-        need ? step.list(["--project", "next-integration", PACKAGE]) : [],
-        PACKAGE,
-        need,
-      ),
+      withReaders(step.list(["--project", "next-integration", ...narrowed]), [
+        // A reader test reads the parser adapter's location under kalfa/config/src as text.
+        ...(!full && changed?.some((path) => path.startsWith("next/") || path.startsWith("kalfa/"))
+          ? step.list(["--project", "next-integration", ...readers])
+          : []),
+        ...(wantsChecklistLaw(changed) ? [checklistFixture] : []),
+      ]),
     tooling: () =>
       confirmed(
         step.list(["--project", "tooling", ...narrowed]),
@@ -644,6 +655,8 @@ export const run = (step: Step) => {
 };
 
 if (import.meta.main && process.argv[2] === "--receipt") {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+
   const directory = process.env["RUNNER_TEMP"];
 
   if (!directory) {
@@ -652,25 +665,49 @@ if (import.meta.main && process.argv[2] === "--receipt") {
 
   const folder = join(directory, "kalfa-config-package");
 
-  const files = Object.fromEntries(
-    readdirSync(folder).map((name) => [name, new Uint8Array(readFileSync(join(folder, name)))]),
-  );
+  // A name that is not a file reads as empty, so a folder named like the archive is a digest fault.
+  const files = existsSync(folder)
+    ? Object.fromEntries(
+        readdirSync(folder, { withFileTypes: true }).map((entry) => [
+          entry.name,
+          entry.isFile() ? new Uint8Array(readFileSync(join(folder, entry.name))) : new Uint8Array(),
+        ]),
+      )
+    : null;
+
+  const results = join(directory, "results.json");
 
   const verdict = checkDelivery({
-    event: process.env["EVENT"],
-    draft: process.env["DRAFT"],
-    head: process.env["HEAD"] ?? "",
-    requested: process.env["REQUESTED"] ?? "",
+    ref: process.env["GITHUB_REF"],
+    event: process.env["GITHUB_EVENT_NAME"],
+    head: process.env["GITHUB_SHA"] ?? "",
+    listed: list(root, ["--project", "next-integration", PACKAGE]),
     folder: files,
-    report: readJson(readFileSync(join(directory, "related.json"), "utf8")),
+    report: existsSync(results) ? readJson(readFileSync(results, "utf8")) : null,
   });
 
-  if (verdict._tag === "refused") {
-    console.error(`related: the package delivery is refused: ${verdict.reason}`);
-    process.exitCode = 1;
-  } else {
-    console.log(`related: kept ${ARCHIVE} sha256 ${verdict.sha256} from ${verdict.source}`);
-  }
+  const keep = (kept: boolean) => {
+    const output = process.env["GITHUB_OUTPUT"];
+
+    if (output) {
+      appendFileSync(output, `kept=${kept}\n`);
+    }
+  };
+
+  Match.valueTags(verdict, {
+    kept: (found) => {
+      console.log(`related: kept ${ARCHIVE} sha256 ${found.sha256} from ${found.source}`);
+      keep(true);
+    },
+    absent: () => {
+      console.log("related: no package archive on this leg: P2 ran elsewhere, and no delivery folder is here");
+      keep(false);
+    },
+    refused: (found) => {
+      console.error(`related: the package delivery is refused: ${found.reason}`);
+      process.exitCode = 1;
+    },
+  });
 } else if (import.meta.main && process.argv[2] === "--fault") {
   NodeRuntime.runMain(
     fault(process.env).pipe(
