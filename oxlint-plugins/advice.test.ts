@@ -819,12 +819,21 @@ const endings = ({ diagnostics }: Report) => {
 };
 
 /**
- * The level a folder's JSON.parse fires are held at where it started: a glob of the warn block is
- * written for a folder one level under a package's `src` (or for `src` itself, or an app's `e2e`), so
- * that folder is the one that has to hold a fire. A clean folder below it advises with it.
+ * The folder that has to hold a JSON.parse fire for `dir` to advise. The warn block's globs are
+ * written for the direct files of a root (`src` or `e2e` of a package, with `/*`), and for a folder
+ * one level under a root with `**`. So a root counts only its own direct files' fires (`directOnly`),
+ * and each folder one level under a root is its own top: a glob that reaches a folder where
+ * JSON.parse blocks today has no fire to show, and the law is red. The same holds for the folders
+ * above the first level (`next`, a package), which hold no fire. A folder below a first-level folder
+ * is not its own top: it advises with that folder, which is at warn from the fold when the block
+ * lists the first-level folder whole.
  */
 const topOf = (dir: string): string =>
-  /^next\/(?:apps|packages|programs)\/[^/]+\/(?:src\/)?[^/]+/.exec(dir)?.[0] ?? dir;
+  /^next\/(?:apps|packages|programs)\/[^/]+\/(?:(?:src|e2e)\/)?[^/]+/.exec(dir)?.[0] ?? dir;
+
+/** A top that counts only its direct files: a root (`src`, `e2e`), or a folder above the first level. */
+const directOnly = (top: string): boolean =>
+  /\/(?:src|e2e)$/.test(top) || !/^next\/(?:apps|packages|programs)\/[^/]+\/[^/]+/.test(top);
 
 describe("Reflect ban L4 each file of next/ ends with the setting the rule held there before", () => {
   // pinned: the real config and the real tree, since the law is about this one file. oxlint 1.90.0's
@@ -834,9 +843,13 @@ describe("Reflect ban L4 each file of next/ ends with the setting the rule held 
   // Then the folders that advise are held to the tree: a JSON.parse fire has to be in the folder a
   // warn glob is written for (topOf), so a glob cannot reach a folder that blocks today and keep the
   // stale warn-line law (T930 L3, per glob) quiet. No list of folders is pinned (0524).
-  // Plants: add "next/packages/libfabrika/**" to the JSON.parse warn block's files; or drop a retry
-  // entry from client/'s block; or set client/'s block to "warn"; or drop JSON.parse from the block
-  // for next/ whole.
+  // The limit, stated as it is: the only folders that advise without a fire of their own are the
+  // subfolders of a first-level folder that the warn block already lists whole with `**`, which
+  // were at warn at the fold too. A root (`src`, `e2e`, a package) counts its direct files only, and
+  // each folder one level under a root is its own top.
+  // Plants: add "next/packages/libfabrika/**" to the JSON.parse warn block's files; or
+  // "next/apps/fabrika/e2e/**" (e2e/node blocks today); or drop a retry entry from client/'s block;
+  // or set client/'s block to "warn"; or drop JSON.parse from the block for next/ whole.
   it("pinned: every folder of next/ ends with JSON.parse and the ban at one level, new folders and client/ at error with both retry entries, and a folder that advises has JSON.parse fires in its tree", () => {
     const git = spawnSync("git", ["ls-files", "next"], { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28 });
     expect(git.status, git.stderr).toBe(0);
@@ -925,7 +938,7 @@ describe("Reflect ban L4 each file of next/ ends with the setting the rule held 
 
       // The tree's own fires: the files a warn folder's top holds, linted with the real config.
       const tops = [...new Set(advising.map(topOf))];
-      const inside = (dir: string, top: string) => dir === top || (!top.endsWith("/src") && dir.startsWith(`${top}/`));
+      const inside = (dir: string, top: string) => dir === top || (!directOnly(top) && dir.startsWith(`${top}/`));
       const files = tracked.filter((file) => tops.some((top) => inside(dirname(file), top)));
 
       const real = spawnSync(
