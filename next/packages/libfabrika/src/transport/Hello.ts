@@ -9,9 +9,9 @@ import * as Base64Url from "effect/encoding/Base64Url";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
+import { Admissions } from "./Admissions.ts";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
-import type { Admission } from "./Wire.ts";
 import { Hello, Who } from "./Wire.ts";
 
 /**
@@ -113,8 +113,9 @@ const pingMs = (text: string, min: number, max: number): number => {
  * - `bad_signature`: the key is not a canonical base64url 32-byte value, the hello's tab or nonce
  *   differs from the expected ones, the key's SHA-256 fingerprint differs from `name`, or the
  *   signed text from `helloText` does not verify as an Ed25519 signature of that key.
- * - The refusal reason from `admit` (today `not_granted`), returned with the fingerprint.
- * - `bad_nonce`: `consume()` returns `false`. It is called last, only after everything else
+ * - The refusal reason from `Admissions.admit` (today `not_granted`), returned with the
+ *   fingerprint. An admission that fails fails `checkHello` with its `AdmissionError`.
+ * - `bad_nonce`: `Admissions.consume` returns `false`. It is called last, only after everything else
  *   passed, so a hello refused earlier does not use up the nonce.
  *
  * On success the ping interval is the hello's `ping` text (for example `30s`) turned into
@@ -123,7 +124,7 @@ const pingMs = (text: string, min: number, max: number): number => {
  *
  * @category combinators
  */
-export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: {
+export const checkHello = Effect.fn("transport.checkHello")(function* (a: {
   readonly hello: unknown;
   readonly url: string;
   readonly tab: string;
@@ -131,9 +132,8 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
   readonly name: string;
   readonly versions: ReadonlyArray<number>;
   readonly ping: { readonly min: number; readonly max: number };
-  readonly consume: () => boolean;
-  readonly admit: (key: string) => Effect.Effect<typeof Admission.Type, E, R>;
 }) {
+  const admissions = yield* Admissions;
   const decoded = Schema.decodeUnknownResult(Hello)(a.hello);
 
   if (Result.isFailure(decoded)) {
@@ -183,13 +183,13 @@ export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: 
     return no("bad_signature");
   }
 
-  const admitted = yield* a.admit(fingerprint);
+  const admitted = yield* admissions.admit(fingerprint);
 
   if (admitted._tag === "refused") {
     return CheckedHello.cases.refused.make({ reason: admitted.reason, fingerprint });
   }
 
-  if (!a.consume()) {
+  if (!(yield* admissions.consume)) {
     return no("bad_nonce");
   }
 
