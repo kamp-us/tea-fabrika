@@ -11,7 +11,7 @@ import type { Answer, RateCountFailure, Who } from "./Wire.ts";
  *
  * @category errors
  */
-export class RouteError extends Schema.TaggedError<RouteError>()("RouteError", {
+export class RouteError extends Schema.TaggedError<RouteError, { readonly brand: unique symbol }>()("RouteError", {
   cause: Schema.Defect(),
 }) {}
 

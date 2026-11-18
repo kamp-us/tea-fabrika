@@ -9,6 +9,7 @@ import * as Layer from "effect/Layer";
 import * as Ordering from "effect/Order";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -27,6 +28,25 @@ export class IdError extends S.TaggedError<IdError, { readonly brand: unique sym
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: S.optional(S.Defect()),
 }) {}
+
+/** The generator's real format check, which laws may record without replacing a method. */
+export interface Validation {
+  readonly decode: <P extends string>(schema: IdSchema<P>, encoded: string) => Effect.Effect<IdValue<P>, IdError>;
+}
+
+export const Validation = Context.Reference<Validation>("@kampus/libfabrika/Id.Validation", {
+  defaultValue: () => ({
+    decode: Effect.fnUntraced(function* <P extends string>(schema: IdSchema<P>, encoded: string) {
+      const decoded = S.decodeResult(schema)(encoded);
+
+      if (Result.isFailure(decoded)) {
+        return yield* IdError.make({ reason: "prefix", cause: decoded.failure });
+      }
+
+      return decoded.success;
+    }),
+  }),
+});
 
 const prefixes = new WeakMap<S.Top, string>();
 
@@ -205,6 +225,7 @@ const advance = (last: Last, now: number, fresh: bigint | undefined): Last | und
 export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRandom.SecureRandom> = Effect.gen(
   function* () {
     const secure = yield* SecureRandom.SecureRandom;
+    const semaphore = yield* Semaphore.make(1);
     let last: Last = { at: -1, random: 0n };
 
     // A throw from the random source is a defect of SecureRandom; the generator translates it.
@@ -229,24 +250,22 @@ export const makeGenerator: Effect.Effect<Generator["Service"], never, SecureRan
           return yield* IdError.make({ reason: "clock" });
         }
 
-        // The draw is an Effect, so it runs before the step. `at` only grows, so a millisecond that
-        // is fresh at the step was fresh at the draw, and `fresh` is there when it is needed.
-        const fresh = now > last.at ? yield* draw : undefined;
-        // Nothing yields between reading and writing `last`, so fibers observe IDs in allocation order.
-        const moved = advance(last, now, fresh);
+        return yield* semaphore.withPermit(
+          Effect.gen(function* () {
+            // The permit owns the fresh-clock decision and draw. A queued fiber therefore never
+            // consumes entropy for a value that its turn would not use.
+            const fresh = now > last.at ? yield* draw : undefined;
+            const moved = advance(last, now, fresh);
 
-        if (moved === undefined) {
-          return yield* IdError.make({ reason: "exhausted" });
-        }
+            if (moved === undefined) {
+              return yield* IdError.make({ reason: "exhausted" });
+            }
 
-        last = moved;
-        const decoded = S.decodeResult(schema)(`${prefix}_${encode(last.at, last.random)}`);
-
-        if (Result.isFailure(decoded)) {
-          return yield* IdError.make({ reason: "prefix", cause: decoded.failure });
-        }
-
-        return decoded.success;
+            last = moved;
+            const validation = yield* Validation;
+            return yield* validation.decode(schema, `${prefix}_${encode(last.at, last.random)}`);
+          }),
+        );
       }),
     };
   },

@@ -50,8 +50,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <A exten
   text: string,
   attached: A,
 ) {
-  const text = frame[0];
-  const attached: A = frame[1];
+  const routes = yield* Routes;
   const request = Schema.decodeResult(Request)(text);
 
   if (Result.isFailure(request)) {
