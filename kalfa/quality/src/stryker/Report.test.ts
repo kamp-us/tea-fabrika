@@ -239,7 +239,7 @@ describe("Report, the answer a plant run gives", () => {
     const fields = fc.subarray(["statusReason", "description", "note", "source"] as const, { minLength: 1 });
 
     fc.assert(
-      fc.property(reports, word, fields, ({ found, law, raw }, word, where) => {
+      fc.property(reports, word, fields, ({ found, law, raw }, word, spot) => {
         const marker = `private-${word}/%?\n`;
 
         // The secret goes where Stryker puts failure text and prose, in every file and every mutant.
@@ -248,22 +248,22 @@ describe("Report, the answer a plant run gives", () => {
         for (const file of Object.values(dirty.files)) {
           for (const m of file.mutants) {
             Object.assign(m, {
-              ...(where.includes("statusReason") ? { statusReason: marker } : {}),
-              ...(where.includes("description") ? { description: marker } : {}),
+              ...(spot.includes("statusReason") ? { statusReason: marker } : {}),
+              ...(spot.includes("description") ? { description: marker } : {}),
             });
           }
 
-          if (where.includes("source")) {
+          if (spot.includes("source")) {
             file.source = marker;
           }
         }
 
         for (const file of Object.values(dirty.testFiles)) {
           for (const test of file.tests) {
-            Object.assign(test, where.includes("note") ? { note: marker } : {});
+            Object.assign(test, spot.includes("note") ? { note: marker } : {});
           }
 
-          if (where.includes("source")) {
+          if (spot.includes("source")) {
             Object.assign(file, { source: marker });
           }
         }

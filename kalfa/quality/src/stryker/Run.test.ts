@@ -33,7 +33,7 @@ const settings = (inPlace: boolean) => ({
 type Kind = "killed" | "elsewhere" | "survived" | "no_coverage" | "timeout";
 
 /** A report with the target's mutant in it as the kind says. The report counts lines and columns from 1. */
-const reportOf = (placed: Placed, plant: Plant, kind: Kind) => ({
+const reportFrom = (placed: Placed, plant: Plant, kind: Kind) => ({
   schemaVersion: "1.0",
   thresholds: { high: 80, low: 60 },
   files: {
@@ -72,7 +72,7 @@ const reportOf = (placed: Placed, plant: Plant, kind: Kind) => ({
 });
 
 /** A plant's file, as `k` lines each holding the node, under a header no other plant's file has. */
-const fileOf = (index: number, node: Node, k: number) =>
+const fileFrom = (index: number, node: Node, k: number) =>
   assemble([
     `// plant ${index}\n`,
     ...Array.from({ length: k }, (_, i) => [`const t${i} = `, node, ";\n"] as const).flat(),
@@ -139,7 +139,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
             };
 
             const k = i !== picked ? 1 : mode === "not_found" ? 0 : mode === "ambiguous" ? 2 : 1;
-            const built = fileOf(i, node, k);
+            const built = fileFrom(i, node, k);
             const lawFolder = i === picked && mode === "needs_in_place" ? "test" : "src";
 
             const ask = plant({
@@ -175,14 +175,14 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
 
           const { got, calls } = await ran(catalog, name, files, false, {
             made: (_, text) => madeBy.get(text) ?? [],
-            report: () => reportOf(placedBy.get(chosen.name)!, chosen, kind),
+            report: () => reportFrom(placedBy.get(chosen.name)!, chosen, kind),
           });
 
           seen.hit(mode);
 
           const done = Result.isSuccess(got) ? got.success : undefined;
           const refusal = Result.isFailure(got) ? got.failure : undefined;
-          const where = placedBy.get(chosen.name);
+          const spot = placedBy.get(chosen.name);
 
           // Each mode's one outcome, said whole so no branch can leave a property asserting nothing.
           expect({
@@ -200,7 +200,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
                   ran: 1,
                   reason: undefined,
                   plant: chosen.name,
-                  target: { line: where!.start.line + 1, column: where!.start.column },
+                  target: { line: spot!.start.line + 1, column: spot!.start.column },
                   answer: mode,
                   by: mode === "killed" ? [chosen.law] : undefined,
                 }
@@ -252,7 +252,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
             replacement: "true",
           };
 
-          const built = fileOf(0, node, 1);
+          const built = fileFrom(0, node, 1);
 
           const ask = plant({
             name: "subject",
@@ -271,7 +271,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
 
           const { got, calls } = await ran([ask], "subject", files, inPlace, {
             made: () => madeFor(ask.file, built.placed),
-            report: () => reportOf(built.placed[0]!, ask, "killed"),
+            report: () => reportFrom(built.placed[0]!, ask, "killed"),
           });
 
           const split = nearest(targetDir) !== nearest(lawDir);

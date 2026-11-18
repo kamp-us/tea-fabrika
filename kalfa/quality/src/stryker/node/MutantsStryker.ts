@@ -1,10 +1,12 @@
-// `Mutants` on StrykerJS 10.1.1: its instrumenter for the mutants of a file, and its own bin, run
-// in the repo's folder, for a run. Stryker is loaded here and nowhere else, so importing
-// `@kalfa/quality/stryker` loads none of it (law Q15).
-//
-// Stryker's own TypeScript checker reads TypeScript's JavaScript API, which TypeScript 7 does not
-// have, so `Options.ts` points its tsconfig at a file that is not there. The run is `nice -n <nice>`
-// when a nice is set, a child process in the layer's scope, so the scope ends it and what it started.
+/**
+ * `Mutants` on StrykerJS 10.1.1: its instrumenter for the mutants of a file, and its own bin, run
+ * in the repo's folder, for a run. Stryker is loaded here and nowhere else, so importing
+ * `@kalfa/quality/stryker` loads none of it (law Q15).
+ *
+ * Stryker's own TypeScript checker reads TypeScript's JavaScript API, which TypeScript 7 does not
+ * have, so `Options.ts` points its tsconfig at a file that is not there. The run is `nice -n <nice>`
+ * when a nice is set, a child process in the layer's scope, so the scope ends it and what it started.
+ */
 import { Console, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { Guard } from "../Guard.ts";
@@ -50,8 +52,12 @@ const instrument = (file: string, text: string) =>
     catch: stuck,
   }).pipe(Effect.map(({ mutants }) => mutants));
 
-/** The real `Mutants`, running Stryker with `root` as its working folder. */
-export const layer = (where: { readonly root: string; readonly nice: number }) =>
+/**
+ * The real `Mutants`, running Stryker with `root` as its working folder.
+ *
+ * @category constructors
+ */
+export const layer = (spot: { readonly root: string; readonly nice: number }) =>
   Layer.effect(
     Mutants,
     Effect.gen(function* () {
@@ -67,9 +73,9 @@ export const layer = (where: { readonly root: string; readonly nice: number }) =
 
       const command = (config: string) =>
         ChildProcess.make(
-          where.nice === 0 ? "node" : "nice",
-          where.nice === 0 ? [bin, "run", config] : ["-n", String(where.nice), "node", bin, "run", config],
-          { cwd: where.root, extendEnv: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
+          spot.nice === 0 ? "node" : "nice",
+          spot.nice === 0 ? [bin, "run", config] : ["-n", String(spot.nice), "node", bin, "run", config],
+          { cwd: spot.root, extendEnv: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
         );
 
       /** Stryker on `options`: its config written, its bin run, its JSON report read back. */

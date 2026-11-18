@@ -48,7 +48,7 @@ const named = (
     law: LAW,
   });
 
-const nodeOf = (s: { tokens: ReadonlyArray<string>; mutator: string; replacement: string }, gap = " "): Node => ({
+const nodeFrom = (s: { tokens: ReadonlyArray<string>; mutator: string; replacement: string }, gap = " "): Node => ({
   tokens: s.tokens,
   gaps: s.tokens.slice(1).map(() => gap),
   mutator: s.mutator,
@@ -56,8 +56,8 @@ const nodeOf = (s: { tokens: ReadonlyArray<string>; mutator: string; replacement
 });
 
 /** A node with other text but the same mutator and replacement: a decoy that only the text tells apart. */
-const otherOf = (s: { tokens: ReadonlyArray<string>; mutator: string; replacement: string }): Node =>
-  nodeOf({ ...s, tokens: [...s.tokens.slice(0, -1), `${s.tokens.at(-1)}_other`] });
+const otherFrom = (s: { tokens: ReadonlyArray<string>; mutator: string; replacement: string }): Node =>
+  nodeFrom({ ...s, tokens: [...s.tokens.slice(0, -1), `${s.tokens.at(-1)}_other`] });
 
 describe("Target.find, a plant's shape is found exactly once", () => {
   // Plant: return the first match when there are two.
@@ -76,10 +76,10 @@ describe("Target.find, a plant's shape is found exactly once", () => {
           // each as a line of its own among the filler lines.
           const rows: Array<Array<Part>> = lines.map((line) => [line]);
 
-          rows.splice(decoySlot % (rows.length + 1), 0, ["const decoy = ", otherOf(s), ";"]);
+          rows.splice(decoySlot % (rows.length + 1), 0, ["const decoy = ", otherFrom(s), ";"]);
 
           for (const [i, slot] of slots.slice(0, k).entries()) {
-            rows.splice(slot % (rows.length + 1), 0, [`const t${i} = `, nodeOf(s), ";"]);
+            rows.splice(slot % (rows.length + 1), 0, [`const t${i} = `, nodeFrom(s), ";"]);
           }
 
           const { text, placed } = assemble(rows.flatMap((row) => [...row, "\n"]));
@@ -159,7 +159,7 @@ describe("Target.find, a plant's shape is found exactly once", () => {
         fc.nat({ max: 6 }),
         (s, gaps, lines, slot, blanks, indent) => {
           const at = slot % (lines.length + 1);
-          const plain = nodeOf(s);
+          const plain = nodeFrom(s);
           const wrapped: Node = { ...plain, gaps: s.tokens.slice(1).map((_, i) => gaps[i % gaps.length]!) };
 
           // One layout is the file as written; the other adds blank lines above the node, an indent
@@ -196,7 +196,7 @@ describe("Target.find, a plant's shape is found exactly once", () => {
           const a = Result.isSuccess(before) ? before.success : undefined;
           const b = Result.isSuccess(after) ? after.success : undefined;
           const added = blanks.slice(0, at).reduce((sum, n) => sum + n, 0);
-          const where = moved.placed[0]!;
+          const spot = moved.placed[0]!;
 
           expect(a).toBeDefined();
           // The same mutator and texts as in the file as written, at the place the node really is in
@@ -205,10 +205,10 @@ describe("Target.find, a plant's shape is found exactly once", () => {
             a && { mutator: a.mutator, original: a.original, replacement: a.replacement },
           );
           expect(b && [b.line, b.column, b.endLine, b.endColumn]).toEqual([
-            where.start.line + 1,
-            where.start.column,
-            where.end.line + 1,
-            where.end.column,
+            spot.start.line + 1,
+            spot.start.column,
+            spot.end.line + 1,
+            spot.end.column,
           ]);
           expect(b?.line).toBe(a && a.line + added);
         },
@@ -230,7 +230,7 @@ describe("Target.find, a plant's shape is found exactly once", () => {
         fc.boolean(),
         fc.constantFrom("once", "twice", "never"),
         (s, one, two, pickFirst, count) => {
-          const node = nodeOf(s);
+          const node = nodeFrom(s);
           const first = `function ${one}_a() { return `;
           const second = `function ${two}_b() { return `;
           const wrapper = (head: string) => `${head}${nodeText(node)}; }`;
@@ -253,11 +253,11 @@ describe("Target.find, a plant's shape is found exactly once", () => {
 
           const found = Result.isSuccess(got) ? got.success : undefined;
           const refused = Result.isFailure(got) ? got.failure : undefined;
-          const where = placed[pickFirst ? 0 : 1]!;
+          const spot = placed[pickFirst ? 0 : 1]!;
 
           expect({ at: found && [found.line, found.column], reason: refused?.reason }).toEqual(
             count === "once"
-              ? { at: [where.start.line + 1, where.start.column], reason: undefined }
+              ? { at: [spot.start.line + 1, spot.start.column], reason: undefined }
               : { at: undefined, reason: "within_not_once" },
           );
         },

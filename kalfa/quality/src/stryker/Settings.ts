@@ -1,10 +1,12 @@
-// The runner's settings (decisions 0069 and 0585): each one Effect `Config` with its Schema and its one
-// default, under `quality.stryker`, so its environment name is `KALFA_QUALITY_STRYKER_<KEY>`. No
-// `FABRIKA_` name is read and no file: the edge hands the repo's own values in as a provider.
-//
-// What joins when `@kalfa/config` is on main: each Config becomes one of its settings, the repo and
-// person files become providers, and the flags come with its loader. Every setting stays reachable
-// through its `KALFA_` variable until then.
+/**
+ * The runner's settings (decisions 0069 and 0585): each one Effect `Config` with its Schema and its one
+ * default, under `quality.stryker`, so its environment name is `KALFA_QUALITY_STRYKER_<KEY>`. No
+ * `FABRIKA_` name is read and no file: the edge hands the repo's own values in as a provider.
+ *
+ * What joins when `@kalfa/config` is on main: each Config becomes one of its settings, the repo and
+ * person files become providers, and the flags come with its loader. Every setting stays reachable
+ * through its `KALFA_` variable until then.
+ */
 import { Config, ConfigProvider, Schema } from "effect";
 
 /** What every environment variable of a setting starts with; the provider below reads under it. */
@@ -12,7 +14,11 @@ const PREFIX = "KALFA";
 
 const Atleast = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
-/** The Stryker settings of one run. */
+/**
+ * The Stryker settings of one run.
+ *
+ * @category utils
+ */
 export const all = Config.all({
   /** The module that lists the repo's plants. No default: a run without one says which variable to set. */
   catalog: Config.NonEmptyString("catalog").pipe(
@@ -39,12 +45,19 @@ export const all = Config.all({
   nice: Config.schema(Atleast(0).check(Schema.isLessThanOrEqualTo(19)), "nice").pipe(Config.withDefault(0)),
 }).pipe(Config.nested("stryker"), Config.nested("quality"));
 
+/**
+ * The runner's settings, as the shape one read of them gives.
+ *
+ * @category services
+ */
 export type Settings = Config.Success<typeof all>;
 
 /**
  * Where the values come from, in the order of decision 0086: the environment under `KALFA`, then the
  * repo's own values (`{ quality: { stryker: { ... } } }`). The edge reads the process's environment
  * and passes it in, so this reads nothing itself.
+ *
+ * @category utils
  */
 export const provider = (
   env: Readonly<Record<string, string | undefined>>,

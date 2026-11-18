@@ -1,13 +1,15 @@
-// `./cli`: the `quality` command, the root a future `kalfa` finds through this package's `kalfa.cli`
-// field (decision 0585). Its one tool so far is `stryker`:
-//
-//   quality stryker plant <name> [--out <file>]
-//   quality stryker survey <file> --law <test file> [--from <line>] [--to <line>] [--out <file>]
-//
-// `plant` runs one plant of the catalog and prints its record line; it exits 0 only when the answer
-// is `killed`. `survey` lists every mutant Stryker makes on some lines, with its status and killers,
-// to find the shape of a new plant. The catalog is a module the `catalog` setting names; the repo's
-// own edge (`.github/ci/plants.ts` in this repo) supplies it and the other settings.
+/**
+ * `./cli`: the `quality` command, the root a future `kalfa` finds through this package's `kalfa.cli`
+ * field (decision 0585). Its one tool so far is `stryker`:
+ *
+ *   quality stryker plant <name> [--out <file>]
+ *   quality stryker survey <file> --law <test file> [--from <line>] [--to <line>] [--out <file>]
+ *
+ * `plant` runs one plant of the catalog and prints its record line; it exits 0 only when the answer
+ * is `killed`. `survey` lists every mutant Stryker makes on some lines, with its status and killers,
+ * to find the shape of a new plant. The catalog is a module the `catalog` setting names; the repo's
+ * own edge (`.github/ci/plants.ts` in this repo) supplies it and the other settings.
+ */
 import { Console, Effect, FileSystem, Path, Predicate, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as MutantsStryker from "./stryker/node/MutantsStryker.ts";
@@ -121,6 +123,11 @@ const stryker = Command.make("stryker").pipe(
   Command.withSubcommands([plant, survey]),
 );
 
+/**
+ * The `quality` command: our testing, linting and formatting tooling.
+ *
+ * @category utils
+ */
 export const quality = Command.make("quality").pipe(
   Command.withDescription("Our testing, linting and formatting tooling"),
   Command.withSubcommands([stryker]),

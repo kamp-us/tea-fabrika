@@ -1,5 +1,7 @@
-// The stand-in `Mutants` the laws run on: scripted mutants and a scripted report, and a count of what
-// it was asked. It runs nothing.
+/**
+ * The stand-in `Mutants` the laws run on: scripted mutants and a scripted report, and a count of what
+ * it was asked. It runs nothing.
+ */
 import { Effect, Layer, Schema } from "effect";
 import type { Made } from "./Mutants.ts";
 import { Mutants } from "./Mutants.ts";
@@ -15,6 +17,8 @@ interface Calls {
 /**
  * A layer that answers `make` with `script.made(file, text)` and `run` with `script.report(options)`,
  * the second a report in the shape Stryker writes, as plain data. `calls` lists what it was asked.
+ *
+ * @category constructors
  */
 export const make = (script: {
   readonly made: (file: string, text: string) => ReadonlyArray<Made>;

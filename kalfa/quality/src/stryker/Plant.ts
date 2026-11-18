@@ -1,9 +1,15 @@
-// A plant, as the catalog writes it (decision 0600): a Stryker-made mutant named by its code shape,
-// and the law that must kill it. Only schemas and one pure helper live here, so importing
-// `@kalfa/quality/stryker` loads no Stryker (law Q15).
+/**
+ * A plant, as the catalog writes it (decision 0600): a Stryker-made mutant named by its code shape,
+ * and the law that must kill it. Only schemas and one pure helper live here, so importing
+ * `@kalfa/quality/stryker` loads no Stryker (law Q15).
+ */
 import { Schema } from "effect";
 
-/** The law that must kill a plant: a test file and the test's full name, the suite chain and the title joined by " > ". */
+/**
+ * The law that must kill a plant: a test file and the test's full name, the suite chain and the title joined by " > ".
+ *
+ * @category models
+ */
 export const Law = Schema.Struct({
   file: Schema.String,
   name: Schema.String,
@@ -14,6 +20,8 @@ export type Law = typeof Law.Type;
 /**
  * One planted mutant. The node is named by its shape, never by its place: no byte offset or commit
  * is pinned, so a blank line or a squash merge leaves the plant as it was.
+ *
+ * @category models
  */
 export const Plant = Schema.Struct({
   /** What a person types: `host-pnpm-path`. */
@@ -33,7 +41,11 @@ export const Plant = Schema.Struct({
 
 export type Plant = typeof Plant.Type;
 
-/** The repo's plants. Two plants never share a name, since a name is what a person types. */
+/**
+ * The repo's plants. Two plants never share a name, since a name is what a person types.
+ *
+ * @category models
+ */
 export const Catalog = Schema.Array(Plant).check(
   Schema.makeFilter(
     (plants) => new Set(plants.map(({ name }) => name)).size === plants.length || "plant names must be unique",
@@ -42,8 +54,16 @@ export const Catalog = Schema.Array(Plant).check(
 
 export type Catalog = typeof Catalog.Type;
 
-/** A plant from its plain form; it throws on a form that does not decode, which a catalog file wants at load. */
+/**
+ * A plant from its plain form; it throws on a form that does not decode, which a catalog file wants at load.
+ *
+ * @category utils
+ */
 export const plant = (input: typeof Plant.Encoded): Plant => Schema.decodeSync(Plant)(input);
 
-/** Every run of whitespace as one space, and no space at either end: the text of a node whatever its layout. */
+/**
+ * Every run of whitespace as one space, and no space at either end: the text of a node whatever its layout.
+ *
+ * @category utils
+ */
 export const fold = (text: string): string => text.replace(/\s+/g, " ").trim();

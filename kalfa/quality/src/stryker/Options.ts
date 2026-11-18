@@ -1,12 +1,18 @@
-// The Stryker options for one plant (decision 0600): one `mutate` place, one test file, bail off, so
-// the report says which tests killed the mutant. Plain data in Stryker's own keys (its
-// `stryker-core.json` schema). Pure.
+/**
+ * The Stryker options for one plant (decision 0600): one `mutate` place, one test file, bail off, so
+ * the report says which tests killed the mutant. Plain data in Stryker's own keys (its
+ * `stryker-core.json` schema). Pure.
+ */
 import { Option } from "effect";
 import type { Plant } from "./Plant.ts";
 import type { Found } from "./Report.ts";
 import type { Settings } from "./Settings.ts";
 
-/** What `make` returns, and what a run writes to Stryker's config file. */
+/**
+ * What `make` returns, and what a run writes to Stryker's config file.
+ *
+ * @category models
+ */
 export interface Options {
   readonly testRunner: "vitest";
   readonly plugins: ReadonlyArray<string>;
@@ -31,7 +37,11 @@ export interface Options {
   readonly vitest: { readonly related: false; readonly configFile?: string };
 }
 
-/** The options for `target`, with every file the run writes under `temp.dir` and the vitest runner at `temp.plugin`. */
+/**
+ * The options for `target`, with every file the run writes under `temp.dir` and the vitest runner at `temp.plugin`.
+ *
+ * @category constructors
+ */
 export const make = (
   target: Found,
   plant: Plant,

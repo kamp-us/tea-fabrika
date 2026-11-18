@@ -1,15 +1,17 @@
-// What a plant run knows after Stryker ran: the JSON report as much as is read, the answer it gives,
-// and the one record line a run leaves (decision 0600). Pure.
-//
-// Three position bases meet here, and each is said where it is read. Stryker's JSON report counts
-// lines and columns from 1. A found target counts lines from 1 and columns from 0, as Stryker's
-// `mutate` range does. The instrumenter's own mutants count both from 0 (see `Mutants.ts`).
-//
-// Stryker renumbers its test ids to "0", "1" and so on before it writes the report, so a mutant's
-// `killedBy` names no test by itself: it is looked up in the report's `testFiles`.
-//
-// No failure text is recorded. `statusReason` can echo environment values, so the schemas below do
-// not even decode it, and no record or refusal holds a line of the file that was read (law Q13).
+/**
+ * What a plant run knows after Stryker ran: the JSON report as much as is read, the answer it gives,
+ * and the one record line a run leaves (decision 0600). Pure.
+ *
+ * Three position bases meet here, and each is said where it is read. Stryker's JSON report counts
+ * lines and columns from 1. A found target counts lines from 1 and columns from 0, as Stryker's
+ * `mutate` range does. The instrumenter's own mutants count both from 0 (see `Mutants.ts`).
+ *
+ * Stryker renumbers its test ids to "0", "1" and so on before it writes the report, so a mutant's
+ * `killedBy` names no test by itself: it is looked up in the report's `testFiles`.
+ *
+ * No failure text is recorded. `statusReason` can echo environment values, so the schemas below do
+ * not even decode it, and no record or refusal holds a line of the file that was read (law Q13).
+ */
 import { Match, Schema } from "effect";
 import { fold } from "./Plant.ts";
 import type { Plant, Law } from "./Plant.ts";
@@ -26,7 +28,11 @@ const Mutant = Schema.Struct({
   location: Schema.Struct({ start: Position, end: Position }),
 });
 
-/** As much of `mutation-testing-report-schema` 3.8.4's report as is read. A field not named here is dropped at decode. */
+/**
+ * As much of `mutation-testing-report-schema` 3.8.4's report as is read. A field not named here is dropped at decode.
+ *
+ * @category models
+ */
 export const Report = Schema.Struct({
   files: Schema.Record(Schema.String, Schema.Struct({ mutants: Schema.Array(Mutant) })),
   testFiles: Schema.optional(
@@ -40,7 +46,11 @@ export const Report = Schema.Struct({
 
 export type Report = typeof Report.Type;
 
-/** A found target: the one mutant a plant names, with its place (line from 1, column from 0) and its folded texts. */
+/**
+ * A found target: the one mutant a plant names, with its place (line from 1, column from 0) and its folded texts.
+ *
+ * @category models
+ */
 export const Found = Schema.Struct({
   file: Schema.String,
   line: Schema.Int,
@@ -59,7 +69,11 @@ const Test = Schema.Struct({ file: Schema.String, name: Schema.String });
 
 type Test = typeof Test.Type;
 
-/** What a plant run answers. Only `killed` is a pass. */
+/**
+ * What a plant run answers. Only `killed` is a pass.
+ *
+ * @category models
+ */
 export const Answer = Schema.TaggedUnion({
   /** The law is among the tests that killed the mutant: the plant holds. */
   killed: { by: Schema.Array(Test) },
@@ -77,7 +91,11 @@ export const Answer = Schema.TaggedUnion({
 
 export type Answer = typeof Answer.Type;
 
-/** What fails before Stryker starts, or when it cannot, each naming what it looked at and no text of the file. */
+/**
+ * What fails before Stryker starts, or when it cannot, each naming what it looked at and no text of the file.
+ *
+ * @category errors
+ */
 export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
   reason: Schema.Literals([
     "unknown_plant",
@@ -129,7 +147,11 @@ const sits = (mutant: Reported, target: Found): boolean =>
 const targetOf = (report: Report, target: Found): Reported | undefined =>
   report.files[target.file]?.mutants.find((mutant) => sits(mutant, target));
 
-/** The answer for the mutant at `target`, as the law's own test kills it or not. */
+/**
+ * The answer for the mutant at `target`, as the law's own test kills it or not.
+ *
+ * @category utils
+ */
 export const answer = (report: Report, target: Found, law: Law): Answer => {
   const mutant = targetOf(report, target);
 
@@ -161,7 +183,11 @@ interface Beside {
   readonly status: string;
 }
 
-/** The record of one plant run, one JSON line: what was found, what was answered, and what ran. */
+/**
+ * The record of one plant run, one JSON line: what was found, what was answered, and what ran.
+ *
+ * @category models
+ */
 export interface Line {
   readonly plant: string;
   readonly target: Found;
@@ -187,6 +213,8 @@ const inside = (mutant: Reported, target: Found): boolean => {
  * The record of a run. It holds the target, the answer, how many tests covered the mutant, and the
  * other mutants on its span with their statuses. It never holds `statusReason`, a description or
  * the file's source (law Q13).
+ *
+ * @category utils
  */
 export const record = (
   plant: Plant,
@@ -217,7 +245,11 @@ export const record = (
   };
 };
 
-/** One mutant of a survey: where it is (line from 1, column from 0), what it is, its status and every test that killed it. */
+/**
+ * One mutant of a survey: where it is (line from 1, column from 0), what it is, its status and every test that killed it.
+ *
+ * @category models
+ */
 export interface Row {
   readonly file: string;
   readonly line: number;
@@ -228,7 +260,11 @@ export interface Row {
   readonly by: ReadonlyArray<Test>;
 }
 
-/** Every mutant the report holds for `file`, as survey rows. */
+/**
+ * Every mutant the report holds for `file`, as survey rows.
+ *
+ * @category utils
+ */
 export const rows = (report: Report, file: string): ReadonlyArray<Row> =>
   (report.files[file]?.mutants ?? []).map((mutant) => ({
     file,

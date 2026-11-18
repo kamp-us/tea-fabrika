@@ -1,10 +1,12 @@
-// Finding the one mutant a plant names, by its code shape (decision 0600). Pure.
-//
-// `made` is every mutant Stryker's instrumenter makes on the whole file. For each, the node's own
-// text is sliced from the file and every run of whitespace is folded to one space; a mutant is a
-// match when its mutator, its folded original and its folded replacement all equal the plant's.
-// Exactly one match is a target. No byte offset or commit is pinned, so a blank line or a re-indent
-// anywhere leaves the answer the same (law Q2).
+/**
+ * Finding the one mutant a plant names, by its code shape (decision 0600). Pure.
+ *
+ * `made` is every mutant Stryker's instrumenter makes on the whole file. For each, the node's own
+ * text is sliced from the file and every run of whitespace is folded to one space; a mutant is a
+ * match when its mutator, its folded original and its folded replacement all equal the plant's.
+ * Exactly one match is a target. No byte offset or commit is pinned, so a blank line or a re-indent
+ * anywhere leaves the answer the same (law Q2).
+ */
 import { Result } from "effect";
 import type { Made } from "./Mutants.ts";
 import { fold } from "./Plant.ts";
@@ -64,6 +66,8 @@ const refuse = (reason: Refused["reason"], at: ReadonlyArray<Position> = []) =>
  * The one mutant of `made` that is `plant`'s shape in `text`, with its place: line from 1, column from 0.
  * Refused as `not_found` for none, `ambiguous` for two or more (naming every place), and
  * `within_not_once` when the plant's `within` snippet does not occur exactly once.
+ *
+ * @category utils
  */
 export const find = (text: string, made: ReadonlyArray<Made>, plant: Plant): Result.Result<Found, Refused> => {
   const starts = lineStarts(text);

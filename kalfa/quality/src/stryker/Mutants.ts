@@ -1,6 +1,8 @@
-// Stryker as a service (decision 0600): the mutants it makes on a file, and a run of it. This file
-// is the contract only (0095); `node/MutantsStryker.ts` is the real layer and `MutantsMemory.ts` the
-// stand-in the laws run on.
+/**
+ * Stryker as a service (decision 0600): the mutants it makes on a file, and a run of it. This file
+ * is the contract only (0095); `node/MutantsStryker.ts` is the real layer and `MutantsMemory.ts` the
+ * stand-in the laws run on.
+ */
 import { Context } from "effect";
 import type { Effect } from "effect";
 import type { Options } from "./Options.ts";
@@ -10,6 +12,8 @@ import type { Refused, Report } from "./Report.ts";
  * One mutant as Stryker's instrumenter makes it: lines and columns both counted from 0, the span
  * being the mutated node's own text. (A report counts both from 1, and a `mutate` range lines from
  * 1 and columns from 0: `Report.ts` and `Options.ts` keep the three apart.)
+ *
+ * @category models
  */
 export interface Made {
   readonly mutatorName: string;
@@ -20,6 +24,11 @@ export interface Made {
   };
 }
 
+/**
+ * Stryker as a service: the mutants it makes on a file, and a run of it.
+ *
+ * @category services
+ */
 export class Mutants extends Context.Service<
   Mutants,
   {

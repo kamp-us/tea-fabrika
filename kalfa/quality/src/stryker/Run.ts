@@ -1,8 +1,10 @@
-// `@kalfa/quality/stryker/Run`: run one plant, or survey the mutants on some lines (decision 0600).
-//
-// A plant runs only once its target is certain: the file is read, Stryker's instrumenter makes every
-// mutant on it, and the shape must match exactly one (`Target.find`). Every refusal is before Stryker
-// is asked to run, so a plant that cannot be certain costs no run.
+/**
+ * `@kalfa/quality/stryker/Run`: run one plant, or survey the mutants on some lines (decision 0600).
+ *
+ * A plant runs only once its target is certain: the file is read, Stryker's instrumenter makes every
+ * mutant on it, and the shape must match exactly one (`Target.find`). Every refusal is before Stryker
+ * is asked to run, so a plant that cannot be certain costs no run.
+ */
 import { Duration, Effect, FileSystem, Path } from "effect";
 import type { Scope } from "effect";
 import { Mutants } from "./Mutants.ts";
@@ -64,7 +66,11 @@ const tempDir = Effect.gen(function* () {
   return yield* fs.realPath(dir);
 }).pipe(Effect.mapError(stuck));
 
-/** Run the catalog's plant called `name`, and answer with the record line: what was found and which tests killed it. */
+/**
+ * Run the catalog's plant called `name`, and answer with the record line: what was found and which tests killed it.
+ *
+ * @category utils
+ */
 export const plant = Effect.fn("Run.plant")(function* (ask: {
   readonly catalog: ReadonlyArray<Plant>;
   readonly name: string;
@@ -97,7 +103,11 @@ export const plant = Effect.fn("Run.plant")(function* (ask: {
   });
 });
 
-/** Every mutant Stryker makes on lines `from` to `to` of `file` (from 1), run against `law`'s file, as rows with their status and killers. */
+/**
+ * Every mutant Stryker makes on lines `from` to `to` of `file` (from 1), run against `law`'s file, as rows with their status and killers.
+ *
+ * @category utils
+ */
 export const survey = Effect.fn("Run.survey")(function* (ask: {
   readonly file: string;
   readonly law: string;

@@ -75,14 +75,14 @@ describe("Settings, each one read as a person sets it", () => {
           vitest: source,
           nice: source,
         }),
-        (v, where) => {
+        (v, spot) => {
           const env: Record<string, string> = {};
           const repo: Record<string, unknown> = {};
           const want: Record<string, unknown> = { ...DEFAULTS };
 
           for (const key of KEYS) {
             const [first, second] = v[key];
-            const from = key === "catalog" && where[key] === "none" ? "env" : where[key];
+            const from = key === "catalog" && spot[key] === "none" ? "env" : spot[key];
 
             // The same key under another app's name is a decoy: it never reaches the answer.
             env[ENV[key].replace("KALFA_", "FABRIKA_")] = text(second);
