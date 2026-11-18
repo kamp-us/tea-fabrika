@@ -74,6 +74,8 @@ const program = {
       },
       work_ok: (s) => [{ ...s, replies: s.replies + 1 }, []],
       work_err: (s) => [{ ...s, replies: s.replies + 1 }, []],
+      exit_ok: (s) => [s, []],
+      exit_err: (s) => [s, []],
     },
   }),
   maxDeliveries: 3,
@@ -148,9 +150,15 @@ const open = Effect.fnUntraced(function* () {
   const table = Effect.gen(function* () {
     const status = yield* manager.status(NAME);
 
-    return status.state._tag === "live"
-      ? { state: "live" as const, process: status.state.process, reason: null }
-      : { state: "ended" as const, process: status.state.process, reason: status.state.reason._tag };
+    const { state } = status;
+
+    return state._tag === "live"
+      ? { state: "live" as const, process: state.process, reason: null }
+      : {
+          state: "ended" as const,
+          process: state.process,
+          reason: state._tag === "ended" ? state.reason._tag : state._tag,
+        };
   });
 
   const runner = Effect.fnUntraced(function* () {

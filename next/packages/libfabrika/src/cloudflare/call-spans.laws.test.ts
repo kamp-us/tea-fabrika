@@ -116,22 +116,39 @@ const handles = (db: DatabaseSync) => {
   };
 };
 
+/** The descriptor the Project's delivery carries, as the Process object decodes it. */
+const Delivered = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  program: Schema.String,
+  build: Schema.String,
+  owner: Writer,
+});
+
 /** A call on an object stub rejected. */
-class CallFailure extends Schema.TaggedError<CallFailure>()("CallFailure", { cause: Schema.Defect() }) {}
+class CallFailure extends Schema.TaggedError<CallFailure, { readonly brand: unique symbol }>()("CallFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 /** A Durable Object stub's calls, by the RPC's own name. */
 type Calls = { readonly [method: string]: (...args: ReadonlyArray<unknown>) => Promise<unknown> };
 
 /** The member of `service` named `method`, run: a member is an Effect or a function that answers one. */
-const member = (service: object, method: string, args: ReadonlyArray<unknown>) => {
+const isRun = (value: unknown): value is Effect.Effect<unknown, unknown> => Effect.isEffect(value);
+
+const member = (service: object, method: string, args: ReadonlyArray<unknown>): Effect.Effect<unknown, unknown> => {
   const found = Object.entries(service).find(([key]) => key === method)?.[1];
 
-  if (Effect.isEffect(found)) {
+  if (isRun(found)) {
     return found;
   }
 
   if (Predicate.isFunction(found)) {
-    return Reflect.apply(found, service, args) as Effect.Effect<unknown, unknown>;
+    const answer: unknown = Reflect.apply(found, service, args);
+
+    if (isRun(answer)) {
+      return answer;
+    }
   }
 
   return Effect.die(new Error(`no member ${method}`));
@@ -182,7 +199,9 @@ const open = Effect.fnUntraced(function* () {
 
     if (method === "configure") {
       const done = Effect.runPromise(
-        configureProcess(processCtx, args[0] as Parameters<typeof configureProcess>[1], runtime),
+        Effect.flatMap(Schema.decodeUnknownEffect(Delivered)(args[0]), (descriptor) =>
+          configureProcess(processCtx, descriptor, runtime),
+        ),
       );
       deliveries.push(done);
       Effect.runSync(Deferred.succeed(entered, undefined));

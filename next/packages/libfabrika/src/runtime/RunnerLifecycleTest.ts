@@ -140,8 +140,8 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
             let model: Model = "live";
 
             for (const pick of tape) {
-              const choices = POSSIBLE[model];
-              const move = choices[pick % choices.length] ?? "due";
+              const choices: ReadonlyArray<Move> = POSSIBLE[model];
+              const move: Move = choices[pick % choices.length] ?? "due";
               reach("B2", move);
               const before = yield* w.table;
               expect(before.state === "live" ? null : before.reason, `the table is ${model} before ${move}`).toBe(
@@ -170,7 +170,7 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
                 }
               }
 
-              const next = AFTER[move]?.to ?? (move === "restart" ? "live" : model);
+              const next: Model = AFTER[move]?.to ?? (move === "restart" ? "live" : model);
               model = next;
               const table = yield* w.table;
               expect(table.state === "live" ? null : table.reason, `the table after ${move}`).toBe(REASONS[model]);
@@ -192,10 +192,10 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
             const expected: Array<{ reason: string; by: string }> = [];
 
             for (const pick of tape) {
-              const choices = POSSIBLE[model];
-              const move = choices[pick % choices.length] ?? "due";
+              const choices: ReadonlyArray<Move> = POSSIBLE[model];
+              const move: Move = choices[pick % choices.length] ?? "due";
               yield* w.call(move);
-              const ended = AFTER[move];
+              const ended: (typeof AFTER)[Move] = AFTER[move];
 
               if (ended !== undefined) {
                 reach("B3", move);
