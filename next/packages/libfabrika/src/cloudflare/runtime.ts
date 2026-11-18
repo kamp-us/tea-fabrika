@@ -491,9 +491,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
       const span = tracer.span(options);
       const attribute = span.attribute.bind(span);
       span.attribute = (key, value) => {
-        if (key !== "fab.ledger.code") {
-          attribute(key, key === "error.type" ? "LedgerError" : value);
-        }
+        attribute(key, key === "error.type" ? "LedgerError" : value);
       };
       const end = span.end.bind(span);
       span.end = (time, exit) =>
@@ -504,7 +502,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
   return yield* work.pipe(
     Effect.withTracer(safe),
     Effect.mapError((error) => (Schema.is(LedgerError)(error) ? new LedgerError({ reason: error.reason }) : error)),
-    Effect.catchDefect((defect) => Effect.fail(new LedgerError({ reason: "storage", message: String(defect) }))),
+    Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
   );
 });
 
