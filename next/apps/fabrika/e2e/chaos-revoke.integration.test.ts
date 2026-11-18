@@ -192,6 +192,7 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 
       const opcode = (buffered[0] ?? 0) & 15;
       const short = (buffered[1] ?? 0) & 127;
+
       const header = Match.value(short).pipe(
         Match.when(126, () => 4),
         Match.when(127, () => 10),

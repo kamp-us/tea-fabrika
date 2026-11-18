@@ -210,6 +210,7 @@ export const suite = (database: Database) =>
                 Match.when(1, () => "save" as const),
                 Match.orElse(() => "cleanup" as const),
               );
+
               armed = mode;
               hit = false;
               frames.length = 0;

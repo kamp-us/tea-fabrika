@@ -987,6 +987,7 @@ describe("T843 sender budget, next/", () => {
               Match.when("unknown", () => "missing.method"),
               Match.orElse(() => "process.send"),
             );
+
             const params = Match.value(move).pipe(
               Match.when("read", () => ({ stream: "empty", after: 0 })),
               Match.when("reserved", () => ({ ...request("same-letter"), by: "claimed-key" })),
@@ -1493,6 +1494,7 @@ describe("T843 sender budget, next/", () => {
             expect(now._tag).toBe("online");
             const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
             const move = moves[choices[n % choices.length]! % moves.length]!;
+
             const method = Match.value(move).pipe(
               Match.when("read", () => "ledger.wait"),
               Match.when("unknown", () => "missing.method"),

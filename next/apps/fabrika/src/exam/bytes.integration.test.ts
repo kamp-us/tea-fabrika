@@ -445,6 +445,7 @@ const graphShape = (g: BundleGraph) => {
       Match.when(1, () => depth + 1),
       Match.orElse(() => 2 ** (depth + 1) - 1),
     );
+
   let least = 0;
 
   while (capacity(least, 2) < g.modules) {

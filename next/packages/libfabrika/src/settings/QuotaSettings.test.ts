@@ -126,11 +126,13 @@ describe("P34c Q11 settings", () => {
           for (const cell of tape) {
             const paths = [...selected.keys()];
             const key = paths[cell.pick % paths.length]!;
+
             const cap = Match.value(key).pipe(
               Match.when("writes", () => 13_760),
               Match.when("storage", () => 1_000_000_000),
               Match.orElse(() => 1_000_000),
             );
+
             selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
             const tables = new Map<string, string[]>();
 

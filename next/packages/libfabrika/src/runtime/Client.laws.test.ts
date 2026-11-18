@@ -419,6 +419,7 @@ const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
     Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
     Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
   );
+
   const pastEnd = Match.value(b.kind).pipe(
     Match.when("list", () => "/items/99"),
     Match.when("tags", () => "/99"),

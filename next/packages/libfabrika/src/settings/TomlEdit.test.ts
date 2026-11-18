@@ -88,6 +88,7 @@ const freezeAll = (value: unknown): void => {
 const frozen = <A>(value: A): A => {
   const copy = structuredClone(value);
   freezeAll(copy);
+
   return copy;
 };
 
