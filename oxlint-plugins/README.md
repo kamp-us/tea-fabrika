@@ -1270,7 +1270,7 @@ entry per banned member. Its blocks near the end of `.oxlintrc.json` ban five me
 saying what to use instead (a service and a test layer, the Recorder, `TestConsole` for `Console`,
 or a `ConfigProvider` layer). A folder joins whole the day its own slice of the sweep brings it to
 zero, and none is ever taken off. The last slice folds the lists into the `next/**/*` block. The
-first folder is `next/apps/fabrika/e2e` (ticket 1067).
+folders so far are `oxlint-plugins/` and `next/apps/fabrika/e2e` (ticket 1067).
 
 ```jsonc
 // The shape of one block of the lock, cut short.
@@ -1294,11 +1294,13 @@ renamed import, which the vitest rule does. The properties half stays until oxc 
 
 An override replaces a rule's options, so a lock block writes out again every
 `no-restricted-properties` entry its files take from the blocks above, at that block's level. That
-is why the e2e folder has two blocks: `e2e/*` takes the `warn` block's `Data.TaggedError` and
-`JSON.parse` entries, and `e2e/node/**` the Reflect ban's `error` block. A `vi` fire blocks at
-`warn` too: `pnpm lint` lets only a `JSON.parse` fire of this rule advise (`advice.ts`).
+is why the e2e folder has two blocks: `e2e/*` takes the `JSON.parse` `warn` block's six entries
+(`Data.TaggedError`, `JSON.parse` and the four Reflect entries), and `e2e/node/**` the same six from
+the `next/**/*` `error` block. A `vi` fire blocks at `warn` too: `pnpm lint` lets only a
+`JSON.parse` fire of this rule advise (`advice.ts`).
 
-What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.ts`:
+What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.ts` (both plants
+take their lines from one list there, `VI_LOCK`):
 
 - It fires on each of the five, through a renamed import (`import { vi as v }`, then `v.spyOn`),
   a computed key (`vi["spyOn"]`) and an optional call (`vi?.fn()`).
