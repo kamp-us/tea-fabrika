@@ -107,7 +107,7 @@ describe("Settings, each one read as a person sets it", () => {
     );
   });
 
-  // Plant: accept an out-of-range value as it is, or drop the key from the failure.
+  // Plant: accept an out-of-range value as it is, or drop the key from the failure, or leave the catalog's failure as Effect's own path.
   it("Q7: a missing catalog and every out-of-range value fail, each naming its key", () => {
     const BAD: ReadonlyArray<readonly [Key, string]> = [
       ["concurrency", "0"],
@@ -137,10 +137,11 @@ describe("Settings, each one read as a person sets it", () => {
         expect(Exit.isFailure(got)).toBe(true);
         expect(String(got).toLowerCase().replace(/[-_ ]/g, "")).toContain(key.toLowerCase());
 
-        // And with no catalog at all the run fails naming it.
-        const none = read({}, {});
-        expect(Exit.isFailure(none)).toBe(true);
-        expect(String(none).toLowerCase()).toContain("catalog");
+        // And with no catalog at all, or an empty one, the run fails naming the variable to set.
+        for (const none of [read({}, {}), read({ [ENV.catalog]: "" }, {})]) {
+          expect(Exit.isFailure(none)).toBe(true);
+          expect(String(none)).toContain(ENV.catalog);
+        }
       }),
       options,
     );

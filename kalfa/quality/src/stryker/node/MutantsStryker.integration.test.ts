@@ -5,7 +5,6 @@
 //
 // scenario: one fixture project (Fixture.test-support.ts), two plants and one survey, because each
 // run starts Stryker and its test runner; a generated input would repeat that cost to show no more.
-import { dirname, join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Path } from "effect";
@@ -14,11 +13,11 @@ import { plant } from "../Plant.ts";
 import * as Run from "../Run.ts";
 import * as MutantsStryker from "./MutantsStryker.ts";
 
-// This package's own node_modules: the fixture links it, so vitest and Stryker's runner resolve.
-const MODULES = join(import.meta.dirname, "../../../node_modules");
+// This package's own node_modules, from this file's folder: the fixture links it, so vitest and Stryker's runner resolve.
+const MODULES = "../../../node_modules";
 
-const settings = (root: string) => ({
-  catalog: join(root, "plants.ts"),
+const settings = (path: Path.Path, root: string) => ({
+  catalog: path.join(root, "plants.ts"),
   concurrency: 1,
   timeout: 60_000,
   inPlace: false,
@@ -47,16 +46,16 @@ it.live(
       const root = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "quality-" }));
 
       for (const [file, text] of Object.entries(FILES)) {
-        yield* fs.makeDirectory(dirname(join(root, file)), { recursive: true });
-        yield* fs.writeFileString(join(root, file), text);
+        yield* fs.makeDirectory(path.dirname(path.join(root, file)), { recursive: true });
+        yield* fs.writeFileString(path.join(root, file), text);
       }
 
-      yield* fs.symlink(MODULES, path.join(root, "node_modules"));
+      yield* fs.symlink(path.join(import.meta.dirname, MODULES), path.join(root, "node_modules"));
 
       const catalog = [named("kills", KILLS), named("spares", SPARES)];
       const real = MutantsStryker.layer({ root, nice: 0 });
       const run = (name: string) =>
-        Run.plant({ catalog, name, settings: settings(root), root }).pipe(Effect.scoped, Effect.provide(real));
+        Run.plant({ catalog, name, settings: settings(path, root), root }).pipe(Effect.scoped, Effect.provide(real));
 
       const killed = yield* run("kills");
       expect(killed.answer).toEqual({ _tag: "killed", by: [KILLS] });
@@ -71,7 +70,7 @@ it.live(
         law: TESTS,
         from: 1,
         to: 1,
-        settings: settings(root),
+        settings: settings(path, root),
         root,
       }).pipe(Effect.scoped, Effect.provide(real));
 

@@ -6,17 +6,24 @@
 //
 // scenario: the repo's own catalog at head. It is data about the repo, so no generated input stands in
 // for it; the five plants are the five cases, one test each.
+//
+// The last law is the edge's host guard (decision 0594), which nothing else runs under Stryker: a
+// property over command lines, in every order and spelling effect/cli accepts, that no run starts a
+// law the host may not start.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { describe, expect, it } from "@effect/vitest";
 import { Catalog } from "@kalfa/quality/stryker";
 import { Mutants } from "@kalfa/quality/stryker/Mutants";
 import { layer } from "@kalfa/quality/stryker/node/MutantsStryker";
 import * as Target from "@kalfa/quality/stryker/Target";
-import { Effect, Schema } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Effect, Exit, Result, Schema } from "effect";
+import { ChildProcessSpawner } from "effect/process";
 import { type CallExpression, type Expression, parseSync, Visitor } from "oxc-parser";
-import { describe, expect, it } from "vitest";
-import catalog from "./plants.ts";
+import { hostFiles } from "../../vitest.hostrun.ts";
+import catalog, { run } from "./plants.ts";
 
 const ROOT = join(import.meta.dirname, "../..");
 
@@ -105,8 +112,116 @@ describe("the plant catalog at head (decision 0600)", () => {
       const text = readFileSync(join(ROOT, plant.file), "utf8");
       const found = Target.find(text, await mutantsOf(plant.file, text), plant);
 
-      expect(found._tag === "Success" ? "found" : found.failure.reason).toBe("found");
+      expect(Result.isSuccess(found) ? "found" : found.failure.reason).toBe("found");
       expect(testNames(plant.law.file)).toContain(plant.law.name);
     });
   }
 });
+
+// The guard law's world. Nothing here starts a real process: the spawner is a stand-in that counts.
+// The first two are laws the guard refuses off a CI or a box: one by its `.integration.` name, one because its
+// own code signals a process (0594). The third is a plain law: the guard lets it run anywhere, and no plant names it.
+const LAWS: ReadonlyArray<{ readonly plant: string | undefined; readonly law: string }> = [
+  { plant: "checklist-pid", law: "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts" },
+  { plant: "host-pin", law: ".agents/skills/lead/scripts/flow/host.test.ts" },
+  { plant: undefined, law: "kalfa/quality/src/stryker/Target.test.ts" },
+];
+
+const PRODUCT = ".agents/skills/lead/scripts/flow/host.ts";
+
+/** The settings every run here shares: in place, so no refusal for two packages comes before the guard. */
+const SETTINGS = { KALFA_QUALITY_STRYKER_IN_PLACE: "true" };
+
+/** A machine that may start a host-only law, and two that may not: a laptop, and a Mac with a box's marker. */
+const ALLOWED = [
+  { env: { ...SETTINGS, CI: "true" }, platform: "linux" },
+  { env: { ...SETTINGS, CLAUDE_CODE_REMOTE: "true" }, platform: "linux" },
+] as const;
+
+const AWAY = [
+  { env: SETTINGS, platform: "linux" },
+  { env: { ...SETTINGS, CLAUDE_CODE_REMOTE: "true" }, platform: "darwin" },
+] as const;
+
+const Place = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9 }));
+
+/** A command line's shape: which command, how a flag is spelled, which flags it has, and where each part sits. */
+const Shape = Schema.Struct({
+  verb: Schema.Literals(["plant", "survey"]),
+  equals: Schema.Boolean,
+  out: Schema.Boolean,
+  range: Schema.Boolean,
+  away: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: AWAY.length - 1 })),
+  allowed: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: ALLOWED.length - 1 })),
+  at: Schema.Struct({ subject: Place, law: Place, out: Place, from: Place, to: Place }),
+});
+
+/** The words of one command, its parts in the order `shape.at` gives (ties keep the order below). */
+const argv = (shape: typeof Shape.Type, law: { readonly plant: string; readonly law: string }) => {
+  const flag = (name: string, value: string) => (shape.equals ? [`--${name}=${value}`] : [`--${name}`, value]);
+
+  const parts: Array<readonly [number, ReadonlyArray<string>]> = [
+    [shape.at.subject, [shape.verb === "plant" ? law.plant : PRODUCT]],
+  ];
+
+  if (shape.verb === "survey") {
+    parts.push([shape.at.law, flag("law", law.law)]);
+
+    if (shape.range) {
+      parts.push([shape.at.from, flag("from", "1")], [shape.at.to, flag("to", "9")]);
+    }
+  }
+
+  if (shape.out) {
+    parts.push([shape.at.out, flag("out", "runs/plants/out.json")]);
+  }
+
+  return ["stryker", shape.verb, ...parts.toSorted(([a], [b]) => a - b).flatMap(([, words]) => words)];
+};
+
+/** The repo's own guard on one law file: whether it refuses it on this machine. */
+const hostOnly = (law: string, where: (typeof ALLOWED)[number] | (typeof AWAY)[number]) =>
+  hostFiles([law], where.env, where.platform, (path) => readFileSync(join(ROOT, path), "utf8")).length > 0;
+
+/** How many times the command started a process, and how it ended: a refusal starts none. */
+const starts = (words: ReadonlyArray<string>, where: (typeof ALLOWED)[number] | (typeof AWAY)[number]) => {
+  const count = { started: 0 };
+
+  const spawner = ChildProcessSpawner.make(() =>
+    Effect.sync(() => {
+      count.started += 1;
+    }).pipe(Effect.andThen(Effect.die("a law starts no real process"))),
+  );
+
+  return run(words, where.env, where.platform).pipe(
+    Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    Effect.provide(NodeServices.layer),
+    Effect.exit,
+    Effect.map((exit) => ({ ...count, exit })),
+  );
+};
+
+// Plant: read the law file from fixed argument spots again (`args[2]` for `plant`, the word after `--law`
+// for `survey`), which a flag before the name, `--law=` or `--out=` all miss.
+it.effect.prop(
+  "property: no command line, in any order or spelling, starts a host-only law where the host may not, and every one still runs where it may",
+  { shape: Shape },
+  ({ shape }) =>
+    Effect.gen(function* () {
+      for (const { plant, law } of LAWS) {
+        if (plant === undefined && shape.verb === "plant") {
+          continue;
+        }
+
+        const words = argv(shape, { plant: plant ?? "", law });
+        const here = yield* starts(words, ALLOWED[shape.allowed] ?? ALLOWED[0]);
+        const away = yield* starts(words, AWAY[shape.away] ?? AWAY[0]);
+
+        // The word list parsed and reached the run: without this, a refusal below could be a typo.
+        expect(here.started, words.join(" ")).toBe(1);
+        expect(away.started, words.join(" ")).toBe(hostOnly(law, AWAY[shape.away] ?? AWAY[0]) ? 0 : 1);
+        expect(Exit.isFailure(away.exit), words.join(" ")).toBe(true);
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 12, full: 60 }) } },
+);

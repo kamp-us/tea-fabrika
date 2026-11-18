@@ -23,7 +23,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { quality } from "@kalfa/quality/cli";
 import { plant } from "@kalfa/quality/stryker";
 import { provider } from "@kalfa/quality/stryker/Settings";
-import { ConfigProvider, Effect } from "effect";
+import { ConfigProvider, Effect, Schema } from "effect";
 import { Command } from "effect/cli";
 import { hostFiles } from "../../vitest.hostrun.ts";
 
@@ -98,6 +98,20 @@ export default catalog;
 /** What the repo hands the package: the three settings that are ours (AGENTS.md's caps and the folders Stryker must not copy). */
 const repo = { quality: { stryker: { catalog: import.meta.filename, nice: 15, ignore: [".claude", "runs"] } } };
 
+type Env = Readonly<Record<string, string | undefined>>;
+
+/** The run is refused here (0594): its law reaches a real resource and this machine is not one that may start it. */
+class HostOnly extends Schema.TaggedError<HostOnly, { readonly brand: unique symbol }>()("HostOnly", {
+  files: Schema.Array(Schema.String),
+}) {
+  override get message(): string {
+    return [
+      `Local host-only plant run refused (decision 0178). This plant's law reaches a real resource: ${this.files.join(", ")}`,
+      "Use eligible disposable CI for the selected laws (0594): gh workflow run plants.yaml -f plant=<name>.",
+    ].join("\n");
+  }
+}
+
 /** The test file a command line names, for the host guard: a plant's law, or `survey`'s `--law`. */
 const lawOf = (args: ReadonlyArray<string>) => {
   const [, verb, subject] = args;
@@ -110,28 +124,22 @@ const lawOf = (args: ReadonlyArray<string>) => {
     : catalog.find(({ name }) => name === subject)?.law.file;
 };
 
+/** One command line, `args` as typed after the script's name, with the environment and platform the guard and the settings read. */
+export const run = (args: ReadonlyArray<string>, env: Env, platform: NodeJS.Platform) =>
+  Effect.suspend(() => {
+    const law = lawOf(args);
+    // 0594: refuse here, with the same message the test runner prints, before anything starts.
+    const refused = law === undefined ? [] : hostFiles([law], env, platform, (path) => readFileSync(path, "utf8"));
+
+    return refused.length > 0
+      ? Effect.fail(new HostOnly({ files: refused }))
+      : Command.runWith(quality, { version: "0.0.0" })(args).pipe(
+          Effect.provide(ConfigProvider.layer(provider(env, repo))),
+        );
+  });
+
 if (import.meta.main) {
-  const args = process.argv.slice(2);
-  const law = lawOf(args);
-
-  // 0594: refuse here, with the same message the test runner prints, before anything starts.
-  const refused =
-    law === undefined ? [] : hostFiles([law], process.env, process.platform, (path) => readFileSync(path, "utf8"));
-
-  if (refused.length > 0) {
-    console.error(
-      [
-        `Local host-only plant run refused (decision 0178). This plant's law reaches a real resource: ${refused.join(", ")}`,
-        "Use eligible disposable CI for the selected laws (0594): gh workflow run plants.yaml -f plant=<name>.",
-      ].join("\n"),
-    );
-    process.exitCode = 1;
-  } else {
-    NodeRuntime.runMain(
-      Command.runWith(quality, { version: "0.0.0" })(args).pipe(
-        Effect.provide(NodeServices.layer),
-        Effect.provide(ConfigProvider.layer(provider(process.env, repo))),
-      ),
-    );
-  }
+  NodeRuntime.runMain(
+    run(process.argv.slice(2), process.env, process.platform).pipe(Effect.provide(NodeServices.layer)),
+  );
 }

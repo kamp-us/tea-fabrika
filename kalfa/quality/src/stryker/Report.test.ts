@@ -5,6 +5,7 @@
 // fast-check for the generated reports: the input is a whole report with several files, tests of the
 // same name in different files and mutants on the same span, which Schema's Arbitrary does not build
 // to a plan.
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -289,9 +290,8 @@ describe("Report, the answer a plant run gives", () => {
         // A refusal's message carries no text of the file it read, either.
         const text = `// ${marker}\nconst x = 1;\n`;
         const refused = Target.find(text, [], ask);
-        const message =
-          refused._tag === "Failure" ? `${refused.failure.message}${JSON.stringify(refused.failure)}` : "";
-        expect(refused._tag).toBe("Failure");
+        const message = Result.isFailure(refused) ? `${refused.failure.message}${JSON.stringify(refused.failure)}` : "";
+        expect(Result.isFailure(refused)).toBe(true);
 
         for (const spelling of [word, encodeURIComponent(marker), JSON.stringify(marker).slice(1, -1)]) {
           expect(message).not.toContain(spelling);

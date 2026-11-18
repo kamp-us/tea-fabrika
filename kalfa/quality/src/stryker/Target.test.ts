@@ -1,3 +1,4 @@
+import { Result } from "effect";
 import fc from "fast-check";
 // Laws Q1 to Q3 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: `Target.find` picks the one mutant a
 // plant names by its code shape (mutator, the node's text and Stryker's replacement), and refuses
@@ -94,8 +95,8 @@ describe("Target.find, a plant's shape is found exactly once", () => {
 
           seen.hit(k === 0 ? "none" : k === 1 ? "one" : "many");
 
-          const found = got._tag === "Success" ? got.success : undefined;
-          const refused = got._tag === "Failure" ? got.failure : undefined;
+          const found = Result.isSuccess(got) ? got.success : undefined;
+          const refused = Result.isFailure(got) ? got.failure : undefined;
           const places = (list: ReadonlyArray<{ line: number; column: number }>) =>
             list.map(({ line, column }) => `${line}:${column}`).sort();
 
@@ -190,8 +191,8 @@ describe("Target.find, a plant's shape is found exactly once", () => {
           const before = Target.find(base.text, madeFor(FILE, base.placed), ask);
           const after = Target.find(moved.text, madeFor(FILE, moved.placed), ask);
 
-          const a = before._tag === "Success" ? before.success : undefined;
-          const b = after._tag === "Success" ? after.success : undefined;
+          const a = Result.isSuccess(before) ? before.success : undefined;
+          const b = Result.isSuccess(after) ? after.success : undefined;
           const added = blanks.slice(0, at).reduce((sum, n) => sum + n, 0);
           const where = moved.placed[0]!;
 
@@ -244,8 +245,8 @@ describe("Target.find, a plant's shape is found exactly once", () => {
 
           seen.hit(count === "once" ? "narrowed" : count);
 
-          const found = got._tag === "Success" ? got.success : undefined;
-          const refused = got._tag === "Failure" ? got.failure : undefined;
+          const found = Result.isSuccess(got) ? got.success : undefined;
+          const refused = Result.isFailure(got) ? got.failure : undefined;
           const where = placed[pickFirst ? 0 : 1]!;
 
           expect({ at: found && [found.line, found.column], reason: refused?.reason }).toEqual(

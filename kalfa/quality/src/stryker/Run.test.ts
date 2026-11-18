@@ -4,7 +4,7 @@
 //
 // fast-check: the input is a catalog with files built to a plan, a scripted report, and a tree of
 // package folders; Schema's Arbitrary builds none of those to order.
-import { Effect, Layer, Option, Path } from "effect";
+import { Effect, Layer, Option, Path, Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { assemble, coverage, madeFor, SHAPES } from "./Built.test-support.ts";
@@ -13,6 +13,7 @@ import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import * as MutantsMemory from "./MutantsMemory.ts";
 import { plant } from "./Plant.ts";
 import type { Plant } from "./Plant.ts";
+import { Answer } from "./Report.ts";
 import * as Run from "./Run.ts";
 
 const options = { seed: 600, numRuns: 100 };
@@ -175,8 +176,8 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
 
           seen.hit(mode);
 
-          const done = got._tag === "Success" ? got.success : undefined;
-          const refusal = got._tag === "Failure" ? got.failure : undefined;
+          const done = Result.isSuccess(got) ? got.success : undefined;
+          const refusal = Result.isFailure(got) ? got.failure : undefined;
           const where = placedBy.get(chosen.name);
 
           // Each mode's one outcome, said whole so no branch can leave a property asserting nothing.
@@ -187,7 +188,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
             plant: done?.plant,
             target: done === undefined ? undefined : { line: done.target.line, column: done.target.column },
             answer: done?.answer._tag,
-            by: done?.answer._tag === "killed" ? done.answer.by : undefined,
+            by: done !== undefined && Answer.guards.killed(done.answer) ? done.answer.by : undefined,
           }).toEqual(
             OKAY.some((okay) => okay === mode)
               ? {
@@ -278,7 +279,7 @@ describe("Run.plant, a plant runs only once its target is certain", () => {
           // Refused before a run, or run once with the option as set.
           expect({
             tag: got._tag,
-            reason: got._tag === "Failure" ? got.failure.reason : undefined,
+            reason: Result.isFailure(got) ? got.failure.reason : undefined,
             ran: calls.ran.length,
             inPlace: calls.ran[0]?.inPlace,
           }).toEqual(
