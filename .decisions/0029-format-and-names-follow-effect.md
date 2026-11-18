@@ -1,19 +1,19 @@
 ---
 id: 0029
-title: The repo formats code as Effect does except semicolons, trailing commas and line width, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
+title: The repo formats code as Effect does except semicolons and trailing commas, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
 status: accepted
 date: 2026-11-09
 tags: [style, format, oxfmt, names, of, services, effect, next]
 ---
 
-# 0029: The repo formats code as Effect does except semicolons, trailing commas and line width, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
+# 0029: The repo formats code as Effect does except semicolons and trailing commas, oxfmt stays, Module.of is allowed, a service that holds many has a plural name and test tooling follows the same names
 
 **What this decides:** the owner closed most of
 [0023](0023-next-follows-effects-code-style.md)'s open differences toward Effect: the format
-settings, `of` read through its module, and plural service names. Three format settings stay
+settings, `of` read through its module, and plural service names. Two format settings stay
 different from Effect's on purpose: semicolons and trailing commas
-([0039](0039-keep-semicolons-and-es5-commas.md)) and the line width
-([0094](0094-lines-are-100-columns.md)).
+([0039](0039-keep-semicolons-and-es5-commas.md)). The line width is `.oxfmtrc.json`'s `printWidth`,
+decided here and by [0094](0094-lines-are-100-columns.md).
 
 ```ts
 // before: tabs, semicolons, trailing commas, no spaces in braces
@@ -55,16 +55,16 @@ rename sweep).
 
 ## Decision
 
-**The repo's format follows Effect's settings except semicolons, trailing commas and line width,
+**The repo's format follows Effect's settings except semicolons and trailing commas,
 oxfmt stays the formatter, `Module.of(...)` is allowed, and a service that holds many is named in the
 plural.**
 
 - **Format, for the whole repo** (one `.oxfmtrc.json`): the indent and the spaces inside braces
-  are Effect's (`useTabs`, `tabWidth` and `bracketSpacing`). Three settings differ from Effect's on
+  are Effect's (`useTabs`, `tabWidth` and `bracketSpacing`). Two settings differ from Effect's on
   purpose: statements end with a semicolon (`semi` is left out, so oxfmt's default) and every
   multi-line list ends with a comma, function parameters and call arguments included
-  (`trailingComma`), both by 0039; and the line width (`printWidth`) is set by 0094, narrower than
-  Effect's. JSON keeps its own settings.
+  (`trailingComma`), both by 0039. The line width is `.oxfmtrc.json`'s `printWidth`, decided here
+  and by 0094. JSON keeps its own settings.
 - **The formatter stays oxfmt, not dprint.** So the generator star stays oxfmt's `function* ()`
   where Effect writes `function*()`. That is a kept difference: one space does not pay for a
   formatter swap. No upstream issue.

@@ -63,9 +63,12 @@ check (owner, 2026-11-09).**
 - A hit from `loosening.sh` goes to the lead's hand check. The PR lists every hit and what the lead
   found. A hit that is not real loosening (a rename the mapping missed, a parser false alarm) does
   not hold the merge. `loosening.sh` with zero real loosening means no owner read is needed.
-- The merge is the lead's `gh pr merge --squash`, pinned to the head that was checked
-  ([0162](0162-no-friction-before-a-merge.md), as [0530](0530-lead-turns-on-merge-when-ready.md)
-  changed when the lead turns it on).
+- The merge is the lead's, through `land.ts` and never a bare `gh pr merge`
+  ([0603](0603-no-stacks-and-sev0-admin-merges.md)): `land.ts arm` turns on merge when ready as a
+  squash pinned to the head that was checked, and GitHub's merge queue tests the pull request on
+  newest main before it lands ([0162](0162-no-friction-before-a-merge.md),
+  [0530](0530-lead-turns-on-merge-when-ready.md),
+  [0544](0544-every-reviewed-pull-request-is-armed.md)).
 - An exam pull request, or a pull request that touches an exam path, merges like any other when
   it passes those checks. The owner's read is not needed.
 - A new edge comment (`fabrika/no-promises -- edge: <why>`) is read by the lead at merge and
@@ -81,8 +84,8 @@ check (owner, 2026-11-09).**
 
 - No step's check is dropped to reach a merge. A check that cannot run is `stuck`, never a pass.
 - The leak check still fails closed.
-- "CI green on the head" is `ci-required` green on the exact head that merges. A head that merges
-  cleanly with main lands behind main as it is, with no lint on the true merge
+- "CI green on the head" is `ci-required` green on the exact head that merges. GitHub's merge queue
+  then runs `ci-required` again on the merge group, the pull request on newest main
   ([0162](0162-no-friction-before-a-merge.md)).
 
 ## Consequences

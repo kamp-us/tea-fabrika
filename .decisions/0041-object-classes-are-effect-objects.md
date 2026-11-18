@@ -232,8 +232,9 @@ source shows a name exists. It does not show that it works for our objects.
   `workers/platform.ts` shrink or go is the plan's to answer.
 - **The host Worker changes too.** `.make()` registers the class through the host Worker's
   `export`, and Alchemy's source says a Worker with `bundle: false` does not get those exports.
-  The stack's `bundle` key (`next/apps/fabrika/alchemy.run.ts`) is `false`, and the stack bundles
-  the brain itself, with the React Compiler plugin and the program table. So the port touches
+  The stack's `bundle` key (`next/apps/fabrika/alchemy.run.ts`) tells Alchemy whether to bundle
+  the brain, and until the port the stack bundles it itself, with the React Compiler plugin and the
+  program table. The port changes that key and what builds the brain, so it touches
   `alchemy.run.ts` and `build.ts`.
 - **Cost:** the object classes join Alchemy's resource graph, a beta's breaking change can reach
   the brain's core, and one more library sits between a platform event and our service.

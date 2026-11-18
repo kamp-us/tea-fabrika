@@ -1,12 +1,12 @@
 ---
 id: 0045
-title: A step that needs ports, sockets or its own processes and cannot run directly runs in a container with its own network, never behind a hole in the laptop sandbox
+title: A step that needs ports, sockets or its own processes and still needs network isolation runs in a container with its own network, never behind a hole in the laptop sandbox
 status: accepted
 date: 2026-11-09
 tags: [sandbox, container, docker, network, mutation, stryker, lead, tooling, sockets, loopback]
 ---
 
-# 0045: A step that needs ports, sockets or its own processes and cannot run directly runs in a container with its own network, never behind a hole in the laptop sandbox
+# 0045: A step that needs ports, sockets or its own processes and still needs network isolation runs in a container with its own network, never behind a hole in the laptop sandbox
 
 **What this decides:** the fence around a step that runs tests or tools and still needs network
 isolation is a container with a private network, where anything may listen and nothing crosses the
@@ -118,14 +118,15 @@ safe checks out of it. The Decision below says where the line falls now.
 
 ## Decision
 
-**A step that needs ports, sockets or its own processes, and so needs network isolation, runs
+**A step that needs ports, sockets or its own processes and still needs network isolation runs
 inside a container with its own private network; we stop opening the laptop sandbox for it.**
 
 - **Ordinary safe checks run directly, in parallel, with no Docker slot** (0594). That covers
   format, lint, ordinary tests and scoped temporary-Git checks that signal no real process, under
   the machine caps. A check that still needs network isolation keeps the rules below.
 - **Launchd, real Electron and real process-signal laws do not run on the owner's laptop.** They
-  use eligible disposable CI: Linux for a portable process-signal law, macOS for a Mac-specific one
+  use eligible disposable CI: Linux or macOS for a portable process-signal law, macOS for a
+  Mac-specific one
   (0594).
 - **The fence is a container, not a filter.** Inside it anything may listen. Its network is its
   own: `--network none` while test code runs, so it reaches nothing on the laptop and nothing
