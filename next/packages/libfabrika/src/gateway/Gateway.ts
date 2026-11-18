@@ -25,7 +25,7 @@ import { RateLimiter } from "effect/persistence/RateLimiter";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Str from "effect/String";
-import { admitted, MemberEvent, Saw } from "../access/Access.ts";
+import { type Access, admitted, MemberEvent, Saw } from "../access/Access.ts";
 import { foldAccess } from "../access/AccessFold.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
 import { ClientManager, type Written } from "../access/ClientManager.ts";
@@ -69,7 +69,7 @@ import { type CheckedHello, checkHello, type WebCryptoError } from "../transport
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
 import { Admission, Answer, Attached, Hello, RateCountFailure, RateRefusal } from "../transport/Wire.ts";
-import { type GatewayError } from "./GatewayError.ts";
+import { GatewayError, Storage } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
@@ -725,6 +725,25 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const [state] = Waiting.machine.init(loaded?.success ?? initialWaiting, options.waiting);
     return stepWaiting(state, { type: "expire", at });
   };
+  // Takes the waiting rows whose keys the members admit, and wakes those rows' clients. The grant
+  // path calls it after a grant applies, and a knock calls it after it writes its row, so a knock
+  // that lands after a grant's drain is still woken. Only the caller whose atomic step removed a row
+  // notifies that row's clients, so a race between the two wakes each client once.
+  const release = Effect.fnUntraced(function* (members: Access, at: number) {
+    const taken = yield* store.atomic(() => {
+      const live = waiting(at);
+      const accepted = live.rows.filter((r) => !("reason" in admitted(members, r.key)));
+      saveWaiting(stepWaiting(live, { type: "accepted", keys: accepted.map((r) => r.key) }));
+      return accepted;
+    });
+
+    for (const row of taken) {
+      for (const client of row.clients) {
+        const nonce = yield* challenge(ConnectionId.make(client));
+        yield* notify(client, News.cases.granted.make({ nonce }));
+      }
+    }
+  });
   const knock = Effect.fnUntraced(function* (
     client: ConnectionId,
     params: { readonly label: string; readonly pass?: string | null; readonly as?: "window" | "agent" | "hands" },
@@ -754,6 +773,16 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     });
     // The positive cap keeps the row this knock just wrote.
     const row = Option.getOrThrow(Option.fromUndefinedOr(state.rows.find((r) => r.key === attached.key)));
+    // Register first, then check: a grant that drained before this row existed is seen here.
+    // An empty project has no members and nobody to admit, and reading it here must not found one.
+    const members = yield* silent(readMembers()).pipe(
+      Effect.mapError((cause) => new GatewayError({ reason: new Storage({ cause }) })),
+    );
+
+    if (members !== null) {
+      yield* release(members, at);
+    }
+
     return ok({ code: row.code, until: row.until });
   });
   const watch = Effect.fnUntraced(function* (client: ConnectionId) {
@@ -1070,20 +1099,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           if (reply._tag === "applied") {
             const latest = yield* clients.members;
             const at = yield* clock;
-            const pending = yield* store.atomic(() => {
-              const live = waiting(at);
-              const accepted = live.rows.filter((r) => !("reason" in admitted(latest, r.key)));
-              const keys = accepted.map((r) => r.key);
-              saveWaiting(stepWaiting(live, { type: "accepted", keys }));
-              return accepted;
-            });
-
-            for (const row of pending) {
-              for (const client of row.clients) {
-                const nonce = yield* challenge(ConnectionId.make(client));
-                yield* notify(client, News.cases.granted.make({ nonce }));
-              }
-            }
+            yield* release(latest, at);
 
             const connections = yield* store.atomic(() =>
               sql.exec("SELECT name FROM gateway_state WHERE name LIKE 'key/%'"),
