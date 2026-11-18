@@ -1,4 +1,3 @@
-import { Effect } from "effect";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
 // key. Starts the real `dev.ts` in its own temp home on its own port and drives headless Chromium;
@@ -18,6 +17,8 @@ import { Effect } from "effect";
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-<state>-<layout>.png`.
+import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate } from "effect";
+
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
 import {
@@ -88,7 +89,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
               for (let tries = 0; ; tries++) {
                 const bar = yield* statusBar(page);
 
-                if (bar.text.includes("Esc cancel") || tries >= 120) {
+                if (pipe(bar.text, Str.includes("Esc cancel")) || tries >= 120) {
                   expect(bar.text, `the prefix line is up (${layout})`).toContain("Esc cancel");
                   expect(bar.tiles, `arming the prefix moves, resizes or folds no tile (${layout})`).toEqual(
                     idle.tiles,
@@ -150,7 +151,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "Control+b", "%");
 
           const side = yield* drawnAs(
-            (n, v) => n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "row",
+            (n, v) => n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "row",
             "two side by side",
           );
 
@@ -167,7 +168,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "y");
           const closed = yield* drawnAs((n) => n === 1, "t2 closed");
           expect(
-            shown(closed).map((t) => t.id),
+            Arr.map(shown(closed), (t) => t.id),
             "L21: y closes the asked tile",
           ).toEqual([t1.id]);
 
@@ -175,7 +176,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "Control+b", '"');
           yield* drawnAs(
             (n, v) =>
-              n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "column",
+              n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "column",
             "two stacked",
           );
           yield* shoot(page, "split-down", "stacked");
@@ -204,9 +205,12 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 
             return (
               n === 4 &&
-              typeof l !== "string" &&
+              !Predicate.isString(l) &&
               l.dir === "column" &&
-              l.parts.every((p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2)
+              Arr.every(
+                l.parts,
+                (p) => !Predicate.isString(p.inner) && p.inner.dir === "row" && p.inner.parts.length === 2,
+              )
             );
           }, "a 2x2");
 
@@ -236,7 +240,11 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           const five = yield* drawnAs((n) => n === 5, "a quarter split right");
           const narrow = focused(five);
           expect(narrow.id, "L21: the quarter's new tile takes focus").not.toBe(quarter.id);
-          const box = (yield* drawn(page)).regions.find((x) => x.name.endsWith(`, t${narrow.n}`))?.box;
+
+          const box = Option.getOrUndefined(
+            Arr.findFirst((yield* drawn(page)).regions, (x) => pipe(x.name, Str.endsWith(`, t${narrow.n}`))),
+          )?.box;
+
           expect(box?.width ?? 0, "the narrow tile is too narrow to split again").toBeLessThan(2 * 220);
           yield* keys(page, "Control+b", "%");
           yield* Effect.sleep(QUIET);
@@ -262,7 +270,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 // started, and the brain answers it as it answers any stream never written, with no entries.
 // Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
 // tab's own tezgah, which exists.
-const NOBODY = `processes/tezgah:${typeId("person", 77).slice("person_".length)}`;
+const NOBODY = `processes/tezgah:${pipe(typeId("person", 77), Str.slice("person_".length))}`;
 
 const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
 
@@ -281,8 +289,8 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           const wire = {
             hide: true,
             /** Per socket, the tezgah streams the tab read on it, in order. */
-            reads: [] as Array<Array<string>>,
-            sockets: [] as Array<{ close: () => Promise<void> }>,
+            reads: Array.of<Array<string>>(),
+            sockets: Array.of<{ close: () => Promise<void> }>(),
           };
 
           yield* promised(() =>
@@ -292,16 +300,16 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
               wire.reads.push(read);
               wire.sockets.push({ close: () => ws.close({ code: 4000, reason: "the law drops the socket" }) });
               ws.onMessage((message) => {
-                const found = typeof message === "string" ? TEZGAH_READ.exec(message) : null;
+                const found = Predicate.isString(message) ? TEZGAH_READ.exec(message) : null;
 
-                if (typeof message !== "string" || found === null) {
+                if (!Predicate.isString(message) || found === null) {
                   server.send(message);
 
                   return;
                 }
 
                 read.push(found[0]);
-                server.send(wire.hide ? message.replace(TEZGAH_READ, `"stream":"${NOBODY}"`) : message);
+                server.send(wire.hide ? pipe(message, Str.replace(TEZGAH_READ, `"stream":"${NOBODY}"`)) : message);
               });
             }),
           );
@@ -329,7 +337,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
             const now = yield* says;
 
             if ((words.test(now.status) && words.test(now.polite)) || tries >= 120) {
-              const seen = `the page says ${JSON.stringify(now)}, the tab read ${JSON.stringify(wire.reads)}`;
+              const seen = `the page says ${Formatter.format(now)}, the tab read ${Formatter.format(wire.reads)}`;
               expect(now.status, `R2: the status bar says tezgah is not running for this person; ${seen}`).toMatch(
                 words,
               );
@@ -348,7 +356,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           }
 
           yield* shoot(page, "no-tezgah", "one-tile");
-          const before = wire.reads.filter((x) => x.length > 0).length;
+          const before = Arr.filter(wire.reads, (x) => x.length > 0).length;
           expect(before, "R2: the tab read its tezgah on its dial").toBeGreaterThan(0);
 
           // tezgah exists for this person now; the socket drops, and the next dial finds it.
@@ -367,7 +375,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           expect((yield* says).status, "R2: once tezgah is there, the status bar no longer says it is not").not.toMatch(
             words,
           );
-          const read = wire.reads.filter((x) => x.length > 0);
+          const read = Arr.filter(wire.reads, (x) => x.length > 0);
           expect(read.length, "R2: the redial read the tab's tezgah again, on a new socket").toBeGreaterThan(before);
 
           for (const streams of read) {

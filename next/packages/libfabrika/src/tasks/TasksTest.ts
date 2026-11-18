@@ -17,12 +17,18 @@
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -109,7 +115,9 @@ export const fcExecutor = (keys: ReadonlyArray<string>): fc.Arbitrary<Executor> 
 export const fcRecorded = fc.record({
   by: fc.constantFrom("brain", "gateway:hands", "gateway:window"),
   for: fcTypeId("person"),
-  sentAt: fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 }).map((at) => new Date(at).toISOString()),
+  sentAt: fc
+    .integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 })
+    .map((at) => DateTime.formatIso(DateTime.makeUnsafe(at))),
   parent: fc.option(fcTypeId("input"), { nil: null }),
   traceId: fcTraceId,
   build: fcHash,
@@ -118,6 +126,7 @@ export const fcRecorded = fc.record({
 export type Said = Omit<Recorded, "seen">;
 
 /** A value as it comes back from JSON: equal in every field, never the same object. */
+// SAFETY: its callers copy plain JSON data (exit reasons, task records, `fc.jsonValue`), which JSON gives back field for field as the same type.
 export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value)) as A;
 
 /** The item a tape number picks; never called on an empty list. */
@@ -131,6 +140,10 @@ export const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   return item;
 };
 
+/** The same process id with its last character flipped: "0" becomes "1", anything else "0". */
+const flipLast = (id: string): string =>
+  `${Function.pipe(id, Str.slice(0, -1))}${Function.pipe(id, Str.endsWith("0")) ? "1" : "0"}`;
+
 /** One field of a request changed to another valid value: same id, different bytes. */
 export const changedRequest = (request: Request, pick: number, other: Request): Request => {
   const field = choose(["target", "process", "name", "program", "needs", "build", "settings", "parent"] as const, pick);
@@ -141,7 +154,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
   }
 
   if (field === "process") {
-    const flipped = request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+    const flipped = flipLast(request.process);
 
     return { ...request, process: differs(request.process, other.process, flipped) };
   }
@@ -174,10 +187,11 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
 };
 
 /** A value one field away from valid: wrong type, empty text or a missing key. */
-export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): unknown => {
+export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly [string, unknown]>): object => {
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
+    // SAFETY: `value` is an object, and this only drops the field `key` names and keeps the rest by their string keys.
     const { [key]: _gone, ...rest } = value as Record<string, unknown>;
 
     return rest;
@@ -209,7 +223,7 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["settings", MISSING],
   ["parent", "not-an-input"],
   ["parent", MISSING],
-  ["traceId", "0".repeat(32)],
+  ["traceId", Function.pipe("0", Str.repeat(32))],
   ["traceId", "XYZ"],
 ];
 
@@ -243,8 +257,9 @@ export const BAD_RECORDED: ReadonlyArray<readonly [string, unknown]> = [
 ];
 
 /** A result one field away from valid, for the case it has. */
-export const brokenResult = (result: Result, pick: number): unknown => {
-  const fits = BAD_RESULT.filter(
+export const brokenResult = (result: Result, pick: number): object => {
+  const fits = Arr.filter(
+    BAD_RESULT,
     ([key]) =>
       key === "_tag" || (key === "code" ? result._tag === "exited" : key === "reason" && result._tag !== "exited"),
   );
@@ -335,6 +350,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql with one planted fault: refuse the next entry insert, or the statement after it. */
 const cutting = (sql: Sql) => {
+  // SAFETY: `at` is widened from `null` to name the planted cut's place, "before" or "after" an append; `null` means no cut.
   const fault = { at: null as "before" | "after" | null, armed: false };
 
   const wrapped: Sql = {
@@ -422,11 +438,12 @@ const expected = (saved: Saved): Task => {
               ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
               : expect.fail("the fold reached a phase without its facts");
 
+  // SAFETY: the branches above built `state` from the saved facts, and `events` are the saved events, which is a Task.
   return { state, events: saved.events } as Task;
 };
 
 const at = (world: World, phases: ReadonlyArray<Phase>) =>
-  [...world.tasks.values()].filter((j) => phases.includes(j.phase));
+  Arr.filter([...world.tasks.values()], (j) => phases.includes(j.phase));
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
@@ -468,7 +485,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_early: requested || assigned || started,
   };
 
-  return moves.filter((move) => can[move]);
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /** An executor for `task` that may take it: its target key, holding every capability it needs. */
@@ -481,7 +498,7 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 
 /** Another execution identity than the saved one, close to it on purpose. */
 const otherExecution = (execution: string, variant: number): string =>
-  choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, Function.pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 /** A move, or a move in the one phase of the task it was played on. */
 type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";
@@ -519,20 +536,21 @@ const walk = (
         const wanted = asked.get(key) ?? [];
         expect(saved.length, `${message}: one ${targetStream(key)} line per accepted request`).toBe(wanted.length);
         expect(
-          saved.map((entry) => entry.body),
+          Arr.map(saved, (entry) => entry.body),
           `${message}: each line points at its task`,
         ).toMatchObject(wanted);
         const answer = success(yield* tasks((j) => j.forTarget(key)), `${message}: forTarget`);
 
-        const open = [...world.tasks.values()].filter(
+        const open = Arr.filter(
+          [...world.tasks.values()],
           (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
         );
 
         const ids = (all: ReadonlyArray<Task>) =>
-          all.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+          Arr.map(all, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
 
         expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
-          open.map((s) => s.request.id).sort(),
+          Arr.map(open, (s) => s.request.id).sort(),
         );
 
         for (const task of answer.tasks) {
@@ -647,7 +665,7 @@ const walk = (
           const saved = choose([...world.tasks.values()], cell.pick);
 
           const key = choose(
-            tape.keys.filter((k) => k !== saved.request.target),
+            Arr.filter(tape.keys, (k) => k !== saved.request.target),
             cell.variant,
           );
 
@@ -663,7 +681,7 @@ const walk = (
         case "take_lacking": {
           const saved = on(["requested", "assigned", "started", "finished", "collected"]);
           const missing = choose(saved.request.needs, cell.variant);
-          const executor = { ...able(saved, cell), has: CAPABILITIES.filter((c) => c !== missing) };
+          const executor = { ...able(saved, cell), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
           refused(
             yield* tasks((j) => j.take(saved.request.id, executor, recorded)),
             "a take without a needed capability",
@@ -757,8 +775,8 @@ const walk = (
           const saved = on(["finished", "collected"]);
 
           const other =
-            JSON.stringify(cell.other) === JSON.stringify(saved.result)
-              ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
+            Formatter.formatJson(cell.other) === Formatter.formatJson(saved.result)
+              ? Result.cases.exited.make({ code: 1, version: `${Formatter.formatJson(cell.other)}-other` })
               : cell.other;
 
           refused(
@@ -854,12 +872,7 @@ const walk = (
           // Another process generation, such as a successor, never takes this result.
           const saved = on(["finished", "collected"]);
           const other = choose(tape.requests, cell.variant).process;
-
-          const process =
-            other === saved.request.process
-              ? saved.request.process.replace(/.$/, (last) => (last === "0" ? "1" : "0"))
-              : other;
-
+          const process = other === saved.request.process ? flipLast(saved.request.process) : other;
           refused(
             yield* tasks((j) =>
               j.collected(saved.request.id, { process, letter: `${saved.request.id}/answer` }, recorded),
@@ -926,11 +939,13 @@ const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tas
 const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks: Call) => {
   const saved = [...world.tasks.values()];
   const which = cell.variant % 4;
+  // SAFETY: the record is broken on purpose, so the call below can show that the store refuses it.
   const badRecord = broken(recorded, cell.pick, BAD_RECORDED) as Recorded;
 
   if (which === 0 || saved.length === 0) {
     const request = choose(tape.requests, world.next < tape.requests.length ? world.next : cell.pick);
 
+    // SAFETY: the request is broken on purpose, so the store's refusal of a bad request can be seen.
     return cell.pick % 3 === 0
       ? tasks((j) => j.request(request, badRecord))
       : tasks((j) => j.request(broken(request, cell.pick, BAD_REQUEST) as Request, recorded));
@@ -940,6 +955,7 @@ const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks
   const execution = task.execution ?? "any-execution";
 
   if (which === 1) {
+    // SAFETY: the executor handed to `take` is broken on purpose, so the law sees the store refuse it.
     return cell.pick % 3 === 0
       ? tasks((j) => j.take(task.request.id, able(task, cell), badRecord))
       : tasks((j) => j.take(task.request.id, broken(able(task, cell), cell.pick, BAD_EXECUTOR) as Executor, recorded));
@@ -949,6 +965,7 @@ const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks
     return tasks((j) => j.started(task.request.id, execution, badRecord));
   }
 
+  // SAFETY: the result handed to `finish` is broken on purpose, to see the store refuse it.
   return cell.pick % 3 === 0
     ? tasks((j) => j.finish(task.request.id, execution, cell.result, badRecord))
     : tasks((j) => j.finish(task.request.id, execution, brokenResult(cell.result, cell.pick) as Result, recorded));
@@ -965,10 +982,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Done>();
         const law = walk(open, moves, done, targets);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40, includeErrorInReport: true }));
         // An empty flow cannot pass: every move the law is about ran at least once.
@@ -1002,7 +1020,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         "take_other",
         "reopen",
         "take_lacking@requested",
-        ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+        ...Arr.flatMap(["assigned", "started", "finished"] as const, (phase) => [
           `take_again@${phase}` as const,
           `take_lacking@${phase}` as const,
         ]),
@@ -1135,7 +1153,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
             Tasks.use(f).pipe(Effect.provide(life));
 
           const wanted = a.request.process;
-          const other = wanted.replace(/.$/, (last) => (last === "0" ? "1" : "0"));
+          const other = flipLast(wanted);
           const said = { ...a.recorded, seen: 0 };
           const expected = new Map<string, Task>();
 
@@ -1146,7 +1164,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
           }
 
           for (const choice of a.cells) {
-            const owned = [...expected.entries()].filter(([, j]) => j.state._tag === "requested");
+            const owned = Arr.filter([...expected.entries()], ([, j]) => j.state._tag === "requested");
             const move = choice % (owned.length > 0 ? 3 : 2);
 
             if (move === 0) {
@@ -1183,12 +1201,13 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               measured.tasks += a.total;
               const rows = [...actual];
 
-              const selected = [...expected.values()].filter(
+              const selected = Arr.filter(
+                [...expected.values()],
                 (j) => j.state._tag !== "absent" && j.state.request.process === process,
               );
 
               const ids = (tasks: ReadonlyArray<Task>) =>
-                tasks.map((j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+                Arr.map(tasks, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
 
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);

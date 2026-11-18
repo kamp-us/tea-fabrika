@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unknown-returns-1-tests-fix",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:37:29-08:00",
+  "ended": "2026-11-15T22:40:56-08:00",
+  "parent": "2026-11-15-antislop-no-unknown-returns-1-tests",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round of anti-slop judgment slice AS-no-unknown-returns-1, in our tooling. The earlier tests commit typed field-check's parse helper as Schema.Json | undefined through an import of effect's Schema type, and that import made lint count .github/ci/field-check.ts as Effect code, so fabrika/no-raw-try-catch blocked its two try/catch blocks (lines 34 and 262). The fix drops the Effect import and gives the file a local recursive Json type, as the build step did in .agents/skills/lead/scripts/quest.ts: the same honest return type, no unknown, no disable line. Every other file the earlier tests commit gave an Effect import was checked: build-assets.integration.test.ts, css.integration.test.ts, Client.laws.test.ts and no-static-layer.test.ts already imported effect before it, and duplicate-packages.test.ts and namespace-imports.test.ts hold no try/catch, so none changed status. Hits met 1, fixed by hand edit 1, left 0, waiting on 1366 0.",
+  "plants": [
+    {
+      "law": ".github/ci/field-check.test.ts: valid cores pass, each blocking field rejects bad types, optional facts stay unknown",
+      "plant": "field-check.ts parse gives back undefined for every text, valid JSON included",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "No law was added, changed or narrowed; no assertion removed. The plant ran once on a saved copy of field-check.ts, restored by copy (14 of 22 tests red under it). Ran at a3615897f plus this diff: field-check.test.ts 22 of 22 green, tsc --noEmit -p .github/ci/tsconfig.json clean, pnpm format, pnpm lint with a 6 GB heap: 0 blocking, red only on the held zero-lock lines for anti-slop/no-unknown-returns (.agents, oxlint-plugins, libfabrika src root, client, gateway, tasks, programs checklist and pipeline), which the owner ruling holds for the later lock pull request.",
+  "step": "tests"
+}

@@ -5,6 +5,8 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -13,6 +15,8 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import {
   BrainControl,
   BrainControlError,
@@ -142,12 +146,14 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const domain = Effect.gen(function* () {
     const response = yield* success("/usr/bin/id", ["-u"]);
 
-    const uid = yield* Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u)))(
+    const uid = yield* response.stdout.pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- edge: decode only the numeric UID from protected native output
-      Redacted.value(response.stdout),
-    ).pipe(Effect.mapError(unsupported));
+      Redacted.value,
+      Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u))),
+      Effect.mapError(unsupported),
+    );
 
-    return `gui/${uid.trimEnd()}`;
+    return `gui/${Str.trimEnd(uid)}`;
   });
 
   const inspect = Effect.gen(function* () {
@@ -201,7 +207,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     const json = path.join(dir, "job.json"),
       xml = path.join(dir, "job.plist");
 
-    yield* fs.writeFileString(json, JSON.stringify(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
+    yield* fs.writeFileString(json, Formatter.formatJson(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
     yield* success("/usr/bin/plutil", ["-convert", "xml1", "-o", xml, json]);
     yield* fs.chmod(xml, 0o600).pipe(Effect.mapError(storage));
     const file = yield* fs.open(xml, { flag: "r+", noFollow: true }).pipe(Effect.mapError(storage));
@@ -277,7 +283,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       // An empty path is not yet "removed": an earlier removal may hold an entry it could not put
       // back. That entry is somebody's, so this removal refuses too, until a person has taken it.
       for (const name of yield* fs.readDirectory(spec.home).pipe(Effect.mapError(storage))) {
-        if (!name.startsWith(".brain-")) {
+        if (!Function.pipe(name, Str.startsWith(".brain-"))) {
           continue;
         }
 
@@ -343,7 +349,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
         // The target is read as text, and bytes that are not UTF-8 come back as U+FFFD. Writing that
         // would put a different link at the path, so the captured link stays in its folder instead.
         // A target that really holds U+FFFD stays too: kept as it is, never a wrong link.
-        if (target.includes("\uFFFD")) {
+        if (Function.pipe(target, Str.includes("\uFFFD"))) {
           return yield* conflict("symlink target is not text");
         }
 

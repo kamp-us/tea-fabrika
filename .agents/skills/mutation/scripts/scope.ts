@@ -33,13 +33,13 @@
  *   which the container cannot open) among its kinds is left out.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Stdio, Stream } from "effect";
+import { Array as Arr, String as Str, pipe, Console, Effect, FileSystem, Option, Stdio, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 
 const LEAD = ".agents/skills/lead/scripts/";
 
 /** The quest code's own files and tests (0089's table); the flow runner is a folder. */
-const QUEST = ["chain", "drive"].flatMap((stem) => [".ts", ".test.ts"].map((end) => `${LEAD}${stem}${end}`));
+const QUEST = Arr.flatMap(["chain", "drive"], (stem) => Arr.map([".ts", ".test.ts"], (end) => `${LEAD}${stem}${end}`));
 
 const FLOW = `${LEAD}flow/`;
 
@@ -55,24 +55,25 @@ const TESTS = [".test.ts", ".test.tsx"] as const;
 
 /** The same product rule as a git pathspec, for the sample script's diff: less tests and type-only files. */
 export const PRODUCT = [
-  ...EXTENSIONS.map((extension) => `*${extension}`),
+  ...Arr.map(EXTENSIONS, (extension) => `*${extension}`),
   ":!*.test.*",
-  ...DECLARATIONS.map((extension) => `:!*${extension}`),
+  ...Arr.map(DECLARATIONS, (extension) => `:!*${extension}`),
 ] as const;
 
 /** A file that holds mutants: the pathspec above, read as git reads it (its `*` crosses `/`). */
 const product = (path: string) =>
-  EXTENSIONS.some((extension) => path.endsWith(extension)) &&
-  !path.includes(".test.") &&
-  !DECLARATIONS.some((extension) => path.endsWith(extension));
+  Arr.some(EXTENSIONS, (extension) => pipe(path, Str.endsWith(extension))) &&
+  !pipe(path, Str.includes(".test.")) &&
+  !Arr.some(DECLARATIONS, (extension) => pipe(path, Str.endsWith(extension)));
 
-const test = (path: string) => TESTS.some((extension) => path.endsWith(extension));
+const test = (path: string) => Arr.some(TESTS, (extension) => pipe(path, Str.endsWith(extension)));
 
 /** Whether the run may mutate this path, or run it as a test: all but lead tooling, quest code kept. */
-export const inScope = (path: string) => !path.startsWith(".agents/") || QUEST.includes(path) || path.startsWith(FLOW);
+export const inScope = (path: string) =>
+  !pipe(path, Str.startsWith(".agents/")) || QUEST.includes(path) || pipe(path, Str.startsWith(FLOW));
 
 /** The changed paths in scope, in their order. */
-export const pick = (paths: ReadonlyArray<string>) => paths.filter(inScope);
+export const pick = (paths: ReadonlyArray<string>) => Arr.filter(paths, inScope);
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -84,10 +85,12 @@ const SIBLING = /^((?:[A-Za-z0-9-]+\.)+)test\.tsx?$/;
 
 /** The tracked tests beside a product file that carry a kind: `stem.<kind>.test.ts(x)`, the stem followed by a dot. */
 const siblings = (stem: string, tracked: ReadonlyArray<string>) =>
-  tracked.filter((file) => {
-    const kinds = file.startsWith(`${stem}.`) ? SIBLING.exec(file.slice(stem.length + 1))?.[1] : undefined;
+  Arr.filter(tracked, (file) => {
+    const kinds = pipe(file, Str.startsWith(`${stem}.`))
+      ? SIBLING.exec(pipe(file, Str.slice(stem.length + 1)))?.[1]
+      : undefined;
 
-    return kinds !== undefined && !kinds.split(".").some((kind) => UNUSABLE.includes(kind));
+    return kinds !== undefined && !Arr.some(Str.split(kinds, "."), (kind) => Arr.contains(UNUSABLE, kind));
   });
 
 /**
@@ -97,11 +100,12 @@ const siblings = (stem: string, tracked: ReadonlyArray<string>) =>
  * `name.test.ts(x)` exists at head is the workflow's check.
  */
 export const related = (changed: ReadonlyArray<string>, tracked: ReadonlyArray<string> = []) => {
-  const tests = pick(changed).flatMap((path) => {
+  const tests = Arr.flatMap(pick(changed), (path) => {
     if (product(path)) {
-      const stem = path.slice(0, path.lastIndexOf("."));
+      const dot = Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
+      const stem = pipe(path, Str.slice(0, dot));
 
-      return [...TESTS.map((extension) => `${stem}${extension}`), ...siblings(stem, tracked)];
+      return [...Arr.map(TESTS, (extension) => `${stem}${extension}`), ...siblings(stem, tracked)];
     }
 
     return test(path) ? [path] : [];
@@ -118,11 +122,11 @@ const scope = Command.make(
     const stdio = yield* Stdio.Stdio;
     const text = yield* stdio.stdin.pipe(Stream.decodeText(), Stream.mkString);
     const files = tracked === undefined ? "" : yield* fs.readFileString(tracked);
-    const lines = (list: string) => list.split("\n").filter((line) => line !== "");
+    const lines = (list: string) => Arr.filter(Str.split(list, "\n"), (line) => line !== "");
     const tests = related(lines(text), lines(files));
 
     if (tests.length > 0) {
-      yield* Console.log(tests.join("\n"));
+      yield* Console.log(Arr.join(tests, "\n"));
     }
   }),
 );

@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -31,23 +31,28 @@ const law = (
   });
 
 // `settingsStart` answers the Project's good reply by default; a law may hold each answer back.
-const world = (
+const world = async (
   port: number,
   name: string,
-  settingsStart: (reply: unknown) => Promise<unknown> = async (reply) => reply,
+  settingsStart: (reply: ReturnType<typeof StartsTest.reply>) => Promise<ReturnType<typeof StartsTest.reply>> = async (
+    reply,
+  ) => reply,
 ) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
 
-  const config = instanceFixture({
-    name,
-    port,
-    person: "person-test",
-    founder: "public-test",
-    window: null,
-    build: "build-test",
-  });
+  const config = await Effect.runPromise(
+    StartsTest.fixture({
+      name,
+      port,
+      person: "person-test",
+      founder: "public-test",
+      window: null,
+      build: "build-test",
+    }),
+  );
 
+  // SAFETY: the public routes call only INSTANCE, CONNECTION's `fetch` and PROJECT's settings, grant and target, as doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
     INSTANCE: JSON.stringify(config),
@@ -105,7 +110,7 @@ describe("P12 public Worker fetch", () => {
 
     await fc.assert(
       fc.asyncProperty(bad, async (target) => {
-        const w = world(18787, "parse-test");
+        const w = await world(18787, "parse-test");
         const exit = await Effect.runPromiseExit(fetch(w.request(`/grant/client/${target}`), w.env, w.config));
         expect(Exit.isFailure(exit)).toBe(true);
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -122,7 +127,7 @@ describe("P12 public Worker fetch", () => {
       fc.asyncProperty(
         fc.jsonValue().map((v) => `${JSON.stringify(v)}!`),
         async (body) => {
-          const w = world(18787, "parse-test");
+          const w = await world(18787, "parse-test");
 
           const request = new Request(`${w.origin}/grant`, {
             method: "POST",
@@ -142,7 +147,7 @@ describe("P12 public Worker fetch", () => {
     );
   });
   law("wrong hosts refuse every route before RPC or body work", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const host of [
       `localhost:${port}`,
@@ -159,7 +164,7 @@ describe("P12 public Worker fetch", () => {
     expect(w.calls).toEqual([]);
   });
   law("foreign origins refuse every route before RPC", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const origin of [`https://127.0.0.1:${port}`, `http://localhost:${port}`, "null", "https://other.invalid"]) {
       for (const path of ["/client/a", "/grant", "/grant/client/a", "/"]) {
@@ -175,7 +180,7 @@ describe("P12 public Worker fetch", () => {
   });
   law("a matching or absent origin forwards the exact client request and path", async ({ port, name, id }, fetch) => {
     for (const originHeader of [null, `http://127.0.0.1:${port}`]) {
-      const w = world(port, name),
+      const w = await world(port, name),
         path = `/client/${encodeURIComponent(id)}`;
 
       const request = w.request(path, "GET", originHeader);
@@ -195,7 +200,7 @@ describe("P12 public Worker fetch", () => {
     }
   });
   law("POST grant forwards parsed JSON only to the configured project", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     const result = await Effect.runPromise(
       fetch(w.request("/grant", "POST", w.origin, undefined, body), w.env, w.config),
@@ -209,7 +214,7 @@ describe("P12 public Worker fetch", () => {
     "GET grant client decodes its name and code, with empty code as the default",
     async ({ port, name, id, code }, fetch) => {
       for (const query of ["", `?code=${encodeURIComponent(code)}`]) {
-        const w = world(port, name);
+        const w = await world(port, name);
 
         const result = await Effect.runPromise(
           fetch(w.request(`/grant/client/${encodeURIComponent(id)}${query}`), w.env, w.config),
@@ -236,7 +241,15 @@ describe("P12 public Worker fetch", () => {
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
-        const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
+
+        const w = await world(port, name, (reply) =>
+          Effect.runPromise(
+            Effect.callback<ReturnType<typeof StartsTest.reply>>((resume) => {
+              held.push(() => resume(Effect.succeed(reply)));
+            }),
+          ),
+        );
+
         const answered: Array<number> = [];
 
         const first = order.map(() =>
@@ -256,7 +269,9 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await new Promise((settle) => setTimeout(settle, 0));
+          // One timer turn, as the old `setTimeout(0)` was (Node runs a 0 ms timer at 1 ms), so a stray
+          // second answer has time to land. `Effect.sleep(0)` would be only `Effect.yieldNow`.
+          await Effect.runPromise(Effect.sleep("1 millis"));
           expect(answered).toHaveLength(done + 1);
         }
 
@@ -271,7 +286,7 @@ describe("P12 public Worker fetch", () => {
     );
   });
   law("unmatched routes and grant methods return the text response without RPC", async ({ port, name }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const [path, method] of [
       ["/", "GET"],
@@ -289,9 +304,3 @@ describe("P12 public Worker fetch", () => {
     expect(w.calls).toEqual([]);
   });
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

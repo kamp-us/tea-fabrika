@@ -14,9 +14,11 @@
  * are per permission, the store fails typed, `Denied` carries who, what and which object, and a
  * proof carries the object it checked.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
@@ -110,12 +112,12 @@ const build = <T extends Types>(name: string, declared: ReadonlyMap<string, Decl
     build<T & { readonly [K in N]: { readonly relations: keyof R & string; readonly permissions: P } }>(
       name,
       new Map(declared).set(type, {
-        relations: new Set(Object.keys(shape.relations ?? {})),
+        relations: new Set(Rec.keys(shape.relations ?? {})),
         permissions: new Map(
-          Object.entries<(p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}).map(([permission, rewrite]) => [
-            permission,
-            rewrite(rewrites)[RewriteTypeId],
-          ]),
+          Arr.map(
+            Rec.toEntries<string, (p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}),
+            ([permission, rewrite]) => [permission, rewrite(rewrites)[RewriteTypeId]],
+          ),
         ),
       }),
     ),

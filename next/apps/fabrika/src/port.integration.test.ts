@@ -1,7 +1,7 @@
 // next/, the laws of the test port helper. An instance test's port must not be one the OS, or another
 // test process, can be given while the instance is still starting.
 import { createServer } from "node:net";
-import { Effect } from "effect";
+import { Array as Arr, Effect } from "effect";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 
@@ -18,7 +18,7 @@ it("scenario: ports held at the same time are all different, below the OS-assign
   const held = await Promise.all(Array.from({ length: 8 }, () => Effect.runPromise(heldPort())));
 
   try {
-    expect(new Set(held.map((h) => h.port)).size).toBe(held.length);
+    expect(new Set(Arr.map(held, (h) => h.port)).size).toBe(held.length);
 
     for (const h of held) {
       // Linux hands out 32768 and up by default, macOS 49152 and up.
@@ -27,7 +27,7 @@ it("scenario: ports held at the same time are all different, below the OS-assign
       expect(await refused(h.port)).toBeNull();
     }
   } finally {
-    await Promise.all(held.map((h) => Effect.runPromise(h.release)));
+    await Promise.all(Arr.map(held, (h) => Effect.runPromise(h.release)));
   }
 });
 

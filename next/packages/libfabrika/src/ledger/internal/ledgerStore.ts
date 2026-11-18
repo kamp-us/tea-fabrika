@@ -7,6 +7,8 @@
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
 import { Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import { ParentText, Rev } from "../../Rev.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";
 import { causeClass, errorClass, short } from "../../telemetry/Trace.ts";
@@ -32,11 +34,14 @@ const TABLES = [
 
 /** Span tag keys past `STREAM` and `tag`: OpenTelemetry's messaging and error names. */
 const ID = "messaging.message.id";
+
 const OPERATION = "messaging.operation.type";
+
 const ERROR = "error.type";
 
 /** A waiter to ring, as the rings table holds it. */
 const Ring = Schema.Struct({ to: Schema.String, after: Rev });
+
 type Ring = typeof Ring.Type;
 
 /** What one append step did. Only `placed` wrote, and only it rings. */
@@ -45,14 +50,19 @@ const Placing = Schema.TaggedUnion({
   resent: { rev: Rev, pos: Rev },
   refused: Appended.cases.refused.fields,
 });
+
 type Placing = typeof Placing.Type;
 
 const Head = Schema.Struct({ rev: Rev, arrivedAt: Schema.Int });
+
 const Last = Schema.Struct({ pos: Rev });
+
 /** A stream's newest rev, 0 when it is empty. */
 const Top = Schema.Struct({ rev: Rev });
+
 /** A stream's newest pos, null when it is empty. */
 const End = Schema.Struct({ pos: Schema.NullOr(Rev) });
+
 /** A stream's newest rev, and how many of its entries sit past a reader's `after`. */
 const Lag = Schema.Struct({ head: Rev, lag: Rev });
 
@@ -64,25 +74,35 @@ const Loose = Schema.Struct({
 });
 
 const strict = { onExcessProperty: "error" } as const;
+
 const decodeLoose = Schema.decodeUnknownResult(Loose, strict);
+
 const isParent = Schema.is(Schema.NullOr(ParentText));
+
 const decodeLine = Schema.decodeUnknownResult(Line, strict);
 
 const decodeId = Schema.decodeUnknownResult(Schema.Struct({ stream: Entry.fields.stream, id: Entry.fields.id }));
 
 const decodeRow = Schema.decodeUnknownSync(Row);
+
 const decodeRing = Schema.decodeUnknownSync(Ring);
+
 const decodeHead = Schema.decodeUnknownSync(Head);
+
 const decodeLast = Schema.decodeUnknownSync(Last);
+
 const decodeTop = Schema.decodeUnknownSync(Top);
+
 const decodeEnd = Schema.decodeUnknownSync(End);
+
 const decodeLag = Schema.decodeUnknownSync(Lag);
+
 const decodeStream = Schema.decodeUnknownSync(Schema.Struct({ stream: Schema.String }));
 
 const encoder = new TextEncoder();
 
 const bytes = (texts: ReadonlyArray<string | null>): number =>
-  texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
+  Arr.reduce(texts, 0, (n, text) => n + (text === null ? 0 : encoder.encode(text).length));
 
 type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
@@ -111,6 +131,7 @@ const check = (stream: string, id: string, input: unknown): Result.Result<Line, 
   const { by, sentAt, parent, traceId, build, body } = line.success;
   const texts = [stream, id, by, line.success.for, sentAt, parent, traceId, build, line.success._tag];
   const size = bytes([...texts, JSON.stringify(body)]);
+
   // node:sqlite answers what workerd would (flag 13).
   return size > ROW_BYTES ? Result.fail("too_big") : Result.succeed(line.success);
 };
@@ -148,12 +169,13 @@ class Threw extends Schema.TaggedError<Threw>()("Threw", { error: Schema.Unknown
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
-  if (typeof error !== "object" || error === null) {
+  if (!Predicate.isObjectOrArray(error)) {
     return Option.none();
   }
 
   const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
-  return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
+
+  return Predicate.isNumber(code) || Predicate.isString(code) ? Option.some(code) : Option.none();
 };
 
 /** @internal */
@@ -166,6 +188,7 @@ export const ledgerStore = (
   readonly streams: (prefix: string, after: string | null) => Effect.Effect<ReadonlyArray<string>, LedgerError>;
 } => {
   let ready = false;
+
   const one = (query: string, ...params: ReadonlyArray<SqlValue>): Option.Option<unknown> =>
     Option.fromUndefinedOr(sql.exec(query, ...params)[0]);
 
@@ -194,11 +217,13 @@ export const ledgerStore = (
         }
 
         const reason = Schema.isSchemaError(error) ? "bad_row" : "storage";
+
         const failure = new LedgerError({
           reason,
           ...(error instanceof Error ? { message: error.message } : {}),
           cause: error,
         });
+
         // The class and code are tags; the message rides only in the span's failure, its content.
         return Effect.annotateCurrentSpan({
           [tag("reason")]: reason,
@@ -230,9 +255,11 @@ export const ledgerStore = (
 
   const place = (stream: string, id: string, line: Line, now: () => number): Placing => {
     const first = byId(stream, id);
+
     const last = Option.map(one(`SELECT rev, "arrivedAt" FROM entries ORDER BY rev DESC LIMIT 1`), (row) =>
       decodeHead(row),
     );
+
     const head = Option.match(last, { onNone: () => 0, onSome: (row) => row.rev });
     const answered = decide(line, first, head);
 
@@ -241,9 +268,11 @@ export const ledgerStore = (
     }
 
     const rev = head + 1;
+
     const pos =
       decodeLast(Option.getOrThrow(one(`SELECT coalesce(max(pos), 0) AS pos FROM entries WHERE stream = ?`, stream)))
         .pos + 1;
+
     const arrivedAt = Math.max(now(), Option.match(last, { onNone: () => 0, onSome: (row) => row.arrivedAt }));
     const admitted = policy?.admit(Entry.make({ id, stream, rev, pos, arrivedAt, ...line }));
 
@@ -269,9 +298,12 @@ export const ledgerStore = (
       line._tag,
       JSON.stringify(line.body),
     );
-    const rings = sql
-      .exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev)
-      .map((row) => decodeRing(row));
+
+    const rings = Arr.map(
+      sql.exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev),
+      (row) => decodeRing(row),
+    );
+
     return Placing.cases.placed.make({ rev, pos, rings });
   };
 
@@ -283,6 +315,7 @@ export const ledgerStore = (
       [tag("after")]: after,
       [tag("rev")]: rev,
     });
+
     return yield* Effect.suspend(() => doorbell.ring(to, stream, rev)).pipe(
       Effect.onExit((exit) =>
         Effect.annotateCurrentSpan(
@@ -316,6 +349,7 @@ export const ledgerStore = (
     const line = checked.success;
     yield* Effect.annotateCurrentSpan(short({ [tag("tag")]: line._tag, [tag("by")]: line.by }));
     const placing = yield* atomic((now) => place(stream, id, line, now));
+
     return yield* Placing.match(placing, {
       refused: ({ reason }) => refused(reason),
       resent: ({ rev, pos }) =>
@@ -351,11 +385,15 @@ export const ledgerStore = (
       [OPERATION]: "receive",
       [tag("after")]: after,
     });
+
     return yield* atomic((now) => {
       const { head, lag } = behind(stream, after);
-      const entries = sql
-        .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`, stream, after, PAGE)
-        .map((row) => decodeRow(row));
+
+      const entries = Arr.map(
+        sql.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`, stream, after, PAGE),
+        (row) => decodeRow(row),
+      );
+
       return { head, lag, entries, at: now() };
     }).pipe(
       Effect.tap(({ head, lag, entries, at }) =>
@@ -376,6 +414,7 @@ export const ledgerStore = (
       ...short({ [STREAM]: stream, [tag("reader")]: reader }),
       [tag("after")]: after,
     });
+
     return yield* atomic(() => {
       const { head, lag } = behind(stream, after);
 
@@ -390,6 +429,7 @@ export const ledgerStore = (
         stream,
         after,
       );
+
       return { head, lag, waited: Waited.cases.parked.make({}) };
     }).pipe(
       Effect.tap(({ head, lag, waited }) =>
@@ -406,30 +446,37 @@ export const ledgerStore = (
   const inTurn = <A>(step: (turn: LedgerTurn) => A, now: () => number) => {
     const rings: Array<{ stream: string; rev: Rev; waiter: Ring }> = [];
     let open = true;
+
     const ensureOpen = () => {
       if (!open) {
         throw new LedgerError({ reason: "storage", message: "ledger turn has ended" });
       }
     };
+
     const turn: LedgerTurn = {
       read: (stream, after) => {
         ensureOpen();
-        return sql
-          .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
-          .map((row) => decodeRow(row));
+
+        return Arr.map(
+          sql.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after),
+          (row) => decodeRow(row),
+        );
       },
       get: (stream, id) => {
         ensureOpen();
+
         return byId(stream, id);
       },
       head: (stream) => {
         ensureOpen();
+
         return decodeTop(
           Option.getOrThrow(one(`SELECT coalesce(max(rev), 0) AS rev FROM entries WHERE stream = ?`, stream)),
         ).rev;
       },
       end: (stream) => {
         ensureOpen();
+
         // A stream's pos only grows, so its newest entry's pos is its largest, which the
         // UNIQUE (stream, pos) index answers. One row always, empty stream included.
         return Option.fromNullishOr(
@@ -469,6 +516,7 @@ export const ledgerStore = (
       open = false;
     }
   };
+
   const transact = Effect.fn("ledger.transaction")(function* <A>(step: (turn: LedgerTurn) => A) {
     const committed = yield* atomic((now) => inTurn(step, now));
     yield* Effect.forEach(
@@ -479,13 +527,14 @@ export const ledgerStore = (
         concurrency: 1,
       },
     );
+
     return committed.value;
   });
 
   const streams = Effect.fn("ledger.streams")(function* (prefix: string, after: string | null) {
     return yield* atomic(() =>
-      sql
-        .exec(
+      Arr.map(
+        sql.exec(
           `SELECT DISTINCT stream FROM entries
          WHERE substr(stream, 1, length(?)) = ? AND (? IS NULL OR stream > ?)
          ORDER BY stream LIMIT ?`,
@@ -494,8 +543,9 @@ export const ledgerStore = (
           after,
           after,
           PAGE,
-        )
-        .map((row) => decodeStream(row).stream),
+        ),
+        (row) => decodeStream(row).stream,
+      ),
     );
   });
 
@@ -510,6 +560,7 @@ export const ledgerStore = (
  */
 export const policyFor = Effect.fnUntraced(function* (policy: WritePolicy["Service"] | undefined) {
   const writer = yield* Effect.serviceOption(TrustedWriter);
+
   return policy === undefined || Option.isNone(writer)
     ? policy
     : { admit: (entry: Entry) => policy.admit(entry, writer.value) };
@@ -533,7 +584,8 @@ export const committedEntries = (sql: Sql, selection: Selection): ReadonlyArray<
       sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", stream, after),
     entry: ({ stream, pos }) => sql.exec("SELECT * FROM entries WHERE stream = ? AND pos = ?", stream, pos),
   });
-  return rows.map((row) => decodeRow(row));
+
+  return Arr.map(rows, (row) => decodeRow(row));
 };
 
 const Place = Schema.Struct({ rev: Rev, pos: Rev, arrivedAt: Schema.Int });
@@ -557,5 +609,6 @@ export const headPlace = (sql: Sql, stream: string, now: number): typeof Place.T
     now,
     stream,
   );
+
   return Schema.decodeUnknownSync(Place)(row);
 };

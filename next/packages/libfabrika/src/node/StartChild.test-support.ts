@@ -7,11 +7,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
@@ -79,9 +81,10 @@ export const databases = Effect.gen(function* () {
       exec: (query, ...params) => {
         // Cloudflare limits each stored row. Node SQLite needs the same failure at this edge.
         if (/^\s*(INSERT|UPDATE)\b/i.test(query)) {
-          const size = params.reduce<number>(
-            (total, value) => total + (typeof value === "string" ? bytes.encode(value).byteLength : 8),
+          const size = Arr.reduce(
+            params,
             0,
+            (total, value) => total + (Predicate.isString(value) ? bytes.encode(value).byteLength : 8),
           );
 
           if (size > ROW_BYTES) {
@@ -106,7 +109,7 @@ export const databases = Effect.gen(function* () {
     concurrency: 1,
   });
 
-  const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
+  const open = () => Arr.filter([...held.values()], (ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
 
   const data = (sql: Sql) =>
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
@@ -140,11 +143,11 @@ export const databases = Effect.gen(function* () {
 
   const entries: StartChildTest.Store["entries"] = (names) =>
     Effect.forEach(
-      ["processes", ...[...new Set(names)].flatMap((name) => [`processes/${name}`, `${name}/inbox`])],
+      ["processes", ...Arr.flatMap([...new Set(names)], (name) => [`processes/${name}`, `${name}/inbox`])],
       (stream) => Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0))),
       { concurrency: 1 },
     ).pipe(
-      Effect.map((parts) => parts.flatMap((part) => [...part]).sort((a, b) => a.rev - b.rev)),
+      Effect.map((parts) => Arr.flatMap(parts, (part) => [...part]).sort((a, b) => a.rev - b.rev)),
       Effect.provide(data(sql("ledger"))),
       Effect.orDie,
     );

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-plan-plants-and-ordering-not-recorded",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": "docs/plan/quests/dev-watch-rebuild-fix-PLAN.md",
+    "line": 219
+  },
+  "says": "The approved next/ watcher plan asks for every listed plant to be run once and recorded, and for the ordered reply tags, hashes, gate hold and release and changed-span identities to be recorded, but the quest's rows record three plants and none of those ordering facts.",
+  "proof": "Plan line 219 reads 'Run each listed plant once, record the red result and remove it'; its law table lists plants for R2 (drop a saved rebuild; report a changed load as same), R3 (omit a span; duplicate a changed outcome; associate a previous span with the current save), R4 (suppress a distinct broken input), R5 (copy the marker or root into each checked output) and R6 (omit result or watcher cleanup). The cloud proof row's plants at line 732 hold only R1 (next-answer assertion restored), P1 (failed-input suppression off) and P2 (stale successful build). The plan's Records section at line 228 lists the ordered reply tags and hashes, the held reply and its release, and changed-span identities; the proof row's runs hold only per-law result and milliseconds. The PR description's 'Still due' list still names the span, privacy and cleanup plants.",
+  "cost": "The span-accounting and privacy laws R3 and R5 have no observed red, as 0093 asks, and the controlled ordering the plan named as the fact it could lose is not in the record.",
+  "head": "742954e3d938850d2837d3de25db7a2e2613c75c",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

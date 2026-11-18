@@ -1,8 +1,13 @@
 // P34c Q9, next/. Real sink and SQL; the archive double only records external I/O.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
-import type { Scope } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import type { Sql } from "../Sql.ts";
 import { Archive, sha256 } from "./Archive.ts";
 import { RecordManager } from "./Records.ts";
@@ -24,12 +29,12 @@ const Tape = Schema.Array(Schema.Struct({ pick: Nat, reopen: Schema.Boolean })).
 );
 
 const counts = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .map(({ name }) => [
         String(name),
-        sql.exec(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`)[0]?.n,
+        sql.exec(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`)[0]?.n,
       ]),
   );
 
@@ -42,25 +47,31 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         Effect.gen(function* () {
           const store = yield* open;
           const shipped: Array<{ key: string; body: Uint8Array }> = [];
+
           const archive = Layer.succeed(Archive, {
             put: Effect.fnUntraced(function* (key, bytes) {
               shipped.push({ key, body: bytes });
+
               return { sha256: yield* sha256(bytes) };
             }),
           });
+
           const layer = () =>
             SpanSink.layer(store.sql, { object: "quota-project" }).pipe(
               Layer.provideMerge(Layer.merge(archive, RecordManager.memory(1_000_000_000))),
             );
+
           // Keep one sink alive while retrying so a growing held buffer cannot hide behind a new layer.
           let live = yield* Layer.build(layer());
           let baseline: ReturnType<typeof counts> | undefined;
           let attempts = 0;
           const expected = new Map<string, number>();
           yield* TestClock.setTime(1000);
+
           const run = Effect.fnUntraced(function* (pick: number) {
             const sink = yield* SpanSink;
             const child = pick % 2 === 0 ? "ledger.append" : "process.msg";
+
             const outcome = yield* sink.batch(
               Effect.gen(function* () {
                 // The child has already ended when the enclosing operation learns the refusal.
@@ -68,9 +79,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                   Effect.withSpan(child, { attributes: { "request.id": `discard-${attempts}` } }),
                 );
                 yield* Effect.annotateCurrentSpan(REFUSED, "other");
+
                 return Refused.make({ reason: "quota" });
               }).pipe(Effect.withSpan("project.route")),
             );
+
             expect(outcome).toEqual(Refused.make({ reason: "quota" }));
             yield* sink.check;
             expected.set(child, (expected.get(child) ?? 0) + 1);

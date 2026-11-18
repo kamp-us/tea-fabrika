@@ -3,7 +3,18 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -98,6 +109,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql, with a cut that refuses the `after`-th insert of the next call. */
 const cutting = (sql: Sql) => {
+  // SAFETY: `after` is widened from `null` so the cut can hold a count of inserts; `null` means no cut is armed.
   const fault = { after: null as number | null };
 
   const wrapped: Sql = {
@@ -158,11 +170,13 @@ const decodeDown = Schema.decodeUnknownResult(DownReason, { onExcessProperty: "e
 /** The oracle: what the rows must say, checked against the fold's own world after every prefix. */
 const check = (rows: ReadonlyArray<Entry>, world: World) => {
   const exited = rows.filter((row) => row._tag === "exited" && row.by === BRAIN);
+  // SAFETY: an `exited` row written by the brain holds a body with its `process`, which `valueFor` reads.
   expect(exited.map((row) => (valueFor(row) as { process: string }).process).sort()).toEqual(
     [...world.exits.keys()].sort(),
   );
 
   for (const row of exited) {
+    // SAFETY: each brain `exited` row carries the process and its exit reason in its body.
     const { process, reason } = valueFor(row) as { process: string; reason: unknown };
     expect(
       Result.isSuccess(decodeExit(reason)),
@@ -175,6 +189,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
   const seen = new Map<string, unknown>();
 
   for (const row of downs) {
+    // SAFETY: a brain `send` row here is a down message, whose body `m` holds ref, recipient and reason.
     const { m } = valueFor(row) as { m: { ref: string; to: typeof Recipient.Type; reason: unknown } };
     expect(
       Result.isSuccess(decodeDown(m.reason)),
@@ -185,7 +200,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
     seen.set(key, m.reason);
   }
 
-  expect(Object.fromEntries(seen)).toEqual(Object.fromEntries(world.downs));
+  expect(Rec.fromEntries(seen)).toEqual(Rec.fromEntries(world.downs));
 };
 
 const startRequest = (world: World, slot: number) => {
@@ -333,7 +348,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             step.pick,
           );
 
-          const ref = key.slice(key.lastIndexOf("|") + 1);
+          const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);
@@ -382,8 +397,9 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
 
         case "bad": {
           const target = choose(live(world), step.pick);
+          // SAFETY: `step.bad` is an invalid exit reason on purpose, so the law sees `exit` refuse it.
           const answer = yield* as(brain(), (p) => p.exit(target.process, step.bad as ExitReason, from()));
-          refused(answer, `invalid input is refused: ${JSON.stringify(step.bad)}`, "bad_text");
+          refused(answer, `invalid input is refused: ${Formatter.format(step.bad)}`, "bad_text");
           expect(yield* facts(sql, world), "a refused exit leaves every lifecycle fact as it was").toEqual(before);
           const still = yield* as(brain(), (p) => p.isLive(target.process));
           expect(Result.getOrThrow(still), "the process still lives").toBe(true);
@@ -393,6 +409,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         case "exit_noproc": {
           // noproc is what a monitor answers for a missing target; no process exits with it.
           const target = choose(live(world), step.pick);
+          // SAFETY: noproc is not an exit reason, and is handed to `exit` on purpose to see it refused.
           const answer = yield* as(brain(), (p) => p.exit(target.process, NOPROC as never, from()));
           refused(answer, "noproc is refused as an exit reason");
           expect(yield* facts(sql, world), "a refused noproc exit writes nothing").toEqual(before);
@@ -450,10 +467,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = { seed: 119120, numRuns: runsFor({ fast: 10, full: 40 }), includeErrorInReport: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));

@@ -1,7 +1,14 @@
 // next/. Contract: tail(env, {project, name, process}, items) returns an Effect<void>.
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";
@@ -64,6 +71,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               const calls: Array<{ object: string; rows: unknown }> = [];
               const spans: Array<Tracer.NativeSpan> = [];
 
+              // SAFETY: the tail calls only PROCESS's `getByName` and the Promise RPC it answers, both doubled here.
               // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform namespace and Promise RPC are doubled
               const env = {
                 PROCESS: {
@@ -96,6 +104,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               yield* tail(
                 env,
                 { project: "project-test", name: "checklist:1", process: PROCESS },
+                // SAFETY: the tail reads only each item's allowed timing fields, which these partial trace items carry.
                 // oxlint-disable-next-line fabrika/no-type-assertions -- partial platform trace objects expose only the allowed timing fields
                 items as unknown as Parameters<typeof tail>[2],
               ).pipe(
@@ -115,7 +124,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               );
               expect(calls).toEqual([
                 {
-                  object: JSON.stringify(["project-test", "checklist:1"]),
+                  object: Formatter.formatJson(["project-test", "checklist:1"]),
                   rows: events.map(({ method, outcome, cpuTime, wallTime }) => ({
                     process: PROCESS,
                     method: methods.some((known) => known === method) ? method : "other",
@@ -127,8 +136,10 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               ]);
 
               for (const { content } of events) {
-                expect(JSON.stringify(calls)).not.toContain(content);
-                expect(JSON.stringify(spans.map((span) => Object.fromEntries(span.attributes)))).not.toContain(content);
+                expect(Formatter.formatJson(calls)).not.toContain(content);
+                expect(Formatter.formatJson(spans.map((span) => Rec.fromEntries(span.attributes)))).not.toContain(
+                  content,
+                );
               }
             }),
           ),
@@ -151,6 +162,7 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
               const seen: Array<{ key: string; tails: ReadonlyArray<unknown> | undefined }> = [];
               const declaration = { name: "checklist", v: 1, inputs: {}, writes: {}, cmds: [] };
 
+              // SAFETY: the loader under test calls only `get` and `describe`, which this recording loader has.
               // oxlint-disable-next-line fabrika/no-type-assertions -- recording Worker Loader implements only get and describe
               const loader = {
                 get: (key: string, code: () => { tails?: ReadonlyArray<unknown> }) => {
@@ -178,7 +190,8 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                 const previous = live.get(name) ?? 1;
                 const n = cell.replace ? ++next : previous;
                 live.set(name, n);
-                const process = `process_0000000000e00800${String(n).padStart(10, "0")}`;
+                const process = `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
+                // SAFETY: the fake loader only stores the bound tail and compares it; it never calls the tail.
                 // oxlint-disable-next-line fabrika/no-type-assertions -- opaque platform tail identity, never invoked by this fake loader
                 const bound = tails.get(n) ?? ({ process, name } as unknown as BoundTail);
                 tails.set(n, bound);

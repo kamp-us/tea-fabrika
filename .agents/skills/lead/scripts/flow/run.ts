@@ -14,8 +14,9 @@
 // Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
+import { Array as Arr, Console, Effect, Formatter, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import { Digest } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
 import { runners as hosting } from "./host.ts";
@@ -62,7 +63,7 @@ const load = Effect.fn("flow.load")(function* (file: string) {
     .toFileUrl(path.resolve(file))
     .pipe(Effect.mapError(() => Usage.make({ reason: `${file} is no path` })));
 
-  const unloadable = (e: unknown) => Usage.make({ reason: `${file} does not load: ${String(e)}` });
+  const unloadable = (cause: unknown) => Usage.make({ reason: `${file} does not load: ${String(cause)}` });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Node loads a module by its path only through import()
   const module = yield* Effect.tryPromise({ try: () => import(url.href), catch: unloadable });
 
@@ -92,9 +93,9 @@ const flowCommand = Command.make(
       );
 
       const end = ending(model);
-      const spent = model.history.reduce((sum, a) => sum + (a.spent?.usd ?? 0), 0);
+      const spent = Arr.reduce(model.history, 0, (sum, a) => sum + (a.spent?.usd ?? 0));
       yield* Console.log(
-        JSON.stringify({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
+        Formatter.formatJson({ ...end, flow: flow.name, state: saved, attempts: model.history.length, usd: spent }),
       );
 
       if (end.outcome === "ask") {
@@ -114,7 +115,12 @@ const flowCommand = Command.make(
 if (import.meta.main) {
   NodeRuntime.runMain(
     Command.runWith(flowCommand, { version: "0.0.0" })(process.argv.slice(2)).pipe(
-      Effect.provide(Layer.provideMerge(Runners.layer({ ...landing, ...hosting }), NodeServices.layer)),
+      Effect.provide(
+        Layer.provideMerge(
+          Runners.layer({ ...landing, ...hosting }),
+          Layer.merge(NodeServices.layer, Digest.layerWebCrypto),
+        ),
+      ),
     ),
     { disableErrorReporting: true },
   );

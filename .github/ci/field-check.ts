@@ -4,8 +4,10 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Config, Predicate, Result } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
+import { readEnv } from "./step-env.ts";
 
 const lines = (text: string): string[] =>
   text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
@@ -30,13 +32,10 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+/** A value as `JSON.parse` gives it back, the same type as Effect's `Schema.Json`. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
+const parse = (text: string): Json | undefined => Result.getOrUndefined(Result.try((): Json => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -124,7 +123,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   }
 
   findings.push(...checkRow(file, 1, value));
-  const row: Record<string, unknown> = typeof value === "object" && value !== null ? { ...value } : {};
+  const row: Record<string, unknown> = Predicate.isObjectOrArray(value) ? { ...value } : {};
   const key = idKey(logOf(file), row);
 
   if (name !== undefined && key !== null && row[key] !== name) {
@@ -133,7 +132,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   const day = row["date"];
 
-  if (name !== undefined && typeof day === "string" && !name.startsWith(`${day}-`)) {
+  if (name !== undefined && Predicate.isString(day) && !name.startsWith(`${day}-`)) {
     findings.push(
       Finding.cases.warning.make({ file, line: 1, field: "date", reason: "differs from the file name's date" }),
     );
@@ -242,10 +241,8 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
     }));
 };
 
-const main = (local: boolean) => {
-  const base = process.env["BASE"] ?? "";
-  const head = process.env["HEAD"] ?? "";
-  const event = process.env["EVENT"] ?? "";
+const main = (local: boolean, env: { readonly base: string; readonly head: string; readonly event: string }) => {
+  const { base, head, event } = env;
   let total = 0;
 
   for (const input of local ? readLocalFieldFiles("origin/main") : readFieldFiles(base, head, event)) {
@@ -269,18 +266,25 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // base and head, and check's shallow checkout holds no origin/main.
   const local = process.argv.includes("--local");
 
-  if (local && process.env["GITHUB_ACTIONS"] === "true") {
+  // The run's variables through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, and an unset BASE, HEAD or EVENT is the empty text.
+  const env = readEnv(
+    Config.all({
+      base: Config.String("BASE").pipe(Config.withDefault("")),
+      head: Config.String("HEAD").pipe(Config.withDefault("")),
+      event: Config.String("EVENT").pipe(Config.withDefault("")),
+      actions: Config.String("GITHUB_ACTIONS").pipe(Config.withDefault(undefined)),
+    }),
+  );
+
+  if (local && env.actions === "true") {
     console.log("field: this CI run's field job checks the added rows");
-  } else {
-    try {
-      main(local);
-    } catch {
-      console.error(
-        local
-          ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
-          : "field: history or input could not be read; validation did not finish",
-      );
-      process.exitCode = 2;
-    }
+  } else if (Result.isFailure(Result.try(() => main(local, env)))) {
+    console.error(
+      local
+        ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
+        : "field: history or input could not be read; validation did not finish",
+    );
+    process.exitCode = 2;
   }
 }

@@ -1,34 +1,58 @@
 // P12, next/. Run the real build and dev command with a recorded FileSystem and Path layer.
-import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
+  Array as Arr,
   Cause,
   Effect,
   Exit,
   FileSystem,
+  Formatter,
   Layer,
   Logger,
+  Option,
   Path,
   PlatformError,
+  Predicate,
+  Record as Rec,
   References,
   Schema,
   Sink,
   Stream,
+  String as Str,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { build } from "./build.ts";
 import { Row } from "./exam/compiler.ts";
 
+class ImportError extends Schema.TaggedError<ImportError, { readonly brand: unique symbol }>()("ImportError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+// The real disk, through Effect's FileSystem, holds each law's own temp folder and source files;
+// the recorded layer below is what the build and dev command see.
+const disk = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)));
+
+const { join, relative, resolve } = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
+const tempFolder = (prefix: string) => Effect.runPromise(disk.makeTempDirectory({ prefix }));
+
+const removeFolder = (folder: string) => Effect.runPromise(disk.remove(folder, { recursive: true, force: true }));
+
+const writeText = (file: string, text: string) => Effect.runPromise(disk.writeFileString(file, text));
+
 const cli = vi.hoisted(() => ({
+  // SAFETY: work starts unset; the CLI mock below stores the Effect it was handed.
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
+  // SAFETY: layer starts unset; each law sets it to the layer it runs the handed work on, one of these two.
   layer: undefined as
     | Layer.Layer<FileSystem.FileSystem | Path.Path>
     | Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>
@@ -168,7 +192,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
     await fc.assert(
       fc.asyncProperty(fc.uuid(), async (name) => {
         const argv = process.argv;
-        const folder = mkdtempSync(join(tmpdir(), "p12-dev-error-"));
+        const folder = await tempFolder("p12-dev-error-");
 
         const failure = PlatformError.systemError({
           module: "FileSystem",
@@ -206,7 +230,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
           cli.layer = undefined;
           cli.work = undefined;
           vi.unstubAllEnvs();
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
@@ -215,12 +239,16 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 }
 
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
-// P16's table check refuses a program whose hash is not its source's own SHA-256 hex.
+// P16's table check refuses a program whose hash is not its source's own SHA-256 hex: this one is
+// `printf counter | shasum -a 256`.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/node/build")>()),
   bundlePrograms: () =>
     Effect.succeed({
-      "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
+      "fabrika/counter": {
+        hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698",
+        source: "counter",
+      },
     }),
   bundle: (_input: unknown, _plugins: unknown, options: { readonly phase?: string }) =>
     Effect.succeed({
@@ -240,7 +268,7 @@ vi.mock("./exam/compiler.ts", async (original) => ({
 }));
 
 // The instance records each start's options, so a law sees the port it was started with.
-const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
+const instances = vi.hoisted(() => Array.of<{ readonly port: number }>());
 
 vi.mock("./local-instance.ts", () => ({
   localInstance: (
@@ -290,9 +318,9 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 
   const move = (from: string, to: string) => {
     for (const [path, text] of [...files]) {
-      if (path === from || path.startsWith(`${from}/`)) {
+      if (path === from || Str.startsWith(`${from}/`)(path)) {
         files.delete(path);
-        files.set(to + path.slice(from.length), text);
+        files.set(to + Str.slice(from.length)(path), text);
       }
     }
   };
@@ -307,7 +335,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
     exists: (path) =>
-      Effect.sync(() => files.has(path) || [...files.keys()].some((file) => file.startsWith(`${path}/`))),
+      Effect.sync(() => files.has(path) || Arr.some([...files.keys()], (file) => Str.startsWith(`${path}/`)(file))),
     readFileString: (path) =>
       Effect.suspend(() => {
         note("read", path);
@@ -363,7 +391,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
         note("remove", path);
 
         for (const file of files.keys()) {
-          if (file === path || file.startsWith(`${path}/`)) {
+          if (file === path || Str.startsWith(`${path}/`)(file)) {
             files.delete(file);
           }
         }
@@ -391,15 +419,15 @@ for (const failed of [false, true]) {
   it(`build reads and publishes through FileSystem, preserving write and rollback order: ${failed ? "rename fails" : "success"}`, async () => {
     await fc.assert(
       fc.asyncProperty(generated, async ({ name, label }) => {
-        const folder = mkdtempSync(join(tmpdir(), "p12-build-fs-")),
+        const folder = await tempFolder("p12-build-fs-"),
           source = join(folder, `${name}.tsx`);
 
         const text = `export const label = ${JSON.stringify(label)};`;
         const w = recorded(folder, source, text, failed);
         // HEAD has real paths too, so ignoring the supplied service fails an assertion, not setup.
-        mkdirSync(w.out);
-        writeFileSync(join(w.out, "brain.mjs"), "last good");
-        writeFileSync(source, text);
+        await Effect.runPromise(disk.makeDirectory(w.out));
+        await writeText(join(w.out, "brain.mjs"), "last good");
+        await writeText(source, text);
 
         try {
           const result = await Effect.runPromiseExit(
@@ -408,38 +436,44 @@ for (const failed of [false, true]) {
 
           // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
           // read through the same FileSystem too, and every read still comes before the first write.
-          const reads = w.calls.flatMap(([call, file]) => (call === "read" ? [String(file)] : []));
-          expect(reads.filter((file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
+          const reads = Arr.flatMap(w.calls, ([call, file]) => (call === "read" ? [String(file)] : []));
+          expect(Arr.filter(reads, (file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
             source,
             join(root, "compiler-ledger.json"),
           ]);
           expect(w.calls[0]).toEqual(["read", source]);
           expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
 
-          const ledgerRead = w.calls.findIndex(
-            ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+          const ledgerRead = Option.getOrThrow(
+            Arr.findFirstIndex(
+              w.calls,
+              ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+            ),
           );
 
           expect(
-            w.calls.slice(0, ledgerRead).every(([call]) => call === "read"),
+            Arr.every(w.calls.slice(0, ledgerRead), ([call]) => call === "read"),
             "only reads come before the compiler ledger read",
           ).toBe(true);
-          const styles = reads.filter((file) => file.endsWith(".css"));
+          const styles = Arr.filter(reads, (file) => Str.endsWith(".css")(file));
           expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
-          const lastRead = w.calls.findLastIndex(([call]) => call === "read");
-          const firstWrite = w.calls.findIndex(([call]) => call === "write");
-          expect(firstWrite === -1 || lastRead < firstWrite, "a read came after a write").toBe(true);
-          const renames = w.calls.filter(([call]) => call === "rename");
+          const lastRead = Arr.findLastIndex(w.calls, ([call]) => call === "read");
+          const firstWrite = Arr.findFirstIndex(w.calls, ([call]) => call === "write");
+          expect(
+            Option.isNone(firstWrite) || Option.isNone(lastRead) || lastRead.value < firstWrite.value,
+            "a read came after a write",
+          ).toBe(true);
+          const renames = Arr.filter(w.calls, ([call]) => call === "rename");
           expect(renames).toEqual([
             ["rename", w.out, w.backup],
             ["rename", w.pending, w.out],
             ...(failed ? [["rename", w.backup, w.out]] : []),
           ]);
-          const firstRename = w.calls.findIndex(([call]) => call === "rename");
-          const writes = w.calls.flatMap(([call], index) => (call === "write" ? [index] : []));
+          const firstRename = Option.getOrThrow(Arr.findFirstIndex(w.calls, ([call]) => call === "rename"));
+          const writes = Arr.flatMap(w.calls, ([call], index) => (call === "write" ? [index] : []));
           // P16 publishes one file: brain.mjs is the only file written, into the pending folder.
-          expect(writes.map((index) => w.calls[index]![1])).toEqual([join(w.pending, "brain.mjs")]);
-          expect(writes.every((index) => index < firstRename)).toBe(true);
+          expect(Arr.map(writes, (index) => w.calls[index]![1])).toEqual([join(w.pending, "brain.mjs")]);
+          expect(Arr.every(writes, (index) => index < firstRename)).toBe(true);
           expect(w.calls.slice(-2)).toEqual([
             ["remove", w.pending],
             ["remove", w.backup],
@@ -457,7 +491,7 @@ for (const failed of [false, true]) {
             });
           }
         } finally {
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), examples: [[boundary]] },
@@ -480,7 +514,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         savedWindow: fc.option(fc.uuid(), { nil: null }),
       }),
       async ({ name, port }, choices) => {
-        const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
+        const folder = await tempFolder("p12-dev-fs-"),
           file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
 
@@ -500,7 +534,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           w.files.set(file, JSON.stringify(saved));
         }
 
-        writeFileSync(source, "export const view = 1;");
+        await writeText(source, "export const view = 1;");
         const argv = process.argv;
         vi.stubEnv("FABRIKA_HOME", folder);
         vi.stubEnv("FABRIKA_INSTANCE_PORT", undefined);
@@ -516,8 +550,10 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           port,
         };
 
-        const selected = Object.entries(overrides).filter(
+        const selected = Arr.filter(
+          Rec.toEntries(overrides),
           ([field]) =>
+            // SAFETY: `field` comes from Object.entries(overrides), so it is one of overrides' own keys.
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
         );
@@ -527,7 +563,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           "dev.ts",
           "--child",
           `--parent=${process.ppid}`,
-          ...selected.flatMap(([field, value]) =>
+          ...Arr.flatMap(selected, ([field, value]) =>
             choices.inline ? [`--${field}=${value}`] : [`--${field}`, String(value)],
           ),
         ];
@@ -541,9 +577,9 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             _tag: "Some",
             value: { reason: "test_instance_ready" },
           });
-          const calls = w.calls.filter(([, path]) => path === folder || path === file);
+          const calls = Arr.filter(w.calls, ([, path]) => path === folder || path === file);
           // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
-          const { port: _flag, ...founding } = Object.fromEntries(selected);
+          const { port: _flag, ...founding } = Rec.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
           const { port: _override, ...named } = overrides;
 
@@ -553,16 +589,23 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             build: "pending",
           };
 
-          expect(instances.map((instance) => instance.port)).toEqual([choices.port ? port : 18787]);
+          expect(Arr.map(instances, (instance) => instance.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
             ...(choices.saved ? [["read", file]] : []),
             ["write", file, w.files.get(file)],
           ]);
           expect(JSON.parse(w.files.get(file)!)).toEqual(expected);
-          expect(w.modes.filter(([path]) => path === file)).toEqual([[file, 0o600]]);
-          const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
-          const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
+          expect(Arr.filter(w.modes, ([path]) => path === file)).toEqual([[file, 0o600]]);
+
+          const savedAt = Option.getOrThrow(
+            Arr.findFirstIndex(w.calls, ([call, path]) => call === "write" && path === file),
+          );
+
+          const buildAt = Option.getOrThrow(
+            Arr.findFirstIndex(w.calls, ([call, path]) => call === "read" && path === source),
+          );
+
           expect(savedAt).toBeLessThan(buildAt);
           expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {
@@ -570,7 +613,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           cli.layer = undefined;
           cli.work = undefined;
           vi.unstubAllEnvs();
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       },
     ),
@@ -615,10 +658,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
         Effect.scoped(
           Effect.gen(function* () {
             // The temp folder and the process state this law changes are given back by its scope (0061).
-            const folder = yield* Effect.acquireRelease(
-              Effect.sync(() => mkdtempSync(join(tmpdir(), "t664-dev-load-"))),
-              (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-            );
+            const folder = yield* disk.makeTempDirectoryScoped({ prefix: "t664-dev-load-" });
 
             const argv = process.argv;
             yield* Effect.addFinalizer(() =>
@@ -654,13 +694,13 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               "dev.ts",
               "--child",
               `--parent=${process.ppid}`,
-              ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
+              ...Arr.map(["name", "person", "founder"], (field) => `--${field}=${name}`),
               ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
             ];
 
             vi.resetModules();
             yield* Effect.promise(() => import("../dev.ts"));
-            const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
+            const exit = yield* Effect.exit(cli.work!);
             instanceFailure(exit, "settings");
             // The dev edge translates the load's error and keeps it as the cause.
             expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
@@ -673,9 +713,9 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               },
             });
             // Counted fakes: the build reads its source first, the instance records each start.
-            expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual(
-              [],
-            );
+            expect(
+              Arr.filter(w.calls, ([call, path]) => call === "write" || call === "temp" || path === source),
+            ).toEqual([]);
             expect(instances).toEqual([]);
           }),
         ),
@@ -688,7 +728,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
 it("dev without saved settings reports settings for each missing required value", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), fc.constantFrom("name", "person", "founder"), async (name, missing) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-empty-"));
+      const folder = await tempFolder("p12-empty-");
       const source = join(folder, "view.tsx");
       const w = recorded(folder, source, "export const view = 1;", false);
       const argv = process.argv;
@@ -699,20 +739,23 @@ it("dev without saved settings reports settings for each missing required value"
         "dev.ts",
         "--child",
         `--parent=${process.ppid}`,
-        ...["name", "person", "founder"].filter((field) => field !== missing).map((field) => `--${field}=${name}`),
+        ...Arr.map(
+          Arr.filter(["name", "person", "founder"], (field) => field !== missing),
+          (field) => `--${field}=${name}`,
+        ),
       ];
 
       try {
         vi.resetModules();
         await import("../dev.ts");
         instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
-        expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
         cli.layer = undefined;
         cli.work = undefined;
         vi.unstubAllEnvs();
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 15 }) },
@@ -731,12 +774,12 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
 
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-ledger-fs-")),
+      const folder = await tempFolder("p12-ledger-fs-"),
         source = join(folder, "view.tsx");
 
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(join(root, "compiler-ledger.json"), raw);
-      writeFileSync(source, "export const view = 1;");
+      await writeText(source, "export const view = 1;");
 
       try {
         const exit = await Effect.runPromiseExit(build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)));
@@ -748,9 +791,9 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
           _tag: "Some",
           value: { _tag: "BuildError", reason: "read" },
         });
-        expect(w.calls.filter(([call]) => call === "write" || call === "rename")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "rename")).toEqual([]);
       } finally {
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ['[{"file":17}]']] },
@@ -767,7 +810,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
       try {
         const raw: unknown = JSON.parse(text);
 
-        return typeof raw !== "object" || raw === null || !("name" in raw);
+        return !Predicate.isObjectOrArray(raw) || !("name" in raw);
       } catch {
         return true;
       }
@@ -775,13 +818,13 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
 
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-settings-fs-")),
+      const folder = await tempFolder("p12-settings-fs-"),
         source = join(folder, "view.tsx"),
         file = join(folder, "instance.json");
 
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
-      writeFileSync(file, raw);
+      await writeText(file, raw);
       const argv = process.argv;
       vi.stubEnv("FABRIKA_HOME", folder);
       cli.layer = w.layer;
@@ -801,13 +844,13 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
           _tag: "Some",
           value: { _tag: "InstanceError", reason: "settings" },
         });
-        expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
         cli.layer = undefined;
         cli.work = undefined;
         vi.unstubAllEnvs();
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ["{}"]] },
@@ -864,7 +907,7 @@ it.effect.prop(
           "dev.ts",
           "--child",
           `--parent=${process.ppid}`,
-          ...["name", "person", "founder"].map((field) => `--${field}=test`),
+          ...Arr.map(["name", "person", "founder"], (field) => `--${field}=test`),
         ];
 
         for (const choice of choices) {
@@ -877,14 +920,14 @@ it.effect.prop(
             const rejected = [secret, [secret], { value: secret }, invalid];
             w.files.set(
               file,
-              JSON.stringify({
+              Formatter.formatJson({
                 ...founding,
                 port: move === "valid" ? port : rejected[Math.floor(choice / moves.length) % rejected.length],
               }),
             );
           }
 
-          const saved = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+          const saved = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
             w.files.get(file) ?? "{}",
           );
 
@@ -903,7 +946,7 @@ it.effect.prop(
           vi.resetModules();
           yield* Effect.tryPromise({
             try: () => import("../dev.ts"),
-            catch: (cause: unknown) => new Error("dev import failed", { cause }),
+            catch: (cause: unknown) => ImportError.make({ message: "dev import failed", cause }),
           });
           expect(cli.work).toBeDefined();
 
@@ -912,21 +955,24 @@ it.effect.prop(
           );
 
           for (const entry of entries) {
-            for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)]) {
+            for (const form of [secret, Str.slice(1, -1)(Formatter.formatJson(secret)), encodeURIComponent(secret)]) {
               expect(entry.text).not.toContain(form);
             }
           }
 
           if (refused) {
-            expect(entries.filter((entry) => entry.level === "Warn")).toEqual([]);
+            expect(Arr.filter(entries, (entry) => entry.level === "Warn")).toEqual([]);
             instanceFailure(exit, "settings");
             expect(
-              w.calls.slice(before).filter(([call, path]) => call === "write" || call === "temp" || path === source),
+              Arr.filter(
+                w.calls.slice(before),
+                ([call, path]) => call === "write" || call === "temp" || path === source,
+              ),
             ).toEqual([]);
             expect(instances).toEqual([]);
           } else {
-            expect(instances.map((instance) => instance.port)).toEqual([Declarations.port.default]);
-            expect(entries.some((entry) => entry.level === "Warn")).toBe(saved.port !== undefined);
+            expect(Arr.map(instances, (instance) => instance.port)).toEqual([Declarations.port.default]);
+            expect(Arr.some(entries, (entry) => entry.level === "Warn")).toBe(saved.port !== undefined);
           }
         }
       }),

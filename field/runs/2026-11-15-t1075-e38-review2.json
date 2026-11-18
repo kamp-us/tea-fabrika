@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e38-review2",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:44:42-08:00",
+  "ended": "2026-11-16T00:13:08-08:00",
+  "parent": "2026-11-15-t1075-e38-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of 173fe70, judgment slice E38 of the Effect-checker sweep (preferSchemaOverJson, ticket 1075), in next/: merge-ready. Since the first review at a913f42, origin/main with pull request 1366 was merged in (c7eb72f), then 8753842 fixed 20 exam-path hits and 173fe70 fixed 22 product hits in 1366's files. The two commits remove exactly 20 and 23 JSON.stringify calls and add none: the 23rd is Runner.ts:2532, not a hit (a plain callback) but the other side of the id_reused compare at 2530, so both sides stay on one encoder. Every hash, digest and compare stays on one encoder: Gateway.ts's issued binding compare (949 and 950), the stored body hash (1358) against its rechecks (1796, 1973), the params and append digests (1357, 1872), the by compares (1965, 1966), Runner.ts's inputDigest (396) and id_reused (2531, 2533), and runtime.ts's window key (953), which is the same variable for get and set. A search of next/ and .agents/ for a hash over JSON.stringify finds only runtime/ReloadTest.ts:193, a self-contained test oracle. For this data the bytes are unchanged anyway: formatJson is JSON.stringify with a replacer that changes only Error, bigint, cycles and Redactable values, and no file in next/ or packages/ defines a Redactable, so no saved hash, digest or SQL value changes. The merge took main whole and resolved one import line in next/programs/pipeline/src/QueueRunnerTest.ts (Formatter kept beside main's Logger and Predicate); the round-one fixes to the files main renamed (OpenRepository.composed.integration.test.ts, Sources.integration.test.ts) came along. No disable or ignore comment, no lock line, no tsconfig change, no comment line lost. A recount at 173fe70 with effect-tsgo diagnostics, preferSchemaOverJson only, on 13 tsconfigs: 101 hits, all in exam paths, 100 in lib:cloudflare, lib:gateway and lib:runtime (row E84) and next/packages/vitest/src/Recorder.test.ts:169 (in no row); 0 in product files. Counts match the rows: 42 hits in 1366's files, 20 tests and 22 build.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 29,
+  "note": "Read-only apart from this row. Ran on Node 26.13.0 at 173fe70: 59 test files one at a time under nice -n 15 --maxWorkers=3 (the changed test files, the two renamed repository integration laws, and every test that imports connection.ts, cloudflare/runtime.ts, Gateway.ts, Runner.ts, QueueRunnerTest.ts or RuntimeCauseTest.ts, integration laws included): all green, 1 skipped by design (RecoveryGaps.integration P34_INSTANCE_DRIVER). loosening.sh c7eb72f HEAD has 2 hits, both removed expects in Runner.integration.test.ts: the toContain lines whose JSON.stringify became Formatter.formatJson, with matcher counts equal before and after in every changed file, so no law is loosened. loosening.sh a913f42 HEAD also lists main's own merged changes (pull request 1366 and others), which are not this slice's. One pnpm typecheck and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, 18 parts) passed. The branch merges cleanly with origin/main at e232f6e. No plant was committed; the slice adds no law.",
+  "plants": [],
+  "step": "review"
+}

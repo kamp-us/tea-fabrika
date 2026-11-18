@@ -1,6 +1,7 @@
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Array as Arr, Record as Rec, Effect, Schema } from "effect";
+
 import { rolldown } from "rolldown";
 
 const contract = new URL("../../../../packages/libfabrika/src/access/ClientManager.ts", import.meta.url).pathname;
@@ -25,7 +26,7 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
               loaded.add(id);
 
               return id === "\0contract-selection"
-                ? `export { ${names?.join(", ")} } from ${JSON.stringify(contract)};`
+                ? `export { ${Arr.join(names ?? [], ", ")} } from ${JSON.stringify(contract)};`
                 : null;
             },
           },
@@ -36,9 +37,9 @@ const inspect = Effect.fnUntraced(function* (names: readonly string[] | null) {
   );
 
   const result = yield* Effect.tryPromise(() => bundle.generate({ format: "esm" }));
-  const kept = result.output.flatMap((chunk) => (chunk.type === "chunk" ? Object.keys(chunk.modules) : []));
-  expect([...loaded].filter((id) => forbidden.test(id))).toEqual([]);
-  expect(kept.filter((id) => forbidden.test(id))).toEqual([]);
+  const kept = Arr.flatMap(result.output, (chunk) => (chunk.type === "chunk" ? Rec.keys(chunk.modules) : []));
+  expect(Arr.filter([...loaded], (id) => forbidden.test(id))).toEqual([]);
+  expect(Arr.filter(kept, (id) => forbidden.test(id))).toEqual([]);
 });
 
 // The direct entry takes no input, so one bundle of it serves every case.

@@ -1,8 +1,19 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
-import { Digest } from "effect/crypto";
-import { Hex } from "effect/encoding";
+import * as Arr from "effect/Array";
+import type * as Config from "effect/Config";
+import * as Digest from "effect/crypto/Digest";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
@@ -58,20 +69,22 @@ export const originFault = (kind: (typeof originKinds)[number]): fc.Arbitrary<Or
     )
     .map(([path, word, choice]) => ({
       path,
-      origin:
-        kind === "flag"
-          ? Origin.cases.flag.make({ name: `--undeclared.${word}` })
-          : kind === "env"
-            ? Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${word.replaceAll("-", "_")}` })
-            : Origin.cases.file.make({
-                file:
-                  choice % 3 === 0
-                    ? `/${word}/fabrika.toml`
-                    : choice % 3 === 1
-                      ? `C:\\${word}\\fabrika.toml`
-                      : `\\\\fixture\\${word}\\fabrika.toml`,
-                line: 1 + (choice % 1000),
-              }),
+      origin: Match.value(kind).pipe(
+        Match.when("flag", () => Origin.cases.flag.make({ name: `--undeclared.${word}` })),
+        Match.when("env", () =>
+          Origin.cases.env.make({ name: `FABRIKA_UNDECLARED_${Str.replaceAll("-", "_")(word)}` }),
+        ),
+        Match.orElse(() =>
+          Origin.cases.file.make({
+            file: Match.value(choice % 3).pipe(
+              Match.when(0, () => `/${word}/fabrika.toml`),
+              Match.when(1, () => `C:\\${word}\\fabrika.toml`),
+              Match.orElse(() => `\\\\fixture\\${word}\\fabrika.toml`),
+            ),
+            line: 1 + (choice % 1000),
+          }),
+        ),
+      ),
     }));
 
 export const changeOrigin = (value: Input, fault: OriginFault): Input => ({
@@ -104,10 +117,10 @@ export const rateLimit = { limit: 100_000, window: 60_000 };
 
 /** Each declaration's default value, by its key, and the default origin, by its path. */
 const defaults = {
-  values: Object.fromEntries(
-    Object.entries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
+  values: Rec.fromEntries(
+    Rec.toEntries(Declarations.all.settings).map(([key, d]) => [key, d.default]),
   ) as Config.Success<typeof Declarations.all>,
-  origins: Object.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
+  origins: Rec.fromEntries(Declarations.all.declarations.map((d) => [d.path, Origin.cases.default.make({})])),
 };
 
 /** Declared values a fixture sets in place of their defaults, by each setting's key. */
@@ -115,9 +128,10 @@ export type Values = Partial<Config.Success<typeof Declarations.all>>;
 
 /** A flag origin for each value a fixture sets, so the snapshot never says a chosen value is a default. */
 const chosen = (values: Values) =>
-  Object.fromEntries(
-    Object.keys(values).map((key) => {
+  Rec.fromEntries(
+    Rec.keys<string, unknown>(values).map((key) => {
       const path = Declarations.all.settings[key as keyof Values].path;
+
       return [path, Origin.cases.flag.make({ name: `--${path}` })];
     }),
   );
@@ -126,14 +140,13 @@ export const input = Effect.fnUntraced(function* (
   r: Recipe,
   values: Values = {},
 ): Effect.fn.Return<Input, never, Digest.Digest> {
-  const origin =
-    r.origin === "flag"
-      ? Origin.cases.flag.make({ name: "--instance.port" })
-      : r.origin === "env"
-        ? Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })
-        : r.origin === "file"
-          ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
-          : Origin.cases.default.make({});
+  const origin = Match.value(r.origin).pipe(
+    Match.when("flag", () => Origin.cases.flag.make({ name: "--instance.port" })),
+    Match.when("env", () => Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })),
+    Match.when("file", () => Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })),
+    Match.orElse(() => Origin.cases.default.make({})),
+  );
+
   const settings = yield* Snapshot.make(Declarations.all, {
     // Every declaration starts at its declared default, so a setting added to `all` (T1041's two
     // mail settings) needs no edit here; the fixture then names the values it chooses.
@@ -156,6 +169,7 @@ export const input = Effect.fnUntraced(function* (
       ...chosen(values),
     },
   });
+
   return {
     settings,
     start: r.start,
@@ -181,45 +195,39 @@ export interface Fixture {
   readonly values?: Values;
 }
 
-// The calling platform supplies its synchronous hash driver. Snapshot.make still owns the encoding.
-export const fixture = (config: Fixture, hash: (algorithm: Digest.Algorithm, data: Uint8Array) => Uint8Array) =>
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: synchronous Vitest fixture setup needs a plain snapshot value
-  Effect.runSync(
-    Effect.gen(function* () {
-      const base = yield* input(
-        {
-          port: config.port,
-          start: config.start ?? `${config.name}-fixture`,
-          build: config.build ?? "fixture-build",
-          revision: null,
-          origin: "flag",
-        },
-        config.values,
-      );
-      return {
-        ...base,
-        name: config.name,
-        founding: {
-          person: config.person ?? "test-person",
-          founder: config.founder ?? "test-public-key",
-          window: config.window ?? null,
-        },
-        ...(config.limits === undefined ? {} : { limits: config.limits }),
-        ...(config.mail === undefined ? {} : { mail: config.mail }),
-        ...(config.starts === undefined ? {} : { starts: config.starts }),
-      };
-    }).pipe(
-      Effect.provideService(Digest.Digest, {
-        digest: (algorithm, data) => Effect.sync(() => hash(algorithm, data)),
-        digestHex: (algorithm, data) => Effect.sync(() => Hex.encode(hash(algorithm, data))),
-      }),
-    ),
+// One start's input as the platform records it. Snapshot.make hashes the settings with Effect's
+// Digest on WebCrypto, which Node, workerd and a browser all have, so no caller brings a hash.
+export const fixture = Effect.fnUntraced(function* (config: Fixture) {
+  const base = yield* input(
+    {
+      port: config.port,
+      start: config.start ?? `${config.name}-fixture`,
+      build: config.build ?? "fixture-build",
+      revision: null,
+      origin: "flag",
+    },
+    config.values,
   );
+
+  return {
+    ...base,
+    name: config.name,
+    founding: {
+      person: config.person ?? "test-person",
+      founder: config.founder ?? "test-public-key",
+      window: config.window ?? null,
+    },
+    ...(config.limits === undefined ? {} : { limits: config.limits }),
+    ...(config.mail === undefined ? {} : { mail: config.mail }),
+    ...(config.starts === undefined ? {} : { starts: config.starts }),
+  };
+}, Effect.provide(Digest.layerWebCrypto));
 
 export const corrupt = (value: Input, choice: number, secret = "invalid") => {
   const snapshot = value.settings;
   const { "instance.port": _port, ...withoutPort } = snapshot.values;
   const { "instance.port": _origin, ...withoutOrigin } = snapshot.origins;
+
   const variants = [
     { ...value, settings: undefined },
     { ...value, settings: { ...snapshot, values: withoutPort } },
@@ -241,6 +249,7 @@ export const corrupt = (value: Input, choice: number, secret = "invalid") => {
     { ...value, port: 18800 },
     { ...value, secrets: { password: secret } },
   ];
+
   return variants[choice % variants.length];
 };
 
@@ -249,19 +258,20 @@ export const sentinel = fc
   .map(([word, mark]) => `private-${word}${mark}end`);
 
 export const exclude = (output: unknown, secret: string) => {
-  const forms = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+  const forms = [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
   const seen = new WeakSet<object>();
+
   const visit = (value: unknown): void => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       for (const form of forms) {
         // A walk visits every string of every output after each move. One assertion per string
         // took two thirds of an entry flow law's time, so only a string that holds the form
         // reaches the assertion, which then fails with its usual message.
-        if (value.includes(form)) {
+        if (Str.includes(form)(value)) {
           expect(value).not.toContain(form);
         }
       }
-    } else if (typeof value === "object" && value !== null && !seen.has(value)) {
+    } else if (Predicate.isObjectOrArray(value) && !seen.has(value)) {
       seen.add(value);
 
       if (value instanceof ArrayBuffer) {
@@ -272,7 +282,9 @@ export const exclude = (output: unknown, secret: string) => {
         visit(new TextDecoder().decode(new Uint8Array(value.buffer, value.byteOffset, value.byteLength)));
       }
 
-      for (const [key, item] of Object.entries(value)) {
+      for (const [key, item] of Arr.isArray(value)
+        ? Arr.map(value, (entry, at): [string, unknown] => [`${at}`, entry])
+        : Rec.toEntries(value)) {
         visit(key);
         visit(item);
       }
@@ -285,6 +297,7 @@ export const exclude = (output: unknown, secret: string) => {
       }
     }
   };
+
   visit(output);
 };
 
@@ -330,6 +343,7 @@ export const receipt = (input: Input): Saved => ({
 });
 
 const Reply = Schema.TaggedStruct("ok", { value: Schema.Unknown });
+
 export const reply = (input: Input) => Reply.make({ value: receipt(input) });
 
 export interface Driver {
@@ -349,13 +363,15 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
         fc.record({
           by: fc.uuid(),
           for: fc.uuid(),
-          sentAt: fc.integer({ min: 0, max: 2_000_000_000_000 }).map((ms) => new Date(ms).toISOString()),
+          sentAt: fc
+            .integer({ min: 0, max: 2_000_000_000_000 })
+            .map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms))),
           seen: fc.nat(),
           parent: fc.option(
-            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${"0".repeat(26)}-${id}`),
+            fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${Str.repeat(26)("0")}-${id}`),
             { nil: null },
           ),
-          traceId: fc.uuid().map((id) => id.replaceAll("-", "")),
+          traceId: fc.uuid().map((id) => Str.replaceAll("-", "")(id)),
         }),
         fc.array(fc.nat(), { minLength: 12, maxLength: 50 }),
       ),
@@ -370,6 +386,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               saved.size === 0
                 ? ["record", "lost", "fresh"]
                 : ["record", "lost", "fresh", "repeat", "concurrent", "conflict", "read"];
+
             const move = moves[choice % moves.length];
 
             if (move === "fresh") {
@@ -392,6 +409,7 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               move === "repeat" || move === "read" || move === "conflict"
                 ? inputs.filter((value) => saved.has(value.start))
                 : inputs;
+
             const current = Option.getOrThrow(Option.fromUndefinedOr(selected[choice % selected.length]));
             const before = driver.counts();
             const absent = !saved.has(current.start);
@@ -404,24 +422,28 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               // A retry cannot replace the original writer clock, parent, trace or reader position.
               for (const key of ["by", "for", "sentAt", "seen", "parent", "traceId"] as const) {
                 const original = Option.getOrThrow(Option.fromUndefinedOr(current.origin));
+
                 const changed = {
                   ...current,
                   origin: {
                     ...original,
-                    [key]:
-                      key === "seen"
-                        ? original.seen + 1
-                        : key === "parent"
-                          ? original.parent === null
-                            ? `in-process_${"0".repeat(26)}-1`
-                            : null
-                          : key === "traceId"
-                            ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
-                            : key === "sentAt"
-                              ? DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1))
-                              : `${original[key]}-different`,
+                    [key]: Match.value(key).pipe(
+                      Match.when("seen", () => original.seen + 1),
+                      Match.when("parent", () =>
+                        original.parent === null ? `in-process_${Str.repeat(26)("0")}-1` : null,
+                      ),
+                      Match.when(
+                        "traceId",
+                        () => `${original.traceId[0] === "0" ? "1" : "0"}${Str.slice(1)(original.traceId)}`,
+                      ),
+                      Match.when("sentAt", () =>
+                        DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1)),
+                      ),
+                      Match.orElse(() => `${original[key]}-different`),
+                    ),
                   },
                 };
+
                 expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);
                 expect(yield* driver.read(current.start)).toEqual(saved.get(current.start));
               }
@@ -452,7 +474,13 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               }
 
               const after = driver.counts();
-              const deliveries = move === "concurrent" ? 3 : move === "lost" ? 2 : 1;
+
+              const deliveries = Match.value(move).pipe(
+                Match.when("concurrent", () => 3),
+                Match.when("lost", () => 2),
+                Match.orElse(() => 1),
+              );
+
               expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
               expect(after.appends - before.appends).toBe(absent ? 1 : 0);
             }

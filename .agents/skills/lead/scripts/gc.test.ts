@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, pipe, String as Str, DateTime } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -144,9 +145,9 @@ describe("box gc, today's tooling", () => {
 
         expect(to.at(-1)).toBe(`fabrikalfa/${name}-wip`);
         expect(new Set(to).size).toBe(to.length);
-        const base = git?.branch?.replace(/(-wip)+$/, "");
+        const base = git?.branch == null ? undefined : pipe(git.branch, Str.replace(/(-wip)+$/, ""));
 
-        if (base?.startsWith("fabrikalfa/")) {
+        if (base !== undefined && pipe(base, Str.startsWith("fabrikalfa/")) === true) {
           expect(to[0]).toBe(`${base}-wip`);
         }
       }),
@@ -160,14 +161,15 @@ describe("box gc, today's tooling", () => {
     const name = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
     fc.assert(
       fc.property(fc.uniqueArray(name), fc.uniqueArray(name), (facts, dirs) => {
-        const files = [...facts.map((f) => `${f}.box`), ...facts.map((f) => `${f}.rows.jsonl`)];
+        const files = [...Arr.map(facts, (f) => `${f}.box`), ...Arr.map(facts, (f) => `${f}.rows.jsonl`)];
         const live = new Set(dirs);
         const dead = deadFacts(files, live);
         expect(dead.sort()).toEqual(
-          facts
-            .filter((f) => !live.has(f))
-            .map((f) => `${f}.box`)
-            .sort(),
+          pipe(
+            facts,
+            Arr.filter((f) => !live.has(f)),
+            Arr.map((f) => `${f}.box`),
+          ).sort(),
         );
       }),
       options,
@@ -231,17 +233,17 @@ describe("worktree gc, today's tooling", () => {
 
           const w = wip ? "-wip" : "";
           // One tip is always a branch some pull request has, so the lookup is exercised.
-          const at = [...tips, ...refs.slice(0, 1).map(([r]) => r)];
+          const at = [...tips, ...Arr.map(refs.slice(0, 1), ([r]) => r)];
 
           const got = worktreePrs(
-            { branch: branch === null ? null : branch + w, head, tips: at.map((t) => t + w) },
+            { branch: branch === null ? null : branch + w, head, tips: Arr.map(at, (t) => t + w) },
             byRef,
             byHead,
           );
 
           const want = [
             ...(branch === null ? [] : (byRef.get(branch) ?? [])),
-            ...at.flatMap((t) => byRef.get(t) ?? []),
+            ...Arr.flatMap(at, (t) => byRef.get(t) ?? []),
             ...(head === null ? [] : (byHead.get(head) ?? [])),
           ];
 
@@ -300,7 +302,7 @@ describe("dirtyIn reads a real box, today's tooling", () => {
     const box = join(root, "quiet");
     const data = join(root, "quiet-gitdata");
     spawnSync("git", ["init", "-q", `--separate-git-dir=${data}`, box]);
-    const old = new Date(Date.now() - 3 * 3_600_000);
+    const old = DateTime.toDateUtc(DateTime.subtract(DateTime.nowUnsafe(), { hours: 3 }));
     // The HEAD log stamps each entry with the committer's time.
     const env = { ...process.env, GIT_COMMITTER_DATE: old.toISOString() };
     const git = (...args: string[]) => spawnSync("git", ["-C", box, ...args], { encoding: "utf8", env });
@@ -316,16 +318,20 @@ describe("dirtyIn reads a real box, today's tooling", () => {
       utimesSync(p, old, old);
     }
 
-    utimesSync(join(box, "a.ts"), new Date(), new Date());
+    utimesSync(join(box, "a.ts"), DateTime.toDateUtc(DateTime.nowUnsafe()), DateTime.toDateUtc(DateTime.nowUnsafe()));
     utimesSync(box, old, old);
     const before = lastTouched(box, data);
     expect(dirtyIn(data, box)).toBe(0);
     expect(dirtyIn(data, box)).toBe(0);
     expect(lastTouched(box, data)).toBe(before);
-    expect(Date.now() - before).toBeGreaterThanOrEqual(IDLE);
+    expect(DateTime.toEpochMillis(DateTime.nowUnsafe()) - before).toBeGreaterThanOrEqual(IDLE);
     expect(statSync(join(data, "index")).mtimeMs).toBe(old.getTime());
     // git gc's reflog expiry rewrites the HEAD log: its file time is not work in the box.
-    utimesSync(join(data, "logs", "HEAD"), new Date(), new Date());
+    utimesSync(
+      join(data, "logs", "HEAD"),
+      DateTime.toDateUtc(DateTime.nowUnsafe()),
+      DateTime.toDateUtc(DateTime.nowUnsafe()),
+    );
     expect(lastTouched(box, data)).toBe(before);
   });
 });

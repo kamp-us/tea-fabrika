@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:33:19-08:00",
+  "ended": "2026-11-15T22:41:00-08:00",
+  "parent": "2026-11-15-as-no-runtime-typeof-2-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of anti-slop judgment slice AS-no-runtime-typeof-2 at 12813192f (tests d27180154, build 12813192f), next/ and our tooling, decision 0563 and its amendment: merge-ready, no blocking fault, no finding row. Every typeof hit in the 108-file diff became the Effect Predicate guard that answers the same for the values that reach it: isObjectOrArray is exactly typeof object and not null, isObject adds not an array, toBeTypeOf and expect.any(Number) check the same type. isTagged and hasProperty also accept a function, but each use in the diff (quest.ts stepOf and stuckIn, Process.ts deliver) reads a JSON.parse result or decoded mail, which is never a function; a 5000-case fast-check run (seed 119120) of the old stepOf against the new one gave the same answer every time. control.ts's removed branch was a word-for-word copy of the first, so it could never be reached. build.ts's manifest exports are a string or a record by its Schema, so the guard answers as before. NodeSqlite.ts's refusal text now names a big integer or a blob, which its doc comment already said; only a literal in LedgerSpans.integration.test.ts uses that text, and the bigint or other split is kept. quest.ts's three Result.try reads catch the same JSON.parse throw; canon, moved out of the try, cannot throw on parsed JSON. Program.ts changed only construct's port reads; the D4 oracles stay verbatim and Program.test.ts passes 44 of 44. No assertion is deleted or narrowed, and no PR 1366 file is touched. Recount with the rule forced on: 288 on the base, 55 at the head, which is 39 in PR 1366's files plus the 16 named left (13 exam, 3 product). The counts in both field rows match.",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/quest.test.ts: holds every stuck answer except a missing signature and a stale link of a step the quest has not signed",
+      "plant": "by reading: quest.ts stuckIn isTagged(a, \"stuck\") swapped for \"ask\", or Result.try dropped so the generated 'commits: noise' line throws",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/internal/connection.test.ts coverage keys id:string and id:number",
+      "plant": "by reading: the label always \"string\"; the expected key list at lines 405-406 and 449-452 needs duplicate:number and id:number:*, so the coverage check fails. Wire.ts Wait.id is a String or Number union, so the two-way label equals typeof",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/telemetry/Sink.integration.test.ts: every kept tag is a string, a number or a boolean",
+      "plant": "by reading: a kept tag that is an object makes the three Predicate checks false, so toBe(true) fails with the value in the message",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Node 26.13.0. loosening.sh on bcad0080d..12813192f: 12 'removed expect' and many 'unrecognized change' hits. Each one is an import line, a typeof to Predicate swap inside the same expression, or expect(typeof x).toBe(t) to expect(x).toBeTypeOf(t), so no law is loosened. On d27180154..12813192f (the build's own range) it gives 0 hits, which is what the build row reported. pnpm typecheck: exit 0. pnpm lint (max-old-space-size 6144) fails only on oxlint-plugins/lint.ts's audit asking to add 10 folders now at zero to the rule's block, which the owner ruled comes later with the locks; every other part passed. Tests run one file at a time at 12813192f, all green: quest 13, chain 63, clauderow 15, fieldfile 4, limit 8, Patch 14, Program 44, Connection 6, internal/connection 5, Ledger.types 1, Fold.laws 2, tuval Layout.laws 3, pipeline Settings 2, TomlEdit 17, processTable.laws 6, Mailbox 16, ProcessManagerMemo 2, cloudflare readers.laws 39, LedgerTransaction 11. Not run, refused by the 0178 guard because the branch does not yet hold PR 1508 (main does): next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts and every other .integration. law the diff reaches; a scheduled.yaml run, or a merge of main, proves them. git merge-tree with origin/main 6c092dd78: no conflict.",
+  "step": "review"
+}

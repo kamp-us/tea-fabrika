@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // P39 slice 4a, next/: the hands client's fake `Commands`, the only `Commands` layer in 4a, and the
 // cut points the laws put around `Commands` and `Journal`. A cut fails, stops or pauses a call
 // before or after it delegates: before, the command never ran or the entry was never saved; after,
@@ -109,7 +110,7 @@ export const fakeCommands = (s: Seen) =>
           yield* hold(s, "execute", before === "fail" ? "stop" : before);
         }
 
-        const result = fakeResult(s.events.filter((e) => e._tag === "ran").length + 1);
+        const result = fakeResult(Arr.filter(s.events, (e) => e._tag === "ran").length + 1);
         s.events.push(Event.cases.ran.make({ command, result }));
         const after = take(s, "execute", "after");
 

@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-padding-child-check-resource-overlap",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#1057"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The next/ spacing repair ran its full lint while another job held the local typed-API check reservation. Its first formatter also overlapped a test that created temporary lint fixtures and failed EISDIR.",
+  "cause": "The worker started whole checks despite a named heavy-check hold and initially overlapped mutation of the fixture files with formatting.",
+  "person": false,
+  "primitive": null,
+  "fix": "The worker preserved the failed run and ran format, lint and the final whole-file test sequentially. They passed. The full lint included local typed-API checks; no external paid model call is claimed. The lead kept this overlap separate from the passing results and stopped further checks before publication.",
+  "test": "A check runner could hold one local heavy-check lease and order formatting before tests that create repository fixtures.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1525"]
+}

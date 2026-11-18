@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1075-e97-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T00:47:15-08:00",
+  "ended": "2026-11-16T01:19:54-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E97 of the Effect-checker sweep (ticket 1075, plan docs/plan/quests/effect-sweep-PLAN.md on fabrikalfa/effect-sweep), in next/: the check globalTimers in app:src. Branch fabrikalfa/effect-e97 from fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds PR 1366. Counted with only globalTimers at error through --lspconfig on next/apps/fabrika/tsconfig.json: 18 hits in app:src, all in exam paths (integration test files), 2 of them in runtime-recovery.laws.integration.test.ts, a PR 1366 file that is now in scope. The one other app hit, next/apps/fabrika/e2e/instance.visual.test.ts:31, is app:e2e, slice E59's, fixed on fabrikalfa/effect-e59 and not yet folded here; left. Fixes, all by hand edit: (1) 10 pause helpers (brain-life:26, instance-records:400, instance-wire:135, memory-replace.laws:99, start-child.laws:58, start-member.laws:36, tezgah-runner.laws:118, worker-mail:402, worker-monitor:167, worker-supervision:194) become Effect.runPromise(Effect.sleep(...)), with Duration.millis(ms) where the delay is a parameter, the same delays, as E59 did; (2) 5 one-off waits (brain-life:325 and 351, instance-one-file:561, runtime-recovery.laws:1442, and instance-one-file:758 inside an Effect.gen, where Effect.runPromiseWith on the surrounding context keeps runEffectInsideEffect from gaining a hit) take Effect.sleep with a unit-tagged string; (3) checklist-instance.laws:502's settle is Effect.sleep(\"50 millis\") in place of Effect.promise around a timer; (4) the two workerd alarm stand-ins (checklist-instance.laws:328, runtime-recovery.laws:550) fork Effect.sleep then the alarm call with Effect.runFork, keep the fiber in Entry.timer, and cancel it with Effect.runFork(Fiber.interrupt(...)) where clearTimeout stood; interruptUnsafe runs synchronously inside that fork (internal/effect.ts fiberInterruptAs), so a cancelled alarm never fires, as with clearTimeout. Recount: app:src 0, and no other diagnostic of the app's tsconfig changed. No law is added, removed or narrowed; no lock line, no LOCKED row, no tsconfig change, no @effect-diagnostics or oxlint-disable line added (owner rulings for judgment slices). No hit sits in a product file, so no build step is needed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Per check for the sweep PR body: globalTimers, hits met 18 (app:src), fixed by quick fix 0, hand edits 18, left 0 in app:src, waiting on 1366 0; folder with hits for the lock: next/apps/fabrika/src (top files). Ignore lines: none added, none found in the diff. Tests run on the uncommitted tree at base eeb8ecdbb: runtime-recovery.laws.integration 14 of 14 green; checklist-instance.laws.integration 6 of 6; start-member.laws 2 of 2; worker-mail 6 of 6; worker-monitor 3 of 3; tezgah-runner.laws 2 of 2; start-child.laws 22 of 23, its L11 law timing out at 60 s, and red the same way with the base file put back (a finding, not this change). Not run here, since they send real signals to children: brain-life, instance-records, instance-wire, instance-one-file, memory-replace.laws, worker-supervision. Checks: pnpm format clean; pnpm lint green except lint:kind and lint:promise-types, which died with EPIPE under the box's memory limit and passed when run alone; ratchet.ts exit 0; pnpm typecheck exit 0.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "runtime-recovery.laws.integration.test.ts: the recovery laws that need the alarm stand-in to fire, such as scenario W2h, a target reopened before its alarm fires drains the saved letter once",
+      "plant": "the alarm fiber sleeps forever (Effect.never in place of Effect.sleep); 7 laws red, W2h: no answer in 15000 ms, last observed waiting",
+      "result": "red"
+    },
+    {
+      "law": "checklist-instance.laws.integration.test.ts: successive sends land and a client joining after the first send opens the current checklist",
+      "plant": "the alarm fiber sleeps forever (Effect.never in place of Effect.sleep); a fresh item's immediate wake leaves it open, never late: expected 'new' to be 'open'",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

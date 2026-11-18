@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-pr1592-merge-attribution-rule-break",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": ".decisions/0407-this-repos-agent-commits-are-the-bots.md",
+    "line": 23
+  },
+  "says": "PR 1592's public main-integration merge has a person-account author and no owner co-author trailer, contrary to decisions 0401 and 0407.",
+  "proof": "Public merge e5cb1cf80345ba8a44f928e7d6810208edca5e36 has parents 54896986c77d1fc84aebc2eccebbd88cc19d4b1d and ad93a08fb2b4323fb1ef0565393bc3abdd085059. `git cat-file -p` shows a person-account author and no Co-authored-by trailer. PR 1592 currently points at e9017fa50780aa6c9ed0f858e18d09435bc7a867. Decisions 0401 and 0407 require fabrikalfa[bot] as author with the owner as co-author.",
+  "cost": "Public history attributes an agent merge to a person account instead of the bot and owner; correcting this commit would require rewriting public history, so the remaining defect belongs in the future merge path.",
+  "head": "e9017fa50780aa6c9ed0f858e18d09435bc7a867",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1592"
+}

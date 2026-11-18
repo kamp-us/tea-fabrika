@@ -29,10 +29,12 @@ on:
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below). Neither runs the whole of next/ (0534): next/ runs the tests the change
   # reaches, and the full run (scheduled.yaml) runs everything, on a push to main or the hourly
-  # catch-up, at most once an hour (0581). No event here runs a
-  # tooling test (0539): their author runs the narrow ones, and the schedule runs them all. A group
-  # whose tree and base tree a ready pull request run already tested green runs no tests (the
-  # changes job below).
+  # catch-up, at most once an hour (0581). A ready pull request and a group add the plain tooling
+  # tests their change reaches (the related job), and neither runs an `.integration.` law, of
+  # next/ or of tooling: only main's full run carries those (0602, related.ts's `onMergeLine`), and
+  # a branch's proof run runs none either (proof.ts). A group whose tree
+  # and base tree a ready pull request run already tested green runs no tests (the changes job
+  # below).
   merge_group:
     types: [checks_requested]
 
@@ -185,8 +187,9 @@ jobs:
       # the full matrix and no list. A failed install or list prints nothing, so it fails open to the
       # full matrix and every file. It was its own job, legs, until each small job's about
       # 30 s of setup and its machine slot were counted (ticket 985). It lists the `next` project's
-      # files, and sizes end-to-end legs, which run the visual tests, only on a pull request with the
-      # `visual` label (VISUAL); everywhere else it prints none (0536).
+      # files. It sizes end-to-end legs, which run the visual tests, on a push to main and on a pull
+      # request with the `visual` label (VISUAL); a pull request without it and a merge queue group
+      # get none (0536).
       # No install scripts: listing runs no test, and builds nothing.
       - name: install for sizing
         run: pnpm install --frozen-lockfile --ignore-scripts
@@ -412,10 +415,15 @@ jobs:
   # Chromium is fetched only once a visual file exists, by
   # the app's own Playwright. Electron and launchd run on the laptop first; CI gets Electron once
   # xvfb and the keychain are tried.
-  # Related in-memory and visual tests run automatically. The related job below adds the
-  # integration and tooling projects. Global triggers select all files at full depth.
-  # The full next matrix has two visual legs and five in-memory legs. Sized runs use fewer
-  # legs when fewer files are affected. No test job takes a job group (0598).
+  # The in-memory tests a change reaches run on every event. The visual tests a change reaches run
+  # on a push to main, and on a pull request only with the `visual` label; a merge queue group
+  # never runs them (0536). Main's full run (scheduled.yaml) runs every visual file. The related
+  # job below adds the tooling project's plain laws. Every `.integration.` law runs only on main's
+  # full run, never on a pull request, a group or a branch's proof run (0602, related.ts's
+  # `onMergeLine`). Global triggers select all files at full depth. The full next matrix has two
+  # visual legs and five in-memory legs; its fallback starts the visual legs only where they may
+  # run. Sized runs use fewer legs when fewer files are affected. No test job takes a job group
+  # (0598).
   next:
     needs: changes
     if: >-
@@ -429,7 +437,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.changes.outputs.shards || ((github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push') && '["e2e-1","e2e-2","1","2","3","4","5"]' || '["1","2","3","4","5"]')) }}
+        shard: ${{ fromJSON(needs.changes.outputs.shards || ((github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'visual')) && '["e2e-1","e2e-2","1","2","3","4","5"]' || '["1","2","3","4","5"]')) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -468,6 +476,7 @@ jobs:
           sudo sh .github/ci/apt.sh update
           pnpm --filter @kampus/fabrika exec playwright install --with-deps chromium
       # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
+      # These legs start only on a push to main and on a pull request with the `visual` label (0536).
       # On a sized run of all of next/ only the visual files whose imports reach a changed file run,
       # the ones the size step sized these legs with, from the same base commit (changes' `base`).
       # A sized run of the reader tests alone, and a run the size step did not size, have no `base`,
@@ -521,8 +530,11 @@ jobs:
           retention-days: 90
       - *stop
 
-  # Only the projects missing from next's existing matrix, on ready PRs and queue groups.
-  # An error fails the required check.
+  # Only the projects missing from next's existing matrix, on ready PRs and queue groups. There it
+  # is tooling's plain laws alone: related.ts's `onMergeLine` leaves every `.integration.` law, of
+  # next/ and of tooling, to main's full run (scheduled.yaml, 0602), so the related job's
+  # integration step runs only when another event's select ran, a push to main whose changes job
+  # failed. An error fails the required check.
   select:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.related != 'false') }}
@@ -533,7 +545,6 @@ jobs:
       legs: ${{ steps.set.outputs.legs }}
       files: ${{ steps.set.outputs.files }}
       projects: ${{ steps.set.outputs.projects }}
-      plants: ${{ steps.set.outputs.plants }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -588,15 +599,6 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-integration $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"
-      - name: checklist faults
-        if: fromJSON(needs.select.outputs.plants)[matrix.shard] != null
-        timeout-minutes: *related-integration-limit
-        env:
-          FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
-          FABRIKA_TEST_DEPTH: full
-          PLANTS: ${{ needs.select.outputs.plants }}
-          LEG: ${{ matrix.shard }}
-        run: node .github/ci/plant-related.ts
       - name: tooling
         if: fromJSON(needs.select.outputs.projects)[matrix.shard] == 'tooling'
         timeout-minutes: *related-tooling-limit
@@ -612,14 +614,6 @@ jobs:
           path: ${{ runner.temp }}/related.json
           if-no-files-found: error
           retention-days: 7
-      - name: checklist fault observations
-        if: ${{ !cancelled() && fromJSON(needs.select.outputs.plants)[matrix.shard] != null }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: checklist-faults-${{ matrix.shard }}
-          path: ${{ runner.temp }}/plant-related/result.json
-          if-no-files-found: error
-          retention-days: 90
       - name: time table
         if: always()
         continue-on-error: true

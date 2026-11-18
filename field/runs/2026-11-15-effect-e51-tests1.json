@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e51-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T20:49:38-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E51 of the Effect-checker sweep, in next/: globalErrorInEffectCatch and globalErrorInEffectFailure, a tagged error in place of a global Error. No lock line, by the owner's ruling for judgment slices, and no pull request, by the coordinator. Counted with only the two checks at error through --lspconfig on next/apps/fabrika and next/packages/libfabrika: 64 hits, 55 in the row's folders (app:src 33, app:exam 4, lib:transport 6, lib:cloudflare 5, lib:node 4, lib:gateway 2, lib:telemetry 1) and 9 in lib:runtime, which is slice E98 and waits on pull request 1366 (Runner.integration.test.ts is in its diff). All 55 are in test files, so in exam paths, and no product file has a hit. Each was fixed by hand: a file-local Schema.TaggedError with the old message, and the original kept as cause where the old Error kept one. Where a law reads the failure (the two secrets readers in start-child.laws.integration.test.ts), the reader now takes the rejection from cause, so it reads exactly the text it read before. The new classes carry the brand type argument, so the fix adds no schemaClassMissingBrand hit. Recount after: 0 in the row's folders. No law was changed in what it asserts.",
+  "plants": [
+    {
+      "law": "the two checks at error, recount",
+      "plant": "Hello.test.ts back to catch: () => new Error(\"test WebCrypto failed\"): the checker reports globalErrorInEffectCatch and globalErrorInEffectFailure at line 63; restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run at base e613fa4 with the change in the worktree: 8 plain files (69 passed, 1 skipped), 5 libfabrika integration files (51 passed), 6 app integration files (220 passed). Not run here because they send a real signal: hands-launcher.integration.test.ts, instance-one-file.integration.test.ts, settings-start.integration.test.ts. pnpm lint and one pnpm typecheck passed; the list ratchet exited 0.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress-errors",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-17T06:51:01-08:00",
+  "ended": "2026-11-17T06:54:17-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "Today's CI tooling, tracker 1144. Fixed the artifact privacy defect proved by scheduled run 44105502584 at the P8 cutoff's final privacy assertion. The timing reader now reports only one of six fixed unavailable contexts instead of copying filesystem, API, JSON-parser or schema errors. Its final output failure also prints fixed context. The unused raw-error formatting export was removed after checking all repo references. The existing P5 property now generates all nine success/failure classes per input, including the actual Effect NotFound error containing a private scratch report path, PermissionDenied, string errors, parser errors, report/job schema errors, API failures and progress read failures. Its original privacy assertions remain, with extra JSON and percent-encoded path scans and retained safe rows, counts and progress checks.",
+  "note": "The extended P5 failed on the prior timing reader with an actual generated job-schema canary leak; that natural red is retained and not counted as a new deliberate plant. After the fix, progress 5 passed in 947 ms and time-table 8 passed in 2.07 s, with the same 100 generated runs and all seven older timing laws intact. Scoped format and lint pass. Every other source hash and the index matched the pre-fix snapshot before this row. The real-child P8 fixture, all its modes, bounds and privacy assertions are unchanged. Both failed scheduled runs and all six real overhead pairs remain archived. No protected child, signal, compiler, full lint, CI action or publication ran during this source repair. Root must read the resulting diff before further checks or publication. Disposable complete P8 proof, the unrun buffer fault and unresolved overhead assessment still hold rollout.",
+  "base": "8ceba81efed06ec7597bb72e0a36f68d98d5c291",
+  "sourceHashes": {
+    ".github/ci/time-table.ts": "ee84c8719902589a289f224353ffaa1fb6f74ddf389ef980cf8056cb5110a704",
+    ".github/ci/progress.test.ts": "0a0e7558a19074ecd121c203fd716c3394e5b3d79f5951d859e9e0e670f15f36"
+  },
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44100183103",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44105502584/job/134117325471"
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 3.26,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

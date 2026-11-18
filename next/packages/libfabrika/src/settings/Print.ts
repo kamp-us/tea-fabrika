@@ -5,17 +5,18 @@
  *
  * Explicitly set keys show, and `all` adds the keys their defaults supply. Which rows show depends on each origin's `_tag`, never on a value, so a key set to its own default still shows, and `all` never changes what a row says.
  */
+import * as Str from "effect/String";
 import type { Row, Warning } from "./Reference.ts";
-import type { Origin } from "./Sources.ts";
+import { Origin } from "./Sources.ts";
 
 const from = (origin: Origin) =>
-  origin._tag === "file"
-    ? `${origin.file}, line ${origin.line}`
-    : origin._tag === "default"
-      ? "the default"
-      : origin.name;
+  Origin.matchOrElse(
+    origin,
+    { file: (origin) => `${origin.file}, line ${origin.line}`, default: () => "the default" },
+    (origin) => origin.name,
+  );
 
-const indent = (text: string) => text.replace(/\n/g, "\n  ");
+const indent = (text: string) => Str.replace(/\n/g, "\n  ")(text);
 
 /**
  * Formats rows as the report text: one block per shown row, then a count of the hidden ones.
@@ -40,6 +41,7 @@ export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolea
 
   const hidden = rows.length - shown.length;
   const list = rows[0]?.app.list;
+
   const rest =
     hidden === 0 || list === undefined ? [] : [`Keys left at their defaults: ${hidden}. ${list} --all shows them.`];
 

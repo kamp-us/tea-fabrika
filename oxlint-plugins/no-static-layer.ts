@@ -19,6 +19,7 @@
 //
 // Which folders it holds is the config's `files` list, and tests are left out there (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 type Member = ESTree.ClassBody["body"][number];
@@ -52,7 +53,7 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
     return node.property.name;
   }
 
-  return node.computed && node.property.type === "Literal" && typeof node.property.value === "string"
+  return node.computed && node.property.type === "Literal" && Predicate.isString(node.property.value)
     ? node.property.value
     : null;
 };

@@ -6,16 +6,28 @@
 // only process the laws look at is the workerd pid their own instance's `started` fact names, and
 // they look with `ps`, never with a signal. These are host-only laws (0045, 0178): they run in the
 // step's container, never on the owner's Mac.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Predicate, Stream } from "effect";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import {
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Predicate,
+  Stream,
+  Array as Arr,
+  String as Str,
+  Clock,
+  Duration,
+  DateTime,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
+
 import { describe, expect } from "vitest";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
@@ -41,62 +53,15 @@ const START = 30_000;
 // How often the poller asks for `info`, and how often a fact or a process is looked at.
 const POLL = 50;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 // The founder's key, as an SSH public key line and a signer for the door's hello.
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = SshsigTest.Identity;
 
 type Instance = any;
 
-const pause = (ms = POLL) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = POLL) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
+
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
 
 /** A real WebSocket at the door, its hello answered: the founder's tab, held open by the caller. */
 const wire = async (instance: Instance, key: Key, tab: string) => {
@@ -119,13 +84,13 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + START;
+    const end = now() + START;
 
-    while (Date.now() < end) {
-      const index = frames.findIndex(match);
+    while (now() < end) {
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closed !== undefined) {
@@ -154,7 +119,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       },
     }),
   );
@@ -174,7 +139,7 @@ const alive = (pid: number) =>
         concurrency: 2,
       });
 
-      return text.trim() === String(pid);
+      return Str.trim(text) === String(pid);
     }),
   ).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -183,7 +148,8 @@ type Fact = { readonly _tag: string; readonly body: Record<string, unknown> };
 /** The brain's facts on `gateway/brain`, or null while the call cannot be answered. */
 const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> => {
   try {
-    return ((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>).map((row) => ({
+    // SAFETY: the audit read answers the stream's rows as an array.
+    return Arr.map((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>, (row) => ({
       _tag: row._tag,
       body: row.body,
     }));
@@ -194,15 +160,15 @@ const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> =>
 
 /** Polls until `done` holds or `ms` pass, and answers what it last saw and when it held, if it did. */
 const watch = async <A>(look: () => Promise<A>, done: (value: A) => boolean, ms: number) => {
-  const began = Date.now();
+  const began = now();
   let last = await look();
 
-  while (!done(last) && Date.now() - began < ms) {
+  while (!done(last) && now() - began < ms) {
     await pause();
     last = await look();
   }
 
-  return { last, after: done(last) ? Date.now() - began : null };
+  return { last, after: done(last) ? now() - began : null };
 };
 
 // How one `info` call ended: answered, refused as offline by the brain, refused by the OS at the
@@ -210,9 +176,9 @@ const watch = async <A>(look: () => Promise<A>, done: (value: A) => boolean, ms:
 type Outcome = "answered" | "offline" | "refused" | "other";
 
 // Every message and code down a failure's chain of causes.
-const chain = (value: unknown): string =>
-  `${String(value)} ${Predicate.hasProperty(value, "code") ? String(value.code) : ""} ${
-    Predicate.hasProperty(value, "cause") && value.cause !== value ? chain(value.cause) : ""
+const chain = (cause: unknown): string =>
+  `${String(cause)} ${Predicate.hasProperty(cause, "code") ? String(cause.code) : ""} ${
+    Predicate.hasProperty(cause, "cause") && cause.cause !== cause ? chain(cause.cause) : ""
   }`;
 
 const outcome = async (instance: Instance): Promise<Outcome> => {
@@ -226,43 +192,27 @@ const outcome = async (instance: Instance): Promise<Outcome> => {
     }
 
     // The control call keeps its cause; Node's fetch names a refused dial ECONNREFUSED.
-    return chain(error).includes("ECONNREFUSED") ? "refused" : "other";
+    return Str.includes("ECONNREFUSED")(chain(error)) ? "refused" : "other";
   }
 };
 
 /** One real local instance with no programs, its `ps -o rss=` answered by `kib`. */
 const world = (kib: (pid: number) => number | null) =>
   Effect.gen(function* () {
-    const home = yield* Effect.acquireRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "mrw-"))),
-      (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
-    );
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "mrw-" });
 
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const previous = process.env.FABRIKA_HOME;
-        process.env.FABRIKA_HOME = home;
-        process.env.DO_NOT_TRACK = "1";
-
-        return previous;
-      }),
-      (previous) =>
-        Effect.sync(() => {
-          if (previous === undefined) {
-            delete process.env.FABRIKA_HOME;
-          } else {
-            process.env.FABRIKA_HOME = previous;
-          }
-        }),
-    );
+    yield* scopedEnv({ FABRIKA_HOME: home });
+    yield* Effect.sync(noTracking);
     const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
     const { build } = yield* Effect.promise(() => import("./build.ts"));
     const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-    const key = identity();
+    const key = yield* SshsigTest.identity;
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-    const built = yield* build({ out: join(home, "dist") }).pipe(Effect.provide(NodeServices.layer));
+    yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+    const built = yield* build({ out: path.join(home, "dist") });
 
     const platform = Layer.mergeAll(
       rssStandIn(kib).pipe(Layer.provide(NodeServices.layer)),
@@ -274,7 +224,7 @@ const world = (kib: (pid: number) => number | null) =>
 
     const instance: Instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: PROJECT,
         person: PERSON,
@@ -285,11 +235,14 @@ const world = (kib: (pid: number) => number | null) =>
     ).pipe(Effect.provideContext(context));
 
     return { instance, key };
-  });
+  }).pipe(Effect.provide(NodeServices.layer));
 
 /** The facts of one start, in the order the brain wrote them. */
 const sequence = (facts: ReadonlyArray<Fact>, start: unknown) =>
-  facts.filter((fact) => fact.body.start === start && fact._tag !== "started").map((fact) => fact._tag);
+  Arr.map(
+    Arr.filter(facts, (fact) => fact.body.start === start && fact._tag !== "started"),
+    (fact) => fact._tag,
+  );
 
 describe("the memory restart on real workerd, next/", () => {
   // scenario: the bug's own shape, real workerd draining on SIGTERM while a WebSocket stays open, which no
@@ -310,12 +263,12 @@ describe("the memory restart on real workerd, next/", () => {
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
-            (facts) => facts?.some((fact) => fact._tag === "started") === true,
+            (facts) => Arr.some(facts ?? [], (fact) => fact._tag === "started"),
             START,
           ),
         );
 
-        const first = before.last!.find((fact) => fact._tag === "started")!.body;
+        const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         expect(yield* alive(old), "the first workerd runs").toBe(true);
         expect(socket.open(), "the door's WebSocket is open").toBe(true);
@@ -331,13 +284,15 @@ describe("the memory restart on real workerd, next/", () => {
           }
         })();
 
-        const switched = Date.now();
+        const switched = yield* Clock.currentTimeMillis;
         sizes.set(old, OVER);
+        // `watch` polls with plain Promises, so each look runs with this law's services.
+        const context = yield* Effect.context();
 
         // The next 1-second sample sends the SIGTERM; the grace and two seconds bound the old pid's end.
         const gone = yield* Effect.promise(() =>
           watch(
-            () => Effect.runPromise(alive(old)),
+            () => Effect.runPromiseWith(context)(alive(old)),
             (live) => !live,
             1000 + GRACE + 2000,
           ),
@@ -347,7 +302,10 @@ describe("the memory restart on real workerd, next/", () => {
           watch(
             async () => {
               const facts = await brain(instance);
-              const next = facts?.find((fact) => fact._tag === "started" && fact.body.after === first.start);
+
+              const next = Option.getOrUndefined(
+                Arr.findFirst(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start),
+              );
 
               return next === undefined ? null : { facts: facts!, next: next.body };
             },
@@ -367,7 +325,7 @@ describe("the memory restart on real workerd, next/", () => {
 
         polling = false;
         yield* Effect.promise(() => poller);
-        const elapsed = Date.now() - switched;
+        const elapsed = (yield* Clock.currentTimeMillis) - switched;
 
         // The bug: a call dials the old control port while the old workerd drains.
         expect(seen.refused, `info calls refused at the control port in ${elapsed} ms`).toBe(0);
@@ -380,14 +338,18 @@ describe("the memory restart on real workerd, next/", () => {
         expect(yield* alive(next), "the new workerd runs").toBe(true);
         // A WebSocket keeps workerd draining, so the grace runs out and the kill is recorded.
         expect(sequence(replaced.last!.facts, first.start)).toEqual(["replacing", "killed", "exited", "restarting"]);
-        expect(replaced.last!.facts.find((fact) => fact._tag === "replacing")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!.facts, (fact) => fact._tag === "replacing"))?.body,
+        ).toMatchObject({
           pid: old,
           reason: "memory",
           bytes: OVER * 1024,
           limit: LIMIT,
           grace: GRACE,
         });
-        expect(replaced.last!.facts.find((fact) => fact._tag === "exited")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!.facts, (fact) => fact._tag === "exited"))?.body,
+        ).toMatchObject({
           reason: "memory",
           signal: "SIGKILL",
         });
@@ -410,18 +372,20 @@ describe("the memory restart on real workerd, next/", () => {
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
-            (facts) => facts?.some((fact) => fact._tag === "started") === true,
+            (facts) => Arr.some(facts ?? [], (fact) => fact._tag === "started"),
             START,
           ),
         );
 
-        const first = before.last!.find((fact) => fact._tag === "started")!.body;
+        const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         sizes.set(old, OVER);
+        // `watch` polls with plain Promises, so each look runs with this law's services.
+        const context = yield* Effect.context();
 
         const gone = yield* Effect.promise(() =>
           watch(
-            () => Effect.runPromise(alive(old)),
+            () => Effect.runPromiseWith(context)(alive(old)),
             (live) => !live,
             1000 + GRACE + 2000,
           ),
@@ -432,7 +396,7 @@ describe("the memory restart on real workerd, next/", () => {
             async () => {
               const facts = await brain(instance);
 
-              return facts?.some((fact) => fact._tag === "started" && fact.body.after === first.start) === true
+              return Arr.some(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start)
                 ? facts
                 : null;
             },
@@ -447,7 +411,9 @@ describe("the memory restart on real workerd, next/", () => {
         expect(sequence(replaced.last!, first.start)).toEqual(["replacing", "exited", "restarting"]);
         // workerd takes SIGTERM as its drain and then exits by itself, so its exit names no signal. The
         // plan expected `signal: SIGTERM`; the first run on workerd 1.20261026.1 showed none.
-        expect(replaced.last!.find((fact) => fact._tag === "exited")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!, (fact) => fact._tag === "exited"))?.body,
+        ).toMatchObject({
           reason: "memory",
           signal: null,
         });

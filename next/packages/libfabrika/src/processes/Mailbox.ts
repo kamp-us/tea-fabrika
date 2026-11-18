@@ -6,6 +6,7 @@
  * on the ledger.
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { Appended, type Entry, Line, lineFor } from "../ledger/Log.ts";
 import type { Rev } from "../Rev.ts";
@@ -258,7 +259,7 @@ export class Mailbox extends Context.Service<
 
             const own = Option.exists(
               runner,
-              (r) => r.name === to && id.startsWith(`${r.process}/`) && inRunnerSpace(id),
+              (r) => r.name === to && Str.startsWith(`${r.process}/`)(id) && inRunnerSpace(id),
             );
 
             if (brainOnly({ stream: inbox(to), id: own ? "" : id, tag: SEND })) {

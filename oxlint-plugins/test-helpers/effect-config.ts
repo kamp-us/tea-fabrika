@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, matchesGlob, relative, resolve } from "node:path";
 import { type Expression, parseSync } from "oxc-parser";
+import { expect } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
@@ -44,7 +45,14 @@ const value = (node: Expression): unknown => {
       return node.elements.map((element) =>
         element === null || element.type === "SpreadElement" ? null : value(element),
       );
-    case "ObjectExpression":
+    case "ObjectExpression": {
+      const keys = node.properties.flatMap((property) =>
+        property.type === "Property" && property.key.type === "Literal" ? [String(property.key.value)] : [],
+      );
+
+      // A duplicate key hides the earlier block from the compiler, including every lock it holds.
+      expect(keys, "config keys must be unique").toEqual([...new Set(keys)]);
+
       return Object.fromEntries(
         node.properties.flatMap((property) =>
           property.type === "Property" && property.key.type === "Literal"
@@ -52,6 +60,8 @@ const value = (node: Expression): unknown => {
             : [],
         ),
       );
+    }
+
     default:
       throw new Error(`a tsconfig holds a ${node.type}, which is not JSON`);
   }

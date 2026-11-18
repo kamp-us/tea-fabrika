@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e44-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:23:27-08:00",
+  "ended": "2026-11-15T21:31:20-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of record for judgment slice E44 (preferEffectString), in next/, at c954b22f5 on fabrikalfa/effect-e44 (tests fb1876ee9, build c954b22f5), the whole diff from origin/main: merge-ready, 0 blocking classes, 2 finding rows. Recount with only this check at error through --lspconfig over libfabrika, tuval, the five programs and the app: 0 hits in the row's product files and 3 in its exam paths, the 3 both step rows list (key.laws.visual.test.ts 130 and 143, padStart inside a page.evaluate callback that runs in the browser; Layout.laws.test.ts 68, a matchAll loop that reads m.index). Each is a fair leave: the browser code cannot import effect, and no reasoned ignore line form exists on main yet (E0's no-bare-disable change has not landed). Every call that now answers an Option keeps what the native call answered: a scratch script ran old and new code side by side over 20,000 generated inputs each for Id split, Id's first-letter and digit fold, objectType, childName, tileWords, tezgah's workspace body, the test-side shortName and endLine, the Branch filter, split on '/' and on whitespace, Sshsig rows and the checklist byId cut, and all answered the same. Effect's split, repeat and localeCompare differ from native only on an empty separator, a negative count and the comparator's size, and no changed call reaches those. No assertion was dropped (loosening.sh hits are import lines and rewritten expect lines; assertion counts per file are equal or higher from line wraps), no disable or @effect-diagnostics line, no lock line or tsconfig change, no LOCKED row, no file of pull request 1366, no personal name or machine path. Finding rows: 51 names added to barrel effect imports in library files against 0577; objectType's no-colon branch is reached by no law.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Ran at c954b22f5 with Node 26.13.0, one file at a time, TYPESAFE_API_KEY unset: Id.test.ts 29/29, Rebac.test.ts 4/4, Repositories.types.test.ts 1/1, tezgah Fold.laws.test.ts 2/2 and Layout.laws.test.ts 4/4, CodeHost.test.ts 3/3, Menu.laws.test.ts 12/12, BrainLife.laws.test.ts 5/5, Sshsig.test.ts 27/27, SshsigWebauthn.test.ts 15/15, Hello.test.ts 25/25, Sshsig.integration.test.ts 3/3 (real ssh-keygen), tuval Layout.laws.test.ts 3/3 and spoken.test.ts 2/2, checklist tile.laws.test.ts 3/3 and window.laws.test.ts 3/3, tezgah program.laws.test.ts 8/8, pipeline Settings.test.ts 2/2 and handlers.test.ts 2/2. pnpm lint passed with a 6 GB heap; pnpm typecheck passed; leakgrep clean; git merge-tree with origin/main 9186e6c49 has no conflict. Not run: the .visual. test (no browser here). Plants, in the working tree and restored by copy, never committed: tuval Layout.tsx tileWords keeps the slash, Layout.laws.test.ts red 1 of 3; tezgah program.ts workspace body keeps the underscore, program.laws.test.ts red 7 of 8; Workspace.ts childName keeps the slash, tezgah program.laws.test.ts red 7 of 8; evaluate.ts objectType answers the whole ref with no colon, Rebac.test.ts stays green 4 of 4 (the finding row); Sshsig.ts read strips only the first whitespace, Sshsig.test.ts stays green 27 of 27, since the base64 decoder skips whitespace itself.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "next/packages/tuval/src/window/Layout.laws.test.ts, the tile names and strips",
+      "plant": "next/packages/tuval/src/window/Layout.tsx tileWords, Str.slice(slash) for Str.slice(slash + 1); restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts, Desk S2a and S3",
+      "plant": "next/programs/tezgah/src/program.ts placed, Str.slice(underscore) for Str.slice(underscore + 1); restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts, through Workspace.childName",
+      "plant": "next/packages/libfabrika/src/tezgah/Workspace.ts childName, Str.slice(slash) for Str.slice(slash + 1); restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/permissions/Rebac.test.ts",
+      "plant": "next/packages/libfabrika/src/permissions/internal/evaluate.ts objectType, onNone answers ref for the empty string; restored by copy",
+      "result": "green"
+    }
+  ],
+  "step": "review"
+}
