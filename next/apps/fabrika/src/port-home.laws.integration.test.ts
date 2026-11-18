@@ -13,7 +13,11 @@
 // Before it saves, the writer sends counter:1 one input, so the home holds a Process checkpoint. To save it again before a later slice, on the commit before
 // that slice's product code:
 //
-//   T502_PORT_HOME=write pnpm exec vitest run next/apps/fabrika/src/port-home.laws.test.ts
+//   T502_PORT_HOME=write pnpm exec vitest run next/apps/fabrika/src/port-home.laws.integration.test.ts
+//
+// The saved home is older than the code store, and the two T833 laws below need one that is: a home
+// saved again on a build with the code store fails them. So it keeps the Msgs it was saved with,
+// still keyed `type`, as an old home that must still open.
 //
 // A saved home is public, so the writer never saves one that names a machine path. It copies the
 // run's home into a staging folder, makes each Alchemy resource's `props.main` relative to the
