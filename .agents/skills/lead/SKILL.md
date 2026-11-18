@@ -305,7 +305,8 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
   network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
   Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
-  clearance; narrow a `--changed` selection that reaches these laws to verified-safe local paths.
+  clearance. A check CI runs is not run here before a push: only `pnpm format` and the leak grep
+  ([0603](../../../.decisions/0603-lead-admin-merges-every-ready-pull-request.md)).
   Mutation still runs through `mutbox.ts` on its hourly schedule (0066).
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the quest's state file

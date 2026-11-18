@@ -2553,9 +2553,10 @@ export const driveStep = (
     }
 
     // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
-    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
-    // typecheck` still takes its own lock (scripts/typecheck.sh).
-    if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
+    // Since 0603 a tests or build step leaves the typecheck to CI, so only mutation waits. Where
+    // pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm typecheck`
+    // still takes its own lock (scripts/typecheck.sh).
+    if (ask.step === "mutation") {
       for (;;) {
         const r = sh("pgrep", ["-x", "tsgo"]);
         const tsgo = pgrepAnswer(r.code, r.out);
