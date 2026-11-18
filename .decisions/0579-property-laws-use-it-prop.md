@@ -1,7 +1,7 @@
 ---
 id: 0579
 title: "In next/ and our tooling, @kalfa/vitest gives a law one import: property laws are it.prop or it.effect.prop with Schemas, calls are watched with a Recorder, and hooks, skipIf, runIf and a raw fc.assert are not exported"
-status: accepted
+status: amended-in-part by [0600](0600-kalfa-quality-holds-test-lint-format.md)
 date: 2026-11-15
 tags: [tests, recorder, spy, hooks, property, effect-vitest, fast-check, schema, arbitrary, seed, next, tooling]
 ---

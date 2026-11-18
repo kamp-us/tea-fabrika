@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unknown-returns-1-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:46:36-08:00",
+  "ended": "2026-11-15T22:12:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-unknown-returns-1, in next/ and our tooling: anti-slop/no-unknown-returns forced to error in a scratch config outside the repo, over the slice's 19 folders on origin/main bcad008. Hits met: 140. 98 in exam paths (exam-paths.json), 35 in product files, 7 in five files of pull request 1366 (not touched: record-wire.test-support.ts:30, ledger/Log.ts:114, runtime/Runner.integration.test.ts:466, runtime/Runner.ts:308,1590,2856, runtime/RuntimeCauseTest.ts:593). Of the 98 exam hits, 78 are fixed by hand edits with the Edit tool and small in-place scripts kept in the scratchpad (no quick fix, no disable line, no lock line, no .oxlintrc.json change): a returned value got the type it really has (object, Schema.Json for a value parsed from JSON text or a JSON-only tree, a union of the schema types a helper makes), a pass-through got a generic, a callback whose result nobody reads got void, and a helper that read an unknown field only to compare it now returns the narrow type the compare needs or does the expect itself (Program.test.ts expectMachine). 20 exam hits are left, stopped because the honest return type is unknown and no decision names an ignore line for this rule's case: an untyped Durable Object RPC binding the law decodes later (client-protocol.test-support.ts:318, chaos-revoke.integration.test.ts:247, instance-one-file.integration.test.ts:113, worker-usage.integration.test.ts:253, instance-records.integration.test.ts:31); a field read off an untyped wire body or tree (client-protocol.test-support.ts:250, Client.laws.test.ts:506 noteRev, TomlEdit.test.ts:92 whose product TomlDocument.value is Record<string, unknown>, scheduled.ts:92 a YAML timeout the check must report as it is, AccessSpans.integration.test.ts:154 Effect's own span attribute type); a generator that builds every JavaScript kind on purpose (Connection.test.ts:708, runtime.decode.test.ts:124); a thrown value (processTable.laws.test.ts:326); the product view type, unknown at runtime/Entry.ts:38 (counter runner.laws.integration.test.ts:46, Patch.test.ts:11,116,120 twice,148, record.laws.integration.test.ts:78). Product hits for the build step: Testing.ts:11, client/HandsStart.ts:51, cloudflare/SettingsStartsRemote.ts:27,28, cloudflare/index.ts:59, cloudflare/platform.ts:83, ledger/Ledger.ts:70,71,72, node/dev/dev.ts:52, runtime/Audit.ts:98, runtime/Client.ts:133,204,220,254, runtime/Execution.ts:52,165-174, runtime/Program.ts:124,244,256,706, settings/TomlParser.ts:40,159, settings/internal/edit.ts:60, .agents/skills/lead/scripts/chain.ts:243, quest.ts:12. pnpm lint is red only on the zero lock: five folders now have no hit (oxlint-plugins, libfabrika gateway and tasks, programs checklist and pipeline) and want their lock line, which the owner ruling holds for the later lock pull request.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/advice.test.ts: T930 L4 pinned: reads a law-shape warn override, a no-restricted-properties one and a jsdocs one with options, and no error or frozen line",
+      "plant": "the reshaped warns helper in oxlint-plugins/advice.ts compares the level with error in place of warn",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "No law was added and no assertion removed or narrowed. The plant ran once on a saved copy of advice.ts, restored by copy. Typecheck with each touched package's own tsc --noEmit -p . (libfabrika, apps/fabrika, programs/pipeline, programs/checklist, oxlint-plugins, .github/ci): clean. Tests: 77 plain test files the edits reach, 1064 tests, all green, at base bcad008 plus this diff. The 53 integration files they reach are not run here: the test config refuses a local host-only run (0178), so CI's scheduled full run runs them. --changed origin/main is refused here as a broad run because the diff touches a force-rerun path.",
+  "step": "tests"
+}

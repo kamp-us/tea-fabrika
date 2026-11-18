@@ -10,6 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { Entry, encodedBytes, lineFor, type Line } from "../ledger/Log.ts";
 import { Selection } from "../ledger/Referee.ts";
 import { accountingEntries, nextPlace } from "../ledger/RefereeSql.ts";
@@ -37,14 +38,22 @@ const TABLES = [
 ];
 
 const encode = Schema.encodeSync(Schema.fromJsonString(Quota.Model));
+
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Model));
+
 // An account's row key is its encoded tagged value, so no two kinds of account can share one.
 const key = Schema.encodeSync(Schema.fromJsonString(Quota.Account));
+
 const readAccount = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Account));
+
 const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Finite, build: Schema.String });
+
 const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Finite, build: Schema.String });
+
 const readStep = Schema.decodeUnknownOption(StepBody);
+
 const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Finite, settled: Schema.Finite });
+
 const readHeld = Schema.decodeUnknownSync(Held);
 
 /**
@@ -59,6 +68,7 @@ const Authority = Schema.TaggedUnion({
   runtime: { process: Schema.String },
   infrastructure: {},
 });
+
 type Authority = typeof Authority.Type;
 
 const fromWriter = (writer: Writer | undefined): Authority =>
@@ -75,19 +85,23 @@ const fromWriter = (writer: Writer | undefined): Authority =>
 // program's charge.
 const infrastructure = (stream: string) =>
   stream === ProcessTable.stream ||
-  stream.startsWith("processes/") ||
+  Str.startsWith("processes/")(stream) ||
   stream === "gateway" ||
-  stream.startsWith("gateway/") ||
-  stream.startsWith("job:") ||
-  stream.startsWith("target:") ||
-  stream.startsWith("settings/") ||
-  stream.startsWith("permissions/") ||
-  stream.startsWith("repository/");
+  Str.startsWith("gateway/")(stream) ||
+  Str.startsWith("job:")(stream) ||
+  Str.startsWith("target:")(stream) ||
+  Str.startsWith("settings/")(stream) ||
+  Str.startsWith("permissions/")(stream) ||
+  Str.startsWith("repository/")(stream);
 
 const programAccount = (program: string) => Quota.Account.cases.program.make({ program });
+
 const recoveryAccount = (name: string) => Quota.Account.cases.recovery.make({ name, location: "project" });
+
 const none = { writes: 0, bytes: 0 };
+
 const free = Result.succeed(undefined);
+
 const refuse = Result.fail("quota" as const);
 
 // A store failure met while accounting rows are read or written, as the error every call fails with.
@@ -140,17 +154,22 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       recovery: ({ location }) => limits.recovery[location],
       local: () => limits.recovery.process,
     });
+
   const machine = (account: Quota.Account) => Quota.make({ account, limits: allowance(account) });
+
   const load = (account: Quota.Account) => {
     const [row] = sql.exec("SELECT value FROM quota_accounts WHERE account=?", key(account));
+
     return row === undefined ? machine(account).init(null, {})[0] : decode(row.value);
   };
+
   const save = (model: Quota.Model) =>
     sql.exec(
       "INSERT INTO quota_accounts (account,value) VALUES (?,?) ON CONFLICT(account) DO UPDATE SET value=excluded.value",
       key(model.account),
       encode(model),
     );
+
   const charged = (entry: Entry, account: Quota.Account) =>
     sql.exec(
       "INSERT INTO quota_entries (rev,account,bytes) VALUES (?,?,?)",
@@ -158,6 +177,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       key(account),
       encodedBytes(entry),
     );
+
   const propose = (
     account: Quota.Account,
     entry: Entry,
@@ -184,8 +204,10 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     save(next);
     charged(entry, account);
+
     return free;
   };
+
   // The process table folds the lifecycle streams alone, as the manager's own fold does, so one
   // write reads the same rows however many messages the ledger holds.
   const table = () =>
@@ -193,14 +215,18 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       (stream, after) => accountingEntries(sql, Selection.cases.stream.make({ stream, after })),
       options.brain,
     );
+
   const owner = (entry: Entry, registry: ProcessTable) => {
-    const live = registry.info.find((p) => entry.stream === `${p.name}/inbox` || entry.stream.startsWith(`${p.name}/`));
+    const live = registry.info.find(
+      (p) => entry.stream === `${p.name}/inbox` || Str.startsWith(`${p.name}/`)(entry.stream),
+    );
 
     if (live !== undefined) {
       return live;
     }
 
-    const life = registry.life(entry.stream.split("/")[0] ?? "");
+    const life = registry.life(Str.split(entry.stream, "/")[0]);
+
     return Option.isNone(life)
       ? undefined
       : {
@@ -210,7 +236,9 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
           build: life.value.state.code.hash,
         };
   };
+
   type Owner = NonNullable<ReturnType<typeof owner>>;
+
   const aheadFor = (entry: Entry, target: Owner) =>
     encodedBytes(
       Entry.make({
@@ -225,10 +253,12 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
         ),
       }),
     );
+
   // The charge a step record's message took ahead, if the entry is one: who paid it, its bytes and
   // whether a step record already settled it.
   const held = (entry: Entry, target: Owner) => {
     const step = entry._tag === "stepped" ? readStep(entry.body) : Option.none();
+
     const [row] = Option.isNone(step)
       ? []
       : sql.exec(
@@ -242,6 +272,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     }
 
     const saved = readHeld(row);
+
     return {
       message: step.value.input,
       payer: readAccount(saved.account),
@@ -277,6 +308,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     return result;
   };
+
   // A write with no trusted writer is charged to the program its stream names, or to nobody on
   // the brain's own streams. A stream nobody owns is refused.
   const byOwner = (entry: Entry) => {
@@ -285,23 +317,29 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     }
 
     const target = owner(entry, table());
+
     return target === undefined ? refuse : asPayer(entry, target, programAccount(target.program));
   };
+
   // A process's program pays for its own writes; a historical process no longer has a program to
   // charge, so it is refused.
   const asProgram = (entry: Entry, process: string) => {
     const registry = table();
     const life = Option.getOrUndefined(registry.life(process));
+
     return life === undefined
       ? refuse
       : asPayer(entry, owner(entry, registry), programAccount(life.state.code.program));
   };
+
   // A recovery write is paid from the recovering name's own reserved room.
   const asRecovery = (entry: Entry, process: string) => {
     const registry = table();
     const life = Option.getOrUndefined(registry.life(process));
+
     return life === undefined ? refuse : asPayer(entry, owner(entry, registry), recoveryAccount(life.name));
   };
+
   // A process's runtime writes only its own stream. Its step record settles the charge its message
   // took ahead; a step record for a message already settled is a replay, in that message's room;
   // anything else it writes is its name's recovery work.
@@ -332,8 +370,10 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     );
     sql.exec("UPDATE quota_steps SET settled=1 WHERE name=? AND message=?", target.name, step.message);
     charged(entry, step.payer);
+
     return free;
   };
+
   const charge = (entry: Entry, cause: Authority) =>
     Authority.match(cause, {
       infrastructure: () => free,
@@ -342,6 +382,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       recovery: ({ process }) => asRecovery(entry, process),
       runtime: ({ process }) => asRuntime(entry, process),
     });
+
   // Charges what was committed before accounting saw it, and nothing else: only entries past the
   // saved revision are read, so a ledger that is already accounted costs one empty query.
   const restore = () => {
@@ -374,6 +415,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
       // Restore exact historical use even when it already exceeds a newly lowered wall.
       const account = programAccount(target.program);
+
       const unlimited = Quota.make({
         account,
         limits: {
@@ -382,6 +424,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
           message: limits.recovery.project.message,
         },
       });
+
       const ahead = entry.stream === `${target.name}/inbox` ? { writes: 1, bytes: aheadFor(entry, target) } : none;
       save(
         applyCell(unlimited, load(account), {
@@ -411,11 +454,13 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       last.rev,
     );
   };
+
   const read = Effect.fnUntraced(function* (account: Quota.Account) {
     return yield* Effect.try({
       try: () =>
         sql.transaction(() => {
           restore();
+
           return use(
             applyCell(machine(account), load(account), { type: "advance", at: clock.currentTimeMillisUnsafe() })[0],
           );
@@ -423,6 +468,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       catch: failed,
     });
   });
+
   const within = <A>(next: Authority, step: () => A): A => {
     const before = authority;
     authority = Option.some(next);
@@ -433,6 +479,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       authority = before;
     }
   };
+
   // The trial runs the admission itself at the place the message will land, past the `before`
   // entries the caller writes first and at the referee's arrival time, then rolls it back: the
   // answer is the one an append there would get, and nothing is saved either way.
@@ -442,6 +489,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     const stream = `${name}/inbox`;
     // The referee reads its clock when it places an entry, so the trial reads it now, as it does.
     const now = yield* Clock.currentTimeMillis;
+
     const tried = Result.try(() =>
       sql.transaction(() => {
         restore();
@@ -450,6 +498,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
           fits = true;
         } else {
           const place = nextPlace(sql, stream, now);
+
           const entry = Entry.make({
             ...line,
             id,
@@ -458,6 +507,7 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
             rev: place.rev + before,
             arrivedAt: place.arrivedAt,
           });
+
           fits = Result.isSuccess(charge(entry, Authority.cases.owner.make({})));
         }
 
@@ -467,11 +517,13 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
 
     if (Result.isFailure(tried) && tried.failure !== rollback) {
       const cause = tried.failure;
+
       return yield* failed(cause);
     }
 
     return fits;
   });
+
   const service = Quotas.of({
     program: (identity) => read(programAccount(identity)),
     recovery: (name) => read(recoveryAccount(name)),
@@ -482,11 +534,13 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
     runtime: (process, work) => work.pipe(Effect.provideService(TrustedWriter, Writer.cases.runtime.make({ process }))),
     own: (process, work) => work.pipe(Effect.provideService(TrustedWriter, Writer.cases.own.make({ process }))),
   });
+
   return Layer.mergeAll(
     Layer.succeed(Quotas, service),
     Layer.succeed(WritePolicy, {
       admit: (entry, writer) => {
         restore();
+
         // A step's own authority wins; else the writer trusted code named around the call.
         const result = charge(
           entry,
@@ -512,8 +566,11 @@ const LocalTables = [
 ];
 
 const Pending = Schema.Struct({ operation: Schema.String, writes: Schema.Finite, bytes: Schema.Finite });
+
 const Fault = Schema.Struct({ ...Pending.fields, fault: RecoveryReserveExhausted });
+
 const faultEncode = Schema.encodeSync(Schema.fromJsonString(Fault));
+
 const faultDecode = Schema.decodeUnknownSync(Schema.fromJsonString(Fault));
 
 class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pending, fault: RecoveryReserveExhausted }) {}
@@ -528,6 +585,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
   const local = Quota.Account.cases.local.make({ name: options.name });
   const recovery = Quota.Account.cases.recovery.make({ name: options.name, location: "process" });
   const machine = (account: Quota.Account) => Quota.make({ account, limits: options.limits });
+
   const initialize = () => {
     for (const query of LocalTables) {
       sql.exec(query);
@@ -535,21 +593,28 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
 
     sql.exec("INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", options.name, "");
   };
+
   initialize();
+
   const load = (account: Quota.Account) => {
     const [row] = sql.exec("SELECT value FROM quota_local WHERE account=?", key(account));
+
     return row === undefined ? machine(account).init(null, {})[0] : decode(row.value);
   };
+
   const save = (next: Quota.Model) =>
     sql.exec(
       "INSERT INTO quota_local (account,value) VALUES (?,?) ON CONFLICT(account) DO UPDATE SET value=excluded.value",
       key(next.account),
       encode(next),
     );
+
   const fault = () => {
     const [row] = sql.exec("SELECT value FROM quota_fault WHERE name=?", options.name);
+
     return row?.value === "" || row === undefined ? null : faultDecode(row.value);
   };
+
   // The step runs inside a synchronous SQL transaction, which rolls back on a throw, so the guard
   // reads the throw as a Result and throws it again, never swallowing it.
   const protect = <A>(step: () => A): A => {
@@ -573,6 +638,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
     );
     throw new QuotasError({ reason: cause.fault });
   };
+
   return {
     protect,
     recordFault: (failure) =>
@@ -640,6 +706,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
             type: "advance",
             at: clock.currentTimeMillisUnsafe(),
           })[0];
+
           return { program: load(local).total, recovery: use(reserve), fault: fault()?.fault ?? null };
         },
         catch: failed,
@@ -657,6 +724,7 @@ export const accounting = (sql: Sql, options: { readonly name: string; readonly 
 
             const m = machine(recovery);
             const ready = applyCell(m, load(recovery), { type: "resume", at: clock.currentTimeMillisUnsafe() })[0];
+
             const trial = applyCell(m, ready, {
               type: "propose",
               at: clock.currentTimeMillisUnsafe(),

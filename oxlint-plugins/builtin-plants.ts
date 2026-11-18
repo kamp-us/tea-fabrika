@@ -61,6 +61,25 @@ export const REFLECT: Plant = {
 };
 
 /**
+ * L10 of the Reflect ban (decision 0554, after the fold): the base blocks of `.oxlintrc.json` hold the
+ * ban for all of `next/`, so a folder no block names is refused too, a new package or program and a
+ * new folder beside the named ones included. Each entry is a folder's path with `NAME` where
+ * plants.test.ts puts a generated name; it plants REFLECT's lines in a file of that folder.
+ * Plant: leave the four Reflect entries out of the base block for all of `next/` (its one glob is
+ * `next/` then two stars, a slash and one star), and these folders are not refused.
+ */
+export const REFLECT_NEW_FOLDERS: readonly string[] = [
+  "next/NAME",
+  "next/apps/NAME",
+  "next/apps/NAME/src",
+  "next/apps/fabrika/src/NAME",
+  "next/apps/fabrika/e2e/NAME",
+  "next/packages/NAME/src",
+  "next/packages/libfabrika/src/NAME",
+  "next/programs/NAME/src",
+];
+
+/**
  * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
  * oxlint's `no-restricted-properties` resolves. It stands beside `fabrika/no-data-taggederror`,
  * which stays because only it refuses the name in a type position (`DATA_TAGGEDERROR` in

@@ -28,10 +28,12 @@ export const Msg = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
 ]);
+
 export type Msg = typeof Msg.Type;
 
 /** The read port's input: a union whose members each hold a value JSON has no form for. */
 export const Query = One;
+
 export type Query = typeof Query.Type;
 
 /** A Msg whose Type and Encoded sides are equal: what every shipped write port has today. */
@@ -44,6 +46,7 @@ export const PlainMsg = Schema.Union([
   }),
   Schema.Struct({ type: Schema.Literal("list"), xs: Schema.Array(Schema.Union([Schema.String, Schema.Int])) }),
 ]);
+
 export type PlainMsg = typeof PlainMsg.Type;
 
 const jsonTrip = (value: unknown): unknown =>
@@ -61,10 +64,13 @@ export const old = (x: PlainMsg): unknown => jsonTrip(Schema.encodeUnknownSync(P
 /** The program over `Msg`, with a fresh recorder. Its model is a count of the Msgs `update` took. */
 export const make = () => {
   const taken: Array<Msg> = [];
+
   const take = (count: number, m: Msg): [number, []] => {
     taken.push(m);
+
     return [count + 1, []];
   };
+
   const machine = Machine.make({
     model: Schema.Int,
     msg: Msg,
@@ -72,6 +78,7 @@ export const make = () => {
     init: (loaded) => [loaded ?? 0, []],
     update: { big: take, bytes: take, date: take, number: take, mixed: take, timer: take },
   });
+
   const program = Program.make({
     name: "pack/wire",
     machine,
@@ -90,16 +97,20 @@ export const make = () => {
     writes: {},
     wake: () => null,
   });
+
   return { program, taken };
 };
 
 /** The program over `PlainMsg`, with a fresh recorder. */
 export const plain = () => {
   const taken: Array<PlainMsg> = [];
+
   const take = (count: number, m: PlainMsg): [number, []] => {
     taken.push(m);
+
     return [count + 1, []];
   };
+
   const machine = Machine.make({
     model: Schema.Int,
     msg: PlainMsg,
@@ -107,6 +118,7 @@ export const plain = () => {
     init: (loaded) => [loaded ?? 0, []],
     update: { text: take, pick: take, list: take },
   });
+
   const program = Program.make({
     name: "pack/plain",
     machine,
@@ -118,6 +130,7 @@ export const plain = () => {
     writes: {},
     wake: () => null,
   });
+
   return { program, taken };
 };
 

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e75-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:46:41-08:00",
+  "ended": "2026-11-15T21:06:28-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E75 of the Effect-checker sweep (preferEffectArray in libfabrika's src/runtime), in next/. No pull request and no lock line, by the owner's ruling. Counted 821 hits on origin/main at 37db01aa8, matching the plan: 661 in exam paths outside PR 1366's files, 61 in product files, and 99 in PR 1366's files (waiting on 1366: Runner.integration.test.ts 54, Runner.ts 32, RecoveryStore.ts 5, RepliesSql.ts 4, ProcessStore.ts 2, RuntimeCauseTest.ts 2). All 661 exam hits are fixed, in 37 files. The checker has no quick fix for this check (checkerfix.mjs fixed 0 of 9 on two files and changed nothing), so a scratchpad codemod (oxc-parser, driven by the checker's own spans, never committed) rewrote 600 calls in its first round (filter, map, some, every, flatMap, forEach, join, reduce, Array.isArray, toReversed) and 59 in its second (find, findIndex, findLastIndex, numeric toSorted), and 2 were hand edits (Patch.test.ts read: reduce with a type argument; supervisor.laws.test.ts canon: toSorted with localeCompare, now Order.String, which only feeds equality checks). Each find keeps what it answered: find(f)! became Option.getOrThrow(Arr.findFirst(...)) and every other find became Option.getOrUndefined(Arr.findFirst(...)), findIndex and findLastIndex became Option.getOrElse(..., () => -1), so no assertion changed. The type check then named 21 errors in 5 files, fixed by hand: a flatMap callback that read its third array argument (Client.laws.test.ts, now a named bounds array), Arr.join on numbers (ProgramMailTest.ts, now joins Arr.map(order, String)), predicates answering boolean | undefined (kept[n] === true, live === true), Arr.isArray narrowing a Schema.Json to unknown[] (RunnerAdmissionTest.ts texts now reads arrays and objects through one Object.values branch), two nested generic inferences hoisted to a const, and eight saved?.x.filter/find/some/every chains the codemod had turned into calls on a possibly-null value, now saved === null ? undefined : ... so each expect sees the same value as before. Recount after the fix: 0 hits in exam paths of the folder; 160 left, all product files or 1366's.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 19.8,
+  "note": "Count: effect-tsgo diagnostics --format json on next/packages/libfabrika/tsconfig.json with an --lspconfig setting only preferEffectArray to error; for the codemod and the type check a temporary preferEffectArray entry sat in tsconfig.base.json's overrides and was removed before the commit (nothing written to a tsconfig). Imports added as import * as Arr from \"effect/Array\" (and Option, Order the same way where a file had none), the library form 0577 asks for, so no preferNamespaceImport hit is added. Whole diff read: no comment line lost, no oxlint-disable touched. Left for the build, 61 hits in 14 product files: runtime/Built.ts 135,140; Chaos.ts 237,268; ChaosMachine.ts 15,165,166,260; Chunk.ts 81,146,149; Client.ts 159,176,185,387; Entry.ts 158,161,166; Execution.ts 208; HandsTasksLive.ts 68; Patch.ts 25,29,29,30,35,46,46,139,143,145,157,172; Program.ts 191,391,614,648,722,747,762,764,778; State.ts 65,75; WatchersSql.ts 83,84,84; internal/supervisor.ts 105,113,262,284,339,343,347,387,425,501,501,586; internal/watchers.ts 17,35,43 (lines on main). Ran at 37db01aa8 plus this change, before the commit: libfabrika's tsc --noEmit -p . (0 errors besides the temporary check), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (17 parts passed), the list ratchet (exit 0), and nice -n 15 vitest --maxWorkers=3 --changed origin/main: 44 files, 407 passed, 1 skipped, 1 failed. The failure is StartChild.integration.test.ts L13 (StartChildTest.ts:1983, the walk did not acquire its store within 1000 yieldNow turns), in a law this change does not touch; it passed alone three times, so it is a flaky law under load, reported as a finding. Not run: pnpm typecheck, the full suite.",
+  "plants": [
+    {
+      "law": "preferEffectArray in src/runtime's exam paths (the check, counted as the slice counts it; no lock yet)",
+      "plant": "export const planted = [1, 2].map((n) => n + 1) appended to runtime/Chunk.test.ts, counted, file restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

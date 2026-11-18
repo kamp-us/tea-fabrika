@@ -6,6 +6,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -84,11 +85,12 @@ const databases = Effect.gen(function* () {
       (stream) =>
         Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0))).pipe(
           Effect.map((read) =>
-            [...read].map((e): MonitorTest.Row => ({
+            Arr.map([...read], (e): MonitorTest.Row => ({
               rev: e.rev,
               stream,
               id: e.id,
               tag: e._tag,
+              // SAFETY: MonitorTest.Row's body names only optional fields of unknown type, which the suite reads one by one; a row with no body reads as `{}`.
               body: (e.body ?? {}) as MonitorTest.Row["body"],
             })),
           ),

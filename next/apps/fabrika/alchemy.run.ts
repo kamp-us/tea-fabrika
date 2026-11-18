@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import * as Alchemy from "alchemy";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Formatter, Layer, Schema } from "effect";
 import type { Built } from "./src/build.ts";
 
 /** Cloudflare's limit on one environment variable, in encoded bytes (Workers platform limits). */
@@ -29,7 +29,7 @@ export const stack = (
     },
     Effect.gen(function* () {
       const settings = checked.input;
-      const instance = yield* setting(JSON.stringify(settings));
+      const instance = yield* setting(Formatter.formatJson(settings));
 
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",

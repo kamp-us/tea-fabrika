@@ -147,6 +147,8 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
         ([before, after], at, position, leak, joint) => {
           lab(({ diff, hits }) => {
             const n = at % before.length;
+            // SAFETY: `after` is `before` respaced line by line (`file` above), so
+            // it is as long as `before` and `after[n]` is a string.
             const tokens = (after[n] as string).trim().split(/[ \t]+/);
             const spot = position % (tokens.length + 1);
             // The new word may bring a ; or , of its own.

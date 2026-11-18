@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import { Array as Arr, pipe, Predicate, Record as Rec } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -61,11 +62,11 @@ type Role =
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
 
-const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
+const each = (names: ReadonlyArray<string>, role: Role) => Rec.fromEntries(Arr.map(names, (name) => [name, role]));
 
 const launchers = (browser: string) =>
   each(
-    ["launch", "launchPersistentContext", "launchServer"].map((method) => `${browser}.${method}`),
+    Arr.map(["launch", "launchPersistentContext", "launchServer"], (method) => `${browser}.${method}`),
     call("browser"),
   );
 
@@ -182,8 +183,10 @@ export const reader = <N>() => {
 
   return {
     imports: (source: string, names: ReadonlyArray<Bound>) => {
-      const paths = MODULES.filter((entry) => entry.module.test(source)).flatMap((entry) =>
-        Object.entries(entry.names),
+      const paths = pipe(
+        MODULES,
+        Arr.filter((entry) => entry.module.test(source)),
+        Arr.flatMap((entry) => Rec.toEntries(entry.names)),
       );
 
       for (const { imported, local } of names) {
@@ -244,7 +247,7 @@ export const reader = <N>() => {
     opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> => {
       const all = stubbed ? found : [...found, ...fetched];
 
-      return scope === "any" ? all : all.filter((one) => one.needs === null || provided.has(one.needs));
+      return scope === "any" ? all : Arr.filter(all, (one) => one.needs === null || provided.has(one.needs));
     },
   };
 };
@@ -253,7 +256,7 @@ type Node = ESTree.Node;
 
 /** A string literal, or a template's text before its first placeholder. */
 const literal = (node: Node | undefined): string | null =>
-  node?.type === "Literal" && typeof node.value === "string"
+  node?.type === "Literal" && Predicate.isString(node.value)
     ? node.value
     : node?.type === "TemplateLiteral"
       ? (node.quasis[0]?.value.cooked ?? null)
@@ -284,7 +287,7 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
 
     read.imports(
       node.source.value,
-      node.specifiers.flatMap((spec) =>
+      Arr.flatMap(node.specifiers, (spec) =>
         spec.type === "ImportSpecifier" && spec.importKind === "type"
           ? []
           : [

@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's M1: changes' classify step and the test jobs' time
 // tables are the steps but the stop steps that get the token.
 import { map, type Rule, steps, TOKEN } from "./shared.ts";
@@ -21,7 +22,7 @@ export const token: Rule = ({ jobs }, require) => {
   );
 
   require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
-  require(Object.entries(jobs).every(([, job]) =>
+  require(Rec.toEntries(jobs).every(([, job]) =>
     steps(map(job)).every(
       (s) => s === classify || tables.includes(s) || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
     ),

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -447,15 +448,16 @@ describe("box rm, today's tooling", () => {
             let main = f.main;
 
             if (kind.startsWith("main")) {
-              main =
-                kind === "main-work"
-                  ? f.work
-                  : kind === "main-data"
-                    ? f.data
-                    : join(
-                        kind === "main-data-child" ? f.data : f.work,
-                        ...Array.from({ length: v.depth }, (_, i) => `child-${v.value}-${i}`),
-                      );
+              main = Match.value(kind).pipe(
+                Match.when("main-work", () => f.work),
+                Match.when("main-data", () => f.data),
+                Match.orElse(() =>
+                  join(
+                    kind === "main-data-child" ? f.data : f.work,
+                    ...Array.from({ length: v.depth }, (_, i) => `child-${v.value}-${i}`),
+                  ),
+                ),
+              );
 
               if (kind.endsWith("child")) {
                 mkdirSync(main, { recursive: true });

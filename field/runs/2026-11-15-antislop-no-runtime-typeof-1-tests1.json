@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-runtime-typeof-1-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:48:09-08:00",
+  "ended": "2026-11-15T22:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Slice AS-no-runtime-typeof-1 of the anti-slop judgment sweep (decision 0563 and its amendment), branch fabrikalfa/antislop-no-runtime-typeof-1, opening no pull request. anti-slop/no-runtime-typeof, forced to error in a scratch config outside the repo, met 320 hits on origin/main at bcad0080d over next/apps/fabrika, .github/ci, oxlint-plugins, next/packages/libfabrika/src/client and next/programs/tezgah. All 320 are in exam paths (exam-paths.json): .github/** and oxlint-plugins/** are exam paths whole, and the rest are tests, test support and next/apps/fabrika/src/exam. None is in a product file, so no build is needed. 7 are in pull request 1366's files and were not touched: runtime-recovery.laws.integration.test.ts lines 295, 502, 611 and 687, and local-instance.integration.test.ts lines 30, 32 and 107, both under next/apps/fabrika/src. 302 were fixed: 277 by a scratch codemod, kept outside the repo, that rewrote each typeof check on a hit line to the matching guard of Effect's Predicate module (isString, isNumber, isBigInt, isBoolean, isFunction; isObject for an object, not null and not an array; isObjectOrArray for an object and not null), and 25 by hand: object checks split over two lines, checks on a call or an index, expect(typeof x).toBe(t) as expect(Predicate.isT(x)).toBe(true), and three places where the narrowed type had to stay the old one (Predicate.isObjectKeyword in door-spans.test.ts, Predicate.not(Predicate.isObjectOrArray) in the any-typed AST walkers of exam/twin.ts and instance-one-file.integration.test.ts, and a check of part?.type in the walkers of oxlint-plugins/match.ts and written-service-type.ts). 11 are left, in the four .mjs scripts of .github/ci that run on the runner's own Node with no install, so they cannot import Effect: required.mjs 44 and 69, gate.mjs 90 and 192, scheduled.mjs 46, 229, 274, 280, 488 and 502, changes.mjs 620. Their right fix is a call for the lead: an ignore line with a reason, or a change to how those jobs start. Importing Effect made 10 files effect-importing, so fabrika/no-raw-try-catch then blocked 13 old try/catch blocks in them; each became Result.try with the same answers (program.ts, shard-times.ts, field-check.ts twice, workflow-lint/ci-speed.ts, caches.ts, shared.ts and scheduled.ts, and oxlint-plugins/workspace-reach.ts, exact-versions.ts, program-package-layout.ts twice and program-package-layout.test.ts). No assertion was removed or narrowed, no law was loosened, and no disable line was added. No .oxlintrc.json line changed, so pnpm lint fails only on the zero lock's three lines asking to add oxlint-plugins/**, next/packages/libfabrika/src/client/** and next/programs/tezgah/** to the rule's block, which the later lock pull request does.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 28,
+  "note": "No new law was written and so no plant ran: the slice changes how checks are spelled, not what they hold. Tests ran on the tree this row is committed with: 65 plain test files touched by or reading the changed files passed (1449 passed, 6 skipped), and the whole typecheck passed. The 27 .integration. files the change reaches were refused locally by the host-only guard of decision 0178 and wait for a full run on the branch. The .visual. tests were not run, as the step rules ask.",
+  "step": "tests"
+}

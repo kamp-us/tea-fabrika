@@ -2,10 +2,16 @@
  * Opening a selected repository on Node: read and check it before the instance starts, then record
  * the selection and the person's trust answer once there is a ledger.
  */
+import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as Id from "../../Id.ts";
 import * as Log from "../../ledger/Log.ts";
 import * as Open from "../../packs/Open.ts";
@@ -38,16 +44,20 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError, { read
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
   OpenRepositoryError.make({
-    reason: (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed).make({
-      cause: Redacted.make(cause),
-    }),
+    reason: Match.value(reason)
+      .pipe(
+        Match.when("storage", () => Storage),
+        Match.when("document", () => InvalidDocument),
+        Match.orElse(() => ReadFailed),
+      )
+      .make({ cause: Redacted.make(cause) }),
     message:
       message ??
-      (reason === "document"
-        ? "Selected repository: settings document is invalid."
-        : reason === "read"
-          ? "Selected repository: read failed."
-          : "Selected repository: trust could not be saved."),
+      Match.value(reason).pipe(
+        Match.when("document", () => "Selected repository: settings document is invalid."),
+        Match.when("read", () => "Selected repository: read failed."),
+        Match.orElse(() => "Selected repository: trust could not be saved."),
+      ),
   });
 
 // A settings error's messages can include rejected values and parser input. Keep only known labels and keys.
@@ -56,25 +66,40 @@ const documentFailed = (cause: Files.SettingsError) => {
     ".fabrika/fabrika.toml",
     "~/.fabrika/fabrika.toml",
     "$FABRIKA_HOME/fabrika.toml",
-    ...Declarations.all.declarations.flatMap((d) => [`--${d.path}`, d.env]),
+    ...Arr.flatMap(Declarations.all.declarations, (d) => [`--${d.path}`, d.env]),
   ];
 
-  const label = labels.find((name) =>
-    [":", ", line ", " could not be read."].some((suffix) => cause.message.startsWith(`${name}${suffix}`)),
+  const label = Option.getOrUndefined(
+    Arr.findFirst(labels, (name) =>
+      Arr.some([":", ", line ", " could not be read."], (suffix) =>
+        Function.pipe(cause.message, Str.startsWith(`${name}${suffix}`)),
+      ),
+    ),
   );
 
-  const line = label === undefined ? undefined : /^, line ([0-9]+):/.exec(cause.message.slice(label.length))?.[1];
-  const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
-  const detail = label === undefined ? "" : cause.message.slice(location.length + 2);
+  const line =
+    label === undefined
+      ? undefined
+      : /^, line ([0-9]+):/.exec(Function.pipe(cause.message, Str.slice(label.length)))?.[1];
 
-  const keys = Declarations.all.declarations.flatMap((d) =>
-    d.segments.map((_, n) => d.segments.slice(0, n + 1).join(".")),
+  const location = label === undefined ? "Settings" : `${label}${line === undefined ? "" : `, line ${line}`}`;
+  const detail = label === undefined ? "" : Function.pipe(cause.message, Str.slice(location.length + 2));
+
+  const keys = Arr.flatMap(Declarations.all.declarations, (d) =>
+    Arr.map(d.segments, (_, n) => Arr.join(d.segments.slice(0, n + 1), ".")),
   );
 
   const key =
     cause.reason === "version"
       ? Declarations.version.path
-      : keys.find((name) => detail.startsWith(`${name} =`) || detail.startsWith(`${name} is `));
+      : Option.getOrUndefined(
+          Arr.findFirst(
+            keys,
+            (name) =>
+              Function.pipe(detail, Str.startsWith(`${name} =`)) ||
+              Function.pipe(detail, Str.startsWith(`${name} is `)),
+          ),
+        );
 
   const explanation = {
     syntax: "Invalid TOML.",
@@ -108,18 +133,25 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
   location: string,
   options: Omit<Parameters<typeof Load.load>[0], "repo">,
 ) {
-  const repository = yield* (yield* Repositories).open(location).pipe(
-    Effect.mapError((cause) =>
-      failed(
-        "read",
-        cause,
-        [
-          "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
-          ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
-        ].find((message) => message === cause.message),
+  const repository = yield* (yield* Repositories)
+    .open(location)
+    .pipe(
+      Effect.mapError((cause) =>
+        failed(
+          "read",
+          cause,
+          Option.getOrUndefined(
+            Arr.findFirst(
+              [
+                "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
+                ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
+              ],
+              (message) => message === cause.message,
+            ),
+          ),
+        ),
       ),
-    ),
-  );
+    );
 
   const loaded = yield* Load.load({
     ...options,
@@ -145,7 +177,7 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
  *
  * @category constructors
  */
-export const open = Effect.fn("repositoryOpen.open")(function* <R>(
+export const open = Effect.fn("repositoryOpen.open")(function* <E, R>(
   prepared: Effect.Success<ReturnType<typeof prepare>>,
   options: {
     readonly selection: Id.InputId;
@@ -154,7 +186,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     readonly by: string;
     readonly build: string;
     readonly interactive: boolean;
-    readonly confirm: (selection: Open.CheckedSelection) => Effect.Effect<boolean, unknown, R>;
+    readonly confirm: (selection: Open.CheckedSelection) => Effect.Effect<boolean, E, R>;
   },
 ) {
   const trust = yield* RepositoryTrust;
@@ -166,7 +198,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     .history(prepared.snapshot.key, options.actor)
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
 
-  const first = history.find((event) => event._tag === "selected");
+  const first = Option.getOrUndefined(Arr.findFirst(history, (event) => event._tag === "selected"));
 
   const repository =
     first?.repository ??
@@ -178,7 +210,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   const snapshot: Open.CheckedSelection = {
     ...prepared.snapshot,
     repository,
-    label: `Repository ${prepared.snapshot.key.slice(0, 12)}`,
+    label: `Repository ${Function.pipe(prepared.snapshot.key, Str.slice(0, 12))}`,
     settings: prepared.settings,
     person: options.actor,
   };

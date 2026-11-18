@@ -5,8 +5,10 @@
 import { assert, describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
@@ -14,6 +16,20 @@ import { answerFrame } from "./Answer.ts";
 import { RouteError, Routes } from "./Routes.ts";
 import { Answer, Attached } from "./Wire.ts";
 import * as Wire from "./Wire.ts";
+
+/** Any JSON text, as the wire carries it. */
+const Json = Schema.fromJsonString(Schema.Unknown);
+
+/** Reads a frame the door sent; a frame that is not JSON fails the law. */
+const readJson = Schema.decodeUnknownEffect(Json);
+
+/** The parts of a JSON-RPC reply these laws read. */
+const Reply = Schema.Struct({
+  jsonrpc: Schema.String,
+  id: Schema.Union([Schema.String, Schema.Finite]),
+  result: Schema.optionalKey(Schema.Unknown),
+  error: Schema.optionalKey(Schema.Struct({ data: Schema.Unknown })),
+});
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -138,13 +154,13 @@ describe("P10 JSON-RPC", () => {
           Effect.provide(answering(answer)),
         );
 
-        expect(JSON.parse(reply.send!)).toEqual({
+        expect(yield* readJson(reply.send!)).toEqual({
           jsonrpc: "2.0",
           id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
           error: { code: -32000, message: "rate_limited", data: { reason: "rate_limited", retryAfter } },
         });
         expect(reply.attached).toEqual(attached);
-        const span = spans.find((s) => s.name === "transport.answerFrame")!;
+        const span = Option.getOrThrow(Arr.findFirst(spans, (s) => s.name === "transport.answerFrame"));
         expect(span.status._tag).toBe("Ended");
         expect(span.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }),
@@ -175,7 +191,7 @@ describe("P10 JSON-RPC", () => {
         Effect.provide(answering(Answer.cases.ok.make({ result: null }))),
       );
 
-      expect(JSON.parse(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
+      expect(yield* readJson(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
     }),
   );
 
@@ -196,9 +212,9 @@ describe("P10 JSON-RPC", () => {
             return Effect.gen(function* () {
               const result = yield* answerFrame(frame(), attached);
               expect(result.send).not.toBeNull();
-              const reply = JSON.parse(result.send!);
+              const reply = yield* Schema.decodeEffect(Schema.fromJsonString(Reply))(result.send!);
               expect(reply).toMatchObject({ jsonrpc: "2.0", id: "r1" });
-              expect(mode === "ok" ? reply.result : reply.error.data).toEqual(
+              expect(mode === "ok" ? reply.result : reply.error?.data).toEqual(
                 mode === "ok"
                   ? { rows: [1] }
                   : { reason: value.reason, ...("retryAfter" in value ? { retryAfter: value.retryAfter } : {}) },
@@ -239,7 +255,7 @@ describe("P10 JSON-RPC", () => {
         const failed = yield* answerFrame(frame(), attached);
         expect(failed).toEqual({ send: null, attached });
         const retried = yield* answerFrame(frame(), failed.attached);
-        expect(JSON.parse(retried.send!)).toMatchObject({ id: "r1", result: "recovered" });
+        expect(yield* readJson(retried.send!)).toMatchObject({ id: "r1", result: "recovered" });
         const call = { method: "route", args: ["ledger.read", PARAMS, attached.identity] };
         expect(yield* Recorder.calls(Routes)).toEqual([call, call]);
       }).pipe(Effect.provide(Recorder.layer(Routes, { route })));
@@ -283,14 +299,14 @@ describe("P10 JSON-RPC", () => {
 
         if (Attached.isAnyOf(["waiting"])(attached) && method === "gateway.knock") {
           expect(calls).toEqual([{ method: "route", args: ["gateway.knock", wire(params), null] }]);
-          expect(JSON.parse(result.send!)).toEqual({
+          expect(yield* readJson(result.send!)).toEqual({
             jsonrpc: "2.0",
             id,
             result: wire(answer),
           });
         } else {
           expect(calls).toEqual([]);
-          expect(JSON.parse(result.send!)).toEqual({
+          expect(yield* readJson(result.send!)).toEqual({
             jsonrpc: "2.0",
             id,
             error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },
@@ -332,7 +348,7 @@ describe("P10 JSON-RPC", () => {
         expect(result.send).toBeNull();
         assert(result.attached._tag === "online");
         expect(result.attached.waits).toEqual([{ id, stream: "x", after: 8 }]);
-        expect(JSON.parse(JSON.stringify(result.attached))).toEqual(result.attached);
+        expect(yield* readJson(yield* Schema.encodeEffect(Json)(result.attached))).toEqual(result.attached);
       }),
     );
   }
@@ -344,7 +360,7 @@ describe("P10 JSON-RPC", () => {
 
     return Effect.gen(function* () {
       const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached);
-      expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });
+      expect(yield* readJson(result.send!)).toMatchObject({ id: "r1", result: null });
       expect((yield* Recorder.calls(Routes, "route"))[0]?.[2]).toEqual(attached.identity);
     }).pipe(
       Effect.provide(Recorder.layer(Routes, { route: () => Effect.succeed(Answer.cases.ok.make({ result: null })) })),

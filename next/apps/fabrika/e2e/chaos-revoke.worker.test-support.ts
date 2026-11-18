@@ -8,6 +8,7 @@ import { Answer } from "@kampus/libfabrika/transport/Wire";
 import { projectRuntime, settings, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { Deferred, Effect, Layer, Predicate, Schema } from "effect";
 import { RateLimiter } from "effect/persistence";
+
 import { programs } from "virtual:fabrika-built";
 import { Project as RealProject } from "../src/brain.ts";
 import * as Hold from "./chaos-revoke.test-support.ts";

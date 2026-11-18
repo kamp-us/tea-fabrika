@@ -8,6 +8,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as Access from "../../access/Access.ts";
@@ -97,8 +98,8 @@ describe("P10 waiting rows", () => {
         }
 
         const keys = Array.from({ length: most + extra }, (_, i) => `k${i}`);
-        const s = keys.reduce((w, k, i) => knock(w, k, `${k}-tab`, i), state(600_000, most));
-        expect(s.rows.map((r) => r.key)).toEqual(keys.slice(-most));
+        const s = Arr.reduce(keys, state(600_000, most), (w, k, i) => knock(w, k, `${k}-tab`, i));
+        expect(Arr.map(s.rows, (r) => r.key)).toEqual(keys.slice(-most));
       }),
       // pinned: a cap of 0. Before PR 516 the cap was any Int, and slice(-0) kept every row, so
       // 0 capped nothing.
@@ -157,7 +158,7 @@ type Memory = {
 const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   const rows = s.rows;
   const row = at(rows, seed.pick);
-  const gone = memory.keys.filter((k) => !rows.some((r) => r.key === k));
+  const gone = Arr.filter(memory.keys, (k) => !Arr.some(rows, (r) => r.key === k));
 
   const time = () => {
     const t = row === undefined || seed.when === 2 ? memory.now + 1 + (seed.other % 5) : row.until + seed.when;
@@ -180,7 +181,10 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   }
 
   if (seed.kind === "accepted") {
-    const keys = rows.filter((_, i) => (seed.pick >> i) % 2 === 1).map((r) => r.key);
+    const keys = Arr.map(
+      Arr.filter(rows, (_, i) => (seed.pick >> i) % 2 === 1),
+      (r) => r.key,
+    );
 
     return { type: "accepted", keys: seed.fresh === 0 ? [...keys, absentKey()] : keys };
   }
@@ -201,7 +205,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
         ? (at(gone, seed.other) ?? freshKey())
         : row.key;
 
-  const own = rows.find((r) => r.key === key);
+  const own = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.key === key));
 
   const client =
     own !== undefined && seed.other % 3 !== 0
@@ -239,11 +243,11 @@ const fold = (walk: Walk) => {
 };
 
 // The spec's own words for expiry: a row lives while `until > at`.
-const live = (s: Model, t: number) => s.rows.filter((r) => r.until > t);
+const live = (s: Model, t: number) => Arr.filter(s.rows, (r) => r.until > t);
 
 const savedShape = (s: Model) =>
   JSON.stringify({
-    rows: s.rows.map((r) => ({
+    rows: Arr.map(s.rows, (r) => ({
       key: r.key,
       label: r.label,
       location: r.location,
@@ -267,25 +271,25 @@ describe("ticket 707: the waiting machine walks", () => {
         for (const { before, msg, after } of fold(walk).steps) {
           expect(after._tag).toBe(after.rows.length === 0 ? "empty" : "waiting");
           expect({ most: after.most, ttl: after.ttl }).toEqual({ most: walk.most, ttl: walk.ttl });
-          expect(new Set(after.rows.map((r) => r.key)).size).toBe(after.rows.length);
+          expect(new Set(Arr.map(after.rows, (r) => r.key)).size).toBe(after.rows.length);
 
           for (const r of after.rows) {
             expect(r.clients.length).toBeGreaterThan(0);
             expect(new Set(r.clients).size).toBe(r.clients.length);
           }
 
-          expect(encoded(after).rows.map((r) => r.tabs)).toEqual(after.rows.map((r) => r.clients.length));
+          expect(Arr.map(encoded(after).rows, (r) => r.tabs)).toEqual(Arr.map(after.rows, (r) => r.clients.length));
 
           if (msg.type !== "knock") {
             continue;
           }
 
           const kept = live(before, msg.at);
-          const old = kept.find((r) => r.key === msg.key);
+          const old = Option.getOrUndefined(Arr.findFirst(kept, (r) => r.key === msg.key));
 
           if (old !== undefined) {
             const clients = old.clients.includes(msg.client) ? old.clients : [...old.clients, msg.client];
-            expect(after.rows).toEqual(kept.map((r) => (r === old ? { ...old, clients } : r)));
+            expect(after.rows).toEqual(Arr.map(kept, (r) => (r === old ? { ...old, clients } : r)));
           }
         }
       }),
@@ -305,7 +309,7 @@ describe("ticket 707: the waiting machine walks", () => {
             want.push(live(before, msg.at));
           }
 
-          if (msg.type === "knock" && !live(before, msg.at).some((r) => r.key === msg.key)) {
+          if (msg.type === "knock" && !Arr.some(live(before, msg.at), (r) => r.key === msg.key)) {
             const { type: _type, client, at: t, ...row } = msg satisfies Knock;
             got.push(after.rows.at(-1));
             want.push({ ...row, clients: [client], until: t + walk.ttl });
@@ -326,8 +330,8 @@ describe("ticket 707: the waiting machine walks", () => {
             continue;
           }
 
-          const keys = live(before, msg.at).map((r) => r.key);
-          expect(after.rows.map((r) => r.key)).toEqual(
+          const keys = Arr.map(live(before, msg.at), (r) => r.key);
+          expect(Arr.map(after.rows, (r) => r.key)).toEqual(
             keys.includes(msg.key) ? keys : [...keys, msg.key].slice(-walk.most),
           );
         }
@@ -344,18 +348,20 @@ describe("ticket 707: the waiting machine walks", () => {
             continue;
           }
 
-          const row = before.rows.find((r) => r.key === msg.key && r.clients.includes(msg.client));
+          const row = Option.getOrUndefined(
+            Arr.findFirst(before.rows, (r) => r.key === msg.key && r.clients.includes(msg.client)),
+          );
 
           if (row === undefined) {
             expect(after).toEqual(before);
             continue;
           }
 
-          const clients = row.clients.filter((c) => c !== msg.client);
+          const clients = Arr.filter(row.clients, (c) => c !== msg.client);
           expect(after.rows).toEqual(
             clients.length === 0
-              ? before.rows.filter((r) => r !== row)
-              : before.rows.map((r) => (r === row ? { ...row, clients } : r)),
+              ? Arr.filter(before.rows, (r) => r !== row)
+              : Arr.map(before.rows, (r) => (r === row ? { ...row, clients } : r)),
           );
         }
       }),
@@ -371,7 +377,7 @@ describe("ticket 707: the waiting machine walks", () => {
             continue;
           }
 
-          expect(after.rows).toEqual(before.rows.filter((r) => !msg.keys.includes(r.key)));
+          expect(after.rows).toEqual(Arr.filter(before.rows, (r) => !msg.keys.includes(r.key)));
           expect(step(after, msg)).toEqual(after);
         }
       }),
@@ -427,12 +433,12 @@ it.prop(
 
     for (const [n, choice] of choices.entries()) {
       const rows = pending.rows;
-      const leaves = [...grants.keys()].filter((k) => !revoked.has(k));
+      const leaves = Arr.filter([...grants.keys()], (k) => !revoked.has(k));
 
       const moves = [
         "knock",
         "expire",
-        ...(rows.some((r) => !grants.has(r.key)) ? ["grant"] : []),
+        ...(Arr.some(rows, (r) => !grants.has(r.key)) ? ["grant"] : []),
         ...(leaves.length > 0 ? ["revoke"] : []),
       ];
 
@@ -440,7 +446,7 @@ it.prop(
 
       if (move === "knock") {
         const key = choice % 2 === 0 && rows.length > 0 ? rows[choice % rows.length]!.key : `key-${n}`;
-        const previous = rows.find((row) => row.key === key);
+        const previous = Option.getOrUndefined(Arr.findFirst(rows, (row) => row.key === key));
         const as = (["hands", "window", "agent"] as const)[choice % 3]!;
         pending = step(pending, {
           type: "knock",
@@ -454,7 +460,9 @@ it.prop(
           pass: null,
           at,
         });
-        expect(pending.rows.find((row) => row.key === key)?.as).toBe(previous?.as ?? as);
+        expect(Option.getOrUndefined(Arr.findFirst(pending.rows, (row) => row.key === key))?.as).toBe(
+          previous?.as ?? as,
+        );
         expect(Access.admitted(Access.members(access), key)).toEqual(
           grants.has(key) && !revoked.has(key)
             ? { key, person: "person-test", as: grants.get(key) }
@@ -464,7 +472,7 @@ it.prop(
         at += 10;
         pending = step(pending, { type: "expire", at });
       } else if (move === "grant") {
-        const available = rows.filter((r) => !grants.has(r.key));
+        const available = Arr.filter(rows, (r) => !grants.has(r.key));
         const row = available[choice % available.length]!;
         const as = (["hands", "window", "agent"] as const)[Math.floor(choice / 3) % 3]!;
 

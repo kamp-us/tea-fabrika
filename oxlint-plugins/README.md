@@ -396,7 +396,7 @@ Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-
 | Rule | Asks | Edges | Tests |
 |---|---|---|---|
 | `jsdocs` | a block on `export const`, `let`, `function` (first overload), `class`, `interface`, `type`, `declare namespace` and each export in it, `export * as`, and each name of `export { a }`, with one description paragraph, Effect's sections, `**Example** (Title)` examples, and `@deprecated`, `@see`, `@category` in that order (`@category` required; a `@stability` tag that is still there passes until the sweep has removed them all, 0574); tags alone on a re-export; a module block with no `@category` in a file with a checked export; a member's block, when there is one | `@internal` takes an export out; a type directly under its same-name schema shares its block (the owner, 2026-11-13: a kept difference in 0023); `since` is `absent` until libfabrika's first release (0118) | left out |
-| `no-stability-tag` | a `@stability` line in a doc block of `next/`, `.agents/`, `.github/ci/` and `oxlint-plugins/` | a mention in prose; the 16 tagged files of pull request 1366, until E60 | `pnpm format` deletes the line, and the blank ` *` line left above ` */` (0574, E1) |
+| `no-stability-tag` | a `@stability` line in a doc block of `next/`, `.agents/`, `.github/ci/` and `oxlint-plugins/` | a mention in prose; the 16 files of pull request 1366 are covered too (E60) | `pnpm format` deletes the line, and the blank ` *` line left above ` */` (0574, E1) |
 | `prefer-namespace-import` | a named import from `effect` or one of its folders (`effect/process`, `effect/testing`) in the libfabrika and tuval folders Effect's `preferNamespaceImport` holds at error (0577, E2); no named import of a function that is no module | a name that is no module of Effect (`pipe`, `identity`) is reported with no fix, whole; the folders still to come | `pnpm format` writes `import * as X from "effect/X"`, `import type * as X` for a type, and the imported module for an alias |
 
 Which tools were looked at, and why none could hold the shape here, is the draft plan's table (`docs/plan/ticket-900-docs-lint.md` on the branch of [pull request 1131](https://github.com/kamp-us/tea-fabrika/pull/1131)): Effect's checker (private, needs TypeScript's JS API below 7, asks `@since`), oxlint's `jsdoc` rules (no rule that asks for a block), `eslint-plugin-jsdoc` (2,770 false alarms on Effect's own source), and TypeDoc and API Extractor (a block's presence only).
@@ -1151,15 +1151,20 @@ so a file that moves to it keeps its integration name and its depth-read count.
 
 Oxlint's own `no-restricted-properties` holds the ban, with four entries: `Reflect.get`,
 `Reflect.set`, `Reflect.has`, and `globalThis.Reflect`, which would hide the call from the rule.
-It is on, at zero, for the tooling (`.agents/`, `.github/`, `oxlint-plugins/`) and for every
-`next/` folder with no fire. Three blocks near the end of `.oxlintrc.json` list those folders. A
-folder is listed whole the day its own slice brings it to zero, and none is ever taken off. The
-last slice folds the lists into the base blocks
+It is on, at zero, for the tooling (`.agents/`, `.github/`, `oxlint-plugins/`) and for all of
+`next/`. The ban covers all of `next/` by the base blocks of the rule, so a folder that is new
+gets it the day it appears, with no line to add. The tooling has one block of its own, since no
+base block covers only the tooling. Each folder joined the ban the day its own slice brought it to
+zero, in lists of folders; the last slice folded the lists into the base blocks and deleted them,
+so no list of folders at zero is left
 ([the plan](../docs/plan/quests/reflect-ban-PLAN.md)).
 
-An override replaces a rule's options, so each `next/` block writes out again what the rule held
-there: the `JSON.parse` entry, and `client/`'s two retry entries once that folder joins. In the
-folders where `JSON.parse` still advises, the block says `warn`. `advice.ts` lets only the
+An override replaces a rule's options, and a file takes the last override that matches it. So each
+base block for `next/` writes out again what the rule held there, then the four entries: `next/**/*`
+holds `Data.TaggedError` and `JSON.parse`; the block that lists the folders where `JSON.parse` still
+advises says `warn`; and `client/`, which also holds its two retry entries, comes last of the three.
+That order is on purpose: a glob added to the warn block cannot reach into `client/`, so it cannot
+strip the retry entries or turn `JSON.parse` into advice there. `advice.ts` lets only the
 `JSON.parse` fire advise, so a `Reflect` fire there fails `pnpm lint` and CI, though a plain
 `oxlint` run in an editor shows it yellow. Oxlint prints the fire's message as
 `'JSON.parse' is restricted from being used.` and the entry's own text apart as a hint, so the
@@ -1181,10 +1186,38 @@ wait for their own slices: `tuval/src/browser`, `programs/counter`, `programs/pi
 direct files of `apps/fabrika/src` and `apps/fabrika/e2e`, and libfabrika's `client`,
 `cloudflare`, `codehost`, `node`, `runtime`, `settings` and `transport`.
 
+Oxlint honors any ignore comment that names a rule and gives a reason, so the ban alone cannot
+hold the plan's L5: no ignore comment lets a `Reflect` call through outside the 6 lines the plan
+names, a `has` and a `get` in each of the three hostile Proxies. `reflect-disables` counts them.
+It reads each ignore comment that reaches `no-restricted-properties` (by name, with or without
+`eslint/`, or naming no rule), in all three forms and both spellings, and counts it when a line it
+covers names `Reflect` in code. A `JSON.parse` oracle's comment covers no such line, so it is not
+counted. Its `allow` option in `.oxlintrc.json` gives each named file its count, 2 each for
+`runtime/Program.test.ts`, `transport/Connection.test.ts` and the app's `runtime.decode.test.ts`;
+the last two are counted before their slices land. Every other file may hold none, and the rule is
+on for all of `next/` and the tooling. The known
+rule, `eslint-comments/no-restricted-disable`, refuses every comment for a rule, which would
+refuse the `JSON.parse` oracles too. It reports at the top of the file, as `no-bare-disable`
+does, so a comment that also named it cannot silence it. `reflect-disables.test.ts` generates the
+files at `next/` and tooling paths and runs them with the real config.
+
 `plants.test.ts` reads the ban blocks from oxlint's own `--print-config` and plants `REFLECT` in
-every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
-blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
-before.
+every folder they list (L1). It also plants it in folders that no block names, at generated names
+(`REFLECT_NEW_FOLDERS`), and holds that the only blocks that hold the ban for `next/` are the
+three base blocks, in the order `next/**/*`, the warn block, `client/` (L10). `advice.test.ts` holds
+the runner's side: a `Reflect` fire at `warn` blocks, and it never keeps a `JSON.parse` warn line
+alive. Its L4 asks oxlint about the real files and models no glob: in a temp copy of the repo it
+writes one sample, a fire each of `JSON.parse`, the four `Reflect` forms, `Effect.retry` and
+`Stream.retry`, at the own path of every tracked code file of `next/` and in one new folder, lints
+the copy with the real config, and reads the severity of each fire in each file. Every file must end
+with `JSON.parse` and the four at one level. The new folder and every `client/` file must end at
+error, `client/` with both retry entries. A file that ends at `warn` must sit in a folder that holds
+a real `JSON.parse` fire, counted at the grain the glob is written for: a package's `src` and an
+app's `src` and `e2e` count their direct files only, and each folder under them is its own top.
+Three reviews each found a glob that passed an earlier L4 and changed what `client/` or `access/`
+ended with: one for a whole package, one for an app's whole `e2e`, one for a kind of file. Each is a
+plant that must now be red. The limit is that a sample of the real tree cannot see a glob for a file
+kind no tracked file has.
 
 ## Rules that gave way to trusted ones, decision 0573
 

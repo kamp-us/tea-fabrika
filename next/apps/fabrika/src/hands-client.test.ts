@@ -36,6 +36,26 @@ import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKe
 import { connection } from "@kampus/libfabrika/transport/Connection";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
+import {
+  Array as Arr,
+  String as Str,
+  Effect,
+  Exit,
+  Layer,
+  Predicate,
+  Queue,
+  Record as Rec,
+  Schema,
+  Scope,
+  Semaphore,
+  Tracer,
+  Formatter,
+} from "effect";
+import { Base64, Base64Url } from "effect/encoding";
+import { KeyValueStore, RateLimiter } from "effect/persistence";
+import { Socket } from "effect/socket";
+import { TestClock } from "effect/testing";
+
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
@@ -58,11 +78,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
-import { KeyValueStore, RateLimiter } from "effect/persistence";
-import { Socket } from "effect/socket";
-import { TestClock } from "effect/testing";
+
 import * as fc from "fast-check";
 import { type ConnectionId, Gateway } from "./door.ts";
 
@@ -88,7 +104,7 @@ const field = (bytes: Uint8Array) => {
 };
 
 const join = (...parts: ReadonlyArray<Uint8Array>) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
   let at = 0;
 
   for (const p of parts) {
@@ -99,7 +115,11 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
   return out;
 };
 
-const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  Arr.join(
+    Arr.map([...bytes], (b) => Str.padStart(2, "0")(b.toString(16))),
+    "",
+  );
 
 // A shared test's failures are tagged like product code's, never thrown.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
@@ -131,7 +151,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
   const fingerprint = Effect.fnUntraced(function* (bytes: Uint8Array) {
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", new Uint8Array(bytes)), catch: fail });
 
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
 
   const sign = (bytes: Uint8Array) =>
@@ -141,13 +161,13 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
 
   return {
     raw: Base64Url.encode(raw),
-    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
+    line: yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
     fingerprint: yield* fingerprint(raw),
     sshFingerprint: yield* fingerprint(blob),
     sign,
     /** Every form the private half could leak in: the seed and PKCS#8 bytes as base64, base64url and
      *  hex. An armored key's body is the PKCS#8 base64, one 64-column line for Ed25519, so it is here too. */
-    secrets: [seed, pkcs8].flatMap((b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
+    secrets: Arr.flatMap([seed, pkcs8], (b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
   };
 });
 
@@ -294,7 +314,11 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
 
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
-    const [name = "", tab = ""] = (new URL(url).pathname.split("/client/")[1] ?? "").split("/").map(decodeURIComponent);
+    const [name = "", tab = ""] = Arr.map(
+      Str.split(Str.split(new URL(url).pathname, "/client/")[1] ?? "", "/"),
+      decodeURIComponent,
+    );
+
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
     const client: { id: ConnectionId | null } = { id: null };
 
@@ -319,7 +343,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         attached = a;
       },
       send: (body) => {
-        if (lose.next > 0 && body.startsWith("{") && body.includes('"id"')) {
+        if (lose.next > 0 && Str.startsWith("{")(body) && Str.includes('"id"')(body)) {
           lose.next--;
 
           return;
@@ -332,7 +356,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         Effect.gen(function* () {
           const id = yield* connected;
 
-          const answer = stream.startsWith("target:")
+          const answer = Str.startsWith("target:")(stream)
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
@@ -389,7 +413,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         const nonce = yield* b.d.challenge(id);
         attached = Attached.cases.new.make({ client: id, nonce });
         drivers.add(c);
-        made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+        made.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       }).pipe(Effect.ignore),
     );
 
@@ -500,14 +524,14 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       });
 
       const busy = new Set(
-        tasks.flatMap((task) =>
+        Arr.flatMap(tasks, (task) =>
           task.state._tag === "absent" || task.state._tag === "finished" || task.state._tag === "collected"
             ? []
             : [task.state.request.process],
         ),
       );
 
-      const free = f.processes.filter((p) => !busy.has(p));
+      const free = Arr.filter(f.processes, (p) => !busy.has(p));
       const moves = [...(free.length > 0 ? ["request"] : []), "run", "run", "drop", "lose", "restart"];
       const move = moves[cell.move % moves.length] ?? "run";
       done.add(move);
@@ -560,7 +584,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     const finished = () =>
       Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
-        Effect.map((tasks) => tasks.every((task) => task.state._tag === "finished")),
+        Effect.map((tasks) => Arr.every(tasks, (task) => task.state._tag === "finished")),
       );
 
     for (let i = 0; i < 300 && !(yield* finished()); i++) {
@@ -581,38 +605,42 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     // E1: every parked wait was rung at the object its socket lives on. A wait that names another
     // reader is never answered on the Worker, so the hands would sleep through new work.
     expect(
-      d.rung.filter((r) => r.to !== READER),
+      Arr.filter(d.rung, (r) => r.to !== READER),
       "E1: every ring names the object the sockets live on",
     ).toEqual([]);
 
-    if (d.rung.some((r) => r.stream.startsWith("target:"))) {
+    if (Arr.some(d.rung, (r) => Str.startsWith("target:")(r.stream))) {
       done.add("ring:target");
     }
 
     // S1: every output a leak could reach, read whole, and every encoding of the private key.
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
-    const tables = b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'").map((row) => String(row.name));
+    const tables = Arr.map(b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) => String(row.name));
 
     const outputs: Record<string, unknown> = {
-      frames: d.sockets.map((socket) => socket.sent),
+      frames: Arr.map(d.sockets, (socket) => socket.sent),
       journal: [...kept.values.entries()],
-      ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
-      spans: spans.map((span) => ({ name: span.name, attributes: [...span.attributes] })),
+      ledger: Arr.map(tables, (table) => b.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`)),
+      spans: Arr.map(spans, (span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
-    for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
-      const encoded = JSON.stringify(value, (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item));
+    for (const [name, value] of focus === "S1" ? Rec.toEntries(outputs) : []) {
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.Unknown, {
+          replacer: (_key, item: unknown) => (Predicate.isBigInt(item) ? String(item) : item),
+        }),
+      )(value);
 
       for (const secret of hands.secrets) {
         for (const form of [secret, encodeURIComponent(secret), Base64.encode(text(secret))]) {
-          expect(encoded.includes(form), `S1: the hands key's private half is not in ${name}`).toBe(false);
+          expect(Str.includes(form)(encoded), `S1: the hands key's private half is not in ${name}`).toBe(false);
         }
       }
     }
 
     expect(
-      d.sockets.some((socket) => socket.sent.length > 0),
+      Arr.some(d.sockets, (socket) => socket.sent.length > 0),
       "S1 read frames the client really wrote",
     ).toBe(true);
     yield* Scope.close(scope, Exit.void);
@@ -624,9 +652,11 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
     () =>
       Effect.gen(function* () {
         const done = new Set<string>();
+        const context = yield* Effect.context();
 
+        // Each flow still gets its own fresh test clock.
         const check = (f: Flow) =>
-          Effect.runPromise(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
+          Effect.runPromiseWith(context)(flow(f, focus, done).pipe(Effect.scoped, Effect.provide(TestClock.layer())));
 
         yield* Effect.tryPromise({
           try: () =>

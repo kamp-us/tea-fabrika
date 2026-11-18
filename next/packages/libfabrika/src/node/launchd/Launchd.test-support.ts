@@ -1,20 +1,26 @@
 import { readlinkSync, symlinkSync } from "node:fs"; // edge: Effect's FileSystem takes and gives a link's target as text, and a target that is not valid UTF-8 needs bytes
 // P19 next/. Scoped real disk, controlled process edge. This never executes launchctl or plutil.
 import { NodeServices } from "@effect/platform-node";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
 import * as ServiceTest from "../../desktop/BrainServiceTest.ts";
@@ -96,24 +102,27 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           return yield* failure("spawn");
         }
 
-        const args = command.args.map((arg) => String(arg));
+        const args = Arr.map(command.args, (arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+        const supplied = Predicate.isFunction(answer) ? yield* answer(args, spec) : answer;
 
         let response: Response = {
           ...supplied,
-          stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
+          stderr: Function.pipe(
+            supplied.stderr,
+            Str.replace("test.p19.brain", Str.split(args.at(-1) ?? "", "/").at(-1) ?? ""),
+          ),
         };
 
-        if (command.command.endsWith("launchctl") && !args.includes("print")) {
+        if (Function.pipe(command.command, Str.endsWith("launchctl")) && !args.includes("print")) {
           response = { code: 0, stdout: "", stderr: "" };
         }
 
-        if (command.command.endsWith("id")) {
+        if (Function.pipe(command.command, Str.endsWith("id"))) {
           response = { code: 0, stdout: "501\n", stderr: "" };
         }
 
-        if (command.command.endsWith("plutil")) {
+        if (Function.pipe(command.command, Str.endsWith("plutil"))) {
           if (fault === "compile") {
             return yield* failure("compile");
           }
@@ -126,7 +135,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           );
 
           jobs.push(data);
-          const body = JSON.stringify(data);
+          const body = Formatter.formatJson(data);
           const output = args[args.indexOf("-o") + 1];
 
           if (output !== undefined && output !== "-") {
@@ -147,7 +156,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
               _tag: "Unknown",
               module: "ChildProcess",
               method: "exitCode",
-              pathOrDescriptor: `${command.command} ${args.join(" ")}`,
+              pathOrDescriptor: `${command.command} ${Arr.join(args, " ")}`,
               // The installed platform-node 4.1.2 exposes termination signals only in this cause.
               cause: new Error(`Process interrupted due to receipt of signal: '${signal}'`),
             }),
@@ -247,7 +256,9 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
-    for (const folder of (yield* fs.readDirectory(home)).filter((name) => name.startsWith(".brain-"))) {
+    for (const folder of Arr.filter(yield* fs.readDirectory(home), (name) =>
+      Function.pipe(name, Str.startsWith(".brain-")),
+    )) {
       for (const name of yield* fs.readDirectory(path.join(home, folder))) {
         const file = path.join(home, folder, name);
 
@@ -281,7 +292,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
       yield* Effect.sync(() => symlinkSync(Buffer.from(entry.target), staged));
 
       // A file system that refuses these bytes throws above. One that changes them stops here.
-      if ((yield* linkBytes(staged)).join() !== entry.target.join()) {
+      if (Arr.join(Arr.map(yield* linkBytes(staged), String), ",") !== Arr.join(Arr.map(entry.target, String), ",")) {
         return yield* Effect.die("this file system did not keep the link's target bytes");
       }
     } else if (entry._tag === "file" || entry._tag === "private" || entry._tag === "copy") {
@@ -313,29 +324,36 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     open: (file, options) =>
       fs.open(file, options).pipe(
         Effect.map(
-          (handle) =>
-            new Proxy(handle, {
-              get(target, key, receiver) {
-                if (key === "sync") {
-                  return Effect.sync(() => {
-                    if (file === home) {
-                      events.push("directory-sync");
-                    }
-
-                    events.push("sync");
-                    events.push(`sync:${file}`);
-                  }).pipe(
-                    Effect.andThen(
-                      (failing && fault === "sync") || (directoryFault && file === home)
-                        ? Effect.fail(failure("sync"))
-                        : target.sync,
-                    ),
-                  );
+          // The node handle keeps its members on its prototype, so each one is forwarded by name.
+          (handle): FileSystem.File => ({
+            [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+            get stat() {
+              return handle.stat;
+            },
+            // A getter, as on the handle, so each sync reads the fault switches when it is taken.
+            get sync() {
+              return Effect.sync(() => {
+                if (file === home) {
+                  events.push("directory-sync");
                 }
 
-                return Reflect.get(target, key, receiver);
-              },
-            }),
+                events.push("sync");
+                events.push(`sync:${file}`);
+              }).pipe(
+                Effect.andThen(
+                  (failing && fault === "sync") || (directoryFault && file === home)
+                    ? Effect.fail(failure("sync"))
+                    : handle.sync,
+                ),
+              );
+            },
+            seek: (offset, from) => handle.seek(offset, from),
+            read: (buffer, options) => handle.read(buffer, options),
+            readAlloc: (size, options) => handle.readAlloc(size, options),
+            truncate: (length) => handle.truncate(length),
+            write: (buffer) => handle.write(buffer),
+            writeAll: (buffer) => handle.writeAll(buffer),
+          }),
         ),
       ),
     link: (from, to) =>

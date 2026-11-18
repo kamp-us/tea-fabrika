@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-18-effect-e88-review2-sends-back",
+  "date": "2026-11-18",
+  "quests": [
+    "tea-fabrika#1562"
+  ],
+  "stage": "review",
+  "kind": "failure",
+  "what": "State of PR 1562 (ticket 1075, Effect judgment fold plus E88, next/ and today's lead tooling). Head f7c90c7fdbf770098e5cec8a238f42232c1cc96e: a plain merge of main a6761bce into 7b5abfa0, all 22 conflicting files and the lockfile resolved, so the PR no longer conflicts with main; typecheck, format and lint passed there, and the merge itself is not reviewed. The fresh whole-diff re-review at 7b5abfa0 (field/runs/2026-11-18-effect-e88-review2.json) answered send build with 4 blocking classes; the first review's three blockers hold as fixed, and every project's own files have 0 Effect diagnostics. The PR stays a draft, not armed, not queued.",
+  "cause": "Blocker 1: slice E46 changed next/packages/libfabrika/src/node/dev/dev.ts:616 from Effect.runPromise to Effect.runPromiseWith(context), so a binding call waiting on a pending replacement sleeps on the law's TestClock and the three T708 dev-control laws hang at full depth (proof run 44077417938; a one-line plant back to runPromise passes 3 of 3). Blocker 2: the E88 plan's R5 and R6 plants and 11 of its 39 real-resource paths have no result at the head. Blocker 3: 41 new named imports from the effect barrel in 35 libfabrika files, against 0577. Blocker 4: helpers with no Existing tools line (env.test-support.ts, nine optional env Config readers, StepMinutes and withDriveMinutes). The checklist L13 timeout in the same proof run was main's own bug, fixed by main's dac30602, which the merge keeps.",
+  "person": true,
+  "primitive": null,
+  "fix": "Next: this is the PR's first sent-back review since the fold fix round (0177), so one fix agent takes the four blocking classes, then the same reviewer rechecks them and the main merge's resolution at f7c90c7f (duplicate-key check, slice-line check, Effect recount). Then the PR's own CI and the merge queue supply proof; a scheduled dispatch only for R5, R6 and the 39 paths if the PR's CI does not run them.",
+  "test": "Recheck: T708 at FABRIKA_TEST_DEPTH=full passes 3 of 3 with timeouts, seeds and run counts unchanged, and the fix round records a plant.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1562",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44077417938"
+  ]
+}

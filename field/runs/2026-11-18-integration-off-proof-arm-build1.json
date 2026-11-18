@@ -1,0 +1,77 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-integration-off-proof-arm-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1618",
+  "started": "2026-11-18T01:45:00-08:00",
+  "ended": "2026-11-18T02:40:08-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI and lead tooling, decision 0602's sev0 fast track: the follow-up build on fabrikalfa/integration-off-proof-arm, on top of pull request 1613. A branch's proof run lists and runs no next-integration law: proof.ts's PROJECTS is next, next-visual and tooling, with a pure listings(base, changed) for its two vitest list calls; scheduled.yaml's changed legs drop the project, and the tests job's vitest legs read PROJECTS from the ref, so a branch's full set runs next alone and main's full run keeps both. workflow-lint's SC7 and SC18 hold both. From 1613's review: related.ts drops tooling's .integration. files on a pull request or queue group (0584), and its main block moved into run(step), so a law runs the step on its own env, git and list. Comments in related.ts, check.yaml, scheduled.yaml, Arm.ts and Arm.test.ts, the glossary's changed set and proof run rows, and docs/plan/README.md now say where integration laws run. Arm.ts needed no code change: it reads job names and how they ended, never which laws ran.",
+  "note": "The start time is an estimate: the worktree was made at 01:46:41 PT. The end time is when pull request 1618 opened. Usage was not recorded. Ran under the laptop's caps (nice 19, one worker, Node 26.13.0 through volta, TYPESAFE_API_KEY unset). No integration law and no host-only law was run here. The related workflow-lint rule R1 needed no change: 1613 kept the related job's integration step for a push to main whose changes job failed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "proof.test.ts: property: a proof run's vitest list calls name no next-integration project, for any change",
+      "plant": "proof.ts PROJECTS keeps next-integration",
+      "result": "red"
+    },
+    {
+      "law": "proof.test.ts: property: a proof run's vitest list calls name no next-integration project, for any change",
+      "plant": "proof.ts readers call names next-integration again",
+      "result": "red"
+    },
+    {
+      "law": "proof.test.ts: pinned: the changed legs run every project proof.ts lists, and no other; scheduled.test.ts SC18",
+      "plant": "scheduled.yaml changed leg names next-integration again",
+      "result": "red"
+    },
+    {
+      "law": "scheduled.test.ts SC7 on the real scheduled.yaml",
+      "plant": "scheduled.yaml PROJECTS gives a branch's full set next-integration",
+      "result": "red"
+    },
+    {
+      "law": "scheduled.test.ts: rejects the schedule's plant, SC7's three PROJECTS plants",
+      "plant": "scheduled.ts SC7's PROJECTS check dropped",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: a pull request or queue group runs tooling's plain laws alone, and any other event keeps its .integration. laws",
+      "plant": "related.ts merge line keeps tooling's .integration. files",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: a pull request or queue group runs tooling's plain laws alone, and any other event keeps its .integration. laws",
+      "plant": "related.ts every event drops .integration. files",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: the select step picks by the event the runner set in GITHUB_EVENT_NAME",
+      "plant": "related.ts run reads env[\"EVENT\"]",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: the select step picks by the event the runner set in GITHUB_EVENT_NAME",
+      "plant": "related.ts run reads process.env[\"EVENT\"]",
+      "result": "red"
+    },
+    {
+      "law": "related-selection.test.ts: the select step picks by the event the runner set in GITHUB_EVENT_NAME",
+      "plant": "related.ts run reads process.env[\"GITHUB_EVENT_NAME\"]",
+      "result": "red"
+    }
+  ]
+}

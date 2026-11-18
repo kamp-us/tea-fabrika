@@ -10,7 +10,7 @@
 import { refuse } from "@demlik/tea";
 import { run } from "@demlik/tea/effect";
 import { fileStore } from "@demlik/tea/node";
-import { Clock, Effect, FileSystem, Option, Runtime, Schema } from "effect";
+import { Clock, Effect, FileSystem, Option, Runtime, Schema, Array as Arr, pipe } from "effect";
 import * as Flow from "./Flow.ts";
 import * as FlowMachine from "./machine.ts";
 import * as Runners from "./Runners.ts";
@@ -41,14 +41,6 @@ export const ending = (m: FlowMachine.Model): End => {
   return { outcome: "stuck", reason: `the flow stopped while ${m.flow.steps[m.position]?.name} ran`, exit: 30 };
 };
 
-/** The saved Model, read back by tea's store: a file that is no Model is refused, never booted. */
-const parse = (raw: unknown) =>
-  raw === null || raw === undefined
-    ? null
-    : Option.getOrElse(Schema.decodeUnknownOption(FlowMachine.Model)(raw), () =>
-        refuse("the state file holds no flow Model"),
-      );
-
 /** A runner's failure as tea's error channel takes it: plain data with its tag. */
 const Failed = Schema.TaggedStruct("StepFailed", { reason: Schema.String });
 
@@ -58,10 +50,15 @@ export type Options = { readonly state: string; readonly resume: boolean; readon
 export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options: Options) {
   const runners = yield* Runners.Runners;
   const fs = yield* FileSystem.FileSystem;
-  const missing = flow.steps.filter((s) => !runners.names.has(s.name)).map((s) => s.name);
+
+  const missing = pipe(
+    flow.steps,
+    Arr.filter((s) => !runners.names.has(s.name)),
+    Arr.map((s) => s.name),
+  );
 
   if (missing.length > 0) {
-    return yield* Usage.make({ reason: `no runner for steps ${missing.join(", ")}` });
+    return yield* Usage.make({ reason: `no runner for steps ${Arr.join(missing, ", ")}` });
   }
 
   const saved = yield* fs.exists(options.state).pipe(Effect.orElseSucceed(() => false));
@@ -91,7 +88,17 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
 
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
-    store: fileStore(options.state, parse, { fenced: true }),
+    // The saved Model, read back by tea's store: a file that is no Model is refused, never booted.
+    store: fileStore(
+      options.state,
+      (raw) =>
+        raw === null || raw === undefined
+          ? null
+          : Option.getOrElse(Schema.decodeUnknownOption(FlowMachine.Model)(raw), () =>
+              refuse("the state file holds no flow Model"),
+            ),
+      { fenced: true },
+    ),
     onError: (error, context) => console.error(`flow ${flow.name}: ${context.phase}: ${String(error)}`),
     interpret: {
       step_run: (cmd) => runners.run(cmd.step).pipe(Effect.mapError((e) => Failed.make({ reason: e.reason }))),

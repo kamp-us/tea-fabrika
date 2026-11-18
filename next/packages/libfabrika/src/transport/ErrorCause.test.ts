@@ -1,5 +1,5 @@
 // T695, next/. The transport's WebCrypto edge and its passkey writer keep the failure they translate
-// (decision 0043 rule 12). Audit sites: `internal/binary.ts:88` (the one callback digest, importKey
+// (decision 0043 rule 12). Audit sites: `internal/binary.ts:106` (the one callback digest, importKey
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged. A rejection is injected through
 // Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { checkHello, helloText } from "./Hello.ts";
@@ -53,11 +54,11 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
 };
 
 /** `work` on a WebCrypto whose one `method` rejects with `failure`; every other call is the real one. */
-const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A, E>) =>
+const rejecting = <A, E>(method: Method, failure: object, work: Effect.Effect<A, E>) =>
   work.pipe(Effect.provide(WebCrypto.layer(Rejecting.crypto(method, failure))));
 
 describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
-  // C5, internal/binary.ts:88. Plant: `const fail = () => new WebCryptoError({ cause: undefined })`.
+  // C5, internal/binary.ts:106. Plant: `const fail = () => WebCryptoError.make({ cause: undefined })`.
   // C5 injects its rejection through `WebCrypto.layer`, so C6's plant (read the global again) reds
   // it too.
   it.effect.prop(
@@ -96,7 +97,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
     effectOptions,
   );
 
-  // C6, internal/binary.ts:87: the edge reads the provided `WebCrypto`, never the global. A hello
+  // C6, internal/binary.ts:105: the edge reads the provided `WebCrypto`, never the global. A hello
   // that passes every check before its fingerprint reaches `digest`, which the stand-in rejects, so
   // `checkHello` fails with WebCryptoError carrying that rejection, and admission is never reached
   // (its stand-in dies). Plant: read `globalThis.crypto.subtle` in `binary.ts` again; the real
@@ -149,7 +150,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
 });
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
 
@@ -169,8 +170,13 @@ const integer = (raw: Uint8Array) => {
   return (bytes[0] ?? 0) >= 128 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
 };
 
-const web = <A>(work: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: work, catch: (cause) => new Error("test WebCrypto failed", { cause }) });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+const web = <A>(work: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: work, catch: (cause) => WebCryptoError.make({ message: "test WebCrypto failed", cause }) });
 
 /**
  * scenario: a passkey made when the law runs (WebCrypto, P-256) signs authenticator data and the

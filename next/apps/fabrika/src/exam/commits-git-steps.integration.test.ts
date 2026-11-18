@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -92,8 +93,9 @@ describe("build_touched_exam (p84)", () => {
   // scenario: real tree reads must use the ancestor list despite the changed list on head.
   it("scenario: a build commit dropping a row from exam-paths.json and touching that path: the base's list counts", () => {
     const r = new Repo();
+    // SAFETY: EXAM_LIST is exam-paths.json's text, an array of rows that each have a `glob`.
     const rows = JSON.parse(EXAM_LIST) as Array<{ glob: string }>;
-    r.write("exam-paths.json", JSON.stringify(rows.filter((row) => row.glob !== "boundary-rules.json")));
+    r.write("exam-paths.json", JSON.stringify(Arr.filter(rows, (row) => row.glob !== "boundary-rules.json")));
     r.write("boundary-rules.json", "[3]\n");
     const c = r.commit();
     r.sign("build");
@@ -258,7 +260,7 @@ describe("the run fails (p87), judging no commit", () => {
   it.each([
     [
       "an ECDSA key",
-      `${[keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "ecdsa")].join("\n")}\n`,
+      `${Arr.join([keyLine("tests", "tests"), keyLine("build", "build"), keyLine("lead", "ecdsa")], "\n")}\n`,
     ],
     ["a key under tests and build", `${GOOD_KEYS}${keyLine("build", "tests")}\n`],
     ["an unknown principal", `${GOOD_KEYS}${keyLine("owner", "stranger")}\n`],
@@ -297,8 +299,8 @@ describe("person commits between step links (p86b)", () => {
     expect(middle.from).not.toBe(middle.to);
 
     const signedCommit = (parent: string, tree: string, signer: "person" | "tests" = "person") =>
-      r
-        .git(
+      Str.trim(
+        r.git(
           "-c",
           "gpg.format=ssh",
           "-c",
@@ -310,8 +312,8 @@ describe("person commits between step links (p86b)", () => {
           "-m",
           "planted signed commit",
           tree,
-        )
-        .trim();
+        ),
+      );
 
     const { squash, rows } = squashed(r, [{ note: middle, commit: person }]);
     const row = rows[0]!.attested[0]!;
@@ -333,7 +335,7 @@ describe("person commits between step links (p86b)", () => {
       }
 
       case "an unsigned commit":
-        row.commit = r.git("commit-tree", "-p", r.base, "-m", "unsigned", middle.to).trim();
+        row.commit = Str.trim(r.git("commit-tree", "-p", r.base, "-m", "unsigned", middle.to));
         break;
       case "a step key": {
         const other = signedCommit(r.base, middle.to, "tests");
@@ -359,14 +361,20 @@ describe("person commits between step links (p86b)", () => {
         r.write("next/packages/x/src/a.ts", "a\n");
         const person = r.gitSigned();
 
-        const payload = r
-          .git("cat-file", "commit", person)
-          .replace(/^gpgsig .*(?:\n .*)*\n/m, "")
-          .replace("\n\n", "\nxgpgsig forged\n\n");
+        const payload = pipe(
+          r.git("cat-file", "commit", person),
+          Str.replace(/^gpgsig .*(?:\n .*)*\n/m, ""),
+          Str.replace("\n\n", "\nxgpgsig forged\n\n"),
+        );
 
         const sig = sh(r.dir, "ssh-keygen", ["-Y", "sign", "-n", "git", "-f", join(KEYS, "person")], payload);
-        const raw = payload.replace("\n\n", `\ngpgsig ${sig.trimEnd().replaceAll("\n", "\n ")}\n\n`);
-        const c = sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw).trim();
+
+        const raw = pipe(
+          payload,
+          Str.replace("\n\n", `\ngpgsig ${pipe(sig, Str.trimEnd, Str.replaceAll("\n", "\n "))}\n\n`),
+        );
+
+        const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         expect(verifyCommit(r, c)).toBe(0);
         const { squash, rows } = squashed(r, [{ note: { ...personLink(r, c), sig: "forged\n" }, commit: c }]);
         log(r, rows);

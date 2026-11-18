@@ -1,6 +1,8 @@
 // P9's additive schema extension: metadata is durable, not caller authority. Existing P9 tests
 // still own root equality and recovery folds. Plants: strip the extension; lose enrollment proof.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { Add, Adds, Signed } from "./Access.ts";
@@ -71,8 +73,8 @@ describe("P10 passkey records", () => {
       })
       .chain((full) =>
         fc
-          .subarray(Object.keys(full), { maxLength: 6 })
-          .map((keys) => Object.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
+          .subarray(Rec.keys(full), { maxLength: 6 })
+          .map((keys) => Rec.fromEntries(Arr.map(keys, (key) => [key, full[key as keyof typeof full]]))),
       );
 
     fc.assert(

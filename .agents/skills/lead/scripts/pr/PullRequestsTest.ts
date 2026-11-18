@@ -1,6 +1,6 @@
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
-import { Effect, Layer, Option, Schema } from "effect";
 import {
   type Detail,
   type MergeQueue,
@@ -8,7 +8,9 @@ import {
   type PullRequest,
   PullRequests,
   PullRequestsError,
+  StackMerge,
   type Stack,
+  type StackMerge as StackMergeResult,
 } from "./PullRequests.ts";
 
 /** One write the layer took, as the caller made it. */
@@ -61,6 +63,8 @@ export type World = {
   readonly stacks: Array<Stack>;
   /** The merge queue on each branch, by branch: none when absent. */
   readonly queues: Map<string, MergeQueue>;
+  /** The async stack result this fixture stands for; pending when absent. */
+  readonly stackResult?: StackMergeResult;
 };
 
 /** A fresh world over these pull requests; the layer reads and changes it in place. */
@@ -85,13 +89,11 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
     PullRequests,
     PullRequests.of({
       openOn: (branch) =>
-        Effect.map(fails("openOn"), () =>
-          Option.fromUndefinedOr(w.prs.find((pr) => pr.head === branch && pr.state === "OPEN")),
-        ),
+        Effect.map(fails("openOn"), () => Arr.findFirst(w.prs, (pr) => pr.head === branch && pr.state === "OPEN")),
       all: Effect.map(fails("all"), () => [...w.prs]),
       draft: (branch, text) =>
         Effect.map(fails("draft"), () => {
-          const number = Math.max(0, ...w.prs.map((pr) => pr.number)) + 1;
+          const number = Math.max(0, ...Arr.map(w.prs, (pr) => pr.number)) + 1;
           w.prs.push({ number, head: branch, oid: "", state: "OPEN", draft: true });
           w.calls.push(Call.cases.draft.make({ branch, title: text.title }));
 
@@ -103,18 +105,18 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
         }),
       ready: (number) =>
         Effect.map(fails("ready"), () => {
-          const at = w.prs.findIndex((pr) => pr.number === number);
-          const pr = w.prs[at];
+          const at = Arr.findFirstIndex(w.prs, (pr) => pr.number === number);
+          const pr = Option.flatMap(at, (i) => Arr.get(w.prs, i));
 
-          if (pr !== undefined) {
-            w.prs[at] = { ...pr, draft: false };
+          if (Option.isSome(at) && Option.isSome(pr)) {
+            w.prs[at.value] = { ...pr.value, draft: false };
           }
 
           w.calls.push(Call.cases.ready.make({ number }));
         }),
       view: (number) =>
         Effect.flatMap(fails("view"), () => {
-          const pr = w.prs.find((p) => p.number === number);
+          const pr = Option.getOrUndefined(Arr.findFirst(w.prs, (p) => p.number === number));
 
           return pr === undefined
             ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
@@ -142,11 +144,34 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
           w.calls.push(Call.cases.admin.make({ number, oid }));
         }),
       stack: (number) =>
-        Effect.map(fails("stack"), () => Option.fromUndefinedOr(w.stacks.find((s) => s.prs.includes(number)))),
+        Effect.map(fails("stack"), () => Arr.findFirst(w.stacks, (s) => Arr.some(s.prs, (pr) => pr.number === number))),
       mergeQueue: (branch) => Effect.map(fails("mergeQueue"), () => Option.fromUndefinedOr(w.queues.get(branch))),
-      mergeStack: (top, heads) =>
-        Effect.map(fails("mergeStack"), () => {
-          w.calls.push(Call.cases.stack.make({ top, heads: [...heads] }));
+      mergeStack: (selection) =>
+        Effect.flatMap(fails("mergeStack"), () => {
+          const top = selection.layers.at(-1);
+
+          if (top === undefined) {
+            return Effect.fail(PullRequestsError.make({ reason: "fixture stack has no selected top" }));
+          }
+
+          w.calls.push(
+            Call.cases.stack.make({
+              top: top.number,
+              heads: selection.layers
+                .filter((layer) => layer.state === "OPEN")
+                .map(({ number, oid }) => ({ number, oid })),
+            }),
+          );
+
+          return Effect.succeed(
+            w.stackResult ??
+              StackMerge.cases.pending.make({
+                uuid: "fixture-merge-request",
+                expectedHeadSha: top.oid,
+                mergeAction: "merge_queue",
+                mergeMethod: "default",
+              }),
+          );
         }),
     }),
   );

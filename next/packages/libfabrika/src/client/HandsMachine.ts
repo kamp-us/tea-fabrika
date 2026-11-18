@@ -11,8 +11,13 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -167,7 +172,7 @@ const assigned = (w: Assigned): Assigned => ({
 });
 
 /** A Msg's time as the journal keeps it: the client's own clock, in ISO text. */
-const iso = (at: number): string => new Date(at).toISOString();
+const iso = (at: number): string => DateTime.formatIso(DateTime.makeUnsafe(at));
 
 /** The start time to keep on an entry, when one is known. */
 const since = (startedAt: string | undefined) => (startedAt === undefined ? {} : { startedAt });
@@ -189,13 +194,13 @@ const Nonce = Schema.Struct({ nonce: Schema.String });
 
 const Rpc = Schema.Struct({
   id: Schema.String,
-  result: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
   ),
 });
 
-const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Json) });
 
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([Rpc, Notice])));
 
@@ -332,9 +337,10 @@ const saved = (s: HandsModel, task: Assigned, entry: Entry): Step => {
  * next one, so one task whose take fails for a passing reason does not hold back the others.
  */
 const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)[number]>, tries: number) => {
-  const once = tasks.filter(
+  const once = Arr.filter(
+    tasks,
     (p) =>
-      tasks.filter((q) => q.process === p.process).length === 1 &&
+      Arr.filter(tasks, (q) => q.process === p.process).length === 1 &&
       !s.held.includes(p.id) &&
       !s.skip.tasks.includes(p.id),
   );
@@ -361,18 +367,21 @@ const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)
  *   what the table cannot place is sent again.
  */
 const LASTS: ReadonlyMap<string, "never" | "link" | "list"> = new Map([
-  ...[
-    "not_allowed",
-    "not_target",
-    "conflict",
-    "wrong_execution",
-    "wrong_state",
-    "wrong_process",
-    "not_found",
-    "bad_input",
-    "reserved",
-    "unknown_method",
-  ].map((reason) => [reason, "never"] as const),
+  ...Arr.map(
+    [
+      "not_allowed",
+      "not_target",
+      "conflict",
+      "wrong_execution",
+      "wrong_state",
+      "wrong_process",
+      "not_found",
+      "bad_input",
+      "reserved",
+      "unknown_method",
+    ],
+    (reason) => [reason, "never"] as const,
+  ),
   ["lacks_capability", "link"],
   ["idle", "list"],
   ["ambiguous", "list"],
@@ -383,11 +392,12 @@ const lasts = (reason: string | null): "never" | "link" | "list" | "later" =>
   (reason === null ? undefined : LASTS.get(reason)) ?? "later";
 
 /** Why a take that assigned nothing to this client was refused, or null when its answer does not decode. */
-const refusal = (reason: string | null, result: unknown): string | null =>
+const refusal = (reason: string | null, result: Schema.Json | undefined): string | null =>
   reason ??
   Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
     onNone: () => null,
-    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+    onSome: (reply) =>
+      TakeReply.match(reply, { idle: () => "idle", refused: ({ reason }) => reason, assigned: () => "not_allowed" }),
   });
 
 /** Skips `task` on this link while the list stays at its rev, and lists again at once. */
@@ -397,7 +407,7 @@ const skip = (s: HandsModel, task: string): Step => list({ ...s, skip: { ...s.sk
 const BadEntry = Schema.Struct({ reason: Schema.Literal("bad_entry") });
 
 /** The assignment in a take's answer, when it is this client's own for an open task. */
-const assignment = (s: HandsModel, result: unknown) =>
+const assignment = (s: HandsModel, result: Schema.Json | undefined) =>
   Option.flatMap(Schema.decodeUnknownOption(TakeReply)(result), (reply) => {
     const state = reply._tag === "assigned" ? reply.task.state : null;
 
@@ -417,7 +427,7 @@ const assignment = (s: HandsModel, result: unknown) =>
   });
 
 /** The brain answered the live work call: `result` when it is ok, else the door's `reason`. */
-const answered = (s: HandsModel, result: unknown, reason: string | null, at: string): Step => {
+const answered = (s: HandsModel, result: Schema.Json | undefined, reason: string | null, at: string): Step => {
   const w = s.work;
   const woke = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Woke)(result)) : null;
   const heard: HandsModel = woke === null ? s : { ...s, seen: Math.max(s.seen, woke.rev) };
@@ -556,7 +566,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
   const fresh = open !== null && open > s.handshake.dial;
   // A grant wait's renewal knock goes on the dial it holds, with its own id `k<dial>.<n>`: its answer
   // renews the code the exchange shows.
-  const renew = cmds.some((c) => c.type === "knock");
+  const renew = Arr.some(cmds, (c) => c.type === "knock");
 
   const next: HandsModel = {
     ...s,
@@ -566,7 +576,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
     sent: renew ? s.sent + 1 : s.sent,
   };
 
-  const pings = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
+  const pings = Arr.filter(cmds, (c): c is ReturnType<typeof ping> => c.type === "ping");
   const knocks = renew ? [knock({ dial: open ?? 0, id: `k${open ?? 0}.${next.sent}` })] : [];
 
   return moved(s, [next, [...pings, ...knocks]]);
@@ -630,7 +640,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const frame = decoded.value;
 
-  const waiting = (params: unknown): Step =>
+  const waiting = (params: Schema.Json | undefined): Step =>
     Option.match(Schema.decodeUnknownOption(WaitingCode)(params), {
       onNone: () => stay(s),
       onSome: (w) => shook(s, { type: "waiting", dial: m.dial, ...w, at: m.at }),
@@ -650,7 +660,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const reason = frame.error === undefined ? null : (frame.error.data?.reason ?? "other");
 
-  if (frame.id.startsWith("h")) {
+  if (Function.pipe(frame.id, Str.startsWith("h"))) {
     const [next, out] = shook(s, {
       type: "answer",
       dial: m.dial,
@@ -667,7 +677,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
     return [key === null ? next : { ...next, key: key.identity.key }, out];
   }
 
-  if (frame.id.startsWith("k")) {
+  if (Function.pipe(frame.id, Str.startsWith("k"))) {
     return waiting(frame.result);
   }
 
@@ -691,6 +701,8 @@ export const handsMachine = Machine.make({
   model: HandsModel,
   msg: Schema.Union([LinkMsg, Own]),
   cmds: [write, hello, knock, ping, journalRead, journalWrite, execute],
+  // SAFETY: tea's `types` slot only carries the socket Sub type; tea never reads this empty value
+  // (0561).
   types: { sub: {} as SocketSub },
   init: (loaded) => [
     loaded ??
@@ -751,8 +763,8 @@ export const handsMachine = Machine.make({
     write_err: stay,
     hello_ok: (s, m): Step => shook(s, m),
     hello_err: (s, m): Step => shook(s, m),
-    knock_ok: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
-    knock_err: (s, m): Step => (m.cmd.id.startsWith("h") ? shook(s, m) : stay(s)),
+    knock_ok: (s, m): Step => (Function.pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
+    knock_err: (s, m): Step => (Function.pipe(m.cmd.id, Str.startsWith("h")) ? shook(s, m) : stay(s)),
     ping_ok: stay,
     ping_err: stay,
     journal_read_ok: (s, m): Step => {

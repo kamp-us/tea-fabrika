@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tt8-law-carries-its-own-seed",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/time-table.test.ts",
+    "line": 699
+  },
+  "says": "In today's CI, the new TT8 property passes `seed: options.seed` in its arbitrary options, though decision 0579 says the seed is set once in package setup and a law carries no seed.",
+  "proof": ".decisions/0579-property-laws-use-it-prop.md line 63: `A law carries no \\`seed\\``; .github/ci/time-table.test.ts line 699: `{ arbitrary: { runs: queueRuns, size: 30, concurrency: 1, seed: options.seed } }`; scripts/vitest.setup.ts line 10 already sets check seed 119120.",
+  "cost": "None today since the value matches the global seed; a later global seed change would leave this law on the old seed and out of the shared sweep.",
+  "head": "108ea8e8fca4b9fe2bd5ed706b24f4dc80bea31d",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567"
+}

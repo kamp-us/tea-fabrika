@@ -26,7 +26,7 @@ export class Routes extends Context.Service<
   {
     readonly route: (
       method: string,
-      params: unknown,
+      params: Schema.Json | undefined,
       identity: typeof Who.Type | null,
     ) => Effect.Effect<typeof Answer.Type, RouteError | typeof RateCountFailure.Type>;
   }

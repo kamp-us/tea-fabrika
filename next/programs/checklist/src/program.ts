@@ -3,7 +3,7 @@
 // shape. Time comes in only as the runner's `timer {at, arrivedAt}`, never from a clock here.
 import { Machine } from "@demlik/tea/effect";
 import { Input, Program, type Refusal } from "@kampus/libfabrika";
-import { Schema } from "effect";
+import { Array as Arr, Schema } from "effect";
 
 /** How long an open item waits before it is late: one day. A constant until a pack's settings
  *  reach a program (P40 slice 3, P38 slice 5); then it is the pack's `checklist.late`. */
@@ -67,7 +67,7 @@ export type Done = typeof Done.Type;
 const fresh: ItemState = ItemState.cases.new.make({});
 
 const each = (m: Model, name: string, f: (state: ItemState) => ItemState): Model => ({
-  items: m.items.map((i) => (i.name === name ? { name, state: f(i.state) } : i)),
+  items: Arr.map(m.items, (i) => (i.name === name ? { name, state: f(i.state) } : i)),
 });
 
 /** A timer stamps a new item with the referee's time, and makes an open one late once due. */
@@ -85,14 +85,17 @@ export const checklistMachine = Machine.make({
   init: (loaded) => [loaded ?? { items: [] }, []],
   update: {
     add: (m, msg) => [{ items: [...m.items, { name: msg.name, state: fresh }] }, []],
-    rename: (m, msg) => [{ items: m.items.map((i) => (i.name === msg.name ? { ...i, name: msg.to } : i)) }, []],
-    remove: (m, msg) => [{ items: m.items.filter((i) => i.name !== msg.name) }, []],
+    rename: (m, msg) => [{ items: Arr.map(m.items, (i) => (i.name === msg.name ? { ...i, name: msg.to } : i)) }, []],
+    remove: (m, msg) => [{ items: Arr.filter(m.items, (i) => i.name !== msg.name) }, []],
     check: (m, msg) => [
       each(m, msg.name, (s) => (s._tag === "checked" ? s : ItemState.cases.checked.make({ note: msg.note ?? null }))),
       [],
     ],
     uncheck: (m, msg) => [each(m, msg.name, (s) => (s._tag === "checked" ? fresh : s)), []],
-    timer: (m, msg) => [{ items: m.items.map((i) => ({ name: i.name, state: tick(i.state, msg.arrivedAt) })) }, []],
+    timer: (m, msg) => [
+      { items: Arr.map(m.items, (i) => ({ name: i.name, state: tick(i.state, msg.arrivedAt) })) },
+      [],
+    ],
   },
 });
 
@@ -100,7 +103,7 @@ const open = (i: Item) => i.state._tag !== "checked";
 
 /** `taken` when the new name exists, `missing` when the named item does not. */
 const refuse = (m: Model, msg: Msg): Refusal | null => {
-  const has = (name: string) => m.items.some((i) => i.name === name);
+  const has = (name: string) => Arr.some(m.items, (i) => i.name === name);
 
   if (msg.type === "timer") {
     return null;
@@ -120,19 +123,19 @@ const refuse = (m: Model, msg: Msg): Refusal | null => {
 /** 0 while an item has no time yet, so the alarm fires at once and stamps it; else when the oldest
  *  open item goes late; null when none waits. */
 const wake = (m: Model): number | null => {
-  if (m.items.some((i) => i.state._tag === "new")) {
+  if (Arr.some(m.items, (i) => i.state._tag === "new")) {
     return 0;
   }
 
-  const since = m.items.flatMap((i) => (i.state._tag === "open" ? [i.state.since] : []));
+  const since = Arr.flatMap(m.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
 
   return since.length === 0 ? null : Math.min(...since) + LATE;
 };
 
 /** A `Done` once there is an item and every one is checked, else null. */
 export const finished = (m: Model): Done | null =>
-  m.items.length > 0 && m.items.every((i) => i.state._tag === "checked")
-    ? Done.make({ items: m.items.map((i) => i.name) })
+  m.items.length > 0 && Arr.every(m.items, (i) => i.state._tag === "checked")
+    ? Done.make({ items: Arr.map(m.items, (i) => i.name) })
     : null;
 
 const shown = (i: Item) => ({
@@ -148,7 +151,7 @@ export const checklist = Program.make({
   name: "fabrika/checklist",
   machine: checklistMachine,
   state: { v: 1, upgrades: [] },
-  view: (m): View => ({ items: m.items.map(shown), left: m.items.filter(open).length }),
+  view: (m): View => ({ items: Arr.map(m.items, shown), left: Arr.filter(m.items, open).length }),
   refuse,
   inputs: {
     add: { description: "Add an item", personOnly: true },

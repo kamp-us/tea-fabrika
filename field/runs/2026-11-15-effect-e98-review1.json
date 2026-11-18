@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e98-review1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:29:37-08:00",
+  "ended": "2026-11-15T23:36:37-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of 773588d33, slice E98 of the Effect sweep in next/ (globalErrorInEffectCatch and globalErrorInEffectFailure over lib:runtime): merge-ready, one finding row. All 9 hits were in two test files and each is fixed the way the check names: the four Effect.tryPromise fixture catches in runtime/Runner.integration.test.ts now build a FixtureError tagged error with the cause kept as Schema.Defect, and the generated handler failure in runtime/EffectFunctions.test.ts yields a HandlerFailure tagged error. Both follow the TaggedError shape already used across libfabrika. No product file, no lock, no disable line, no tsconfig change. No law changed what it asserts: loosening.sh gave one unrecognized change per file, both the added class declarations, with no removed expect, no muted test and no bound change. Runner.ts answers any handler failure as handler_failed without reading the error, so the fixture's error type does not reach any law. The tests step's handler-reason gap is older than this slice and does not affect it: the reason is asserted for a handler defect in Runner.integration.test.ts, not for a typed failure; that is the finding row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Read-only apart from this row. Node 26.13.0. Recount with only the two checks at error through effect-tsgo diagnostics --lspconfig on next/packages/libfabrika/tsconfig.json: 0 in src/runtime, 18 in other folders (E51's), as the tests row says. Ran alone: runtime/EffectFunctions.test.ts (11 passed), runtime/Runner.integration.test.ts (117 passed). pnpm typecheck exited 0. git merge-tree with origin/main 797c3c8a8 merges clean. leakgrep on the range clean. Not run: pnpm lint (the tests step ran it). Plants by reading only.",
+  "step": "review"
+}

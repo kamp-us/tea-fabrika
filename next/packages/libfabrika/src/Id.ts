@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // next/: TypeIDs with UUIDv7 suffixes. It draws random bits from Effect's SecureRandom;
 // `Generator.layer` provides the WebCrypto one.
 import type * as Brand from "effect/Brand";
@@ -6,10 +7,12 @@ import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ordering from "effect/Order";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as Str from "effect/String";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -53,11 +56,11 @@ const prefixes = new WeakMap<S.Top, string>();
 // Fabrika requires a nonempty prefix, with interior underscores and at most 63 characters.
 const validPrefix = (prefix: string): boolean => /^[a-z](?:[a-z_]{0,61}[a-z])?$/.test(prefix);
 
-const split = (id: string): readonly [string, string] => {
-  const separator = id.lastIndexOf("_");
-
-  return [id.slice(0, Math.max(0, separator)), id.slice(separator + 1)];
-};
+const split = (id: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(id), {
+    onNone: (): readonly [string, string] => ["", id],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(id), Str.slice(separator + 1)(id)],
+  });
 
 const valid = (id: string): boolean => {
   const [prefix, suffix] = split(id);
@@ -71,13 +74,20 @@ const valid = (id: string): boolean => {
   }
 
   // The first character has only three bits: the UUID must fit in 128 bits.
-  if (alphabet.indexOf(suffix.charAt(0)) > 7) {
+  if (
+    Option.exists(
+      Option.flatMap(Str.charAt(0)(suffix), (first) => Str.indexOf(first)(alphabet)),
+      (index) => index > 7,
+    )
+  ) {
     return false;
   }
 
-  const uuid = [...suffix].reduce((bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)), 0n);
+  return Option.exists(Option.all(Arr.map([...suffix], (char) => Str.indexOf(char)(alphabet))), (digits) => {
+    const uuid = Arr.reduce(digits, 0n, (bits, digit) => (bits << 5n) | BigInt(digit));
 
-  return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+    return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+  });
 };
 
 /** Any canonical TypeID containing a UUIDv7. Validation never trims or repairs input. */
@@ -85,12 +95,22 @@ export const Schema = S.String.check(S.makeFilter(valid, { expected: "a UUIDv7 T
 
 export type Schema = typeof Schema.Type;
 
-const specific = <const P extends string>(prefix: P) => {
+/**
+ * Returns the pattern of one prefix's ids: the prefix, `_`, and a suffix whose bits are a UUIDv7.
+ *
+ * @category getters
+ */
+export const pattern = (prefix: string): RegExp => {
   const a = "[0-9a-hjkmnp-tv-z]";
 
+  return new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`);
+};
+
+const specific = <const P extends string>(prefix: P) => {
   const schema = Object.assign(
-    S.String.check(S.isPattern(new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`))).pipe(
-      // Prefixes may come from runtime input; make and makeEffect validate them first.
+    S.String.check(S.isPattern(pattern(prefix))).pipe(
+      // SAFETY: brand's type takes only one literal key, but at run time any string is a key. Prefixes may
+      // come from runtime input; make and makeEffect validate them first.
       S.brand<P>(prefix as Parameters<typeof S.brand<P>>[0]),
     ),
     { prefix } as const,
@@ -194,7 +214,7 @@ const encode = (at: number, random: bigint): string => {
   let suffix = "";
 
   for (let i = 0; i < 26; i++) {
-    suffix = alphabet.charAt(Number(uuid & 31n)) + suffix;
+    suffix = Option.getOrElse(Str.charAt(Number(uuid & 31n))(alphabet), () => "") + suffix;
     uuid >>= 5n;
   }
 

@@ -37,9 +37,24 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { FileSystem, Path } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  Clock,
+  ConfigProvider,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+  FileSystem,
+  Path,
+  Option,
+} from "effect";
 import type { Redacted } from "effect";
-import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -83,11 +98,11 @@ const from = {
   build: BUILD,
 };
 
-const head = CodeHostTest.commit("a".repeat(40));
+const head = CodeHostTest.commit(Str.repeat(40)("a"));
 
-const base = CodeHostTest.commit("d".repeat(40));
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
 
-const checked = CodeHostTest.tree("e".repeat(40));
+const checked = CodeHostTest.tree(Str.repeat(40)("e"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -237,11 +252,11 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   let current = yield* life(store, services, scope);
   let serial = 0;
 
-  const deliver = (input: unknown) =>
+  const deliver = (input: typeof Mail.Land.Type | typeof Mail.Abandon.Type) =>
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(serial.toString(16))}`),
         by: owner,
         arrivedAt: serial,
         input,
@@ -259,7 +274,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   });
 
   const fire = Effect.gen(function* () {
-    const alarm = (yield* store.alarms.saved).find((a) => a.name === NAME);
+    const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === NAME));
     expect(alarm, "a working merger has a saved alarm").toBeDefined();
 
     if (alarm !== undefined) {
@@ -382,9 +397,10 @@ const open = Effect.gen(function* () {
           }
         }),
       saved: Effect.sync(() =>
-        table()
-          .exec("SELECT name, at FROM alarms ORDER BY at, name")
-          .map((row) => ({ name: String(row.name), at: Number(row.at) })),
+        Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+          name: String(row.name),
+          at: Number(row.at),
+        })),
       ),
       take: (alarm) =>
         Effect.sync(() => {

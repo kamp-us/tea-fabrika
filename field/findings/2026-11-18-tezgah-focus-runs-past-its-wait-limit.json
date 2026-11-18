@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tezgah-focus-runs-past-its-wait-limit",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/e2e/tezgah.test-support.ts",
+    "line": 161
+  },
+  "says": "The tezgah focus laws L28/L30 (next/apps/fabrika/e2e/tezgah-focus.visual.test.ts) wait for each tile's region with locator.boundingBox under a 30 s limit, and the scenario runs close to it, so a slow e2e leg times out with no code change.",
+  "proof": "PR 1525 at 3ec749234: run 44243295809 attempt 1 (job 134596389361) and attempt 2 (job 134602975180) both failed 'locator.boundingBox: Timeout 30000ms exceeded' at tezgah.test-support.ts:161 waiting on region 'checklist, t2'. The same file took 31.5 s in main's passing full run 44242548956, and PR 1525 at c6c750e4c passed it in run 44247206536 with no change to any file the scenario drives (K1's read: 1525 changes no client, tuval, programs, desktop or window file).",
+  "cost": "Any pull request whose e2e legs run tezgah-focus can go red at random; tonight it held the kalfa stack 1554 for two runs and one rerun.",
+  "head": "2077e9d243dfce7726016a82d96686afb229597e",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1525"
+}

@@ -2,7 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { inboxMachine } from "./program.ts";
 
@@ -92,7 +92,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
       // CI checks the type pin. The window's press type belongs to slice 2.
       const { inbox } = yield* Effect.promise(load);
       expectTypeOf<keyof (typeof inbox)["inputs"]>().toEqualTypeOf<never>();
-      expect(Object.keys(inbox.inputs)).toEqual([]);
+      expect(Rec.keys(inbox.inputs)).toEqual([]);
     }),
   );
 
