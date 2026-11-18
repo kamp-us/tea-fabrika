@@ -2093,7 +2093,7 @@ const attributesDiff = (...lines: string[]) =>
 const attributesGit =
   (diff: string, base: string | null, head: string | null): Runner =>
   (args) => {
-    const rev = args[0] === "ls-tree" ? args[3] : args[0] === "show" ? args[1]?.split(":")[0] : undefined;
+    const rev = args[0] === "ls-tree" ? args[2] : args[0] === "show" ? args[1]?.split(":")[0] : undefined;
     const text = rev === sha.head ? head : base;
 
     if (args[0] === "ls-tree") {
