@@ -42,9 +42,10 @@ syncBuiltinESMExports();
 `;
 
 describe("T325 K6 botpush, today's tooling", () => {
-  // Plants: omit the leakgrep call; omit its --commits call; skip both leak greps when the tree has
-  // no step notes. Removed private text and the repo URL must still push.
-  it("scans every submitted commit from the merge base at the requested source, with or without step notes", () => {
+  // Each case runs in a tree with step notes and in one without (decisions 0161 and 0164: plain
+  // commits). Plants: omit the leakgrep call; omit its --commits call; skip both leak greps when the
+  // tree has no step notes. Removed private text and the repo URL must still push.
+  it("scans every submitted commit from the merge base at the requested source", () => {
     fc.assert(
       fc.property(input, ({ word, leak, range, notes }) => {
         const dir = mkdtempSync(join(tmpdir(), "push-"));
