@@ -981,6 +981,7 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
 const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
   printed.overrides.flatMap(({ files, rules }) => {
     const setting = rules["vitest/no-restricted-vi-methods"];
+
     return setting === undefined
       ? []
       : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));

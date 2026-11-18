@@ -124,11 +124,13 @@ export const bundle = Effect.fn("build.bundle")(function* (
   // The console a person sees, or a law's TestConsole. Its members are plain functions, so the
   // synchronous onLog calls them with no run of an Effect.
   const out = yield* Console.Console;
+
   // One printer per level Rolldown prints at its default level; a level Rolldown adds does not compile.
   const print = {
     warn: (line: string) => out.warn(line),
     info: (line: string) => out.info(line),
   } satisfies Record<Exclude<LogLevel, "debug">, (line: string) => void>;
+
   const config = {
     input,
     plugins,

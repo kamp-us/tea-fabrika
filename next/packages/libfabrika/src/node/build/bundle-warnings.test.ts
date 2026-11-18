@@ -55,12 +55,15 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
         const use = (file: "entry" | "imported") => (directive === file ? '"use client";\n' : "");
         const top = "\n".repeat(pad);
         const space = " ".repeat(indent);
+
         const files: Readonly<Record<string, string>> = {
           [entry]: `${top}${use("entry")}${space}import ${JSON.stringify(entrySpecifier)};\nimport "../dependency/imported.ts";\nexport const a = 1;\n`,
           [imported]: `${top}${use("imported")}${space}import ${JSON.stringify(importedSpecifier)};\nexport const b = 2;\n`,
         };
+
         // Where the plugin's own warning points: the imported file's missing specifier.
         const position = { line: 1 + pad + (directive === "imported" ? 1 : 0), column: indent + 7 };
+
         // What Rolldown logged before bundle's onLog saw it: the law's own record, never the product's.
         const raw: Array<{
           readonly level: LogLevel;
@@ -69,6 +72,7 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
           readonly plugin: string | undefined;
           readonly loc: RolldownLog["loc"];
         }> = [];
+
         const served: Plugin = {
           name: PLUGIN,
           resolveId: (id, importer) =>
@@ -127,6 +131,7 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
           // Coverage, loud: a case whose line equals its column could not catch a swap.
           expect(log.loc?.line, `the ${log.code} log's line differs from its column`).not.toBe(log.loc?.column);
           const plugin = log.plugin === undefined ? "" : `(${log.plugin} plugin) `;
+
           return `${plugin}${path.relative(root, importer)} (${log.loc?.line}:${log.loc?.column}) `;
         };
 
