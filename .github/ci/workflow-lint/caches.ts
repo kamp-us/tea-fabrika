@@ -2,11 +2,12 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 
 const lines = (value: unknown) =>
-  typeof value === "string"
+  Predicate.isString(value)
     ? value
         .split("\n")
         .map((line) => line.trim())
@@ -50,20 +51,21 @@ export const lintCaches = (files: CacheFiles): string[] => {
     }
   };
 
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
+  const read = Result.try(() => ({
+    action: map(parse(files.action)),
+    workspace: map(parse(files.workspace)),
+    workflows: Object.entries(files.workflows).map(([path, text]): [string, Record<string, unknown>] => [
+      path,
+      map(parse(text)),
+    ]),
+  }));
 
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
+  if (Result.isFailure(read)) {
 
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
     return ["cache lint: a file is not valid YAML"];
   }
 
+  const { action, workspace, workflows } = read.success;
   const actionSteps = steps(map(action["runs"]));
 
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
@@ -76,9 +78,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
   });
 
   const everyStep: [string, Record<string, unknown>][] = [
+    // SAFETY: the arrow builds a two-item array of a path and a step, and the cast names it as that tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...perRef.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: `steps` returns each step as a map, so the pair here is a path and a step map, as the tuple says.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
@@ -93,9 +97,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
   // step whose path is the store.
   const allSteps: [string, Record<string, unknown>][] = [
+    // SAFETY: the setup action's own steps, paired with action.yml's path: a literal two-item path-and-step tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...workflows.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: each workflow step comes from `steps`, which answers maps, so this pair is the tuple it is cast to.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),

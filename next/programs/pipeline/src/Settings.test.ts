@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Predicate, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, Match, Predicate, type Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -35,7 +35,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
       fc.nat(),
       invalid,
       (values, omitted, pick, bad) => {
-        const read = (settings: unknown) =>
+        const read = (settings: Schema.Json) =>
           Effect.runSyncExit(
             Settings.all.parse(
               ConfigProvider.fromUnknown({ pack: { pipeline: { settings } } }, { preserveEmptyStrings: true }).pipe(
@@ -99,7 +99,10 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(declaration.doc.length).toBeGreaterThan(0);
         }
 
-        const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
+        const broken = structuredClone(table) as {
+          queue: Record<string, Schema.Json>;
+          merger: Record<string, Schema.Json>;
+        };
 
         const paths = [
           "merger.wait",
@@ -119,7 +122,13 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           broken.queue.most = bad;
         } else if (path === "queue.kinds") {
           broken.queue.kinds = {
-            rows: [pick % 3 === 0 ? "" : pick % 3 === 1 ? "!docs/**" : "x".repeat(65_537)],
+            rows: [
+              Match.value(pick % 3).pipe(
+                Match.when(0, () => ""),
+                Match.when(1, () => "!docs/**"),
+                Match.orElse(() => "x".repeat(65_537)),
+              ),
+            ],
             docs: [],
           };
         } else {
@@ -141,7 +150,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           const keys = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );
@@ -165,12 +174,12 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 it("L11: every declared numeric setting refuses zero, negatives and fractions at its own path", () => {
   fc.assert(
     fc.property(invalid, fc.nat(), (bad, pick) => {
-      const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
+      const declarations = Settings.all.declarations.filter((d) => Predicate.isNumber(d.default));
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
 
-      const parse = (value: unknown) =>
+      const parse = (value: Schema.Json) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
 
       for (const value of [bad, 0]) {
@@ -181,7 +190,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
           const paths = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );

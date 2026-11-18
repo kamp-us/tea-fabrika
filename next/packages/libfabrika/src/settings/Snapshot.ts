@@ -49,7 +49,7 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
 
-  const text = JSON.stringify(sorted, (_key, value: unknown) =>
+  const text = JSON.stringify(sorted, (_key, value: Schema.Json) =>
     Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
   );
 
@@ -129,7 +129,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
  */
 export const read = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
   group: Setting.Group<A, R>,
-  input: unknown,
+  input: Schema.Json,
 ) {
   const strict = { onExcessProperty: "error" } as const;
   const paths = group.declarations.map((d) => d.path);

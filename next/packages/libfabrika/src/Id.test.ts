@@ -9,6 +9,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as TestClock from "effect/testing/TestClock";
@@ -113,10 +114,9 @@ const validPrefix = (type: string): boolean =>
   /^[a-z]$/.test(type.at(-1)!) &&
   [...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
 
-const accepts = (input: unknown, type?: string): boolean => {
-  if (typeof input !== "string") {
-    return false;
-  }
+/** The oracle: `input` is a well-formed ID, of `type` when one is given. A caller with a value that
+ *  may be no string at all checks `Predicate.isString` first, since no other value is an ID. */
+const accepts = (input: string, type?: string): boolean => {
 
   const [found, suffix] = split(input);
 
@@ -145,12 +145,7 @@ const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes
 
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
-const expectDecoded = <A, E>(
-  exit: Exit.Exit<A, E>,
-  ok: boolean,
-  input: unknown,
-  error: (value: unknown) => boolean,
-) => {
+const expectDecoded = <A, E>(exit: Exit.Exit<A, E>, ok: boolean, input: unknown, error: (value: E) => boolean) => {
   expect(Exit.isSuccess(exit)).toBe(ok);
 
   if (Exit.isSuccess(exit)) {
@@ -265,7 +260,7 @@ describe("T518 Id format", () => {
           for (const schema of [builtin, Id.Input, Front.InputId]) {
             expectDecoded(
               Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(value))),
-              accepts(value, "input"),
+              Predicate.isString(value) && accepts(value, "input"),
               value,
               Schema.isSchemaError,
             );
@@ -479,13 +474,13 @@ describe("T518 Id format", () => {
       fc.property(unknown, prefix, (input, type) => {
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Schema)(input))),
-          accepts(input),
+          Predicate.isString(input) && accepts(input),
           input,
           Schema.isSchemaError,
         );
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.make(type))(input))),
-          accepts(input, type),
+          Predicate.isString(input) && accepts(input, type),
           input,
           Schema.isSchemaError,
         );
@@ -500,8 +495,18 @@ describe("T518 Id format", () => {
         const common = Id.Schema.makeEffect(input);
         // @ts-expect-error Deliberately test runtime validation beyond the typed constructor input.
         const specific = Id.make(type).makeEffect(input);
-        expectDecoded(Effect.runSync(Effect.exit(common)), accepts(input), input, SchemaIssue.isIssue);
-        expectDecoded(Effect.runSync(Effect.exit(specific)), accepts(input, type), input, SchemaIssue.isIssue);
+        expectDecoded(
+          Effect.runSync(Effect.exit(common)),
+          Predicate.isString(input) && accepts(input),
+          input,
+          SchemaIssue.isIssue,
+        );
+        expectDecoded(
+          Effect.runSync(Effect.exit(specific)),
+          Predicate.isString(input) && accepts(input, type),
+          input,
+          SchemaIssue.isIssue,
+        );
       }),
       options,
     );
@@ -549,7 +554,7 @@ describe("T518 Id format", () => {
           wire("process", wrongVariant),
           wire("letter", bytes),
         ]) {
-          const ok = accepts(value, "process");
+          const ok = Predicate.isString(value) && accepts(value, "process");
           expectDecoded(
             Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(ProcessId)(value))),
             ok,
@@ -1033,7 +1038,7 @@ describe("T518 shared Id generator", () => {
     // The real format check runs synchronously after the state write and encoding.
     // Observe there: a fiber can yield between allocation and returning to its caller.
     const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
-      if (typeof input === "string") {
+      if (Predicate.isString(input)) {
         allocated.push(input);
       }
 

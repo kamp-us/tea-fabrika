@@ -15,6 +15,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
@@ -258,7 +259,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
       const value: unknown = Reflect.get(target, key);
 
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 
@@ -300,13 +301,14 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
       const value: unknown = Reflect.get(target, key);
 
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
+        // SAFETY: every fetch here is a dev.ts control call, whose body is the JSON of `{ target, project, name, method, args }`, a Call body.
         const body = JSON.parse(bodyText(options)) as Call["body"];
         // The address as `fetch` parses it, given as a string or as the client's URL object.
         sent.push({ url: new URL(String(url)).href, body });
@@ -360,8 +362,9 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
 
+          // SAFETY: the deploy's local context holds one plugin with `sockets`, the control plugin, and it has `start`.
           const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+            (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
 
           listen = (port) => plugin.start({ "fabrika-control": port });
@@ -371,6 +374,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       );
 
       // The startup flush delivered the first started row; its brain call keeps what it said.
+      // SAFETY: the brain call's first argument is the started row the startup flush delivered.
       const startup = sent.find((call) => call.body.method === "brain")!.body.args[0] as Row;
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
@@ -500,9 +504,10 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             woken: null,
           });
 
+          // SAFETY: dev.process answers dev.ts's proxy, which turns any method name that is not its own member into a function that returns a Promise.
           const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
             (value): Answer => ({ _tag: "value", value }),
-            (error: unknown): Answer => ({ _tag: "error", error }),
+            (cause: unknown): Answer => ({ _tag: "error", error: cause }),
           );
 
           if (world.pending) {
@@ -591,7 +596,10 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
   const spans = sent
     .filter((call) => call.body.target === "record" && call.body.method === "write")
-    .flatMap((call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+    .flatMap(
+      // SAFETY: a record write's third argument is its list of spans, or absent.
+      (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? [],
+    );
 
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });

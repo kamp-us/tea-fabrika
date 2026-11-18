@@ -307,6 +307,7 @@ const fires = (paths: readonly string[]) => {
     throw out.error;
   }
 
+  // SAFETY: oxlint's `--format=json` report holds these fields for each diagnostic.
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };

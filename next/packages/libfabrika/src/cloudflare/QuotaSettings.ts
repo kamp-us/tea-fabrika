@@ -35,7 +35,8 @@ const refused = (cause: unknown) =>
  * @category constructors
  */
 export const read = Effect.fn("quota_settings.read")(function* (input: unknown) {
-  const checked = yield* Snapshot.read(Declarations.all, input);
+  const saved = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(Effect.mapError(refused));
+  const checked = yield* Snapshot.read(Declarations.all, saved);
   const { writes, storage, recovery } = checked.values;
   return { writes, storage, recovery };
 });

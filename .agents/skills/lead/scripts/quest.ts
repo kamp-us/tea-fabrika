@@ -3,14 +3,17 @@
 
 import { dirname, matchesGlob } from "node:path";
 
+import { Predicate, Result } from "effect";
+/** A value as JSON text holds it, the same type as Effect's `Schema.Json`. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
  * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
  * as `quest`, and the old key goes, so the next write of the file says `quest`. Anything that is not
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
-export const questKeyed = (saved: unknown): unknown => {
-  if (typeof saved !== "object" || saved === null || !("lane" in saved)) {
+export const questKeyed = (saved: Json): Json => {
+  if (!Predicate.isObjectOrArray(saved) || Array.isArray(saved) || !("lane" in saved)) {
     return saved;
   }
 
@@ -84,33 +87,25 @@ export const questRoot = (
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
-  let n: unknown;
+  const n = Result.getOrUndefined(Result.try((): unknown => JSON.parse(note)));
 
-  try {
-    n = JSON.parse(note);
-  } catch {
-    return [];
-  }
 
-  const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
+  const step = Predicate.hasProperty(n, "step") ? n.step : undefined;
 
-  return typeof step === "string" ? [step] : [];
+  return Predicate.isString(step) ? [step] : [];
 };
 
 const stuckIn = (out: string) =>
   out.split("\n").flatMap((line) => {
-    let a: unknown;
+    const a = Result.getOrUndefined(Result.try((): unknown => JSON.parse(line)));
 
-    try {
-      a = JSON.parse(line);
-    } catch {
+    if (!Predicate.isTagged(a, "stuck")) {
+
       return [];
     }
 
-    if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
-      return [];
-    }
-
+    // SAFETY: `a` is a non-null object whose `_tag` is "stuck", checked above; `reason` and `step`
+    // stay unknown, and questStuck's filter checks each before use.
     const { reason, step } = a as { reason?: unknown; step?: unknown };
 
     return [{ line, reason, step }];
@@ -127,7 +122,7 @@ const stuckIn = (out: string) =>
 export const questStuck = (out: string, questSteps: ReadonlySet<string>): string[] =>
   stuckIn(out)
     .filter(({ reason }) => reason !== "unsigned_commit")
-    .filter(({ reason, step }) => !(reason === "stale_link" && !(typeof step === "string" && questSteps.has(step))))
+    .filter(({ reason, step }) => !(reason === "stale_link" && !(Predicate.isString(step) && questSteps.has(step))))
     .map((a) => a.line);
 
 /**
@@ -137,6 +132,8 @@ export const questStuck = (out: string, questSteps: ReadonlySet<string>): string
  */
 export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[] =>
   questStuck(out, questSteps).map((line) => {
+    // SAFETY: questStuck returned only lines that parsed to an object, so this parse gives one; each
+    // field stays unknown and is checked below before use.
     const a = JSON.parse(line) as {
       reason?: unknown;
       sha?: unknown;
@@ -147,9 +144,9 @@ export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[
     const paths = Array.isArray(a.paths) ? a.paths.slice(0, 3).map(String) : [];
 
     return [
-      typeof a.reason === "string" ? a.reason : "stuck",
-      typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
-      typeof a.step === "string" ? `step ${a.step}` : "",
+      Predicate.isString(a.reason) ? a.reason : "stuck",
+      Predicate.isString(a.sha) ? a.sha.slice(0, 8) : "",
+      Predicate.isString(a.step) ? `step ${a.step}` : "",
       ...paths,
     ]
       .filter(Boolean)
@@ -208,28 +205,28 @@ const LOCKED = [
 ] as const;
 
 /** Keys sorted all the way down, so a reorder is not a change. */
-const canon = (v: unknown): string =>
+const canon = (v: Json | undefined): string =>
+  // SAFETY: the one cast below runs only where `v` is a non-null object that is not an array,
+  // and `k` is one of its own keys from Object.keys, so the read gives that key's value.
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
-    : v !== null && typeof v === "object"
+    : Predicate.isObjectOrArray(v)
       ? `{${Object.keys(v)
           .toSorted()
-          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
+          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, Json>)[k])}`)
           .join(",")}}`
       : JSON.stringify(v);
 
 const lockedPart = (text: string): string | null => {
-  try {
-    const json: unknown = JSON.parse(text);
+  const json = Result.getOrUndefined(Result.try((): Json => JSON.parse(text)));
 
-    if (json === null || typeof json !== "object") {
-      return null;
-    }
+  if (!Predicate.isObjectOrArray(json)) {
 
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
-  } catch {
     return null;
   }
+  // SAFETY: `json` is a non-null object, checked above; a LOCKED key it lacks reads as undefined,
+  // which `?? null` turns to null.
+  return canon(LOCKED.map((k) => (json as Record<string, Json>)[k] ?? null));
 };
 
 /** One manifest a step's commits touched, as the base and the head hold it (`null`: absent). */

@@ -19,6 +19,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
@@ -36,8 +37,8 @@ const ROOT = new URL("../../../../../../", import.meta.url).pathname;
 
 /** Every real Rolldown watcher and result the laws saw, and which were closed. */
 const opened = vi.hoisted(() => ({
-  watchers: [] as Array<{ closed: boolean; repeat: Effect.Effect<void> }>,
-  results: [] as Array<{ code: string; closed: boolean }>,
+  watchers: Array.of<{ closed: boolean; repeat: Effect.Effect<void> }>(),
+  results: Array.of<{ code: string; closed: boolean }>(),
 }));
 
 vi.mock("rolldown", async (original) => {
@@ -57,6 +58,7 @@ vi.mock("rolldown", async (original) => {
       };
 
       const on = watcher.on.bind(watcher);
+      // SAFETY: the wrapper has only the `event` overload of Rolldown's `on`, the one watch.ts calls (`watcher.on("event", ...)`).
       watcher.on = ((
         name: "event",
         listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,
@@ -593,7 +595,13 @@ describe("P15 slice 1: the watcher", () => {
                   hashes.set(i.program, i.hash);
                 }
 
-                seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
+                seen.add(
+                  Match.value(reaches[file]!.length).pipe(
+                    Match.when(2, () => "shared"),
+                    Match.when(1, () => "own"),
+                    Match.orElse(() => "outside"),
+                  ),
+                );
               }
             }),
           ).pipe(Effect.provide(NodeServices.layer)),

@@ -34,13 +34,15 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+// SAFETY: nothing is in the table until the world writes it, and every write here stores a
+// `built(...)` value, which is `{ hash, source }`.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 // Only the platform base class is fake. The box methods run the real programBox.
@@ -293,11 +295,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        s._tag === "waiting" && Predicate.isObjectOrArray(m.cmd.m) && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [RequestModel.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },
@@ -491,6 +489,10 @@ const world = (
     db = new DatabaseSync(":memory:");
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
+
+  // SAFETY: projectRuntime's Project reads `id.name`, `storage` (here the SQL wrapper that counts
+  // settings reads) and `exports.IsolateTail` for its tail, and this object has those three; only
+  // workerd can build a whole DurableObjectState.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
   const ctx = {
     id: { name: "project-test" },
@@ -504,7 +506,7 @@ const world = (
           query: string,
           ...args: Parameters<typeof handles.sql.exec> extends [string, ...infer A] ? A : never
         ) => {
-          if (args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"))) {
+          if (args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"))) {
             if (/SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
               settingsCounts.reads++;
             }
@@ -597,6 +599,10 @@ const world = (
     await work();
     throw new Error("transport lost the Project's answer");
   };
+
+  // SAFETY: the brain's code calls each namespace's `getByName` and the loader's `get`, the members
+  // these doubles define; workerd's namespace and loader types are classes with RPC brands that a
+  // Node object literal cannot have.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
@@ -618,7 +624,7 @@ const world = (
           {},
           {
             get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
+              if (!Predicate.isString(method) || method === "then") {
                 return undefined;
               }
 
@@ -674,6 +680,9 @@ const world = (
               clearTimeout(entry.timer);
             },
           });
+
+          // SAFETY: processLogic in cloudflare/runtime.ts reads the object's `id.name`, its `storage` and,
+          // to bind a program's tail, `exports`; those are the three members given here.
           // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the SQL, descriptor, alarm and sync handles the real Process reads
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const created: Entry = {
@@ -694,7 +703,7 @@ const world = (
           {},
           {
             get: (_target, method) => {
-              if (typeof method !== "string" || method === "then") {
+              if (!Predicate.isString(method) || method === "then") {
                 return undefined;
               }
 
@@ -1063,6 +1072,9 @@ const world = (
       const client = await project.clientConnect(),
         nonce = await project.challenge(client);
       let attached: unknown = Attached.cases.new.make({ client, nonce });
+
+      // SAFETY: connection.ts calls four methods on a hibernating socket, deserializeAttachment,
+      // serializeAttachment, send and close, and this double defines exactly those.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the hibernating socket methods the Connection service calls
       const socket = {
         deserializeAttachment: () => attached,
@@ -1074,6 +1086,10 @@ const world = (
         },
         close: () => {},
       } as unknown as WebSocket;
+
+      // SAFETY: of the state's members, connection.ts reads `id`, `storage`, `getWebSockets`, `getTags`,
+      // the two auto-response members, all given here, and `acceptWebSocket`, which only its fetch
+      // upgrade calls; this law hands frames to `door.message` and never sends a fetch.
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the storage and socket handles the real Connection service reads
       const doorCtx = {
         id: { name: "gateway-test" },
@@ -1087,7 +1103,8 @@ const world = (
       const runtime = connectionRuntime(doorCtx, env);
       await project.register(client, "gateway-test", session);
       let id = 0;
-      const call = async (method: string, params: unknown) => {
+
+      const call = async (method: string, params: Schema.Json) => {
         id++;
         await runtime.runPromise(
           ConnectionService.use((door) => door.message(socket, JSON.stringify({ jsonrpc: "2.0", id, method, params }))),
@@ -1292,7 +1309,7 @@ describe("P12 Project configure recovery", () => {
       const w = world(fault);
       const first = w.project.info().then(
         (value) => ({ value }),
-        (error: unknown) => ({ error }),
+        (cause: unknown) => ({ error: cause }),
       );
       await w.entered;
       const result = await first;
@@ -1390,7 +1407,7 @@ describe("P12 Process RPC refusal answers", () => {
         })
         .then(
           (answer) => ({ answer }),
-          (error: unknown) => ({ error }),
+          (cause: unknown) => ({ error: cause }),
         );
       // A policy refusal completes the input. An infrastructure error must not replace it.
       expect.soft(result).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
@@ -1473,10 +1490,11 @@ const runFlow = async (flow: RecoveryFlow) => {
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
-  const route = (method: string, params: unknown) =>
+
+  const route = (method: string, params: Schema.Json | undefined) =>
     w.project.route(client, method, params).then(
       (answer) => ({ answer }),
-      (error: unknown) => ({ error: String(error) }),
+      (cause: unknown) => ({ error: String(cause) }),
     );
   const send = (pid: string, letter: string, type: "throw" | "inc") =>
     route("process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 });
@@ -1484,7 +1502,11 @@ const runFlow = async (flow: RecoveryFlow) => {
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
-  const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
+
+  // A name with no live process throws, so `until` polls again and a check on it fails loudly.
+  const live = async () =>
+    Schema.decodeUnknownSync(Schema.String)((await w.project.info()).find((row) => row.name === NAME)?.process);
+
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
@@ -1679,7 +1701,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         expect(rows.at(-1)).toMatchObject({ process: next });
         // The restart starts the new init and re-folds the accepted letters (P34, as
         // runner-supervision.test.ts requires): the healthy letters, never the throws.
-        expect(await route("view.open", { pid: next })).toMatchObject({
+        expect(await route("view.open", { pid: next ?? null })).toMatchObject({
           answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
         });
         expect(w.newCalls()).toBeGreaterThan(0);
@@ -1691,7 +1713,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
           .object.restart({ id: NAME, build: poisonCode.hash })
           .then(
             () => ({ answer: "ok" }),
-            (error: unknown) => ({ error }),
+            (cause: unknown) => ({ error: cause }),
           );
         expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
       }),
@@ -1734,7 +1756,12 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
         const exited = async (name: string) =>
           (await w.project.read(`processes/${name}`, 0, "audit"))
             .filter((row) => row._tag === "exited")
-            .map((row) => Object(row.body) as { process: string; reason: unknown })
+            .map(
+              (row) =>
+                // SAFETY: ProcessManager's exit appends each `exited` row to `processes/<name>` with the
+                // body ProcessEvent.cases.exited.make({ process, reason }), and the filter keeps only those.
+                Object(row.body) as { process: string; reason: unknown },
+            )
             .map(({ process, reason }) => [process, reason] as const);
 
         for (const cell of tape) {
@@ -1784,8 +1811,15 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               const target = live[cell.pick % live.length]!;
               const before = await exited(target.name);
               const reply = await w.project
-                .processExit(target.process, cell.bad as ExitReason, FROM)
-                .catch((error: unknown) => ({ _tag: Object(error)._tag }));
+                .processExit(
+                  target.process,
+                  // SAFETY: not an ExitReason on purpose: ProcessManager's exit decodes the reason before
+                  // its turn opens, and the law sends a bad one past the type to see that decode refuse it.
+                  cell.bad as ExitReason,
+                  FROM,
+                )
+                .catch((cause: unknown) => ({ _tag: Object(cause)._tag }));
+
               expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
                 _tag: "ProcessError",
               });

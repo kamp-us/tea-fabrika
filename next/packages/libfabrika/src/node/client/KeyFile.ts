@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
@@ -48,9 +49,12 @@ const isErrorClass = Schema.is(ErrorClass);
 /** A failure's class from a fixed list: a file system reason, or a WebCrypto error's name. Never a message. */
 const errorClass = (cause: unknown): ErrorClass => {
   if (PlatformError.isPlatformError(cause)) {
-    const reason = cause.reason._tag;
+    return Match.value(cause.reason).pipe(
+      Match.tag("NotFound", (): ErrorClass => "NotFoundError"),
+      Match.tag("PermissionDenied", (): ErrorClass => "NotAllowedError"),
+      Match.orElse((): ErrorClass => "other"),
+    );
 
-    return reason === "NotFound" ? "NotFoundError" : reason === "PermissionDenied" ? "NotAllowedError" : "other";
   }
 
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";

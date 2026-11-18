@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Schema, Stream, Match } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -96,11 +96,11 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               audit: {
                 data: AuditMetadata,
                 select: (m: typeof AuditInput.Type) =>
-                  mode === "throw"
-                    ? auditThrow(m.body)
-                    : mode === "output"
-                      ? { type: "save", base: m.body }
-                      : { type: m.type, base: m.base },
+                  Match.value(mode).pipe(
+                    Match.when("throw", () => auditThrow(m.body)),
+                    Match.when("output", () => ({ type: "save", base: m.body })),
+                    Match.orElse(() => ({ type: m.type, base: m.base })),
+                  ),
               },
             };
 

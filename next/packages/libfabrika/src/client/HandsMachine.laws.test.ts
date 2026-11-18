@@ -35,6 +35,7 @@
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
@@ -90,9 +91,9 @@ const step = (s: Model, m: Sent) => applyCell<Model, Sent, Out>(handsMachine, s,
 const boot = (): readonly [Model, ReadonlyArray<Out>] => handsMachine.init(null, {});
 
 const record = (v: unknown): ReadonlyMap<string, unknown> =>
-  typeof v === "object" && v !== null ? new Map(Object.entries(v)) : new Map();
+  Predicate.isObjectOrArray(v) ? new Map(Object.entries(v)) : new Map();
 
-const text = (v: unknown) => (typeof v === "string" ? v : "");
+const text = (v: unknown) => (Predicate.isString(v) ? v : "");
 
 const tagIn = (v: unknown) => text(record(v).get("_tag"));
 
@@ -109,7 +110,7 @@ const about = (s: Model) => ({
 const isTimer = (d: unknown): d is { readonly ms: number; readonly msg: Sent } => {
   const r = record(d);
 
-  return typeof r.get("ms") === "number" && typeof record(r.get("msg")).get("type") === "string";
+  return Predicate.isNumber(r.get("ms")) && Predicate.isString(record(r.get("msg")).get("type"));
 };
 
 /** The deps of each of the machine's Subs of `type` that is on in `s`. */
@@ -223,7 +224,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const [deps] = subs(w.s, "socket");
     const dial = record(deps).get("dial");
 
-    return typeof dial === "number" ? dial : null;
+    return Predicate.isNumber(dial) ? dial : null;
   };
 
   /** The checks every step answers to, whichever law walks: H1, H3 and H4 hold at once. */
@@ -348,7 +349,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     if (c.type === "write") {
       const call: Call = {
-        dial: typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1,
+        dial: Predicate.isNumber(r.get("dial")) ? Number(r.get("dial")) : -1,
         id: text(r.get("id")),
         method: text(r.get("method")),
         params: r.get("params"),
@@ -360,14 +361,14 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     }
 
     if (c.type === "hello") {
-      const dial = typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1;
+      const dial = Predicate.isNumber(r.get("dial")) ? Number(r.get("dial")) : -1;
       w.wire.push({ dial, id: text(r.get("id")), method: "initialize", params: null });
 
       return { type: "hello_ok", cmd: c, value: null, at: w.at };
     }
 
     if (c.type === "ping") {
-      const dial = typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1;
+      const dial = Predicate.isNumber(r.get("dial")) ? Number(r.get("dial")) : -1;
       w.wire.push({ dial, id: "", method: "ping", params: null });
 
       return { type: "ping_ok", cmd: c, value: null, at: w.at };
@@ -698,7 +699,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const reply = m.type === "frame" ? record(Option.getOrNull(parse(text(m.text)))) : new Map<string, unknown>();
     const reason = text(record(record(reply.get("error")).get("data")).get("reason"));
     const answered = record(reply.get("result"));
-    const rev = typeof answered.get("rev") === "number" ? Number(answered.get("rev")) : null;
+    const rev = Predicate.isNumber(answered.get("rev")) ? Number(answered.get("rev")) : null;
     const onLive = chosen.label === "door:tasks.finish" && live.tag === "reporting" && reply.get("id") === live.call;
     // An ok is a receipt: a result with no rev says nothing the client can trust.
     const receipt = reason === "" && rev !== null;

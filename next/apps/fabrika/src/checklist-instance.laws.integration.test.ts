@@ -38,7 +38,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Match, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -52,6 +52,7 @@ const CODE = {
   tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
 };
 
+// SAFETY: the table starts with no program, and the code below writes only `{ hash, source }` rows into it.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 
 vi.mock("./table.ts", () => table);
@@ -207,6 +208,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     call: (method: string, args: ReadonlyArray<unknown>) =>
+      // SAFETY: each method the law calls on the Process is one of its RPC methods, and each returns an Effect.
       run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>),
   };
 };
@@ -252,7 +254,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
 
       const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project reads
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies only the platform handles the real Project reads
       const ctx = {
         id: { name: "project-test" },
         storage: storage(db),
@@ -318,17 +320,19 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
         }
 
         return project.run((p) => {
+          // SAFETY: the Project's RPC methods the law calls each return an Effect.
           const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
 
-          return method === "sign"
-            ? signingReply(work as never)
-            : method === "commit"
-              ? commitReply(work as never)
-              : work;
+          // SAFETY: `sign` and `commit` return the Effects signingReply and commitReply take, and the method name was just checked.
+          return Match.value(method).pipe(
+            Match.when("sign", () => signingReply(work as never)),
+            Match.when("commit", () => commitReply(work as never)),
+            Match.orElse(() => work),
+          );
         });
       };
 
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node namespaces call the real services but lack workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(
           RecordWireTest.settingsFixture({
@@ -346,7 +350,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
               {},
               {
                 get: (_t, method) =>
-                  typeof method !== "string" || method === "then"
+                  !Predicate.isString(method) || method === "then"
                     ? undefined
                     : (...args: ReadonlyArray<unknown>) => projectCall(method)(args),
               },
@@ -404,7 +408,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
                 }
               });
 
-              // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the handles the real Process reads
+              // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies the handles the real Process reads
               const processCtx = {
                 id: { name },
                 storage: handles,
@@ -423,7 +427,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
               {},
               {
                 get: (_t, method) => {
-                  if (typeof method !== "string" || method === "then") {
+                  if (!Predicate.isString(method) || method === "then") {
                     return undefined;
                   }
 
@@ -626,10 +630,12 @@ describe("L21: the boot list", () => {
                     live.delete(pid!);
                   } else {
                     seen.input++;
-                    const isChecklist = pid === first[1]![0];
+                    // An input is offered only while a process is live, so a pick from none fails loudly here.
+                    const to = Schema.decodeUnknownSync(Schema.String)(pid);
+                    const isChecklist = to === first[1]![0];
                     yield* call(w, (p) =>
                       p.route(client, "process.send", {
-                        pid,
+                        pid: to,
                         letter: `letter_${seen.input}_${m.pick}`,
                         m: isChecklist ? { type: "add", name: `item ${m.pick}` } : { type: "inc" },
                         sentAt: SENT,
@@ -681,7 +687,11 @@ describe("L13: notices name their process", () => {
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
               const [, [pid]] = Schema.decodeUnknownSync(
-                Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                Schema.Tuple([
+                  Schema.Array(Schema.String),
+                  Schema.NonEmptyArray(Schema.String),
+                  Schema.Array(Schema.String),
+                ]),
               )(yield* placings(w));
 
               const client = yield* admit(w);
@@ -760,7 +770,11 @@ describe("L13: notices name their process", () => {
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
                 const [, [pid]] = Schema.decodeUnknownSync(
-                  Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                  Schema.Tuple([
+                    Schema.Array(Schema.String),
+                    Schema.NonEmptyArray(Schema.String),
+                    Schema.Array(Schema.String),
+                  ]),
                 )(yield* placings(w));
 
                 const client = yield* admit(w);

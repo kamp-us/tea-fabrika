@@ -5,7 +5,7 @@
  * the runner binds the watcher, and the Cmd's own id is the watch's ref.
  */
 import { Cmd } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 import { Watched } from "../processes/Monitors.ts";
 
 /**
@@ -34,8 +34,8 @@ export const MonitorRefusal = Schema.Literals(["forbidden", "stale_sender", "no_
 
 /** What a step's own check takes: any object, typed as the operands. The host decodes it strictly,
  *  so a malformed watch is answered `bad_cmd` and never fails the step that asked for it. */
-const Asked = Schema.declare<typeof MonitorInput.Type>(
-  (value): value is typeof MonitorInput.Type => typeof value === "object" && value !== null,
+const Asked = Schema.declare<typeof MonitorInput.Type>((value): value is typeof MonitorInput.Type =>
+  Predicate.isObjectOrArray(value),
 );
 
 /**
@@ -55,8 +55,8 @@ export const monitor = Cmd.make("monitor", { input: Asked, ok: Monitored, err: M
 export const DemonitorInput = Schema.Struct({ ref: Schema.String });
 
 /** What a step's own check takes for a demonitor: any object, as for a monitor. */
-const AskedRef = Schema.declare<typeof DemonitorInput.Type>(
-  (value): value is typeof DemonitorInput.Type => typeof value === "object" && value !== null,
+const AskedRef = Schema.declare<typeof DemonitorInput.Type>((value): value is typeof DemonitorInput.Type =>
+  Predicate.isObjectOrArray(value),
 );
 
 /**

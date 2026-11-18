@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type { Sql } from "../Sql.ts";
@@ -42,7 +43,8 @@ const Move = Schema.Union([
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
   const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
-  const closes = (db: unknown) => events.filter((e) => e.step === "closed" && e.db === db).length;
+  const closes = (db: ReturnType<typeof opened>[number]) =>
+    events.filter((e) => e.step === "closed" && e.db === db).length;
   const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
 
   const released = Effect.gen(function* () {
@@ -140,11 +142,11 @@ describe("T641 record-part stores on node:sqlite", () => {
                   store.use((sql) =>
                     body(sql).pipe(
                       Effect.andThen(
-                        move.exit === "fail"
-                          ? Effect.fail("planted failure")
-                          : move.exit === "throw"
-                            ? Effect.sync(() => expect(move.row).toBe(`${move.row}!`))
-                            : Effect.void,
+                        Match.value(move.exit).pipe(
+                          Match.when("fail", () => Effect.fail("planted failure")),
+                          Match.when("throw", () => Effect.sync(() => expect(move.row).toBe(`${move.row}!`))),
+                          Match.orElse(() => Effect.void),
+                        ),
                       ),
                     ),
                   ),
@@ -159,7 +161,7 @@ describe("T641 record-part stores on node:sqlite", () => {
               const handles = watch.opened().slice(before);
               expect(handles).toHaveLength(1);
               expect(handles[0]!.isOpen).toBe(false);
-              expect(watch.closes(handles[0])).toBe(1);
+              expect(watch.closes(handles[0]!)).toBe(1);
             }
           }),
         );

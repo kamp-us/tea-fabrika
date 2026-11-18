@@ -57,11 +57,11 @@ const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s 
 /** Whether `path` is the declaration's own path or one of its tables. */
 const under = (d: Declaration, path: Path) => path.every((s, n) => d.segments[n] === s);
 
-const at = (value: unknown, path: Path) =>
+const at = (value: TomlDocument["value"], path: Path) =>
   path.reduce<unknown>((v, key) => (Predicate.isObject(v) ? v[key] : undefined), value);
 
 /** The first key/value at or under `path`. */
-const leaf = (value: unknown, path: Path): Path => {
+const leaf = (value: TomlDocument["value"], path: Path): Path => {
   const below = at(value, path);
   const key = Predicate.isObject(below) ? Object.keys(below)[0] : undefined;
 

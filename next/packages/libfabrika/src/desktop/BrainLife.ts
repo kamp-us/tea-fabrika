@@ -153,14 +153,19 @@ const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 const matches = (m: Model, cmd: Command): m is Active =>
   active(m) && m.pending?.id === cmd.id && m.pending.type === cmd.type;
 
+/** The command an active state waits on when no command is pending. */
+type Waits = Command["type"];
+const waitsOn = (m: Active): Waits =>
+  Model.matchOrElse(
+    m,
+    { waiting_ready: (): Waits => "ready", checking_children: (): Waits => "cleanup" },
+    (): Waits => "inspect",
+  );
 const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,
     reason,
-    command:
-      command ??
-      m.pending?.type ??
-      (m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect"),
+    command: command ?? m.pending?.type ?? waitsOn(m),
   }),
   [],
 ];
@@ -239,11 +244,7 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           return [m, []];
         }
 
-        return issue(
-          m,
-          m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect",
-          msg.next,
-        );
+        return issue(m, waitsOn(m), msg.next);
       },
       inspect_ok: reply("inspect_ok", (m, msg) => {
         if (msg.value._tag === "loaded" && !BrainSpec.matches(spec, msg.value)) {

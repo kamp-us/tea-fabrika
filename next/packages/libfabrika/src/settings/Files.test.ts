@@ -17,7 +17,7 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -209,7 +209,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
             });
 
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(saved));
             const checked = yield* Snapshot.read(group, transported);
 
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
@@ -341,11 +341,11 @@ describe("L10, the three S5 messages, word for word", () => {
       .map(([at, letter, edit]) => {
         const word = "port";
 
-        return edit === "swap"
-          ? word.slice(0, at) + letter + word.slice(at + 1)
-          : edit === "add"
-            ? word.slice(0, at) + letter + word.slice(at)
-            : word.slice(0, at) + word.slice(at + 1);
+        return Match.value(edit).pipe(
+          Match.when("swap", () => word.slice(0, at) + letter + word.slice(at + 1)),
+          Match.when("add", () => word.slice(0, at) + letter + word.slice(at)),
+          Match.orElse(() => word.slice(0, at) + word.slice(at + 1)),
+        );
       })
       .filter((w) => w !== "port" && w.length > 0);
 
@@ -423,7 +423,7 @@ const document = (ds: Declared) =>
       ...ds.map((d) =>
         fc.oneof(
           fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
+          KINDS[d.kind].valid.map((value: number | string | boolean) => ({ _tag: "valid" as const, value })),
           KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
         ),
       ),

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Match, Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -802,6 +803,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
       (paths, more, same, extra, event) => {
         const before = ci.scope(paths, event, same);
         const after = ci.scope([...paths, ...more], event, same);
+        // SAFETY: `ci.scope` only answers "none", "readers" or "all", the three keys of `rank`; its string type is wider than that.
         expect(rank[after as Scope]).toBeGreaterThanOrEqual(rank[before as Scope]);
         const flags = ci.classify(paths, event, same);
         const grown = ci.classify([...paths, ...more], event, same);
@@ -811,6 +813,7 @@ it("property: adding paths never lowers the scope or turns a flag off, and addin
         }
 
         // Proving more paths can only lower what next/ needs, and never moves a flag.
+        // SAFETY: this `ci.scope` call answers one of the three keys of `rank` too, as `before` above does.
         expect(rank[ci.scope(paths, event, [...same, ...extra, ...paths]) as Scope]).toBeLessThanOrEqual(
           rank[before as Scope],
         );
@@ -970,6 +973,7 @@ it("property: probe changes no flag: the first pass prints the same flags for an
         expect(["true", "false"]).toContain(printed["probe"]);
 
         if (expected.next) {
+          // SAFETY: `ci.scope` answers one of the three values `filterOf` takes; the law above checks that set.
           expect(printed["filter"]).toBe(filterOf(ci.scope(paths, event) as Scope));
         }
       },
@@ -993,6 +997,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
 
   const comments = "+/** A note. */\n+// more";
 
+  // SAFETY: each row below is a list of paths and one event name, written out here by hand.
   for (const [paths, event] of [
     [nextPaths, "pull_request"],
     [nextPaths, "merge_group"],
@@ -1433,7 +1438,11 @@ const world = (paths: readonly string[], ran: ci.Selection, fault: Fault) => {
   const run = {
     event: "pull_request",
     status: fault === "unfinished" ? "in_progress" : "completed",
-    conclusion: fault === "conclusion" ? "failure" : fault === "unfinished" ? null : "success",
+    conclusion: Match.value(fault).pipe(
+      Match.when("conclusion", () => "failure"),
+      Match.when("unfinished", () => null),
+      Match.orElse(() => "success"),
+    ),
     path: fault === "workflow" ? ".github/workflows/host.yaml" : ".github/workflows/check.yaml",
     html_url: "https://github.com/owner/repo/actions/runs/11",
     repository: { id: 1 },
@@ -1899,6 +1908,7 @@ it("property: a group whose one GitHub call fails or answers in a wrong shape ru
       ),
       async (call, answer) => {
         const broken = () =>
+          // SAFETY: the fake GitHub call hands back a malformed answer on purpose, to see `grouped` refuse it.
           answer === "reject" ? Promise.reject(new Error("502")) : Promise.resolve(answer.value as never);
 
         const { printed } = await grouped(paths, { ...api, [call]: broken });
@@ -1937,6 +1947,7 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
 
       const { printed } = await grouped(paths, {
         ...api,
+        // SAFETY: `listed` holds artifacts whose `workflow_run` may be any shape, on purpose, so the law sees bad ones refused.
         artifacts: () => Promise.resolve(listed as never),
         run: byUrl(api.run),
         jobs: byUrl(api.jobs),
@@ -1948,12 +1959,12 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
         (a) =>
           a.name === name &&
           !a.expired &&
-          typeof a.workflow_run === "object" &&
-          a.workflow_run !== null &&
+          Predicate.isObjectOrArray(a.workflow_run) &&
           "id" in a.workflow_run &&
-          typeof a.workflow_run.id === "number",
+          Predicate.isNumber(a.workflow_run.id),
       );
 
+      // SAFETY: the `find` above kept only an artifact whose `workflow_run` is an object with a numeric `id`.
       const vouched = first !== undefined && (first.workflow_run as { id: number }).id === 11;
       prints(printed, vouched ? noJob : ci.jobs(paths, "merge_group", false));
       expect(printed["tested"]).toBe(vouched ? "11" : "");

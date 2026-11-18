@@ -158,7 +158,7 @@ export interface GatewayCalls {
   readonly challenge: (client: ConnectionId) => Effect.Effect<string, unknown>;
   readonly initialize: (
     client: ConnectionId,
-    input: unknown,
+    input: Schema.Json | undefined,
     trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
   ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
   readonly target: (
@@ -177,7 +177,7 @@ export interface GatewayCalls {
   readonly route: (
     client: ConnectionId,
     method: string,
-    params: unknown,
+    params: Schema.Json | undefined,
     reader?: string,
   ) => Effect.Effect<typeof Answer.Type, unknown>;
   readonly knock: (

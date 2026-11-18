@@ -6,7 +6,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope, Match } from "effect";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -20,6 +20,8 @@ import { processRuntime, settings } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
 type Environment = Parameters<typeof processRuntime>[1];
+
+// SAFETY: each call gives `platform` what processRuntime and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation `Process.make` was handed.
 const platform = <A>(value: object): A => value as A;
 
 // Ticket 502 slice S2: keep only what the Process object's Layer hands to Alchemy's `make`, so law
@@ -360,11 +362,14 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                     due: (at) =>
                       Effect.suspend(() => {
                         dues.push(at);
-                        return now.outcome === "fails"
-                          ? Effect.fail(new LedgerError({ reason: "storage", message: now.text }))
-                          : now.outcome === "dies"
-                            ? Effect.die(new Error(now.text))
-                            : Effect.void;
+
+                        return Match.value(now.outcome).pipe(
+                          Match.when("fails", () =>
+                            Effect.fail(new LedgerError({ reason: "storage", message: now.text })),
+                          ),
+                          Match.when("dies", () => Effect.die(new Error(now.text))),
+                          Match.orElse(() => Effect.void),
+                        );
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,

@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { errorClass } from "./index.ts";
 
@@ -43,13 +44,12 @@ type Stored = {
 };
 
 const isStored = (u: unknown): u is Stored =>
-  typeof u === "object" &&
-  u !== null &&
+  Predicate.isObjectOrArray(u) &&
   "pair" in u &&
   "fingerprint" in u &&
-  typeof u.fingerprint === "string" &&
+  Predicate.isString(u.fingerprint) &&
   "raw" in u &&
-  typeof u.raw === "string";
+  Predicate.isString(u.raw);
 
 /** One IndexedDB request as an Effect. */
 const request = Effect.fnUntraced(function* <A>(op: StoreError["op"], make: () => IDBRequest<A>) {

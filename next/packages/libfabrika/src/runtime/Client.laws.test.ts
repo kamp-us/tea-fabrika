@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -88,6 +88,7 @@ const SHAPES = {
 
 type Kind = keyof typeof SHAPES;
 
+// SAFETY: SHAPES is a const object literal, so its own keys are exactly the Kind union.
 const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
 
 type ListView = typeof SHAPES.list.Type;
@@ -103,8 +104,9 @@ const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
 };
 
 /** One generated edit of a value of `kind`, chosen from what the value holds now. */
-const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): unknown => {
+const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): ListView | TagsView | RecordView => {
   if (kind === "list") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a list value has the list shape.
     const v = value as ListView;
     const i = v.items.length === 0 ? 0 : at % v.items.length;
 
@@ -121,6 +123,7 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
   }
 
   if (kind === "tags") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a tags value is an array of strings.
     const v = value as TagsView;
     const i = v.length === 0 ? 0 : at % v.length;
 
@@ -133,6 +136,7 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
           : [word, ...v];
   }
 
+  // SAFETY: the two branches above handled list and tags, so this value has the record shape.
   const v = value as RecordView;
   const i = v.rows.length === 0 ? 0 : at % v.rows.length;
 
@@ -394,7 +398,7 @@ type Brain = { readonly kind: Kind; rev: number; views: Array<unknown>; made: Ar
 /** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
 const json = Schema.decodeUnknownSync(Schema.Json);
 
-const brainStep = (b: Brain, c: ViewChoice): unknown => {
+const brainStep = (b: Brain, c: ViewChoice): object => {
   const before = b.views[b.rev]!;
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
@@ -405,18 +409,21 @@ const brainStep = (b: Brain, c: ViewChoice): unknown => {
 /** The next notice the brain would send, broken one way: an op that is not RFC 6902, a path that is
  *  not there, an array index past the end, a value of the wrong type, the whole of another shape, or no
  *  list of ops at all. */
-const corrupt = (b: Brain, c: ViewChoice): unknown => {
+const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
   const rev = b.rev;
   const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
 
-  const wrongType =
-    b.kind === "list"
-      ? [{ op: "replace", path: "/left", value: "three" }]
-      : b.kind === "tags"
-        ? [{ op: "add", path: "/-", value: 3 }]
-        : [{ op: "replace", path: "/n", value: "x" }];
+  const wrongType = Match.value(b.kind).pipe(
+    Match.when("list", () => [{ op: "replace", path: "/left", value: "three" }]),
+    Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
+    Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
+  );
+  const pastEnd = Match.value(b.kind).pipe(
+    Match.when("list", () => "/items/99"),
+    Match.when("tags", () => "/99"),
+    Match.orElse(() => "/rows/99"),
+  );
 
-  const pastEnd = b.kind === "list" ? "/items/99" : b.kind === "tags" ? "/99" : "/rows/99";
   const other = KINDS.find((k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k]))!;
 
   return [
@@ -524,15 +531,18 @@ const viewWalks = fc.tuple(
   fc.array(viewChoice, { minLength: 1, maxLength: 50 }),
 );
 
+// SAFETY: every pid the walk makes ends in `_` and its kind, as `pid_${i}_${kind}`.
 const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
 
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
-const noteType = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
+/** A notice's `type` when it is a string: every caller compares it with a string. */
+const noteType = (note: unknown): string | null =>
+  Predicate.hasProperty(note, "type") && Predicate.isString(note.type) ? note.type : null;
 
-const noteRev = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
+/** A notice's `rev` when it is a number: every note the walks make carries a number. */
+const noteRev = (note: unknown): number | null =>
+  Predicate.hasProperty(note, "rev") && Predicate.isNumber(note.rev) ? note.rev : null;
 
 // L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
 // notices it accepted, since a valid foreign whole can replace the brain's historical value.
@@ -555,6 +565,7 @@ const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["view
     return views;
   }
 
+  // SAFETY: decodes just checked the view against its kind's schema, and each of those is JSON.
   return decodes(pid, view) ? { ...views, [pid]: { rev: body.rev, view: view as Schema.Json } } : views;
 };
 
@@ -569,6 +580,7 @@ describe("L5: client views (p3)", () => {
 
           if (notice.foreign === "whole" && decodes(notice.pid, Object(notice.note).view)) {
             foreign.accepted++;
+            // SAFETY: a `foreign: "whole"` notice is built in the walk above with `rev: b.rev`, the brain's own rev, which Brain types as a number.
             foreign.different +=
               JSON.stringify(Object(notice.note).view) !==
               JSON.stringify(w.brains.get(notice.pid)!.views[noteRev(notice.note) as number])
@@ -658,7 +670,7 @@ describe("L5: client views (p3)", () => {
             return;
           }
 
-          if (shown !== undefined && typeof note.rev === "number" && note.rev > shown.rev + 1) {
+          if (shown !== undefined && Predicate.isNumber(note.rev) && note.rev > shown.rev + 1) {
             seen.gap++;
             expect(asks, "a gap asks once for a whole view").toHaveLength(1);
           }
@@ -743,14 +755,12 @@ const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ?
   return facts.map((f) => {
     rev += f.gap;
 
-    const body =
-      f.tag === "started"
-        ? { process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" }
-        : f.tag === "restarted"
-          ? { process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" }
-          : f.tag === "exited"
-            ? { process: f.pid, reason: f.reason }
-            : { process: f.pid, reason: "too_many", crashes: 1, until: 0 };
+    const body = Match.value(f.tag).pipe(
+      Match.when("started", () => ({ process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" })),
+      Match.when("restarted", () => ({ process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" })),
+      Match.when("exited", () => ({ process: f.pid, reason: f.reason })),
+      Match.orElse(() => ({ process: f.pid, reason: "too_many", crashes: 1, until: 0 })),
+    );
 
     return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
   });

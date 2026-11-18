@@ -20,6 +20,8 @@
 // The second property breaks a walked, tidy workspace in one named way and asks `check` to see it,
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
@@ -61,14 +63,14 @@ const tileId = (id: string) => Schema.decodeSync(TileId)(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => order(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => order(p.inner));
 
 /** Every way a workspace is untidy, by the plan's words; empty when tidy. */
 const untidy = (w: Space): ReadonlyArray<string> => {
   const out: Array<string> = [];
 
   const walk = (node: Node, parent: string | null): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       return;
     }
 
@@ -186,7 +188,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
     case "one_part":
       return { ...w, layout: { dir: "row", parts: [{ percent: 100, inner: root }] } };
     case "same_direction":
-      return typeof root === "string"
+      return Predicate.isString(root)
         ? null
         : {
             ...w,
@@ -199,7 +201,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
             },
           };
     case "sum":
-      return typeof root === "string"
+      return Predicate.isString(root)
         ? null
         : {
             ...w,
@@ -207,7 +209,7 @@ const broken = (w: Space, kind: (typeof BREAKS)[number], pick: number): Space | 
           };
     case "twice": {
       const tiles = order(root);
-      const dir = typeof root === "string" ? "row" : root.dir === "row" ? "column" : "row";
+      const dir = Predicate.isString(root) ? "row" : root.dir === "row" ? "column" : "row";
 
       return {
         ...w,
@@ -298,7 +300,7 @@ const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: n
   }
 
   const walk = (node: Node): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       return;
     }
 
@@ -348,7 +350,7 @@ const gapBreaks = (layout: Node, at: ReadonlyMap<string, Box>, size: Box, gap: n
 /** The shortest side any tile gets under the amendment's rule, written here: what is left after a
  *  container's gaps, shared by percent. A walk whose tiles would get none is too small to read. */
 const shortest = (node: Node, width: number, height: number, gap: number): number => {
-  if (typeof node === "string") {
+  if (Predicate.isString(node)) {
     return Math.min(width, height);
   }
 
@@ -379,7 +381,7 @@ describe("Desk S2b: rects measure drawn tiles, with the frame's gap between part
           const layout = encode(real.w).layout;
           fc.pre(shortest(layout, width, height, gap) > 1);
           const at = Layout.rects(real.w.layout, { width, height }, { gap }) as ReadonlyMap<string, Box>;
-          nested += typeof layout !== "string" && layout.parts.some((p) => typeof p.inner !== "string") ? 1 : 0;
+          nested += !Predicate.isString(layout) && layout.parts.some((p) => !Predicate.isString(p.inner)) ? 1 : 0;
           expect([...at.keys()].sort(), "every tile has its rectangle").toEqual([...order(layout)].sort());
           expect(gapBreaks(layout, at, { x: 0, y: 0, width, height }, gap), `gap ${gap} in ${width}x${height}`).toEqual(
             [],
@@ -408,7 +410,7 @@ const SIDES: ReadonlyArray<Side> = ["left", "right", "up", "down"];
 
 /** Each tile's box in the unit square, from the percents alone. */
 const unit = (node: Node, box: Box = { x: 0, y: 0, width: 1, height: 1 }, out = new Map<string, Box>()) => {
-  if (typeof node === "string") {
+  if (Predicate.isString(node)) {
     out.set(node, box);
 
     return out;
@@ -435,14 +437,12 @@ const EPS = 1e-9;
 
 /** How much of `from`'s `side` edge `other` shares, or 0 when it does not touch that edge. */
 const overlap = (from: Box, other: Box, side: Side): number => {
-  const touches =
-    side === "left"
-      ? Math.abs(other.x + other.width - from.x) < EPS
-      : side === "right"
-        ? Math.abs(from.x + from.width - other.x) < EPS
-        : side === "up"
-          ? Math.abs(other.y + other.height - from.y) < EPS
-          : Math.abs(from.y + from.height - other.y) < EPS;
+  const touches = Match.value(side).pipe(
+    Match.when("left", () => Math.abs(other.x + other.width - from.x) < EPS),
+    Match.when("right", () => Math.abs(from.x + from.width - other.x) < EPS),
+    Match.when("up", () => Math.abs(other.y + other.height - from.y) < EPS),
+    Match.orElse(() => Math.abs(from.y + from.height - other.y) < EPS),
+  );
 
   const across =
     side === "left" || side === "right"

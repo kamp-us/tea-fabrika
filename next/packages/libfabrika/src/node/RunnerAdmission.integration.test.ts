@@ -94,7 +94,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     throw new Error("unused platform call");
   });
 
-  const namespace = <Get extends (...args: never[]) => unknown>(getByName: Get) => ({
+  const namespace = <Get extends (...args: never[]) => void>(getByName: Get) => ({
     getByName,
     newUniqueId: unused,
     idFromName: unused,

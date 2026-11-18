@@ -3,7 +3,7 @@
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Match } from "effect";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -350,7 +350,11 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
 
             const translated = yield* failed(
               nemesis.check(target),
-              reason === "unreachable" ? "Unreachable" : reason === "bad_row" ? "BadRow" : "Storage",
+              Match.value(reason).pipe(
+                Match.when("unreachable", () => "Unreachable" as const),
+                Match.when("bad_row", () => "BadRow" as const),
+                Match.orElse(() => "Storage" as const),
+              ),
             );
 
             // Each service owns its error. Nemesis retains ProcessHistory's error, which retains Ledger's.

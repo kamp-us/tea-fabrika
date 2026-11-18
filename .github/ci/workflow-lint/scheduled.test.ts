@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -43,6 +44,7 @@ const real = (): Workflow => parse(read("scheduled.yaml"));
  */
 const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   const tests = w.jobs["tests"]!;
+  // SAFETY: the real scheduled workflow's test job is a matrix over a list of shard names.
   const all = tests.strategy!.matrix.shard as string[];
   const apart = structuredClone(tests);
   apart.strategy!.matrix.shard = all.filter(leaves);
@@ -50,6 +52,7 @@ const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   tests.strategy!.matrix.shard = all.filter((shard) => !leaves(shard));
   tests.strategy!["max-parallel"] = 1;
   w.jobs["split"] = apart;
+  // SAFETY: `real()` reads the report job's `needs` from the workflow, where it is a list of job names.
   (w.jobs["report"]!.needs as string[]).push("split");
 };
 
@@ -70,7 +73,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
-  typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
+  Predicate.isString(value) ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
 const scheduled = fc
   .tuple(
@@ -84,10 +87,11 @@ const scheduled = fc
   )
   .map(([minute, minutes, most, gap, slots, numeric, upper]) => {
     const w = real();
+    // SAFETY: the branch is taken only when `schedule` is a list, and each GitHub schedule entry is a map.
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
     for (const cron of crons) {
-      if (typeof cron.cron === "string") {
+      if (Predicate.isString(cron.cron)) {
         cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
       }
     }
@@ -345,7 +349,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC14: the gate's step has another id", (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["id"] = "read")],
   [
     "SC14: the gate checks out the whole repository",
-    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => typeof s["uses"] === "string")!.with!, "sparse-checkout"),
+    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => Predicate.isString(s["uses"]))!.with!, "sparse-checkout"),
   ],
   // SC14, the review of pull request 1404: a gate that ends with no `start` and no failure leaves
   // main unproven with no sev1. A job that hits its own limit ends `cancelled`, read as stopped by
@@ -364,7 +368,7 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC14: the gate's checkout has no time limit of its own",
     (w) =>
       Reflect.deleteProperty(
-        gate(w).steps.find((s) => typeof s["uses"] === "string")!,
+        gate(w).steps.find((s) => Predicate.isString(s["uses"]))!,
         "timeout-minutes",
       ),
   ],
@@ -384,7 +388,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC14: the gate's checkout never runs",
-    (w) => (gate(w).steps.find((s) => typeof s["uses"] === "string")!["if"] = false),
+    (w) => (gate(w).steps.find((s) => Predicate.isString(s["uses"]))!["if"] = false),
   ],
   // SC15: the tests start only on the gate's `true`.
   ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
@@ -560,7 +564,7 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC5: the gate's checkout gets the token",
     (w) => {
-      const checkout = gate(w).steps.find((s) => typeof s["uses"] === "string")!;
+      const checkout = gate(w).steps.find((s) => Predicate.isString(s["uses"]))!;
       checkout.env = { GITHUB_TOKEN: `\${{ github.token }}` };
     },
   ],
@@ -651,6 +655,7 @@ const plants: [string, (w: Workflow) => void][] = [
     (w) => {
       w.jobs["tests"]!.strategy!["max-parallel"] = 8;
       w.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+      // SAFETY: the report job of the real workflow lists its `needs` as an array of job names.
       (w.jobs["report"]!.needs as string[]).push("extra");
     },
   ],
@@ -1043,6 +1048,7 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
   const beside = real();
   beside.jobs["tests"]!.strategy!["max-parallel"] = 8;
   beside.jobs["extra"] = { "runs-on": "ubuntu-latest", "timeout-minutes": 5, steps: [{ run: "true" }] };
+  // SAFETY: `beside` is `real()`, whose report job waits on a list of job names.
   (beside.jobs["report"]!.needs as string[]).push("extra");
   expect(lint(beside)).toEqual([
     ONE,

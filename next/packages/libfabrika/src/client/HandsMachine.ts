@@ -189,13 +189,13 @@ const Nonce = Schema.Struct({ nonce: Schema.String });
 
 const Rpc = Schema.Struct({
   id: Schema.String,
-  result: Schema.optionalKey(Schema.Unknown),
+  result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
   ),
 });
 
-const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Unknown) });
+const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey(Schema.Json) });
 
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([Rpc, Notice])));
 
@@ -383,11 +383,12 @@ const lasts = (reason: string | null): "never" | "link" | "list" | "later" =>
   (reason === null ? undefined : LASTS.get(reason)) ?? "later";
 
 /** Why a take that assigned nothing to this client was refused, or null when its answer does not decode. */
-const refusal = (reason: string | null, result: unknown): string | null =>
+const refusal = (reason: string | null, result: Schema.Json | undefined): string | null =>
   reason ??
   Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
     onNone: () => null,
-    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+    onSome: (reply) =>
+      TakeReply.match(reply, { idle: () => "idle", refused: ({ reason }) => reason, assigned: () => "not_allowed" }),
   });
 
 /** Skips `task` on this link while the list stays at its rev, and lists again at once. */
@@ -397,7 +398,7 @@ const skip = (s: HandsModel, task: string): Step => list({ ...s, skip: { ...s.sk
 const BadEntry = Schema.Struct({ reason: Schema.Literal("bad_entry") });
 
 /** The assignment in a take's answer, when it is this client's own for an open task. */
-const assignment = (s: HandsModel, result: unknown) =>
+const assignment = (s: HandsModel, result: Schema.Json | undefined) =>
   Option.flatMap(Schema.decodeUnknownOption(TakeReply)(result), (reply) => {
     const state = reply._tag === "assigned" ? reply.task.state : null;
 
@@ -417,7 +418,7 @@ const assignment = (s: HandsModel, result: unknown) =>
   });
 
 /** The brain answered the live work call: `result` when it is ok, else the door's `reason`. */
-const answered = (s: HandsModel, result: unknown, reason: string | null, at: string): Step => {
+const answered = (s: HandsModel, result: Schema.Json | undefined, reason: string | null, at: string): Step => {
   const w = s.work;
   const woke = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Woke)(result)) : null;
   const heard: HandsModel = woke === null ? s : { ...s, seen: Math.max(s.seen, woke.rev) };
@@ -630,7 +631,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
 
   const frame = decoded.value;
 
-  const waiting = (params: unknown): Step =>
+  const waiting = (params: Schema.Json | undefined): Step =>
     Option.match(Schema.decodeUnknownOption(WaitingCode)(params), {
       onNone: () => stay(s),
       onSome: (w) => shook(s, { type: "waiting", dial: m.dial, ...w, at: m.at }),
@@ -691,6 +692,8 @@ export const handsMachine = Machine.make({
   model: HandsModel,
   msg: Schema.Union([LinkMsg, Own]),
   cmds: [write, hello, knock, ping, journalRead, journalWrite, execute],
+  // SAFETY: tea's `types` slot only carries the socket Sub type; tea never reads this empty value
+  // (0561).
   types: { sub: {} as SocketSub },
   init: (loaded) => [
     loaded ??

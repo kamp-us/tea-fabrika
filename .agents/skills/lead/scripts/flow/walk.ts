@@ -41,13 +41,6 @@ export const ending = (m: FlowMachine.Model): End => {
   return { outcome: "stuck", reason: `the flow stopped while ${m.flow.steps[m.position]?.name} ran`, exit: 30 };
 };
 
-/** The saved Model, read back by tea's store: a file that is no Model is refused, never booted. */
-const parse = (raw: unknown) =>
-  raw === null || raw === undefined
-    ? null
-    : Option.getOrElse(Schema.decodeUnknownOption(FlowMachine.Model)(raw), () =>
-        refuse("the state file holds no flow Model"),
-      );
 
 /** A runner's failure as tea's error channel takes it: plain data with its tag. */
 const Failed = Schema.TaggedStruct("StepFailed", { reason: Schema.String });
@@ -91,7 +84,17 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
 
   const handle = yield* run(FlowMachine.make({ lead: options.lead }), {
     ctx: { flow, at },
-    store: fileStore(options.state, parse, { fenced: true }),
+    // The saved Model, read back by tea's store: a file that is no Model is refused, never booted.
+    store: fileStore(
+      options.state,
+      (raw) =>
+        raw === null || raw === undefined
+          ? null
+          : Option.getOrElse(Schema.decodeUnknownOption(FlowMachine.Model)(raw), () =>
+              refuse("the state file holds no flow Model"),
+            ),
+      { fenced: true },
+    ),
     onError: (error, context) => console.error(`flow ${flow.name}: ${context.phase}: ${String(error)}`),
     interpret: {
       step_run: (cmd) => runners.run(cmd.step).pipe(Effect.mapError((e) => Failed.make({ reason: e.reason }))),

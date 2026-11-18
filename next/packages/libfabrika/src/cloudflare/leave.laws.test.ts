@@ -124,6 +124,7 @@ const instance = Effect.fnUntraced(function* () {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
 
+  // SAFETY: the Project reads its name, SQL, key-value storage and tail exports, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -145,6 +146,7 @@ const instance = Effect.fnUntraced(function* () {
 
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
 
+  // SAFETY: the leave composition calls only these namespace methods: configure, descriptor, msg, swap, ring and notify.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(START),
@@ -204,6 +206,7 @@ const instance = Effect.fnUntraced(function* () {
       door: (options) => {
         monitor = options.monitor;
 
+        // SAFETY: `door` above holds each door method the Project calls, built from a list of names, which loses its type.
         return Effect.succeed(door as never);
       },
     }),

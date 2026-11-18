@@ -5,14 +5,14 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Result } from "effect";
+import { Effect, Exit, Layer, Predicate, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
-const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
+const held = vi.hoisted(() => ({ project: Array.of<unknown>(), door: Array.of<unknown>() }));
 
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 
@@ -29,7 +29,7 @@ vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
 
 vi.mock("./door.ts", () => ({
   Gateway: {
-    pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
+    pipe: <A>(f: (self: Effect.Effect<void>) => A) => f(Effect.void),
     layer: (options: unknown) => {
       held.door.push(options);
 
@@ -72,8 +72,8 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   await runtime.runPromise(Effect.void);
   await runtime.dispose();
   const project = held.project.at(-1);
-  const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
-  expect(typeof door).toBe("function");
+  const door = Predicate.isObjectOrArray(project) ? Reflect.get(project, "door") : undefined;
+  expect(Predicate.isFunction(door)).toBe(true);
   const checked = await Effect.runPromise(readSettings(env));
 
   // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
@@ -85,15 +85,15 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
     built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
   );
   const options = held.door.at(-1);
-  const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
-  const name = typeof inputs === "object" && inputs !== null ? Reflect.get(inputs, "name") : undefined;
-  expect(typeof name).toBe("function");
+  const inputs = Predicate.isObjectOrArray(options) ? Reflect.get(options, "inputs") : undefined;
+  const name = Predicate.isObjectOrArray(inputs) ? Reflect.get(inputs, "name") : undefined;
+  expect(Predicate.isFunction(name)).toBe(true);
 
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
 const oldName = (m: unknown) =>
-  typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : undefined;
+  Predicate.isObjectOrArray(m) && "type" in m && Predicate.isString(m.type) ? m.type : undefined;
 
 class Sent {
   readonly extra = 1;
@@ -156,7 +156,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!r.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!r.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 

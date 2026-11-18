@@ -5,7 +5,20 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
@@ -77,13 +90,11 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
 
-const rawObject = (a: unknown): Record<string, unknown> | null =>
-  typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
+/** Whether an object carries a field that only the door stamps. Callers narrow with `Predicate.isReadonlyObject`. */
+const reserved = (value: object) => ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
 
-const reserved = (a: unknown) => {
-  const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
-};
+
+
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
 
@@ -342,7 +353,7 @@ type Options<A, RNext, RDeliver, RNotify> = {
     RDeliver
   >;
   readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError, RNotify>;
-  readonly audit?: (process: string, message: unknown) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
+  readonly audit?: (process: string, message: A) => Effect.Effect<Schema.Json, Audit.AuditError, RDeliver>;
   readonly inputs: {
     readonly schema: Schema.Codec<A, unknown>;
     readonly personOnly: ReadonlyArray<string>;
@@ -381,6 +392,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const write = options.write ?? turn.withPermit;
   const flush = sink.flush.pipe(Effect.provideService(RecordManager, records), Effect.provideService(Archive, archive));
   const clock = Effect.clockWith((c) => c.currentTimeMillis);
+
   const notify = Effect.fn("gateway.notify")(function* (client: string, news: News) {
     const result = yield* Effect.exit(options.notify(client, news).pipe(Effect.provideContext(context)));
     yield* Effect.annotateCurrentSpan("fab.gateway.notified", Exit.isSuccess(result));
@@ -508,7 +520,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     });
     return yield* silent(nonces.issue(client));
   });
-  const initialize = Effect.fnUntraced(function* (client: ConnectionId, input: unknown, trusted: Trusted) {
+
+  const initialize = Effect.fnUntraced(function* (
+    client: ConnectionId,
+    input: Schema.Json | undefined,
+    trusted: Trusted,
+  ) {
     if (trusted.url !== options.url) {
       return no("bad_nonce");
     }
@@ -1101,7 +1118,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       build: options.build,
     });
   });
-  const deny = Effect.fnUntraced(function* (client: ConnectionId, input: unknown) {
+
+  const deny = Effect.fnUntraced(function* (client: ConnectionId, input: Schema.Json | undefined) {
     const checked = yield* silent(Effect.result(online(client)));
 
     if (Result.isFailure(checked)) {
@@ -1114,7 +1132,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     const params = Schema.decodeUnknownResult(Schema.Struct({ key: Schema.String, saw: Saw }))(input);
 
-    if (Result.isFailure(params) || reserved(input)) {
+    if (Result.isFailure(params) || (Predicate.isReadonlyObject(input) && reserved(input))) {
       return GrantReply.cases.refused.make({ reason: "bad_input" });
     }
 
@@ -1144,7 +1162,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     admit: NonNullable<typeof options.admit>,
     raw: string,
     key: string,
-    params: unknown,
+    params: Schema.Json | undefined,
   ) {
     const request = Schema.decodeUnknownResult(Send)(params);
     const message = Result.isSuccess(request)
@@ -1182,7 +1200,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
-    params: unknown,
+    params: Schema.Json | undefined,
     reader = String(client),
   ) {
     const checked = yield* silent(Effect.result(authenticated(client)));
@@ -1223,7 +1241,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return answer;
     }
 
-    if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
+    if (
+      Predicate.isReadonlyObject(params) &&
+      (reserved(params) || (method === "process.send" && Predicate.isReadonlyObject(params.m) && reserved(params.m)))
+    ) {
       return yield* refuse("reserved");
     }
 
@@ -1307,7 +1328,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
         : null;
     const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
-    const name = message === null ? undefined : (options.inputs.name?.(message) ?? rawObject(message)?._tag);
+    const name =
+      message === null
+        ? undefined
+        : (options.inputs.name?.(message) ?? (Predicate.isReadonlyObject(message) ? message._tag : undefined));
 
     if (
       method === "process.send" &&
@@ -1315,7 +1339,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         Result.isFailure(request) ||
         decoded === null ||
         Result.isFailure(decoded) ||
-        typeof name !== "string")
+        !Predicate.isString(name))
     ) {
       refusal ??= "bad_input";
     }
@@ -1413,8 +1437,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           client: raw,
           by,
           process: processId,
-          name: typeof name === "string" ? name : method,
-          personOnly: typeof name === "string" && policy.inputs.includes(name),
+          name: Predicate.isString(name) ? name : method,
+          personOnly: Predicate.isString(name) && policy.inputs.includes(name),
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
@@ -1478,10 +1502,11 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       let safe: typeof Schema.Json.Type | undefined;
 
-      if (refusal === null && message !== null && typeof name === "string" && !options.inputs.raw.includes(name)) {
+      if (refusal === null && message !== null && Predicate.isString(name) && !options.inputs.raw.includes(name)) {
         const audit = options.audit;
         // Audit decodes the same trusted parent that the runner stamps before checking the message.
-        const stamped = typeof message === "object" ? { ...message, parent: binding.id } : message;
+        const stamped = Predicate.isObjectOrArray(message) ? { ...message, parent: binding.id } : message;
+
         const selected =
           audit === undefined
             ? Effect.succeed<Schema.Json>({ type: name })
@@ -1769,7 +1794,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       binding.seen !== incoming.seen ||
       binding.span.traceId !== incoming.span.traceId ||
       binding.span.spanId !== incoming.span.spanId ||
-      reserved(incoming.envelope.input)
+      (Predicate.isReadonlyObject(incoming.envelope.input) && reserved(incoming.envelope.input))
     ) {
       return yield* new NotGranted({});
     }
@@ -1837,7 +1862,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const event = rawObject(a.event);
+      const event = Predicate.isReadonlyObject(a.event) ? a.event : null;
 
       if (
         event === null ||
@@ -2011,7 +2036,7 @@ export class Gateway extends Context.Service<
     /** Answers the checked hello, or the door's own refusal before the hello is checked. */
     readonly initialize: (
       client: ConnectionId,
-      input: unknown,
+      input: Schema.Json | undefined,
       trusted: Trusted,
     ) => Effect.Effect<
       typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
@@ -2033,12 +2058,12 @@ export class Gateway extends Context.Service<
     >;
     readonly deny: (
       client: ConnectionId,
-      input: unknown,
+      input: Schema.Json | undefined,
     ) => Effect.Effect<typeof GrantReply.cases.refused.Type | Written, LedgerError | Cause.NoSuchElementError>;
     readonly route: (
       client: ConnectionId,
       method: string,
-      params: unknown,
+      params: Schema.Json | undefined,
       reader?: string,
     ) => Effect.Effect<
       typeof Answer.Type,
