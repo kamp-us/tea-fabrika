@@ -1,8 +1,8 @@
-// Today's CI, both workflows. Each test leg's time table: how long each of the job's steps took
+// Today's CI, both workflows. Each test leg's time table: the job's queue wait and step times
 // (GitHub's jobs API) and the leg's slowest test files (its Vitest JSON report), in the job summary,
-// and the same numbers as one small JSON file the leg uploads, so each leg's balance shows on every
-// run and can be followed over time. Advice only: a missing or broken input gives an unavailable
-// section and the rest still prints, and the program exits 0 whatever it read.
+// and as one small JSON file the leg uploads, so each leg's balance shows on every run and can be
+// followed over time. Advice only: a missing or broken input gives an unavailable section and the
+// rest still prints, and the program exits 0 whatever it read.
 //
 //   check.yaml       next legs                   report $RUNNER_TEMP/next.json
 //   scheduled.yaml   next legs and tooling legs  report $RUNNER_TEMP/results.json
@@ -55,8 +55,16 @@ export type Leg = {
   readonly leg: string;
 };
 
-/** The artifact: one leg's steps and test files. */
+/** The time from GitHub creating a job until it starts. */
+export type QueueWait = {
+  readonly created: string;
+  readonly started: string;
+  readonly seconds: number;
+};
+
+/** The artifact: one leg's queue wait, steps and test files. */
 export type Timings = Leg & {
+  readonly queueWait?: QueueWait;
   readonly steps: Section<Step>;
   readonly files: Section<TestFile>;
   readonly progress?: Progress.Progress;
@@ -75,6 +83,12 @@ const Job = Schema.Struct({
       completed_at: Schema.optionalKey(Time),
     }),
   ),
+});
+
+const JobTimes = Schema.Struct({
+  status: Schema.optionalKey(Schema.String),
+  created_at: Schema.optionalKey(Time),
+  started_at: Schema.optionalKey(Time),
 });
 
 // Vitest's JSON reporter: one entry per test file, its times in milliseconds since the epoch.
@@ -115,6 +129,28 @@ export const readSteps = (input: unknown): Section<Step> => {
         })),
       }
     : unavailable("the jobs API answer is not a job");
+};
+
+/** A real started job's queue wait. Pending placeholders have no queue wait. */
+export const readQueueWait = (input: unknown): QueueWait | undefined => {
+  const decoded = Schema.decodeUnknownResult(JobTimes)(input);
+
+  if (
+    Result.isFailure(decoded) ||
+    !["in_progress", "completed"].includes(decoded.success.status ?? "") ||
+    decoded.success.created_at == null ||
+    decoded.success.started_at == null
+  ) {
+    return undefined;
+  }
+
+  const created = Date.parse(decoded.success.created_at);
+  const started = Date.parse(decoded.success.started_at);
+  const seconds = (started - created) / 1000;
+
+  return Number.isFinite(seconds) && seconds >= 0
+    ? { created: decoded.success.created_at, started: decoded.success.started_at, seconds }
+    : undefined;
 };
 
 /** Each test file of a Vitest JSON report, its path from `root`. */
@@ -166,6 +202,13 @@ const table = (header: readonly string[], right: readonly number[], rows: readon
 const section = <A>(title: string, read: Section<A>, render: (rows: readonly A[]) => string) =>
   `### ${title}\n\n${read._tag === "read" ? render(read.rows) : `Unavailable: ${cell(read.reason)}`}`;
 
+const queueSection = (queueWait: QueueWait | undefined) =>
+  [
+    "### Queue wait",
+    "",
+    queueWait ? `${queueWait.seconds.toFixed(3)} s` : "Unavailable: no valid job queue timing",
+  ].join("\n");
+
 const stepTable = (rows: readonly Step[]) =>
   table(
     ["Step", "Result", "Seconds"],
@@ -202,6 +245,7 @@ const fileTable = (rows: readonly TestFile[]) => {
 export const markdown = (timings: Timings): string =>
   [
     `## Time table: ${cell(timings.job)}, leg ${cell(timings.leg)}`,
+    queueSection(timings.queueWait),
     section("Steps", timings.steps, stepTable),
     section("Slowest test files", timings.files, fileTable),
     Progress.markdown(timings.progress ?? Progress.Progress.cases.unavailable.make({ reason: "unread" })),
@@ -234,14 +278,26 @@ export const legOf = (env: Readonly<Record<string, string | undefined>>): Leg =>
 
 // The jobs API is asked once, then again `pause` apart until the steps before this one all show an
 // end, at most TRIES times in all; the last answer stands.
-const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<Section<Step>> =>
+type JobTimings = {
+  readonly steps: Section<Step>;
+  readonly queueWait?: QueueWait;
+};
+
+const jobOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.Effect<JobTimings> =>
   id
     ? io.job(id).pipe(
-        Effect.map(readSteps),
-        Effect.catch(() => Effect.succeed(unavailable<Step>("the jobs API could not be read"))),
-        Effect.repeat({ until: settled, times: TRIES - 1, schedule: Schedule.spaced(pause) }),
+        Effect.map((input): JobTimings => {
+          const queueWait = readQueueWait(input);
+
+          return {
+            steps: readSteps(input),
+            ...(queueWait ? { queueWait } : {}),
+          };
+        }),
+        Effect.catch(() => Effect.succeed({ steps: unavailable<Step>("the jobs API could not be read") })),
+        Effect.repeat({ until: (job) => settled(job.steps), times: TRIES - 1, schedule: Schedule.spaced(pause) }),
       )
-    : Effect.succeed(unavailable("JOB_ID is not set"));
+    : Effect.succeed({ steps: unavailable("JOB_ID is not set") });
 
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
   path
@@ -272,15 +328,15 @@ export const collect = (
 ): Effect.Effect<Timings> =>
   Effect.all(
     {
-      steps: stepsOf(env["JOB_ID"], io, pause),
+      job: jobOf(env["JOB_ID"], io, pause),
       files: filesOf(env["REPORT"], root, io),
       progress: progressOf(env, io),
     },
     { concurrency: 3 },
   ).pipe(
-    Effect.map(({ steps, files, progress }) => ({
+    Effect.map(({ job, files, progress }) => ({
       ...legOf(env),
-      steps,
+      ...job,
       files,
       ...(env["RUNNER_TEMP"] ? { progress } : {}),
     })),

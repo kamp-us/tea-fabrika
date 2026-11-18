@@ -11,6 +11,7 @@ import {
   type Io,
   markdown,
   readFiles,
+  readQueueWait,
   readSteps,
   SLOWEST,
   STEP,
@@ -32,6 +33,8 @@ const root = resolve("time-table-fixture");
 const job = {
   id: 131255816934,
   status: "in_progress",
+  created_at: "2026-11-14T09:59:56Z",
+  started_at: "2026-11-14T10:00:00Z",
   steps: [
     {
       name: "Set up job",
@@ -243,6 +246,7 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
     sha: "a".repeat(40),
     job: "next",
     leg: "3",
+    queueWait: { created: "2026-11-14T09:59:56Z", started: "2026-11-14T10:00:00Z", seconds: 4 },
     steps: readSteps(job),
     files: {
       _tag: "read",
@@ -406,6 +410,68 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
     }),
     options,
   );
+});
+
+it("TT8: queue wait uses a started job's created and started times, and leaves pending placeholders out", async () => {
+  const actualJob = fc
+    .record({
+      status: fc.constantFrom("in_progress", "completed"),
+      created: fc.integer({ min: 1_790_000_000, max: 1_800_000_000 }),
+      wait: fc.integer({ min: 0, max: 3_600 }),
+    })
+    .map(({ status, created, wait }) => ({
+      ...job,
+      status,
+      created_at: iso(created),
+      started_at: iso(created + wait),
+    }));
+
+  await fc.assert(
+    fc.asyncProperty(actualJob, async (answer) => {
+      const timings = await timingsOf(
+        env,
+        io(
+          () => answer,
+          () => "{}",
+        ),
+      );
+      const expected = {
+        created: answer.created_at,
+        started: answer.started_at,
+        seconds: (Date.parse(answer.started_at) - Date.parse(answer.created_at)) / 1000,
+      };
+      const artifact = JSON.stringify(timings);
+
+      expect(readQueueWait(answer)).toEqual(expected);
+      expect(timings.queueWait).toEqual(expected);
+      expect(artifact).toContain(`"queueWait":${JSON.stringify(expected)}`);
+      expect(markdown(timings)).toContain(`### Queue wait\n\n${expected.seconds.toFixed(3)} s`);
+    }),
+    options,
+  );
+
+  const created = "2026-11-14T09:59:56Z";
+  const started = "2026-11-14T10:00:00Z";
+
+  for (const status of ["queued", "waiting", "requested", "pending"]) {
+    const placeholder = { status, created_at: created, started_at: null };
+    const timings = await timingsOf(
+      env,
+      io(
+        () => ({ ...job, ...placeholder }),
+        () => "{}",
+      ),
+    );
+
+    expect(readQueueWait(placeholder)).toBeUndefined();
+    expect(Object.hasOwn(timings, "queueWait")).toBe(false);
+    expect(markdown(timings)).toContain("Unavailable: no valid job queue timing");
+  }
+
+  expect(readQueueWait({ status: "pending", created_at: created, started_at: started })).toBeUndefined();
+  expect(readQueueWait({ status: "in_progress", created_at: created, started_at: null })).toBeUndefined();
+  expect(readQueueWait({ status: "in_progress", created_at: "bad", started_at: started })).toBeUndefined();
+  expect(readQueueWait({ status: "in_progress", created_at: started, started_at: created })).toBeUndefined();
 });
 
 // The existing timing properties above keep their generators, assertions and run counts.
