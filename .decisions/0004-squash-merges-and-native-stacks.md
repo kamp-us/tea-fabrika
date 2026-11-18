@@ -1,19 +1,16 @@
 ---
 id: 0004
-title: Every pull request squash-merges, stacked ones included, and a stack moves with `gh stack rebase`, never a merge-only catch-up
-status: amended-in-part by [0599](0599-native-stack-upkeep.md)
+title: Every pull request squash-merges, each layer of a chain is a plain pull request that lands on its own after its parent, and an open child is kept current by merging its parent's head
+status: accepted
 date: 2026-11-09
 tags: [merge, squash, stacks, rebase, signing]
 ---
 
-# 0004: Every pull request squash-merges, stacked ones included, and a stack moves with `gh stack rebase`, never a merge-only catch-up
+# 0004: Every pull request squash-merges, each layer of a chain is a plain pull request that lands on its own after its parent, and an open child is kept current by merging its parent's head
 
-**What this decides:** all pull requests land by squash. Stacks use GitHub's native
-[gh-stack](https://github.com/github/gh-stack) extension, and after a parent lands, the child is
-rebased onto main.
-
-The stack upkeep and merge-command rules below are amended by [0599](0599-native-stack-upkeep.md).
-The squash and step-signature rules still hold.
+**What this decides:** all pull requests land by squash. A chain of pull requests has no native
+stack: each layer is a plain pull request that lands on its own, bottom first, and an open child is
+kept current by merging its parent's head in.
 
 ## Context
 
@@ -25,39 +22,49 @@ but made stacks slow and left merge commits on main. Step signatures sign links 
 [experiment 221](../experiments/221-signed-steps-and-rebases.md) showed a rebase can be checked by
 replay.
 
+[0599](0599-native-stack-upkeep.md) changed how a stacked child catches up: it first rebased onto
+main, and now it merges its parent's head in.
+[0603](0603-no-stacks-and-sev0-admin-merges.md), on 2026-11-18, dropped native stacks for good,
+since they fight the merge queue: this record first had them linked with
+[gh-stack](https://github.com/github/gh-stack) and landed whole.
+
 ## Decision
 
-**Every PR squash-merges. A stack is a GitHub stack, run with the
-[gh-stack](https://github.com/github/gh-stack) commands
-([GitHub's docs](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands)).**
+**Every PR squash-merges. A chain of pull requests is made of plain pull requests, each landing
+on its own after its parent, and each open child is kept current by merging its parent's head in
+(0603).**
 
 ```sh
-gh stack init <bottom> ... <top>   # adopt the existing branches as one stack
-gh stack submit                    # push them and open the PRs as one stack (or gh stack link)
-gh stack merge <pr> --squash       # land bottom-up, all or nothing, up to <pr>; next PR retargets main
-gh stack sync --prune              # fetch, rebase what is left onto main, push
+gh pr update-branch <child>   # keep an open child current: merges its parent's head in
+gh stack unstack <number>     # once, for an old native stack
 ```
 
-- `gh stack merge` cannot skip a middle PR. Branch protection still applies to every PR in the
-  stack, and a merge queue picks its own method.
-- To rebase by hand, run `gh stack rebase`, then `gh stack push`, locally. Never the web "Rebase
-  stack" button: it makes unsigned commits.
-- No parent lands with a merge commit any more. `catchup.sh` drops `--merge-method merge` for
-  parents.
+- A child pull request targets its parent's branch and lands on its own after its parent, bottom
+  first. No native stack link joins them. When the parent lands, GitHub moves the child onto main.
+- After the source, the queue and the writer agree on a parent's new head, update each open child
+  with `gh pr update-branch <child>`, which makes a merge commit, and repeat up the chain. No fixed
+  10-minute wait, no rebase and no force-push for this upkeep.
+- Every layer lands as a squash, bottom-up, through the merge queue like any pull request. Branch
+  protection and the protected merge gates apply to every layer, including protected merge-group CI
+  ([0162](0162-no-friction-before-a-merge.md)).
+- An old native stack is unstacked once, with the command above.
+- No parent lands with a merge commit.
 - Why signatures survive: a step signs a link from one tree to the next. A parent's squash commit has
-  the same tree as the parent's head, so rebasing the child onto it leaves the child's trees as
-  they were, and its links still hold (experiment 221's replay idea).
-- If a rebase does change a child's trees, that child's links are signed again, each by its own
-  step.
+  the same tree as the parent's head, so GitHub's server-side move of the child after the parent
+  lands leaves the child's trees as they were, and its links still verify (experiment
+  221's replay idea).
+- If a retarget or a rebase does change a child's trees, that child's links are signed again, each
+  by its own step owner.
 
 **Binding constraints.**
 
-- A single PR still catches up with main by merging main in. Only a stacked child is rebased, and
-  only with the `gh stack` commands above.
+- A single PR catches up with main by merging main in. A child of an open parent catches up by
+  merging its parent's head in, with `gh pr update-branch <child>`.
 - No step's link is signed again by another step or by the lead.
 
 ## Consequences
 
 - This walks back the 2026-11-08 line in Tier 1; that line is now a link to this file.
 - Main's history has one commit per PR.
-- A rebase that changes a child's trees costs a re-sign round for that child.
+- Open children gain merge commits when their parents move. GitHub may still move a
+  child onto main after its parent lands, which costs a re-sign round for that child when its trees change.

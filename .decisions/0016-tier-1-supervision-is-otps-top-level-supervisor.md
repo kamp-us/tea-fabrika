@@ -1,7 +1,7 @@
 ---
 id: 0016
 title: Tier 1 supervision is OTP's top-level supervisor, and each difference from OTP is written with its reason
-status: amended-in-part by [0018](0018-one-application-per-program.md), [0601](0601-program-make-with-optional-pipes.md)
+status: accepted
 date: 2026-11-09
 tags: [supervision, otp, coordination, tier-1, next, restart]
 ---
@@ -28,25 +28,22 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
   live --> ending: threw
-  ending --> starting: inside intensity, at once
-  ending --> failed: past intensity, the root stops its children and itself
+  ending --> starting: inside intensity, as the restart policy says
+  ending --> failed: past intensity, the program's supervisor stops its children and itself
   failed --> starting: a person's Restart
   starting --> live: started
 ```
 
 The `down` to `starting` edge on a timer is gone. Past the limit, only a person starts it again.
+Each program has its own supervisor, so one program past its limit stops alone.
 
 ```ts
-// Sketch, next/. One root supervisor per brain. Its children are the brain's named programs.
-const root = {strategy: "one_for_one", intensity: 1, periodMs: 5_000}; // OTP's defaults
+// Sketch, next/. One top-level supervisor per program. Its children are the names that program runs.
+const supervisor = {strategy: "one_for_one", intensity: 1, periodMs: 5_000}; // OTP's defaults
 const child = {name: "counter:1", program: "counter", restart: "permanent", shutdown: "brutal_kill"};
-// More than `intensity` restarts in `periodMs`: every child exits, the root stops, and the brain
-// writes `failed` on the log and raises an ask to the person.
+// More than `intensity` restarts in `periodMs`: that program's children exit, its supervisor stops,
+// and the brain writes `failed` on the log and raises an ask to the person.
 ```
-
-> Amended in part by [0018](0018-one-application-per-program.md): there is no single root per
-> brain. Each program is its own application with its own top-level supervisor, so one program past
-> its intensity stops alone. The rest of this file holds, read per program.
 
 ## Context
 
@@ -59,6 +56,12 @@ day for one name that always throws, with no escalation. OTP gives up there and 
 above decide ([supervisor behaviour](https://www.erlang.org/doc/system/sup_princ.html)). The
 experiment's lean for tracker ticket 404 was a wait that grows, as Kubernetes does. The owner
 picked OTP's shape instead, so the design stays one a person can learn from OTP's own docs.
+
+Two later records changed parts of it. [0018](0018-one-application-per-program.md) split the one
+root per brain into one application per program, each with its own top-level supervisor, and
+[0020](0020-programs-get-hard-walls.md) put each program's supervisor in an object of its own.
+[0601](0601-program-make-with-optional-pipes.md) made the restart policy a `Schedule` given by a
+Layer, so a restart inside intensity may back off.
 
 This amends four places in the notes and the plan, each marked where it stands:
 
@@ -81,14 +84,17 @@ amended there.
 **In Tier 1, `next/`'s supervision is OTP's top-level supervisor, followed as closely as possible
 (owner, 2026-11-09).**
 
-- One root supervisor per brain. Its children are the brain's named programs. Its strategy is
-  `one_for_one`.
+- Each program is its own OTP application, with its own top-level supervisor
+  ([0018](0018-one-application-per-program.md)). Its children are the names that program runs, and
+  its restart count is its own. Its strategy is `one_for_one`. Each program's supervisor lives in a
+  supervisor object of its own ([0020](0020-programs-get-hard-walls.md)).
 - Each child has a child spec with OTP's restart types: `permanent`, `transient` or `temporary`.
 - Restart intensity and period are OTP's defaults, 1 in 5 s, unless a reason is written.
-- A restart inside intensity happens at once, as in OTP. There is no backoff.
-- Past intensity, the root stops its children and then itself. At the top, that is the
-  application stopping: the brain marks the name `failed`, writes it to the log, and raises it to
-  the person as an ask. A person restarts it. Nothing restarts it on a clock.
+- A restart inside intensity follows the supervisor's restart policy, a `Schedule` given by a Layer,
+  so it may back off ([0601](0601-program-make-with-optional-pipes.md)).
+- Past intensity, the program's supervisor stops its children and then itself. At the top, that is
+  the application stopping: the brain marks the name `failed`, writes it to the log, and raises it
+  to the person as an ask. A person restarts it. Nothing restarts it on a clock.
 - Shutdown follows OTP's child spec: `brutal_kill`, a timeout or `infinity`, with children stopped
   in reverse start order, unless a reason is written.
 - Where we cannot follow OTP, the difference is written down with its reason, in a place the owner
@@ -106,11 +112,12 @@ amended there.
 
 - P34's backoff, its `down {until}`, the `due` wake that retries it, and the crash-count reset go
   away when P34c lands. The `[Restart]` act stays: it is how a person starts a `failed` name.
-- The supervisor moves from each program's object to the brain, where the process tree lives.
-  The per-letter receipts and dead letters (C2) stay in the program's object.
+- The supervisor moves out of each program's own object. Each program's supervisor lives in a
+  supervisor object of its own, and the process tree lives in the project object
+  ([0020](0020-programs-get-hard-walls.md)). The per-letter receipts and dead letters (C2) stay in
+  the program's object.
 - A name that always throws now costs a few ledger entries and one ask, not 276,000 entries a day.
 - Restart types arrive in Tier 1, so `exited` needs a reason a restart type can read: normal or
   not. That pulls part of tracker ticket 406 into P34c.
-- Not decided here: the exact numbers, and how wide one root's restart count reaches. P34c's plan
-  proposes them, and the owner reads it. Sibling strategies, nested supervisors, links and trap
+- Not decided here: the exact numbers. P34c's plan proposes them, and the owner reads it. Sibling strategies, nested supervisors, links and trap
   exit still wait for Tier 4 ([Tier 1](../docs/plan/tier-1.md)).

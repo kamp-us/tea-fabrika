@@ -1,7 +1,7 @@
 ---
 id: 0037
 title: Every implicit state machine in next/ is made explicit, one named type with its transitions in one place, never flags, a position in code or an order two parties assume
-status: amended-in-part by [0046](0046-one-tea-machine-per-file.md)
+status: accepted
 date: 2026-11-09
 tags: [state-machine, control-state, tagged-union, tea, properties, replay, next]
 ---
@@ -9,8 +9,9 @@ tags: [state-machine, control-state, tagged-union, tea, properties, replay, next
 # 0037: Every implicit state machine in next/ is made explicit, one named type with its transitions in one place, never flags, a position in code or an order two parties assume
 
 **What this decides:** in `next/`, anything that passes two yes-or-no tests is a state machine, and
-every one of them is written as one named type with its transitions in one place; a third test
-picks which form it takes.
+every one of them is written as one named type with its transitions in one place, and that type is
+a tea machine ([0046](0046-one-tea-machine-per-file.md)); a third test says whether its state is
+stored.
 
 ```mermaid
 flowchart TD
@@ -20,10 +21,9 @@ flowchart TD
   t2 -->|"no"| data["not a machine: plain data"]
   t2 -->|"yes"| machine["a state machine: make it explicit"]
   machine --> t3{"T3: must the state survive a restart, or be seen by another party?"}
-  t3 -->|"yes"| stored["stored data that recovery reads"]
-  t3 -->|"no"| union["a tagged union plus one transition function, in memory"]
-  machine --> time{"do its events arrive over time?"}
-  time -->|"yes"| tea["a tea machine with Msgs"]
+  t3 -->|"yes"| stored["its Model is stored data that recovery reads"]
+  t3 -->|"no"| memory["its Model lives in memory"]
+  machine --> tea["always a tea machine, with Msgs"]
 ```
 
 ```ts
@@ -32,12 +32,11 @@ let ready = false
 sql.transaction(() => { if (!ready) makeTables(); ready = true; return step() })
 // step() throws -> the tables roll back, `ready` stays true -> every later write fails.
 
-// Explicit: one named type, one transition, in one place.
+// Explicit: one named type, one transition, in one place. Written as a tea machine (0046), the type
+// is its Model and the transition is its update; this shows only the type and the transition.
 type Tables = "cold" | "ready"
 const next = (state: Tables, committed: boolean): Tables => (committed ? "ready" : state)
 ```
-
-*Amended 2026-11-09 by [0046](0046-one-tea-machine-per-file.md): the form is always a tea machine. The "tagged union plus one transition function" form below no longer holds; everything else here does.*
 
 ## Context
 
@@ -46,6 +45,10 @@ state machines nobody had named. It found 13, and one of them has a bug its prob
 flag in the sketch above. It also holds the definition this record uses, with its sources (Harel's
 statecharts paper for the transition, the UML tradition for control state against extended state).
 That experiment is the rule's first test on real code. Tracker ticket 493.
+
+[0046](0046-one-tea-machine-per-file.md), decided the same day, settled the form: this record first
+let a machine whose state need not survive a restart be a tagged union with one transition function
+in memory, and 0046 removed that option. The text below says what holds now.
 
 The owner decided the rule on 2026-11-09. One reason is recorded on purpose. "Which things count as
 a state machine" can sound like a matter of taste. When a rule is called subjective, the answer is
@@ -77,21 +80,22 @@ explicit.**
   - flags: booleans, nullable fields or `let`s on one thing;
   - position: which step a long function has reached;
   - between two parties: a protocol whose order each side only assumes.
-- **The third test picks the form, never whether.** T3: must the state survive a restart of the
-  process, or be seen by another party?
-  - Yes: stored data that the recovery path reads. Never a position in code, never memory only.
-  - No: a tagged union plus one transition function, in memory.
-  - Either way, when its events arrive over time it is a tea machine with Msgs
-    ([Elm first](../docs/direction/elm-first.md)).
+- **The form is always a tea machine,** written with `Machine.make`, one machine to a file, as
+  [0046](0046-one-tea-machine-per-file.md) says. Small is no exception. A window's state lives in a
+  tea machine too ([Elm first](../docs/direction/elm-first.md)).
+- **The third test says where the state lives, never whether it is a machine.** T3: must the state
+  survive a restart of the process, or be seen by another party?
+  - Yes: the machine's Model is stored data that the recovery path reads. Never a position in code,
+    never memory only.
+  - No: the Model lives in memory.
 - **A plan asks of new code: what are its states?** The answer is a named type, or "none, and here
   is the test it fails".
 
 Why it pays twice:
 
-- **Property tests come nearly for free.** A tea machine runs `@demlik/tea/pbt` as it is: drawn Msg
-  lists, an invariant checked on every step, a predicate over the whole trace, and a check that
-  every list ends in a terminal state. A plain tagged union needs only a small fast-check wrapper.
-  The experiment's totals for the 13: about 15 properties gained, about 65 of today's example tests
+- **Property tests come nearly for free.** Every machine is a tea machine, so each runs
+  `@demlik/tea/pbt` as it is: drawn Msg lists, an invariant checked on every step, a predicate over
+  the whole trace, and a check that every list ends in a terminal state. The experiment's totals for the 13: about 15 properties gained, about 65 of today's example tests
   whose transition part they could cover (a rough read of test titles), and 23 invariants still to
   write.
 - **A stored machine gets the replay law:** the state rebuilt from what is stored equals the state
