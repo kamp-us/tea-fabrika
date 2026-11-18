@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0602 and 0599 on the delivery plan, amended by the lead's ruling that delivery comes from main's full run; body 3e7221f27992
+
 Plancheck-Version: 3
 
 # Plan: CI delivers the tested @kalfa/config archive from main's full run, then two CI speed items
@@ -79,7 +79,7 @@ The laws that change, and why none is a loosening:
 | D4 | `select` prints `archive` and `consumer` | `select` prints `consumer` only; `archive` leaves |
 | D5 | the fault step on the tooling leg that holds P1 | unchanged |
 | Q1 | `record.ts` allows exactly one archive upload in check.yaml, through the related guard's predicate | `record.ts` returns to its parent's bytes: check.yaml uploads no archive, and Q1 refuses one |
-| SC9, SC21 | none | SC9 lists the receipt command beside the test job's commands. A new SC21 pins the two steps and refuses any other keeper |
+| SC9, SC22 | none | SC9 lists the receipt command beside the test job's commands. A new SC22 pins the two steps and refuses any other keeper |
 
 Why none of these is a loosening:
 
@@ -95,7 +95,7 @@ Why none of these is a loosening:
   commit is the only head, so it must equal `source`. The new `absent` verdict is stricter than
   before: a leg that does not keep must prove P2 is a `next-integration` file and that no folder
   is lying about, so a renamed or dropped P2 turns main red instead of silently keeping nothing.
-- **D3's and Q1's related-job pins** guarded steps that leave check.yaml. Their replacement, SC21,
+- **D3's and Q1's related-job pins** guarded steps that leave check.yaml. Their replacement, SC22,
   guards the same two steps in `scheduled.yaml` on the same terms: the receipt right after the
   leg's tests and before any upload, `success()` in both `if`s, the two exact paths,
   `if-no-files-found: error`, no token, no `continue-on-error`, and one keeper in the workflow.
@@ -195,7 +195,7 @@ What this plan takes on, for the lead's handoff checklist:
 |---|---|---|
 | The seven routing and upload paths (P4, Q1) | yes | All seven are among our 21. |
 | The thirteen ordinary-routing paths (O1 to O4) | yes | All thirteen are among our 21. |
-| P2's runtime proof: its strict declaration check, its installed-copy refusals and the restored positive, then the upload of the exact tested archive and receipt | yes, on main | P2 runs them inside one test on main's full run; our receipt step on that leg uploads only after P2's own passing, unskipped result (D2, SC21). |
+| P2's runtime proof: its strict declaration check, its installed-copy refusals and the restored positive, then the upload of the exact tested archive and receipt | yes, on main | P2 runs them inside one test on main's full run; our receipt step on that leg uploads only after P2's own passing, unskipped result (D2, SC22). |
 | P1's source fault and its restore proof | yes | The fault step (D5), on the tooling leg that owns P1, on our pull request. |
 | A fresh review of the applied delivery source at the real package head | yes | The review step runs at our head after the merge of `7d38689ff` (Validation). |
 | Decision 0599's upkeep | yes | One plain merge of 1583's branch per parent move; no rebase, no force-push, no write to layers 1 to 3. |
@@ -255,7 +255,7 @@ scheduled guard, and lands on main before this stack. So the work goes in two pa
 1. **Now:** the merge of 7d38689ff, then every edit outside the three `scheduled` paths: the
    selector, the receipt code, check.yaml, the record guard, the related guard and their laws.
 2. **Once 1161 is on main:** merge main into this branch with a plain merge. Then make the
-   `scheduled.yaml` steps, SC21 and SC9's one new command on top of 1161's lines, changing
+   `scheduled.yaml` steps, SC22 and SC9's one new command on top of 1161's lines, changing
    only what the move needs.
 
 The review reads both parts. CI proves only the head after part 2.
@@ -279,7 +279,7 @@ Amended: the last three bullets are new.
   kept file. Not fetched for this plan: the exact rule for `if-no-files-found` when one of several
   paths is missing in `actions/upload-artifact@v7`, and its refusal of a second upload under one
   name in one run, which upload-artifact's README described for v4 and later. The design does not
-  depend on either, because the receipt step checks both files before the upload and SC21 allows
+  depend on either, because the receipt step checks both files before the upload and SC22 allows
   one keeper.
 - **Elm and OTP** add no machine here. This is a CI filter, a check and an upload.
 - **Presubmit and post-submit.** Google runs only fast, reliable tests before a submit and every
@@ -337,7 +337,7 @@ it, as any other integration file, and nothing keeps its folder.
 `changes.mjs` keeps `kalfa/` in its `readTrees`, so a Markdown change in the package runs the heavy
 jobs, and P1 with them, instead of being skipped as safe Markdown.
 
-### Receipt check (SC21's step, on each numbered leg of main's full run)
+### Receipt check (SC22's step, on each numbered leg of main's full run)
 
 ```ts
 // Sketch of the --receipt mode of .github/ci/related.ts: the Receipt and Report schemas, sha256,
@@ -444,10 +444,10 @@ gains one line: the numbered legs keep the archive on main. The workflow's `perm
 `actions: read` and `contents: read`: an artifact upload uses the runner's own runtime token, as
 the `results` and `timings` uploads do.
 
-### Guard: SC21 in the scheduled guard
+### Guard: SC22 in the scheduled guard
 
 ```ts
-// Sketch of SC21 in .github/ci/workflow-lint/scheduled.ts, beside SC9 and SC10.
+// Sketch of SC22 in .github/ci/workflow-lint/scheduled.ts, beside SC9 and SC10.
 const RECEIPT = "node .github/ci/related.ts --receipt";
 const ON_NUMBERED = `!${ON_E2E} && !${ON_TOOLING}`;
 const RECEIPT_IF = `success() && ${ON_MAIN} && ${ON_NUMBERED}`;
@@ -459,7 +459,7 @@ const ARCHIVE_WITH = {
   "if-no-files-found": "error",
 }; // and `retention-days`, a setting (0069): only a whole number of 1 or more is held
 
-// SC21. Main's full run keeps the tested archive, once, on the leg that ran P2.
+// SC22. Main's full run keeps the tested archive, once, on the leg that ran P2.
 //  - In `tests`, exactly one step runs RECEIPT: name `package receipt`, id `receipt`, if RECEIPT_IF,
 //    timeout-minutes 1, and no other key (no env, no token, no continue-on-error); it is the step
 //    right after the vitest step (WHOLE_NEXT).
@@ -523,7 +523,8 @@ the sev1 issue.
 
 ## Laws
 
-Amended: D1 to D4 change, SC21 is new, D5 and O1 to O4 stand as approved.
+Amended: D1 to D4 change, SC22 is new, D5 and O1 to O4 stand as approved. The new law was planned as SC21; ticket 1161 (#1623) took SC21 first, for the hand
+start's inputs, so this plan's law is SC22.
 
 Every existing law, domain, count, seed, timeout and assertion stays, except the D1 to D4 cases
 the amendment table names, which are rewritten here. New property laws use the supported Schema
@@ -538,13 +539,13 @@ picks it. None runs locally.
 | D3, the real `check.yaml` has one consumer fault step, in `related` alone, on the consumer leg, after `tooling`, with the tooling limit and `FABRIKA_TEST_DEPTH: full` alone, no token and no `continue-on-error`; it has no receipt step and no archive upload: R1's command list is install, integration, tooling, fault and time table, and Q1 is the parent's own upload rule. | test | scenario: each fault applied alone to the real check.yaml, with the existing related fault list kept | Put the old `package receipt` step or the old `package archive` upload back, run the fault on an unselected leg or before `tooling`, make it soft, give it a token or another env key: lintWorkflow accepts it and the case fails. | .github/ci/workflow-lint/related.test.ts |
 | D4, `select` prints exactly the five outputs run, legs, files, projects and consumer, read from its `set` step, and `related` reads them only through `needs.select.outputs`. | test | scenario: one fault per output applied to the real check.yaml | Drop `consumer`, put `archive` back, read `consumer` from another step, or add a sixth output: the R1 case is accepted and fails. | .github/ci/workflow-lint/related.test.ts |
 | D5, the fault mode proves P1 only when the faulted run fails for the export, the manifest's bytes are restored to the same digest, and the second run passes unskipped; outside CI it refuses. 100 runs | test | Effect Arbitrary: FaultRun | Accept a faulted run that passes, a failure for another reason, a restore with other bytes, or a second run that fails or skips: the matching case is accepted and fails. | .github/ci/related-selection.test.ts |
-| SC21, the real `scheduled.yaml` keeps the archive in `tests` alone: one `package receipt` step right after `vitest`, on main's ref and the numbered legs, with `success()`, a one-minute limit, no env, no token and no `continue-on-error`; one `package archive` upload right after it, on main's ref and `kept == 'true'`, with `success()`, the two exact paths, `if-no-files-found: error`, a one-minute limit and a retention; no other step of any job runs the receipt, names the delivery folder or uploads a name starting `kalfa-config-`. SC9 lists the receipt beside the test job's commands and admits no other new command. | test | scenario: each fault applied alone to the real scheduled.yaml, with the existing plant list kept | The receipt on the e2e or tooling legs, on every ref, before `vitest`, soft, with a token or an env key; the upload without `kept`, without `success()`, on a branch ref, with a wildcard, a third path or the whole folder, `warn` or `ignore`, before the receipt; a second `kalfa-config-` upload in `changed` or `report`; a step that runs P2 alone with `vitest run`: lintScheduled accepts it and the case fails. | .github/ci/workflow-lint/scheduled.test.ts |
+| SC22, the real `scheduled.yaml` keeps the archive in `tests` alone: one `package receipt` step right after `vitest`, on main's ref and the numbered legs, with `success()`, a one-minute limit, no env, no token and no `continue-on-error`; one `package archive` upload right after it, on main's ref and `kept == 'true'`, with `success()`, the two exact paths, `if-no-files-found: error`, a one-minute limit and a retention; no other step of any job runs the receipt, names the delivery folder or uploads a name starting `kalfa-config-`. SC9 lists the receipt beside the test job's commands and admits no other new command. | test | scenario: each fault applied alone to the real scheduled.yaml, with the existing plant list kept | The receipt on the e2e or tooling legs, on every ref, before `vitest`, soft, with a token or an env key; the upload without `kept`, without `success()`, on a branch ref, with a wildcard, a third path or the whole folder, `warn` or `ignore`, before the receipt; a second `kalfa-config-` upload in `changed` or `report`; a step that runs P2 alone with `vitest run`: lintScheduled accepts it and the case fails. | .github/ci/workflow-lint/scheduled.test.ts |
 | O1, full and changed ordinary discovery follow project `next` with no `next/` restriction; Kalfa's three ordinary law files are in the set; readers and every file land once. 100 runs | test | Effect Arbitrary: OrdinarySelection | Restore the positional `next/` in `list`: the Kalfa laws are missing from the sized set. | .github/ci/legs.test.ts and .github/ci/related.test.ts |
 | O2, the two-root fallback equals the configured `next` project; exact reader narrowing stays; bad filter input never narrows to readers; ordinary Kalfa files never join `related`. | test | scenario: real configured discovery, the canonical fallback, the reader-only and failed-sizing routes; an import-only stand-in cannot prove Vitest's CLI filter | Put `next/` back in either workflow fallback, or copy an ordinary Kalfa file into `related`: the universe or partition check fails. | .github/ci/legs.test.ts and .github/ci/related.test.ts |
 | O3, the classifier's full scope prints `next/ kalfa/`; the record reads only that as `all` and refuses legacy `next/`, missing and malformed values; a same-program result never lowers a Kalfa change to reader-only coverage. Reuse of an exact tree and base still works. 100 runs | test | Effect Arbitrary: PrintedSelection | Decode legacy `next/` as `all`, record a ready run that printed it, or let the parser's pass prove a Kalfa path: the negative case fails. | .github/ci/changes.test.ts |
 | O4, the sizing, next-job and merge-line guards accept the generated valid workflow and refuse a one-root fallback, a wrong precedence, a second narrowing, an extra project or env and every earlier fault. | test | scenario: each new fault alone on the generated valid workflow, with the full prior fault list kept | Allow the old spelling in `SIZE_ENV.FILTER`, the next-job fallback or `VITEST_VARS`: its isolated case is accepted and fails. | .github/ci/workflow-lint/changes.test.ts, .github/ci/workflow-lint/next-job.test.ts and .github/ci/workflow-lint/merge-line.test.ts |
 
-Lint, type or test? Each law is a test. D3, D4, SC21 and O4 are checks on a workflow's shape, but
+Lint, type or test? Each law is a test. D3, D4, SC22 and O4 are checks on a workflow's shape, but
 the workflow is YAML that oxlint does not read; the repo's YAML shape checks are `workflow-lint.ts`
 rules, run by these tests and by `pnpm lint`. D1, D2, D5, O1 and O3 judge values. D2's law judges
 the receipt's decisions on generated folders, reports and listings; the real receipt runs only on
@@ -572,8 +573,8 @@ its test were outside the lane's original 18 paths; the lead has asked to widen 
 | .github/ci/workflow-lint/related.ts | tests | tests | `deliveryUpload` becomes a pin of the consumer fault step alone; `OUTPUTS` is five; R1's command list loses the receipt. |
 | .github/ci/workflow-lint/related.test.ts | tests | tests | D3 and D4: the old receipt and archive shapes become plants, beside the existing fault list. |
 | .github/ci/workflow-lint/record.ts | tests | tests | Back to its parent's bytes: no `deliveryUpload` import and no archive allowance. Its diff against 1583's branch is empty. |
-| .github/ci/workflow-lint/scheduled.ts | tests | tests | New: SC21, and the receipt in SC9's command list. |
-| .github/ci/workflow-lint/scheduled.test.ts | tests | tests | New: SC21's plants and SC9's narrowed-P2 plant in the plant list; the real-file and varied-file cases hold the two new steps. |
+| .github/ci/workflow-lint/scheduled.ts | tests | tests | New: SC22, and the receipt in SC9's command list. |
+| .github/ci/workflow-lint/scheduled.test.ts | tests | tests | New: SC22's plants and SC9's narrowed-P2 plant in the plant list; the real-file and varied-file cases hold the two new steps. |
 | .github/ci/changes.mjs | tests | tests | The `next/ kalfa/` full filter, strict decoding in `selectionOf`, and `kalfa/` in `readTrees`. |
 | .github/ci/changes.test.ts | tests | tests | O3, the new full-filter strings, legacy refusal, the same-program case; keep the reuse cases. |
 | .github/ci/legs.ts | tests | tests | No positional `next/` in ordinary discovery; exact reader decoding, else the full route. |
@@ -678,9 +679,9 @@ Amended: the first, second and last two lines.
 - The upload: `actions/upload-artifact@v7`, the action every other upload in `scheduled.yaml` uses.
 - Guard cases: the existing `Fault` list and `lintWorkflow` in the related guard test, and the
   generated plants of `wiring.test-support.ts`. No new validator.
-- SC21 in `.github/ci/workflow-lint/scheduled.ts`: searched the scheduled guard (SC9, SC10, SC17's
+- SC22 in `.github/ci/workflow-lint/scheduled.ts`: searched the scheduled guard (SC9, SC10, SC17's
   `proof-set` upload rule), the related guard's built `deliveryUpload` and `time-tables.ts`'s
-  `timed`. SC21 reuses `steps`, `uses`, `compact`, `map`, `ON_E2E` and the guard's own `ON_MAIN`,
+  `timed`. SC22 reuses `steps`, `uses`, `compact`, `map`, `ON_E2E` and the guard's own `ON_MAIN`,
   `ON_TOOLING` and `WHOLE_NEXT`, and follows SC10's "right after the tests" form and the built
   `deliveryUpload`'s exact-keys form. The scheduled guard test's `plants` list takes its cases.
 - O1 to O4: `list`, `withReaders`, `filterOf`, `selectionOf`, `record` and `covers`, as the
