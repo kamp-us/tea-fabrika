@@ -401,6 +401,30 @@ One slice of code, in one commit, since no part of it lands whole alone: `proof.
 workflow's `SCOPE` would make every branch proof red at `select`, and the workflow without
 `proof.ts` would pass an input nothing reads. Then the glossary rows, by the build step.
 
+## Amendment 1, 2026-11-18: main merged in after the sev0 pause
+
+The lead merged origin/main (1775071ca) into the branch before the tests step. What changed for this
+plan, and what it now says:
+
+- **Pull request 1562 is on main.** `proof.ts`'s main block reads its variables through `Config.all`
+  (lines 232 to 241 at the merge), and line 277's `at:` is `DateTime`. So the first rule under
+  "Clash with pull request 1562" applies: `SCOPE` and `LAW` are two more
+  `Config.String(...).pipe(Config.withDefault(undefined))` entries in that `Config.all`, passed to
+  `askOf` unchanged, and new code follows the lint 1562 brought. The line numbers in that section
+  are from before the merge; the tests step reads the merged file.
+- **Pull request 1567 lands before this one.** It changes the four test commands and the changed
+  step's `LEG` in `scheduled.yaml`, and the SC rule that pins those commands in `scheduled.ts`. None
+  of those lines is one this plan edits. When 1567 is on main, the branch merges main again before
+  the build step, and any conflict is resolved by keeping both changes.
+- **The merge line still runs the tooling tests on a pull request.** Since pull requests 1613 and
+  1615, a pull request and a merge queue group pick the `tooling` project alone in the related job
+  (`related.ts`'s `projectsOf`), so `proof.test.ts` and `scheduled.test.ts` still run there, as the
+  Laws table says.
+- **D1 waits for the sev0 to end** or for fabrikaa to allow one dispatch of this branch at
+  `scope=changed`. If neither comes before the review, the review goes ahead without it, and the
+  pull request says D1 is owed: its failure mode fails closed (every branch proof red at `select`),
+  and the first branch proof after the merge runs it.
+
 ## Clash with pull request 1562
 
 Pull request 1562 (ticket 1075, an Effect sweep, open) edits both of this ticket's shared files.
