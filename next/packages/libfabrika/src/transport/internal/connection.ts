@@ -26,14 +26,14 @@ export type Model = typeof Model.Type;
 
 type Online = typeof Model.cases.idle.Type | typeof Model.cases.busy.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("observed"), attached: Attached }),
-  Schema.Struct({ type: Schema.Literal("started") }),
-  Schema.Struct({ type: Schema.Literal("finished") }),
-  Schema.Struct({ type: Schema.Literal("waited"), wait: Wait }),
-  Schema.Struct({ type: Schema.Literal("answered"), wait: Wait }),
-]);
-
+/** @internal */
+export const Msg = Schema.TaggedUnion({
+  observed: { attached: Attached },
+  started: {},
+  finished: {},
+  waited: { wait: Wait },
+  answered: { wait: Wait },
+});
 /** @internal */
 export type Msg = typeof Msg.Type;
 

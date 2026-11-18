@@ -36,9 +36,9 @@ const settle = (c: typeof Config.Type, pending: ReadonlyArray<Pending>): Model =
     ? Model.cases.waiting.make({ rows: pending, most: c.most, ttl: c.ttl })
     : Model.cases.empty.make({ rows: [], most: c.most, ttl: c.ttl });
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("knock"),
+/** The waiting room's Msgs. @internal */
+export const Msg = Schema.TaggedUnion({
+  knock: {
     key: Pending.fields.key,
     label: Pending.fields.label,
     location: Pending.fields.location,
@@ -48,11 +48,11 @@ const Msg = Schema.Union([
     as: Pending.fields.as,
     client: Schema.String,
     at: Schema.Number,
-  }),
-  Schema.Struct({ type: Schema.Literal("leave"), key: Schema.String, client: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("expire"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("accepted"), keys: Schema.Array(Schema.String) }),
-]);
+  },
+  leave: { key: Schema.String, client: Schema.String },
+  expire: { at: Schema.Number },
+  accepted: { keys: Schema.Array(Schema.String) },
+});
 
 /** The saved row, with `tabs` derived from its clients. @internal */
 export const Row = Schema.Struct({

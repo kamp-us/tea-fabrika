@@ -62,35 +62,32 @@ const OnDial = { dial: Dial };
 /** How long the dial took to reach an outcome, in ms: a measurement, never authority. */
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
-export const LinkMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Finite, ms: Ms }),
-  Schema.Struct({
-    type: Schema.Literal("not_granted"),
+export const LinkMsg = Schema.TaggedUnion({
+  admitted: { ...OnDial, ping: Schema.Finite, ms: Ms },
+  not_granted: {
     ...OnDial,
     fingerprint: Schema.String,
     code: Schema.String,
     until: Schema.Finite,
     ms: Ms,
-  }),
-  Schema.Struct({ type: Schema.Literal("granted"), ...OnDial }),
-  Schema.Struct({
-    type: Schema.Literal("closed"),
+  },
+  granted: { ...OnDial },
+  closed: {
     ...OnDial,
     code: Schema.Int,
     fingerprint: Schema.String,
     ms: Ms,
-  }),
-  Schema.Struct({ type: Schema.Literal("retry"), ...OnDial, tries: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("beat"), ...OnDial }),
-  Schema.Struct({ type: Schema.Literal("pong"), ...OnDial }),
-  Schema.Struct({ type: Schema.Literal("stalled"), ...OnDial, ms: Ms }),
+  },
+  retry: { ...OnDial, tries: Schema.Int },
+  beat: { ...OnDial },
+  pong: { ...OnDial },
+  stalled: { ...OnDial, ms: Ms },
   // `knocks` is the count the timer was set at: each renew gives the next timer new deps, since tea
   // keeps a fired timer until its deps change. A renew for an older count is stale.
-  Schema.Struct({ type: Schema.Literal("renew"), ...OnDial, knocks: Schema.optionalKey(Count) }),
-  Schema.Struct({ type: Schema.Literal("blocked"), reason: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("ask_again"), ...OnDial }),
-]);
-
+  renew: { ...OnDial, knocks: Schema.optionalKey(Count) },
+  blocked: { reason: Schema.String },
+  ask_again: { ...OnDial },
+});
 export type LinkMsg = typeof LinkMsg.Type;
 
 /** Send the text `ping` on the dial's socket; the brain answers `pong`. */
@@ -116,19 +113,19 @@ export const backoff = (tries: number): number => Math.min(CAP, 500 * 2 ** Math.
 export const linkTimer = (link: Link): { readonly after: number; readonly msg: LinkMsg } | null => {
   switch (link._tag) {
     case "dialing":
-      return { after: DIALING, msg: { type: "stalled", dial: link.dial, ms: DIALING } };
+      return { after: DIALING, msg: LinkMsg.cases.stalled.make({ dial: link.dial, ms: DIALING }) };
     case "waiting_grant":
-      return { after: RENEW, msg: { type: "renew", dial: link.dial, knocks: link.knocks ?? 0 } };
+      return { after: RENEW, msg: LinkMsg.cases.renew.make({ dial: link.dial, knocks: link.knocks ?? 0 }) };
     case "online": {
       const after = Math.max(0, Math.min(link.ping, BEAT));
 
       return (link.pings ?? 0) === 0
-        ? { after, msg: { type: "beat", dial: link.dial } }
-        : { after, msg: { type: "stalled", dial: link.dial, ms: after } };
+        ? { after, msg: LinkMsg.cases.beat.make({ dial: link.dial }) }
+        : { after, msg: LinkMsg.cases.stalled.make({ dial: link.dial, ms: after }) };
     }
 
     case "retrying":
-      return { after: backoff(link.tries), msg: { type: "retry", dial: link.dial, tries: link.tries } };
+      return { after: backoff(link.tries), msg: LinkMsg.cases.retry.make({ dial: link.dial, tries: link.tries }) };
     case "removed":
     case "blocked":
       return null;
@@ -220,5 +217,8 @@ export const linkMachine = Machine.make({
     knock_ok: stay,
     knock_err: stay,
   },
-  subs: [{ type: "timer", deps: (s) => timerDeps(s) }],
+  subs: [
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+    { _tag: "timer", deps: (s) => timerDeps(s) },
+  ],
 });

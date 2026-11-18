@@ -64,8 +64,7 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
               typeof Rate.Model.Type,
               typeof Rate.machine.msg.Type,
               ReturnType<typeof Rate.machine.init>[1][number]
-            >(Rate.machine, model, { type: "take", at, policy });
-
+            >(Rate.machine, model, Rate.Take.make({ at, policy }));
             const command = commands[0];
 
             if (command === undefined) {

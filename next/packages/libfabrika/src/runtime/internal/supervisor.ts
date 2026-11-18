@@ -160,46 +160,44 @@ export const Supervision = Schema.Struct({
 /** @internal */
 export type Supervision = typeof Supervision.Type;
 
-const msg = <T extends string, F extends Schema.Struct.Fields>(type: T, fields: F) =>
-  Schema.Struct({ type: Schema.Literal(type), ...fields });
-
-const Msg = Schema.Union([
-  msg("swapped", { process: ProcessId, build: Text }),
-  msg("swap_prepared", { change: CodeChange }),
-  msg("swap_completed", { load: Text }),
-  msg("received", { receipt: Receipt }),
-  msg("compacted", { letter: Text, digest: Text }),
-  msg("limited", { maxDeliveries: Schema.NullOr(Deliveries) }),
-  msg("begin", { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis }),
-  msg("admitted", { seq: Count, receipt: Receipt }),
-  msg("refused", { seq: Count, reply: Reply }),
-  msg("reply_written", { seq: Count }),
-  msg("abandoned", { seq: Count }),
-  msg("attempt_cleared", { seq: Count }),
-  msg("check_threw", { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From }),
-  msg("finished", { seq: Count }),
-  msg("threw", { seq: Count, error: Text, reason: ExitReason, from: From }),
-  msg("interrupted", { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis }),
-  msg("dead_written", { seq: Count }),
-  msg("exit_written", { process: ProcessId, restarts: Schema.Array(Millis), at: Millis, program: Text }),
-  msg("down_written", { process: ProcessId }),
-  msg("due", { at: Millis, program: Text, from: From }),
-  msg("started", { id: Text, process: ProcessId, at: Millis }),
-  msg("checkpointed", { after: ProcessId, process: ProcessId, restarts: Schema.Array(Millis), at: Millis }),
-  msg("adopted", { process: ProcessId, build: Text, restarts: Schema.Array(Millis) }),
-  msg("restart_requested", {
+/** @internal The supervisor's Msgs, each made with `SupervisorMsg.cases.<name>.make`. */
+export const SupervisorMsg = Schema.TaggedUnion({
+  swapped: { process: ProcessId, build: Text },
+  swap_prepared: { change: CodeChange },
+  swap_completed: { load: Text },
+  received: { receipt: Receipt },
+  compacted: { letter: Text, digest: Text },
+  limited: { maxDeliveries: Schema.NullOr(Deliveries) },
+  begin: { process: ProcessId, letter: Text, build: Text, phase: Attempt.fields.phase, at: Millis },
+  admitted: { seq: Count, receipt: Receipt },
+  refused: { seq: Count, reply: Reply },
+  reply_written: { seq: Count },
+  abandoned: { seq: Count },
+  attempt_cleared: { seq: Count },
+  check_threw: { seq: Count, receipt: Receipt, error: Text, reason: ExitReason, from: From },
+  finished: { seq: Count },
+  threw: { seq: Count, error: Text, reason: ExitReason, from: From },
+  interrupted: { process: ProcessId, letter: Text, build: Text, reason: ExitReason, from: From, at: Millis },
+  dead_written: { seq: Count },
+  exit_written: { process: ProcessId, restarts: Schema.Array(Millis), at: Millis, program: Text },
+  down_written: { process: ProcessId },
+  due: { at: Millis, program: Text, from: From },
+  started: { id: Text, process: ProcessId, at: Millis },
+  checkpointed: { after: ProcessId, process: ProcessId, restarts: Schema.Array(Millis), at: Millis },
+  adopted: { process: ProcessId, build: Text, restarts: Schema.Array(Millis) },
+  restart_requested: {
     id: Text,
     build: Text,
     live: Schema.Boolean,
     process: ProcessId,
     program: Text,
     from: From,
-  }),
-  msg("healthy", { at: Millis }),
-]);
+  },
+  healthy: { at: Millis },
+});
 
 /** @internal */
-export type SupervisorMsg = typeof Msg.Type;
+export type SupervisorMsg = typeof SupervisorMsg.Type;
 
 type Ctx = {
   readonly policy: Policy;
@@ -305,7 +303,7 @@ const failed = (
 /** @internal */
 export const supervisor = Machine.make({
   model: Supervision,
-  msg: Msg,
+  msg: SupervisorMsg,
   cmds: [],
   // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
@@ -382,7 +380,7 @@ export const supervisor = Machine.make({
         return unchanged(s);
       }
 
-      const { type: _type, ...fields } = m;
+      const { _tag: _type, ...fields } = m;
       const attempt = { ...fields, seq: s.seq + 1 };
 
       const journal =

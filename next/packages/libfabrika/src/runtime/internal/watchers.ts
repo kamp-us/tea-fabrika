@@ -19,10 +19,8 @@ export const Model = Schema.TaggedUnion({
   },
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("open"), watch: Client }),
-  Schema.Struct({ type: Schema.Literal("end"), client: Schema.String }),
-]);
+/** @internal A watch opened, or a client's watch ended. */
+export const Msg = Schema.TaggedUnion({ open: { watch: Client }, end: { client: Schema.String } });
 
 /** @internal */
 export const watchers = Machine.make({
