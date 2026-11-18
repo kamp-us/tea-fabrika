@@ -2,7 +2,8 @@
 // into an object commits the spans it ended together, before it answers. A real Project and a real Process
 // object run on in-memory SQLite and in-memory platform handles; only Cloudflare's handles, the Worker
 // Loader transport and the Record stub are doubled. The laws count the sink's transactions that landed spans
-// on the object a call entered: they never read the sink's state, only the rows it commits.
+// on the object a call entered, the span rows the object still holds after the call (`unsent`), and the span
+// rows the Record stub received: they never read the sink's state, only what it commits and ships.
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
@@ -74,11 +75,20 @@ const START = StartsTest.fixture(
 const handles = (db: DatabaseSync) => {
   const sql = nodeSql(db);
   const landings: Array<number> = [];
+  let transactions = 0;
   const values = new Map<string, unknown>();
   let inserts = 0;
 
   return {
     landings,
+    /** The span rows the object holds, not yet shipped. */
+    unsent: () =>
+      sql.exec(`SELECT name FROM sqlite_master WHERE name = 'unsent'`).length === 0
+        ? 0
+        : Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Number }))(sql.exec(`SELECT count(*) AS n FROM unsent`)[0])
+            .n,
+    /** Every transaction the object's storage ran, a span's or not. */
+    transactions: () => transactions,
     storage: {
       sql: {
         exec: (query: string, ...args: ReadonlyArray<string | number | null>) => {
@@ -94,6 +104,7 @@ const handles = (db: DatabaseSync) => {
       },
       transactionSync: <A>(step: () => A): A => {
         inserts = 0;
+        transactions += 1;
         const done = sql.transaction(step);
 
         if (inserts > 0) {
@@ -115,6 +126,19 @@ const handles = (db: DatabaseSync) => {
     },
   };
 };
+
+/** One span row the Record stub received: its name, its attributes and the object that ended it. */
+const ShippedRows = Schema.Array(
+  Schema.Struct({
+    span: Schema.Struct({
+      name: Schema.String,
+      attributes: Schema.Record(Schema.String, Schema.Unknown),
+      resource: Schema.Struct({ attributes: Schema.Record(Schema.String, Schema.Unknown) }),
+    }),
+  }),
+);
+
+type Shipped = (typeof ShippedRows.Type)[number];
 
 /** The descriptor the Project's delivery carries, as the Process object decodes it. */
 const Delivered = Schema.Struct({
@@ -161,6 +185,7 @@ const open = Effect.fnUntraced(function* () {
   const processDb = new DatabaseSync(":memory:");
   const processHandles = handles(processDb);
   const entered = yield* Deferred.make<void>();
+  const shipped: Array<Shipped> = [];
   const deliveries: Array<Promise<void>> = [];
   const Box = programBox(counter, CODE.hash);
   const programs = { [PROGRAM]: CODE };
@@ -228,7 +253,15 @@ const open = Effect.fnUntraced(function* () {
         probe: () => Promise.resolve(0),
       }),
     },
-    RECORD: { getByName: () => ({ write: () => Promise.resolve({ _tag: "written" }) }) },
+    RECORD: {
+      getByName: () => ({
+        write: (_chain: unknown, _at: number, rows: unknown) => {
+          shipped.push(...Schema.decodeUnknownSync(ShippedRows)(rows));
+
+          return Promise.resolve({ _tag: "written" });
+        },
+      }),
+    },
     MEASUREMENTS: {},
     LOADER: { get: () => ({ getEntrypoint: () => Reflect.construct(Box, []) }) },
   } as unknown as Env;
@@ -267,7 +300,7 @@ const open = Effect.fnUntraced(function* () {
   yield* Deferred.await(entered);
   yield* Effect.tryPromise({ try: () => Promise.all(deliveries), catch: (cause) => new CallFailure({ cause }) });
 
-  return { projectHandles, processHandles, projectStub, processStub, call };
+  return { projectHandles, processHandles, projectStub, processStub, call, shipped };
 });
 
 type World = Effect.Success<ReturnType<typeof open>>;
@@ -306,16 +339,24 @@ type Move = typeof Move.Type;
  *  its flush. */
 const MOST = { process: 2, project: 1 } as const;
 
+/** A span row the Project ended: the Project's objects are named `project:` and a Process's by its id. */
+const fromProject = (row: Shipped) => {
+  const object = row.span.resource.attributes["fab.object"];
+
+  return Predicate.isString(object) && object.startsWith("project:");
+};
+
 const REQUIRED = [...Move.literals, "a call that ended more spans than its bound"];
 
 const reached = new Set<string>();
 
 describe("T753 L16 a call commits its spans together", () => {
   // Plants (run once, not kept): remove the batch from `attributed` and from `wrapped`, so each span commits
-  // as it ends and the bound is passed; and batch outside the runner's flush with no flush commit, so the
-  // call's own flush ships nothing of what it ended (a Process call that ships fewer spans than it ended).
+  // as it ends and the bound is passed; and delete the `commitOpen` call at the top of the sink's `flush`, so
+  // the call's own flush ships nothing of what it ended: the spans stay in `unsent` and the Record stub
+  // receives none of them until a later call's flush.
   it.effect.prop(
-    "A6 every Process call and wrapped Project call commits the spans it ended in at most one transaction before it flushes, and the call's end in one more",
+    "A6 every Process call and wrapped Project call commits the spans it ended in at most one transaction before it flushes, and the call's end in one more; its own flush ships what it ended before, with fab.settings and fab.build",
     { moves: Schema.Array(Move).check(Schema.isMinLength(3), Schema.isMaxLength(10)) },
     ({ moves }) =>
       Effect.scoped(
@@ -332,6 +373,8 @@ describe("T753 L16 a call commits its spans together", () => {
             const side = move.startsWith("process.") ? "process" : "project";
             const object = side === "process" ? w.processHandles : w.projectHandles;
             const before = object.landings.length;
+            const held = object.unsent();
+            w.shipped.length = 0;
             const spans = object.landings.reduce((total, n) => total + n, 0);
 
             switch (move) {
@@ -381,6 +424,70 @@ describe("T753 L16 a call commits its spans together", () => {
               used,
               `${move} ended ${ended} spans in ${used} sink transactions, over ${MOST[side]}`,
             ).toBeLessThanOrEqual(MOST[side]);
+
+            // The call's own flush shipped every span it ended before that flush: what the object still holds
+            // is only what ended after the flush, which landed in the call's last transaction. A call that
+            // ended no span, an alarm with nothing due, leaves what an earlier call left.
+            const landed = object.landings.slice(before);
+            const first = landed[0] ?? 0;
+            const after = landed.length > 1 ? (landed.at(-1) ?? 0) : 0;
+            const own = w.shipped.filter((row) => fromProject(row) === (side === "project"));
+            const left = object.unsent();
+            const said = `${move} left spans unshipped by its own flush (landed ${JSON.stringify(landed)})`;
+
+            if (landed.length === 0) {
+              expect(left, said).toBeLessThanOrEqual(held);
+            } else {
+              expect(left, said).toBe(after);
+            }
+
+            expect(
+              own.length,
+              `${move} shipped ${own.length} of the ${first} spans it ended before its flush`,
+            ).toBeGreaterThanOrEqual(first);
+
+            for (const row of w.shipped) {
+              expect(
+                [row.span.attributes["fab.settings"] !== undefined, row.span.attributes["fab.build"] !== undefined],
+                `${move} shipped the span ${row.span.name} without fab.settings and fab.build`,
+              ).toEqual([true, true]);
+            }
+          }
+        }),
+      ),
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 40 }) } },
+  );
+  // Plant (run once, not kept): wrap the Project's `publish` in the sink's batch, as the first build did. The
+  // `project.publish` span then lands as a span row, in a commit of its own, where main records none.
+  it.effect.prop(
+    "A6 a Project publish adds no span row and no commit to the Project's database",
+    { updates: Schema.Array(Schema.Literals(["whole", "patch"])).check(Schema.isMinLength(1), Schema.isMaxLength(5)) },
+    ({ updates }) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const w: World = yield* open();
+          // The first call builds the Project's services and its sink's tables.
+          yield* w.call(w.projectStub, "info");
+          let rev = 0;
+
+          for (const type of updates) {
+            const rows = w.projectHandles.unsent();
+            const commits = w.projectHandles.transactions();
+            const landings = w.projectHandles.landings.length;
+            const update =
+              type === "whole"
+                ? { type, rev: ++rev, view: null, pid: NAME }
+                : { type, base: rev, rev: ++rev, patch: [], pid: NAME };
+            yield* w.call(w.projectStub, "publish", "nobody", update);
+
+            expect(
+              {
+                rows: w.projectHandles.unsent() - rows,
+                commits: w.projectHandles.transactions() - commits,
+                landings: w.projectHandles.landings.length - landings,
+              },
+              `a ${type} publish changed the Project's database`,
+            ).toEqual({ rows: 0, commits: 0, landings: 0 });
           }
         }),
       ),

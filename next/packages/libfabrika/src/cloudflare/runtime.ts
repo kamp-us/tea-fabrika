@@ -1901,8 +1901,6 @@ const projectLogic = Effect.fn("project.init")(function* (
       Schema.decodeUnknownEffect(Published)(update).pipe(
         Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
         Effect.flatMap((checked) => clients.publish(client, checked)),
-        // No flush here: a publish never shipped its spans, and its commit is still one.
-        (work) => Context.get(services, SpanSink).batch(work),
       ),
     connect: () => wrapped(door.connect()),
     challenge: (client: ConnectionId) => wrapped(door.challenge(client)),
