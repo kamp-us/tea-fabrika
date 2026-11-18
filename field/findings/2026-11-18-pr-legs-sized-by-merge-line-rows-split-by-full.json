@@ -12,7 +12,7 @@
   "says": "In today's CI, legs.ts sizes a pull request's next and e2e legs with `measured` (size's default table), while those legs run at FABRIKA_TEST_DEPTH full, where Shards splits by rowsAt(\"full\"); its header says 'this split is the one Shards makes on each leg', which holds only for files with no full row.",
   "proof": "check.yaml lines 465 and 483 set FABRIKA_TEST_DEPTH: full on the next and e2e steps; legs.ts line 270 calls size(run, selected, full, limit) with no table; vitest.shards.full.json holds 330 next/ rows, many unlike their measured rows.",
   "cost": "A sized pull request can get fewer legs than its full-depth seconds need, and a leg can run past the budget it was sized for.",
-  "head": "397e63f",
+  "head": "397e63f44d84c59cbd562ccb56675a26c641ed0f",
   "ticket": null,
   "pr": null
 }

@@ -12,7 +12,7 @@
   "says": "In today's CI, shard-rows.ts (pnpm lint) judges only next/ rows of vitest.shards.json and vitest.shards.full.json; a tooling row whose file is renamed or deleted is caught only by vitest.shards.test.ts's 'names only files that are in the repo' tests, which a pull request does not select unless it reaches vitest.shards.ts, so the first red is main's full run.",
   "proof": "stale() filters path.startsWith(\"next/\"); vitest.shards.json holds 437 non-next rows; a deleted tooling test changes nothing vitest.shards.test.ts imports.",
   "cost": "A pull request that renames a tooling test with a row turns main's scheduled run red, a sev1.",
-  "head": "397e63f",
+  "head": "397e63f44d84c59cbd562ccb56675a26c641ed0f",
   "ticket": null,
   "pr": null
 }
