@@ -4,12 +4,13 @@
 import type * as Cloudflare from "@alchemy.run/cloudflare";
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { connectionLayer, ConnectionService } from "./connection.ts";
 import { Connection, type ConnectionShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
 import type { Env, ProjectOptions } from "./runtime.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 type Service = (typeof ConnectionService)["Service"];
 
@@ -69,7 +70,7 @@ export const layer = (options: {
 
       const service = ObjectService.make(
         ConnectionService,
-        connectionLayer(raw, bindings, undefined, options.input(bindings)),
+        connectionLayer(raw, bindings, undefined, options.input(bindings)).pipe(Layer.provide(WaitsLive.layer)),
       );
 
       const event = (

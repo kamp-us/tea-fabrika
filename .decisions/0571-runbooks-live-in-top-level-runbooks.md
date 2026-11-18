@@ -1,12 +1,12 @@
 ---
 id: 0571
-title: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
-status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
+title: Runbooks live in .runbooks/ today and move to .kalfa/runbooks/ with the other record folders once 0585's move is built, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
+status: accepted
 date: 2026-11-15
 tags: [runbook, operations, checklist, docs, sev, skills, wipe, dev-home]
 ---
 
-# 0571: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
+# 0571: Runbooks live in .runbooks/ today and move to .kalfa/runbooks/ with the other record folders once 0585's move is built, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
 
 **What this decides:** an operation we run by hand, such as a sev or wiping the dev and test homes after a saved shape changes, gets a runbook (a checklist for when that thing happens) in `.runbooks/`, and `docs/` stays for documentation of what fabrika is.
 
@@ -57,6 +57,9 @@ moment that operation happens.**
   runbook is the checklist for one operation; the skill is the judgment around the idea
   ([0408](./0408-skills-keep-only-judgment.md)).
 - `docs/` holds only documentation of what fabrika is.
+- **The folder moves to `.kalfa/runbooks/`,** with every other record folder under `.kalfa/`
+  ([0585](0585-kalfa-is-six-domain-packages.md)), when that move is built. Only the folder's path
+  changes: the sketch above shows `.runbooks/` as it is until then.
 
 **Binding constraints:**
 

@@ -40,7 +40,8 @@ waiting today.
   20 general rules. `src/effect/index.ts` is a second plugin, `anti-slop-effect`, with 7 rules for
   Effect code. Its README registers both through oxlint's `jsPlugins`, as `anti-slop/<rule>` and
   `anti-slop-effect/<rule>`. The rules are written for oxlint's own plugin API
-  (`@oxlint/plugins`), which our installed oxlint 1.90.0 has.
+  (`@oxlint/plugins`), which our installed oxlint has (`pnpm-workspace.yaml`'s catalog entries for
+  `oxlint` and `@oxlint/plugins`).
 - **How it is installed, as found:**
   - `package.json` names it `oxlint-plugin-anti-slop`, version `0.1.2`, and marks it
     `"private": true`. Its README says there is no official npm package, and that the project is
@@ -50,9 +51,9 @@ waiting today.
   - Neither repository has a tag or a release. So the only exact version is a full commit.
   - That leaves two ways to have it "as it ships": a git dependency pinned to one full commit
     (`github:K-Mistele/anti-slop#<commit>`), or its `src/` folder brought in whole and unchanged
-    at one commit, which is what its README describes. Neither was tried for this file.
-  - Things the install will meet: the package pins `@oxlint/plugins` at `1.86.0` and ours is
-    `1.90.0`; its README asks that the two match exactly. It has a `prepare` script
+    at one commit, which is what its README describes. The second is taken, see the Decision.
+  - Things the install will meet: when it was read on 2026-11-15, the package pinned
+    `@oxlint/plugins` at `1.86.0` and ours was `1.90.0`; its README asks that the two match exactly. It has a `prepare` script
     (`effect-tsgo patch --oxlint`) that a git install may run. Its `exports` names only
     `./src/index.ts`, so the Effect entry point is reached by path.
 - **Only the fork has `max-ternary-depth`,** and the fork replaced the parent's
@@ -66,8 +67,8 @@ waiting today.
   comes before a hand-written check. This file applies it to this plugin, and goes one step
   further: no copy that we then change.
 - [0554](0554-no-reflect-get-set-has.md) and [0555](0555-no-vi-mock-or-domock.md) were written
-  before this ruling, and each names an oxlint built-in rule as its hold. Each gets a one-line
-  pointer here.
+  before this ruling, and each names an oxlint built-in rule as its hold. Each has a one-line
+  pointer to this file.
 
 ## Decision
 
@@ -82,8 +83,10 @@ authors already wrote (owner, 2026-11-15).**
   one exact version, which today means one full commit.
 - **How it comes in: as its README says (owner, 2026-11-15).** The fork's `src/` folder is
   brought into this repo whole and unchanged, at one commit, with that commit and the license
-  recorded beside it. It is not a git dependency. An update brings in a newer commit whole. This
-  is not "our own copy of a rule": that line is about rewriting or hand-copying single rules.
+  recorded beside it. It is not a git dependency: that would make every install and CI run depend on one fork
+  staying online, and its `prepare` script could run on install. An update brings in a newer commit
+  whole. This is not "our own copy of a rule": that line is about rewriting or hand-copying single
+  rules.
 - **B. It blocks where lint blocks.** Each rule is a lint rule that runs in the pull request and in
   the merge line, and fails them. There is no scheduled count and no dashboard of counts.
 - **C. An exception is one inline ignore, on the line, with its reason:**
@@ -94,11 +97,16 @@ authors already wrote (owner, 2026-11-15).**
   [0168](0168-old-lint-breaks-are-fixed.md)).
 - **E. Theirs replaces ours.** A lint rule of our own in `oxlint-plugins/` that a trusted
   repository's rule already covers is replaced by theirs, and ours is deleted. Which of our rules
-  that is, rule by rule, is an audit of its own. This file only states the rule.
+  that is, rule by rule, [0573](0573-trusted-lint-rule-replaces-ours.md) rules: where theirs catches
+  the same or more, ours goes in the pull request that turns theirs on; where ours catches more, it
+  stays. So `fabrika/no-hand-tag` goes to theirs, and `fabrika/padding-line-between-statements`
+  stays beside their `require-readable-spacing`, which misses class-member lines (upstream issue
+  <https://github.com/dmmulroy/anti-slop/issues/78>).
 - **Every rule the owner took is on as an error, at zero hits, in `next/` and our tooling:**
   ternary depth, a reason on every cast, spacing, no `unknown` parameters or returns, no runtime
-  `typeof`, and no hand-written `_tag` anywhere, with the two from 0554 and 0555. The rest of the
-  plugin's rules wait on his ruling, one by one.
+  `typeof`, no `unknown` type alias, no unsafe dictionary type, and no hand-written `_tag`
+  anywhere, with the two from 0554 and 0555. The rest of the plugin's rules wait on his ruling,
+  one by one.
 
 **The list, as of 2026-11-15.** Hits are `next/` product, `next/` tests, tooling.
 
@@ -112,7 +120,7 @@ authors already wrote (owner, 2026-11-15).**
 | `anti-slop/no-unknown-parameters` | 253 / 486 / 58 | here, below |
 | `anti-slop/no-unknown-returns` | 39 / 88 / 12 | here |
 | `anti-slop/no-runtime-typeof` | 85 / 311 / 179 | here |
-| `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type` | 3 / 1,728 / 197 and 1 / 144 / 14 | the decision that no `_tag` is written by hand anywhere, being written as its own file |
+| `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type` | 3 / 1,728 / 197 and 1 / 144 / 14 | [0562](0562-nothing-teaches-the-wrong-shape.md), the decision that no `_tag` is written by hand anywhere |
 
 - **Also taken, and not from the plugin:** oxlint's own `oxc/no-accumulating-spread`, which the
   plugin's README turns on beside its rules. It has its own decision, 0559, in its own pull
@@ -131,7 +139,11 @@ authors already wrote (owner, 2026-11-15).**
 - **Since taken:** the two Match rules, by [0567](0567-a-tagged-value-is-matched.md), which also
   says the form we write. They no longer wait.
 - **Since taken:** `anti-slop/no-unknown-type-aliases` and `anti-slop/no-unsafe-dictionary-type`
-  (owner, 2026-11-15), see Amendments. They no longer wait.
+  (owner, 2026-11-15). They no longer wait: they go on with the rest, folder by folder, each at
+  zero, alongside `no-unknown-parameters`, `no-unknown-returns` and `no-runtime-typeof`, in the
+  sweep of ticket 1053. No `unknown` inside an array or an object-type field is covered by any rule
+  of theirs; that gap went to the authors as
+  <https://github.com/dmmulroy/anti-slop/issues/77>.
 
 **`no-unknown-parameters`**
 
@@ -159,7 +171,7 @@ authors already wrote (owner, 2026-11-15).**
   blank line between top-level statements, between class members and around every control
   statement, and lets two one-line statements stay a group. What will change there: the list of
   places gains "before a `return`" and "around a multi-line binding in any block", and the line
-  that Effect does not enforce blank lines gains this measure. 0021 is not amended by this file.
+  that Effect does not enforce blank lines gains this measure.
 
 **Binding constraints**
 
@@ -192,17 +204,14 @@ authors already wrote (owner, 2026-11-15).**
   the installed plugin gives the real numbers.
 - **Not decided here:**
   - Which commit is brought in, where the folder lives, and what holds that it still matches
-    that commit. The plan of the install says.
+    that commit. The plan of the install says. Today it put the folder at `vendor/anti-slop/`.
   - Where the plugin's config lives in `.oxlintrc.json`.
   - The order the rules are turned on.
-  - How our own `fabrika/padding-line-between-statements` sits with their spacing rule.
-  - Where we already hold the same thing with a rule of ours or a built-in one
-    (`fabrika/no-hand-tag`, `fabrika/no-type-assertions`, and the two that 0554 and 0555 name,
-    `eslint/no-restricted-properties` and `vitest/no-restricted-vi-methods`): rule E says theirs
-    replaces ours where theirs covers it. Whether it does, for each of these, is for the audit and
-    the plan that turns their rule on, by the order of precedence that decision 0560 sets.
-    Their `no-reflect-get` reads only `Reflect.get`, and their `no-module-mocking` only `mock`,
-    `doMock` and `unstable_mockModule`, so 0554's `set` and `has` and 0555's `spyOn` and
+  - Where we already hold the same thing with a built-in rule (the two that 0554 and 0555 name,
+    `eslint/no-restricted-properties` and `vitest/no-restricted-vi-methods`): whether theirs covers
+    it is for the plan that turns their rule on, by the order of precedence that decision 0560
+    sets. Their `no-reflect-get` reads only `Reflect.get`, and their `no-module-mocking` only
+    `mock`, `doMock` and `unstable_mockModule`, so 0554's `set` and `has` and 0555's `spyOn` and
     `stubEnv` need a hold of their own either way.
   - What the reason line says for each kind of `unknown` parameter that is right.
   - Today's app.
@@ -210,13 +219,4 @@ authors already wrote (owner, 2026-11-15).**
 ## Records
 
 - [0554](0554-no-reflect-get-set-has.md) and [0555](0555-no-vi-mock-or-domock.md): a one-line
-  pointer each. Their status does not change.
-
-## Amendments
-
-- 2026-11-15: the install route is ruled. Of the two routes in Context, the second is taken: the
-  plugin's `src/` comes in whole and unchanged at one commit of the fork, as its README says, with
-  the commit and license recorded. The first route, a git dependency, would make every install and
-  CI run depend on one fork staying online, and its `prepare` script could run on install.
-- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) rules which of our rules rule E replaces: where theirs catches the same or more, ours goes in the pull request that turns theirs on; where ours catches more, it stays. It also settles `fabrika/no-hand-tag` (theirs holds it) and `fabrika/padding-line-between-statements` (theirs holds it once `require-readable-spacing` is on and a check shows it flags every line ours does), two of the open items under Not decided here.
-- 2026-11-15: the owner took `anti-slop/no-unknown-type-aliases` and `anti-slop/no-unsafe-dictionary-type`. They go on with the rest, folder by folder, each at zero, alongside `no-unknown-parameters`, `no-unknown-returns` and `no-runtime-typeof`, in the sweep of ticket 1053. No `unknown` inside an array or an object-type field is covered by any rule of theirs; that gap went to the authors as https://github.com/dmmulroy/anti-slop/issues/77.
+  pointer each.

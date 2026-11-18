@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-error-cause-client-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-18T21:43:58+00:00",
+  "ended": "2026-11-18T21:50:14+00:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "next/: tests for ticket 1062, the JournalError row of slice 3 (0568): L3 in client/Hands.types.test.ts, seen red in one libfabrika typecheck (TS2578 unused @ts-expect-error), and the two cut fakes gain an Error cause; head b0462c593; tests step on Sonnet at high effort, a cloud Claude Code subagent Claude Code subagent transcript: 18 model calls; tokens in 36 uncached, 51,497 5-minute and 0 1-hour cache writes, 1,539,270 cache reads; out 7,358. Dollars are list price (https://platform.claude.com/docs/en/about-claude/pricing, read 2026-11-08). Billing `subscription` as the caller gave it; the transcript does not record it.",
+  "tokens": 98360,
+  "tools": 19,
+  "minutes": 6.3,
+  "note": null,
+  "costUsd": null,
+  "listUsd": 0.3563,
+  "billed": 1598161,
+  "inputTokens": 1590803,
+  "cachedTokens": 1539270,
+  "outputTokens": 7358,
+  "billing": "subscription",
+  "step": "test_writer",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/client/Hands.types.test.ts L3",
+      "plant": "next/packages/libfabrika/src/client/Journal.ts:57 cause = Schema.Defect(), the build shape",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/Hands.types.test.ts L3",
+      "plant": "next/packages/libfabrika/src/client/Journal.ts:57 cause = Schema.optional(Schema.Defect())",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/Commands.test-support.ts:141 the cut fake",
+      "plant": "build shape applied and the before-cut fake cause dropped",
+      "result": "red"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-lint-rule-swaps-of-0573-and-0575-not-done",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "oxlint-plugins/index.ts",
+    "line": 21
+  },
+  "says": "Decisions 0573 and 0575 say our lint rules no-hand-tag, no-node-imports, no-effect-run-outside-edge and service-id give way to trusted rules (the two anti-slop-effect no-manual-tagged rules, oxlint's import/no-nodejs-modules and no-restricted-properties, and the checker's deterministicKeys), each deleted in the pull request that turns its replacement on at zero hits, but all four rules still exist in oxlint-plugins/ and .oxlintrc.json still sets them, so the code lags the decisions. This is not the 2026-11-14 service-id row, which is about ids the rule never checks. The approved plan that already carries this work is docs/plan/quests/trusted-rules-0573-PLAN.md (the no-hand-tag swap, with no-node-imports and no-effect-run-outside-edge named there as their own later pull requests), and the service-id swap is slice E55 of docs/plan/quests/effect-sweep-PLAN.md. Ticket text: land those approved plans, one pull request per swap as 0573 and 0575 order, and do not plan the work again; each pull request turns the trusted rule on where ours ran, then deletes ours with its test, its plants and its README row.",
+  "proof": "`ls oxlint-plugins/service-id.ts oxlint-plugins/no-hand-tag.ts oxlint-plugins/no-node-imports.ts oxlint-plugins/no-effect-run-outside-edge.ts` lists all four; `grep -n 'fabrika/service-id\\|fabrika/no-hand-tag\\|fabrika/no-node-imports\\|fabrika/no-effect-run-outside-edge' .oxlintrc.json` prints each set to \"error\" (for example lines 662, 663, 673 and 2243); `oxlint-plugins/index.ts` lines 21, 24, 52 and 19 import them; `grep -rn deterministicKeys tsconfig.base.json next --include=tsconfig*.json` prints nothing, so the checker's replacement for service-id is not set.",
+  "cost": "Two rules hold the same thing in the same files, and a reader of 0573 and 0575 finds rules that the records say are gone, so an agent copies or extends the wrong one.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

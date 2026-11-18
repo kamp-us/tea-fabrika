@@ -52,6 +52,7 @@ import type { Descriptor } from "../runtime/Runner.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { GatewayCalls, ProcessBinding } from "./bindings.ts";
 import { control } from "./control.ts";
+import * as DispatcherLive from "./DispatcherLive.ts";
 import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject: class {} }));
@@ -1370,7 +1371,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                     i.env,
                     Redacted.make(TOKEN),
                     {},
-                  );
+                  ).pipe(Effect.provide(DispatcherLive.layer));
 
                 if (move === "control") {
                   const response = yield* ask("project", "codeInstall", TOKEN);

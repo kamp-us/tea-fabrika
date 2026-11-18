@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-cloudflare-fix1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1637",
+  "started": "2026-11-18T13:00:00-08:00",
+  "ended": "2026-11-18T13:20:00-08:00",
+  "parent": "2026-11-18-mock-cloudflare-review1",
+  "active": null,
+  "driver_caused": false,
+  "role": "fix",
+  "step": "fix",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "6f1bd5fa6a367775b20f38745119e394cffb5010",
+  "why": "In next/ and the lint tooling, one fix round for ticket 1067: CI's typecheck was red on oxlint-plugins/plants.test.ts. The kept list in M13 was declared as const, so its retries row's folders narrowed to a one-literal tuple and folders.includes(folder) refused a string. It is now typed as a read-only array of rows whose folders are a read-only array of strings, with no cast and no disable. Main (PR 1636) was merged first, with no conflict; its hunks in plants.test.ts and builtin-plants.ts were read and kept as they are. No law was weakened: M13 keeps every check.",
+  "plants": [
+    {
+      "law": "scenario: M13 process stdout and stderr are refused in libfabrika's product and test-support files, taken in its test files, and no other entry is lost",
+      "plant": "Dropped the two process entries from the next/packages/libfabrika/src/** copy block in .oxlintrc.json. Restored by copy.",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "costUsd": null,
+  "billed": null,
+  "note": "Node 26.13.0, TYPESAFE_API_KEY unset. oxlint-plugins/plants.test.ts passes (266 tests); tsc in oxlint-plugins exits 0; one whole-repo pnpm typecheck exits 0. pnpm lint: the parallel run lost lint:kind and lint:promise-types to the known tsgo broken-pipe crash, and each passes run alone; every other part passed."
+}

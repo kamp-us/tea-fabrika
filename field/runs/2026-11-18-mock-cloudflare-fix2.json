@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-cloudflare-fix2",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1644",
+  "started": "2026-11-18T13:42:00-08:00",
+  "ended": "2026-11-18T13:50:00-08:00",
+  "parent": "2026-11-18-mock-cloudflare-fix1",
+  "active": null,
+  "driver_caused": false,
+  "role": "fix",
+  "step": "fix",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "f9ddee07a5f42a99725322112fcdf0519ef47b91",
+  "why": "In next/ and the lint tooling, one fix round for ticket 1067: CI was red on oxlint-plugins/layers.test.ts, scenario: tuval's folders, a program's box and window, and nothing above the library. Its plant moved two rows from next-node on, but the new row next-workers-project-audit-test sits between next-node and next-workers, so the plant left next-workers behind. The plant now finds next-workers by name and moves next-node through next-workers as one block, and the expected order names all five rows (next-apps, next-node, next-workers-project-audit-test, next-workers, next-program-windows). layer-rules.json is unchanged and no check was loosened.",
+  "plants": [
+    {
+      "law": "scenario: tuval's folders, a program's box and window, and nothing above the library",
+      "plant": "The plant's layers are the real rows unmoved, so the node test's tuval import stays upward. Restored by copy.",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "costUsd": null,
+  "billed": null,
+  "note": "Node 26.13.0. Before the fix the scenario was red on its row-order check (expected next-workers in third place, got next-workers-project-audit-test); after it, oxlint-plugins/layers.test.ts passes (19 tests). The head field is the head the round started from. pnpm lint, tsc in oxlint-plugins and the list ratchet pass."
+}

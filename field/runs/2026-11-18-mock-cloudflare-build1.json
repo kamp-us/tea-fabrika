@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-cloudflare-build1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1637",
+  "started": "2026-11-18T12:12:00-08:00",
+  "ended": "2026-11-18T12:26:16-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 2's product code in next/, as docs/plan/quests/mock-cloudflare-PLAN.md (amendments 2026-11-16 and 2026-11-17) says. New contract files Waits.ts and Dispatcher.ts (Dispatcher.ts also holds the Request schema its contract speaks in) and live layers WaitsLive.ts and DispatcherLive.ts, each exporting layer; connection.ts asks Waits inside GatewayWaits and connectionRuntime and ConnectionObject.ts provide WaitsLive.layer; control.ts reads Dispatcher on each request; brain.ts provides DispatcherLive.layer where it runs control; runtime.ts has the SinkLayer and RunnerLayer References and reads WebCrypto.WebCrypto in checkedPut and the key fingerprint; record.ts exports recordPartImplementation and ProcessObject.ts exports implementation; package.json exports ./workers/Waits, ./workers/WaitsLive and (needed by brain.ts) ./workers/DispatcherLive; next/AGENTS.md gets the no-console and process-output lint row (M12, M13). Every slice 2 law is green: readers.laws 39, alarm.laws 2, ObjectService 3, error-cause 12, connection 16, entry-flows.laws 6, reload.laws 11, door.integration 153. The one red outside the build's files is control.laws.test.ts (1 test, L8): Service not found for Dispatcher, since it calls control without DispatcherLive.layer; its typecheck line is control.laws.test.ts(350,7) TS2375. pnpm format, lint (lint:promise-types alone after an out-of-memory kill in the parallel run, 0 findings), the list ratchet and both package typechecks pass, apart from that one test file's typecheck line.",
+  "note": "Node 26.13.0 from the tests step's scratch download was first on PATH for every vitest and pnpm run and nothing about it is committed. Each plant broke one line of the real build, ran its one law, and was restored by copy; git status then showed only the build's own files. The first s2 row's plant 'control.ts runs the dispatch body inline' is the same edit as the second row's 'reads Dispatcher from its own DispatcherLive.layer' once the body lives in DispatcherLive, so it ran once, in that form. Started time is approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "readers.laws.test.ts: Connection ready RPC decoding fails in the typed channel before the wait refusal is sent (M1)",
+      "plant": "WaitsLive.layer's ready uses Effect.orDie in place of the mapError to LedgerError",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: Connection ready RPC decoding fails in the typed channel before the wait refusal is sent (M1)",
+      "plant": "wait decodes the answer inline, past Waits",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: control bucket bytes fail as a typed parse error before its HTTP error response (M2)",
+      "plant": "DispatcherLive.layer's dispatch decodes the bucket bytes with Schema.decodeUnknownSync",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: control checks outside head key as text instead of coercing it or throwing (M2)",
+      "plant": "DispatcherLive.layer's dispatch coerces the head key with String(raw) before its check",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: the four control laws (M2)",
+      "plant": "control.ts reads Dispatcher from its own DispatcherLive.layer, past the provided Dispatcher",
+      "result": "red"
+    },
+    {
+      "law": "alarm.laws.test.ts: A1 and A2 (M8)",
+      "plant": "processLogic names ProgramRunner.withLoader again, past RunnerLayer",
+      "result": "red"
+    },
+    {
+      "law": "ObjectService.test.ts: law 3, the Process shell (M9)",
+      "plant": "recordingLayer names SpanSink.layer again, past SinkLayer",
+      "result": "red"
+    },
+    {
+      "law": "error-cause.test.ts: C1 (M10)",
+      "plant": "checkedPut calls globalThis.crypto.subtle.digest, past the WebCrypto reference",
+      "result": "red"
+    }
+  ]
+}

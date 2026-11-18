@@ -46,19 +46,17 @@ tradeoff. A lead's note the same day added syntax highlighting to v1.
 How this relates to the decisions near it:
 
 - **[0432](0432-next-has-fabsh-rethought-from-tsh.md), amended in part.** Its "rethought from tsh,
-  never copied" does not hold for v1. The name `fabsh` in `next/`, and `tsh` staying in today's
-  version, still hold.
+  never copied" does not apply to v1.
 - **[0217](0217-next-grows-beside-today.md), amended in part.** The owner sets its lesson rule aside
   for this one case: `fabsh` v1 carries today's terminal over as it behaves, feature for feature.
-  The rest of 0217 holds. `next/` still imports nothing from today's version: each part is rebuilt
-  in `next/`, on its runtime, and the switch pull request deletes the old part once its laws are
-  ported. [Rethink, do not port](../docs/direction/rethink-do-not-port.md) holds everywhere else.
-- **[0275](0275-the-shell-is-a-regular-program.md) holds.** `fabsh` is a regular program, a
+  `next/` imports nothing from today's version: each part is rebuilt in `next/`, on its runtime,
+  and the switch pull request deletes the old part once its laws are ported.
+- **[0275](0275-the-shell-is-a-regular-program.md) governs it.** `fabsh` is a regular program, a
   submitted line is a Msg, keys typed mid-line are never saved, and the window echoes at once. Where
   the line editor runs on `next/`'s runtime is the plan's, inside 0275.
-- **[0159](0159-fabsh-pipes-summon-join-first.md) holds,** and this answers one thing it left open:
+- **[0159](0159-fabsh-pipes-summon-join-first.md) governs it,** and this answers one thing it left open:
   what a `fabsh` line may contain. In v1 it is what a `tsh` line may contain.
-- **[0069](0069-choices-are-settings.md) holds:** the terminal's look is settings, not code.
+- **[0069](0069-choices-are-settings.md) applies:** the terminal's look is settings, not code.
 
 ## Decision
 

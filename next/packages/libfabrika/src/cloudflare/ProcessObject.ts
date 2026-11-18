@@ -3,7 +3,7 @@
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { ProgramSource } from "./index.ts";
 import { Process, type ProcessShape } from "./objects.ts";
@@ -15,7 +15,9 @@ import {
   processLayer,
   ProcessService,
   type ProjectOptions,
+  RunnerLayer,
   savedAlarm,
+  SinkLayer,
 } from "./runtime.ts";
 
 type Service = (typeof ProcessService)["Service"];
@@ -30,11 +32,13 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
   );
 
 /**
- * Layer that provides the Process object: it takes what the platform gives an instance and hands
- * the alarm slot and every call to `ProcessService`.
+ * What Alchemy's `make` is handed for the Process object: the outer Effect that takes what the
+ * platform gives an instance and answers the alarm slot and every call through `ProcessService`.
  *
  * **Details**
  *
+ * It reads `SinkLayer` and `RunnerLayer` once, where it is built, and builds the service with them,
+ * so a law that provides another sink or runner reaches the service however late it is built.
  * `programs` are the built programs the object's runner loads, and `input` reads the instance's
  * checked settings from the Worker's bindings. The service is built on the first slot or call that
  * needs it, kept once the build succeeds, and built again after a failed one. The Layer starts no
@@ -45,59 +49,68 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
  * and any other failure of a call dies too. `abort` resets the instance, as the platform's own
  * abort does.
  *
- * @category layers
+ * @category constructors
  */
-export const layer = (options: {
+export const implementation = (options: {
   readonly programs: Readonly<Record<string, ProgramSource>>;
   readonly input: (env: Pick<Env, "INSTANCE">) => NonNullable<ProjectOptions["input"]>;
 }) =>
-  Process.make(
-    Effect.gen(function* () {
-      const state = yield* ObjectState;
-      const env = yield* WorkerEnvironment;
+  Effect.gen(function* () {
+    const state = yield* ObjectState;
+    const env = yield* WorkerEnvironment;
+    const sink = yield* SinkLayer;
+    const runner = yield* RunnerLayer;
 
-      const bindings: Env = {
-        INSTANCE: env.INSTANCE,
-        PROJECT: env.PROJECT,
-        PROCESS: env.PROCESS,
-        CONNECTION: env.CONNECTION,
-        RECORD: env.RECORD,
-        LOADER: env.LOADER,
-        MEASUREMENTS: env.MEASUREMENTS,
-      };
+    const bindings: Env = {
+      INSTANCE: env.INSTANCE,
+      PROJECT: env.PROJECT,
+      PROCESS: env.PROCESS,
+      CONNECTION: env.CONNECTION,
+      RECORD: env.RECORD,
+      LOADER: env.LOADER,
+      MEASUREMENTS: env.MEASUREMENTS,
+    };
 
-      // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
-      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
-      const raw = state.raw as unknown as DurableObjectState;
+    // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
+    // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
+    const raw = state.raw as unknown as DurableObjectState;
 
-      const service = ObjectService.make(
-        ProcessService,
-        processLayer(raw, bindings, options.programs, options.input(bindings)),
-      );
+    const service = ObjectService.make(
+      ProcessService,
+      processLayer(raw, bindings, options.programs, options.input(bindings)).pipe(
+        Layer.provide(Layer.merge(Layer.succeed(SinkLayer, sink), Layer.succeed(RunnerLayer, runner))),
+      ),
+    );
 
-      // `configure` saves the descriptor first, then runs the service's first turn from a context.
-      const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
-      const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
+    // `configure` saves the descriptor first, then runs the service's first turn from a context.
+    const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
+    const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
 
-      return {
-        alarm: () =>
-          service.pipe(
-            Effect.flatMap((process) => process.alarm()),
-            Effect.orDie,
-          ),
-        usage: (rows) => use((process) => process.usage(rows)),
-        configure: (descriptor, drain) => called(configureProcess(raw, descriptor, context, drain)),
-        descriptor: (process) => called(processDescriptor(raw, process)),
-        msg: (input) => use((process) => process.msg(input)),
-        open: (client) => use((process) => process.open(client)),
-        swap: (request) => use((process) => process.swap(request)),
-        mailed: (trace) => use((process) => process.mailed(trace)),
-        due: (at) => use((process) => process.due(at)),
-        restart: (request) => use((process) => process.restart(request)),
-        activity: (value) => use((process) => process.activity(value)),
-        recover: () => use((process) => process.recover()),
-        savedAlarm: () => called(savedAlarm(raw)),
-        abort: () => state.abort("storage wake"),
-      } satisfies ProcessShape;
-    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
-  );
+    return {
+      alarm: () =>
+        service.pipe(
+          Effect.flatMap((process) => process.alarm()),
+          Effect.orDie,
+        ),
+      usage: (rows) => use((process) => process.usage(rows)),
+      configure: (descriptor, drain) => called(configureProcess(raw, descriptor, context, drain)),
+      descriptor: (process) => called(processDescriptor(raw, process)),
+      msg: (input) => use((process) => process.msg(input)),
+      open: (client) => use((process) => process.open(client)),
+      swap: (request) => use((process) => process.swap(request)),
+      mailed: (trace) => use((process) => process.mailed(trace)),
+      due: (at) => use((process) => process.due(at)),
+      restart: (request) => use((process) => process.restart(request)),
+      activity: (value) => use((process) => process.activity(value)),
+      recover: () => use((process) => process.recover()),
+      savedAlarm: () => called(savedAlarm(raw)),
+      abort: () => state.abort("storage wake"),
+    } satisfies ProcessShape;
+  }).pipe(Effect.map((shape) => Effect.succeed(shape)));
+
+/**
+ * Layer that provides the Process object: Alchemy's `make` over `implementation`.
+ *
+ * @category layers
+ */
+export const layer = (options: Parameters<typeof implementation>[0]) => Process.make(implementation(options));

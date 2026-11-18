@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "links": [],
+  "id": "2026-11-18-lead-fold-of-0535-typed-a-push-start",
+  "stage": "lead",
+  "kind": "failure",
+  "person": false,
+  "what": "In records cleanup slice 5 the lead caught a builder's fold of 0535 that typed an hourly mutation interval, and sent its own wording back instead: mutation is started by main's scheduled clock, `scheduled.yaml`'s `on.push` and `on.schedule`. That made a push to main start mutation, which 0067 rules out (never by a push). The review sent it back, and fix round 1 names only the `on.schedule` cron.",
+  "cause": "The lead wrote the fold from 0535 and 0581 alone, and did not read 0067, an amender of the same rule outside the slice's status lines.",
+  "primitive": "Draft",
+  "fix": "A lead-sent fold reads every record that rules on the same line, the ones outside the status lines included, before it is sent, as the review brief already asks of a reviewer.",
+  "test": "The next lead-sent fold in a cleanup slice names the records it read in its message to the builder."
+}

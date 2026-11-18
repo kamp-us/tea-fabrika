@@ -7,9 +7,8 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Recorder, runsFor } from "@kampus/vitest";
-import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Match, Option, Redacted, Schema } from "effect";
+import { Recorder, runsFor, Stub } from "@kampus/vitest";
+import { Cause, Effect, Exit, Layer, Match, Redacted, Schema } from "effect";
 
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -25,11 +24,13 @@ import { News } from "../runtime/News.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
+import type { ProjectBinding, RecordBinding } from "./bindings.ts";
 import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
+import { Dispatcher } from "./Dispatcher.ts";
+import * as DispatcherLive from "./DispatcherLive.ts";
 import { fetch } from "./fetch.ts";
-import type { RecordShape } from "./objects.ts";
-import { recordRead, recordWrite } from "./record.ts";
+import { recordPartImplementation, recordRead, recordWrite } from "./record.ts";
 import {
   ProcessService,
   ProjectService,
@@ -40,41 +41,8 @@ import {
   SettingsRuntime,
   type Env,
 } from "./runtime.ts";
-
-const recordConstructor = vi.hoisted(() => {
-  const slot: {
-    value?: Effect.Effect<
-      Effect.Effect<RecordShape, unknown, Scope.Scope>,
-      unknown,
-      ObjectState | WorkerEnvironment | Scope.Scope
-    >;
-  } = {};
-
-  return slot;
-});
-
-// Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-
-  return {
-    ...actual,
-    RecordPart: {
-      make: (implementation: NonNullable<typeof recordConstructor.value>) => {
-        recordConstructor.value = implementation;
-
-        return Layer.empty;
-      },
-    },
-  };
-});
-
-vi.mock("effect", async (original) => {
-  const actual = await original<typeof import("effect")>();
-
-  return { ...actual, Effect: { ...actual.Effect } };
-});
+import { Waits } from "./Waits.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 const config = await Effect.runPromise(
   StartsTest.fixture({
@@ -98,6 +66,32 @@ const freshPublicKey = Signature.Signature.use((signature) => signature.generate
 const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
+/** A platform member any call to which fails the law: the world gives only what the readers use. */
+const unexpected = (member: string): never => {
+  throw new Error(`the world gives no platform member ${member}`);
+};
+
+/** The one member Alchemy's `fromDurableObjectState` reads as it wraps an object, which these objects lack:
+ *  `container` answers nothing, and any other member the world did not give fails the law. */
+const absent = (member: string) => (member === "container" ? undefined : unexpected(member));
+
+/** A platform member built from plain parts, as workerd's type promises it. */
+// SAFETY: each caller hands `fake` the one part the readers use, and the readers use nothing else of it.
+const fake = <A>(value: object): A => value as A;
+
+/** A saved value a law has damaged on purpose: workerd's type promises better, so the readers check it. */
+// SAFETY: the damage is the law's point. Every reader decodes the value before it uses it.
+const saved = <A>(value: unknown): A => value as A;
+
+/** The world's bindings with another `INSTANCE` text, the one binding a law changes. */
+const withInstance = (env: Env, instance: string) =>
+  Stub.make<Env>(unexpected, {
+    INSTANCE: instance,
+    PROJECT: env.PROJECT,
+    RECORD: env.RECORD,
+    MEASUREMENTS: env.MEASUREMENTS,
+  });
 
 const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
 
@@ -149,45 +143,48 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
             const sql = w.ctx.storage.sql;
 
-            const ctx = {
-              ...w.ctx,
-              id: {
-                ...w.ctx.id,
+            const ctx = Stub.make<DurableObjectState>(absent, {
+              id: Stub.make<DurableObjectId>(unexpected, {
                 name: Match.value(path).pipe(
                   Match.when("Process", () => Formatter.formatJson(["settings-law", "worker"])),
                   Match.when("RecordPart", () => Formatter.formatJson(["settings-law", "spans/0"])),
                   Match.orElse(() => "settings-law"),
                 ),
-              },
+              }),
               getWebSockets: () => {
                 consumers++;
 
                 return [];
               },
+              getTags: w.ctx.getTags,
+              getWebSocketAutoResponseTimestamp: w.ctx.getWebSocketAutoResponseTimestamp,
+              acceptWebSocket: w.ctx.acceptWebSocket,
+              setWebSocketAutoResponse: w.ctx.setWebSocketAutoResponse,
               // The storage, with each read a consumer could make counted: `get`, and `sql.exec`.
-              storage: {
-                ...w.ctx.storage,
-                get: (...args: unknown[]) => {
+              storage: Stub.make<DurableObjectStorage>(unexpected, {
+                // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+                kv: Stub.make<SyncKvStorage>(unexpected),
+                get: fake<DurableObjectStorage["get"]>((...args: ReadonlyArray<unknown>) => {
                   consumers++;
 
                   return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
-                },
-                sql: {
-                  ...sql,
-                  exec: (...args: unknown[]) => {
+                }),
+                transactionSync: w.ctx.storage.transactionSync,
+                sql: Stub.make<SqlStorage>(unexpected, {
+                  exec: fake<SqlStorage["exec"]>((...args: ReadonlyArray<unknown>) => {
                     consumers++;
 
                     return Reflect.apply(sql.exec, sql, args);
-                  },
+                  }),
                   get databaseSize() {
                     return sql.databaseSize;
                   },
-                },
-              },
-            };
+                }),
+              }),
+            });
 
             // The world's Project stub counts each `settingsStart` and answers the start it is given.
-            const env = { ...w.env, INSTANCE: Formatter.formatJson(bad) };
+            const env = withInstance(w.env, Formatter.formatJson(bad));
 
             const local = {
               ...config,
@@ -212,10 +209,9 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ),
               );
             } else if (path === "RecordPart") {
-              const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
               exit = yield* Effect.exit(
                 Effect.gen(function* () {
-                  const build = yield* constructor;
+                  const build = yield* recordPartImplementation;
                   const part = yield* build;
 
                   return yield* part.read(Chain.cases.spans.make({}), 0, 0);
@@ -302,9 +298,17 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   });
 };
 
+// M4 (mock sweep slice 1). Every platform object here is a `Stub.make` fake, so a call the world does
+// not give fails the law. Plants, each run once: the fake socket's `send` drops its frame (the ready
+// law is red: no `bad_row` reply in `sent`); `gatewayLogic` calls `ctx.storage.list()` (`unexpected`
+// throws, and the laws that build a connection are red).
 /** In-memory platform handles over one SQLite database. The Project stub's `settingsStart` answers
- *  as `settingsStart` says, the good start by default. */
-const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config)) => {
+ *  as `settingsStart` says, the good start by default, its `route` answers what `answer` last set, and
+ *  the object state's `storage.get` answers `read` says. `sent` holds each frame the socket was sent. */
+const world = (
+  settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config),
+  read?: (key: string) => Promise<unknown>,
+) => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
 
@@ -318,72 +322,79 @@ const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = asy
   });
 
   let tags: unknown = ["session", "tab", "key"],
-    name: unknown = "gateway";
+    name: unknown = "gateway",
+    answered: unknown = { _tag: "parked", stream: "stream", after: 0 };
 
-  const ws = {
+  const sent: Array<string> = [];
+
+  const socket = Stub.make<WebSocket>(unexpected, {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
       attached = value;
     },
-    send: vi.fn(),
-    close: vi.fn(),
-  };
-
-  // SAFETY: the readers use only the socket's attachment, `send` and `close`, which `ws` holds.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
-  const socket = ws as unknown as WebSocket;
-
-  // SAFETY: the readers call only the object's id, SQL storage and these socket methods, all given below.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
-  const ctx = {
-    id: {
-      get name() {
-        return name;
-      },
+    send: (text) => {
+      sent.push(String(text));
     },
-    storage: {
-      sql: {
-        exec: sql.exec,
+    close: () => {},
+  });
+
+  const ctx = Stub.make<DurableObjectState>(absent, {
+    id: Stub.make<DurableObjectId>(unexpected, {
+      get name() {
+        return saved<string>(name);
+      },
+    }),
+    storage: Stub.make<DurableObjectStorage>(unexpected, {
+      // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+      kv: Stub.make<SyncKvStorage>(unexpected),
+      sql: Stub.make<SqlStorage>(unexpected, {
+        // workerd answers a cursor, which the readers take with `Array.from`, as they take these rows.
+        exec: fake<SqlStorage["exec"]>(sql.exec),
         get databaseSize() {
           return sql.size();
         },
-      },
-      transactionSync: sql.transaction,
-    },
-    getWebSockets: () => [socket],
-    getTags: () => tags,
-    getWebSocketAutoResponseTimestamp: () => null,
-    acceptWebSocket: vi.fn(),
-    setWebSocketAutoResponse: vi.fn(),
-  } as unknown as DurableObjectState;
-
-  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
-
-  // SAFETY: these readers reach INSTANCE, PROJECT's settings and session calls, and RECORD's `write`, all doubled here.
-  // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
-  const env = {
-    INSTANCE: JSON.stringify(config),
-    PROJECT: {
-      getByName: () => ({
-        settingsStart,
-        route,
-        leave: async () => {},
-        disconnect: async () => {},
-        clientConnect: async () => "client",
-        challenge: async () => "nonce",
       }),
-    },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    MEASUREMENTS: {},
-  } as unknown as Env;
+      transactionSync: sql.transaction,
+      ...(read === undefined ? {} : { get: fake<DurableObjectStorage["get"]>(read) }),
+    }),
+    getWebSockets: () => [socket],
+    getTags: () => saved<Array<string>>(tags),
+    getWebSocketAutoResponseTimestamp: () => null,
+    acceptWebSocket: () => {},
+    setWebSocketAutoResponse: () => {},
+  });
+
+  const project = Stub.make<DurableObjectStub<ProjectBinding>>(unexpected, {
+    settingsStart: fake<DurableObjectStub<ProjectBinding>["settingsStart"]>(settingsStart),
+    route: fake<DurableObjectStub<ProjectBinding>["route"]>(async () => answered),
+    leave: fake<DurableObjectStub<ProjectBinding>["leave"]>(async () => {}),
+    disconnect: fake<DurableObjectStub<ProjectBinding>["disconnect"]>(async () => {}),
+    clientConnect: fake<DurableObjectStub<ProjectBinding>["clientConnect"]>(async () => "client"),
+    challenge: fake<DurableObjectStub<ProjectBinding>["challenge"]>(async () => "nonce"),
+  });
+
+  const env = Stub.make<Env>(unexpected, {
+    INSTANCE: JSON.stringify(config),
+    PROJECT: Stub.make<Env["PROJECT"]>(unexpected, { getByName: () => project }),
+    RECORD: Stub.make<Env["RECORD"]>(unexpected, {
+      getByName: () =>
+        Stub.make<DurableObjectStub<RecordBinding>>(unexpected, {
+          write: fake<DurableObjectStub<RecordBinding>["write"]>(async () => ({ _tag: "written" })),
+        }),
+    }),
+    MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
+  });
 
   return {
     ctx,
     env,
-    ws,
     socket,
+    sent,
     db,
-    route,
+    /** What the Project's `route` answers from now on. */
+    answer: (value: unknown) => {
+      answered = value;
+    },
     attached: (value: unknown) => {
       attached = value;
     },
@@ -453,11 +464,23 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
   });
 }
 
+// The live members the two Recorder laws below wrap, read once from each service's live layer, the
+// sibling file 0095 keeps apart from the contract.
+const liveWaits = Effect.runSync(Waits.pipe(Effect.provide(WaitsLive.layer)));
+
+const liveDispatcher = Effect.runSync(Dispatcher.pipe(Effect.provide(DispatcherLive.layer)));
+
+// M1 (mock sweep slice 2). The wait asks the `Waits` service for the ready decode once, with the
+// raw answer the project gave, and the live decode fails in the typed channel. The Recorder holds
+// the call; the live member run on the recorded value holds the typed exit.
+// Plants: in `WaitsLive.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`
+// (red on the typed exit); `wait` decodes the answer inline, past `Waits` (red: no recorded call).
 it("Connection ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        attempts: Array<Exit.Exit<unknown, unknown>> = [];
+        attempts: Array<Exit.Exit<unknown, unknown>> = [],
+        decodes: Array<Exit.Exit<unknown, unknown>> = [];
 
       // The real waits, watched: each run is recorded, and its exit is kept to read its error.
       const waits = Layer.unwrap(
@@ -477,17 +500,32 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         }),
       ).pipe(Layer.provide(GatewayWaits.layer));
 
+      // The ready decode's own seam (mock sweep slice 2, 0095): the live `Waits` member behind a
+      // Recorder, with its own exit kept. The request path must ask it, so the recorded call holds the
+      // exact raw answer the project gave, beside the exit of the whole wait above.
+      const decoding = Recorder.layer(Waits, {
+        ready: (answer) =>
+          liveWaits.ready(answer).pipe(
+            Effect.onExit((exit) =>
+              Effect.sync(() => {
+                decodes.push(exit);
+              }),
+            ),
+          ),
+      });
+
       const runtime = SettingsRuntime.runtime(
         gatewayLayer(w.ctx, w.env).pipe(
           Layer.provideMerge(waits),
           Layer.provide(gatewayProject(w.env)),
           Layer.provide(recordedLayer(w.env)),
+          Layer.provideMerge(decoding),
         ),
       );
 
       try {
         const gateway = await runtime.runPromise(ConnectionService);
-        w.route.mockResolvedValue({ _tag: "ok", result: raw });
+        w.answer({ _tag: "ok", result: raw });
         await runtime.runPromise(
           gateway
             .message(
@@ -504,7 +542,13 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         expect(await runtime.runPromise(Recorder.calls(GatewayWaits, "wait"))).toHaveLength(1);
         expect(attempts).toHaveLength(1);
         typed(attempts[0]!);
-        expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
+        expect(
+          await runtime.runPromise(Recorder.calls(Waits, "ready")),
+          "the wait asks for the decode once, with exactly the project's raw answer",
+        ).toEqual([[raw]]);
+        expect(decodes, "the one decode ran once and failed").toHaveLength(1);
+        typed(decodes[0]!);
+        expect(w.sent.map((text) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
             error: expect.objectContaining({ data: { reason: "bad_row" } }),
@@ -519,48 +563,81 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
   );
 });
 
+/**
+ * Sends one control request with the `Dispatcher` recorded, and answers the response with the
+ * dispatch calls the request path made and the exit of each. The recorded member is the live one
+ * with `Effect.onExit` on it, so the exit read is the first, actual call's, never a second run.
+ */
+const recordedControl = (body: unknown, headers: Record<string, string>, env: Env) => {
+  const exits: Array<Exit.Exit<unknown, unknown>> = [];
+
+  const watched = Recorder.layer(Dispatcher, {
+    dispatch: (...args) =>
+      liveDispatcher.dispatch(...args).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            exits.push(exit);
+          }),
+        ),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const request = new Request("http://local/", {
+      method: "POST",
+      headers: { authorization: "Bearer test", ...headers },
+      body: JSON.stringify(body),
+    });
+
+    const response = yield* parserControl(request, env);
+
+    return { response, calls: yield* Recorder.calls(Dispatcher, "dispatch"), exits };
+  }).pipe(Effect.provide(watched));
+};
+
+/** The one recorded dispatch is the law's own request, and its actual exit fails typed. */
+const dispatchedOnce = (
+  calls: ReadonlyArray<Recorder.Args<Dispatcher["Service"], "dispatch">>,
+  exits: ReadonlyArray<Exit.Exit<unknown, unknown>>,
+  body: unknown,
+  env: Env,
+) => {
+  expect(calls, "the request path dispatches once").toHaveLength(1);
+  const [call] = calls;
+  expect(call?.[0], "with the Worker's own bindings").toBe(env);
+  expect(call?.[2], "and exactly the request the law sent").toEqual(JSON.parse(JSON.stringify(body)));
+  expect(exits, "the one dispatch ran once").toHaveLength(1);
+  typed(exits[0]!);
+};
+
+// M2 (mock sweep slice 2). Plants: in the live `dispatch`, decode the bucket bytes with
+// `Schema.decodeUnknownSync`, so a bad value dies (red); `control.ts` calls the dispatch body
+// inline, past `Dispatcher` (red: no recorded call).
 it("control bucket bytes fail as a typed parse error before its HTTP error response", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
-      const w = world(),
-        attempts: Array<Exit.Exit<unknown, unknown>> = [];
-
-      const original = Effect.result;
-
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
-        ),
-      );
+      const w = world();
 
       try {
-        const request = new Request("http://local/", {
-          method: "POST",
-          headers: { authorization: "Bearer test", "content-type": "application/json" },
-          body: JSON.stringify({
-            target: "bucket",
-            project: "parse-test",
-            name: "",
-            method: "put",
-            args: ["key", raw, "checksum"],
-          }),
-        });
+        const body = {
+          target: "bucket",
+          project: "parse-test",
+          name: "",
+          method: "put",
+          args: ["key", raw, "checksum"],
+        };
 
-        const exit = await Effect.runPromiseExit(parserControl(request, w.env));
+        const exit = await Effect.runPromiseExit(recordedControl(body, { "content-type": "application/json" }, w.env));
         expect(Exit.isSuccess(exit)).toBe(true);
-        expect(attempts).toHaveLength(1);
-        typed(attempts[0]!);
-        const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+
+        const { response, calls, exits } = Exit.isSuccess(exit)
+          ? exit.value
+          : { response: new Response(null), calls: [], exits: [] };
+
+        dispatchedOnce(calls, exits, body, w.env);
         expect(response.status).toBe(500);
         expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
       } finally {
-        inspect.mockRestore();
         w.db.close();
       }
     }),
@@ -568,27 +645,14 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
   );
 });
 
+// M2, per field. Plant: coerce the field with `String(raw)` before the check (red: the dispatch
+// succeeds); `control.ts` calls the dispatch body inline, past `Dispatcher` (red: no recorded call).
 for (const field of ["put key", "put checksum", "head key"] as const) {
   it(`control checks outside ${field} as text instead of coercing it or throwing`, async () => {
     const input: fc.Arbitrary<unknown> = fc.oneof(malformed(Schema.String), fc.record({ toString: fc.jsonValue() }));
     await fc.assert(
       fc.asyncProperty(input, async (raw) => {
-        const w = world(),
-          attempts: Array<Exit.Exit<unknown, unknown>> = [];
-
-        const original = Effect.result;
-
-        const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-          original(
-            work.pipe(
-              Effect.onExit((exit) =>
-                Effect.sync(() => {
-                  attempts.push(exit);
-                }),
-              ),
-            ),
-          ),
-        );
+        const w = world();
 
         try {
           const args: Array<unknown> = field === "head key" ? [raw] : ["key", [], EMPTY_SHA256];
@@ -601,27 +665,25 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
             args[2] = raw;
           }
 
-          const request = new Request("http://local/", {
-            method: "POST",
-            headers: { authorization: "Bearer test" },
-            body: JSON.stringify({
-              target: "bucket",
-              project: "parse-test",
-              name: "",
-              method: field === "head key" ? "head" : "put",
-              args,
-            }),
-          });
+          const body = {
+            target: "bucket",
+            project: "parse-test",
+            name: "",
+            method: field === "head key" ? "head" : "put",
+            args,
+          };
 
-          const exit = await Effect.runPromiseExit(parserControl(request, w.env));
-          expect(attempts).toHaveLength(1);
-          typed(attempts[0]!);
+          const exit = await Effect.runPromiseExit(recordedControl(body, {}, w.env));
           expect(exit).toMatchObject({ _tag: "Success" });
-          const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+
+          const { response, calls, exits } = Exit.isSuccess(exit)
+            ? exit.value
+            : { response: new Response(null), calls: [], exits: [] };
+
+          dispatchedOnce(calls, exits, body, w.env);
           expect(response.status).toBe(500);
           expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
         } finally {
-          inspect.mockRestore();
           w.db.close();
         }
       }),
@@ -661,6 +723,8 @@ for (const service of ["process", "record"] as const) {
   });
 }
 
+// M3 (mock sweep slice 1). Plant, run once: `processDescriptor` returns `storage.get`'s value without its
+// decode (red: a malformed descriptor is no typed `bad_row` failure).
 it("processDescriptor checks the saved value before returning it to a caller", async () => {
   const descriptor = Schema.Struct({
     id: Schema.String,
@@ -672,9 +736,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
 
   await fc.assert(
     fc.asyncProperty(malformed(descriptor), async (raw) => {
-      const w = world();
-      const get = vi.fn(async () => raw);
-      Object.assign(w.ctx.storage, { get });
+      const w = world(undefined, async () => raw);
 
       try {
         typed(await Effect.runPromiseExit(processDescriptor(w.ctx)));
@@ -753,19 +815,18 @@ StartsTest.law(
       let size = 0;
       const raw = w.ctx.storage.sql;
 
-      const ctx = {
-        ...w.ctx,
-        id: { ...w.ctx.id, name: Formatter.formatJson(["settings-law", "spans/0"]) },
-        storage: {
-          ...w.ctx.storage,
-          sql: {
-            ...raw,
+      const ctx = Stub.make<DurableObjectState>(unexpected, {
+        id: Stub.make<DurableObjectId>(unexpected, { name: Formatter.formatJson(["settings-law", "spans/0"]) }),
+        storage: Stub.make<DurableObjectStorage>(unexpected, {
+          transactionSync: w.ctx.storage.transactionSync,
+          sql: Stub.make<SqlStorage>(unexpected, {
+            exec: raw.exec,
             get databaseSize() {
               return size;
             },
-          },
-        },
-      };
+          }),
+        }),
+      });
 
       const chain = Chain.cases.spans.make({});
 

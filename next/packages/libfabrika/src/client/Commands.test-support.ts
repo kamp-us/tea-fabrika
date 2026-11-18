@@ -138,7 +138,10 @@ export const cutJournal = (s: Seen) =>
           const before = take(s, op, "before");
 
           if (before === "fail") {
-            return yield* JournalError.make({ reason: "storage" });
+            return yield* JournalError.make({
+              reason: "storage",
+              cause: new Error(`planted cut: journal ${op} failed before it delegated`),
+            });
           }
 
           if (before !== null) {
@@ -150,7 +153,10 @@ export const cutJournal = (s: Seen) =>
           const after = take(s, op, "after");
 
           if (after === "fail") {
-            return yield* JournalError.make({ reason: "storage" });
+            return yield* JournalError.make({
+              reason: "storage",
+              cause: new Error(`planted cut: journal ${op} failed after it delegated`),
+            });
           }
 
           if (after !== null) {

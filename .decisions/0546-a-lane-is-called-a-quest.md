@@ -40,8 +40,3 @@ we already use run for one agent's turn, so the owner picked a word of our own.
 ## Records
 
 - `.glossary/TERMS.md`: the `lane` row is now `quest`.
-
-## Amendments
-
-- 2026-11-15: the Consequences line on what still says lane was made exact. It said "decisions
-  and notes", which contradicted the Decision section's rename of the plan and the notes.
