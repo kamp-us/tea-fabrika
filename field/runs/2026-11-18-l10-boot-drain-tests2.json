@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-tests2",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T11:10:39-08:00",
+  "ended": "2026-11-18T11:25:05-08:00",
+  "parent": "2026-11-18-l10-boot-drain-tests1",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, applied amendment 1 of docs/plan/quests/l10-boot-drain-PLAN.md to next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts: L10 has no clock. An owed change is due by the end of the program's first rebuild that started after Rolldown's change report for the saved file (at boot, its first rebuild), and fails at once if that rebuild ends unpaid, naming a repeat or no install. An earlier rebuild that already read the saved bytes may pay first, since scenario case 2 makes that order. settle, the span check, the change-report wait and the scenario's gate wait lost their 10 s and 3 s bounds, so only the it timeout backs a silent watcher. The end-of-case check now ties each change report to its program. At full depth the scenario passed in 6.7 s and L10 in 38.7 s idle and in 93.2 s beside a nice -n 15 pnpm lint. P4 went red at once with its own message, and the L10d law plant went red on values. No product file was touched.",
+  "note": "Same Claude subagent (step-tests) as tests1, resumed by the lead with the owner's rulings, then once before for a type-only fix (7c337e8b). Agent report at this round's end: 347480 tokens at its last turn, 19 tool uses this round, 15 minutes. Pinned Node 26.13.0, Linux cloud box. The lint beside the loaded L10 lost lint:kind and lint:promise-types to a kernel memory kill (broken pipe to their type checker). The pre-commit pnpm lint run alone passed 17 of 18 parts, and lint:promise-types was killed for memory again; run alone it gave 0 findings. pnpm typecheck in next/packages/libfabrika exit 0. Not pushed by the agent.",
+  "driver_caused": false,
+  "tokens": 347480,
+  "tools": 19,
+  "minutes": 15,
+  "costUsd": null,
+  "billed": null,
+  "base": "3af6afac",
+  "plants": [
+    {
+      "law": "L10b, in L10",
+      "plant": "P4 watch.ts installs the previous rebuild's build",
+      "result": "red"
+    },
+    {
+      "law": "L10d a repeat never pays an owed change, and the owed change is paid by the end of the first rebuild after its change report",
+      "plant": "Any install of a pending program pays its owed change",
+      "result": "red"
+    }
+  ]
+}

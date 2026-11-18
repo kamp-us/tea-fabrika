@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 06bb8018064e
+Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 627047193799
 Plancheck-Version: 3
 
 # L10 accounts for every install, and waits on counts, never on quiet
@@ -517,6 +517,14 @@ budget for a real build measures the machine (0052). Removing it removes the cau
 - `owed` takes installs until the owed program's first rebuild after its `change` report has
   ended, then requires that rebuild's install to be the owed change. A repeat in that rebuild, or no
   install in it, fails at once with its own message, never after a timeout.
+- **The lead's reading of Q2, after the tests step built it (85%):** the owed change is due by the
+  end of the program's first rebuild that started after the `change` report, and a rebuild that
+  started earlier but already read the saved bytes may pay it first. Read as "that rebuild's install
+  must be the change", the rule fails a correct watcher on an order scenario case 2 makes on
+  purpose. It stays a count with no clock, a repeat still never pays, and an unpaid change fails at
+  the end of that rebuild with its own message.
+- The change-report wait in `owe` and the scenario's gate wait lose their 3 s bounds too, by the
+  same principle.
 - `settle` and `inOwnRebuild` wait on the span-completion queue with no 10 s bound. Those 10 s
   bounds are the file's existing ones; inside L10 they are the same machine-dependent wait, so
   Q2's principle covers them. Only the `it` timeout backs them up.
