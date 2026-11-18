@@ -160,5 +160,5 @@ export const record: Rule = ({ workflow, jobs }, require) => {
     uploaders.filter((s) => s === upload).length === 1 &&
     uploaders.every(
       (s) => s === upload || timingsUploads.includes(s) || reportUploads.includes(s) || deliveries.includes(s),
-    ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings and the exact package archive");
+    ), "Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings");
 };
