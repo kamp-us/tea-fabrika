@@ -108,6 +108,7 @@ it.prop(
     let color = false;
     let at = 0;
     let painted = "";
+
     for (const match of sgrMatches(bytes)) {
       const plain = bytes.slice(at, match.index);
 
