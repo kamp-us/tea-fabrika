@@ -67,19 +67,30 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
   ]);
 };
 
+/**
+ * The runner's own answer to a refused start, beside tea's: `cmd` echoes only the Cmd's `_tag`, and
+ * `reason` says why. One start is out while `starting`, so a refusal with no name answers that start.
+ */
+const StartRefused = Schema.TaggedStruct("start_child_err", {
+  cmd: Schema.TaggedStruct("start_child", {}),
+  reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
+  at: Schema.Finite,
+});
+
 const Msg = Schema.Union([
   Enqueue,
   Drop,
   Resume,
   Reply,
   answers("start_child", StartChild.StartChildInput, Started, StartChild.startChild.errTags),
+  StartRefused,
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
 /** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
 const Input = Schema.Union([Enqueue, Drop, Resume, Reply]);
 
-type Message = typeof Input.Type | Settled<typeof StartChild.startChild | typeof Send.send>;
+type Message = typeof Input.Type | Settled<typeof StartChild.startChild | typeof Send.send> | typeof StartRefused.Type;
 
 /** The whole Msg the program declares, as tea types it: the inputs and each Cmd's settled answers. */
 const Whole: Schema.Codec<Message, typeof Msg.Encoded> = Msg;
@@ -160,7 +171,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     }
 
     if (m._tag === "start_child_ok" || m._tag === "start_child_err") {
-      if (s._tag !== "starting" || m.cmd.name !== s.current.name) {
+      if (s._tag !== "starting" || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
@@ -179,7 +190,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           reason: Stop.cases.start_refused.make({
             change: s.current.change,
             name: s.current.name,
-            refusal: m._tag === "start_child_err" ? m.error._tag : m.value._tag,
+            refusal: m._tag === "start_child_err" ? ("reason" in m ? m.reason : m.error._tag) : m.value._tag,
           }),
         }),
         [],
