@@ -13,7 +13,7 @@ flowchart TD
   value["code that branches on a tagged value"] --> known{"is the value's type known?"}
   known -- "no, it is unknown" --> guard["Predicate.isTagged"]
   known -- yes --> key{"which key names the case?"}
-  key -- "type, a tea Msg" --> msg["Match.discriminators('type'), cleaned up last"]
+  key -- "type, a semantic event" --> msg["Match.discriminators('type')"]
   key -- "_tag" --> own{"is the value its whole union, and has the union a matcher?"}
   own -- yes --> first["1. Union.match, Union.matchOrElse, Union.isAnyOf"]
   own -- "no, or it is already narrowed" --> second["2. Match.valueTags"]
@@ -41,6 +41,9 @@ const terminal = BrainState.isAnyOf(["braked", "stopped"]);
 The handler does not change. The check it calls is now the union's own, and no `_tag` is compared
 by hand.
 
+The examples in this file return the `[model, cmds]` tuple. A cell answers a `Step`
+([0578](0578-tea-cell-answers-a-step.md)), so the examples change with the sweep.
+
 **What this decides:** how code in `next/` and our tooling branches on a tagged value, which two
 lint rules hold it, and that the form is the same inside a tea machine's `update`.
 
@@ -48,8 +51,8 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
 
 - The anti-slop lint plugin has two rules about branching on a tag.
   [0563](0563-anti-slop-plugin-as-it-ships.md), which takes the plugin as it ships, lists both as
-  waiting on the owner. This file moves them to taken. 0563's rules for a taken rule hold here as
-  written, so 0563 is not amended: it gets a one-line pointer.
+  waiting on the owner. This file moves them to taken, and 0563's rules for a taken rule apply to
+  them.
 - **What the two rules fire on,** read in the plugin's source at commit `5360c12` of
   <https://github.com/K-Mistele/anti-slop>, under `src/effect/`:
   - `anti-slop-effect/no-manual-tag-comparison` fires on `x._tag` compared with a string, by
@@ -62,12 +65,12 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
 - **The hits:** 2,433 for the first rule and 247 for the second. Both are the research's syntax
   counts, not runs of the rules. A plain line search made for this file, on `origin/main` at
   `9a53b828d` over `next/`, `.agents/`, `.github/` and `oxlint-plugins/`, finds about 2,290
-  compared `_tag`s and 20 switches, so the first number is of the right size. The plugin is not in
-  the repo yet: it comes in as its `src/` folder, whole and unchanged at one commit (0563's
-  amendment of 2026-11-15). Its first run gives the real numbers.
+  compared `_tag`s and 20 switches, so the first number is of the right size. The plugin was not in
+  the repo yet: it comes in as its `src/` folder, whole and unchanged at one commit
+  ([0563](0563-anti-slop-plugin-as-it-ships.md)). Its first run gives the real numbers.
 - **This is stricter than the Effect team's own code, and it is the owner's choice.**
-  [0560](0560-an-order-for-effect-code.md) asks a file to say so plainly. What was read, in the
-  installed `node_modules/effect/src` at 4.1.2:
+  [0560](0560-an-order-for-effect-code.md) asks a file to say so plainly. What was read on
+  2026-11-15, in the installed `node_modules/effect/src` at 4.1.2:
   - `_tag ===` is on 978 lines in 175 files, and `switch (x._tag)` on about 200 lines more.
   - The `Match` module is called in 6 files, all under `ai/internal/mcpProtocol`.
   - No sentence of theirs says "use `Match`, not `===`". `node_modules/effect/AGENTS.md` does not
@@ -86,8 +89,8 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
     times, on values of unknown type, such as
     `(u: unknown): u is RpcClientError => Predicate.isTagged(u, "RpcClientError")`
     (`rpc/RpcClient.ts:66`).
-- **[0046](0046-one-tea-machine-per-file.md) said the opposite for one place.** Its amendment of
-  2026-11-10 says an `update` handler picks the next state with a plain conditional on `_tag`, not
+- **[0046](0046-one-tea-machine-per-file.md) said the opposite for one place.** Its rule of
+  2026-11-10 said an `update` handler picks the next state with a plain conditional on `_tag`, not
   `Match` and not the Model's own `.match`. Its tryout wrote every handler as a
   `Match.type<Model>().pipe(Match.tag(...), Match.exhaustive)` chain, and refused it for two
   reasons: each handler listed every state that stays, and a missing state gave about ten lines of
@@ -100,13 +103,13 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
     `Property 'stopping' is missing in type ...`.
   - A misspelled tag is refused by `match`, `matchOrElse` and `Match.tag`.
   - The rewritten merge machine passed its own 12 laws.
-- **This file amends 0046 in part.** Only that amendment's rule changes. The rest of 0046 holds as
-  written: every state machine is a tea machine, one per file or one factory, and the file holds
-  no input or output code.
+- **This file amends 0046 in part:** it replaces the rule of 2026-11-10 that an `update` handler
+  picks the next state with a plain conditional on `_tag`.
 - [0558](0558-no-ternary-deeper-than-two.md) left "Effect's `Match` in place of a ternary" open,
-  and its sketch of a fix still compares `_tag` by hand. Its cap of 2 holds as written. The checks
-  in its sketch are written as a match from now on, and it gets a one-line pointer.
-- [0214](0214-unions-are-tagged-with-tag.md) is not changed: tea's Msgs and Cmds keep `type`.
+  and its sketch of a fix still compares `_tag` by hand. The checks in its sketch are written as a
+  match from now on, and it gets a one-line pointer.
+- [0214](0214-unions-are-tagged-with-tag.md) tags every union with `_tag`, and since
+  [0569](0569-tea-msgs-are-keyed-on-tag.md) a tea Msg is one of them.
   [0562](0562-nothing-teaches-the-wrong-shape.md) is why tests and tooling are inside the scope.
 
 ## Decision
@@ -133,11 +136,10 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
    - `Union.matchOrElse(value, {...}, orElse)`, some cases and then the rest.
    - `Union.isAnyOf([...])`, a yes or no for a subset of cases.
 2. **The `Match` module second,** where a union has no matcher of its own, or the value is already
-   narrowed to some of its cases: `Match.valueTags(value, {...})`. For a tea Msg, which is keyed
-   by `type`: `Match.discriminators("type")({...})`, closed with `Match.exhaustive` or
-   `Match.orElse`.
-   Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg is keyed on `_tag` once its patch
-   lands, and then point 1 reads it; this line holds only until then.
+   narrowed to some of its cases: `Match.valueTags(value, {...})`. For a value keyed by a field
+   other than `_tag`, such as a semantic event's `type`: `Match.discriminators("type")({...})`,
+   closed with `Match.exhaustive` or `Match.orElse`. A tea Msg is keyed on `_tag`
+   ([0569](0569-tea-msgs-are-keyed-on-tag.md)), so point 1 reads it.
 3. **Each inner answer is matched by its own union,** inside the case that holds it, such as
    `CodeHost.Updated.match(m.value, {...})` inside the `updating` state's case.
 4. **Never `Predicate.isTagged` on a value whose type is known.** It is for `unknown`. The first
@@ -202,14 +204,14 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
 
 - **The state side first:** the `_tag` checks on our states and answers, and on Effect's own
   `Exit`, `Option` and `Result`.
-- **The Msg side last:** the checks on a tea Msg's `type`. Whether a Msg can be a `_tag` union on
-  the Effect side, with one conversion to tea's `type`, is still being researched (Not decided
-  here).
-- **The bump to effect 4.1.3 lands before the cleanup leans on `isAnyOf`.** On the installed
-  4.1.2, `isAnyOf(["typo"])` compiles: its type takes any key (`Schema.ts:6543`,
-  `<const Keys>` with no bound). <https://github.com/Effect-TS/effect/pull/10355> bounds the keys
-  by the union's tags, and the release notes of `effect@4.1.3` list it. `match`, `matchOrElse` and
-  `Match.tag` already refuse a misspelled tag on 4.1.2.
+- **The Msg side last:** the checks on a tea Msg, which is a `_tag` union since 0569, so point 1
+  reads it.
+- **The cleanup leans on `isAnyOf` only from effect 4.1.3 on.** On 4.1.2, `isAnyOf(["typo"])`
+  compiled: its type took any key (`Schema.ts:6543`, `<const Keys>` with no bound).
+  <https://github.com/Effect-TS/effect/pull/10355> bounds the keys by the union's tags, and the
+  release notes of `effect@4.1.3` list it. `pnpm-workspace.yaml`'s catalog entry for `effect` is
+  at that release. `match`, `matchOrElse` and `Match.tag` refused a misspelled tag on 4.1.2
+  already.
 
 **Binding constraints**
 
@@ -224,19 +226,19 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
 
 ## Consequences
 
-- **0046's amendment of 2026-11-10 is superseded.** An `update` handler no longer picks the next
-  state with a plain conditional on `_tag`. 0046's status says `amended-in-part`, and a pointer
-  sits at the amendment. The line in [`next/AGENTS.md`](../next/AGENTS.md) that repeated it is
-  changed in this pull request.
+- **0046's rule of 2026-11-10 is replaced.** An `update` handler no longer picks the next state
+  with a plain conditional on `_tag`. 0046's text says the new rule where it said the old one. The
+  line in [`next/AGENTS.md`](../next/AGENTS.md) that repeated it was changed in the same pull
+  request.
 - **The compiler now checks more.** With `Union.match`, a new state does not compile until every
   matcher has a key for it. 0046 had left that to the machine's property tests. `isAnyOf` and
   `matchOrElse` stay silent on a new state, as the plain check did.
 - **Lint holds less than this file says.** The two rules catch a hand comparison. They do not
   check the order of points 1 to 3, and `Predicate.isTagged` on a typed value passes them. Those
   are for the plan and the review.
-- **The Msg side is only partly held.** The first rule does not read `type`, so a plain
-  `if (m.type === "land")` passes both rules. Only a ternary chain on `m.type` fires, by the
-  second rule.
+- **A value keyed on `type` is only partly held.** The first rule does not read `type`, so a plain
+  `if (e.type === "land")` on a semantic event passes both rules. Only a ternary chain on `e.type`
+  fires, by the second rule.
 - **The second rule reaches past tags.** It fires on any chained ternary over one value and a
   literal. The form for a value that is no tag is not decided here.
 - **The cost.** About 2,700 hits to rewrite, most of them in tests, across every machine in
@@ -244,29 +246,19 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
 - **The pattern doc** [a tagged value is matched by its union](../.patterns/effect-tagged-value-is-matched.md)
   shows the forms with code from `next/`.
 - **Not decided here:**
-  - Whether tea's Msgs become `_tag` unions on the Effect side, with one conversion to tea's
-    `type`. It is being researched. Until it is settled, 0214 stands and a Msg keeps `type`.
-  - Whether a Msg union gets a matcher of its own with `Schema.toTaggedUnion("type")`. The
-    research compiled it on one machine only.
   - The form for a chained ternary over a plain literal that is no tag.
   - Which folder goes first, and how the cleanup is cut into pull requests.
   - Today's app.
 
 ## Records
 
-- [0046](0046-one-tea-machine-per-file.md): status `amended-in-part`, and a one-line pointer at
-  its amendment of 2026-11-10.
+- [0046](0046-one-tea-machine-per-file.md): its text edited where it said how an `update` handler
+  picks the next state.
 - [`next/AGENTS.md`](../next/AGENTS.md): the line on how an `update` handler picks the next state.
 - [`.patterns/effect-tagged-value-is-matched.md`](../.patterns/effect-tagged-value-is-matched.md):
   new.
 - [0563](0563-anti-slop-plugin-as-it-ships.md): a one-line pointer under its list, where the two
-  rules stood as waiting. Its status does not change.
+  rules stood as waiting.
 - [0558](0558-no-ternary-deeper-than-two.md) and [0561](0561-a-cast-says-its-reason.md): a
-  one-line pointer each, where they name the two rules as not taken or not decided. Their status
-  does not change.
+  one-line pointer each, where they name the two rules as not taken or not decided.
 - `.glossary/TERMS.md`: no word is coined.
-
-## Amendments
-
-- 2026-11-15: [0578](0578-tea-cell-answers-a-step.md) says a cell answers a `Step`, not the
-  `[model, cmds]` tuple that this file's examples show. The examples change with the sweep.
