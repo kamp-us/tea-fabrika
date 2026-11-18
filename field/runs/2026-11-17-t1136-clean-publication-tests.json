@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1136-clean-publication-tests",
+  "ticket": "1136",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1547",
+  "started": "2026-11-17T05:09:17.994201-08:00",
+  "ended": "2026-11-17T05:09:18.647845-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's tooling keeps the checked hidden-leaf diagnostic repair on a fresh branch following decision0048.",
+  "note": "New pure checks passed here. The original protected Vitest module and real lint child command were not run locally. Earlier30-workspace typecheck and18-part lint passed at4e17ac46224cbd9eaee58f72921f26330e07dcd1 only, not this head. Eligible proof at the final published head remains owed. No historical record or old local commit was rewritten.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "driver_caused": false,
+  "branch": "fabrikalfa/1136-clean-publication",
+  "base": "7057e20bb1962e317778073477f8be5913d2cd24",
+  "checkedFiles": {
+    "oxlint-plugins/one-machine-per-file.test.ts": "efdcb9e170573afb12da831ceafbbf75c460f3cdad7ef2156c05f8855e166b82"
+  },
+  "checks": [
+    {
+      "command": "Pure source-extracted unchanged property and actual diagnostic helper",
+      "result": "Passed the pinned hidden-leaf counterexample plus100 generated cases. Prior actual red before the fix remains recorded separately; no new red run is claimed."
+    },
+    {
+      "command": "Existing pure synthetic-only checks",
+      "result": "20 cases passed, maximum message length5244. Existing L5 command, config, cleanup and assertion truth remain unchanged."
+    },
+    {
+      "command": "Scoped source formatter and lint",
+      "result": "Passed. Source lint reports0blocking and0advice. No whole compiler or full typed API check ran here."
+    },
+    {
+      "command": "Source byte comparison",
+      "result": "Diagnostic file exactly matches the final checked source from4e17ac46224cbd9eaee58f72921f26330e07dcd1. Independent incoming main changes remain separate from that carried evidence."
+    }
+  ],
+  "notRun": [
+    "Protected original Vitest module or real child lint command locally",
+    "Canonical whole compiler or full18-part lint on this new head",
+    "Public push, signing or CI dispatch"
+  ]
+}
