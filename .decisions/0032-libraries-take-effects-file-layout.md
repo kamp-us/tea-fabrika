@@ -1,38 +1,36 @@
 ---
 id: 0032
-title: next/'s libraries take Effect's file layout, a flat src/ of PascalCase modules with prefixed variants, internal/ for private parts and a namespace index, never folders by area or kind
-status: amended-in-part by [0034](0034-libfabrika-folders-are-bounded-contexts.md), [0043](0043-rooms-on-floors.md), [0051](0051-gateway-connection-and-node-by-job.md)
+title: next/'s libraries take Effect's file layout, PascalCase files with prefixed variants, internal/ for private parts and a namespace index, a flat src/ except libfabrika's one folder per module, and no folders by kind
+status: accepted
 date: 2026-11-09
 tags: [layout, files, names, modules, barrel, internal, effect, libfabrika, next]
 ---
 
-# 0032: next/'s libraries take Effect's file layout, a flat src/ of PascalCase modules with prefixed variants, internal/ for private parts and a namespace index, never folders by area or kind
+# 0032: next/'s libraries take Effect's file layout, PascalCase files with prefixed variants, internal/ for private parts and a namespace index, a flat src/ except libfabrika's one folder per module, and no folders by kind
 
 **What this decides:** `libfabrika` and every other library package in `next/` lays out its files
-the way Effect and its core team's own libraries do: one PascalCase file per concept in a flat
-`src/`, and an `index.ts` that re-exports each one as a namespace.
-
-[0034](0034-libfabrika-folders-are-bounded-contexts.md) replaced the one flat `src/` with one folder
-per bounded context, and [0043](0043-rooms-on-floors.md) replaced that with one folder per subject,
-a room. 0043 also makes `internal/` private to its room, not only to the package. The rest of this
-record still holds, inside each room.
+the way Effect and its core team's own libraries do: one PascalCase file per concept, and an
+`index.ts` that re-exports each one as a namespace. A library's `src/` is flat, except
+`libfabrika`'s, which has one folder per module, a folder with one subject
+([0043](0043-rooms-on-floors.md), [0091](0091-modules-and-layers.md)); each of those folders holds
+its own files and its own `internal/`.
 
 ```mermaid
 flowchart LR
-  index["src/index.ts"] -->|"export * as Ledger"| ledger["src/Ledger.ts"]
-  index -->|"export * as LedgerStore"| store["src/LedgerStore.ts (a variant)"]
-  index -->|"export * as Gateway"| gateway["src/Gateway.ts"]
-  gateway --> part["src/Gateway/Shard.ts (a part of Gateway)"]
-  ledger --> internal["src/internal/binary.ts (@internal)"]
-  test["src/Ledger.test.ts"] --> ledger
+  index["src/index.ts"] -->|"export * as Ledger"| ledger["src/ledger/Ledger.ts"]
+  index -->|"export * as LedgerStore"| store["src/ledger/LedgerStore.ts (a variant)"]
+  index -->|"export * as Gateway"| gateway["src/gateway/Gateway.ts"]
+  gateway --> part["src/gateway/Gateway/Shard.ts (a part of Gateway)"]
+  ledger --> internal["src/ledger/internal/binary.ts (@internal)"]
+  test["src/ledger/Ledger.test.ts"] --> ledger
 ```
 
 ```ts
-// src/index.ts, as clanka's and Effect's are written
+// src/index.ts, as clanka's and Effect's are written (libfabrika's adds the module folder)
 /**
  * @since 0.0.0
  */
-export * as Ledger from "./Ledger.ts"
+export * as Ledger from "./ledger/Ledger.ts"
 
 // a caller
 import { Ledger } from "@kampus/libfabrika"
