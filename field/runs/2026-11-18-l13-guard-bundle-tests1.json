@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l13-guard-bundle-tests1",
+  "ticket": "kamp-us/tea-fabrika#1167",
+  "pr": "kamp-us/tea-fabrika#1622",
+  "started": "2026-11-18T05:03:00-08:00",
+  "ended": "2026-11-18T05:14:13-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, wrote G1 and the crash half of G2 of docs/plan/quests/l13-guard-bundle-PLAN.md. Moved the L13 guard and its shared helpers into next/apps/fabrika/e2e/node/P19Guard.test-support.ts (no compiler imported), made P19Launchd.test-support.ts bundle guard.mjs from it, race guard.ready against the guard's exit (guard-exited-<code>) and record guardMs in runs/p19/host.json as soon as the race ends, widened the bundle's treeshake rule to the guard file, and added the guard file to host.yaml's paths and to the path list its workflow lint holds. G1 (pinned L13 bundle law) now checks the guard's linked files by real path: none of rolldown, lightningcss or oxc-. The G2 crash half is a generated property that starts the real guard bundle with a missing or generated unreadable guard.json and expects guard-exited-<code> well before the wait's limit. The host half of G2 (guardMs recorded) and G3 need launchd and run on host.yaml, run by the lead. Every plant was red. No product file was touched.",
+  "note": "Started and ended times are approximate (clock read at the end). Usage and cost are not recorded. Local runs used a Node 26.13.0 installed into a scratch folder to meet the test config's pin (the container has Node 22); no CI variable was set. G2's host half and G3 were not run: they need launchd, Electron and signals (0594). A typecheck ran once at the end.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "c360cc2d6f6e3b45a8039bf9689a44193cf97946",
+  "plants": [
+    { "law": "G1 the guard's bundle links no compiler", "plant": "P19Guard.test-support.ts imports bundle from P19Launchd.test-support.ts, which links rolldown, oxc-parser, oxc-transform-react and lightningcss", "result": "red" },
+    { "law": "G1 the guard still dispatches p19:guard", "plant": "the bundle's treeshake rule no longer matches P19Guard.test-support.ts, so the guard's main is dropped", "result": "red" },
+    { "law": "G2 crash half: a guard that cannot read its config exits before ready and the wait names its exit code", "plant": "ready lets the guard's exit end the wait without failing it", "result": "red" },
+    { "law": "G2 crash half: a guard that cannot read its config exits before ready and the wait names its exit code", "plant": "the treeshake rule drops the guard's main, so the bundle exits 0 with no dispatch", "result": "red" }
+  ]
+}
