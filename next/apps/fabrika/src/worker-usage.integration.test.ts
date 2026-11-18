@@ -301,23 +301,22 @@ const lifecycle = Schema.Array(
 class World extends Context.Service<World, Effect.Success<typeof world>>()("@kampus/fabrika/worker-usage.test.World") {}
 
 const start = (world: World["Service"], name: string, program: string) =>
-  invoke(
-    world.instance.project(PROJECT),
-    "start",
-    {
-      _tag: "first",
-      id: `start-${name}`,
-      name,
-      code: { program, hash: world.built.programs[program]?.hash ?? "missing" },
-    },
-    world.from,
+  call(() =>
+    world.instance.project(PROJECT).start(
+      {
+        _tag: "first",
+        id: `start-${name}`,
+        name,
+        code: { program, hash: world.built.programs[program]?.hash ?? "missing" },
+      },
+      world.from,
+    ),
   ).pipe(Effect.map((reply) => Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(reply).process));
 
 const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
-    yield* invoke(world.instance.process(process), "open", "usage-probe");
-
+    yield* call(() => world.instance.process(process).open("usage-probe"));
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
@@ -414,13 +413,14 @@ it.layer(
 
         expect(cpu(updated, "update")).toHaveLength(calls(updated, "update").length);
         expect(cpu(updated, "fresh")).toHaveLength(calls(updated, "fresh").length);
-        yield* invoke(instance.process(checklist), "restart", {
-          id: "replay",
-          build: built.programs["fabrika/checklist"]?.hash ?? "missing",
-        });
-
+        yield* call(() =>
+          instance.process(checklist).restart({
+            id: "replay",
+            build: built.programs["fabrika/checklist"]?.hash ?? "missing",
+          }),
+        );
         const started = yield* until(
-          invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
+          call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
           ),
           (rows) => rows.some((row) => row.body.after === checklist),
