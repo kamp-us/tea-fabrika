@@ -23,7 +23,7 @@
 import { fileURLToPath } from "node:url";
 
 /** The jobs that may skip, each a key of `gates`. */
-export const gated = /** @type {const} */ (["check", "typecheck", "next"]);
+export const gated = /** @type {const} */ (["check", "typecheck", "next", "select", "related"]);
 
 /**
  * Each job that may skip, and the changes outputs it runs on: its `if:` starts it when any of them
@@ -36,6 +36,8 @@ export const gates = {
   check: ["check", "field"],
   typecheck: ["typecheck"],
   next: ["next"],
+  select: ["related"],
+  related: ["related"],
 };
 
 /** @typedef {{ pass: boolean, lines: string[] }} Verdict */
@@ -64,7 +66,13 @@ export const judge = (needs) => {
   for (const [name, job] of Object.entries(needs)) {
     const result = field(job, "result");
     const flags = Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? [];
-    const meant = flags.length > 0 && flags.every((flag) => field(outputs, flag) === "false");
+
+    const empty =
+      name === "related" &&
+      field(needs["select"], "result") === "success" &&
+      field(field(needs["select"], "outputs"), "run") === "false";
+
+    const meant = empty || (flags.length > 0 && flags.every((flag) => field(outputs, flag) === "false"));
     const ok = result === "success" || (result === "skipped" && meant);
     const shown = typeof result === "string" && result !== "" ? result : "no result";
     const note = result !== "skipped" ? "" : meant ? ", as changes said" : ", but it should have run";
