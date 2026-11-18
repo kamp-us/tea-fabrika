@@ -249,7 +249,7 @@ export class Fault extends Schema.TaggedError<Fault>()("EmailTestFault", {
   message: Schema.String,
 }) {}
 
-export type IO<A> = Effect.Effect<A, Fault | { readonly reason: string }>;
+export type IO<A> = Effect.Effect<A, Fault | PromiseFailed | { readonly reason: string }>;
 
 export const Challenge = Schema.Struct({ id: Schema.String, until: Schema.Number });
 
