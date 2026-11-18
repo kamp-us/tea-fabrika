@@ -1,12 +1,12 @@
 ---
 id: 0123
-title: GitHub's schedule starts the mutation run every 3 hours and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
+title: GitHub's schedule starts the mutation run at the times its cron line sets, and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
 status: accepted
 date: 2026-11-11
 tags: [mutation, schedule, cron, ci, github-actions, heartbeat, trial]
 ---
 
-# 0123: GitHub's schedule starts the mutation run every 3 hours and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
+# 0123: GitHub's schedule starts the mutation run at the times its cron line sets, and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
 
 **Before:**
 
@@ -22,7 +22,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  schedule["GitHub's schedule, every 3 hours"] --> run["mutation.yaml"]
+  schedule["GitHub's schedule, at the cron line's times"] --> run["mutation.yaml"]
   run -->|"code: last passing run's head to main's head, skip when equal"| files["run artifacts"]
   files --> issue["survivors open or update one GitHub issue"]
   issue --> agent["an agent, whenever one is awake"]
@@ -31,10 +31,10 @@ flowchart LR
 ```
 
 ```yaml
-# after, a sketch of the decision, not the workflow file's own text
+# after, a sketch of the decision, not the workflow file's own text; the times are the cron line's
 on:
   schedule:
-    - cron: "17 */3 * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 ```
 

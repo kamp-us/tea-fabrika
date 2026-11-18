@@ -4,7 +4,7 @@
   "ticket": null,
   "pr": "kamp-us/tea-fabrika#1627",
   "started": "2026-11-18T09:26:00-08:00",
-  "ended": "2026-11-18T09:44:00-08:00",
+  "ended": "2026-11-18T10:00:00-08:00",
   "parent": null,
   "active": null,
   "role": "hand",
@@ -12,12 +12,12 @@
   "model": "sonnet",
   "effort": "high",
   "outcome": "pass",
-  "why": "In today's tooling records (.decisions/0100 to 0199, slice 3 of docs/plan/quests/rules-and-records-build-PLAN.md), folded each amendment into its record's own text under decisions 0605 and 0606: set status to accepted on 27 records, removed the Amendments section from 11, dropped the 14 still-holds lines the baseline found plus the ones in 0117, 0143, 0154, 0164 and 0180, retitled 0116, 0118, 0123, 0129, 0140, 0149, 0161, 0176, 0178 and 0179, and named config owners for 0129's size target, 0134's job list and 0152's recovery setting. Left 0109 alone and 0175 unedited as a question (its fold would pick between 0175's run-everything fallback and 0534's no-whole-suite rule). Wrote two finding rows (0123's schedule and heartbeat not in the workflow files; 0173's Write cases still caused and own in code). The records exit exam reads zero over 0100-0199 except 0175 and slice 7's 0146, 0150 and 0156.",
+  "why": "In today's tooling records (.decisions/0100 to 0199, slice 3 of docs/plan/quests/rules-and-records-build-PLAN.md), folded each amendment into its record's own text under decisions 0605 and 0606: set status to accepted on 28 records, removed the Amendments section from 11, dropped the 14 still-holds lines the baseline found plus the ones in 0117, 0143, 0154, 0164 and 0180, retitled 0116, 0118, 0123, 0129, 0133, 0140, 0149, 0161, 0175, 0176, 0178 and 0179, and named config owners for 0129's size target, 0134's job list and 0152's recovery setting. Left 0109 alone. First round left 0175 as a question; the second round, on the lead's answer, folded 0525 and 0534 into 0175 (fallback starts every job through classify in changes.mjs, the whole suite runs on the schedule in scheduled.yaml, today's checks bullets removed, retitled), set 0123's times to the cron line's, and named check.yaml in 0133. Wrote three finding rows (0123's schedule and heartbeat not in the workflow files; 0173's Write cases still caused and own in code; changes.mjs still gating today's build against 0525). The records exit exam reads zero over 0100-0199 except slice 7's 0146, 0150 and 0156.",
   "note": "Started and ended times are approximate; usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. pnpm lint was not run (main's lint is red for an unrelated reason, see field/findings/2026-11-18-main-lint-red-tracked-scripts-typecheck.json). No test or typecheck applies: only .decisions records and field rows changed.",
   "driver_caused": false,
   "tokens": null,
   "tools": null,
-  "minutes": 18,
+  "minutes": 34,
   "costUsd": null,
   "billed": null
 }
