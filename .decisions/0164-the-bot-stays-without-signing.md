@@ -1,7 +1,7 @@
 ---
 id: 0164
 title: The bot pushes agent branches and opens their pull requests, with no step signature and the owner as co-author, and a step's agent stays in its box
-status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
+status: accepted
 date: 2026-11-13
 tags: [bot, push, pull-request, co-author, box, token, signing, lead, hand-run, security]
 ---
@@ -97,13 +97,16 @@ as co-author, and boxes stay (owner, 2026-11-13).**
   2026-11-13). Until it does, the lead's code fetches the branch from the box and runs the bot's
   push on the host, as one command with no person in it.
 - **Merging stays the lead's act,** by 0162's rule: green `ci-required`, a clean leak check, and
-  the head pinned.
+  the head pinned. The lead turns on merge when ready once its final read is done, and GitHub
+  queues the pull request when `ci-required` goes green
+  ([0530](0530-lead-turns-on-merge-when-ready.md)).
 
 **Binding constraints**
 
 - The leak check runs before every push, on the branch's net change and on each commit the push
   sends ([0048](0048-leak-check-reads-each-commit.md)), and fails closed.
-- No force push, no `--admin`, no auto-merge.
+- No force push and no `--admin`. No auto-merge, except the lead's own turn-on of merge when ready
+  (0530).
 - The bot's token is never printed, never written to disk, and never passed into a box in the
   clear. The app's key stays outside every box.
 - No tooling uses the bot's token to merge.

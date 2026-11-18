@@ -42,7 +42,7 @@ The owner decided this for `next/` on 2026-11-13. It applies
 
 - `caused` and `own` came with P11's `Write` and were kept by
   [0140](0140-gateway-refuses-client-id-and-by.md). This decision changes 0140's case name `own`
-  to `root`. The rest of 0140 holds: a write with no cause is still the process owner's.
+  to `root`. A write with no cause is still the process owner's.
 - A write's `parent` and `traceId` are already OpenTelemetry's names
   ([0262](0262-a-write-carries-parent-and-traceid.md)). OpenTelemetry names the two cases too:
   "A span is said to be a root span if it does not have a parent", and a span with a parent is a
@@ -75,7 +75,6 @@ is `requester`.**
   `caused`, `own` and `asked`, and the glossary rows say so.
 - The rename touches the wire: a program's `write` Cmd carries the case as `_tag`, and lines
   already written carry `asked` in their bodies. The ticket's plan says what happens to both.
-- 0140's status now names this file. Its body is not edited.
 - Notes that still say `caused` or `own` are changed in their own pull requests.
 
 Not decided here:
