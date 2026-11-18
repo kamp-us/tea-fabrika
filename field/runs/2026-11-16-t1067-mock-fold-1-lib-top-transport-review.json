@@ -26,27 +26,10 @@
       "result": "green, 3 of 3, at ef6008b03"
     }
   ],
-  "plants": [
-    {
-      "law": "plants.test.ts REFLECT scenario after its dedupe",
-      "plant": "by reading: drop the Reflect entries from the slice's src/*.ts block",
-      "result": "caught: src/*.ts and src/* both plant src/planted.ts, which is linted with the last block's options and refuses nothing"
-    },
-    {
-      "law": "Answer.test.ts p82",
-      "plant": "by reading: pass the identity from the request's params to routes.route",
-      "result": "caught: Recorder.calls(Routes, \"route\")[0][2] is not attached.identity"
-    },
-    {
-      "law": "plants.test.ts VI_PROPERTIES scenario",
-      "plant": "by reading: let advises() pass any no-restricted-properties warning",
-      "result": "caught: the vi fires at warn in src/*.ts would then advise, and the law expects none to"
-    }
-  ],
   "tokens": null,
   "tools": null,
   "minutes": 5,
-  "note": "loosening.sh gives the same hit list over each merge as over its slice alone (527076fe8..7a952e8b5 against 5c94f12f4..3637964ea, and 06fded6e9..4a417c6b4 against 5c94f12f4..fdb4324d6), so the merges add no hit. Judged: (a) the slice's eslint/no-restricted-properties block at warn for next/packages/libfabrika/src/*.ts holds under 0523 and 0524: those files were already at warn for this rule through the src/* blocks at .oxlintrc.json:2333 and :2449, so the set of files that may advise does not grow (0523's 2026-11-16 amendment reasoning), and oxlint-plugins/advice.ts:26 lets only a JSON.parse fire advise, so the vi and Reflect entries block at warn; the .tsx block is at error. (b) the REFLECT scenario's dropped one-file-per-glob expect (plants.test.ts, now a Set of files) loses no reach: plantPath maps src/* and src/*.ts to the same src/planted.ts, a file both globs truly hold, and that file is linted with the options it really gets; every distinct planted file is still checked. (c) effect/crypto/WebCrypto in tsconfig.base.json allowedUnstableApis follows 0574: a part used on purpose (binary.ts reads WebCrypto.WebCrypto, named in the transport plan), beside its siblings Digest and SecureRandom, and 0574 says the setting is not a 0524 list. Id.test.ts removed law and expects: the shared-fibers law is renamed to the exact-ids law and the check.run spy expects are replaced by the predicted model, both in the reviewed slice. Answer.test.ts's five removed expects are vi.fn expects replaced by Recorder.calls, in the reviewed slice. Not run, as briefed: pnpm lint and pnpm typecheck, which the coordinator runs.",
+  "note": "loosening.sh gives the same hit list over each merge as over its slice alone (527076fe8..7a952e8b5 against 5c94f12f4..3637964ea, and 06fded6e9..4a417c6b4 against 5c94f12f4..fdb4324d6), so the merges add no hit. Judged: (a) the slice's eslint/no-restricted-properties block at warn for next/packages/libfabrika/src/*.ts holds under 0523 and 0524: those files were already at warn for this rule through the src/* blocks at .oxlintrc.json:2333 and :2449, so the set of files that may advise does not grow (0523's 2026-11-16 amendment reasoning), and oxlint-plugins/advice.ts:26 lets only a JSON.parse fire advise, so the vi and Reflect entries block at warn; the .tsx block is at error. (b) the REFLECT scenario's dropped one-file-per-glob expect (plants.test.ts, now a Set of files) loses no reach: plantPath maps src/* and src/*.ts to the same src/planted.ts, a file both globs truly hold, and that file is linted with the options it really gets; every distinct planted file is still checked. (c) effect/crypto/WebCrypto in tsconfig.base.json allowedUnstableApis follows 0574: a part used on purpose (binary.ts reads WebCrypto.WebCrypto, named in the transport plan), beside its siblings Digest and SecureRandom, and 0574 says the setting is not a 0524 list. Id.test.ts removed law and expects: the shared-fibers law is renamed to the exact-ids law and the check.run spy expects are replaced by the predicted model, both in the reviewed slice. Answer.test.ts's five removed expects are vi.fn expects replaced by Recorder.calls, in the reviewed slice. Not run, as briefed: pnpm lint and pnpm typecheck, which the coordinator runs. Source review only. No plants were executed. The reviewer recorded three observations: plants.test.ts REFLECT scenario after its dedupe. by reading: drop the Reflect entries from the slice's src/*.ts block. caught: src/*.ts and src/* both plant src/planted.ts, which is linted with the last block's options and refuses nothing. Answer.test.ts p82. by reading: pass the identity from the request's params to routes.route. caught: Recorder.calls(Routes, \"route\")[0][2] is not attached.identity. plants.test.ts VI_PROPERTIES scenario. by reading: let advises() pass any no-restricted-properties warning. caught: the vi fires at warn in src/*.ts would then advise, and the law expects none to.",
   "driver_caused": false,
   "step": "review"
 }
