@@ -915,7 +915,7 @@ const writtenReport = (ask: Ask) => {
 export const loadEnv = (): Env => {
   const r = sh("sh", [
     "-c",
-    '. "$0" && printf "%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT" "$CODEX_PLAN_MODEL" "$CODEX_PLAN_EFFORT" "$CODEX_BUILD_MODEL" "$CODEX_BUILD_EFFORT" "$CODEX_REVIEW_MODEL" "$CODEX_REVIEW_EFFORT"',
+    '. "$0" && printf "%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COORD_MODEL" "$FABRIKA_COORD_EFFORT" "$CODEX_PLAN_MODEL" "$CODEX_PLAN_EFFORT" "$CODEX_BUILD_MODEL" "$CODEX_BUILD_EFFORT" "$CODEX_REVIEW_MODEL" "$CODEX_REVIEW_EFFORT"',
     join(HERE, "env.sh"),
   ]);
 

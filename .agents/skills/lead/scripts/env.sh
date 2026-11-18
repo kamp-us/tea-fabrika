@@ -17,16 +17,12 @@ FABRIKA_COAUTHOR=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git co
 #   CODEX_MODEL=gpt-6.2-sol
 #   CODEX_EFFORT=high
 # Save launch overrides before local.env supplies coordination values. Keep the marker so a child
-# that sources env.sh again does not mistake those coordination values for new launch overrides.
+# that sources env.sh again does not mistake resolved coordination values for new launch overrides.
 if [ "${FABRIKA_CODEX_LAUNCH_CAPTURED:-}" = 1 ]; then
 	launch_model=${FABRIKA_CODEX_LAUNCH_MODEL:-}
 	launch_effort=${FABRIKA_CODEX_LAUNCH_EFFORT:-}
-	if [ "${CODEX_MODEL:-}" != "${FABRIKA_CODEX_COORD_MODEL:-}" ]; then
-		launch_model=${CODEX_MODEL:-}
-	fi
-	if [ "${CODEX_EFFORT:-}" != "${FABRIKA_CODEX_COORD_EFFORT:-}" ]; then
-		launch_effort=${CODEX_EFFORT:-}
-	fi
+	[ "${CODEX_MODEL+x}" != x ] || launch_model=$CODEX_MODEL
+	[ "${CODEX_EFFORT+x}" != x ] || launch_effort=$CODEX_EFFORT
 else
 	launch_model=${CODEX_MODEL:-}
 	launch_effort=${CODEX_EFFORT:-}
@@ -34,6 +30,9 @@ else
 	FABRIKA_CODEX_LAUNCH_EFFORT=$launch_effort
 	FABRIKA_CODEX_LAUNCH_CAPTURED=1
 fi
+# A saved launch choice still feeds local.env's conditional coordination defaults on child runs.
+if [ "${CODEX_MODEL+x}" != x ] && [ -n "$launch_model" ]; then CODEX_MODEL=$launch_model; fi
+if [ "${CODEX_EFFORT+x}" != x ] && [ -n "$launch_effort" ]; then CODEX_EFFORT=$launch_effort; fi
 # shellcheck disable=SC1091
 [ -f "$MAIN/.agents/skills/lead/local.env" ] && . "$MAIN/.agents/skills/lead/local.env"
 CODEX_MODEL=${CODEX_MODEL:-gpt-6.2-sol}
@@ -56,8 +55,9 @@ if [ -n "$launch_effort" ]; then
 fi
 FABRIKA_CODEX_LAUNCH_MODEL=$launch_model
 FABRIKA_CODEX_LAUNCH_EFFORT=$launch_effort
-FABRIKA_CODEX_COORD_MODEL=$CODEX_MODEL
-FABRIKA_CODEX_COORD_EFFORT=$CODEX_EFFORT
-export MAIN BOXES REMOTE GH_REPO FABRIKA_COAUTHOR CODEX_MODEL CODEX_EFFORT
-export FABRIKA_CODEX_LAUNCH_CAPTURED FABRIKA_CODEX_LAUNCH_MODEL FABRIKA_CODEX_LAUNCH_EFFORT FABRIKA_CODEX_COORD_MODEL FABRIKA_CODEX_COORD_EFFORT
+FABRIKA_COORD_MODEL=$CODEX_MODEL
+FABRIKA_COORD_EFFORT=$CODEX_EFFORT
+unset CODEX_MODEL CODEX_EFFORT
+export MAIN BOXES REMOTE GH_REPO FABRIKA_COAUTHOR FABRIKA_COORD_MODEL FABRIKA_COORD_EFFORT
+export FABRIKA_CODEX_LAUNCH_CAPTURED FABRIKA_CODEX_LAUNCH_MODEL FABRIKA_CODEX_LAUNCH_EFFORT
 export CODEX_PLAN_MODEL CODEX_PLAN_EFFORT CODEX_BUILD_MODEL CODEX_BUILD_EFFORT CODEX_REVIEW_MODEL CODEX_REVIEW_EFFORT
