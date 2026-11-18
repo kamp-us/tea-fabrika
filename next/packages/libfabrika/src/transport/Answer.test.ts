@@ -4,6 +4,7 @@
 // slice 1). Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
+import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -57,28 +58,42 @@ const METHODS = [
   "gateway.knock ",
 ] as const;
 
-const unauthenticated = fc.oneof(
-  fc.record({ client: fc.string(), nonce: fc.string() }).map((a) => Attached.cases.new.make(a)),
-  fc
-    .record({
-      client: fc.string(),
-      key: fc.string(),
-      nonce: fc.string(),
-      hello: fc.record({
-        versions: fc.array(fc.integer({ min: 1, max: 9 })),
-        has: fc.array(fc.string()),
-        ping: fc.string(),
-        key: fc.string(),
-        tab: fc.string(),
-        nonce: fc.string(),
-        platform: fc.constantFrom("browser", "electron", "headless"),
-        os: fc.constantFrom("macos", "windows", "linux", "android", "ios", "unknown"),
-        sentAt: fc.string(),
-        signed: fc.string(),
-      }),
-    })
-    .map((a) => Attached.cases.waiting.make(a)),
+const Unauthenticated = Schema.TaggedUnion({
+  new: { client: Schema.String, nonce: Schema.String },
+  waiting: {
+    client: Schema.String,
+    key: Schema.String,
+    nonce: Schema.String,
+    hello: Schema.Struct({
+      versions: Schema.Array(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9 }))),
+      has: Schema.Array(Schema.String),
+      ping: Schema.String,
+      key: Schema.String,
+      tab: Schema.String,
+      nonce: Schema.String,
+      platform: Schema.Literals(["browser", "electron", "headless"]),
+      os: Schema.Literals(["macos", "windows", "linux", "android", "ios", "unknown"]),
+      sentAt: Schema.String,
+      signed: Schema.String,
+    }),
+  },
+});
+
+const unauthenticatedEffect = Arbitrary.schema(Unauthenticated).pipe(
+  Arbitrary.map(
+    Unauthenticated.match({
+      new: ({ client, nonce }) => Attached.cases.new.make({ client, nonce }),
+      waiting: ({ client, key, nonce, hello }) => Attached.cases.waiting.make({ client, key, nonce, hello }),
+    }),
+  ),
 );
+
+const method = Arbitrary.schema(Schema.Union([Schema.Literals(["gateway.knock", ...METHODS]), Schema.String]));
+const jsonRpcId = Schema.Union([
+  Schema.String,
+  Schema.Int.check(Schema.isBetween({ minimum: -0x80000000, maximum: 0x7fffffff })),
+]);
+const nonnegativeInteger = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 0x7fffffff }));
 
 /** A route that answers `answer` to every request, for a law that reads only the reply. */
 const answering = (answer: typeof Answer.Type) => Layer.mock(Routes, { route: () => Effect.succeed(answer) });
@@ -131,7 +146,7 @@ describe("P10 JSON-RPC", () => {
         expect(span.status._tag).toBe("Ended");
         expect(span.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }),
-    { arbitrary: { seed: SEED, runs: 50 } },
+    { arbitrary: { runs: 50 } },
   );
 
   it("T843 rate reply schema: a positive safe retry delay is required (50 runs)", () => {
@@ -195,7 +210,7 @@ describe("P10 JSON-RPC", () => {
           },
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { runs: 12 } },
     );
   }
 
@@ -253,69 +268,57 @@ describe("P10 JSON-RPC", () => {
   // its answer is the one reply. Plants: drop the request silently; let waiting reach any method;
   // answer no_hello to a waiting knock; pass the waiting client's key as an identity to the knock
   // route.
-  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        unauthenticated,
-        fc.oneof(fc.constant("gateway.knock"), fc.constantFrom(...METHODS), fc.string()),
-        fc.oneof(fc.string(), fc.integer()),
-        fc.jsonValue(),
-        fc.jsonValue(),
-        (attached, method, id, params, answer) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              const result = yield* answerFrame(frame({ id, method, params }), attached);
-              expect(result.send).not.toBeNull();
-              expect(result.attached).toEqual(attached);
-              const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
-              const calls = yield* Recorder.calls(Routes);
+  it.effect.prop(
+    "d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed",
+    { attached: unauthenticatedEffect, method, id: jsonRpcId, params: Schema.Json, answer: Schema.Json },
+    ({ attached, method, id, params, answer }) =>
+      Effect.gen(function* () {
+        const result = yield* answerFrame(frame({ id, method, params }), attached);
+        expect(result.send).not.toBeNull();
+        expect(result.attached).toEqual(attached);
+        const wire = <A>(value: A): A => JSON.parse(JSON.stringify(value));
+        const calls = yield* Recorder.calls(Routes);
 
-              if (attached._tag === "waiting" && method === "gateway.knock") {
-                expect(calls).toEqual([{ method: "route", args: ["gateway.knock", wire(params), null] }]);
-                expect(JSON.parse(result.send!)).toEqual({
-                  jsonrpc: "2.0",
-                  id,
-                  result: wire(answer),
-                });
-              } else {
-                expect(calls).toEqual([]);
-                expect(JSON.parse(result.send!)).toEqual({
-                  jsonrpc: "2.0",
-                  id,
-                  error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },
-                });
-              }
-            }).pipe(
-              Effect.provide(
-                Recorder.layer(Routes, { route: () => Effect.succeed(Answer.cases.ok.make({ result: answer })) }),
-              ),
-            ),
-          ),
+        if (Attached.isAnyOf(["waiting"])(attached) && method === "gateway.knock") {
+          expect(calls).toEqual([{ method: "route", args: ["gateway.knock", wire(params), null] }]);
+          expect(JSON.parse(result.send!)).toEqual({
+            jsonrpc: "2.0",
+            id,
+            result: wire(answer),
+          });
+        } else {
+          expect(calls).toEqual([]);
+          expect(JSON.parse(result.send!)).toEqual({
+            jsonrpc: "2.0",
+            id,
+            error: { code: -32000, message: "no_hello", data: { reason: "no_hello" } },
+          });
+        }
+      }).pipe(
+        Effect.provide(
+          Recorder.layer(Routes, { route: () => Effect.succeed(Answer.cases.ok.make({ result: answer })) }),
+        ),
       ),
-      { seed: SEED, endOnFailure: true, numRuns: 300 },
-    );
-  });
+    { arbitrary: { runs: 300, maxShrinks: 0 } },
+  );
   // d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it
   // was. Only an online client keeps a parked wait. Plant: treat every parked answer as online.
-  it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        unauthenticated.filter((a) => a._tag === "waiting"),
-        fc.oneof(fc.string(), fc.integer()),
-        fc.string(),
-        fc.nat(),
-        (attached, id, stream, after) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              const result = yield* answerFrame(frame({ id, method: "gateway.knock" }), attached);
+  it.effect.prop(
+    "d2: for any waiting state, a knock that parks sends nothing and leaves it waiting",
+    {
+      attached: Arbitrary.filter(unauthenticatedEffect, Attached.isAnyOf(["waiting"])),
+      id: jsonRpcId,
+      stream: Schema.String,
+      after: nonnegativeInteger,
+    },
+    ({ attached, id, stream, after }) =>
+      Effect.gen(function* () {
+        const result = yield* answerFrame(frame({ id, method: "gateway.knock" }), attached);
 
-              expect(result).toEqual({ send: null, attached });
-            }).pipe(Effect.provide(answering(Answer.cases.parked.make({ stream, after })))),
-          ),
-      ),
-      { seed: SEED, endOnFailure: true, numRuns: 100 },
-    );
-  });
+        expect(result).toEqual({ send: null, attached });
+      }).pipe(Effect.provide(answering(Answer.cases.parked.make({ stream, after })))),
+    { arbitrary: { runs: 100, maxShrinks: 0 } },
+  );
 
   for (const id of ["r1", 0]) {
     it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>

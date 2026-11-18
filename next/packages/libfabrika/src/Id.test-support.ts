@@ -67,6 +67,19 @@ export const generatorWith = (fill: (size: number) => Uint8Array): Layer.Layer<I
     Layer.provide(Layer.succeed(SecureRandom.SecureRandom, SecureRandom.make(fill))),
   );
 
+/** Id.Generator over a SecureRandom source whose draw may yield or fail as an Effect. */
+export const generatorWithEffect = (
+  randomBytes: (size: number) => Effect.Effect<Uint8Array>,
+): Layer.Layer<Id.Generator> =>
+  Layer.effect(Id.Generator, Id.makeGenerator).pipe(
+    Layer.provide(
+      Layer.succeed(SecureRandom.SecureRandom, {
+        ...SecureRandom.make((size) => new Uint8Array(size)),
+        randomBytes,
+      }),
+    ),
+  );
+
 /** A random source whose every byte is `byte`. */
 export const bytes =
   (byte: number) =>

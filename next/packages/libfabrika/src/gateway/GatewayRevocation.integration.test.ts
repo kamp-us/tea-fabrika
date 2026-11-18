@@ -25,7 +25,7 @@ import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
-import { lineFor } from "../ledger/Log.ts";
+import { Appended, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { ProcessError } from "../processes/Process.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -54,9 +54,11 @@ beforeEach(async () => {
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
-// The three paused-hash laws report their first failure unshrunk: a hash that misses the stand-in
-// fails each run at `reached`'s timeout, and shrinking would spend the law's whole time on it.
-const pausedChecks = { ...checks, endOnFailure: true };
+const effectPausedChecks = { arbitrary: { runs: runsFor({ fast: 3, full: 25 }), size: 30, maxShrinks: 0 } };
+
+const Uuid = Schema.String.check(
+  Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+);
 
 /**
  * Waits for a paused hash to be reached, on the live clock, since the laws run on a TestClock. A
@@ -667,128 +669,119 @@ describe("P17a, revoke stops writes at the final door", () => {
   // the `WebCrypto` reference. Plants: skip the grant recheck after the request hash in Gateway.ts,
   // and the `revokeFirst` runs go red; hash with `globalThis.crypto.subtle` past the reference, and
   // every run goes red at `reached`'s timeout.
-  it("a route paused after its online check cannot record authenticated input after revoke", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom("counter", "notes"),
-        fc.boolean(),
-        fc.uuid(),
-        async (target, revokeFirst, token) => {
-          await Effect.runPromise(
-            Effect.gen(function* () {
-              const w = yield* world(),
-                d = yield* setup(w);
+  it.effect.prop(
+    "a route paused after its online check cannot record authenticated input after revoke",
+    {
+      target: Schema.Literals(["counter", "notes"]),
+      revokeFirst: Schema.Boolean,
+      token: Uuid,
+    },
+    ({ target, revokeFirst, token }) =>
+      Effect.gen(function* () {
+        const w = yield* world(),
+          d = yield* setup(w);
 
-              const marker = `queued-input-${token}`;
-              const pause = yield* paused(marker);
+        const marker = `queued-input-${token}`;
+        const pause = yield* paused(marker);
 
-              const pending = yield* Effect.forkChild(
-                Effect.result(send(d.a, d.old, w, target, marker, token)).pipe(
-                  Effect.provide(WebCrypto.layer(pause.crypto)),
-                ),
-              );
+        const pending = yield* Effect.forkChild(
+          Effect.result(send(d.a, d.old, w, target, marker, token)).pipe(Effect.provide(WebCrypto.layer(pause.crypto))),
+        );
 
-              yield* reached(pause.entered);
+        yield* reached(pause.entered);
 
-              if (revokeFirst) {
-                yield* remove(d.b, w, "revoke");
-              }
+        if (revokeFirst) {
+          yield* remove(d.b, w, "revoke");
+        }
 
-              yield* Deferred.succeed(pause.release, undefined);
-              const result = yield* Fiber.join(pending);
+        yield* Deferred.succeed(pause.release, undefined);
+        const result = yield* Fiber.join(pending);
 
-              const refused = Result.isFailure(result)
-                ? result.failure._tag === "NotGranted"
-                : result.success._tag === "refused" && result.success.reason === "not_granted";
+        const refused = Result.isFailure(result)
+          ? Schema.is(NotGranted)(result.failure)
+          : Answer.isAnyOf(["refused"])(result.success) && result.success.reason === "not_granted";
 
-              expect(refused).toBe(revokeFirst);
-              expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
-              expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
-            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-          );
-        },
-      ),
-      pausedChecks,
-    );
-  });
-  it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom("counter", "notes"),
-        fc.boolean(),
-        fc.uuid(),
-        fc.string({ maxLength: 30 }),
-        async (target, revokeFirst, token, text) => {
-          await Effect.runPromise(
-            Effect.gen(function* () {
-              const w = yield* world(),
-                d = yield* setup(w);
+        expect(refused).toBe(revokeFirst);
+        expect(yield* rows(w, "gateway/inputs")).toHaveLength(revokeFirst ? 0 : 1);
+        expect(w.deliveries).toHaveLength(revokeFirst ? 0 : 1);
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    effectPausedChecks,
+  );
+  it.effect.prop(
+    "a settled retry paused after online rechecks revoke before answering its cached placing",
+    {
+      target: Schema.Literals(["counter", "notes"]),
+      revokeFirst: Schema.Boolean,
+      token: Uuid,
+      text: Schema.String.check(Schema.isBetweenLength(0, 30)),
+    },
+    ({ target, revokeFirst, token, text }) =>
+      Effect.gen(function* () {
+        const w = yield* world(),
+          d = yield* setup(w);
 
-              w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
-                const placing = yield* d.a.accept(incoming);
+        w.controls.deliver = Effect.fnUntraced(function* (incoming: Incoming) {
+          const placing = yield* d.a.accept(incoming);
 
-                if (placing._tag !== "placed") {
-                  return Sent.cases.refused.make({ reason: placing.reason });
-                }
+          if (!Appended.isAnyOf(["placed"])(placing)) {
+            return Sent.cases.refused.make({ reason: placing.reason });
+          }
 
-                return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
-              });
-              const marker = `settled-retry-${token}`;
-              const first = yield* send(d.a, d.old, w, target, marker, text);
-              expect(first).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
-              const inbox = yield* rows(w, `${processes[target]}/inbox`);
-              expect(inbox).toHaveLength(1);
-              const inputs = yield* rows(w, "gateway/inputs");
+          return Sent.cases.accepted.make({ rev: placing.rev, pos: placing.pos });
+        });
+        const marker = `settled-retry-${token}`;
+        const first = yield* send(d.a, d.old, w, target, marker, text);
+        expect(Answer.isAnyOf(["ok"])(first)).toBe(true);
+        if (Answer.isAnyOf(["ok"])(first)) {
+          expect(Schema.is(Sent.cases.accepted)(first.result)).toBe(true);
+        }
+        const inbox = yield* rows(w, `${processes[target]}/inbox`);
+        expect(inbox).toHaveLength(1);
+        const inputs = yield* rows(w, "gateway/inputs");
 
-              const pause = yield* paused(marker);
+        const pause = yield* paused(marker);
 
-              const pending = yield* Effect.forkChild(
-                Effect.result(send(d.a, d.old, w, target, marker, text)).pipe(
-                  Effect.provide(WebCrypto.layer(pause.crypto)),
-                ),
-              );
+        const pending = yield* Effect.forkChild(
+          Effect.result(send(d.a, d.old, w, target, marker, text)).pipe(Effect.provide(WebCrypto.layer(pause.crypto))),
+        );
 
-              // Request hashing follows online(); the settled reply is still pending.
-              yield* reached(pause.entered);
+        // Request hashing follows online(); the settled reply is still pending.
+        yield* reached(pause.entered);
 
-              if (revokeFirst) {
-                yield* remove(d.b, w, "revoke");
-              }
+        if (revokeFirst) {
+          yield* remove(d.b, w, "revoke");
+        }
 
-              yield* Deferred.succeed(pause.release, undefined);
-              const result = yield* Fiber.join(pending);
+        yield* Deferred.succeed(pause.release, undefined);
+        const result = yield* Fiber.join(pending);
 
-              if (!revokeFirst) {
-                yield* remove(d.b, w, "revoke");
-              }
+        if (!revokeFirst) {
+          yield* remove(d.b, w, "revoke");
+        }
 
-              const answer = Result.isFailure(result)
-                ? Schema.is(NotGranted)(result.failure)
-                  ? { reason: "not_granted" }
-                  : result.failure
-                : result.success._tag === "refused"
-                  ? { reason: result.success.reason }
-                  : result.success;
+        const answer = Result.isFailure(result)
+          ? Schema.is(NotGranted)(result.failure)
+            ? { reason: "not_granted" }
+            : result.failure
+          : Answer.isAnyOf(["refused"])(result.success)
+            ? { reason: result.success.reason }
+            : result.success;
 
-              // Plant: answer the cached placing without a final membership check.
-              expect({
-                answer,
-                inbox: yield* rows(w, `${processes[target]}/inbox`),
-                inputs: yield* rows(w, "gateway/inputs"),
-                deliveries: w.deliveries.length,
-              }).toEqual({
-                answer: revokeFirst ? { reason: "not_granted" } : first,
-                inbox,
-                inputs,
-                deliveries: 1,
-              });
-            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-          );
-        },
-      ),
-      pausedChecks,
-    );
-  });
+        // Plant: answer the cached placing without a final membership check.
+        expect({
+          answer,
+          inbox: yield* rows(w, `${processes[target]}/inbox`),
+          inputs: yield* rows(w, "gateway/inputs"),
+          deliveries: w.deliveries.length,
+        }).toEqual({
+          answer: revokeFirst ? { reason: "not_granted" } : first,
+          inbox,
+          inputs,
+          deliveries: 1,
+        });
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    effectPausedChecks,
+  );
   it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -1013,78 +1006,75 @@ describe("P17a, revoke stops writes at the final door", () => {
       checks,
     );
   });
-  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom("counter", "notes"),
-        fc.boolean(),
-        fc.boolean(),
-        fc.string({ minLength: 1, maxLength: 20 }),
-        async (target, revokeFirst, reopen, text) => {
-          await Effect.runPromise(
-            Effect.gen(function* () {
-              const w = yield* world(),
-                d = yield* setup(w);
+  const causedEventPaused = (target: "counter" | "notes", revokeFirst: boolean, reopen: boolean, text: string) =>
+    Effect.gen(function* () {
+      const w = yield* world(),
+        d = yield* setup(w);
 
-              yield* send(d.a, d.old, w, target, "cause", text);
-              const incoming = last(w);
+      yield* send(d.a, d.old, w, target, "cause", text);
+      const incoming = last(w);
 
-              const id = "queued-fact",
-                parent = incoming.envelope.id;
+      const id = "queued-fact",
+        parent = incoming.envelope.id;
 
-              yield* d.a.signer(parent, processes[target], "saved").pipe(Effect.provideService(SignRequest, { id }));
+      yield* d.a.signer(parent, processes[target], "saved").pipe(Effect.provideService(SignRequest, { id }));
 
-              if (reopen) {
-                w.first.db.close();
-              }
+      if (reopen) {
+        w.first.db.close();
+      }
 
-              const saved = reopen ? yield* w.storage() : w.first;
-              const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
-              const remover = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.b;
+      const saved = reopen ? yield* w.storage() : w.first;
+      const door = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.a;
+      const remover = reopen ? yield* Gateway.pipe(Effect.provide(w.layers(saved).layer)) : d.b;
 
-              const marker = `p17-queued-${text}`;
-              // The event is hashed as JSON, so the pause looks for the marker as JSON writes it.
-              const pause = yield* paused(JSON.stringify(marker));
+      const marker = `p17-queued-${text}`;
+      // The event is hashed as JSON, so the pause looks for the marker as JSON writes it.
+      const pause = yield* paused(JSON.stringify(marker));
 
-              const pending = yield* Effect.forkChild(
-                Effect.result(
-                  door.append({
-                    id,
-                    parent,
-                    process: processes[target],
-                    kind: "saved",
-                    stream: "notes",
-                    event: Event.make({ text: marker }),
-                  }),
-                ).pipe(Effect.provide(WebCrypto.layer(pause.crypto))),
-              );
+      const pending = yield* Effect.forkChild(
+        Effect.result(
+          door.append({
+            id,
+            parent,
+            process: processes[target],
+            kind: "saved",
+            stream: "notes",
+            event: Event.make({ text: marker }),
+          }),
+        ).pipe(Effect.provide(WebCrypto.layer(pause.crypto))),
+      );
 
-              yield* reached(pause.entered);
+      yield* reached(pause.entered);
 
-              if (revokeFirst) {
-                yield* remove(remover, w, "revoke");
-              }
+      if (revokeFirst) {
+        yield* remove(remover, w, "revoke");
+      }
 
-              yield* Deferred.succeed(pause.release, undefined);
-              const result = yield* Fiber.join(pending);
-              expect(Result.isFailure(result)).toBe(revokeFirst);
+      yield* Deferred.succeed(pause.release, undefined);
+      const result = yield* Fiber.join(pending);
+      expect(Result.isFailure(result)).toBe(revokeFirst);
 
-              if (revokeFirst && Result.isFailure(result)) {
-                expect(result.failure).toMatchObject({ _tag: "NotGranted" });
-              }
+      if (revokeFirst && Result.isFailure(result)) {
+        expect(Schema.is(NotGranted)(result.failure)).toBe(true);
+      }
 
-              expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
-            }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
-          );
-        },
-      ),
-      {
-        ...pausedChecks,
-        // P17a regression: JSON-escaped text used to miss the pause after receipt checking.
-        examples: [["notes", true, false, '"\n\\']],
-      },
-    );
-  });
+      expect(yield* rows(w, "notes", saved)).toHaveLength(revokeFirst ? 0 : 1);
+    }).pipe(Effect.scoped, Effect.provide(TestClock.layer()));
+
+  it.effect.prop(
+    "a caused event paused after receipt checking cannot cross a revoke on another Gateway",
+    {
+      target: Schema.Literals(["counter", "notes"]),
+      revokeFirst: Schema.Boolean,
+      reopen: Schema.Boolean,
+      text: Schema.String.check(Schema.isBetweenLength(1, 20)),
+    },
+    ({ target, revokeFirst, reopen, text }) => causedEventPaused(target, revokeFirst, reopen, text),
+    effectPausedChecks,
+  );
+  it.effect("M1 pinned: JSON-escaped text reaches the hash pause after receipt checking", () =>
+    causedEventPaused("notes", true, false, '"\n\\'),
+  );
   it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", async () => {
     await fc.assert(
       fc.asyncProperty(

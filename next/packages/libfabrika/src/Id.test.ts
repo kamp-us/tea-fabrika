@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
+import { Recorder } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -22,7 +23,9 @@ const seed = 119120;
 
 const options = { seed, numRuns: 100 };
 
-const effectOptions = { arbitrary: { seed, runs: 40 } };
+const effectOptions = { arbitrary: { runs: 40 } };
+
+const scheduleOptions = { arbitrary: { runs: 40, size: 61 } };
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -1019,12 +1022,30 @@ describe("T518 shared Id generator", () => {
 
   /** What the generated schedules reached, so the law fails loudly when a required case is missing. */
   const reached = { fresh: 0, rollback: 0, overflow: 0 };
+  let schedules = 0;
 
-  const checkSchedule = async (schedule: Schedule) => {
-    const Specific = Id.make(schedule.type);
+  const lower = Schema.String.check(Schema.isPattern(/^[a-z]$/));
+  const middle = Schema.String.check(Schema.isPattern(/^[a-z_]$/));
+  const typePrefix = Arbitrary.schema(
+    Schema.Union([
+      lower,
+      Schema.Struct({
+        first: lower,
+        middle: Schema.Array(middle).check(Schema.isBetweenLength(0, 61)),
+        last: lower,
+      }),
+    ]),
+  ).pipe(
+    Arbitrary.map((value) =>
+      typeof value === "string" ? value : `${value.first}${value.middle.join("")}${value.last}`,
+    ),
+  );
 
-    const returned = await Effect.runPromise(
-      Effect.gen(function* () {
+  const checkSchedule = (schedule: Schedule) =>
+    Effect.gen(function* () {
+      const validation = yield* Front.Validation;
+      const { returned, recorded } = yield* Effect.gen(function* () {
+        const Specific = Id.make(schedule.type);
         const generator = yield* Id.Generator;
         const ids: Array<string> = [];
 
@@ -1048,55 +1069,75 @@ describe("T518 shared Id generator", () => {
           ids.push(yield* generator.next(Specific));
         }
 
-        return ids;
-      }).pipe(Effect.provide(generatorWith(bytes(schedule.entropy))), Effect.provide(TestClock.layer())),
-    );
+        const calls = yield* Recorder.calls(Front.Validation, "decode");
+        return { returned: ids, recorded: calls.map(([, encoded]) => encoded) };
+      }).pipe(
+        Effect.provide(generatorWith(bytes(schedule.entropy))),
+        Effect.provide(TestClock.layer()),
+        Effect.provide(Recorder.layer(Front.Validation, validation)),
+      );
 
-    // Fixed entropy makes every lost update or second reseed in one millisecond a duplicate or a
-    // wrong id, so the exact ids the model owes stand in for watching allocation order.
-    expect([...returned].sort(compare)).toEqual(predicted(schedule));
-    increasing([...returned].sort(compare));
-    schedule.batches.forEach((batch, i) => {
-      const before = schedule.batches[i - 1];
-      reached.fresh += before === undefined || batch.at > before.at ? 1 : 0;
-      reached.rollback += before !== undefined && batch.at < before.at ? 1 : 0;
+      // The independent model checks the IDs themselves. The Recorder captures the live validation
+      // arguments in order, including fibers that finish out of order.
+      expect([...returned].sort(compare)).toEqual(predicted(schedule));
+      expect([...recorded].sort(compare)).toEqual([...returned].sort(compare));
+      increasing(recorded);
+      const swapped = [...recorded];
+      [swapped[0], swapped[1]] = [swapped[1]!, swapped[0]!];
+      expect(() => increasing(swapped), "an adjacent ID swap breaks actual-order checking").toThrow();
+      schedule.batches.forEach((batch, i) => {
+        const before = schedule.batches[i - 1];
+        reached.fresh += before === undefined || batch.at > before.at ? 1 : 0;
+        reached.rollback += before !== undefined && batch.at < before.at ? 1 : 0;
+      });
+      reached.overflow += schedule.entropy === 255 ? 1 : 0;
     });
-    reached.overflow += schedule.entropy === 255 ? 1 : 0;
-  };
 
   // T1067 T4. Plant: in the generator's synchronous step, take a fresh draw whenever one is given,
   // without `now > at`, so fibers that drew for one millisecond each reseed it (T518 review 5 P1);
   // a second plant yields between reading and writing the state.
-  it("shared fibers allocate exactly the ids the generator's model owes, unique and increasing, over generated schedules", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.record({
-          type: prefix,
-          // All-ones entropy, so the model's overflow edge is reached too.
-          entropy: fc.oneof(fc.constant(0), fc.constant(255), fc.integer({ min: 0, max: 255 })),
-          batches: fc.array(
-            fc.record({
-              // Leave room for logical-clock increments after all-ones entropy.
-              at: fc.integer({ min: 0, max: maxClock - 1000 }),
-              // Effect 4.1.1's normal scheduler budget is crossed near this range.
-              work: fc.array(fc.integer({ min: 2000, max: 2070 }), { minLength: 2, maxLength: 8 }),
-            }),
-            { minLength: 2, maxLength: 6 },
+  it.effect.prop(
+    "shared fibers allocate exactly the ids the generator's model owes, unique and increasing, over generated schedules",
+    {
+      type: typePrefix,
+      entropy: Arbitrary.schema(
+        Schema.Union([
+          Schema.Literals([0]),
+          Schema.Literals([255]),
+          Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 })),
+        ]),
+      ),
+      batches: Arbitrary.array(
+        Arbitrary.all({
+          at: Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 1000 }))),
+          work: Arbitrary.array(
+            Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 2000, maximum: 2070 }))),
+            { minLength: 2, maxLength: 8 },
           ),
         }),
-        checkSchedule,
+        { minLength: 2, maxLength: 6 },
       ),
-      { ...options, numRuns: 40 },
-    );
-    expect(reached.fresh, "a batch on a fresh millisecond").toBeGreaterThan(0);
-    expect(reached.rollback, "a batch after the clock moved back").toBeGreaterThan(0);
-    expect(reached.overflow, "a schedule on all-ones entropy").toBeGreaterThan(0);
-  });
-  it("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", async () => {
-    await checkSchedule({
+    },
+    (schedule) =>
+      Effect.andThen(
+        checkSchedule(schedule),
+        Effect.sync(() => {
+          schedules += 1;
+
+          if (schedules === scheduleOptions.arbitrary.runs) {
+            expect(reached.fresh, "a batch on a fresh millisecond").toBeGreaterThan(0);
+            expect(reached.rollback, "a batch after the clock moved back").toBeGreaterThan(0);
+            expect(reached.overflow, "a schedule on all-ones entropy").toBeGreaterThan(0);
+          }
+        }),
+      ),
+    scheduleOptions,
+  );
+  it.effect("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
+    checkSchedule({
       type: "process",
       entropy: 0,
       batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
-    });
-  });
+    }),
+  );
 });

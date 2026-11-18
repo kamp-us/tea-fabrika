@@ -4,7 +4,8 @@
 // `Archive.ts:68` (a `head` answer that does not decode), `Records.ts:444` (a part's answer that
 // does not decode). `Sink.ts:393` needs a database and runs in `node/ErrorCause.test.ts`.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Effect, Exit, Match, Option, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
 import { WebCrypto } from "effect/crypto";
 import * as fc from "fast-check";
 import { rejecting } from "../crypto.test-support.ts";
@@ -16,12 +17,80 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const RUNS = 100;
 
+const effectOptions = { arbitrary: { runs: RUNS } };
+
 /** A failure as a platform gives one: an Error, a subclass with its own cause, or a plain object. */
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),
   fc.string().map((message) => new TypeError(message, { cause: { detail: message } })),
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
+
+type GeneratedAnything =
+  | { readonly _tag: "undefined" }
+  | { readonly _tag: "null" }
+  | { readonly _tag: "boolean"; readonly value: boolean }
+  | { readonly _tag: "finite"; readonly value: number }
+  | { readonly _tag: "nan" }
+  | { readonly _tag: "positiveInfinity" }
+  | { readonly _tag: "negativeInfinity" }
+  | { readonly _tag: "string"; readonly value: string }
+  | { readonly _tag: "array"; readonly value: ReadonlyArray<GeneratedAnything> }
+  | { readonly _tag: "object"; readonly value: Readonly<Record<string, GeneratedAnything>> };
+
+type Anything =
+  | undefined
+  | null
+  | boolean
+  | number
+  | string
+  | ReadonlyArray<Anything>
+  | { readonly [key: string]: Anything };
+
+const generatedAnything: Schema.Codec<GeneratedAnything> = Schema.suspend((): Schema.Codec<GeneratedAnything> =>
+  Schema.TaggedUnion({
+    undefined: {},
+    null: {},
+    boolean: { value: Schema.Boolean },
+    finite: { value: Schema.Finite },
+    nan: {},
+    positiveInfinity: {},
+    negativeInfinity: {},
+    string: { value: Schema.String },
+    array: {
+      value: Schema.Array(Schema.suspend((): Schema.Codec<GeneratedAnything> => generatedAnything)),
+    },
+    object: {
+      value: Schema.Record(
+        Schema.String,
+        Schema.suspend((): Schema.Codec<GeneratedAnything> => generatedAnything),
+      ),
+    },
+  }),
+);
+
+const decodeAnything = (value: GeneratedAnything): Anything =>
+  Match.valueTags(value, {
+    undefined: () => undefined,
+    null: () => null,
+    boolean: ({ value }) => value,
+    finite: ({ value }) => value,
+    nan: () => Number.NaN,
+    positiveInfinity: () => Number.POSITIVE_INFINITY,
+    negativeInfinity: () => Number.NEGATIVE_INFINITY,
+    string: ({ value }) => value,
+    array: ({ value }) => value.map(decodeAnything),
+    object: ({ value }) =>
+      Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, decodeAnything(entry)])),
+  });
+
+const Rejection = Schema.TaggedUnion({
+  error: { message: Schema.String },
+  typeError: { message: Schema.String },
+  object: { code: Schema.String, detail: Schema.Json },
+  raw: { value: generatedAnything },
+  undefined: {},
+});
 
 /** A property over generated input, each run an Effect on the real code. */
 const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
@@ -76,9 +145,25 @@ describe("T695, the archive keeps what failed", () => {
   // `body.slice(1)`, and `asked` is wrong; `Effect.promise` in place of `tryPromise`, and the
   // rejection is a defect; read `globalThis.crypto` in place of the reference, and `asked` is empty.
   // A Promise may reject with anything, `undefined` and other primitives included.
-  law(
+  it.effect.prop(
     "C1: a digest that rejects is `storage` with the rejected value as its cause, on any archive",
-    fc.record({ failure: fc.oneof(failures, fc.anything()), body: bodies, onBucket: fc.boolean() }),
+    {
+      failure: Arbitrary.schema(Rejection).pipe(
+        Arbitrary.map(
+          Rejection.match({
+            error: ({ message }) => new Error(message),
+            typeError: ({ message }) => new TypeError(message, { cause: { detail: message } }),
+            object: ({ code, detail }) => ({ code, detail }),
+            raw: ({ value }) => decodeAnything(value),
+            undefined: () => undefined,
+          }),
+        ),
+      ),
+      body: Arbitrary.array(Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))), {
+        maxLength: 64,
+      }).pipe(Arbitrary.map((values) => Uint8Array.from(values))),
+      onBucket: Schema.Boolean,
+    },
     ({ failure, body, onBucket }) =>
       Effect.gen(function* () {
         const calls: BucketCalls = {
@@ -97,6 +182,7 @@ describe("T695, the archive keeps what failed", () => {
           expect(asked).toEqual([body]);
         }
       }),
+    effectOptions,
   );
 
   // C5, Archive.ts:58: one callback serves `put` and `head`. Plant: the zero-argument `fail`.

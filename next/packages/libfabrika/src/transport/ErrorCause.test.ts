@@ -5,6 +5,7 @@
 // Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
 // 1067 slice 1).
 import { describe, expect, it } from "@effect/vitest";
+import * as Arbitrary from "effect/Arbitrary";
 import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -19,6 +20,14 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const RUNS = 100;
 
+const effectOptions = { arbitrary: { runs: RUNS } };
+
+const GeneratedFailure = Schema.TaggedUnion({
+  error: { message: Schema.String },
+  dom: { message: Schema.String },
+  object: { code: Schema.String, detail: Schema.Json },
+});
+
 /** A property over generated input, each run an Effect on the real code. */
 const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
   it(name, () =>
@@ -27,12 +36,6 @@ const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effec
       { seed: SEED, numRuns: RUNS },
     ),
   );
-
-const failures: fc.Arbitrary<object> = fc.oneof(
-  fc.string().map((message) => new Error(message)),
-  fc.string().map((message) => new DOMException(message, "OperationError")),
-  fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
-);
 
 type Method = Rejecting.Method;
 
@@ -57,18 +60,28 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
   // C5, internal/binary.ts:88. Plant: `const fail = () => new WebCryptoError({ cause: undefined })`.
   // C5 injects its rejection through `WebCrypto.layer`, so C6's plant (read the global again) reds
   // it too.
-  law(
+  it.effect.prop(
     "C5: a generated rejection on any WebCrypto call is WebCryptoError with that very value as its cause",
-    fc.record({
-      steps: fc.array(
-        fc.record({ method: fc.constantFrom<Method>("digest", "importKey", "verify"), failure: failures }),
-        {
-          minLength: 1,
-          maxLength: 4,
-        },
+    {
+      steps: Arbitrary.array(
+        Arbitrary.all({
+          method: Arbitrary.schema(Schema.Literals(["digest", "importKey", "verify"])),
+          failure: Arbitrary.schema(GeneratedFailure).pipe(
+            Arbitrary.map(
+              GeneratedFailure.match({
+                error: ({ message }) => new Error(message),
+                dom: ({ message }) => new DOMException(message, "OperationError"),
+                object: ({ code, detail }) => ({ code, detail }),
+              }),
+            ),
+          ),
+        }),
+        { minLength: 1, maxLength: 4 },
       ),
-      bytes: fc.uint8Array({ maxLength: 65 }).map((b) => new Uint8Array(b)),
-    }),
+      bytes: Arbitrary.array(Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))), {
+        maxLength: 65,
+      }).pipe(Arbitrary.map((values) => new Uint8Array(values))),
+    },
     ({ steps, bytes }) =>
       Effect.gen(function* () {
         for (const { method, failure } of steps) {
@@ -80,6 +93,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
           expect((error as { readonly cause?: unknown }).cause).toBe(failure);
         }
       }),
+    effectOptions,
   );
 
   // C6, internal/binary.ts:87: the edge reads the provided `WebCrypto`, never the global. A hello
