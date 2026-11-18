@@ -1,4 +1,4 @@
-Approved by the lead agent, builds slice B of the two-flakes plan (0036), as the lead (fabrikaa-merger) approved it on 2026-11-18; body 100511a2c601
+
 Plancheck-Version: 3
 
 # Slice B of the two-flakes plan: the L13 guard gets a bundle of its own with no compiler in it, and records `guardMs`, in next/ (ticket 1167, decision 0036)
@@ -196,3 +196,56 @@ Each builds a decided behavior or is an implementation choice, taken with its pe
 ## Open questions
 
 None.
+
+## Amendment, 2026-11-18: the proof bar after a second L13 failure, and a phase record
+
+This section overrides the body where they differ. fabrikaa ruled it on 2026-11-18 (option 1 of
+mail 0004 on `fabrikalfa/mail-session_01WuXcavBirJCDRQGrHiuYi2`).
+
+**What happened.** Host run 3
+(https://github.com/kamp-us/tea-fabrika/actions/runs/44313709458, head 43dcdfb63) failed L13 with
+`Test timed out in 120000ms`, host.yaml's vitest limit, after its guard was ready in 216 ms. Runs 1
+and 2 passed with `guardMs` 103 and 203. That failure is a second cause in the brain's start, crash
+and stop cycle, not the guard wait this slice fixes, and the law recorded nothing that names its
+phase. Its finding row is
+`field/findings/2026-11-18-l13-scenario-runs-past-its-120s-test-timeout.json`; it becomes its own
+slice, and ticket 1167 stays open until that is fixed too.
+
+**G3 narrows to what this slice fixes.** It now reads: the guard wait passes 20 host runs in a row,
+each with `guardMs`, and L13's whole count (passed and failed, with each failure's cause) is in the
+PR. The L13 law itself does not change. A run counts toward G3 when its guard was ready inside the
+5 s bound with `guardMs` recorded, at a head whose `P19Guard.test-support.ts` and race are the
+ones this PR lands.
+
+**A phase record, G4.** `check` writes `runs/p19/host.json` as each phase happens, not only at the
+end, so the next red on the second cause names its phase:
+
+```ts
+// Sketch, P19Launchd.test-support.ts: one small writer the check calls around each phase.
+// Before a phase: { ...record, phase: "start 2" }. After it: its time joins starts, stops or
+// replacementMs, and phase names the next one. The final record keeps every field it has today.
+yield* progress.begin("start 2");
+const at = yield* Clock.currentTimeMillis;
+const client = yield* launch();
+yield* progress.end({ starts: [...starts, (yield* Clock.currentTimeMillis) - at] });
+```
+
+The phases are each of the four starts, the crash replacement, each of the four stops, and the
+normal-exit fixture. Names stay short words (`phase`, `starts`, `stops`, `replacementMs`), and
+`guardMs` stays where the first write puts it.
+
+| Law | Kind | Generator | Plant |
+|---|---|---|---|
+| G4: for every generated sequence of phase begins and ends, the record file after each step names the phase in progress (or none once it ended) and holds every finished phase's time in order, with `guardMs` kept. 100 runs | test, on a temp file through the real writer, so it runs here | fc.array: begin and end steps over the phase names, repaired so each end follows its begin; seed 119120 | write the record only at the end: the file after a begin does not name that phase |
+| G3, as amended above | test, host-only | scenario: L13, unchanged | none: a count |
+
+G2's host half also reads the phase field: a passing run's final record names no phase in progress.
+
+| File | Change | Owner | Product lines expected |
+|---|---|---|---|
+| next/apps/fabrika/e2e/node/P19Launchd.test-support.ts | the phase writer, called around each phase of `check` | tests | tests |
+| next/apps/fabrika/e2e/electron-launchd.visual.test.ts | G4, and G2's host half reads the phase field | tests | tests |
+| .github/ci/workflow-lint/host.ts | the guard file joins its copy of host.yaml's paths, which host.test.ts compares (found by the tests step) | tests | tests |
+
+The 120 s failure's ticket text goes to fabrikaa in a mail file, since this cloud session has no
+tracker.
