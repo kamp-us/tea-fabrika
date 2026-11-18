@@ -43,7 +43,7 @@ The owner ruled yes on 2026-11-15 to two judgment checks.
 - [0040](0040-existing-tools-before-hand-written.md) already says a plan that adds a check or a
   tool names the existing tools it looked at. It left open whether code checks that a plan carries
   the list. This decision answers that, and widens the rule from checks and tools to every new
-  helper. 0040 is amended in part; the rest of it holds.
+  helper. 0040 is amended in part.
 - [Use the industry's names](../docs/direction/use-the-industrys-names.md) and the names rule in
   `AGENTS.md` say a thing keeps the industry's name, checked on every pull request. Nothing wrote
   down where a pull request shows that check, so a reviewer had to guess the source of each name.
@@ -65,13 +65,16 @@ for each new name, and code refuses either one when a line is missing.**
 
 - A plan that adds a helper, a function or a tool has an `## Existing tools` section with one line
   per new helper: the helper, what was searched, and the existing one found or why none fits.
-- `plancheck.sh` refuses a draft whose files table adds a code file with no line for it there. A
-  new function inside an existing file still gets its line; review checks that one.
+- `plancheck.sh` refuses a draft whose files table adds a code file with no line for it there. It
+  checks the line in draft mode, with no new plan version, so a plan approved earlier keeps passing.
+  A new function inside an existing file still gets its line; review checks that one.
 - Review sends back a plan or a diff that adds a helper with no line, or whose line shows no real
   search.
 - [jscpd](https://github.com/kucherenko/jscpd), the existing copy-paste detector (0040), runs on
   each pull request as advice only. It names a clone that touches the lines the pull request adds,
   and never turns a check red. It blocks only after its false alarms are measured at 0523's bar.
+  It was measured on main before it advised: 5 of 60 fresh clones were false alarms, 8%
+  ([experiment 297](../experiments/297-jscpd-false-alarms.md)).
 
 **Check 2, industry names:**
 
@@ -101,9 +104,3 @@ for each new name, and code refuses either one when a line is missing.**
 - CI runs jscpd once per pull request, about 2 seconds on the whole tree on a laptop.
 - Not decided here: when jscpd blocks, and what counts as a name the code check cannot see (a
   setting key, a record field). Those wait on measurement.
-
-## Amendments
-
-- 2026-11-15: `plancheck.sh` checks the line in draft mode, with no new plan version, so plans
-  approved earlier keep passing. jscpd was measured on main before it advises: 5 of 60 fresh clones
-  were false alarms, 8% ([experiment 297](../experiments/297-jscpd-false-alarms.md)).

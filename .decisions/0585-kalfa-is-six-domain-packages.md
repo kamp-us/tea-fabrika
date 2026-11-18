@@ -1,12 +1,12 @@
 ---
 id: 0585
-title: "Our tooling is six @kalfa packages grouped by domain, config, ci, records, vitest, oxlint and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder"
-status: amended-in-part by [0600](0600-kalfa-quality-holds-test-lint-format.md), [0601](0601-program-make-with-optional-pipes.md)
+title: "Our tooling is five @kalfa packages grouped by domain, config, ci, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder"
+status: accepted
 date: 2026-11-15
 tags: [kalfa, packages, tooling, ci, cli, config, settings, records, vitest, oxlint, leak-check, ship]
 ---
 
-# 0585: Our tooling is six @kalfa packages grouped by domain, config, ci, records, vitest, oxlint and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder
+# 0585: Our tooling is five @kalfa packages grouped by domain, config, ci, records, quality and a thin cli, reached through one kalfa command, never one small package per tool, its settings never take a FABRIKA_ name, and every record folder moves under one .kalfa/ folder
 
 ```mermaid
 flowchart LR
@@ -16,8 +16,7 @@ flowchart LR
   checks["@kalfa/ci/checks"]
   ship["@kalfa/ci/ship"]
   records["@kalfa/records: every record folder"]
-  vitest["@kalfa/vitest"]
-  oxlint["@kalfa/oxlint"]
+  quality["@kalfa/quality: vitest, stryker, oxlint, oxfmt, stylelint"]
   fabrika["fabrika: .fabrika and FABRIKA_*"]
   cli -->|builds in the cli tree of| config
   cli -->|finds the cli tree of| ci
@@ -27,12 +26,11 @@ flowchart LR
   config -->|used by| fabrika
   config -->|used by| ci
   config -->|used by| records
-  config -->|used by| vitest
-  config -->|used by| oxlint
+  config -->|used by| quality
 ```
 
 ```text
-# A sketch. None of these folders is on main yet.
+# A sketch of the layout.
 kalfa/
   cli/        @kalfa/cli        the one kalfa command; finds each dependency's ./cli tree
   config/     @kalfa/config     settings engine: .<app>/<app>.toml, <APP>_<SECTION>_<KEY>, --section.key
@@ -41,8 +39,11 @@ kalfa/
                                   plants, pin, redact, unlisted, movecheck
                 @kalfa/ci/ship    today's land.ts and pr/
   records/    @kalfa/records    find, list, next, show, resolve; field rows; frontmatter Schemas
-  vitest/     @kalfa/vitest     0557's test toolbox
-  oxlint/     @kalfa/oxlint     from oxlint-plugins/
+  quality/    @kalfa/quality    testing, linting and formatting, one subpath per tool
+                @kalfa/quality/vitest   0557's test toolbox
+                @kalfa/quality/stryker  plants and mutation
+                @kalfa/quality/oxlint   from oxlint-plugins/
+                @kalfa/quality/oxfmt, @kalfa/quality/stylelint
 
 .kalfa/
   kalfa.toml    [records] says where each folder is
@@ -58,18 +59,19 @@ stays where it is, and when the builds land.
 [0556](0556-kalfa-holds-our-tooling-packages.md) made `@kalfa` our npm scope for tooling and infra
 and `kalfa/` its folder. It left open whether the tooling that exists today (`oxlint-plugins/`,
 `.github/ci` and `.agents`) moves in. [0557](0557-kalfa-vitest-is-the-test-toolbox.md) named the
-first package, `@kalfa/vitest`.
+first package, `@kalfa/vitest`. [0600](0600-kalfa-quality-holds-test-lint-format.md) later put
+testing, linting and formatting in one package, `@kalfa/quality`, with one subpath per tool, in
+place of `@kalfa/vitest` and `@kalfa/oxlint`.
 
 On 2026-11-15 the owner ruled on the rest: which packages, what each holds, the one command that
 calls them, how tooling is configured, where the record folders go, and the order the builds land
-in. This amends 0556 in part: it settles the first item under its "Not decided here". The rest of
-0556 holds.
+in. This amends 0556 in part: it settles the first item under its "Not decided here".
 
 It also amends in part three decisions that name a record folder's path:
 [0001](0001-decisions-live-in-the-repo.md) (`.decisions/`),
 [0005](0005-patterns-and-decisions-are-visual.md) (`.patterns/`) and
-[0571](0571-runbooks-live-in-top-level-runbooks.md) (`.runbooks/`). Each one's rule holds; only its
-folder moves under `.kalfa/`, when the move is built.
+[0571](0571-runbooks-live-in-top-level-runbooks.md) (`.runbooks/`). Only the folder each names
+moves under `.kalfa/`, when the move is built.
 
 It builds on these, which it cites and does not change:
 [0113](0113-no-shell-or-python-scripts.md) (no shell or Python script; ports to TypeScript and
@@ -78,12 +80,16 @@ through the code host service), [0086](0086-settings-are-declared-once.md) (how 
 declared and read) and [0159](0159-fabsh-pipes-summon-join-first.md) (fabrika is built inside
 fabrika, so the step runner's job goes to fabrika).
 
+[0601](0601-program-make-with-optional-pipes.md) adds small libraries of one domain each beside the
+tooling packages: `@kalfa/program`, `@kalfa/ledger` and `@kalfa/transport`. They are not tooling,
+so the count below does not include them.
+
 ## Decision
 
-**Our tooling is six `@kalfa` packages, grouped by domain. A tool goes in the package for its
+**Our tooling is five `@kalfa` packages, grouped by domain. A tool goes in the package for its
 domain and is exported by subpath, never made into a small package of its own.**
 
-### The six packages
+### The five packages
 
 - **`@kalfa/config`** (`kalfa/config/`): one settings engine, named by the app that uses it.
   - fabrika uses it for `.fabrika` and `FABRIKA_*`. Every `@kalfa` package uses it for `.kalfa`
@@ -112,11 +118,14 @@ domain and is exported by subpath, never made into a small package of its own.**
   - It holds the commands `records.ts` has today (`list`, `next`, `find`, `resolve`), adds `show`,
     and takes in `fieldfile` and `fieldrow`, the field-row writers.
   - Each kind's frontmatter is a Schema. The checks on records live here; `field-check` moves in.
-- **`@kalfa/vitest`** (0557) and **`@kalfa/oxlint`** (from `oxlint-plugins/`) are shaped to
-  publish.
-  - Each has its own README and its own tests, and no repo path is baked in. A value that is ours
-    becomes a setting.
-  - They stay `"private": true` until the owner says publish (0556). Changesets come only then.
+- **`@kalfa/quality`** (0600): testing, linting and formatting, with one subpath per tool.
+  - The subpaths are `/vitest` (0557's test toolbox), `/stryker`, `/oxlint` (from
+    `oxlint-plugins/`), `/oxfmt` and `/stylelint`. A new tool in this domain is a new subpath. The
+    package root holds only pieces two or more subpaths share. Each tool is an optional peer
+    dependency, and no subpath imports another tool's subpath.
+  - It is shaped to publish: its own README and tests, and no repo path baked in. A value that is
+    ours becomes a setting.
+  - It stays `"private": true` until the owner says publish (0556). Changesets come only then.
 - **`@kalfa/cli`** (`kalfa/cli/`): a thin package that gives the one `kalfa` command. Its shape is
   the next section.
 
@@ -218,8 +227,9 @@ field = ".kalfa/field"
 
 ### When it lands
 
-- **Plans start now.** Builds land at the tail of the sev0 list, in this order: config, then ci
-  (with checks, ship and the leak-words move), then records, then vitest, then oxlint.
+- **Plans start now.** Builds land at the tail of the sev0 list, in this order: config, with
+  `@kalfa/quality`'s `/stryker` beside it, then ci (with checks, ship and the leak-words move), then
+  records, then quality's `/vitest`, then its `/oxlint`.
 - **The move under `.kalfa/` builds at the sev0's tail too, after `@kalfa/records` exists,** since
   the move is done by its command.
 - **A build that moves `oxlint-plugins/` or `.github/ci` waits** until the Effect-check and
@@ -228,8 +238,9 @@ field = ".kalfa/field"
 
 **Binding constraints:**
 
-- There are six `@kalfa` tooling packages. A new tool is a subpath of the package for its domain,
-  never a seventh small package, unless a later decision adds one.
+- There are five `@kalfa` tooling packages. A new tool is a subpath of the package for its domain,
+  never a sixth small package, unless a later decision adds one. The small libraries of
+  [0601](0601-program-make-with-optional-pipes.md) are not tooling and are not counted.
 - A package's commands are its `./cli` export, an `effect/cli` `Command`, named by its
   `kalfa.cli` field. `kalfa` loads only the project's own dependencies that carry that field,
   never a scan of `node_modules`, and `help`, `version` and `config` are always there.
@@ -261,18 +272,18 @@ These are the lead's reading of what follows from the ruling. They are not the o
 - **The discovery laws** go in the plan that carries `@kalfa/cli`: a dependency without the
   `kalfa.cli` field adds nothing, a package that is not a dependency is never loaded, and the
   built-ins are always there.
-- **0556's scope line holds:** today's version (`packages/`, `programs/`, `apps/`) is not covered
+- **Today's version** (`packages/`, `programs/`, `apps/`) is not covered, as 0556's scope line says
   ([0217](0217-next-grows-beside-today.md)).
 
 **Not decided here:**
 
 - The `[records]` key names and the exact output of `kalfa records decisions show`.
-- When `@kalfa/vitest` or `@kalfa/oxlint` is published.
+- When `@kalfa/quality` is published.
 - Where `docs/plan` goes later.
 - Where `.agents/` lives once the step runner's job moves into fabrika.
 
 ## Records
 
-- `.glossary/TERMS.md`: the `kalfa` row gains the six packages, the `kalfa` command and the
+- `.glossary/TERMS.md`: the `kalfa` row gains the five packages, the `kalfa` command and the
   `.kalfa/` folder. No new word is coined: `ship` keeps its glossary meaning, the one merge
   authority.
