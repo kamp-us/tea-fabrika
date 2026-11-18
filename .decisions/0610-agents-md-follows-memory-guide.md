@@ -1,12 +1,12 @@
 ---
-id: 0609
+id: 0610
 title: AGENTS.md follows Claude Code's memory guide, under 200 lines of facts every session needs, with each procedure in the skill read for that job and each folder's rules in that folder's file
 status: accepted
 date: 2026-11-18
 tags: [agents-md, map, size, skills, rules, lint, kalfa-records]
 ---
 
-# 0609: AGENTS.md follows Claude Code's memory guide, under 200 lines of facts every session needs, with each procedure in the skill read for that job and each folder's rules in that folder's file
+# 0610: AGENTS.md follows Claude Code's memory guide, under 200 lines of facts every session needs, with each procedure in the skill read for that job and each folder's rules in that folder's file
 
 ```mermaid
 flowchart TD
@@ -59,9 +59,9 @@ of the codebase, move it to a skill or a path-scoped rule instead." This repo's 
 read `AGENTS.md` through `@AGENTS.md`.
 
 The lead session decided this on 2026-11-18, in place of the owner call slice 6 had stopped for.
-It supersedes 0129 and 0608 whole and holds what of them is still live.
-[0180](0180-instruction-files-take-quick-edits.md) still holds: a cut lands with no test first, and
-the table it names is the one below.
+It supersedes 0129 and 0608 whole and holds what of them is still live. It also changes
+[0180](0180-instruction-files-take-quick-edits.md), whose cut carried 0129's table: that table is
+now the one below, and 0180 says so in its own text.
 
 ## Decision
 
@@ -78,9 +78,9 @@ lives in that folder's `AGENTS.md`.**
   - a decision's own text holds it: one line with a link to that decision;
   - it is about one folder: it moves to that folder's own `AGENTS.md`, such as `next/AGENTS.md`;
   - it is a procedure, or read for one job only: it moves whole to the skill read for that job, or
-    to a reference file that skill links, word for word, and the map keeps its heading and one
-    line that says when to read it and links it.
-- **The table:** a pull request that moves entries out of the map carries a table with one row for
+    to a reference file that skill links, word for word, and the map keeps one line that says when
+    to read it and links it, under the section's heading while any file links that anchor.
+- **The table:** a cut, a pull request whose job is to move entries out of the map, carries a table with one row for
   every line or bullet it removes: where it went, or which check holds it. A rule with no row
   blocks the merge.
 - **A rule conflict is resolved, not kept.** A map line that an accepted decision has overruled

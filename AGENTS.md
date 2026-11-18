@@ -1,6 +1,6 @@
 # Working in this repo
 
-A map for any agent or person picking up work here ([0609](./.decisions/0609-agents-md-follows-memory-guide.md)). Read
+A map for any agent or person picking up work here ([0610](./.decisions/0610-agents-md-follows-memory-guide.md)). Read
 this first, then [`docs/plan/README.md`](./docs/plan/README.md) for where the work stands, then
 [`docs/direction/README.md`](./docs/direction/README.md) for why.
 

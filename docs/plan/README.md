@@ -62,7 +62,7 @@ tooling and the records both versions read, cleans the records up and then turns
 [PR 1629](https://github.com/kamp-us/tea-fabrika/pull/1629),
 [PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)). Slice 6 could not fit 0608's
 32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with
-[0609](../../.decisions/0609-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
+[0610](../../.decisions/0610-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
 200 lines, and procedures move to the skill read for that job. Slice 6 makes that cut, and slice
 8's size check counts lines, as advice. The other slices remain.
 
