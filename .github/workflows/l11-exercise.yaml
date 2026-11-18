@@ -21,7 +21,7 @@ on:
         description: Exact cached source commit
         required: true
         type: string
-        default: 07c65ba2f2065cc87dfdab106b81534652af011e
+        default: 875e45de42b4dceee1aa47b57a046050ada4a4dc
 permissions:
   contents: read
 jobs:
@@ -48,7 +48,7 @@ jobs:
       - &a3
         uses: actions/checkout@v7
         with:
-          ref: 07c65ba2f2065cc87dfdab106b81534652af011e
+          ref: 875e45de42b4dceee1aa47b57a046050ada4a4dc
           path: source-cached
           persist-credentials: false
           fetch-depth: 1
@@ -57,7 +57,7 @@ jobs:
       - &a4
         uses: actions/checkout@v7
         with:
-          ref: 610ab4c2097e363979cc16ec89675f9aa9d64a44
+          ref: ab47ff27805749e5cfb27a2170cbea381304b7ca
           path: source-uncached
           persist-credentials: false
           fetch-depth: 1
@@ -66,8 +66,8 @@ jobs:
       - &a5
         name: verify exact source before setup
         run: |-
-          test "$(git -C source-cached rev-parse HEAD)" = 07c65ba2f2065cc87dfdab106b81534652af011e
-          test "$(git -C source-uncached rev-parse HEAD)" = 610ab4c2097e363979cc16ec89675f9aa9d64a44
+          test "$(git -C source-cached rev-parse HEAD)" = 875e45de42b4dceee1aa47b57a046050ada4a4dc
+          test "$(git -C source-uncached rev-parse HEAD)" = ab47ff27805749e5cfb27a2170cbea381304b7ca
           test -d 'source-cached' && test ! -L 'source-cached'
           test -d 'source-cached/next' && test ! -L 'source-cached/next'
           test -d 'source-cached/next/apps' && test ! -L 'source-cached/next/apps'
@@ -89,25 +89,25 @@ jobs:
           test -d 'source-uncached/next/packages/libfabrika/src/cloudflare' && test ! -L 'source-uncached/next/packages/libfabrika/src/cloudflare'
           test -d 'source-uncached/next/packages/libfabrika/src/processes' && test ! -L 'source-uncached/next/packages/libfabrika/src/processes'
           test -f 'pnpm-lock.yaml' && test ! -L 'pnpm-lock.yaml'
-          printf '%s\n' '02d1d1c629105e240ea3b473df3dbb0f89874cfaf5f57352c6d8492da133da4c  pnpm-lock.yaml' | sha256sum --check --status
+          printf '%s\n' '1800791fae8716cfb063adc7bd50822a0bfe07d7980eb599543e07c948032c95  pnpm-lock.yaml' | sha256sum --check --status
           test -f 'source-cached/pnpm-lock.yaml' && test ! -L 'source-cached/pnpm-lock.yaml'
-          printf '%s\n' '02d1d1c629105e240ea3b473df3dbb0f89874cfaf5f57352c6d8492da133da4c  source-cached/pnpm-lock.yaml' | sha256sum --check --status
+          printf '%s\n' '1800791fae8716cfb063adc7bd50822a0bfe07d7980eb599543e07c948032c95  source-cached/pnpm-lock.yaml' | sha256sum --check --status
           test -f 'source-cached/pnpm-workspace.yaml' && test ! -L 'source-cached/pnpm-workspace.yaml'
           printf '%s\n' '2dbe2a8e5e781cefa412fb2a43723b6dad1c8586bb49948d5d79eb1f81bef758  source-cached/pnpm-workspace.yaml' | sha256sum --check --status
           test -f 'source-cached/next/apps/fabrika/src/start-child.laws.integration.test.ts' && test ! -L 'source-cached/next/apps/fabrika/src/start-child.laws.integration.test.ts'
           printf '%s\n' '9eae1ecb08f3db5834a8c5de8488773ddf280f8f058971725321156d15d083e0  source-cached/next/apps/fabrika/src/start-child.laws.integration.test.ts' | sha256sum --check --status
           test -f 'source-cached/next/packages/libfabrika/src/cloudflare/runtime.ts' && test ! -L 'source-cached/next/packages/libfabrika/src/cloudflare/runtime.ts'
-          printf '%s\n' '175ceddc78e5bf30a68abc3c9d826175f7a8afc7611f247fa2c3bccd41aeaf05  source-cached/next/packages/libfabrika/src/cloudflare/runtime.ts' | sha256sum --check --status
+          printf '%s\n' 'b9a29ebd2f4b153c392983d09c2781bacbb9d581a98cc8cf1f68908f389c24fc  source-cached/next/packages/libfabrika/src/cloudflare/runtime.ts' | sha256sum --check --status
           test -f 'source-cached/next/packages/libfabrika/src/processes/ChildrenLedger.ts' && test ! -L 'source-cached/next/packages/libfabrika/src/processes/ChildrenLedger.ts'
           printf '%s\n' 'f4a3d647242f362c5b6292e54eae107d936331469aee9b7a2c44a1b316f1ab51  source-cached/next/packages/libfabrika/src/processes/ChildrenLedger.ts' | sha256sum --check --status
           test -f 'source-uncached/pnpm-lock.yaml' && test ! -L 'source-uncached/pnpm-lock.yaml'
-          printf '%s\n' '02d1d1c629105e240ea3b473df3dbb0f89874cfaf5f57352c6d8492da133da4c  source-uncached/pnpm-lock.yaml' | sha256sum --check --status
+          printf '%s\n' '1800791fae8716cfb063adc7bd50822a0bfe07d7980eb599543e07c948032c95  source-uncached/pnpm-lock.yaml' | sha256sum --check --status
           test -f 'source-uncached/pnpm-workspace.yaml' && test ! -L 'source-uncached/pnpm-workspace.yaml'
           printf '%s\n' '2dbe2a8e5e781cefa412fb2a43723b6dad1c8586bb49948d5d79eb1f81bef758  source-uncached/pnpm-workspace.yaml' | sha256sum --check --status
           test -f 'source-uncached/next/apps/fabrika/src/start-child.laws.integration.test.ts' && test ! -L 'source-uncached/next/apps/fabrika/src/start-child.laws.integration.test.ts'
           printf '%s\n' '8c38d7ff077aa796420ac76881be179a12b3461b60e5db05897b2a20727809cb  source-uncached/next/apps/fabrika/src/start-child.laws.integration.test.ts' | sha256sum --check --status
           test -f 'source-uncached/next/packages/libfabrika/src/cloudflare/runtime.ts' && test ! -L 'source-uncached/next/packages/libfabrika/src/cloudflare/runtime.ts'
-          printf '%s\n' '175ceddc78e5bf30a68abc3c9d826175f7a8afc7611f247fa2c3bccd41aeaf05  source-uncached/next/packages/libfabrika/src/cloudflare/runtime.ts' | sha256sum --check --status
+          printf '%s\n' 'b9a29ebd2f4b153c392983d09c2781bacbb9d581a98cc8cf1f68908f389c24fc  source-uncached/next/packages/libfabrika/src/cloudflare/runtime.ts' | sha256sum --check --status
           test -f 'source-uncached/next/packages/libfabrika/src/processes/ChildrenLedger.ts' && test ! -L 'source-uncached/next/packages/libfabrika/src/processes/ChildrenLedger.ts'
           printf '%s\n' 'f4a3d647242f362c5b6292e54eae107d936331469aee9b7a2c44a1b316f1ab51  source-uncached/next/packages/libfabrika/src/processes/ChildrenLedger.ts' | sha256sum --check --status
       - &a6

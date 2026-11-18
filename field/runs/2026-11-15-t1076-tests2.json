@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1076-tests2",
+  "ticket": 1076,
+  "pr": "kamp-us/tea-fabrika#1427",
+  "started": "2026-11-15T22:27:14-08:00",
+  "ended": "2026-11-15T22:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests round 2 for slice 1 of the @kalfa/config plan (docs/plan/quests/kalfa-config-PLAN.md), in next/, the import-line round of law F1 after the build. origin/main was merged in first (it holds PR 1508, the narrowed 0178 guard). Seventeen exam files now take Setting or Sources from settings/Fabrika.ts (fabrika's binding) with only their import line changed: the settings Codec, DesktopBrain, DesktopLink, Files, JsonSchema, Mail, Print, Reference, Setting, Snapshot, Sources and TomlEdit tests, desktop/BrainServiceTest.ts, packs/RepositoryTrustTest.ts, and in next/apps/fabrika settings-generated.integration.test.ts (the brief's settings-generated.test.ts is named that on main), worker-mail.integration.test.ts (its dynamic import line) and e2e/node/P19Launchd.test-support.ts, through @kampus/libfabrika/settings/Fabrika, which the package's ./settings/* export allows. An rg over next/ finds no other unbound caller outside product code. App.test.ts had three test-side type errors fixed with no law changed: the at helper types its document as TomlDocument, not typeof empty, and the two-app home check uses Effect.forEach in place of Effect.all over a mapped array, with the same inputs, order and concurrency. Files.test.ts T753 L3: on the lead's answer, its exact expected Reference.Row gains app { name fabrika, list fabrika settings }, which K2 requires; the match stays exact with one more field, so it is not a loosening. The same commit adds a dated amendment to F1 in the plan body, so the merge session must re-sign the plan. No product file changes: build_needed no.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Tests run at the merge head 2b2aaea plus this round's edits, in a cloud box (CLAUDE_CODE_REMOTE=true, Linux), with no override: the 14 settings test files and node/settings/Command.test.ts, 99 of 99 green; Load.integration.test.ts, settings-generated.integration.test.ts, worker-mail.integration.test.ts, desktop/BrainLife.laws.test.ts, desktop/BrainServiceManaged.laws.test.ts and node/repositories/RepositoryTrust.integration.test.ts, 34 of 34 green, none refused by the 0178 guard. Not run: e2e/electron-launchd.visual.test.ts, the one reader of P19Launchd.test-support.ts, a visual law that needs Electron and launchd; it is typechecked. Checks: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed (18 parts); ratchet.ts exit 0; pnpm typecheck passed whole. Plan gap: F1's plant (a) (prefix not upper-cased) turns Command.test.ts T753 L8 and L7 red, but Setting.test.ts L1 stays green, because L1 reads a ConfigProvider and never an env name; the plan's line names Setting L1 wrongly. F1's plant (b), tried as another app's person name in Command.ts and another app's default repo name in node/settings/Load.ts, leaves Command.test.ts and Load.integration.test.ts green: those F1 bodies pass the file names in themselves, so this class is held by K1, not F1. The row file is dated 2026-11-15, the Pacific date of the run, where the brief named 2026-11-16.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "F1",
+      "plant": "App.make builds prefix from the name without upper-casing it",
+      "result": "red"
+    },
+    {
+      "law": "F1",
+      "plant": "Command names the person file ~/.kalfa/kalfa.toml and node/settings/Load.ts defaults the repo file to .kalfa/kalfa.toml",
+      "result": "green"
+    },
+    {
+      "law": "T753 L3",
+      "plant": "Reference.rows writes another list command into each row's app",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

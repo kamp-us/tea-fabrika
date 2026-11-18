@@ -1,0 +1,67 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1076-tests1",
+  "ticket": 1076,
+  "pr": "kamp-us/tea-fabrika#1427",
+  "started": "2026-11-15T19:35:00-08:00",
+  "ended": "2026-11-15T20:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of the @kalfa/config plan (docs/plan/quests/kalfa-config-PLAN.md), in next/: K1 to K5 written in next/packages/libfabrika/src/settings/App.test.ts, 7 it lines that run as 16 tests. On the code as it is, the file is red because ./App.ts and ./Load.ts do not exist yet: the build adds both. Each law was first run green on a throwaway prototype of App.ts, a generic settings/Load.ts and small edits to Files, Snapshot, Reference and Print, at 25 runs and at FABRIKA_TEST_DEPTH=full (100 runs). Each plant was then applied to that prototype one at a time, and the prototype was removed before the commit. F1 and F2 are unchanged in this step: their 15 files keep their bodies and imports, and are green at 19ee884 (87 tests, Load.integration.test.ts left to the schedule). Their import lines change once the build has picked the binding's export form, in a tests round after the build. The plan's Laws count (75 engine it lines, plus 12) matches the branch. One gap against the plan: the generic load is pinned at settings/Load.ts, not node/settings/Load.ts, because fabrika's node/settings/Load.ts must keep load({ person, repo, flags, env, version }) for the F1 bodies in Load.integration.test.ts and Command.test.ts. K1's plant (c), which the plan puts in Command, is run on the generic load's home lookup, since Command is fabrika's only.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 45,
+  "note": "Start time is estimated from the first command of the session; the end time is from the clock. Laws and their red on main: K1 (a second app reads only its own), K2 (every name comes from the app, and a version warning names the app), K3 (one lowercase word, and a group holds one app), K4 (each app checks its own minimum version), K5 [secrets] (another app's values never reach an output, 10 cases by it.each): all fail to load with Cannot find module './App.ts'. Checks: pnpm format, oxlint (0 blocking), oxfmt, pnpm -s lint:dead (passes with a 6 GB heap; the default heap ran out of memory in this box), ratchet.ts exit 0. No typecheck in this step.",
+  "plants": [
+    {
+      "law": "K1",
+      "plant": "the generic load reads the repo file at .fabrika/fabrika.toml whatever the app",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "the app's Sources.env keeps ConfigProvider.nested(\"fabrika\")",
+      "result": "red"
+    },
+    {
+      "law": "K1",
+      "plant": "the person's home is read from FABRIKA_HOME whatever the app",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "Files.refused keeps \"fabrika settings lists every setting.\"",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "the snapshot's origin check keeps $FABRIKA_HOME",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "App.make accepts _ in a name",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "Setting.group drops the two-app check",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "Files.supported keeps reading Declarations.version (fabrika-version)",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "the read error prints the whole environment record",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

@@ -19,6 +19,7 @@ import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
 import { lintPlant } from "./workflow-lint/plant.ts";
 import { record } from "./workflow-lint/record.ts";
+import { relatedChecks } from "./workflow-lint/related.ts";
 import { lintScheduled } from "./workflow-lint/scheduled.ts";
 import { ends, legs, map, nextJob, numbered, type Require, type Rule } from "./workflow-lint/shared.ts";
 import { timeTables } from "./workflow-lint/time-tables.ts";
@@ -49,6 +50,7 @@ const CHECK_RULES: readonly Rule[] = [
   classifyStep,
   mergeLine,
   nextLaws,
+  relatedChecks,
   timeTables,
 ];
 

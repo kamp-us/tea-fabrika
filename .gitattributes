@@ -3,3 +3,6 @@
 * text=auto eol=lf
 field/runs.jsonl merge=union
 field/notes.jsonl merge=union
+# Field rows are records, not code: GitHub collapses them in pull request diffs. They stay searchable
+# and readable on click; linguist-generated only folds the diff and leaves them out of language stats.
+field/** linguist-generated=true

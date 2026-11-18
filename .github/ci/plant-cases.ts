@@ -131,7 +131,7 @@ export const cases = {
       "L13: notices name their process each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
     selector:
       "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "              heard.push({ client, news: structuredClone(news) });",
     after:
       "              const delivered = News.guards.view(news) ? { ...news, update: { ...news.update, rev: -1 } } : news;\n              heard.push({ client, news: structuredClone(delivered) });",
@@ -157,7 +157,7 @@ export const cases = {
       "L13: notices name their process each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
     selector:
       "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "              heard.push({ client, news: structuredClone(news) });",
     after:
       "              if (News.guards.view(news) && published.filter((h) => Schema.is(Published)(h.news)).length === 1) {\n                return;\n              }\n\n              heard.push({ client, news: structuredClone(news) });",
@@ -188,7 +188,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                              yield* Effect.void;",
     after: "                              yield* Deferred.succeed(work.done, undefined);",
     preparation: [
@@ -220,12 +220,12 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "              for (const [n] of names.entries()) {\n                counts.moves++;",
         after:
-          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n                counts.moves++;",
+          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n                counts.moves++;",
       },
       {
         before:
@@ -236,8 +236,8 @@ export const cases = {
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "d097eed69883a94ee40d8824e84844567672012f97a6e3e71001167c3ed45336",
-      edited: "5a166e8c8fc6b26afa845cc793052ac228037237c557a1c01a662bbfb116db15",
+      prepared: "004095a928b532a3523ad79c43e8eb4467ed9c20ca6070cf9e318dcad8bd3630",
+      edited: "1d543fd46defdc860b3575533a46ea68be91f4ec8117f068088da79b0a604423",
     },
     failures: [
       {
@@ -255,7 +255,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: '          yield* Effect.forEach(due, (work) => Deferred.await(work.done), { concurrency: "unbounded" });',
     after: "          yield* Effect.void;",
     preparation: [
@@ -291,12 +291,12 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "              for (const [n] of names.entries()) {\n                counts.moves++;",
         after:
-          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n                counts.moves++;",
+          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n                counts.moves++;",
       },
       {
         before:
@@ -307,8 +307,8 @@ export const cases = {
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "5ab79a9bd1333b20874fcfd26659f7fbb4c1d799fac4a441b78b2b2a9cf79087",
-      edited: "ea0866f9735cb11103994209e889f2a5e23cb57ecb7d6ff28711d589f4aa24ef",
+      prepared: "8ed3ccbb85fd6c73e1ce6a66126d199632461178e1d9274ffa46c743de199523",
+      edited: "d9406d4a36b308ee027e7f3ad54bc11adaa5421d7dc166bc69759c1a71381b92",
     },
     failures: [
       {
@@ -326,7 +326,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          for (const work of due) {\n            alarms.delete(work);\n          }",
     after: "          for (const work of due) {\n            alarms.delete(work);\n          }\n\n          return;",
     preparation: [
@@ -362,12 +362,12 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "              for (const [n] of names.entries()) {\n                counts.moves++;",
         after:
-          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n                counts.moves++;",
+          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n                counts.moves++;",
       },
       {
         before:
@@ -378,8 +378,8 @@ export const cases = {
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "15a20a30009ce885e2fce5b77164a70dde147c44286ecefb7bf7a13abda32852",
-      edited: "4ce6941d2ad4b4780a411b994b63f4a078052b9bca5ac9e0a225b2f521a1eeda",
+      prepared: "8d34531ea09955b97a0232904d5386719a84f9f5699ee51bbf671f37a11fb464",
+      edited: "ceacfeeff0d6ed8f2e359f4c4e465f379a32cae94321939e4d4fcbed65e02f31",
     },
     failures: [
       {
@@ -397,7 +397,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          Deferred.doneUnsafe(pending.work.done, Effect.void);",
     after:
       "          Deferred.doneUnsafe(pending.work.done, Effect.void);\n\n          for (const active of running) {\n            Deferred.doneUnsafe(active.done, Effect.void);\n          }",
@@ -434,12 +434,12 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "              for (const [n] of names.entries()) {\n                counts.moves++;",
         after:
-          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n                counts.moves++;",
+          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n                counts.moves++;",
       },
       {
         before:
@@ -450,8 +450,8 @@ export const cases = {
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "a7a798a65be92dabc32d25540c0b9fd6ef4b328a4bb0c7af5d53669e47fde6a5",
-      edited: "84c27c3333f5eeb55c26c33219671a09008dc0abee7d7797245997872305facf",
+      prepared: "3be18ac196ab5e5a831bdf539e84283f3b617dbc1013370721982c9f116635a3",
+      edited: "10bf8473034e98139035a7ef8cbacf82495740e12def92be7eff7af58122b88d",
     },
     failures: [
       {
@@ -469,7 +469,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "          Deferred.doneUnsafe(pending.work.done, Effect.void);",
     after:
       "          Deferred.doneUnsafe(pending.work.done, Effect.void);\n\n          for (const active of running) {\n            Deferred.doneUnsafe(active.done, Effect.void);\n          }",
@@ -506,12 +506,12 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "              for (const [n] of names.entries()) {\n                counts.moves++;",
         after:
-          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n                counts.moves++;",
+          "              for (const [n] of names.entries()) {\n                const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n                counts.moves++;",
       },
       {
         before:
@@ -522,8 +522,8 @@ export const cases = {
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "e82cf996bf5a94d236f5c3022e0e3ee02748a427946fd6ea3817455ddbf9c678",
-      edited: "13c9dae45705b697abede18a004fc6656235918bd9198b6c665b4b5da016c09b",
+      prepared: "a3ecfc94d45ca20c606daac09a63cbf5c829525be2fac8028656627d5baa4d5b",
+      edited: "b23f17fbf3369ff6ad8e349fbacaf54e76cab417f3c236ec6ce90deba2732d58",
     },
     failures: [
       {
@@ -541,7 +541,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                          }).pipe(\n                            Effect.ensuring(",
     after:
       "                          }).pipe(\n                            Effect.catch(() => Effect.void),\n                            Effect.ensuring(",
@@ -578,18 +578,18 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "                ).toEqual(model.items.map((item) => item.name));\n              }\n",
         after:
-          '                ).toEqual(model.items.map((item) => item.name));\n              }\n              const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n              yield* probe.arm(0);\n              yield* Deferred.await(probe.entered);\n              const waiting = yield* Effect.forkChild(Effect.exit(w.settled), { startImmediately: true });\n              yield* Deferred.succeed(probe.release, undefined);\n              const exit = yield* Fiber.join(waiting);\n              expect(Exit.isFailure(exit), "alarm failure reaches the completion waiter").toBe(true);\n              const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;\n              expect(error, "alarm failure stays typed").toMatchObject({ _tag: "Some", value: { _tag: "AlarmFailure" } });\n\n              if (error?._tag === "Some") {\n                expect(error.value.cause, "alarm failure keeps its original cause").toBe(probe.failure);\n              }\n',
+          '                ).toEqual(model.items.map((item) => item.name));\n              }\n              const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n              yield* probe.arm(0);\n              yield* Deferred.await(probe.entered);\n              const waiting = yield* Effect.forkChild(Effect.exit(w.settled), { startImmediately: true });\n              yield* Deferred.succeed(probe.release, undefined);\n              const exit = yield* Fiber.join(waiting);\n              expect(Exit.isFailure(exit), "alarm failure reaches the completion waiter").toBe(true);\n              const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;\n              expect(error, "alarm failure stays typed").toMatchObject({ _tag: "Some", value: { _tag: "AlarmFailure" } });\n\n              if (error?._tag === "Some") {\n                expect(error.value.cause, "alarm failure keeps its original cause").toBe(probe.failure);\n              }\n',
       },
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "ea8d42e1ae68ac5f544227f17c5c29ea7a4e009e29936308d6963e61ff3ed073",
-      edited: "c976a384dc41751fc74e96f21b588314333033e1cb03618d23de85405378ef9a",
+      prepared: "b70d90cd64fd642340761a7fa666c259aed66d237f6e539321db318be3160d89",
+      edited: "ba775127d5e9eedb2cdcb9c59f57931bfb316d0688c0949db8ba0c90311f440a",
     },
     failures: [
       {
@@ -607,7 +607,7 @@ export const cases = {
       "L13: notices name their process successive sends land and a client joining after the first send opens the current checklist",
     selector:
       "L13: notices name their process > successive sends land and a client joining after the first send opens the current checklist",
-    source: "a062f7a2515aa1917dfae05d3af95e3705b88812",
+    source: "3ca406a62f5f5a7e4300ebc8cd5c3918ecbf64db",
     before: "                                running.delete(work);",
     after:
       "                                running.delete(work);\n                                alarms.delete(work);",
@@ -640,18 +640,18 @@ export const cases = {
       {
         before: "        published,\n        settled,",
         after:
-          '        published,\n        settled,\n        pause: (pid: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(pid);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(pid, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(pid);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
+          '        published,\n        settled,\n        pause: (name: string) =>\n          Effect.acquireRelease(\n            Effect.sync(() => {\n              const entry = processes.get(name);\n\n              if (entry === undefined) {\n                throw new Error("checklist probe process missing");\n              }\n\n              const probe: AlarmProbe = {\n                entered: Deferred.makeUnsafe<AlarmWork>(),\n                release: Deferred.makeUnsafe<void>(),\n                failure: new Error("checklist alarm failure probe"),\n                calls: new Set(),\n                arm: (at) => Effect.tryPromise({\n                  try: () => at === null ? entry.ctx.storage.deleteAlarm() : entry.ctx.storage.setAlarm(at),\n                  catch: (cause) => new AlarmFailure({ cause }),\n                }),\n              };\n              probes.set(name, probe);\n\n              return probe;\n            }),\n            (probe) => Effect.gen(function* () {\n              probes.delete(name);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.forEach([...probe.calls], (returned) => Deferred.await(returned), { concurrency: "unbounded" });\n            }),\n          ),',
       },
       {
         before: "                ).toEqual(model.items.map((item) => item.name));\n              }\n",
         after:
-          '                ).toEqual(model.items.map((item) => item.name));\n              }\n              const probe = yield* w.pause(Schema.decodeUnknownSync(Schema.String)(pid));\n              yield* probe.arm(0);\n              const work = yield* Deferred.await(probe.entered);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.exit(Deferred.await(work.done));\n              const exit = yield* Effect.exit(w.settled);\n              expect(Exit.isFailure(exit), "alarm failure reaches the completion waiter").toBe(true);\n              const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;\n              expect(error, "alarm failure stays typed").toMatchObject({ _tag: "Some", value: { _tag: "AlarmFailure" } });\n\n              if (error?._tag === "Some") {\n                expect(error.value.cause, "alarm failure keeps its original cause").toBe(probe.failure);\n              }\n',
+          '                ).toEqual(model.items.map((item) => item.name));\n              }\n              const probe = yield* w.pause(yield* call(w, (p) => p.processObject(Schema.decodeUnknownSync(Schema.String)(pid))));\n              yield* probe.arm(0);\n              const work = yield* Deferred.await(probe.entered);\n              yield* Deferred.succeed(probe.release, undefined);\n              yield* Effect.exit(Deferred.await(work.done));\n              const exit = yield* Effect.exit(w.settled);\n              expect(Exit.isFailure(exit), "alarm failure reaches the completion waiter").toBe(true);\n              const error = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : null;\n              expect(error, "alarm failure stays typed").toMatchObject({ _tag: "Some", value: { _tag: "AlarmFailure" } });\n\n              if (error?._tag === "Some") {\n                expect(error.value.cause, "alarm failure keeps its original cause").toBe(probe.failure);\n              }\n',
       },
     ],
     hashes: {
       source: "08a5cfd7af599b98e3a68c887328f5d2462f455c9e19aefe2258e5766a03f50f",
-      prepared: "a0a10cef5b8e134ea8a2b87f89930e2f58b715fdac29bdc1b25e30574d77bf3c",
-      edited: "5b43a4afb1e77c9f783623dbe1ca34526f419a477da4cf15e17255d035d0ed27",
+      prepared: "ffaedc842f4a83f6fb1ee013d5c5289e1381d3102adaf484d1d318e12d0d9e1b",
+      edited: "cdb7163a5fa5cf1468f8c179a478a5238295eff08074f291d6da886ffaaa0ae9",
     },
     failures: [
       {
