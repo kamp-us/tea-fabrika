@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-integration-off-merge-line-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1613",
+  "started": null,
+  "ended": null,
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI, the one review of pull request 1613 at abbff0846, in decision 0602's sev0 fast track. It let 1613 land and sent its findings to the follow-up branch fabrikalfa/integration-off-proof-arm: a plant at related.ts's read of the event (process.env[\"EVENT\"] at line 128) left all four related-selection laws green, since no law ran the step itself; tooling .integration. files still reached pull request legs (.github/ci/workflow-lint/scheduled.integration.test.ts, which spawns a process, ran on a tooling leg in run 44278795643), against 0584; comments in related.ts, check.yaml, Arm.ts, Arm.test.ts and scheduled.yaml, and docs/plan/README.md, still said a proof run or ready CI runs integration laws.",
+  "note": "Written by the follow-up's builder from the findings the lead relayed. Times, model, effort and usage are not known to this writer, so they stay null. The outcome is pass because the lead landed 1613 with its findings moved to the follow-up, not sent back.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "related-selection.test.ts, all four laws",
+      "plant": "related.ts:128 reads process.env[\"EVENT\"] in place of GITHUB_EVENT_NAME",
+      "result": "green"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1144-fix1",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-18T12:05:00+00:00",
+  "ended": "2026-11-18T12:16:00+00:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "builder",
+  "step": "build",
+  "model": "sonnet",
+  "effort": null,
+  "outcome": "pass",
+  "head": "fe62b24f3baa072e0dc6434101ebde3823c0e705",
+  "base": "286668aaf341b1ed4562aa1527ddc0f18f287892",
+  "why": "Fix round for the one fault of review 2: the negative half of readQueueWait was checked by hand-picked examples, so narrowing the status gate to pending-only stayed green. It is now a generated law on it.effect.prop with weighted draws of status, conclusion, runner and both times, an oracle built from the draw, and coverage that fails loudly. The real cases stay in a vector test. Product code did not change: every plant went red on the law and the product agrees with the oracle on all draws.",
+  "note": "Today's CI tooling, .github/ci. Node 26.13.0, nice 15, one worker. time-table.test.ts 11 passed (was 10, the property is new, the old example test is now the vector test). Scoped lint of time-table.test.ts 0 blocking. Plants run once each on time-table.ts, restored with sha256 f94ee0c3 checked and git diff empty: status gate narrowed to pending-only, 1 failed (the new law only, the vector stays green); runner_id null check dropped, 2 failed; calendar check dropped, 2 failed; zone part of the timestamp regex made optional, 2 failed. Seed 119120 fixed so the coverage check is deterministic. Served model and usage not reported.",
+  "plants": [
+    {
+      "law": "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+      "plant": ".github/ci/time-table.ts readQueueWait: status gate narrowed to status === pending",
+      "result": "red"
+    },
+    {
+      "law": "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+      "plant": ".github/ci/time-table.ts readQueueWait: drop the runner_id == null check",
+      "result": "red"
+    },
+    {
+      "law": "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+      "plant": ".github/ci/time-table.ts timestamp: drop the calendar check",
+      "result": "red"
+    },
+    {
+      "law": "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+      "plant": ".github/ci/time-table.ts timestamp: make the zone part of the regex optional so a zone-less time passes",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

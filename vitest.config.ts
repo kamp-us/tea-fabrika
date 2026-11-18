@@ -30,6 +30,12 @@ const TOOLING = [
   ".agents/skills/*/scripts/**/*.test.ts",
 ];
 
+// The tooling tests that reach a real thing, a process, a server or a file, named
+// `*.integration.test.ts` as in next/ (0584; oxlint-plugins/test-names.ts). They are a project of
+// their own, `tooling-integration`, since a project ignores `--exclude`, and only main's full run
+// runs them (0602): `tooling` leaves them out, as `next` leaves out `next-integration`'s.
+const TOOLING_INTEGRATION = TOOLING.map((glob) => glob.replace(/\.test\.ts$/, ".integration.test.ts"));
+
 // next/'s tests, by the layer they test against (0536). A file's name says which: a test that drives
 // a real resource (a SQLite file, git, workerd, a spawned process, a socket, a bundler, temp files)
 // is `*.integration.test.ts`, and one that drives a browser or Electron is `*.visual.test.ts`, each
@@ -241,15 +247,17 @@ const scriptReads: Plugin = {
 const VISUAL_LIMIT = 120_000;
 
 // One Vitest project per layer, picked by `--project` (0536). Pull requests and the merge queue run
-// `next`; the 3-hour schedule runs `next-integration` and `next-visual` too; a pull request runs
-// `next-visual` only when it carries the `visual` label (check.yaml). The tooling tests are their
-// own project and today's version's theirs (`today`), so `--project tooling` leaves today's out.
-// The visual project starts one file at a time, since each starts a brain, Chromium or Electron,
-// and keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
-// leaves the other two names out.
+// the `next` and `tooling` tests their change reaches, and a pull request with the `visual` label
+// its `next-visual` tests too (check.yaml); main's full run runs every project but `today`, and
+// only it runs `next-integration` and `tooling-integration` (0602). The tooling tests are their own
+// projects and today's version's theirs (`today`), so `--project tooling` leaves today's out. The
+// visual project starts one file at a time, since each starts a brain, Chromium or Electron, and
+// keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
+// leaves the other two next names out, and `tooling` leaves out `tooling-integration`'s.
 export const projects = [
   { extends: true, test: { name: "today", include: [...TODAY], exclude: [...EXCLUDE] } },
-  { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE] } },
+  { extends: true, test: { name: "tooling", include: [...TOOLING], exclude: [...EXCLUDE, ...TOOLING_INTEGRATION] } },
+  { extends: true, test: { name: "tooling-integration", include: [...TOOLING_INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: true,
     test: { name: "next", include: [...NEXT], exclude: [...EXCLUDE, ...INTEGRATION, ...VISUAL, ...KALFA_VISUAL] },
