@@ -217,9 +217,25 @@ def asks(*args):
 def is_shallow():
     return asks('rev-parse', '--is-shallow-repository').stdout.strip() == 'true'
 
-# Fetches `more` commits of history past the shallow boundary of every ref the clone follows.
-def deepen(more):
+# The two ends of a revision such as base..head or base...head, an empty end meaning HEAD.
+def ends_of(arg):
+    for dots in ('...', '..'):
+        if dots in arg and not arg.startswith('-'):
+            base, head = arg.split(dots, 1)
+            return base or 'HEAD', head or 'HEAD'
+    return None
+
+# Fetches `more` commits of history past the shallow boundary. A base that lives on a remote is also
+# fetched by its own branch: a plain fetch deepens only the branches the clone follows, and which
+# other shallow tips it reaches depends on the git version, so the base is never left to chance.
+def deepen(more, bases):
     asks('fetch', f'--deepen={more}')
+    for base in bases:
+        name = asks('rev-parse', '--symbolic-full-name', base).stdout.strip().removeprefix('refs/remotes/')
+        for remote in asks('remote').stdout.split():
+            if name.startswith(remote + '/'):
+                branch = name[len(remote) + 1:]
+                asks('fetch', f'--deepen={more}', remote, f'+refs/heads/{branch}:refs/remotes/{name}')
 
 # The commits in .git/shallow are grafted roots: git shows them with no parents, though they are old.
 def boundary():
@@ -236,6 +252,7 @@ def listed(revs):
 # Stopping at the first merge base is not enough: a branch that merged main in has older parents of
 # its own.
 def reach_bases(revs):
+    bases = [base for base, _ in filter(None, map(ends_of, revs))]
     steps = iter((50, 200, 1000))
     def unsure():
         grafted = boundary()
@@ -244,7 +261,7 @@ def reach_bases(revs):
         more = next(steps, None)
         if more is None:
             refuse('a commit at this shallow clone\'s boundary is still in the range after deepening; fetch more history')
-        deepen(more)
+        deepen(more, bases)
 
 bad = 0
 respaced = 0
