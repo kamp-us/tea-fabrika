@@ -1,8 +1,8 @@
 // next/. Alchemy owns the local runtime, as in src/instance.ts.
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import { testKey } from "@kampus/libfabrika/email/Email.test-support";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
-import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import * as Alchemy from "alchemy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
