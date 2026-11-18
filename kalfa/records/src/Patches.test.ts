@@ -12,9 +12,9 @@
 // on .decisions/0414, and the two measured false alarms after it): a block is a heading, a paragraph, a list
 // item's paragraph or a table cell, read as Markdown, outside fenced code, with inline code removed and each
 // link replaced by its text. A sentence ends at `.`, `!` or `?` followed by a space or the block's end. A form
-// fires only when its sentence holds a record reference: a four-digit number that is not part of a date, or a
-// link to a `NNNN-slug.md` record. The finding's `line` is the file line where the match begins, the line that
-// holds "rest" or "carried". The `## Amendments` heading stays a match of the heading alone.
+// fires only when its sentence, or the one before it in the same block, holds a record reference: a four-digit
+// number that is not part of a date, or a link to a `NNNN-slug.md` record, written inline or reference-style.
+// The finding's `line` is the file line where the match begins, the line that holds "rest" or "carried". The `## Amendments` heading stays a match of the heading alone.
 //
 // No law reads a committed record: another slice of this quest edits those, so each real shape is fixture text
 // below, with the commit or finding it came from.
@@ -111,7 +111,7 @@ type Block =
     };
 
 /** Shapes of a still-holds or carried-forward line over a line break, with Markdown links in them. */
-const MULTI = 10;
+const MULTI = 14;
 
 const multi = (variant: number, a: string, b: string, name: string): Block => {
   const one = `[${a}](${a}-${name}.md)`;
@@ -163,15 +163,43 @@ const multi = (variant: number, a: string, b: string, name: string): Block => {
         lines: ["| rule | note |", "| --- | --- |", `| ${name} | The rest of ${one} holds. |`],
         hit: { at: 2, form: "still-holds" },
       };
-    default:
+    case 9:
       // A `1)` item, which .decisions/0093 uses.
       return { _tag: "text", lines: [`1) The rest of ${one} and`, `   ${two} still holds.`], hit: still };
+    case 10:
+      // The only record reference is a link with word text: no number is written, in the same sentence.
+      return { _tag: "text", lines: [`The rest of [the merge rule](${a}-${name}.md) still holds.`], hit: still };
+    case 11:
+      // The same, written reference-style: the reference is in the definition's target.
+      return {
+        _tag: "text",
+        lines: [`The rest of [the merge rule][m${a}] still`, "holds.", "", `[m${a}]: ./${a}-${name}.md`],
+        hit: still,
+      };
+    case 12:
+      // The link with word text is in the sentence before the one that says the rest holds.
+      return {
+        _tag: "text",
+        lines: [`[the merge rule](${a}-${name}.md) adds one change.`, "The rest of the file still holds."],
+        hit: { at: 1, form: "still-holds" },
+      };
+    default:
+      return {
+        _tag: "text",
+        lines: [
+          `[the merge rule][n${a}] adds one change to the file.`,
+          "The rest of the file still holds.",
+          "",
+          `[n${a}]: ./${a}-${name}.md`,
+        ],
+        hit: { at: 1, form: "still-holds" },
+      };
   }
 };
 
-const SPLITS = ["bullets", "heading", "paragraphs", "cells"] as const;
+const SPLITS = ["bullets", "heading", "paragraphs", "cells", "far"] as const;
 
-/** "rest" in one block and "holds" in the next: no finding, whatever separates them. */
+/** "rest" in one block and "holds" in the next, or a record reference two sentences back: no finding, whatever separates them. */
 const split = (kind: (typeof SPLITS)[number], marker: string, id: string): Block => ({
   _tag: "text",
   lines:
@@ -182,7 +210,10 @@ const split = (kind: (typeof SPLITS)[number], marker: string, id: string): Block
         : kind === "cells"
           ? // Rows of a table are not one sentence: the cell with "rest" and the cell with "holds" are two blocks.
             ["| a | b |", "| --- | --- |", `| the rest of ${id} | x |`, "| y | holds as written. |"]
-          : [`The rest of ${id} is small,`, "", "holds as written."],
+          : kind === "far"
+            ? // The record reference is two sentences before the one that says the rest holds: too far.
+              [`See [the merge rule](${id}-x.md) for it.`, "A plain sentence.", "The rest of the file still holds."]
+            : [`The rest of ${id} is small,`, "", "holds as written."],
   hit: undefined,
 });
 
@@ -526,4 +557,96 @@ it.effect("L3 scenario: the measured false alarms of the first run (0227, 0281, 
 
     expect(found).toEqual([]);
   }),
+);
+
+/**
+ * Seven real patches of the first run of the check on main, each as written in the record at commit 604bbcf0b,
+ * with the line where "rest" is (counted from the first line given): the record reference is in the sentence
+ * before the one that says the rest holds, or in its own sentence.
+ */
+const REAL_PATCHES = {
+  // .decisions/0279, line 35: the reference is in the two sentences before; the sentence before has links.
+  "0279-tuval-is-a-package-desk-in-tier-2": {
+    lines: [
+      '- 2026-11-13: The Tier 1 clause "one fixed layout at wiring, each window keeps its own focus, and there is no desk process" ended with [0159](0159-fabsh-pipes-summon-join-first.md). The desk program comes now, and focus and layout live in its process in the brain, one focus per workspace ([0274](0274-the-desktop-is-a-platform-free-core.md), [0277](0277-size-belongs-to-the-viewer.md)). The rest of this file still holds: Tuval is the `@kampus/tuval` package, and the desk is `fabrika/tezgah`.',
+    ],
+    rest: 0,
+  },
+  // .decisions/0532, lines 15-16: a self-patch.
+  "0532-a-sev0-freezes-ci": {
+    lines: [
+      "[0542](0542-two-sev-levels-one-skill.md) adds a second level, the sev1, and changes how a sev0 ends: nothing is",
+      "rerun, and the script is `sev.ts`. The rest of this file still holds.",
+    ],
+    rest: 1,
+  },
+  // .decisions/0549, lines 55-56.
+  "0549-a-pipe-carries-the-whole-value": {
+    lines: [
+      "- [0553](0553-a-pipe-sends-one-way.md) settles the first: every value travels as a list underneath,",
+      "  and no program sees it. The rest of this file still holds.",
+    ],
+    rest: 1,
+  },
+  // .decisions/0551, lines 57-58.
+  "0551-the-brain-checks-and-records-pipes": {
+    lines: [
+      "- [0553](0553-a-pipe-sends-one-way.md) says one thing about the record: it holds both declared",
+      "  shapes, the writer's output and the reader's input. The rest of this file still holds.",
+    ],
+    rest: 1,
+  },
+  // .decisions/0569, lines 81-82.
+  "0569-tea-msgs-are-keyed-on-tag": {
+    lines: [
+      "- 2026-11-15, later (owner): [0578](0578-tea-cell-answers-a-step.md) adds one change to this",
+      "  patch, a pipeable `Step` for a cell's answer in place of the tuple. The rest of this file holds.",
+    ],
+    rest: 1,
+  },
+  // .decisions/0585, lines 61-64: "ruled on the rest ... holds" in the first sentence is plain English, and
+  // the real patch, "The rest of 0556 holds", is the one at the end.
+  "0585-kalfa-is-six-domain-packages": {
+    lines: [
+      "On 2026-11-15 the owner ruled on the rest: which packages, what each holds, the one command that",
+      "calls them, how tooling is configured, where the record folders go, and the order the builds land",
+      'in. This amends 0556 in part: it settles the first item under its "Not decided here". The rest of',
+      "0556 holds.",
+    ],
+    rest: 2,
+  },
+  // .decisions/0600, lines 82-83.
+  "0600-kalfa-quality-holds-test-lint-format": {
+    lines: [
+      "- 0557, 0579 and 0585 are amended in part: the package name and 0585's count of six. The rest",
+      "  each holds. 0585's build order changes only in that `/stryker` starts now, beside `@kalfa/config`.",
+    ],
+    rest: 0,
+  },
+} as const;
+
+// Plant: a form fires only when its own sentence holds the reference, with no sentence before it counted.
+it.effect(
+  "L3 scenario: seven real patches of main (0279, 0532, 0549, 0551, 0569, 0585, 0600, as of 604bbcf0b) are still-holds findings",
+  () =>
+    Effect.gen(function* () {
+      const files = Object.fromEntries(
+        Object.entries(REAL_PATCHES).map(([name, { lines }]) => [
+          `.decisions/${name}.md`,
+          record({ id: name.slice(0, 4), body: [...lines] }),
+        ]),
+      );
+
+      const found = yield* Patches.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
+
+      expect(found.map(({ path, line }) => ({ path, line }))).toEqual(
+        Object.entries(REAL_PATCHES).map(([name, { rest }]) => ({
+          path: `.decisions/${name}.md`,
+          line: BODY_AT + rest,
+        })),
+      );
+      expect(found.map((finding) => finding._tag === "patch" && finding.form)).toEqual(
+        Object.keys(REAL_PATCHES).map(() => "still-holds"),
+      );
+    }),
 );
