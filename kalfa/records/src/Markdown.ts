@@ -48,7 +48,12 @@ interface Chars {
 }
 
 /** The text of inline nodes, appended to `out`. */
-const inline = (nodes: ReadonlyArray<Mdast.PhrasingContent>, out: Chars, ref: boolean) => {
+const inline = (
+  nodes: ReadonlyArray<Mdast.PhrasingContent>,
+  out: Chars,
+  ref: boolean,
+  definitions: ReadonlyMap<string, string>,
+) => {
   for (const node of nodes) {
     const line = node.position?.start.line ?? 0;
 
@@ -73,13 +78,16 @@ const inline = (nodes: ReadonlyArray<Mdast.PhrasingContent>, out: Chars, ref: bo
         out.refs.push(ref);
         break;
       case "link":
-        inline(node.children, out, ref || RECORD.test(node.url));
+        inline(node.children, out, ref || RECORD.test(node.url), definitions);
         break;
       case "linkReference":
+        // A reference-style link points where its definition says, which may be anywhere in the file.
+        inline(node.children, out, ref || RECORD.test(definitions.get(node.identifier) ?? ""), definitions);
+        break;
       case "emphasis":
       case "strong":
       case "delete":
-        inline(node.children, out, ref);
+        inline(node.children, out, ref, definitions);
         break;
       default:
         // Inline code, images, HTML and footnote references say nothing in words.
@@ -89,10 +97,13 @@ const inline = (nodes: ReadonlyArray<Mdast.PhrasingContent>, out: Chars, ref: bo
 };
 
 /** What a block is made of: the heading, paragraph or cell's own inline nodes. */
-const block = (node: Mdast.Heading | Mdast.Paragraph | Mdast.TableCell): Block => {
+const block = (
+  node: Mdast.Heading | Mdast.Paragraph | Mdast.TableCell,
+  definitions: ReadonlyMap<string, string>,
+): Block => {
   const out: Chars = { text: [], lines: [], refs: [] };
 
-  inline(node.children, out, false);
+  inline(node.children, out, false, definitions);
 
   return {
     text: out.text.join(""),
@@ -120,15 +131,21 @@ export const markdown = (
 
   const tree = fromMarkdown(source, { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] });
   const links: Array<Link> = [];
-  const blocks: Array<Block> = [];
+  const pending: Array<Mdast.Heading | Mdast.Paragraph | Mdast.TableCell> = [];
+  // Label to target, the first definition of a label winning, as CommonMark reads them.
+  const definitions = new Map<string, string>();
 
   const visit = (node: Mdast.Nodes) => {
     if (node.type === "link") {
       links.push({ url: node.url, line: node.position?.end.line ?? 0 });
     } else if (node.type === "definition") {
       links.push({ url: node.url, line: node.position?.start.line ?? 0 });
+
+      if (!definitions.has(node.identifier)) {
+        definitions.set(node.identifier, node.url);
+      }
     } else if (node.type === "heading" || node.type === "paragraph" || node.type === "tableCell") {
-      blocks.push(block(node));
+      pending.push(node);
     }
 
     if ("children" in node) {
@@ -137,6 +154,8 @@ export const markdown = (
   };
 
   visit(tree);
+
+  const blocks = pending.map((node) => block(node, definitions));
 
   return { links, blocks };
 };

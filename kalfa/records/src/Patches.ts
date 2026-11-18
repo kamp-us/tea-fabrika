@@ -8,7 +8,8 @@
  * table cell is a block, with its links replaced by their text. The two sentences are read one sentence
  * at a time, since a sentence breaks across lines and its links hold dots, and only a sentence that holds
  * a record reference is a patch: plain English that says "the rest holds" or "carried forward" about a
- * note, a count or a date is not.
+ * note, a count or a date is not. The reference may be in the sentence before, in the same block: a patch
+ * often names the record in one sentence and says in the next that the rest holds.
  */
 import { Effect } from "effect";
 import { Finding } from "./Finding.ts";
@@ -62,11 +63,19 @@ export const check = Effect.fnUntraced(function* (root: string) {
           ? [Finding.cases.patch.make({ path, line: block.line, form: "amendments" })]
           : [];
 
-      const found = sentences(block.text).flatMap(({ start, end: stop }) => {
-        const sentence = block.text.slice(start, stop);
-        const referenced = NUMBER.test(sentence.replace(DATE, "")) || block.refs.slice(start, stop).includes(true);
+      const each = sentences(block.text);
 
-        return referenced
+      // Whether each sentence holds a record reference.
+      const cites = each.map(
+        ({ start, end: stop }) =>
+          NUMBER.test(block.text.slice(start, stop).replace(DATE, "")) || block.refs.slice(start, stop).includes(true),
+      );
+
+      const found = each.flatMap(({ start, end: stop }, index) => {
+        const sentence = block.text.slice(start, stop);
+
+        // The reference is in this sentence or the one before it, in the same block.
+        return cites[index] === true || cites[index - 1] === true
           ? SENTENCES.flatMap(({ form, pattern }) =>
               [...sentence.matchAll(pattern)].map((match) =>
                 Finding.cases.patch.make({
