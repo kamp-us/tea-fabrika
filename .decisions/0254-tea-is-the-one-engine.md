@@ -1,7 +1,7 @@
 ---
 id: 0254
 title: In next/, tea is the one engine that holds state that moves, so no Effect Workflow, replay engine or actor runtime replaces a tea machine, and a Cmd is one bounded Effect whose answer is a Msg
-status: amended-in-part by [0601](0601-program-make-with-optional-pipes.md)
+status: accepted
 date: 2026-11-02
 tags: [tea, effect, workflow, cluster, state, engine, next]
 ---
@@ -18,8 +18,8 @@ flowchart LR
   update --> cmd["Cmd: one bounded Effect"]
   cmd --> answer["answer as a Msg"]
   answer --> update
-  facts["ledger facts"] --> fold["fold through the same update"]
-  fold --> model
+  committed["committed state"] --> boot["boot installs it, no reducer runs"]
+  boot --> model
 ```
 
 ## Context
@@ -31,11 +31,13 @@ side. [Build on Effect](../docs/direction/build-on-effect.md) names this as its 
 
 ## Decision
 
-**Every piece of state that moves is a tea machine, and what survives a sleep or a kill is its facts
-folded through the same `update`.**
+**Every piece of state that moves is a tea machine, and what survives a sleep or a kill is its
+committed state, which boot installs without folding any facts through `update`.**
 
 - Nothing replaces a tea machine. A library that would hold a machine's state or decide its next
   step does not come in.
+- How a program's own functions run inside one tea Cmd is decided in
+  [0601](0601-program-make-with-optional-pipes.md), the home of a program's shape.
 - Banned: Effect's `Workflow` (with `Activity`, `DurableClock`, `DurableDeferred`) and any
   `WorkflowEngine`; any replay engine that re-runs code outside a tea fold; any actor runtime that
   keeps state for us, such as cluster's `Entity` and `Sharding`.

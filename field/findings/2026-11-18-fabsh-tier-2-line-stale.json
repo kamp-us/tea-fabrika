@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-fabsh-tier-2-line-stale",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0432-next-has-fabsh-rethought-from-tsh.md",
+    "line": 34
+  },
+  "says": "0432's Consequences line says fabsh lands in Tier 2, but 0159 made fabsh part of the first thing built in next/ and 0185 puts Tier 2 after the four primitives; neither names 0432, so the rules and records cleanup left the line. Ticket text: decide whether 0159 changed 0432, and if so edit 0432's line where it lives.",
+  "proof": "0432 line 34 says \"fabsh lands in Tier 2\"; 0159's title says the next thing built is the four primitives, fabsh first; `rg 0432 .decisions/0159-*.md .decisions/0185-*.md` finds nothing.",
+  "cost": "A reader of 0432 gets the wrong tier for fabsh.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

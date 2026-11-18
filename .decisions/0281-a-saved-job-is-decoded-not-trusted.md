@@ -35,11 +35,10 @@ Decided by the owner in
   the journal does.
 - A job that does not fit is refused, "this job was saved by older code, can't open it", and the
   other jobs open.
-- The note's "no version number on each machine" no longer holds where state is carried forward: a
-  saved model carries its shape's number and a chain of named upgrades
-  ([saved state, S3](../docs/direction/saved-state.md)). The schema is still the last check.
-
-> Until the first release the named-upgrade chain is set aside: [0572](0572-pre-release-shape-change-wipes-data.md) wipes the data on a shape change.
+- The note's "no version number on each machine" is replaced in `next/` by a saved model's shape
+  number and a chain of named upgrades ([saved state, S3](../docs/direction/saved-state.md)). The
+  schema is still the last check. Until the first release, a shape change wipes the data
+  ([0572](0572-pre-release-shape-change-wipes-data.md)).
 
 ## Consequences
 
