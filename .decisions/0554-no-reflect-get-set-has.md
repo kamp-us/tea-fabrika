@@ -1,7 +1,7 @@
 ---
 id: 0554
 title: In next/ and our tooling, no code calls Reflect.get, Reflect.set or Reflect.has, so a field is read through its type or a decode, never past it
-status: amended-in-part by [0576](0576-schema-sync-error-result-in-plain-code.md)
+status: accepted
 date: 2026-11-15
 tags: [lint, oxlint, reflect, types, schema, predicate, laws, next, tooling]
 ---
@@ -62,8 +62,9 @@ each kind of call, and how the ban is held.
   names. A test cannot write `instance.project(p).start(...)` and writes
   `Reflect.get(instance.project(p), "start")(...)`. A one-line search for that shape finds 14 such
   calls in 7 test files; calls split over two lines are not in that number.
-- The installed Effect is 4.1.2 (the lockfile, and `node_modules/effect/package.json`, which names
-  `Effect-TS/effect` as its repository). Its `AGENTS.md` says to use `Schema` to parse untrusted
+- The installed Effect was 4.1.2 on 2026-11-15 (`pnpm-workspace.yaml`'s catalog entry for `effect`
+  says what it is now; `node_modules/effect/package.json` names `Effect-TS/effect` as its
+  repository). Its `AGENTS.md` says to use `Schema` to parse untrusted
   data, and to use the `Predicate` module's checks over hand-written ones. In `Effect-TS/effect`,
   GitHub's code search finds `Reflect.get(` in 18 files: mostly tests, where it is the pass-through
   in a `Proxy` trap or a swapped global, plus a few source files such as
@@ -72,9 +73,10 @@ each kind of call, and how the ban is held.
   our lint rules refuse.
 - No earlier decision names `Reflect`. This builds on
   [0524](0524-no-list-lets-broken-code-pass.md): the ban gets no list of leftovers.
-- It adds one thing to what [0538](0538-kampus-vitest-holds-the-test-primitives.md) puts in
-  `@kampus/vitest`: the fakes of Cloudflare objects. 0538's rules hold as written, since such a
-  fake imports no service of ours.
+- It adds one thing to what [0538](0538-kampus-vitest-holds-the-test-primitives.md) puts in the
+  test package, `@kalfa/quality/vitest` ([0557](0557-kalfa-vitest-is-the-test-toolbox.md),
+  [0600](0600-kalfa-quality-holds-test-lint-format.md)): the fakes of Cloudflare objects. The
+  package imports no service of ours (0538), and such a fake imports none either.
 
 ## Decision
 
@@ -87,24 +89,28 @@ reads or writes past the types (owner, 2026-11-15).**
 - **What replaces each kind of call.** Each API below was read in the installed source. None of the
   replacements was compiled for this file.
 
-  | The call reads or writes | Use | Where it is in Effect 4.1.2 |
+  | The call reads or writes | Use | Where it is in the installed Effect |
   |---|---|---|
-  | fields of a loose or `unknown` value | one schema, decoded once, then plain fields: `Schema.decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit`, `decodeUnknownEffect` or `decodeUnknownSync` | `node_modules/effect/src/Schema.ts:1535-1883` |
-  | one field in a check | `Predicate.hasProperty(x, "name") && x.name === ...`; for `_tag`, `Predicate.isTagged` | `node_modules/effect/src/Predicate.ts:1352`, `:1452` |
-  | a field of one of our own classes or errors | `Schema.is(TheClass)(x)`, then the typed field | `node_modules/effect/src/Schema.ts:1461` |
+  | fields of a loose or `unknown` value | one schema, decoded once, then plain fields: `Schema.decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit` or `decodeUnknownEffect` | `node_modules/effect/src/Schema.ts` |
+  | one field in a check | `Predicate.hasProperty(x, "name") && x.name === ...`; for `_tag`, `Predicate.isTagged` | `node_modules/effect/src/Predicate.ts` |
+  | a field of one of our own classes or errors | `Schema.is(TheClass)(x)`, then the typed field | `node_modules/effect/src/Schema.ts` |
   | a field on one case of a union | narrow on the case first, then read the field | plain TypeScript |
   | a field the type already has | read it: `model.handshake` | plain TypeScript |
   | a value on `globalThis` | declare the global once with its type, then read and assign it by name | plain TypeScript |
 
-  There is no bare `Schema.decodeUnknown` in 4.1.2. Use one of the five named ones.
+  There is no bare `Schema.decodeUnknown` in the installed Effect. Use one of the four named ones.
+  `decodeUnknownSync` is not a replacement: `schemaSync` is an error in `next/` and our tooling
+  ([0576](0576-schema-sync-error-result-in-plain-code.md)).
 - **A law that reads a field the build has not added yet writes the field plainly:** `monitor.ref`,
   never `Reflect.get(monitor, "ref")`. The type error is the law's red until the build adds the
   field. It is the ordinary red then green loop. The tests step reports it the way
   [the tests skill](../.agents/skills/tests/SKILL.md) already says: a type law is red only in a
   typecheck, the report says so, and the build runs it.
 - **`Proxy` itself is not banned.** The fakes of Cloudflare objects live in one place, `next/`'s
-  shared test tooling, `@kampus/vitest` in `next/packages/vitest`
-  ([0538](0538-kampus-vitest-holds-the-test-primitives.md)), read through its module
+  shared test tooling, `@kalfa/quality/vitest`
+  ([0538](0538-kampus-vitest-holds-the-test-primitives.md),
+  [0557](0557-kalfa-vitest-is-the-test-toolbox.md),
+  [0600](0600-kalfa-quality-holds-test-lint-format.md)), read through its module
   ([0029](0029-format-and-names-follow-effect.md)). A law calls the helper and does not write the
   fake by hand. The helper's shape and file name are the plan step's to decide.
 - **One narrow exception: a pass-through `Reflect` line inside a `Proxy` trap, in two places only.**
@@ -126,7 +132,7 @@ reads or writes past the types (owner, 2026-11-15).**
   ```
 
   An override replaces a rule's options, so each block that already sets this rule repeats the
-  three entries. There are four today, at `.oxlintrc.json:1689`, `:1729`, `:1746` and `:2296`.
+  three entries.
 
 **Binding constraints**
 
@@ -140,15 +146,15 @@ reads or writes past the types (owner, 2026-11-15).**
 
 ## Consequences
 
-- This file records the ban and how it is held. The cleanup and the lint change are later pull
-  requests. Until the lint change lands, nothing stops a new call.
+- This file records the ban and how it is held: `.oxlintrc.json`'s `eslint/no-restricted-properties`
+  sets the three entries. The cleanup of the old calls is a later pull request.
 - **The cost:** 167 matches in 40 files of `next/`. Most are one-line changes in tests. The loops
   that read many fields off one entry each need a schema, and a schema that refuses a whole entry
   drops fields the old loop still read, so each is checked by hand.
 - **Stricter than the makers.** The Effect team keeps `Reflect.get` for swapped globals in its own
   tests and in a few source files. We do not.
 - **Work the cleanup must do, beside the line-by-line fixes:**
-  - **One or two helpers in `@kampus/vitest`** take the place of the 11 stubs that answer any
+  - **One or two helpers in `@kalfa/quality/vitest`** take the place of the 11 stubs that answer any
     method name and the 7 guards that fail on any use, and the laws call them. Those 18 sit in 9
     test files today.
   - **The 9 wrappers a plain object can replace are swapped for one,** as
@@ -172,21 +178,18 @@ reads or writes past the types (owner, 2026-11-15).**
     `Reflect.apply` is not decided here, so they stand, but the cleanup reads them again.
 - **What the lint rule may miss, untested:** `globalThis.Reflect.get`, `const R = Reflect`, and a
   destructured `const { get } = Reflect`. The lint pull request plants each to find out.
-- **The hold moves to the test package later.** `next/`'s test package (today `@kampus/vitest`,
-  [0538](0538-kampus-vitest-holds-the-test-primitives.md)) is to become `@kalfa/vitest`. The
-  decision on `@kalfa/vitest`, which is its own file, records the owner's rule: a mechanism that
-  package does not export is not used, and one we need is built in that package. The shared helper
-  for Cloudflare fakes lives there. The lead's reading of what follows here: once tests get their
-  tools only from that package, the ban in test code is held by what the package does not export,
-  plus one lint rule that no file outside it imports `vitest` or `@effect/vitest` directly. Until
-  the package is in place, the oxlint rule named above holds the ban.
+- **The hold moves to the test package later.** `next/`'s test package is `@kalfa/quality/vitest`
+  ([0538](0538-kampus-vitest-holds-the-test-primitives.md),
+  [0557](0557-kalfa-vitest-is-the-test-toolbox.md),
+  [0600](0600-kalfa-quality-holds-test-lint-format.md)). 0557 records the owner's rule: a mechanism
+  that package does not export is not used, and one we need is built in that package. The shared
+  helper for Cloudflare fakes lives there. The lead's reading of what follows here: once tests get
+  their tools only from that package, the ban in test code is held by what the package does not
+  export, plus one lint rule that no file outside it imports `vitest` or `@effect/vitest` directly.
+  Until tests get their tools only from that package, the oxlint rule named above holds the ban.
 - **Not decided here:**
   - `Reflect.apply`, `Reflect.construct` and `Reflect.deleteProperty`.
   - What replaces a law that hands a typed function a value its type refuses, which today goes
     through `Reflect.apply(Reflect.get(...))`.
 - [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
   `anti-slop/no-reflect-get` when the plugin is installed. The ban itself does not change.
-
-## Amendments
-
-- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) makes `schemaSync` an error, so `decodeUnknownSync` in the first row of the replacement table is no longer a replacement. Use `decodeUnknownOption`, `decodeUnknownResult`, `decodeUnknownExit` or `decodeUnknownEffect`.

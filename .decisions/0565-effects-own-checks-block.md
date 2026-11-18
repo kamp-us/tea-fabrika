@@ -1,12 +1,12 @@
 ---
 id: 0565
-title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
-status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md), [0576](0576-schema-sync-error-result-in-plain-code.md), [0577](0577-libraries-namespace-programs-barrel-imports.md)
+title: "In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path"
+status: accepted
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
 
-# 0565: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
+# 0565: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time, with three exceptions: apiStabilityLeak may stay off while hits remain, strictEffectProvide covers source but not test files, and four bare-Node CI scripts are excluded by path
 
 ```mermaid
 flowchart LR
@@ -28,23 +28,22 @@ flowchart LR
 ```
 
 **What this decides:** that all 135 checks of the Effect team's checker block in `next/` and our
-tooling, how they are turned on, and which of them clash with something we decided and wait for
-the owner.
+tooling, how they are turned on, and how the five that clashed with something we decided were
+ruled.
 
 ## Context
 
-- The Effect team ships a checker, `@effect/tsgo`, that runs inside `tsc`. The lockfile pins
-  0.63.0. Its `schema.json` lists 135 checks. `tsconfig.base.json` sets 59 of them, and no other
-  tsconfig sets any.
-- **How a check's level is set today.** The plugin block in `tsconfig.base.json` has a
-  `diagnosticSeverity` map (line 22) for every folder, for example `leakingRequirements` as
-  `error` at line 49. Its `overrides` list (line 69) sets a level for some folders only. Each
-  entry has `include` globs, optional `exclude` globs and its own map. `globalErrorInEffectCatch`
-  is `off` at line 27 and back to `error` at line 100, in the entry that includes `next/` and
-  excludes its test files (lines 96 to 97). `preferNamespaceImport` is on for two library folders
-  at lines 113 to 116, and that list grows a folder at a time.
-- `includeSuggestionsInTsc` is `false` (line 21), so a check whose default level is `suggestion`
-  runs nowhere until a level is set for it.
+- The Effect team ships a checker, `@effect/tsgo`, that runs inside `tsc`. `pnpm-workspace.yaml`'s
+  catalog entry for `@effect/tsgo` pins it. Its `schema.json` lists 135 checks. When this was
+  written, `tsconfig.base.json` set 59 of them and no other tsconfig set any.
+- **How a check's level is set.** The plugin block in `tsconfig.base.json` has a
+  `diagnosticSeverity` map for every folder, for example `leakingRequirements` as `error`. Its
+  `overrides` list sets a level for some folders only. Each entry has `include` globs, optional
+  `exclude` globs and its own map. On 2026-11-15 `globalErrorInEffectCatch` was `off` in the map
+  and back to `error` in the entry that includes `next/` and excludes its test files, and
+  `preferNamespaceImport` was on for two library folders, a list that grows a folder at a time.
+- `includeSuggestionsInTsc` is `false` in `tsconfig.base.json`, so a check whose default level is
+  `suggestion` runs nowhere until a level is set for it.
 - A count ran on 2026-11-15, on main at `98bcdfa22`, with all 135 checks printed as messages over
   `next/`, `.agents/`, `.github/ci/` and `oxlint-plugins/`. Its report and raw output are in the
   private archive ([0027](0027-experiment-results-live-in-a-private-archive.md)). **Every hit
@@ -68,18 +67,50 @@ the owner.
 
 **Every check in the Effect checker, all 135, is on as an error in `next/` and our tooling, at
 zero hits. The Effect team wrote each one for a reason, and the size of the change does not
-matter (owner, 2026-11-15).**
+matter (owner, 2026-11-15). Three exceptions: `apiStabilityLeak` may stay off while hits remain
+([0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)), `strictEffectProvide` covers
+source but not test files, and the four bare-Node CI scripts are excluded by path.**
 
 - **Scope:** `next/`, tests too, and our tooling: the lead and step scripts under `.agents/`,
   `oxlint-plugins/` and `.github/ci/`. Today's app (`packages/`, `programs/`, `apps/`) is not
   covered.
-- **The five that are off at the root today are in scope:** `unstableApiUsage`,
+- **The five that were off at the root when this was written are in scope:** `unstableApiUsage`,
   `multipleEffectProvide`, `promiseInEffectSuccess`, `globalErrorInEffectCatch` and
   `globalErrorInEffectFailure`.
 - **A check on for part of the scope goes on for all of it.** That is the 16 that are errors for
   `next/` only, the 4 for `next/` product only, and `preferNamespaceImport`, on for two folders.
-- **A check that clashes with something we decided is not skipped and not settled here.** It is
-  listed under "Not decided here", with the code on both sides, and the owner rules.
+- **A check that clashes with something we decided is not skipped and not settled by a sweep.** It
+  is listed with the code on both sides, and the owner rules. The five found when this was written
+  are ruled, under "The five clashes" in Consequences.
+- **One check may stay off:** `apiStabilityLeak` is recounted once the `@stability` tags are gone
+  ([0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)). At zero it is an error. If hits
+  remain because our exports show Effect's unstable types, which we use on purpose, it stays off
+  and those hits are not swept.
+- **`unstableApiUsage` is an error with each unstable Effect part we use named once** in the
+  checker's `allowedUnstableApis` setting, for example `@effect/vitest` and
+  `effect/unstable/sql` (0574). A new unstable part fails until someone adds it on purpose.
+- **`strictEffectProvide` covers library and program source, not test files** (lead's ruling,
+  2026-11-15, about 75% sure). The sweep found 775 hits: 757 in 129 test files, 14 at
+  `NodeRuntime.runMain` entry points and 4 in library code. The checker's own page
+  ([strict-effect-provide](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/strict-effect-provide.md))
+  says it warns on `Effect.provide` outside an application entry point, because a layer provided
+  elsewhere "may break scope lifetimes", and "If this is an entry point, you can safely disable
+  this diagnostic." A test that provides its own fresh layer is the scope the rule protects, so
+  the lock's globs leave tests out. Each of the 14 entry points keeps the check on, with a
+  `@effect-diagnostics-next-line strictEffectProvide:off -- <why>` that quotes the doc's
+  entry-point reason, and the 4 library hits are fixed. The doubt: the makers' page never names
+  tests, and `@effect/vitest`'s `layer(...)` helper is another way to give a test its layer. If
+  the owner prefers it, the 757 test sites move to that helper and tests stay in the lock.
+- **The four bare-Node CI scripts stay outside the Effect checks.** Four scripts in `.github/ci/`
+  run with bare Node before `pnpm install`, so `changes.mjs` can pick a run's CI jobs before anyone
+  pays for an install ([0175](0175-every-run-follows-its-paths.md)). The Effect checks ask for
+  Effect-native counterparts, and those cannot load before install. Each lock lists these four
+  files by exact path in its `exclude`, never by a glob, with this reason. A new script then needs
+  its own diff and its own reason (lead's ruling, 2026-11-15).
+- **`missingPipeableSignature` covers every folder** (owner, 2026-11-15): library code, scripts,
+  test helpers, Layer constructors and comparators. All 135 hits left after slice E43 get a
+  `Function.dual` signature, and the lock covers every folder. This overrules the lead's lean,
+  which would have covered exported library code only.
 
 **The 56 checks with hits, 39,314 in all**
 
@@ -116,8 +147,9 @@ to be fixed first.
 
 - **51 are set today** and stay. `promiseInEffectSuccess` and the 14 others that are errors for
   `next/` only have 0 hits in tooling, so tooling takes them now.
-- **`preferBarrelImport`** has 0 hits because it needs a setting we do not use. It is under "Not
-  decided here".
+- **`preferBarrelImport`** has 0 hits because it needs a setting, a package named in
+  `barrelImportPackages`. [0577](0577-libraries-namespace-programs-barrel-imports.md) sets it for
+  programs and apps, and `preferNamespaceImport` for libraries (clash 5 below).
 - **27 block only by the checker's default level.** Naming them means a version bump of the
   checker cannot lower one without a diff here.
   - Default `error` (12): `classSelfMismatch`, `effectFnImplicitAny`, `floatingEffectInVitest`,
@@ -133,8 +165,8 @@ to be fixed first.
 **What replaces a flagged call**
 
 Each check's message names its replacement. For the three helper checks, read in the installed
-Effect, 4.1.2, at `node_modules/effect/src/Array.ts`, `String.ts` and `Record.ts` (its `AGENTS.md`
-says nothing about these three modules):
+Effect (`pnpm-workspace.yaml`'s catalog entry for `effect`), at `node_modules/effect/src/Array.ts`,
+`String.ts` and `Record.ts` (its `AGENTS.md` says nothing about these three modules):
 
 ```ts
 // before
@@ -164,8 +196,8 @@ too.
   semantic caveats", and each message says what differs. `Arr.findFirst` and `String.indexOf`
   answer an `Option`. `Arr.sort` takes an `Order`, where `toSorted` took a compare function.
   `Arr.join` needs its separator.
-- **The string helpers take the string last:** `String.startsWith("a")(text)`
-  (`String.ts:579`), so they read best in a `pipe`.
+- **The string helpers take the string last:** `String.startsWith("a")(text)`, so they read best
+  in a `pipe`.
 - **Records:** `Record.keys`, `Record.values`, `Record.toEntries`, `Record.fromEntries` and
   `Record.has`.
 - **Import names.** Effect's own source imports the module as `Arr` in 18 files.
@@ -173,6 +205,19 @@ too.
   that throws; a named error type for `unknown`; `Schema.Finite` for `Schema.Number`; `Config` for
   `process.env`; the typed decoder, such as `Schema.decodeEffect`, for `decodeUnknown...` on a
   typed value; `Console.log` or `Effect.log` for `console`.
+- **`schemaSync` is an error, and the form depends on where the call runs**
+  ([0576](0576-schema-sync-error-result-in-plain-code.md)): Effect code uses the Effect form
+  (`Schema.decodeUnknownEffect`, `Schema.decodeEffect`, `Schema.encodeEffect`,
+  `Schema.encodeUnknownEffect`), and a plain function, such as a ledger step
+  ([0050](0050-a-ledger-step-is-a-plain-function.md)), uses the Result form
+  (`Schema.decodeUnknownResult`, `Schema.decodeResult`, `Schema.encodeResult`,
+  `Schema.encodeUnknownResult`) and handles the failure. The check flags only the four sync calls,
+  never a Result form. Each hit must handle the failure the sync call ignored: no Result unwrapped
+  with a throw, no failure folded into a bare default. A decode of outside input gets a real
+  failure path; an encode of a value the code just built may map its failure to a defect that says
+  what was encoded. Each sweep reports, per folder, how many hits were decodes of outside input
+  and how many encodes of a built value. The count was 620 on main at `61d551ff3`, where the first
+  count said 632.
 
 **How it is rolled out**
 
@@ -180,10 +225,10 @@ too.
   pull request that brings its hits in that folder to zero.
 - **Folder by folder to zero.** The folder is as small as the code allows, so one busy folder does
   not hold back its clean neighbors. A folder with 0 hits today is turned on first.
-- **The level is set where levels are set today:** an entry in `overrides` in
-  `tsconfig.base.json`, the way `preferNamespaceImport` grows at lines 113 to 116. When the last
-  folder is at zero, one entry covers `next/` and our tooling. A check does not move to the top
-  map for this, since that map also reaches today's app.
+- **The level is set where levels are set:** an entry in `overrides` in `tsconfig.base.json`, the
+  way `preferNamespaceImport` grows a folder at a time. When the last folder is at zero, one entry
+  covers `next/` and our tooling. A check does not move to the top map for this, since that map
+  also reaches today's app.
 - **An exception is the checker's own comment on the line before, only where the code is right,
   and the line says why:**
 
@@ -191,8 +236,8 @@ too.
   // @effect-diagnostics-next-line preferEffectArray:off -- <plain reason>
   ```
 
-  The form is read from the checker's parser at 0.63.0 (`internal/directives/parser.go` in
-  `Effect-TS/tsgo`): the check's name, a colon, the level. The ` -- <plain reason>` tail is our
+  The form was read on 2026-11-15 from the checker's parser at 0.63.0
+  (`internal/directives/parser.go` in `Effect-TS/tsgo`): the check's name, a colon, the level. The ` -- <plain reason>` tail is our
   own, as on an oxlint disable line. By the parser's pattern the tail is ignored as long as it
   holds no `word:word`. That was read, not run. The first sweep pull request plants one line to
   prove it. The Effect team uses the same comment in its own source.
@@ -209,16 +254,16 @@ too.
   folder pass.
 - Each sweep pull request reports, per check: the hits it met, the ones it fixed, and each ignore
   line with its reason.
-- A check listed under "Not decided here" is not swept and not switched off until the owner
-  rules.
+- A check that clashes with something we decided, and is not yet ruled, is not swept and not
+  switched off until the owner rules.
 
 ## Consequences
 
 - This file records the ruling and the order of work. It changes no config. Until a sweep lands
   for a folder, nothing stops a new hit there.
 - **The cost.** 39,314 hits over 56 checks. In the report's raw output they sit in 905 of the
-  1,034 `.ts` and `.tsx` files in scope. `unstableApiUsage` alone is 16,281, and what its fix is
-  waits on the owner. The checker lists the three helper checks as "Fixable: No", so their 10,857
+  1,034 `.ts` and `.tsx` files in scope. `unstableApiUsage` alone is 16,281, and 0574 rules its fix: 12,933 of those hits are our
+  own `@stability` tags, which go. The checker lists the three helper checks as "Fixable: No", so their 10,857
   hits have no quick fix. A change that turns `undefined` into an `Option` reaches the callers
   too.
 - **It conflicts with every open branch.** The sweep touches most files in `next/`. The order it
@@ -253,8 +298,11 @@ too.
 - **Our own lint rules that repeat a check give way to it,** as
   [0114](0114-effects-team-as-the-builder.md) already says. The report names
   `fabrika/no-promises`, `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and
-  `fabrika/no-hand-tag` as overlaps. Each sweep says which rule of ours its check replaces, or why
-  both stay.
+  `fabrika/no-hand-tag` as overlaps.
+  [0573](0573-trusted-lint-rule-replaces-ours.md) rules them: `fabrika/no-node-imports`,
+  `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules, and
+  `fabrika/no-promises` stays, since theirs is narrower. Each sweep says which other rule of ours
+  its check replaces, or why both stay.
 - **Against the Effect team's own repo: much stricter.** Read on 2026-11-15 at `d5f8bdf4f` of
   `Effect-TS/effect`, the repository the installed `effect` names. Its `tsconfig.base.json` uses
   `@effect/tsgo` 0.69 and:
@@ -269,12 +317,66 @@ too.
     included.
   - The same: it uses the `@effect-diagnostics-next-line` comment for its exceptions.
   - The checker's `effect-native` lint preset has the three helper checks, at `warn`.
-- **Version drift.** The Effect team's repo is on 0.69 of the checker and we pin 0.63.0. A bump
-  can add checks and change defaults. By this ruling a new check is on as an error too; the bump's
+- **Version drift.** When read, the Effect team's repo was on 0.69 of the checker and we pinned
+  0.63.0 (`pnpm-workspace.yaml`'s catalog entry for `@effect/tsgo` holds ours). A bump can add
+  checks and change defaults. By this ruling a new check is on as an error too; the bump's
   pull request counts its hits.
-- **Not decided here: a check that cannot be on together with something we decided.** Each waits
-  for the owner, with the code on both sides.
-  - **RULED on 2026-11-15 by [0577](0577-libraries-namespace-programs-barrel-imports.md): clash 5, `preferBarrelImport` against namespace imports**
+- **The five clashes, a check that could not be on together with something we decided.** The owner
+  ruled each on 2026-11-15.
+  - **Clash 1, `unstableApiUsage` (16,281), against our doc tags**
+    ([0118](0118-no-since-tag-before-a-release.md)). Every public export of ours carried
+    `@stability unstable`, so 12,933 of the hits were our own exports used by our own code. About
+    3,350 pointed at Effect's packages, 1,632 of them `it` from `@effect/vitest`.
+
+    ```ts
+    // next/packages/libfabrika/src/ledger/Ledger.ts, the tag every export of ours carried
+    /** @stability unstable */
+    export class Doorbell extends Context.Service<Doorbell, Ring>()("...") {}
+
+    // any file of ours that names it is flagged, and so is each test that calls `it`
+    import { Doorbell } from "@kampus/libfabrika/ledger/Ledger"; // a sketch of a use
+    ```
+
+    Ruled by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): no `@stability` in
+    `next/` and our tooling until `libfabrika` has a released version, as `@since` already is; the
+    check is an error; each unstable Effect part we use on purpose is named once in
+    `allowedUnstableApis`. That setting is a list of chosen dependencies, not a list that lets
+    broken code pass, so [0524](0524-no-list-lets-broken-code-pass.md) does not apply (owner's
+    word). Nothing is added to it to make a hit pass.
+  - **Clash 2, `apiStabilityLeak` (235), the same root.** It flags an export whose type shows a
+    less stable type. With every export unstable, and Effect's `Path` and `FileSystem` unstable
+    too, it fired on almost any export. Ruled by 0574: recounted once the tags are gone, an error
+    if zero, off if hits remain from Effect's unstable types, never swept.
+  - **Clash 3, `schemaSync` (632) against a ledger step that is a plain function**
+    ([0050](0050-a-ledger-step-is-a-plain-function.md)). The check flags every synchronous decode
+    or encode, also outside Effect code, and asks for the Effect form. A step may not be an
+    Effect.
+
+    ```ts
+    // next/packages/libfabrika/src/tasks/TasksLedger.ts, flagged
+    const encodePointer = Schema.encodeSync(Pointer);
+    // what the check asks for, which a plain step cannot run
+    const encodePointer = Schema.encodeEffect(Pointer);
+    ```
+
+    Ruled by [0576](0576-schema-sync-error-result-in-plain-code.md): an error, with the Result
+    form in a plain function and the Effect form in Effect code, as "What replaces a flagged call"
+    says. A ledger step still returns a value, with no Effect inside it.
+  - **Clash 4, `deterministicKeys` (35) against our service id shape**
+    ([0120](0120-effect-code-guidelines.md), E7).
+
+    ```ts
+    "@kampus/libfabrika/ledger/Ledger.Doorbell"; // ours
+    "@kampus/libfabrika/ledger/Ledger/Doorbell"; // what the check expects
+    ```
+
+    Ruled by [0575](0575-deterministic-keys-is-the-service-id-form.md): `deterministicKeys` is an
+    error and sets the service ID form, and our lint rule `service-id` is deleted, in the pull
+    request that turns the check on where it ran. The pattern is a setting, `keyPatterns`. The
+    sweep first tries it with our dot form. By the reading of 2026-11-15 it cannot say it, since no
+    formula joins with a dot, and then the sweep takes the checker's default form and renames the
+    35 IDs, after checking that nothing persists or sends an ID.
+  - **Clash 5, `preferBarrelImport` against namespace imports**
     ([0120](0120-effect-code-guidelines.md), E7). It fires only for packages named in
     `barrelImportPackages`, and `preferNamespaceImport` only for those in
     `namespaceImportPackages`. One package cannot be in both.
@@ -284,94 +386,11 @@ too.
     import { Effect } from "effect"; // what preferBarrelImport asks, once "effect" is named for it
     ```
 
-    Set to `error` with no package named, it is on and can never fire.
-  - **RULED on 2026-11-15 by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): clash 1, `unstableApiUsage` (16,281) against our doc tags**
-    ([0118](0118-no-since-tag-before-a-release.md)). Every public export of ours carries
-    `@stability unstable`, so 12,933 of the hits are our own exports used by our own code. About
-    3,350 point at Effect's packages, 1,632 of them `it` from `@effect/vitest`.
-
-    ```ts
-    // next/packages/libfabrika/src/ledger/Ledger.ts:49, the tag every export of ours carries
-    /** @stability unstable */
-    export class Doorbell extends Context.Service<Doorbell, Ring>()("...") {}
-
-    // any file of ours that names it is flagged, and so is each test that calls `it`
-    import { Doorbell } from "@kampus/libfabrika/ledger/Ledger"; // a sketch of a use
-    ```
-
-    The checker has an `allowedUnstableApis` setting. Whether that is a list in the sense of 0524
-    is part of the question.
-  - **RULED on 2026-11-15 by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): clash 2, `apiStabilityLeak` (235), the same root.** It flags an export whose type shows a less
-    stable type. With every export unstable, and Effect's `Path` and `FileSystem` unstable too, it
-    fires on almost any export.
-  - **RULED on 2026-11-15 by [0576](0576-schema-sync-error-result-in-plain-code.md): clash 3, `schemaSync` (632, 620 on main at `61d551ff3`) against a ledger step that is a plain function**
-    ([0050](0050-a-ledger-step-is-a-plain-function.md)). The check flags every synchronous decode
-    or encode, also outside Effect code, and asks for the Effect form. A step may not be an Effect.
-
-    ```ts
-    // next/packages/libfabrika/src/tasks/TasksLedger.ts:35, flagged
-    const encodePointer = Schema.encodeSync(Pointer);
-    // what the check asks for, which a plain step cannot run
-    const encodePointer = Schema.encodeEffect(Pointer);
-    ```
-
-  - **RULED on 2026-11-15 by [0575](0575-deterministic-keys-is-the-service-id-form.md): clash 4, `deterministicKeys` (35) against our service id shape**
-    ([0120](0120-effect-code-guidelines.md), E7).
-
-    ```ts
-    "@kampus/libfabrika/ledger/Ledger.Doorbell"; // ours, Ledger.ts:55
-    "@kampus/libfabrika/ledger/Ledger/Doorbell"; // what the check expects
-    ```
-
-    The pattern is a setting, `keyPatterns`. Whether it can express ours was not checked.
+    Ruled by [0577](0577-libraries-namespace-programs-barrel-imports.md): libraries in
+    `next/packages/` import `effect` by namespace, held by `preferNamespaceImport`; programs and
+    apps in `next/programs/` and `next/apps/` import it from the barrel, held by
+    `preferBarrelImport`. Both are errors, set in each package's own tsconfig.
 - **What this cannot tell us:** what a fix breaks, since none was tried; how many hits today's
   app has, since it was not run; whether more clashes exist than the five found by reading the
   report against `.decisions/`; and the count on any commit after `98bcdfa22`. Main moves fast,
   and the report saw `schemaSyncInEffect` go from 27 hits to 154 in six days.
-
-## Amendments
-
-- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) names which of our rules give way to a check of the Effect checker or another trusted rule, and which stay. `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules; `fabrika/no-promises` stays, since theirs is narrower. It leaves `deterministicKeys` and `service-id` as an unruled clash.
-- 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) rules clashes 1 and 2. `unstableApiUsage`: `@stability` is dropped until the first release and the check is an error, with `allowedUnstableApis` naming each unstable Effect part we use. `apiStabilityLeak`: recounted after the tags go; an error if zero, off if hits remain from Effect's unstable types, which we use on purpose.
-- 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) rules clash 4. `deterministicKeys` is an error and sets the service ID form, `service-id` is deleted, and the sweep tries `keyPatterns` with our dot form first, then renames the 35 IDs to the checker's form.
-- 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) rules clash 3. `schemaSync` is an error; a plain function (a ledger step, [0050](0050-a-ledger-step-is-a-plain-function.md)) uses the Result form and handles the failure, Effect code the Effect form. The count is 620 on main at `61d551ff3`, where this file said 632. Each hit must handle the failure it ignores today.
-- 2026-11-15: [0577](0577-libraries-namespace-programs-barrel-imports.md) rules clash 5. Libraries in `next/packages/` import `effect` by namespace, held by `preferNamespaceImport`; programs and apps in `next/programs/` and `next/apps/` import it from the barrel, held by `preferBarrelImport`. Both are errors, set in each package's own tsconfig. With it, all five clashes this file lists are ruled.
-
-### 2026-11-15: `strictEffectProvide` covers library and program source, not test files
-
-Slice E30 found 775 `strictEffectProvide` hits: 757 in 129 test files, 14 at
-`NodeRuntime.runMain` entry points, and 4 in library code. The checker's own page
-([strict-effect-provide](https://github.com/Effect-TS/tsgo/blob/main/docs/rules/strict-effect-provide.md))
-says the rule warns on `Effect.provide` outside an application entry point, because a layer
-provided elsewhere "may break scope lifetimes". It also says: "If this is an entry point, you can
-safely disable this diagnostic."
-
-The lead ruled, following the makers:
-
-- **Test files are out of the lock.** A test that provides its own fresh layer is the scope the
-  rule protects: one layer per test run, with nothing shared. So the lock's globs cover library
-  and program source only. Like any other check, it stays on wherever those globs reach.
-- **Entry points keep the check on, with a reasoned disable line.** Each of the 14 gets a
-  `@effect-diagnostics-next-line strictEffectProvide:off -- <why>` that quotes the doc's
-  entry-point reason.
-- **The 4 library hits get fixed.**
-
-The lead is about 75% sure. The doubt: the makers' page never names tests, and `@effect/vitest`'s
-`layer(...)` helper is another way to give a test its layer. Moving the 757 sites to that helper
-would keep tests in the lock. If the owner prefers that, this amendment is reversed and E30 moves
-the tests instead.
-
-### 2026-11-15: the four bare-Node CI scripts stay outside the Effect checks
-
-Four scripts in `.github/ci/` run with bare Node before `pnpm install`, so `changes.mjs` can pick a
-run's CI jobs before anyone pays for an install (0175). The Effect checks ask for Effect-native
-counterparts, and those cannot load before install. The lead ruled that each lock lists these four
-files by exact path in its `exclude`, never by a glob, with this reason. A new script then needs
-its own diff and its own reason.
-
-### 2026-11-15: `missingPipeableSignature` covers every folder
-
-The owner ruled on 2026-11-15 that Effect's `missingPipeableSignature` check covers everything:
-library code, scripts, test helpers, Layer constructors and comparators. All 135 hits left after
-slice E43 get a `Function.dual` signature, and the lock covers every folder. This overrules the
-lead's lean, which would have covered exported library code only.

@@ -52,10 +52,3 @@ started.**
   the last whole value it got. No new screen rule comes from this decision.
 - Not decided here: how a small program with no window shows on screen, and what Ctrl-C does to a
   process that was already running before a line piped into it.
-
-## Amendments
-
-- 2026-11-15: the Consequences were made exact. They said a reader that outlives its source "still
-  needs its words on screen" and left open what an ended tile does. The same day's design talk
-  found that the only such cases are a crash, which the tile guideline covers, and a small program
-  that exits.

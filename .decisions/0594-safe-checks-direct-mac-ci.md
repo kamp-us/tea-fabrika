@@ -8,7 +8,7 @@ tags: [checks, parallel, docker, linux, macos, ci, launchd, electron, signals, s
 
 # 0594: Ordinary safe checks run directly in parallel while launchd, real Electron and process-signal laws use disposable CI
 
-**Earlier wording:**
+**Earlier wording (wrong, corrected on 2026-11-16: it was broader than the ruling):**
 
 ```mermaid
 flowchart LR
@@ -99,13 +99,6 @@ process signals run on eligible disposable CI away from the owner's laptop.**
 - No workflow or product behavior changes in this record. A workflow that does not run a required
   law still needs its own change before that law has proof.
 - Agent counts, incident policy and how agents are started are outside this decision.
-
-## Amendments
-
-- **2026-11-16:** Corrected this record's routing wording, which was broader than the ruling it
-  recorded. Keeping these laws off the owner's laptop did not require portable process-signal
-  laws to run only on macOS. They may use eligible disposable Linux CI; Mac-specific laws keep
-  disposable macOS CI. Guards, proof before the first review and resource caps still hold.
 
 ## Records
 

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-laws-on-missing-from-test-primitives",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/vitest/src/index.ts",
+    "line": 13
+  },
+  "says": "Decisions 0538, 0579 and 0581 name `lawsOn` as the test package's runner that applies one law to a stand-in and to the real layer, but no `lawsOn` exists in the package that holds the test primitives, so the code lags the decision. Ticket text: add `lawsOn` to the test package (next/packages/vitest today, @kalfa/quality/vitest by 0557 and 0600) as docs/plan/quests/laws-on-PLAN.md plans, with the guard that a fast test which opens a file fails loudly.",
+  "proof": "`grep -rn 'lawsOn' next kalfa --include=*.ts` prints nothing, and `grep -n 'export' next/packages/vitest/src/index.ts` prints only Depth.ts (line 13), Recorder.ts (line 21) and Stub.ts (line 29); `lawsOn` appears only in decisions 0538, 0579 and 0581, in docs/plan/quests/laws-on-PLAN.md and in today's packages/pipeline and packages/fabrika tests.",
+  "cost": "A law cannot run on a stand-in on the pull request and on the real layer in the full run through one call, so each folder keeps a hand-written pair and the stand-in rule of 0581 has no shared tool.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

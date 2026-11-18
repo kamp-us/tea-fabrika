@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-law-shape-reads-title-prefix-not-label-options",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "oxlint-plugins/law-shape.ts",
+    "line": 46
+  },
+  "says": "Decision 0580 (folded into 0527) makes a law's label an option of its declaration and a title that starts with a label an error, but oxlint-plugins/law-shape.ts still reads the label from the title prefix and has no read of an option, so the code lags the decision. Ticket text: make law-shape read the label option (vector, format, scenario, type, pinned, with its required reason), report a title that starts with a label with a message that names the option, and judge a type-labeled body by the type option, as 0580's Consequences say.",
+  "proof": "`grep -n 'LABELED' oxlint-plugins/law-shape.ts` prints line 46, a regex over the title text (`^(?:id )?(vector|format|pinned|scenario|type):`), and `grep -c 'plant' oxlint-plugins/law-shape.ts` prints 0; the file header (lines 1 to 3) says a law's example title starts with `vector:`, `format:`, `pinned:`, `scenario:` or `type:`.",
+  "cost": "Until it reads the option, the 676 labeled titles cannot move to options without lint failing them, and the type label 0527 now gives as an option is not judged at all.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}
