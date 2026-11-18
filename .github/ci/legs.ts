@@ -10,8 +10,10 @@
 //   the same events, the reader tests alone      sized from the reader tests, with or without a base
 //   anything else                                the full matrix: all of next/ with no base
 //
-// Only a pull request with the `visual` label starts end-to-end legs, which run `next-visual`; the
-// merge queue and main never do, and the schedule runs every layer (0536).
+// End-to-end legs run the `next-visual` project. A pull request starts them only when it carries the
+// `visual` label, and a merge queue group never does (0536, the owner's ruling of 2026-11-18). A push
+// to main runs the visual files its change reaches. Main's full run (scheduled.yaml) runs them all.
+// Global triggers select every file.
 //
 // The reader tests (changes.mjs's `readers`) read source as text, so `--changed`, which follows
 // imports, misses them. A sized run adds them to the vitest files, each once, and prints that list
@@ -25,11 +27,15 @@
 // this split is the one `Shards` makes on each leg.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Record as Rec, Config } from "effect";
+import { testConfig } from "../../vitest.config.ts";
 import { assign, measured, median } from "../../vitest.shards.ts";
-import { readers, validSha } from "./changes.mjs";
+import { readers, readPaths, validSha } from "./changes.mjs";
+import { readEnv, stepFiles } from "./step-env.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
 
 /** How many legs of each kind run. Zero of a kind starts none of its machines. */
@@ -90,7 +96,7 @@ export const budgetOf = (value: string | undefined): number => {
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
-  Object.hasOwn(table, path) ? table[path] : undefined;
+  Rec.has(table, path) ? table[path] : undefined;
 
 /** Each leg's files when `assign` splits `files` over `count` legs, as `Shards` keeps them. */
 export const split = (files: readonly string[], count: number, table = measured): string[][] => {
@@ -98,7 +104,7 @@ export const split = (files: readonly string[], count: number, table = measured)
     files.map((path) => ({ path, seconds: rowOf(table, path) })),
     count,
     [],
-    median(Object.values(table)),
+    median(Rec.values(table)),
   );
 
   return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
@@ -106,7 +112,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
 export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const unmeasured = median(Object.values(table));
+  const unmeasured = median(Rec.values(table));
 
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
@@ -133,6 +139,12 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
 /** The events on the merge line, each of which runs only what its change reaches (0534). */
 const LINE = new Set(["pull_request", "merge_group", "push"]);
 
+const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
+
+/** Vitest's installed matcher and the configured global rerun triggers. */
+export const isTrigger = (path: string): boolean =>
+  match.isMatch(path, testConfig.test.forceRerunTriggers, { dot: true });
+
 /**
  * A run legs.ts sizes: one on the merge line that tests all of next/ from a base commit, or only the
  * reader tests, which are listed whole and need no base. Every other run is the full matrix: one
@@ -141,11 +153,12 @@ const LINE = new Set(["pull_request", "merge_group", "push"]);
 const sizes = (run: Run) => LINE.has(run.event) && (run.scope === "readers" || validSha(run.base));
 
 /**
- * Whether a run's end-to-end legs, which run the visual tests, may start: only on a pull request
- * that asked with the `visual` label; never in the merge queue or on main, since the schedule runs
- * them (0536). check.yaml's fallback says the same (workflow-lint.ts, E10).
+ * Whether a run's end-to-end legs, which run the visual tests, may start (0536): on a pull request
+ * only when it asked with the `visual` label, never in the merge queue, and on a push to main. A
+ * visual law needs a browser or Electron, a real resource, so it stays off the pull request and the
+ * merge queue unless asked. check.yaml's fallback says the same (workflow-lint.ts, E10).
  */
-const visual = (run: Run) => run.event === "pull_request" && run.visual;
+const visual = (run: Run) => run.event === "push" || (run.event === "pull_request" && run.visual);
 
 /**
  * The legs a run starts: sized on a merge line run, each kind to its own limit, else `full`, each
@@ -186,10 +199,10 @@ export const withReaders = (changed: readonly string[], readerFiles: readonly st
  * end-to-end files the size step sized them with, `--changed` from the same commit; every other run
  * prints none, and its end-to-end legs run every file, as a sized run of the reader tests sized them.
  */
-export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
+export const outputs = (run: Run, legs: Legs, selected: Selected, full = false): string[] => {
   const some = legs.vitest + legs.e2e > 0;
   const listed = sizes(run) && legs.vitest > 0;
-  const narrowed = sizes(run) && run.scope === "all" && legs.e2e > 0;
+  const narrowed = sizes(run) && validSha(run.base) && legs.e2e > 0 && !full;
 
   if (listed && selected.vitest.some((path) => /\s/.test(path))) {
     throw new Error("legs: a vitest file's path holds a space, so it cannot be one word of `files`");
@@ -233,25 +246,40 @@ export const list = (root: string, args: readonly string[]): string[] => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so an empty FILTER still means the reader tests alone.
+  const env = readEnv(
+    Config.all({
+      event: Config.String("EVENT").pipe(Config.withDefault(undefined)),
+      filter: Config.String("FILTER").pipe(Config.withDefault(undefined)),
+      base: Config.String("BASE").pipe(Config.withDefault(undefined)),
+      visual: Config.String("VISUAL").pipe(Config.withDefault(undefined)),
+      budget: Config.String("BUDGET").pipe(Config.withDefault(undefined)),
+      ...stepFiles,
+    }),
+  );
+
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
 
   const run: Run = {
-    event: process.env["EVENT"] ?? "",
-    scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
-    base: process.env["BASE"] ?? "",
-    visual: process.env["VISUAL"] === "true",
+    event: env.event ?? "",
+    scope: (env.filter ?? "next/") === "next/" ? "all" : "readers",
+    base: env.base ?? "",
+    visual: env.visual === "true",
   };
 
-  const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
+  const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
+  const head = spawnSync("git", ["rev-parse", "--verify", "HEAD^{commit}"], { cwd: root, encoding: "utf8" });
+  const paths = head.status === 0 ? readPaths(run.base, head.stdout.trim(), run.event) : null;
+  const force = paths === null || paths.some(isTrigger);
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
-  const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
+  const changed = validSha(run.base) && !force ? [`--changed=${run.base}`] : [];
   const sized = sizes(run);
   // The reader tests are listed whole, with no `--changed`: Vitest's own match of changes' paths.
-  // The merge line's vitest legs run the `next` project alone, and a pull request's end-to-end legs
-  // the `next-visual` one, only when it asked (0536).
-  const picked = sized && run.scope === "all" ? list(root, ["--project", "next", "next/", ...changed]) : [];
+  // The existing matrix keeps next and visual files separate; related.ts adds other projects.
+  const picked = sized && (run.scope === "all" || force) ? list(root, ["--project", "next", "next/", ...changed]) : [];
   const readerFiles = sized ? list(root, ["--project", "next", ...readers]) : [];
 
   const selected: Selected = sized
@@ -262,7 +290,7 @@ if (import.meta.main) {
     : { vitest: [], e2e: [] };
 
   const legs = size(run, selected, full, limit);
-  const lines = outputs(run, legs, selected);
+  const lines = outputs(run, legs, selected, force);
   const missed = selected.vitest.length - picked.length;
 
   const vitestNote =
@@ -276,13 +304,13 @@ if (import.meta.main) {
 
   console.log(note);
   console.log(lines.join("\n"));
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  const summary = env.summary;
 
   if (summary !== undefined && summary !== "") {
     appendFileSync(summary, `${note}\n`);

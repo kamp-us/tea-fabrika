@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-17-l11-equality-runtime",
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "cost",
+  "person": false,
+  "primitive": null,
+  "quests": ["tea-fabrika#1135"],
+  "what": "Today's lead tooling's pure equality property passed locally in 19015.677 ms before the change and 6961.68125 ms after it. The test still runs all 100 generated cases over the complete fixture, with seed 119120, its original assertions and the shared 60000 ms timeout. The brief's 40-run count was incorrect; the source's 100-run count was kept.",
+  "cause": "One CPU profile of the unchanged exact property on pinned Node 26.13.0 and Vitest 5.0.5 measured 20.330 s in the worker. Strict trace reading accounted for 13.532 s, or 66.6 percent, inclusive. Identical trace lines were repeatedly decoded, both within one input and across the two inputs. This measures local source cost, not the cause of CI's timing variation. The same old source had passed CI in 32.764 s and failed in 67.336 s.",
+  "fix": "Reuse each successful strict schema decode by its exact input line within one comparison. The cache ends with that call. Every event position remains in the ordered trace, and both traces still pass their complete checks before comparison. The schema, excess-field rejection and normalized whole-value comparison are unchanged. Raw profiles and reports remain in the private archive.",
+  "test": "The whole l11-exercise tooling file passed all 20 tests; equality took 7097.535 ms. A lengths-only comparator failed the original changed-value assertion at l11-exercise.test.ts:408 after five cases and one shrink. Accepting identical text before validation failed the original invalid-input assertion at line 377 after one case and one shrink. Both faults were removed with exact source-byte restoration. The restored equality property passed in 6953.180 ms. Narrow lint passed. Compiler, full lint, CI and protected product laws were not run in this task.",
+  "source": "a2b0bb28ff778c17ac26ef0e2679c4b7374dc47a",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44112439877",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44111772408"
+  ]
+}

@@ -45,11 +45,9 @@ it.effect.prop(
       expect(Object.hasOwn(Ledger, "remote")).toBe(false);
       // The SQL layer needs a database, which stays out of ledger/ (0062); tsc checks its type above.
       const ledger = yield* Ledger.pipe(Effect.provide(LedgerRemote.layer(stub, { reader })));
-      expect([typeof ledger.append, typeof ledger.read, typeof ledger.wait]).toEqual([
-        "function",
-        "function",
-        "function",
-      ]);
+      expect(ledger.append).toBeTypeOf("function");
+      expect(ledger.read).toBeTypeOf("function");
+      expect(ledger.wait).toBeTypeOf("function");
     }),
   { arbitrary: { seed: 119120, runs: 20 } },
 );

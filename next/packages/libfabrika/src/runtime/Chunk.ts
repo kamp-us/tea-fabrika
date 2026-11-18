@@ -4,7 +4,7 @@
  * `last`, as a WebSocket frame's FIN flag marks a message's final frame (RFC 6455, section 5.4).
  */
 import { Option, Result, Schema } from "effect";
-import type { NonEmptyReadonlyArray } from "effect/Array";
+import * as Arr from "effect/Array";
 
 /**
  * Schema for a chunk letter's place in its send.
@@ -67,14 +67,14 @@ const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).
  *
  * @category constructors
  */
-export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArray<Chunk>, TooBig> => {
+export const cut = (send: Send, size: number): Result.Result<Arr.NonEmptyReadonlyArray<Chunk>, TooBig> => {
   const letter = (items: ReadonlyArray<Schema.Json>, seq: number, last: boolean): Chunk => ({
     type: send.type,
     items,
     part: { id: send.id, seq, last },
   });
 
-  const sizes = send.items.map(bytes);
+  const sizes = Arr.map(send.items, bytes);
   const end = send.items.length;
 
   /** The chunk at `seq` that starts at item `from` and takes as many items as fit, and where it stops. */
@@ -141,9 +141,10 @@ export const join = (chunks: ReadonlyArray<Chunk>): Option.Option<ReadonlyArray<
 
   const whole =
     id !== undefined &&
-    chunks.every(
+    Arr.every(
+      chunks,
       (chunk, n) => chunk.part.id === id && chunk.part.seq === n && chunk.part.last === (n === chunks.length - 1),
     );
 
-  return whole ? Option.some(chunks.flatMap((chunk) => chunk.items)) : Option.none();
+  return whole ? Option.some(Arr.flatMap(chunks, (chunk) => chunk.items)) : Option.none();
 };

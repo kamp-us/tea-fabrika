@@ -10,6 +10,7 @@ import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
+import type { Published } from "@kampus/libfabrika/runtime/News";
 import { fetch } from "@kampus/libfabrika/workers";
 import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
@@ -63,14 +64,14 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
 
   initialize(
     client: ConnectionId,
-    input: unknown,
+    input: Schema.Json | undefined,
     trusted: { url: string; tab: string; name: string; session?: string },
   ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }
 
-  route(client: ConnectionId, method: string, params: unknown, reader?: string) {
+  route(client: ConnectionId, method: string, params: Schema.Json | undefined, reader?: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.route(client, method, params, reader)));
   }
@@ -170,7 +171,7 @@ export class Project extends DurableObject<Env> implements ProjectBinding {
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
   }
 
-  publish(client: string, update: unknown) {
+  publish(client: string, update: Published) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.publish(client, update)));
   }
@@ -286,7 +287,7 @@ const deployment = Schema.decodeUnknownSync(
 )(env);
 
 const meta = {
-  // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
+  // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Alchemy's generated entry passes the Worker.make export here (Sources/Rolldown.ts); makeDurableObjectBridge's type names an Effect
   entrypoint: Objects as unknown as Effect.Effect<Record<string, unknown>>,
   // oxlint-disable-next-line fabrika/no-stage-word -- Alchemy's own key picks its deployment state
   stack: { name: deployment.ALCHEMY_STACK_NAME, stage: deployment.ALCHEMY_STAGE },

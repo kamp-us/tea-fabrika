@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-libfabrika-patch-hand-writes-effect-jsonpatch",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "duplicate",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Patch.ts",
+    "line": 107
+  },
+  "says": "In next/, libfabrika's runtime/Patch.ts hand-writes an RFC 6902 diff and apply over Schema.Json (add, remove and replace), while the installed effect 4.1.3 ships a JsonPatch module with the same two functions, so 0040's existing tool is not used.",
+  "proof": "next/packages/libfabrika/src/runtime/Patch.ts:107 `export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Patch>` and :132 `export const apply = (before: unknown, ops: unknown)`, against effect 4.1.3's src/JsonPatch.ts:184 `export function get(oldValue: Schema.Json, newValue: Schema.Json): JsonPatch` and :287 `export function apply(patch: JsonPatch, oldValue: Schema.Json): Schema.Json`, whose module doc says it computes and applies add, remove and replace patches addressed by JSON Pointer.",
+  "cost": "A second JSON patch engine to keep correct and test, and the JSON-object guard copies of this pull request exist partly to serve it.",
+  "head": "2dd36441a95432da21b7d4825fb87969db53dd05",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": "kamp-us/tea-fabrika#1593"
+}

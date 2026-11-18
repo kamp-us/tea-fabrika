@@ -17,20 +17,21 @@
 // - The oracle for L2 and L4 is Effect's own reader, `SchemaRepresentation.fromJsonSchemaDocument`
 //   with trusted patterns, never a validator of ours.
 import { describe, expect, it } from "@effect/vitest";
-import {
-  ByteSize,
-  JsonSchema as EffectJsonSchema,
-  Exit,
-  Predicate,
-  Schema,
-  SchemaAST,
-  SchemaRepresentation,
-} from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as Exit from "effect/Exit";
+import * as EffectJsonSchema from "effect/JsonSchema";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
+import * as SchemaRepresentation from "effect/SchemaRepresentation";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
+import * as Setting from "./Fabrika.ts";
 import * as Files from "./Files.ts";
 import * as JsonSchema from "./JsonSchema.ts";
-import * as Setting from "./Setting.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -120,7 +121,7 @@ const groupWith = (input: Declared, defaults: ReadonlyArray<unknown>) => {
   const { made } = build(input);
 
   return Setting.group(
-    Object.fromEntries(
+    Rec.fromEntries(
       ds.map((d, n) => [
         `s${n}`,
         Setting.make(`${d.table}.${d.key}`, {
@@ -148,10 +149,10 @@ type Json = Record<string, unknown>;
 /** The definition a local reference names, by Effect's escaping: URI-encoded JSON Pointer. */
 const target = (document: Json, ref: string) => {
   const prefix = "#/$defs/";
-  expect(ref.startsWith(prefix), ref).toBe(true);
-  const name = decodeURIComponent(ref.slice(prefix.length)).replaceAll("~1", "/").replaceAll("~0", "~");
+  expect(Str.startsWith(prefix)(ref), ref).toBe(true);
+  const name = Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(decodeURIComponent(Str.slice(prefix.length)(ref))));
   const defs = document.$defs;
-  expect(Predicate.isObject(defs) && Object.hasOwn(defs, name), `${ref} names no definition`).toBe(true);
+  expect(Predicate.isObject(defs) && Rec.has(defs, name), `${ref} names no definition`).toBe(true);
 
   return (defs as Json)[name] as Json;
 };
@@ -159,7 +160,7 @@ const target = (document: Json, ref: string) => {
 /** A node with its references followed: the referenced fields, with the node's own over them. */
 const resolve = (document: Json, node: Json): Json => {
   const { $ref, allOf, ...own } = node;
-  const below = typeof $ref === "string" ? resolve(document, target(document, $ref)) : {};
+  const below = Predicate.isString($ref) ? resolve(document, target(document, $ref)) : {};
   const parts = Array.isArray(allOf) ? allOf.map((part: Json) => resolve(document, part)) : [];
 
   return Object.assign({}, below, ...parts, own);
@@ -170,7 +171,7 @@ const leaf = (document: Json, segments: ReadonlyArray<string>) =>
   segments.reduce<Json | undefined>((node, key) => {
     const properties = node === undefined ? undefined : resolve(document, node).properties;
 
-    return Predicate.isObject(properties) && Object.hasOwn(properties, key)
+    return Predicate.isObject(properties) && Rec.has(properties, key)
       ? resolve(document, (properties as Json)[key] as Json)
       : undefined;
   }, document);
@@ -180,7 +181,7 @@ const refs = (value: unknown): Array<string> =>
   Array.isArray(value)
     ? value.flatMap(refs)
     : Predicate.isObject(value)
-      ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
+      ? Rec.toEntries(value).flatMap(([key, v]) => (key === "$ref" && Predicate.isString(v) ? [v] : refs(v)))
       : [];
 
 /** The generated document read back by Effect's own JSON Schema reader. */
@@ -305,7 +306,7 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
         for (const d of group.declarations) {
           const node = leaf(document, d.segments)!;
           expect(node.description).toBe(d.doc);
-          expect(typeof node.default).toBe("string");
+          expect(node.default).toBeTypeOf("string");
           expect(node.default).not.toBe(String(d.default));
           expect(Schema.decodeUnknownSync(Schema.toCodecStringTree(shared))(node.default)).toBe(d.default);
           const input = { limits: { [d.segments[1]!]: node.default } };
@@ -432,7 +433,7 @@ describe("L4, generated local references resolve, with every definition present"
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);
 
           if (broken !== undefined) {
-            const [[table, keys]] = Object.entries(broken) as [[string, Record<string, unknown>]];
+            const [[table, keys]] = Rec.toEntries(broken) as [[string, Record<string, unknown>]];
             const document = { ...valid, [table]: { ...valid[table], ...keys } };
             expect(Exit.isFailure(Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" }))).toBe(
               true,

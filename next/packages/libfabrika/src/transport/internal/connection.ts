@@ -1,4 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 import { Attached, Wait, Who } from "../Wire.ts";
 
@@ -100,7 +101,7 @@ export const attachment = (model: Model): typeof Attached.Type | null => {
 
 /** The limits measure the saved attachment as UTF-8 JSON, metadata included. */
 const admits = (s: Online, next: Online, wait: typeof Wait.Type) =>
-  !s.waits.some((w) => w.id === wait.id) &&
+  !Arr.some(s.waits, (w) => w.id === wait.id) &&
   next.waits.length <= MAX_WAITS &&
   new TextEncoder().encode(JSON.stringify(attachment(next))).length <= MAX_BYTES;
 
@@ -129,9 +130,9 @@ export const connection = Machine.make({
       }
 
       const { id, stream, after } = m.wait;
-      const matching = s.waits.some((w) => w.id === id && w.stream === stream && w.after === after);
+      const matching = Arr.some(s.waits, (w) => w.id === id && w.stream === stream && w.after === after);
 
-      return [matching ? { ...s, waits: s.waits.filter((w) => w.id !== id) } : s, []];
+      return [matching ? { ...s, waits: Arr.filter(s.waits, (w) => w.id !== id) } : s, []];
     },
   },
 });

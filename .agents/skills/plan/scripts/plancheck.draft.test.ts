@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Match } from "effect";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { estimateIn } from "../../lead/scripts/chain.ts";
 import {
   approved,
@@ -22,6 +23,18 @@ import {
 
 // Today's tooling: plancheck.sh's --draft and --approved checks. Its table grammar is in plancheck.test.ts.
 
+let compileCache: string | undefined;
+
+beforeEach(() => {
+  const folder = mkdtempSync(join(tmpdir(), "pc-node-"));
+  compileCache = folder;
+
+  return () => {
+    compileCache = undefined;
+    rmSync(folder, { recursive: true, force: true });
+  };
+});
+
 // T321 keeps normal saved-plan reads in plancheck.test.ts. New structure checks run at the approval
 // boundary.
 const modeCheck = (text: string, mode: "--draft" | "--approved") => {
@@ -36,7 +49,12 @@ const modeCheck = (text: string, mode: "--draft" | "--approved") => {
     const ran = spawnSync("sh", [script, mode, path], {
       encoding: "utf8",
       timeout: 5_000,
-      env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
+      env: {
+        ...process.env,
+        FABRIKA_LEAK_WORDS: words,
+        NODE_COMPILE_CACHE: process.env.NODE_V8_COVERAGE ? undefined : compileCache,
+        TYPESAFE_API_KEY: undefined,
+      },
     });
 
     expect(ran.error).toBeUndefined();
@@ -148,12 +166,11 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
         ),
         fc.constantFrom("prose", "list", "code"),
         (path, place) => {
-          const mention =
-            place === "code"
-              ? `\n\`\`\`text\n${path}\n\`\`\``
-              : place === "list"
-                ? `\n- \`${path}\``
-                : `\nChange \`${path}\` here.`;
+          const mention = Match.value(place).pipe(
+            Match.when("code", () => `\n\`\`\`text\n${path}\n\`\`\``),
+            Match.when("list", () => `\n- \`${path}\``),
+            Match.orElse(() => `\nChange \`${path}\` here.`),
+          );
 
           const body = complete(mention);
           const bad = modeCheck(`\nPlancheck-Version: 3\n${body}`, "--draft");
@@ -348,6 +365,7 @@ describe("plan estimate, today's tooling", () => {
   it("a missing, doubled, fenced, misplaced or malformed Estimate line fails with one message", () => {
     fc.assert(
       fc.property(
+        // SAFETY: `Object.keys` of the literal `estimateFaults` lists exactly its own keys, the EstimateFault type.
         fc.constantFrom(...(Object.keys(estimateFaults) as EstimateFault[])),
         fc.integer({ min: 1, max: 40 }),
         fc.integer({ min: 1, max: 90 }),

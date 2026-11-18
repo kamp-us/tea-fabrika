@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec } from "effect";
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
 import { fileName, STEP } from "../time-table.ts";
@@ -18,7 +19,10 @@ export const timeTableEnv = (report: string) => ({
 
 // check.yaml's test jobs, each with the Vitest report its time table reads: next alone, since 0539
 // took the tooling tests' job off the merge line.
-export const TIMED_LEGS = [["next", "next.json"]] as const;
+export const TIMED_LEGS = [
+  ["next", "next.json"],
+  ["related", "related.json"],
+] as const;
 
 // A timings upload's `with:`, whole. `retention-days` is a setting (0069), so only its being there is
 // held, as for the record's upload. Its name starts `timings-`, so it can never be taken for a
@@ -37,10 +41,10 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
   return (
     uses(step, "actions/upload-artifact") &&
     sameEntries(
-      Object.entries(given).filter(([key]) => key !== "retention-days"),
-      Object.entries(TIMINGS),
+      Rec.toEntries(given).filter(([key]) => key !== "retention-days"),
+      Rec.toEntries(TIMINGS),
     ) &&
-    typeof kept === "number" &&
+    Predicate.isNumber(kept) &&
     kept >= 1
   );
 };

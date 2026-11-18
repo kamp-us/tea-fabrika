@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
@@ -16,6 +18,11 @@ import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { brainOutbox, checkMemory } from "./local-dev.ts";
+
+/** The failure a stand-in control channel answers a flush with. */
+class ControlFault extends Schema.TaggedError<ControlFault, { readonly brand: unique symbol }>()("ControlFault", {
+  message: Schema.String,
+}) {}
 
 const SEED = 119120;
 
@@ -73,13 +80,14 @@ const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 describe("P12 local brain life", () => {
   // The memory restart plan makes the limit a setting, `desktop.brain-memory`, so the law generates it;
   // the pinned cases keep 0292's 500 MB mark.
-  it("p81 plant: sample workerd RSS, replace at the limit, never measure the Node parent", async () => {
+  it("p81 plant: sample workerd RSS, replace at the limit, never measure the Node parent", () => {
     const child = fc.integer({ min: 1 }).filter((pid) => pid !== process.pid);
     const belowCap: [number, number, number] = [499_999_999, 417, 500_000_000];
     const atCap: [number, number, number] = [500_000_000, 417, 500_000_000];
     const aboveCap: [number, number, number] = [500_000_001, 417, 500_000_000];
     const limit = fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER });
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), child, limit, (bytes, pid, limit) =>
         runNode(
           Effect.gen(function* () {
@@ -95,7 +103,7 @@ describe("P12 local brain life", () => {
 
                   return bytes;
                 }),
-              replace: (reason: unknown) =>
+              replace: (reason) =>
                 Effect.sync(() => {
                   requests.push(reason);
                 }),
@@ -109,20 +117,22 @@ describe("P12 local brain life", () => {
       { seed: SEED, examples: [belowCap, atCap, aboveCap] },
     );
   });
-  it("p81/content plant: remove a pending event before acknowledgement or leak error text", async () => {
-    await fc.assert(
+  it("p81/content plant: remove a pending event before acknowledgement or leak error text", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
             const folder = yield* home("p12-l-");
             let outbox = yield* brainOutbox(folder);
             yield* outbox.add(event);
-            yield* Effect.exit(outbox.flush(() => Effect.fail(new Error("private control failure"))));
+            yield* Effect.exit(
+              outbox.flush(() => Effect.fail(ControlFault.make({ message: "private control failure" }))),
+            );
             outbox = yield* brainOutbox(folder);
             expect(yield* outbox.pending).toEqual([event]);
             expect(readFileSync(join(folder, "brain.pending.jsonl"), "utf8")).not.toContain("private control failure");
             const sent: Array<unknown> = [];
-            yield* outbox.flush((row: unknown) =>
+            yield* outbox.flush((row) =>
               Effect.sync(() => {
                 sent.push(row);
               }),
@@ -130,7 +140,7 @@ describe("P12 local brain life", () => {
             expect(sent).toEqual([event]);
             expect(yield* outbox.pending).toEqual([]);
             yield* outbox.add(event);
-            yield* outbox.flush((row: unknown) =>
+            yield* outbox.flush((row) =>
               Effect.sync(() => {
                 sent.push(row);
               }),
@@ -141,15 +151,15 @@ describe("P12 local brain life", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 });
 
 describe("P12 durable brain outbox", () => {
   for (const reader of ["pending", "last"] as const) {
-    it(`malformed saved ${reader} returns BrainError without a defect`, async () => {
+    it(`malformed saved ${reader} returns BrainError without a defect`, () => {
       const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
-      await fc.assert(
+
+      return fc.assert(
         fc.asyncProperty(
           fc.jsonValue().filter((raw) => !Schema.is(schema)(raw)),
           async (raw) => {
@@ -158,7 +168,7 @@ describe("P12 durable brain outbox", () => {
                 const folder = yield* home("p12-m-");
                 writeFileSync(
                   join(folder, reader === "pending" ? "brain.pending.jsonl" : "brain.last.json"),
-                  JSON.stringify(raw),
+                  Formatter.formatJson(raw),
                 );
                 const outbox = yield* brainOutbox(folder);
 
@@ -181,17 +191,18 @@ describe("P12 durable brain outbox", () => {
     });
   }
 
-  it("FileSystem writes each pending and last file in durable order, including acknowledgement", async () => {
-    await fc.assert(
+  it("FileSystem writes each pending and last file in durable order, including acknowledgement", () =>
+    fc.assert(
       fc.asyncProperty(fc.uniqueArray(brainEvent, { minLength: 1, maxLength: 4, selector: (row) => row.id }), (rows) =>
         runNode(
           Effect.gen(function* () {
+            const context = yield* Effect.context<never>();
             const folder = yield* home("p12-m-");
             const files = new Map<string, string>();
             const calls: Array<unknown> = [];
             const joins: Array<ReadonlyArray<string>> = [];
 
-            const note = (call: unknown) =>
+            const note = (call: readonly [string, string]) =>
               Effect.sync(() => {
                 calls.push(call);
               });
@@ -232,7 +243,7 @@ describe("P12 durable brain outbox", () => {
                 }),
             });
 
-            const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+            const path = Effect.runSyncWith(context)(Path.Path.pipe(Effect.provide(Path.layer)));
 
             const paths = Layer.succeed(Path.Path, {
               ...path,
@@ -258,7 +269,10 @@ describe("P12 durable brain outbox", () => {
             ];
 
             const encoded = (rows: ReadonlyArray<typeof BrainEvent.Type>) =>
-              rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : "");
+              Arr.join(
+                Arr.map(rows, (row) => JSON.stringify(row)),
+                "\n",
+              ) + (rows.length > 0 ? "\n" : "");
 
             yield* Effect.scoped(
               Effect.gen(function* () {
@@ -270,13 +284,13 @@ describe("P12 durable brain outbox", () => {
                   expected.push(...durable(file, encoded(rows.slice(0, index + 1))));
 
                   if (row._tag === "started") {
-                    expected.push(...durable(last, JSON.stringify(row.start)));
+                    expected.push(...durable(last, Formatter.formatJson(row.start)));
                   }
 
                   expect(calls).toEqual(expected);
                 }
 
-                const latest = rows.filter((row) => row._tag === "started").at(-1);
+                const latest = Arr.filter(rows, (row) => row._tag === "started").at(-1);
                 const sent: Array<typeof BrainEvent.Type> = [];
                 yield* outbox.flush((row) =>
                   Effect.sync(() => {
@@ -285,7 +299,7 @@ describe("P12 durable brain outbox", () => {
                 );
 
                 if (latest !== undefined) {
-                  expected.push(...durable(last, JSON.stringify(latest.start)));
+                  expected.push(...durable(last, Formatter.formatJson(latest.start)));
                 }
 
                 for (let n = 1; n <= rows.length; n++) {
@@ -299,7 +313,7 @@ describe("P12 durable brain outbox", () => {
                 expect(joins).toContainEqual([folder, "brain.pending.jsonl"]);
                 expect(joins).toContainEqual([folder, "brain.last.json"]);
               }),
-            ).pipe(Effect.provide(fs), Effect.provide(paths));
+            ).pipe(Effect.provide(fs.pipe(Layer.provideMerge(paths))));
           }),
         ),
       ),
@@ -312,10 +326,9 @@ describe("P12 durable brain outbox", () => {
           [[firstStart, { ...firstStart, id: "next", start: "next-start", at: 43 }]],
         ],
       },
-    );
-  });
-  it("an event with an excess property is a bad_row on add and on a saved pending row", async () => {
-    await fc.assert(
+    ));
+  it("an event with an excess property is a bad_row on add and on a saved pending row", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, fc.string({ minLength: 1 }), (event, extra) =>
         runNode(
           Effect.gen(function* () {
@@ -327,7 +340,7 @@ describe("P12 durable brain outbox", () => {
               reason: "bad_row",
             });
             expect(yield* outbox.pending).toEqual([]);
-            writeFileSync(join(folder, "brain.pending.jsonl"), `${JSON.stringify(excess)}\n`);
+            writeFileSync(join(folder, "brain.pending.jsonl"), `${Formatter.formatJson(excess)}\n`);
             expect(yield* Effect.flip(outbox.pending)).toMatchObject({
               _tag: "BrainError",
               reason: "bad_row",
@@ -336,10 +349,9 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("an outbox id accepts an exact retry once and rejects changed content", async () => {
-    await fc.assert(
+    ));
+  it("an outbox id accepts an exact retry once and rejects changed content", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
@@ -366,11 +378,10 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 
-  it("outbox writes release both the pending file and its directory handle", async () => {
-    await fc.assert(
+  it("outbox writes release both the pending file and its directory handle", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
@@ -384,6 +395,5 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 });

@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e54-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:36:21-08:00",
+  "ended": "2026-11-15T20:46:34-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E54 of the Effect-check sweep (newPromise), a judgment slice in next/ that adds no lock line. Counted with only newPromise at error through --lspconfig over next/apps/fabrika, libfabrika and tuval: 48 hits, 16 in this slice's folders (app:e2e 9, lib:cloudflare 3, lib:node 2, tuval 2), all in exam paths, none in pull request 1366's files; the other 32 are app:src, slice E92. Fixed 7 by hand: a pause and a wait for a child's exit in e2e/instance.visual.test.ts become Effect.sleep and Effect.callback; a held RPC answer in cloudflare/fetch.test.ts becomes Effect.callback; its setTimeout turn becomes Effect.yieldNow; three never-settling stand-ins (cloudflare/platform.test.ts, node/build/build-assets.integration.test.ts twice) become Effect.never. Kept 9 as ignore lines, each `@effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded`: code inside Playwright's page.evaluate (instance.visual 5, reload.visual 2, tuval key.laws.visual 2). Recount: 0 hits in the slice's folders. No law was added or changed in what it asserts.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The ignore line's ` -- reason` tail was proven read as no part of the directive: with the comment the hit is gone, without it the hit is back. The checker's quick-fix client was not used; all 7 fixes and 9 ignore lines are hand edits. The three .visual. files were not run (step rules forbid it here). fetch.test.ts, platform.test.ts and build-assets.integration.test.ts passed. No product file has a hit, so no build step is needed. By owner ruling no pull request is opened: the work stays on branch fabrikalfa/effect-e54 for an integrator to fold in, and this row carries what a body would say.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "newPromise ignore line (0565's reason tail)",
+      "plant": "removed the ignore line above key.laws.visual.test.ts:153; the checker reports newPromise at line 153 again",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/fetch.test.ts: requests before any finished read each read for themselves",
+      "plant": "fetch.ts httpContext shares one cached in-flight read per env; expected the held list to have a length of 2 but got 1",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

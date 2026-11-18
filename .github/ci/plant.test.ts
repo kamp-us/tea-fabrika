@@ -1,11 +1,11 @@
 // Today's tooling. These laws supply in-memory I/O only; the real adapters remain unexercised.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, RegExp as Regex, Result, Schema } from "effect";
+import { Effect, FileSystem, Match, Option, Path, RegExp as Regex, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { describe } from "vitest";
-import { argv, cases, decodeRequest, derive, Request } from "./plant-cases.ts";
-import { failure } from "./plant-errors.ts";
+import { argv, cases, decodeRequest, derive, prepare, Request } from "./plant-cases.ts";
+import { failure, Issue, issue } from "./plant-errors.ts";
 import { Model, Observation } from "./plant-machine.ts";
 import PlantReporter from "./plant-reporter.ts";
 import {
@@ -14,6 +14,7 @@ import {
   exercise,
   ExerciseError,
   observation,
+  report as receipt,
   unchanged,
   Workspace,
   type Snapshot,
@@ -53,8 +54,7 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
   const kept = { keep: "fixture child", foreground: true, paid: true };
   const homeRoot = new TextEncoder().encode(`${tmp}/fh-XXXXXX/host/sock`).length < 103 ? tmp : "/tmp";
 
-  const matchers = {
-    "checklist-pid": () => expect(undefined, "a notice names its process").toBe("process-id"),
+  const matchers: Partial<Record<Request["case"], () => unknown>> = {
     "watcher-r1": () =>
       expect({ _tag: "same", program: content, hash: content }).toMatchObject(
         syntax ? { _tag: "failed", reason: "bundle" } : { _tag: "loaded" },
@@ -69,7 +69,13 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
       ),
   };
 
-  return Result.match(Result.try(matchers[key]), {
+  const compare = matchers[key];
+
+  if (compare === undefined) {
+    throw new Error("missing fixed matcher");
+  }
+
+  return Result.match(Result.try(compare), {
     onSuccess: () => Matcher.make({ name: "Error", message: "" }),
     onFailure: (error) => {
       const serialized = Schema.decodeUnknownSync(Matcher)(error);
@@ -80,22 +86,21 @@ const matcher = (key: Request["case"], content = "", syntax = false) => {
 };
 
 const position = (key: Request["case"], line = 17, column = 23) =>
-  key === "host-requested-pin"
-    ? { line: 195, column: 62 }
-    : key === "host-pnpm-path"
-      ? { line: 194, column: 70 }
-      : key === "host-env-order"
-        ? { line: 197, column: 24 }
-        : { line, column };
+  Match.value(key).pipe(
+    Match.when("host-requested-pin", () => ({ line: 195, column: 62 })),
+    Match.when("host-pnpm-path", () => ({ line: 194, column: 70 })),
+    Match.when("host-env-order", () => ({ line: 197, column: 24 })),
+    Match.orElse(() => ({ line, column })),
+  );
 
 const message = (key: Request["case"], content = "", syntax = false) => {
   const error = matcher(key, content, syntax);
   const stack = error.stack || error.message;
-  const frame = position(key, 194, 12);
+  const fixture = cases[key].project === "tooling" ? position(key, 194, 12) : null;
 
-  return cases[key].project === "tooling"
-    ? `${stack}\n    at fixture (${root}/${cases[key].test}:${frame.line}:${frame.column})`
-    : stack;
+  return fixture === null
+    ? stack
+    : `${stack}\n    at fixture (${root}/${cases[key].test}:${fixture.line}:${fixture.column})`;
 };
 
 const report = (key: Request["case"], status: string, messages: string[] = []) => ({
@@ -136,6 +141,17 @@ const report = (key: Request["case"], status: string, messages: string[] = []) =
     },
   ],
 });
+
+const images = <Key extends Request["case"]>(key: Key, content: string) => {
+  const selected = cases[key];
+  const original = bytes(`${JSON.stringify(content)}\n\n${selected.before}\n`);
+  const prepared = original;
+
+  const edited = bytes(new TextDecoder().decode(prepared).replace(selected.before, selected.after));
+  const head = sha;
+
+  return { original, prepared, edited, head };
+};
 
 // Plant: accept unknown fields and cases
 it.effect.prop(
@@ -225,11 +241,6 @@ it.effect.prop(
 // Plant: anchor the JSON reporter's space-joined name instead of Vitest's actual CLI task name.
 // The suite/leaf pairs were read from each mapped source law. These bodies start no real resource.
 const nested = [
-  {
-    key: "checklist-pid",
-    suite: "L13: notices name their process",
-    leaf: "each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-  },
   {
     key: "watcher-r1",
     suite: "P15 slice 1: the watcher",
@@ -333,7 +344,112 @@ it.prop(
   options,
 );
 
-// Plant: require formatted minus/plus diff lines absent from JSON failureMessages
+// Plant: copy a raw error name, message, stack or nested cause into the public receipt.
+it.prop(
+  "incomplete phase receipts retain verdict facts and only closed causal error details",
+  {
+    key: Request.fields.case,
+    content: Schema.String,
+    line: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10000 })),
+    column: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 1000 })),
+    name: Schema.Literals(["AssertionError", "SyntaxError", "ReferenceError", "TypeError", "RangeError", "Error"]),
+  },
+  ({ key, content, line, column, name }) => {
+    const marker = `private-value-${JSON.stringify(content)}-end`;
+
+    const error = {
+      name,
+      message: marker,
+      stack: `at selected (/private/${encodeURIComponent(marker)}/${cases[key].test}:${line}:${column})`,
+      actual: marker,
+      expected: marker,
+    };
+
+    const detail = issue(key, {
+      name: "Error",
+      message: marker,
+      cause: { name: "Error", message: marker, cause: error },
+    });
+
+    expect(detail).toEqual({ kind: name, frame: { line, column } });
+    expect(Schema.is(Issue)(detail)).toBe(true);
+    expect(issue(key, { ...error, name: marker })).toEqual({ kind: "unknown", frame: { line, column } });
+    expect(
+      issue(key, { ...error, stack: `/private/${encodeURIComponent(marker)}/unrelated.test.ts:${line}:${column}` }),
+    ).toEqual({ kind: name, frame: null });
+    expect(issue(key, { ...error, name: "Error", message: `Test timed out in 60000ms: ${marker}` }).kind).toBe(
+      "timeout",
+    );
+    expect(issue(key, marker)).toEqual({ kind: "unknown", frame: null });
+
+    const cyclic = { name: "Error", message: marker, cause: {} };
+    cyclic.cause = cyclic;
+    expect(issue(key, cyclic)).toEqual({ kind: "unknown", frame: null });
+
+    const raw = report(key, "failed", [marker]);
+
+    const target = raw.testResults[0]!.assertionResults[0]!;
+
+    const extended = {
+      ...raw,
+      testResults: [
+        {
+          ...raw.testResults[0]!,
+          assertionResults: [
+            { ...target, meta: { plant: null, plantErrors: [detail], plantUnhandled: [detail], private: marker } },
+          ],
+        },
+      ],
+    };
+
+    const actual = receipt(key, root, JSON.stringify(extended));
+    expect(actual).toMatchObject({
+      state: "decoded",
+      success: false,
+      counts: { total: 1, passed: 0, failed: 1, pending: 0, todo: 0 },
+      suites: { total: 2, passed: 0, failed: 2, pending: 0, results: 1 },
+      targets: [
+        {
+          status: "failed",
+          message: false,
+          assertions: 1,
+          active: 1,
+          results: [
+            { status: "failed", duration: 12, failures: 1, plant: false, errors: [detail], unhandled: [detail] },
+          ],
+        },
+      ],
+    });
+
+    expect(observation(key, root, JSON.stringify(extended), 1, 12)).toEqual({ _tag: "incomplete", reason: "unclear" });
+    expect(JSON.stringify(actual)).not.toContain(marker);
+    expect(JSON.stringify(actual)).not.toContain("/private/");
+    expect(JSON.stringify(actual)).not.toContain(cases[key].title);
+    expect(JSON.stringify(actual)).not.toContain(cases[key].test);
+
+    const passed = report(key, "passed");
+
+    const malformed = {
+      ...passed,
+      testResults: [
+        {
+          ...passed.testResults[0]!,
+          assertionResults: [
+            { ...passed.testResults[0]!.assertionResults[0]!, meta: { plant: null, plantErrors: [marker] } },
+          ],
+        },
+      ],
+    };
+
+    expect(observation(key, root, JSON.stringify(malformed), 0, 12)).toEqual(
+      observation(key, root, JSON.stringify(passed), 0, 12),
+    );
+    expect(receipt(key, root, "")).toEqual({ state: "missing" });
+    expect(receipt(key, root, marker)).toEqual({ state: "malformed" });
+  },
+  options,
+);
+
 it.prop(
   "watcher observations decode installed matcher stacks and keep ambiguous outcomes incomplete",
   {
@@ -561,8 +677,11 @@ it.prop(
 
 // Plant: copy raw actual/expected JSON or a stack into the new closed diagnostic metadata.
 it.prop(
-  "new host diagnostics discard generated matcher values and paths",
-  { key: Schema.Literals(["host-requested-pin", "host-pnpm-path", "host-env-order"]), content: Schema.String },
+  "strict diagnostics discard generated matcher values and paths",
+  {
+    key: Schema.Literals(["host-requested-pin", "host-pnpm-path", "host-env-order"]),
+    content: Schema.String,
+  },
   ({ key, content }) => {
     const marker = `private-value-${JSON.stringify(content)}-end`;
     const location = position(key);
@@ -643,7 +762,6 @@ it.prop(
     expect(output).not.toContain("/private/temp");
 
     const diagnostics = {
-      "checklist-pid": "AssertionError: a notice names its process",
       "watcher-r1": "AssertionError: expected _tag loaded; received _tag same",
       "host-pin": "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
       "host-discovery-timeout": "AssertionError: runtime discovery exceeded the existing command cleanup bound",
@@ -652,7 +770,7 @@ it.prop(
       "host-env-order": "AssertionError: pinned host environment retained a removed parent value",
     };
 
-    expect(JSON.parse(output).diagnostic).toBe(diagnostics[key]);
+    expect(JSON.parse(output).diagnostic).toBe(new Map(Object.entries(diagnostics)).get(key));
   },
   options,
 );
@@ -696,78 +814,104 @@ it.effect.prop(
   },
   ({ key, content, fault }) =>
     Effect.gen(function* () {
-      const original = bytes(`${JSON.stringify(content)}\n${cases[key].before}\n`);
-      let current = original;
-      let calls = 0;
-      const tested: string[] = [];
+      const { original, prepared, edited, head } = images(key, content);
+      expect(yield* prepare(key, original)).toEqual(prepared);
+      const digest = yield* Digest.Digest;
 
-      const io = <A>(body: () => A) =>
-        Effect.suspend(() =>
-          calls++ === fault ? Effect.fail(ExerciseError.make({ reason: "injected-private-value" })) : Effect.sync(body),
+      for (const brokenAt of [fault, 35]) {
+        let current = original;
+        let calls = 0;
+        const tested: string[] = [];
+
+        const io = <A>(body: () => A) =>
+          Effect.suspend(() =>
+            calls++ === brokenAt
+              ? Effect.fail(ExerciseError.make({ reason: "injected-private-value" }))
+              : Effect.sync(body),
+          );
+
+        const workspace = Workspace.of({
+          inspect: io(() => ({
+            bytes: current,
+            mode: 0o100644,
+            head,
+            index: sha,
+            status: current === original ? "" : ` M ${cases[key].file}\0`,
+            summary: "",
+          })),
+          write: (data) =>
+            io(() => {
+              current = data;
+            }),
+          diff: io(() =>
+            current === original ? new Uint8Array() : bytes(`generated-diff-${JSON.stringify(content)}`),
+          ),
+          test: (phase) =>
+            io(() => {
+              expect(current).toEqual(phase === "broken" ? edited : prepared);
+              tested.push(phase);
+
+              return phase === "broken"
+                ? Observation.cases.failed.make({
+                    ...details(key),
+                    exit: 1,
+                    category: "assertion",
+                    assertion: null,
+                    diagnostic: "assertion mismatch",
+                  })
+                : Observation.cases.passed.make(details(key));
+            }),
+        });
+
+        const answer = yield* exercise({ case: key, sha: head }).pipe(
+          Effect.provideService(Workspace, workspace),
+          Effect.option,
         );
 
-      const workspace = Workspace.of({
-        inspect: io(() => ({
-          bytes: current,
-          mode: 0o100644,
-          head: sha,
-          index: sha,
-          status: current === original ? "" : ` M ${cases[key].file}\0`,
-          summary: "",
-        })),
-        write: (data) =>
-          io(() => {
-            current = data;
-          }),
-        diff: io(() => (current === original ? new Uint8Array() : bytes(`generated-diff-${JSON.stringify(content)}`))),
-        test: (phase) =>
-          io(() => {
-            tested.push(phase);
+        if (brokenAt === 35) {
+          expect(Option.isSome(answer)).toBe(true);
 
-            return phase === "broken"
-              ? Observation.cases.failed.make({
-                  ...details(key),
-                  exit: 1,
-                  category: "assertion",
-                  assertion: null,
-                  diagnostic: "assertion mismatch",
-                })
-              : Observation.cases.passed.make(details(key));
-          }),
-      });
+          if (Option.isSome(answer)) {
+            expect(Model.isAnyOf(["recorded"])(answer.value.model)).toBe(true);
+            expect(answer.value.preparedHash).toBe(yield* digest.digestHex(Digest.sha256, prepared));
+            expect(answer.value.observedHashes).toEqual({
+              baseline: yield* digest.digestHex(Digest.sha256, prepared),
+              broken: yield* digest.digestHex(Digest.sha256, edited),
+              restored: yield* digest.digestHex(Digest.sha256, prepared),
+            });
+            expect(answer.value.cleanup.hash).toBe(yield* digest.digestHex(Digest.sha256, original));
+            expect(current).toEqual(original);
+          }
+        }
 
-      const answer = yield* exercise({ case: key, sha }).pipe(
-        Effect.provideService(Workspace, workspace),
-        Effect.option,
-      );
+        if (Option.isSome(answer)) {
+          const result = answer.value;
 
-      if (Option.isSome(answer)) {
-        const result = answer.value;
+          if (result.cleanup.restored) {
+            expect(current).toEqual(original);
+          } else {
+            expect(Model.isAnyOf(["recorded", "incomplete"])(result.model)).toBe(true);
+          }
 
-        if (result.cleanup.restored) {
-          expect(current).toEqual(original);
+          if (Model.isAnyOf(["recorded"])(result.model)) {
+            expect(tested).toEqual(["baseline", "broken", "restored"]);
+          }
+
+          const hash = yield* Digest.Digest;
+
+          if (result.diffHash !== null) {
+            expect(result.diffHash).toBe(
+              yield* hash.digestHex(Digest.sha256, bytes(`generated-diff-${JSON.stringify(content)}`)),
+            );
+          }
+
+          expect(JSON.stringify(result)).not.toContain("injected-private-value");
         } else {
-          expect(Model.isAnyOf(["recorded", "incomplete"])(result.model)).toBe(true);
+          expect(tested).toEqual([]);
         }
 
-        if (Model.isAnyOf(["recorded"])(result.model)) {
-          expect(tested).toEqual(["baseline", "broken", "restored"]);
-        }
-
-        const hash = yield* Digest.Digest;
-
-        if (result.diffHash !== null) {
-          expect(result.diffHash).toBe(
-            yield* hash.digestHex(Digest.sha256, bytes(`generated-diff-${JSON.stringify(content)}`)),
-          );
-        }
-
-        expect(JSON.stringify(result)).not.toContain("injected-private-value");
-      } else {
-        expect(tested).toEqual([]);
+        expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
       }
-
-      expect(tested).toEqual(["baseline", "broken", "restored"].slice(0, tested.length));
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   options,
 );
@@ -791,6 +935,8 @@ it.effect.prop(
   },
   ({ request, caller, reason, content }) =>
     Effect.gen(function* () {
+      const account = `private-account-${caller}`;
+
       const environment = {
         GITHUB_REF: "refs/heads/main",
         GITHUB_EVENT_NAME: "workflow_dispatch",
@@ -811,7 +957,7 @@ it.effect.prop(
       const layer = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
         readFileString: () =>
-          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request, ignored: content })),
+          Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: request, ignored: content })),
         writeFileString: (_file, value) =>
           Effect.sync(() => {
             saved.push(value);
@@ -826,11 +972,11 @@ it.effect.prop(
 
           const before = Schema.decodeUnknownSync(
             Schema.fromJsonString(
-              Schema.Struct({ caller: Schema.String, source: Request.fields.sha, startedAt: Schema.String }),
+              Schema.Struct({ caller: Schema.Null, source: Request.fields.sha, startedAt: Schema.String }),
             ),
           )(saved.at(-1));
 
-          expect(before.caller).toBe(caller);
+          expect(before.caller).toBeNull();
           expect(before.source).toBe(request.sha);
           expect(before.startedAt).not.toBe("");
 
@@ -842,7 +988,7 @@ it.effect.prop(
       expect(entered).toBe(true);
 
       const Record = Schema.Struct({
-        caller: Schema.NullOr(Schema.String),
+        caller: Schema.Null,
         source: Schema.NullOr(Request.fields.sha),
         request: Schema.NullOr(Request),
         startedAt: Schema.String,
@@ -855,7 +1001,7 @@ it.effect.prop(
 
       const recorded = Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1));
       expect(recorded).toMatchObject({
-        caller,
+        caller: null,
         source: request.sha,
         request,
         runner: sha,
@@ -880,7 +1026,7 @@ it.effect.prop(
       );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
         source: request.sha,
-        caller,
+        caller: null,
         reason: "setup_or_io",
       });
       expect(saved.at(-1)).not.toContain(encodeURIComponent(unknown));
@@ -909,7 +1055,7 @@ it.effect.prop(
 
       const interruptedWrite = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
-        readFileString: () => Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: request })),
+        readFileString: () => Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: request })),
         writeFileString: (_file, value) =>
           Effect.suspend(() =>
             ++writes === 4
@@ -934,7 +1080,9 @@ it.effect.prop(
         Effect.succeed({
           request,
           originalHash: sha,
+          preparedHash: sha,
           editedHash: sha,
+          observedHashes: { baseline: sha, broken: sha, restored: sha },
           originalMode: 0o100644,
           head: request.sha,
           index: sha,
@@ -958,7 +1106,7 @@ it.effect.prop(
 
       expect(afterWriteFailure).toMatchObject({
         source: request.sha,
-        caller,
+        caller: null,
         state: "incomplete",
         reason: "setup_or_io",
         model: { _tag: "recorded" },
@@ -968,7 +1116,7 @@ it.effect.prop(
       const invalid = FileSystem.layerNoop({
         makeDirectory: () => Effect.void,
         readFileString: () =>
-          Effect.succeed(JSON.stringify({ sender: { login: caller }, inputs: { ...request, patch: content } })),
+          Effect.succeed(JSON.stringify({ sender: { login: account }, inputs: { ...request, patch: content } })),
         writeFileString: (_file, value) =>
           Effect.sync(() => {
             saved.push(value);
@@ -980,12 +1128,19 @@ it.effect.prop(
         Effect.provide(Path.layer),
       );
       expect(Schema.decodeUnknownSync(Schema.fromJsonString(Record))(saved.at(-1))).toMatchObject({
-        caller,
+        caller: null,
         source: null,
         request: null,
         state: "incomplete",
         reason: "request_invalid",
       });
+
+      for (const raw of saved) {
+        expect(raw).not.toContain(account);
+        expect(raw).not.toContain(unknown);
+        expect(raw).not.toContain(JSON.stringify(unknown).slice(1, -1));
+        expect(raw).not.toContain(encodeURIComponent(unknown));
+      }
     }),
   options,
 );

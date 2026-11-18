@@ -9,8 +9,10 @@
 // encoded Error stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
@@ -68,10 +70,11 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
-    Object.getOwnPropertyNames(value)
-      .filter((key) => key !== "stack")
-      .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),
+  Rec.fromEntries(
+    Arr.map(
+      Arr.filter(Object.getOwnPropertyNames(value), (key) => key !== "stack"),
+      (key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value],
+    ),
   );
 
 describe("T1062 L4, a sender error whose cause may be missing reads a cause written as undefined", () => {

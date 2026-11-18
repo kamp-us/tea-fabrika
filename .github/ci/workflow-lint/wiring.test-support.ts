@@ -3,8 +3,11 @@
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
+import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
+import { parse } from "yaml";
 import { ignored } from "../changes.mjs";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
 
@@ -64,7 +67,9 @@ export const step = <W extends { jobs: object }, J extends keyof W["jobs"] & str
   job: J,
   name: string,
 ): StepOf<W["jobs"][J]> => {
+  // SAFETY: every workflow `valid` builds has a `jobs` map whose jobs each hold a `steps` list of the job's own step type.
   const steps = (w.jobs as Record<string, { steps: StepOf<W["jobs"][J]>[] } | undefined>)[job]?.steps ?? [];
+  // SAFETY: a step is any object here; `name` is only probed, and compared with a string, so a missing name reads as no match.
   const [found, ...more] = steps.filter((s) => (s as { name?: unknown }).name === name);
 
   if (found === undefined || more.length > 0) {
@@ -80,6 +85,7 @@ export const step = <W extends { jobs: object }, J extends keyof W["jobs"] & str
 export const place = <W extends { jobs: object }, J extends keyof W["jobs"] & string>(w: W, job: J, name: string) => {
   const found = step(w, job, name);
 
+  // SAFETY: `jobs` in a `valid` workflow maps each job to an object with a `steps` list.
   return (w.jobs as Record<string, { steps: unknown[] }>)[job]?.steps.indexOf(found) ?? -1;
 };
 
@@ -116,6 +122,11 @@ const vitestCommand =
 // 0536: a pull request that asked for its visual tests.
 export const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
+// 0536: where next's full fallback starts the visual legs, a push to main and a labeled pull request.
+export const visualRoute = `(github.event_name == 'push' || ${visualLabel})`;
+
+const automatic = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
+
 // Chromium is fetched only once a visual file exists.
 const visualFiles = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 
@@ -139,10 +150,11 @@ export const nextLegs = (count: number) => [
   "5",
 ];
 
-// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a pull request
-// with the `visual` label, the vitest legs alone everywhere else (0536, E10).
+// S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a push to main
+// and on a pull request with the `visual` label, the vitest legs alone everywhere else, the merge
+// queue among them (0536, E10).
 export const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
-  `\${{ fromJSON(needs.changes.outputs.shards || (${visualLabel} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
+  `\${{ fromJSON(needs.changes.outputs.shards || (${visualRoute} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
 /** The full matrix a workflow's next job falls back to, as `sizedLegs` wrote it. */
 export const legsOf = (w: { jobs: { next: { strategy: { matrix: { shard: string } } } } }): unknown[] =>
@@ -224,11 +236,13 @@ export const timings = (): Timed => ({
 
 const valid = (label: string, extra: string) => ({
   name: label,
+  // SAFETY: the top-level grant is widened to unknown on purpose, so a plant can set it to any shape GitHub might read.
   permissions: { actions: "write", contents: "read" } as unknown,
   on: {
     push: { branches: ["main"] },
     pull_request: {
       types: ["opened", "synchronize", "reopened", "ready_for_review", "labeled"],
+      // SAFETY: widened from a fixed tuple so a plant can drop paths-ignore or set its own list.
       "paths-ignore": [...ignored] as string[] | undefined,
     },
     merge_group: { types: ["checks_requested"] },
@@ -241,8 +255,9 @@ const valid = (label: string, extra: string) => ({
     changes: {
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 5,
+      // SAFETY: every value below is a string, and the wider map type lets a plant add or remove an output.
       outputs: {
-        ...Object.fromEntries(
+        ...Rec.fromEntries(
           ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
@@ -254,7 +269,9 @@ const valid = (label: string, extra: string) => ({
         "vitest-legs": `\${{ steps.size.outputs.vitest }}`,
         "e2e-legs": `\${{ steps.size.outputs.e2e }}`,
         base: `\${{ steps.size.outputs.base }}`,
+        related: automatic.jobs.changes.outputs.related,
       } as Record<string, string>,
+      // SAFETY: changes' steps are object literals, widened to plain maps so a plant can add, move or retype a field.
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         classify,
@@ -316,10 +333,11 @@ const valid = (label: string, extra: string) => ({
           id: "record",
           if: "github.event_name == 'pull_request' && !github.event.pull_request.draft",
           "continue-on-error": true,
+          // SAFETY: each key below maps to a string, and the map type lets a plant add or delete one.
           env: {
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               ["check", "typecheck", "field", "build"].map((key) => [
                 key.toUpperCase(),
                 `\${{ steps.diff.outputs.${key} }}`,
@@ -335,6 +353,7 @@ const valid = (label: string, extra: string) => ({
           if: "steps.record.outputs.name != ''",
           "continue-on-error": true,
           uses: "actions/upload-artifact@v7",
+          // SAFETY: the upload's inputs, widened to a map so a plant can set any input to any value.
           with: {
             name: `\${{ steps.record.outputs.name }}`,
             path: `\${{ runner.temp }}/tested.json`,
@@ -350,6 +369,7 @@ const valid = (label: string, extra: string) => ({
       needs: "changes",
       if: `${guard("check").slice(0, -4)} || needs.changes.outputs.field != 'false') }}`,
       "timeout-minutes": 10,
+      // SAFETY: check's steps are object literals, widened to plain maps so plants can edit any field.
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         { name: "install", if: checkFlag, run: "pnpm install --frozen-lockfile" },
@@ -376,7 +396,10 @@ const valid = (label: string, extra: string) => ({
         { name: "typecheck", run: "pnpm typecheck" },
       ],
     },
+    select: structuredClone(automatic.jobs.select),
+    related: structuredClone(automatic.jobs.related),
     next: {
+      // SAFETY: widened from the one string so a plant can give next a list of needs, as GitHub allows.
       needs: "changes" as string | string[],
       if: guard("next"),
       "timeout-minutes": 17,
@@ -386,7 +409,7 @@ const valid = (label: string, extra: string) => ({
           name: "vitest",
           run: vitestCommand,
           if: `!${onE2e}`,
-          env: { SHARD: vitestShard(), FILTER: vitestFilter },
+          env: { SHARD: vitestShard(), FILTER: vitestFilter, FABRIKA_TEST_DEPTH: "full" },
         },
         {
           name: "chromium",
@@ -399,7 +422,7 @@ const valid = (label: string, extra: string) => ({
           name: "end to end",
           run: e2eCommand,
           if: onE2e,
-          env: { SHARD: e2eShard(2), CHANGED: changedFromBase },
+          env: { SHARD: e2eShard(2), CHANGED: changedFromBase, FABRIKA_TEST_DEPTH: "full" },
         },
         {
           name: "edges",
@@ -413,10 +436,12 @@ const valid = (label: string, extra: string) => ({
     },
     "ci-required": {
       name: `\${{ github.event.pull_request.draft && 'ci-required (draft)' || 'ci-required' }}`,
-      needs: ["changes", "check", "typecheck", "next"],
+      needs: ["changes", "check", "typecheck", "next", "select", "related"],
       if: "always()",
       "timeout-minutes": 5,
+      // SAFETY: ci-required's grant is widened to unknown so a plant can set any shape there.
       permissions: { contents: "read" } as unknown,
+      // SAFETY: ci-required's steps are literals, widened to plain maps so a plant can edit them.
       steps: [
         {
           name: "checkout",
@@ -433,6 +458,7 @@ export type Workflow = ReturnType<typeof valid>;
 
 /** A job's steps as one plain list, whatever its own step type. */
 export const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
+  // SAFETY: each job's steps in `valid` are object literals, and every object literal is a map of fields.
   w.jobs[job].steps as Record<string, unknown>[];
 
 /** Sets a next step's SHARD, kept in its place among the step's env keys. */

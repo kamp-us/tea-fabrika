@@ -16,8 +16,8 @@ import { expect, it } from "vitest";
 import { devRecording } from "./dev-recording.ts";
 
 for (const failed of [false, true]) {
-  it(`recording creates its directory and database path through supplied FileSystem and Path: ${failed ? "refusal" : "success"}`, async () => {
-    await fc.assert(
+  it(`recording creates its directory and database path through supplied FileSystem and Path: ${failed ? "refusal" : "success"}`, () =>
+    fc.assert(
       fc.asyncProperty(fc.uuid(), async (child) => {
         const home = mkdtempSync(join(tmpdir(), "p12-rec-")),
           folder = join(home, child);
@@ -62,8 +62,7 @@ for (const failed of [false, true]) {
         try {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(devRecording(folder, "brain:test", () => Effect.succeed({ _tag: "written" }))).pipe(
-              Effect.provide(platform),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(platform.pipe(Layer.provideMerge(NodeServices.layer))),
             ),
           );
 
@@ -81,6 +80,5 @@ for (const failed of [false, true]) {
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 }

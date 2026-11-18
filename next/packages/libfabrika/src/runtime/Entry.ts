@@ -4,7 +4,14 @@
  * ones to object calls, the Worker Loader and the span sink; Node tests wire the same shapes.
  */
 import { type Outcome, type Tagged } from "@demlik/tea";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+
 import { type SessionManagerError } from "../access/SessionManager.ts";
 import {
   type Appended,
@@ -20,34 +27,26 @@ import {
   Writer,
 } from "../coordination/index.ts";
 import { nodeExecution, type Execution, type Declaration } from "./Execution.ts";
-import { type Patch } from "./Patch.ts";
 import { ProgramDown, stepper, type Stepper } from "./Program.ts";
 
 /** A function type whose parameters are checked both ways, as a method's are. */
 type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"];
 
-/**
- * A view as JSON. One runner serves every program, so the type stays open: each program's own
- * client decodes its view.
- *
- * @category models
- */
-export type View = unknown;
-
-/**
- * What a watcher is sent: the whole view once, then one patch per installed step. `rev` is the inbox
- * position of the last installed letter, so other streams leave no gaps.
- *
- * @category models
- */
-export type Update =
-  | { readonly type: "whole"; readonly rev: number; readonly view: View }
-  | {
-      readonly type: "patch";
-      readonly base: number;
-      readonly rev: number;
-      readonly patch: ReadonlyArray<Patch>;
-    };
+export type {
+  /**
+   * A view as JSON, re-exported so the runner's names come from one place.
+   *
+   * @category models
+   */
+  View,
+  /**
+   * What a watcher is sent, the whole view or one patch, re-exported so the runner's names come
+   * from one place.
+   *
+   * @category models
+   */
+  Update,
+} from "./News.ts";
 
 /**
  * Schema for the gateway's delivery of one input: its stable letter id, the stamped envelope, the
@@ -132,7 +131,7 @@ export class ProgramLoader extends Context.Service<
 
         return {
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {
-            if (!Object.hasOwn(programs, name)) {
+            if (!Rec.has(programs, name)) {
               return yield* new ProgramDown({ reason: "no_program" });
             }
 
@@ -148,20 +147,20 @@ export class ProgramLoader extends Context.Service<
                 v: loaded.program.state.v,
                 ...(loaded.program.maxDeliveries === undefined ? {} : { maxDeliveries: loaded.program.maxDeliveries }),
                 ...(loaded.program.policy === undefined ? {} : { policy: loaded.program.policy }),
-                writes: Object.fromEntries(
-                  Object.entries(loaded.program.writes).map(([name, p]) => [name, { personOnly: p.personOnly }]),
+                writes: Rec.fromEntries(
+                  Arr.map(Rec.toEntries(loaded.program.writes), ([name, p]) => [name, { personOnly: p.personOnly }]),
                 ),
-                inputs: Object.fromEntries(
-                  Object.entries(loaded.program.inputs).map(([name, p]) => [
+                inputs: Rec.fromEntries(
+                  Arr.map(Rec.toEntries(loaded.program.inputs), ([name, p]) => [
                     name,
                     { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
                   ]),
                 ),
-                cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),
+                cmds: Arr.map(loaded.program.machine.cmds ?? [], (d) => d.cmdType),
               },
               handler: (cmd: string) => {
                 const owner = CHAOS_ONLY[cmd];
-                const run = Object.hasOwn(handlers, cmd) ? handlers[cmd] : undefined;
+                const run = Rec.has(handlers, cmd) ? handlers[cmd] : undefined;
 
                 if (run === undefined || BUILT_IN.has(cmd) || (owner !== undefined && owner !== name)) {
                   return Option.none();

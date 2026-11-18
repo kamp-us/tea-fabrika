@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1170-review",
+  "ticket": "kamp-us/tea-fabrika#1170",
+  "pr": null,
+  "started": "2026-11-18T06:59:18-08:00",
+  "ended": "2026-11-18T07:06:14-08:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "reviewer",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "ecce9b4fcf6994858d25ae25d1dce191b23c4bc8",
+  "base": "2288cf8de77acc3793d38a70d5cdc7168de93130",
+  "why": "Today's CI tooling, .github/ci. Merge-ready, 0 findings. The cause holds: on main, lines 349-353 (SIGKILL exit) and 309 (no final JSON at the journal read) passed before 356 failed, so Vitest wrote final JSON between the parent's read and the kill, which matches the cutoff child's 5 s default deadline (P8 took 6483 ms in job 134841612997). testTimeout: 0 reaches the test in installed Vitest 5.0.5: no CLI testTimeout, `??=` keeps 0 (index.1TqnEahn.js:9162), the test reads `options.timeout ?? runner.config.testTimeout` (run.BPv-BBRv.js:2647), and withTimeout returns the function unwrapped for 0 (run.BPv-BBRv.js:3271). The kill takes the whole process group (NodeChildProcessSpawner.js:373). Removing the child deadline removes the race's competitor rather than widening a timeout; the 30 s parent bound only turns a hang into the named :312 failure and fails before the project's 60 s deadline (vitest.config.ts:82). Normal and timeout config bytes, the fixture, the observer and P9's input hash are identical at base and head. loosening.sh hit only the Option import.",
+  "note": "Linux cloud box, Node 26, nice 15, one worker. P8 passed 6 of 6 runs in a row at the head (10.8 to 11.6 s). Plants run in the worktree and restored by sha256, git status clean, no .ci-progress- process left: (c) testTimeout 0 kept plus a 12 s sleep before the kill, green in 23.3 s; (d) the same sleep with the default deadline back, red at :336 isRunning; (e) a journal that never acknowledges, red at :312 after 31.9 s with cleanup done. pnpm typecheck and pnpm lint not run, as the brief asked. Requested model opus, effort high; served model and usage not reported.",
+  "plants": [
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.integration.test.ts probe: keep testTimeout 0 and sleep 12 s just before the SIGKILL",
+      "result": "green"
+    },
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.integration.test.ts probe: default deadline back on the cutoff child and sleep 12 s just before the SIGKILL",
+      "result": "red"
+    },
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.integration.test.ts probe: the journal wait looks for never.test.ts, so it never acknowledges",
+      "result": "red"
+    }
+  ],
+  "tokens": 152271,
+  "tools": 29,
+  "minutes": 7.9,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

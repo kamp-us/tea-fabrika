@@ -1,8 +1,10 @@
 // P34c, next/. Node and live-object fixtures supply real runners and real stores to these laws.
 // The fixture may supply transport and an archive double. It must not implement quota decisions.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { Appended } from "../coordination/index.ts";
 import { Supervision } from "./internal/supervisor.ts";
@@ -77,7 +79,9 @@ export const supervision = Supervision;
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
+
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
+
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
 
 const History = Schema.Array(
@@ -88,6 +92,7 @@ const History = Schema.Array(
 ).check(Schema.isMinLength(1), Schema.isMaxLength(3));
 
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
+
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
 const call = Effect.fnUntraced(function* (
@@ -109,19 +114,20 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             const w = yield* open(defaults);
             yield* w.input("alpha:1", "first", { type: "inc" });
             yield* w.drain("alpha:1");
-            const encode = Schema.encodeSync(Schema.fromJsonString(Checkpoint));
-            let previous = Schema.decodeUnknownSync(Checkpoint)(yield* w.checkpoint("alpha:1"));
+            const encode = Schema.encodeEffect(Schema.fromJsonString(Checkpoint));
+            let previous = yield* Schema.decodeUnknownEffect(Checkpoint)(yield* w.checkpoint("alpha:1"));
 
             for (const c of tape) {
               const old = yield* w.local("alpha:1");
-              const model = c.pick % 3 === 0 ? previous.saved.model : { payload: "😀é\n".repeat(c.amount % 120) };
+              const model = c.pick % 3 === 0 ? previous.saved.model : { payload: Str.repeat(c.amount % 120)("😀é\n") };
               const next = { ...previous, saved: { ...previous.saved, model } };
-              const delta =
-                new TextEncoder().encode(encode(next)).length - new TextEncoder().encode(encode(previous)).length;
+              const nextText = yield* encode(next);
+              const previousText = yield* encode(previous);
+              const delta = new TextEncoder().encode(nextText).length - new TextEncoder().encode(previousText).length;
               yield* w.replace("alpha:1", next);
               const use = yield* w.local("alpha:1");
               expect(use.program.bytes - old.program.bytes).toBe(delta);
-              expect(use.program.writes - old.program.writes).toBe(encode(next) === encode(previous) ? 0 : 1);
+              expect(use.program.writes - old.program.writes).toBe(nextText === previousText ? 0 : 1);
               expect(use.recovery).toEqual(old.recovery);
               yield* w.reopen;
               expect(yield* w.checkpoint("alpha:1")).toEqual(next);
@@ -204,9 +210,9 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const settled = yield* w.program("sample/alpha");
               expect(settled.writes).toBe(2);
               expect(settled.ahead.writes).toBe(before.ahead.writes);
-              expect((yield* w.entries).filter((e) => e._tag === "stepped" && e.id === `step:pair:${n}`)).toHaveLength(
-                1,
-              );
+              expect(
+                Arr.filter(yield* w.entries, (e) => e._tag === "stepped" && e.id === `step:pair:${n}`),
+              ).toHaveLength(1);
               const saved = yield* w.snapshot;
               expect(yield* w.input(name, `refused:${n}`, { type: "inc" })).toEqual(
                 Appended.cases.refused.make({ reason: "quota" }),
@@ -244,7 +250,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             let terminal = false;
 
             for (const c of tape) {
-              const saved = Schema.decodeUnknownSync(Schema.NullOr(supervision))(yield* w.journal(name));
+              const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
 
               if (saved !== null && saved.journal._tag !== "idle") {
                 yield* w.drain(name);
@@ -283,10 +289,11 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
             expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
             const entries = yield* w.entries;
-            expect(entries.some((e) => e._tag === "exited")).toBe(true);
-            expect(entries.some((e) => e._tag === "restarted")).toBe(true);
+            expect(Arr.some(entries, (e) => e._tag === "exited")).toBe(true);
+            expect(Arr.some(entries, (e) => e._tag === "restarted")).toBe(true);
             expect(
-              entries.some(
+              Arr.some(
+                entries,
                 (e) =>
                   e._tag === "send" &&
                   e.stream === "beta:1/inbox" &&
@@ -294,12 +301,15 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               ),
             ).toBe(true);
             expect(
-              entries.some(
+              Arr.some(
+                entries,
                 (e) =>
                   e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
               ),
             ).toBe(true);
-            expect(entries.some((e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
+            expect(Arr.some(entries, (e) => Predicate.isString(e.stream) && Str.endsWith("/dead")(e.stream))).toBe(
+              true,
+            );
             expect(yield* w.checkpoint(name)).not.toBeNull();
             expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
             yield* w.drain("beta:1");
@@ -325,10 +335,12 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             // Project alone, the call's recovery writes there may fit, and then a later one, on a
             // saved alarm, runs out.
             const spare = required(tape[1]).pick % 2;
+
             const tighten = (allowance: Limits["recovery"]["process"]) => ({
               ...allowance,
               ...(resource === "writes" ? { writes: spare } : { bytes: 1 }),
             });
+
             w.limits({
               ...defaults,
               recovery: {
@@ -428,7 +440,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
-                const m = j === length - 1 ? { type: "inc", text: "é😀".repeat(c.amount % 256) } : { type: "inc" };
+                const m = j === length - 1 ? { type: "inc", text: Str.repeat(c.amount % 256)("é😀") } : { type: "inc" };
                 expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
                 messages.push(id);
               }
@@ -459,11 +471,18 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               expect(yield* w.entries).toEqual(before);
               expect(yield* w.program("sample/alpha")).toEqual(full);
               const after = yield* w.entries;
+              const stepped = new Set<unknown>();
+
+              for (const entry of after) {
+                const id = entry.id;
+
+                if (Predicate.isTagged(entry, "stepped")) {
+                  stepped.add(id);
+                }
+              }
 
               for (const id of messages) {
-                expect(
-                  after.filter((e) => e._tag === "stepped" && e.id === `step:${id}`).length,
-                ).toBeGreaterThanOrEqual(1);
+                expect(stepped.has(`step:${id}`)).toBe(true);
               }
 
               w.limits(defaults);
@@ -504,7 +523,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 expect(yield* w.checkpoint("alpha:1")).toEqual(saved);
                 expect(yield* w.journal("alpha:1")).toEqual(journal);
                 expect((yield* w.local("alpha:1")).recovery).toEqual(usage.recovery);
-                expect((yield* w.entries).filter((e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
+                expect(Arr.filter(yield* w.entries, (e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
               }
 
               yield* TestClock.setTime(at + 60_001);

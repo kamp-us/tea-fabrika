@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-e54-judgment-slice-adds-lock-lines",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/tsconfig.json",
+    "line": 294
+  },
+  "says": "In next/, judgment slice E54 sets newPromise to error in three package tsconfigs, while 0589's first amendment says judgment slices add no lock lines and their locks land together at the end; E86 instead removed its ignore lines to obey the same rule, so the fold applies the rule two ways.",
+  "proof": ".decisions/0589-agents-edit-files-with-any-tool.md:55 says 'no lock lines, and their locks land in one small pull request at the end'; git diff cb978023..7b5abfa0 adds '\"options\": { \"diagnosticSeverity\": { \"newPromise\": \"error\" } }' at next/apps/fabrika/tsconfig.json:81, next/packages/libfabrika/tsconfig.json:294 and next/packages/tuval/tsconfig.json:29 (commit 2213f504), while field/runs/2026-11-16-effect-e86-tests2.json removes E86's reasoned lines under that ruling.",
+  "cost": "The final lock pull request has to work out which locks already landed, and later judgment slices have two examples that conflict.",
+  "head": "7b5abfa0da65980a549cbb3ed9f280713cf64790",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

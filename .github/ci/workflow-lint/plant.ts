@@ -13,7 +13,6 @@ const expected = {
           required: true,
           type: "choice",
           options: [
-            "checklist-pid",
             "watcher-r1",
             "host-pin",
             "host-discovery-timeout",

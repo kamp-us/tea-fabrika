@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-16-p25-pr-head-branch-readback",
+  "date": "2026-11-16",
+  "quests": ["tea-fabrika#888"],
+  "stage": "harness",
+  "kind": "failure",
+  "what": "The lead first pushed the recovered next/ P25 head to a different spelling of the existing pull request branch. The actual PR head readback caught the mismatch before proof dispatch or landing.",
+  "cause": "The push target was taken from a saved summary instead of the existing PR head ref.",
+  "person": false,
+  "primitive": null,
+  "fix": "Read the actual existing pull request head ref before the branch write. The lead verified the old PR head was an ancestor, made a normal push to the existing ref, converted the PR to draft, and independently matched its full head, title and body. No source or history was lost. The extra identical ref is retained until safe cleanup.",
+  "test": "A publisher check could compare its target branch with the named existing PR head ref before pushing.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1099"]
+}

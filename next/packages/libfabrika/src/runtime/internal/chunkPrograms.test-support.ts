@@ -14,6 +14,7 @@
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Str from "effect/String";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 
@@ -56,7 +57,7 @@ const Big = Schema.Struct({
 
 /** @internal The items a `big` input makes: `count` items of send `n`, the last padded with `tail`. */
 export const madeItems = (n: number, count: number, size: number, tail: number) =>
-  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
+  Array.from({ length: count }, (_, i) => ({ s: n, i, pad: Str.repeat(i === count - 1 ? tail : size)("x") }));
 
 /** A plain send's number, read back from the letter its answer echoes. */
 const numbered = (m: unknown): number => {

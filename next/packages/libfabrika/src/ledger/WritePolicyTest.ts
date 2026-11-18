@@ -3,6 +3,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Layer, Result, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction } from "./LedgerTransaction.ts";
@@ -25,7 +26,9 @@ const Cell = Schema.Struct({
 });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(10), Schema.isMaxLength(30));
+
 const options = { arbitrary: { seed: 119120, runs: 40 } };
+
 const body = Schema.TaggedStruct("saved", { text: Schema.String });
 
 const line = (text: string): Line =>
@@ -63,7 +66,7 @@ const size = (entry: Entry) =>
 
 const rows = (sql: Sql) =>
   // oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
-  sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
+  Arr.map(sql.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row));
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("P34c ledger admission", () => {
@@ -77,6 +80,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           sql.exec("CREATE TABLE test_charge (id TEXT PRIMARY KEY, bytes INTEGER NOT NULL)");
           let full = false;
           let calls = 0;
+
           const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerTransactionSql.layer(sql)).pipe(
             Layer.provide(
               Layer.mergeAll(
@@ -90,12 +94,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     }
 
                     sql.exec("INSERT INTO test_charge VALUES (?, ?)", entry.id, size(entry));
+
                     return Result.succeed(undefined);
                   },
                 }),
               ),
             ),
           );
+
           const call = <A, E>(work: Effect.Effect<A, E, Referee>) => work.pipe(Effect.provide(layer));
           const history: Array<{ id: string; line: Line; answer: unknown }> = [];
 
@@ -143,6 +149,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           let cut = -1;
           let refuse = true;
           const rings: Array<unknown> = [];
+
           const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerTransactionSql.layer(sql)).pipe(
             Layer.provide(
               Layer.mergeAll(
@@ -164,12 +171,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     }
 
                     sql.exec("INSERT INTO test_charge VALUES (?, ?)", entry.id, size(entry));
+
                     return Result.succeed(undefined);
                   },
                 }),
               ),
             ),
           );
+
           const run = <A, E, R extends Referee | LedgerTransaction>(work: Effect.Effect<A, E, R>) =>
             work.pipe(Effect.provide(layer));
 
@@ -222,7 +231,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             );
             const committed = rows(sql);
             expect(committed.length).toBe(before.length + width);
-            expect(committed.map((e) => e.rev)).toEqual(Array.from({ length: committed.length }, (_, j) => j + 1));
+            expect(Arr.map(committed, (e) => e.rev)).toEqual(Array.from({ length: committed.length }, (_, j) => j + 1));
             expect(rings.length).toBe(rang + 1);
 
             for (const e of committed) {

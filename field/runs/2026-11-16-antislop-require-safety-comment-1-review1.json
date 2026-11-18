@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-require-safety-comment-1-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:26:03-08:00",
+  "ended": "2026-11-15T22:38:30-08:00",
+  "parent": "2026-11-16-antislop-require-safety-comment-1-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of anti-slop judgment slice AS-require-safety-comment-1 (decisions 0561 and 0563), in next/ and our tooling, at 34b9210: merge-ready. Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker, run through the installed oxlint with a scratch config outside the repo: 300 hits on base bcad008 (client 159, .agents 135, tezgah 6), 0 at head, the same counts the field rows give. Every added line of the diff is a SAFETY comment except four: the three cast removals and drive.test.ts's changed: 0. The removals do not change behavior: tezgah's holding compares strings with some(id === tile) in place of includes (same result for strings), plants.ts's records takes the same last BuildEntry by findLast in place of findLastIndex plus a cast, and drive.ts's draft keeps its type annotation, so its repeated cast was a no-op. changed: 0 fills the one Read field the helper lacked; drive.ts reads it only as read.changed > 0, false for undefined and 0. The comments were read one by one; the spot checks against the code held (LinkMsg's eleven type literals, usage() exits, no cell in chain.ts or drive.ts reads an answer's cmd, the Own Msg case shapes, CursorKey's 256 limit, the size floor of 240, refusedLetter only on a refused send, MARKS and Owner members, land.ts's ReadyJson). Repeated sentences (40 sentences over 106 comments) sit on the same cast repeated in sibling helpers, and each is true for its own line, so 0561's same-sentence constraint is not broken. No assertion deleted or narrowed, no disable line, no .oxlintrc.json, tsconfig or lock change, no file of pull request 1366 touched.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12.5,
+  "note": "Read-only apart from this row. Node 26.13.0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) exits 1 only on oxlint-plugins/lint.ts's prompt that the rule has no hit left in .agents/**, next/packages/libfabrika/src/client/** and next/programs/tezgah/**; every other part passed. pnpm typecheck passed, .agents, libfabrika and tezgah included. Tests one file at a time under nice -n 19 vitest --maxWorkers=1 at 34b9210, all green: agents, boxfiles, codexexec, gc, gcloop, plants, quest, quests, flow/machine, flow/walk, flow/landing, botpush, land, leakgrep.respaced, pr/Arm, pr/Queue, pr/Unlisted, sample, plancheck.draft, plancheck, stepcommit, chain 63, drive 65, HandsMachine.laws, Tezgah.laws, WindowMachine.laws 51, Prefix.laws, WindowStart.laws, tezgah program.laws; mutation run.test.ts 9 passed with its two T300 signal laws skipped. box.test.ts 40 of 47 failed, all on spawnSync ssh-keygen ENOENT, not counted. loosening.sh on bcad008..34b9210: 17 unrecognized-change hits, each an added comment line (and changed: 0), plus one removed-law hit on plancheck.test.ts's 'root exam paths retain owners' law, which is unchanged; a scratch clone shows the hit goes away when the apostrophe in the line-296 comment (repo's) is dropped, so it is a loosening.sh parse false alarm, given as a finding row. No law loosened. PR 1366's 67 files: no overlap. git merge-tree with origin/main: clean (5 commits behind).",
+  "step": "review"
+}

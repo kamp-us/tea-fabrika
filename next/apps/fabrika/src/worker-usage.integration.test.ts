@@ -1,14 +1,28 @@
 // next/, U9. Host/container only: only workerd can deliver loader tail events. This file must not
 // replace a zero CPU reading with a weaker assertion. The build's probe runs before this scenario.
-// edge: crypto supplies an ephemeral public identity; no person's key is read
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// The person's key is a fresh one from Effect's Signature (person-key.test-support.ts); no person's
+// own key is read.
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
+import {
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Array as Arr,
+  String as Str,
+  Formatter,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { scopedEnv } from "./env.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -26,59 +40,6 @@ const FROM = {
   parent: null,
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
   build: "fixture",
-};
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("no public identity");
-  }
-
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
 };
 
 const Frame = Schema.Struct({
@@ -105,13 +66,16 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof identity>) {
+const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity) {
   const tab = "usage";
   const frames: Array<typeof Frame.Type> = [];
 
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -126,9 +90,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   const next = (match: (frame: typeof Frame.Type) => boolean) =>
     until(
       Effect.sync(() => {
-        const at = frames.findIndex(match);
+        const at = Arr.findFirstIndex(frames, match);
 
-        return at < 0 ? undefined : frames.splice(at, 1)[0];
+        return Option.isNone(at) ? undefined : frames.splice(at.value, 1)[0];
       }),
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
       "the signed client received no matching frame within 10 seconds",
@@ -143,9 +107,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
 
   let serial = 0;
 
-  const call = Effect.fnUntraced(function* (method: string, params: unknown) {
+  const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
 
     return yield* next((frame) => frame.id === id);
   });
@@ -163,51 +127,35 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     platform: "headless",
     os: "linux",
     sentAt: FROM.sentAt,
-    signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
 
-  return Effect.fnUntraced(function* (process: string, letter: string, input: unknown) {
+  return Effect.fnUntraced(function* (process: string, letter: string, input: Schema.Json) {
     const reply = yield* call("process.send", { pid: process, letter, m: input, sentAt: FROM.sentAt, seen: 0 });
     expect(reply).toMatchObject({ result: { _tag: "accepted" } });
   });
 });
 
-const spinSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model=Schema.Struct({checksum: Schema.Int});",
-  'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
-  "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
-  'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
-].join("\n");
+const spinSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model=Schema.Struct({checksum: Schema.Int});",
+    'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
+    "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
+    'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
+  ],
+  "\n",
+);
 
 const world = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "usage-worker-" });
-  const oldAlchemy = process.env.ALCHEMY_HOME;
-  const oldHome = process.env.FABRIKA_HOME;
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      process.env.FABRIKA_HOME = home;
-    }),
-    () =>
-      Effect.sync(() => {
-        if (oldHome === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = oldHome;
-        }
-
-        if (oldAlchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = oldAlchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const file = path.join(home, "spin.ts");
   yield* fs.writeFileString(file, spinSource);
@@ -219,12 +167,12 @@ const world = Effect.gen(function* () {
     programs: { "usage/spin": file, "fabrika/checklist": checklist },
   });
 
-  const key = identity();
+  const key = yield* SshsigTest.identity;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.settingsFixture({
+    yield* RecordWireTest.settingsFixture({
       home,
       name: PROJECT,
       person: PERSON,
@@ -265,7 +213,9 @@ const healthRows = (home: string) =>
           );
 
           for (const row of rows) {
-            found.push(Schema.decodeUnknownSync(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row));
+            found.push(
+              yield* Schema.decodeUnknownEffect(Schema.Struct({ spanId: Schema.String, ms: Schema.Finite }))(row),
+            );
           }
         }
       }
@@ -301,22 +251,22 @@ const lifecycle = Schema.Array(
 class World extends Context.Service<World, Effect.Success<typeof world>>()("@kampus/fabrika/worker-usage.test.World") {}
 
 const start = (world: World["Service"], name: string, program: string) =>
-  invoke(
-    world.instance.project(PROJECT),
-    "start",
-    {
-      _tag: "first",
-      id: `start-${name}`,
-      name,
-      code: { program, hash: world.built.programs[program]?.hash ?? "missing" },
-    },
-    world.from,
+  call(() =>
+    world.instance.project(PROJECT).start(
+      {
+        _tag: "first",
+        id: `start-${name}`,
+        name,
+        code: { program, hash: world.built.programs[program]?.hash ?? "missing" },
+      },
+      world.from,
+    ),
   ).pipe(Effect.map((reply) => Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(reply).process));
 
 const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
-    yield* invoke(world.instance.process(process), "open", "usage-probe");
+    yield* call(() => world.instance.process(process).open("usage-probe"));
 
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
@@ -330,10 +280,10 @@ const read = (world: World["Service"], process: string) =>
   });
 
 const cpu = (rows: ReadonlyArray<SpanRow>, method: string) =>
-  rows.filter((row) => row.name === "isolate.cpu" && row.attributes["fab.isolate.method"] === method);
+  Arr.filter(rows, (row) => row.name === "isolate.cpu" && row.attributes["fab.isolate.method"] === method);
 
 const calls = (rows: ReadonlyArray<SpanRow>, method: string) =>
-  rows.filter((row) => row.name === `execution.${method}`);
+  Arr.filter(rows, (row) => row.name === `execution.${method}`);
 
 const duration = (row: SpanRow) => Number(BigInt(row.endTimeUnixNano) - BigInt(row.startTimeUnixNano)) / 1_000_000;
 
@@ -341,8 +291,10 @@ const checkHealth = (home: string, spans: ReadonlyArray<SpanRow>) =>
   Effect.gen(function* () {
     const health = yield* healthRows(home);
 
-    for (const span of spans.filter((row) => row.name === "isolate.cpu")) {
-      expect(health.filter((row) => row.spanId === span.spanId)).toEqual([{ spanId: span.spanId, ms: duration(span) }]);
+    for (const span of Arr.filter(spans, (row) => row.name === "isolate.cpu")) {
+      expect(Arr.filter(health, (row) => row.spanId === span.spanId)).toEqual([
+        { spanId: span.spanId, ms: duration(span) },
+      ]);
     }
   });
 
@@ -367,8 +319,8 @@ const spinSample = Effect.gen(function* () {
     "the spinning update produced no second isolate.cpu row",
   );
 
-  const baseline = cpu(idle, "update").map(duration);
-  const later = cpu(busy, "update").filter((row) => !idle.some((old) => old.spanId === row.spanId));
+  const baseline = Arr.map(cpu(idle, "update"), duration);
+  const later = Arr.filter(cpu(busy, "update"), (row) => !Arr.some(idle, (old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
   const [spinning] = later;
 
@@ -414,20 +366,23 @@ it.layer(
 
         expect(cpu(updated, "update")).toHaveLength(calls(updated, "update").length);
         expect(cpu(updated, "fresh")).toHaveLength(calls(updated, "fresh").length);
-        yield* invoke(instance.process(checklist), "restart", {
-          id: "replay",
-          build: built.programs["fabrika/checklist"]?.hash ?? "missing",
-        });
+        yield* call(() =>
+          instance.process(checklist).restart({
+            id: "replay",
+            build: built.programs["fabrika/checklist"]?.hash ?? "missing",
+          }),
+        );
 
         const started = yield* until(
-          invoke(instance.project(PROJECT), "read", "processes/checklist:2", 0, "usage-probe").pipe(
+          call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
           ),
-          (rows) => rows.some((row) => row.body.after === checklist),
+          (rows) => Arr.some(rows, (row) => row.body.after === checklist),
           "restart recorded no successor within 10 seconds",
         );
 
-        const successor = started.find((row) => row.body.after === checklist)?.body.process;
+        const successor = Option.getOrUndefined(Arr.findFirst(started, (row) => row.body.after === checklist))?.body
+          .process;
 
         if (successor === undefined) {
           return yield* Effect.die("restart recorded no successor");
@@ -450,7 +405,7 @@ it.layer(
           [checklist, updated],
           [successor, folded],
         ] as const) {
-          for (const span of spans.filter((row) => row.name === "isolate.cpu")) {
+          for (const span of Arr.filter(spans, (row) => row.name === "isolate.cpu")) {
             expect(span.attributes["fab.process"]).toBe(process);
             expect(span.attributes["fab.isolate.outcome"]).toBe("ok");
           }

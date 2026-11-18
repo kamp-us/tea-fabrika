@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, pipe, Match, String as Str } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -38,9 +39,9 @@ describe("classify", () => {
         code,
         fc.constantFrom(".agents", "oxlint-plugins", ".github", "scripts"),
         (root, [inner, name, ext], other) => {
-          const below = [...inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part)), `${name}${ext}`];
-          expect(classify([root, ...below].join("/"), false)).toBe("product");
-          expect(classify([other, ...below].join("/"), false)).toBe("other");
+          const below = [...Arr.filter(inner, (part) => !["e2e", "fixtures", "docs"].includes(part)), `${name}${ext}`];
+          expect(classify(Arr.join([root, ...below], "/"), false)).toBe("product");
+          expect(classify(Arr.join([other, ...below], "/"), false)).toBe("other");
         },
       ),
       options,
@@ -56,8 +57,8 @@ describe("classify", () => {
         (root, [inner, name, ext], mark) => {
           const path =
             mark === "fixtures" || mark === "e2e"
-              ? [root, ...inner, mark, `${name}${ext}`].join("/")
-              : [root, ...inner, `${name}.${mark}${ext}`].join("/");
+              ? Arr.join([root, ...inner, mark, `${name}${ext}`], "/")
+              : Arr.join([root, ...inner, `${name}.${mark}${ext}`], "/");
 
           expect(classify(path, false)).toBe("test");
         },
@@ -73,7 +74,7 @@ describe("classify", () => {
         fc.stringMatching(/^[A-Za-z][A-Za-z0-9]{0,7}$/),
         fc.constantFrom(".ts", ".tsx"),
         (inner, subject, ext) => {
-          const path = ["next", ...inner, `${subject}Test${ext}`].join("/");
+          const path = Arr.join(["next", ...inner, `${subject}Test${ext}`], "/");
           expect(isSharedSuite(path)).toBe(true);
           expect(classify(path, false)).toBe("test");
           expect(classify(path, true)).toBe("generated");
@@ -93,12 +94,12 @@ describe("classify", () => {
         fc.constantFrom(".ts", ".tsx"),
         (root, other, inner, subject, ext) => {
           const below = [
-            ...inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part)),
+            ...Arr.filter(inner, (part) => !["e2e", "fixtures", "docs"].includes(part)),
             `${subject}Test${ext}`,
           ];
 
-          expect(classify([root, ...below].join("/"), false)).toBe("product");
-          expect(classify([other, ...below].join("/"), false)).toBe("other");
+          expect(classify(Arr.join([root, ...below], "/"), false)).toBe("product");
+          expect(classify(Arr.join([other, ...below], "/"), false)).toBe("other");
         },
       ),
       options,
@@ -112,7 +113,7 @@ describe("classify", () => {
         word,
         fc.constantFrom("lower", "bare", "folder", "style", "data"),
         (inner, subject, shape) => {
-          const kept = inner.filter((part) => !["e2e", "fixtures", "docs"].includes(part));
+          const kept = Arr.filter(inner, (part) => !["e2e", "fixtures", "docs"].includes(part));
 
           const below = {
             lower: [...kept, `${subject}test.ts`],
@@ -122,7 +123,7 @@ describe("classify", () => {
             data: [...kept, `${subject}Test.json`],
           }[shape];
 
-          const path = ["next", ...(below ?? [])].join("/");
+          const path = Arr.join(["next", ...(below ?? [])], "/");
           expect(isSharedSuite(path)).toBe(false);
           expect(classify(path, false)).toBe("product");
         },
@@ -158,9 +159,9 @@ describe("classify", () => {
   it("property: Markdown and anything under docs/ is docs; a marked file is generated, first of all", () => {
     fc.assert(
       fc.property(fc.constantFrom("next", "apps", ".decisions", "experiments"), code, (root, [inner, name, ext]) => {
-        expect(classify([root, ...inner, `${name}.md`].join("/"), false)).toBe("docs");
-        expect(classify([root, ...inner, "docs", `${name}${ext}`].join("/"), false)).toBe("docs");
-        expect(classify([root, ...inner, `${name}.test${ext}`].join("/"), true)).toBe("generated");
+        expect(classify(Arr.join([root, ...inner, `${name}.md`], "/"), false)).toBe("docs");
+        expect(classify(Arr.join([root, ...inner, "docs", `${name}${ext}`], "/"), false)).toBe("docs");
+        expect(classify(Arr.join([root, ...inner, `${name}.test${ext}`], "/"), true)).toBe("generated");
       }),
       options,
     );
@@ -185,19 +186,21 @@ describe("parseNumstat", () => {
   it("property: every numstat entry is read back, renames by their new path, binaries with no lines", () => {
     fc.assert(
       fc.property(fc.array(NUMSTAT, { maxLength: 12 }), (entries) => {
-        const out = entries
-          .map((entry) =>
-            entry.shape === "binary"
-              ? `-\t-\t${entry.path}\0`
-              : entry.shape === "renamed"
-                ? `${entry.added}\t${entry.deleted}\t\0${entry.from}\0${entry.path}\0`
-                : `${entry.added}\t${entry.deleted}\t${entry.path}\0`,
-          )
-          .join("");
+        const out = pipe(
+          entries,
+          Arr.map((entry) =>
+            Match.value(entry.shape).pipe(
+              Match.when("binary", () => `-\t-\t${entry.path}\0`),
+              Match.when("renamed", () => `${entry.added}\t${entry.deleted}\t\0${entry.from}\0${entry.path}\0`),
+              Match.orElse(() => `${entry.added}\t${entry.deleted}\t${entry.path}\0`),
+            ),
+          ),
+          Arr.join(""),
+        );
 
         const rows = parseNumstat(out);
-        expect(rows.map((row) => row.path)).toEqual(entries.map((entry) => entry.path));
-        rows.forEach((row, at) => {
+        expect(Arr.map(rows, (row) => row.path)).toEqual(Arr.map(entries, (entry) => entry.path));
+        Arr.forEach(rows, (row, at) => {
           const entry = entries[at];
           expect(row._tag).toBe(entry?.shape === "binary" ? "binary" : "text");
 
@@ -218,23 +221,24 @@ describe("countLines and diffLine", () => {
         fc.array(fc.tuple(code, fc.nat(400), fc.boolean()), { maxLength: 10 }),
         fc.integer({ min: 1, max: 2000 }),
         (files, advice) => {
-          const rows: Array<Row> = files.map(([[inner, name, ext], lines, binary], at) => {
-            const path = [at % 2 === 0 ? "next" : ".agents", ...inner, `${name}${at}${ext}`].join("/");
+          const rows: Array<Row> = Arr.map(files, ([[inner, name, ext], lines, binary], at) => {
+            const path = Arr.join([at % 2 === 0 ? "next" : ".agents", ...inner, `${name}${at}${ext}`], "/");
 
             return binary ? Row.cases.binary.make({ path }) : Row.cases.text.make({ path, lines });
           });
 
           const tally = countLines(rows, new Set());
 
-          const product = rows.reduce(
-            (sum, row) => sum + (row._tag === "text" && classify(row.path, false) === "product" ? row.lines : 0),
+          const product = Arr.reduce(
+            rows,
             0,
+            (sum, row) => sum + (row._tag === "text" && classify(row.path, false) === "product" ? row.lines : 0),
           );
 
           expect(tally.product).toBe(product);
-          expect(tally.binary).toBe(rows.filter((row) => row._tag === "binary").length);
+          expect(tally.binary).toBe(Arr.filter(rows, (row) => row._tag === "binary").length);
           const line = diffLine(tally, advice);
-          expect(line.includes("should it have been sliced?")).toBe(product > advice);
+          expect(pipe(line, Str.includes("should it have been sliced?"))).toBe(product > advice);
           expect(line).not.toMatch(/\bcap\b/);
         },
       ),
@@ -244,24 +248,30 @@ describe("countLines and diffLine", () => {
 });
 
 const table = (cells: ReadonlyArray<string>) =>
-  [
-    "| File | Product lines expected | Owner |",
-    "|---|---:|---|",
-    ...cells.map((cell, at) => `| \`f${at}.ts\` | ${cell} | build |`),
-  ].join("\n");
+  Arr.join(
+    [
+      "| File | Product lines expected | Owner |",
+      "|---|---:|---|",
+      ...Arr.map(cells, (cell, at) => `| \`f${at}.ts\` | ${cell} | build |`),
+    ],
+    "\n",
+  );
 
 const sizeSection = (slices: ReadonlyArray<number | null>) =>
-  [
-    "## Size",
-    "",
-    "Seven pull requests, each one landing whole.",
-    "",
-    ...slices.map((lines, at) =>
-      lines === null
-        ? `${at + 1}. **Slice ${at + 1}.** No estimate yet.`
-        : `${at + 1}. **Slice ${at + 1}: ${lines} lines.** Some words.`,
-    ),
-  ].join("\n");
+  Arr.join(
+    [
+      "## Size",
+      "",
+      "Seven pull requests, each one landing whole.",
+      "",
+      ...Arr.map(slices, (lines, at) =>
+        lines === null
+          ? `${at + 1}. **Slice ${at + 1}.** No estimate yet.`
+          : `${at + 1}. **Slice ${at + 1}: ${lines} lines.** Some words.`,
+      ),
+    ],
+    "\n",
+  );
 
 const cell = fc.oneof(
   fc.nat(900).map((n) => ({ text: String(n), lines: n })),
@@ -276,21 +286,24 @@ describe("readPlan and advise", () => {
         fc.array(cell, { minLength: 1, maxLength: 12 }),
         fc.array(fc.option(fc.nat(1200), { nil: null }), { maxLength: 7 }),
         (cells, slices) => {
-          const plan = [
-            "## Files",
-            "",
-            table(cells.map((c) => c.text)),
-            "",
-            sizeSection(slices),
-            "",
-            "## Records",
-            "",
-            "1. not a slice: 9000 lines",
-          ].join("\n");
+          const plan = Arr.join(
+            [
+              "## Files",
+              "",
+              table(Arr.map(cells, (c) => c.text)),
+              "",
+              sizeSection(slices),
+              "",
+              "## Records",
+              "",
+              "1. not a slice: 9000 lines",
+            ],
+            "\n",
+          );
 
           const size = readPlan(plan);
-          expect(size.table).toBe(cells.reduce((sum, c) => sum + c.lines, 0));
-          expect(size.slices.map((slice) => slice.lines)).toEqual(slices);
+          expect(size.table).toBe(Arr.reduce(cells, 0, (sum, c) => sum + c.lines));
+          expect(Arr.map(size.slices, (slice) => slice.lines)).toEqual(slices);
         },
       ),
       options,
@@ -300,8 +313,8 @@ describe("readPlan and advise", () => {
   it("property: advice names exactly the slices with no estimate, whatever the others expect (0099)", () => {
     fc.assert(
       fc.property(fc.array(fc.option(fc.nat(100_000), { nil: null }), { minLength: 1, maxLength: 7 }), (slices) => {
-        const named = advise(readPlan(sizeSection(slices))).map((a) => (a._tag === "unsized" ? a.order : 0));
-        expect(named).toEqual(slices.flatMap((lines, at) => (lines === null ? [at + 1] : [])));
+        const named = Arr.map(advise(readPlan(sizeSection(slices))), (a) => (a._tag === "unsized" ? a.order : 0));
+        expect(named).toEqual(Arr.flatMap(slices, (lines, at) => (lines === null ? [at + 1] : [])));
       }),
       options,
     );
@@ -310,25 +323,28 @@ describe("readPlan and advise", () => {
   it("property: a plan with a product lines column and no slices gets no advice, however large its table (0099)", () => {
     fc.assert(
       fc.property(fc.array(cell, { minLength: 1, maxLength: 12 }), (cells) => {
-        expect(advise(readPlan(table(cells.map((c) => c.text))))).toEqual([]);
+        expect(advise(readPlan(table(Arr.map(cells, (c) => c.text))))).toEqual([]);
       }),
       options,
     );
   });
 
   it("scenario: a table in a fence is an example, an escaped pipe stays in its cell, and no column is unknown", () => {
-    const fenced = [
-      "```md",
-      table(["900"]),
-      "```",
-      "",
-      "| File \\| path | Product lines expected |",
-      "|---|---|",
-      "| a \\| b | 700 |",
-    ].join("\n");
+    const fenced = Arr.join(
+      [
+        "```md",
+        table(["900"]),
+        "```",
+        "",
+        "| File \\| path | Product lines expected |",
+        "|---|---|",
+        "| a \\| b | 700 |",
+      ],
+      "\n",
+    );
 
     expect(readPlan(fenced)).toEqual({ table: 700, slices: [] });
-    expect(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |")).map((a) => a._tag)).toEqual([
+    expect(Arr.map(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |")), (a) => a._tag)).toEqual([
       "unknown",
     ]);
   });
@@ -375,7 +391,7 @@ describe("the command", () => {
 
         expect(got.status, got.stderr).toBe(0);
 
-        return got.stdout.trim();
+        return Str.trim(got.stdout);
       };
 
       const write = (path: string, text: string) => {
@@ -384,7 +400,10 @@ describe("the command", () => {
       };
 
       const lines = (n: number, tag: string) =>
-        `${Array.from({ length: n }, (_, at) => `line ${tag} ${at}`).join("\n")}\n`;
+        `${Arr.join(
+          Array.from({ length: n }, (_, at) => `line ${tag} ${at}`),
+          "\n",
+        )}\n`;
 
       git("init", "-q", "-b", "main");
       write(".fabrika/fabrika.toml", "[review]\nlines = 50\n");
@@ -411,7 +430,7 @@ describe("the command", () => {
         "size: 63 product lines; not counted: 500 test, 0 docs, 0 lock, 70 generated, 3 other lines, 0 binary files\n",
       );
 
-      write("plan.md", [table(["450", "tests"]), "", sizeSection([450, 700])].join("\n"));
+      write("plan.md", Arr.join([table(["450", "tests"]), "", sizeSection([450, 700])], "\n"));
       const plan = run("plan", "plan.md");
       expect(plan.status, plan.stderr).toBe(0);
       expect(plan.stdout).toBe("size: 450 product lines in the files table, 2 slices, the largest 700\n");

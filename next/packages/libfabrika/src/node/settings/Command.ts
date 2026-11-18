@@ -4,14 +4,17 @@
  * person's file, the declared environment names and the declared flags. The whole report is built
  * before anything prints, and it writes nothing and starts nothing.
  */
-
+import * as Arr from "effect/Array";
 import * as Command from "effect/cli/Command";
 import * as Flag from "effect/cli/Flag";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as Declarations from "../../settings/Declarations.ts";
+import { Fabrika } from "../../settings/Fabrika.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";
 import * as Load from "./Load.ts";
@@ -20,7 +23,7 @@ const declarations = Declarations.all.declarations;
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 const optional = (name: string) => Config.String(name).pipe(Config.withDefault(undefined));
 
@@ -41,8 +44,8 @@ export const make = (options: { readonly version: string }) =>
     "settings",
     {
       // Each declared setting is a flag at its own path, as --instance.port.
-      settings: Object.fromEntries(
-        declarations.map((d) => [
+      settings: Rec.fromEntries(
+        Arr.map(declarations, (d) => [
           d.path,
           Flag.String(d.path).pipe(Flag.withDescription(d.doc), Flag.withDefault(undefined)),
         ]),
@@ -55,13 +58,13 @@ export const make = (options: { readonly version: string }) =>
     (flags) =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
-        const fabrikaHome = yield* optional("FABRIKA_HOME");
-        const home = fabrikaHome ?? path.join(yield* Config.String("HOME"), ".fabrika");
+        const moved = yield* optional(Fabrika.home);
+        const home = moved ?? path.join(yield* Config.String("HOME"), `.${Fabrika.name}`);
 
-        // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
+        // A person reads their file's name from ~ or the app's home variable, never as this machine's path.
         const person = {
-          path: path.join(home, "fabrika.toml"),
-          name: `${fabrikaHome === undefined ? "~/.fabrika" : "$FABRIKA_HOME"}/fabrika.toml`,
+          path: path.join(home, `${Fabrika.name}.toml`),
+          name: moved === undefined ? Fabrika.person : `$${Fabrika.home}/${Fabrika.name}.toml`,
         };
 
         const env: Array<readonly [string, string | undefined]> = [];
@@ -72,7 +75,7 @@ export const make = (options: { readonly version: string }) =>
 
         const loaded = yield* Load.load({
           person,
-          flags: present(declarations.map((d) => [d.path, flags.settings[d.path]])),
+          flags: present(Arr.map(declarations, (d) => [d.path, flags.settings[d.path]])),
           env: present(env),
           version: options.version,
         });
@@ -85,6 +88,6 @@ export const make = (options: { readonly version: string }) =>
           yield* Console.error(warning);
         }
 
-        yield* Console.log(report.trimEnd());
+        yield* Console.log(Str.trimEnd(report));
       }),
   ).pipe(Command.withDescription("Print the settings this fabrika reads, with their origins and defaults."));

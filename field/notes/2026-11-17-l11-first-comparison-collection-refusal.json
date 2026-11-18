@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "failure",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-l11-first-comparison-collection-refusal",
+  "quests": [
+    "tea-fabrika#1135",
+    "tea-fabrika#1129"
+  ],
+  "what": "Today's L11 executor verified both fixed historical source snapshots but refused their collected test lists before running any test.",
+  "cause": "Installed Vitest 5.0.5 defaults list to static parsing. That parser copies template source without expanding loop registrations. The executor omitted --staticParse=false, so the dynamically registered L11 names could not match its strict collection-name contract. Both actual source jobs returned collection_mismatch. The exact raw list and its row count were not retained, so no observed count is claimed. The collector missing_report is downstream of zero test observations.",
+  "fix": null,
+  "test": "Actual manual run 44086970814, attempt 1, used trusted main ad9082bc34bf32a21aa7a30e1b00e10f68cc6170. Cached source 07c65ba2f2065cc87dfdab106b81534652af011e and uncached source 610ab4c2097e363979cc16ec89675f9aa9d64a44 passed exact source, product, lock and installed-version checks. All three public records passed the strict Report schema, and both collector receipt hashes matched the compact encoded source records. Both source jobs recorded unchanged files, HEAD, index and status after cleanup.",
+  "limits": "Zero L11 tests ran. Executor setup durations are not law timings. No speedup, timeout cause, input equality, output fault or batch result follows from this attempt. Later cases were not dispatched while this cause remained open. No local protected list or test ran.",
+  "runner": "ad9082bc34bf32a21aa7a30e1b00e10f68cc6170",
+  "run": "44086970814",
+  "attempt": 1,
+  "tests": 0,
+  "sources": [
+    {
+      "variant": "uncached",
+      "sha": "610ab4c2097e363979cc16ec89675f9aa9d64a44",
+      "job": 134051820242,
+      "result": "collection_mismatch",
+      "cleanup": true
+    },
+    {
+      "variant": "cached",
+      "sha": "07c65ba2f2065cc87dfdab106b81534652af011e",
+      "job": 134051819768,
+      "result": "collection_mismatch",
+      "cleanup": true
+    }
+  ],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44086970814",
+    "https://github.com/kamp-us/tea-fabrika/pull/1560"
+  ]
+}

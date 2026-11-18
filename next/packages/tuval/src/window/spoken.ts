@@ -7,6 +7,8 @@
 import type { AnyTile, WindowRegistration } from "@kampus/libfabrika";
 import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import type { Tile } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import type { ReactNode } from "react";
 import { tileWords } from "./Layout.tsx";
 
@@ -53,4 +55,9 @@ export const spoken = <T extends Named>(
   m: Pick<WindowModel, "said">,
   lookup: (id: string) => T | null,
   windowFor: (tile: T) => TileWindow | null,
-): string => m.said.messages.flatMap((message) => wordsFor(message, lookup, windowFor) ?? []).join(", ");
+): string =>
+  Function.pipe(
+    m.said.messages,
+    Arr.flatMap((message) => Arr.fromNullishOr(wordsFor(message, lookup, windowFor))),
+    Arr.join(", "),
+  );

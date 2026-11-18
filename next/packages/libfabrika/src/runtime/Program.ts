@@ -4,9 +4,18 @@
  * runs a Cmd: the runner does that, after the input is saved.
  */
 import { applyCell, msgKeysOf, type AnyCmdDef } from "@demlik/tea";
-import { Effect, Option, Predicate, Result, Schema, type SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
+import * as SchemaTransformation from "effect/SchemaTransformation";
 import { ParentText } from "../coordination/index.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
+import { isJsonObject } from "./Patch.ts";
 
 /** A function type whose parameters TypeScript checks both ways, as it does a method's: a program
  *  declares `(model: Model) => …`, and the runner calls it with the model it decoded. */
@@ -185,8 +194,8 @@ export type EventPolicy = typeof EventPolicy.Type;
  *  that message arrives on: the load refuses one that does not, before any `DOWN` can be dropped. */
 const downDeclared = Schema.makeFilter(
   (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, unknown>> }) =>
-    !(program.machine.cmds ?? []).some((cmd) => cmd.cmdType === "monitor") ||
-    Object.hasOwn(program.inputs, "DOWN") ||
+    !Arr.some(program.machine.cmds ?? [], (cmd) => cmd.cmdType === "monitor") ||
+    Rec.has(program.inputs, "DOWN") ||
     "a program whose cmds hold monitor must declare a DOWN input",
 );
 
@@ -384,15 +393,15 @@ const construct = (raw: unknown) =>
       state: { ...spec.state, schema: spec.machine.model },
       msg: spec.machine.msg,
       view: { data: Schema.Json, select: spec.view },
-      inputs: Object.fromEntries(
-        Object.entries(spec.inputs).map(([key, port]) => [
+      inputs: Rec.fromEntries(
+        Arr.map(Rec.toEntries(spec.inputs), ([key, port]) => [
           key,
-          typeof port !== "string" && "_tag" in port
+          !Predicate.isString(port) && "_tag" in port
             ? port
             : Input.cases.write.make({
                 schema: spec.machine.msg,
-                description: typeof port === "string" ? port : port.description,
-                personOnly: typeof port !== "string",
+                description: Predicate.isString(port) ? port : port.description,
+                personOnly: !Predicate.isString(port),
               }),
         ]),
       ),
@@ -466,6 +475,83 @@ const makeEffect = Effect.fn("program.make")(function* <
  * @category constructors
  */
 export const Program = { schema: Declaration, make, makeEffect };
+
+type PortFields<M, K extends string> = M extends Typed ? (K extends M["type"] ? Omit<M, "type"> : never) : never;
+
+type PortSchema<P extends typeof Declaration.Type, K extends string> = string extends K
+  ? Declared
+  : K extends keyof P["inputs"]
+    ? P["inputs"][K] extends Pick<typeof InputSchema.cases.read.Type, "_tag"> & {
+        readonly schema: infer S extends Declared;
+      }
+      ? S
+      : unknown extends P["msg"]["Type"]
+        ? Declared
+        : Schema.Codec<PortFields<P["msg"]["Type"], K>, unknown>
+    : Declared;
+
+const Payload = Schema.Record(Schema.String, Schema.Json).check(
+  Schema.makeFilter((value) => !Object.hasOwn(value, "type")),
+);
+
+const Fields = Schema.Record(Schema.String, Schema.Unknown);
+
+// Keep the Msg's codecs and checks intact. Only add and remove the port's discriminator.
+const writePortCodec = (msg: Declared, key: string) =>
+  Payload.pipe(
+    Schema.decodeTo(
+      Schema.toCodecJson(msg),
+      SchemaTransformation.transform<Schema.Json, Readonly<Record<string, Schema.Json>>>({
+        decode: (value) => ({ ...value, type: key }),
+        encode: (wire) => {
+          if (!isJsonObject(wire)) {
+            return {};
+          }
+
+          const { type: _, ...value } = wire;
+
+          return value;
+        },
+      }),
+    ),
+    Schema.decodeTo(Fields.check(Schema.makeFilter((m) => m.type === key))),
+    Schema.decodeTo(
+      Fields,
+      SchemaTransformation.transform({
+        decode: (m) => {
+          const { type: _, ...fields } = Predicate.isObject(m) ? m : {};
+
+          return fields;
+        },
+        encode: (fields) => ({ ...fields, type: key }),
+      }),
+    ),
+  );
+
+/**
+ * Returns the schema of one of a program's ports, or none when the program declares no port by
+ * that name. A read port gives its own schema. A write port gives a codec for its Msg's fields
+ * without `type`, which decodes and checks them with the Msg's own JSON codec.
+ *
+ * @category getters
+ */
+export function port<P extends typeof Declaration.Type, K extends string>(
+  program: P,
+  key: K,
+): Option.Option<PortSchema<P, K>>;
+export function port(program: typeof Declaration.Type, key: string): Option.Option<Declared> {
+  const input = Object.hasOwn(program.inputs, key) ? program.inputs[key] : undefined;
+
+  if (input === undefined) {
+    return Option.none();
+  }
+
+  if (Input.isAnyOf(["read"])(input)) {
+    return Option.some(input.schema);
+  }
+
+  return Option.some(writePortCodec(program.msg, key));
+}
 
 /** A JSON object: an event as it travels inside a write. Its declared schema gives its `_tag`. */
 const Event = Schema.Record(Schema.String, Schema.Json);
@@ -561,7 +647,7 @@ export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown"
       return this.error;
     }
 
-    const original = Object.hasOwn(this, "cause") ? this.cause : this;
+    const original = "cause" in this ? this.cause : this;
 
     return original instanceof Error ? original.constructor.name : original === null ? "null" : typeof original;
   }
@@ -603,7 +689,7 @@ const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
 
 /** What each failed result failed with, in order: a check that meets several keeps them all. */
 const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): ReadonlyArray<unknown> =>
-  results.flatMap((result) => (Result.isFailure(result) ? [result.failure] : []));
+  Arr.flatMap(results, (result) => (Result.isFailure(result) ? [result.failure] : []));
 
 /** Runs `f`, turning any throw into ProgramDown with `reason`. */
 const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
@@ -637,7 +723,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
   }
 
   const type = typed.value.type;
-  const def = defs.find((d) => d.okType === type || d.errType === type);
+  const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.okType === type || d.errType === type));
 
   if (def === undefined || !Predicate.isObjectOrArray(msg)) {
     return Option.none();
@@ -692,7 +778,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const decodeModel = Schema.decodeUnknownResult(program.state.schema);
   const encodeModel = Schema.encodeUnknownResult(program.state.schema);
   const encodeView = Schema.encodeUnknownResult(program.view.data);
-  const decodeMsg = Schema.decodeUnknownResult(program.msg);
+  const decodeMsg = Schema.decodeUnknownResult(Schema.toCodecJson(program.msg));
 
   /** A model as the program's own value, or ProgramDown with `reason`. */
   const model = (raw: unknown, reason: ProgramDown["reason"]): unknown => {
@@ -705,13 +791,16 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return decoded.success;
   };
 
-  /** A Msg as the machine takes it: a settled Cmd Msg, or one the program's Msg schema decodes. */
+  /** A Msg as the machine takes it: a settled Cmd Msg, or one the Msg schema's JSON codec decodes. */
   const message = (raw: unknown, saved: boolean): Option.Option<Typed> => {
     const typed = decodeTyped(raw);
 
     if (
       !saved &&
-      Option.exists(typed, (m) => m.type === "timer" || defs.some((d) => d.okType === m.type || d.errType === m.type))
+      Option.exists(
+        typed,
+        (m) => m.type === "timer" || Arr.some(defs, (d) => d.okType === m.type || d.errType === m.type),
+      )
     ) {
       return Option.none();
     }
@@ -737,7 +826,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       return false;
     }
 
-    const def = defs.find((d) => d.cmdType === typed.value.type);
+    const def = Option.getOrUndefined(Arr.findFirst(defs, (d) => d.cmdType === typed.value.type));
 
     if (def === undefined) {
       return true;
@@ -753,9 +842,14 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const encoded = encodeModel(next);
     const view = guard(reason, () => encodeView(program.view.select(next)));
     const wake = guard(reason, () => decodeWake(program.wake(next)));
-    const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
+    const json = Arr.map(cmds, (cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 
-    if (Result.isFailure(encoded) || Result.isFailure(view) || Result.isFailure(wake) || json.some(Result.isFailure)) {
+    if (
+      Result.isFailure(encoded) ||
+      Result.isFailure(view) ||
+      Result.isFailure(wake) ||
+      Arr.some(json, Result.isFailure)
+    ) {
       throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
     }
 
@@ -769,7 +863,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     return Step.cases.stepped.make({
       model: model.success,
       view: shown.success,
-      cmds: json.flatMap((one) => (Result.isSuccess(one) ? [one.success] : [])),
+      cmds: Arr.flatMap(json, (one) => (Result.isSuccess(one) ? [one.success] : [])),
       wake: wake.success,
     });
   };

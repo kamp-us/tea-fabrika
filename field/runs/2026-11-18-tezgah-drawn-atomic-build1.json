@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-tezgah-drawn-atomic-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1612",
+  "started": "2026-11-18T02:10:00-08:00",
+  "ended": "2026-11-18T02:22:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build step for slice A of the two-flakes plan (docs/plan/quests/tezgah-drawn-atomic-PLAN.md, tickets 1166 and L33, decision 0036) in next/. The plan gives every file to the tests step, so there is no product file. Confirmed T1 (next/apps/fabrika/e2e/tezgah-drawn.visual.test.ts) is green at 240314b (1 test, 100 runs, about 11 s). Read the helper fix in next/apps/fabrika/e2e/tezgah.test-support.ts: drawn and foldDrawn read names and boxes in one evaluateAll per list with no waiting read, and the Drawn and FoldDrawn types and differences, foldDifferences, settle and foldSettle are unchanged, so the fix is inside the plan. No product commit.",
+  "note": "Started time is approximate; usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. The run used CI=1 for the local-limit guard (this container has Node 22, the pin is Node 26) and a symlinked browsers folder outside the repo for the Chromium build (1243 installed, 1248 wanted). T2 (30 CI runs of the focus and fold laws) is not run here.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

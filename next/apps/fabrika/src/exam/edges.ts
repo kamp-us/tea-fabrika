@@ -16,8 +16,22 @@
 // It exits 2 when it could not read something. The answer comes back by hand for now: the lead agent
 // relays each line to the owner and posts the answer on the pull request (P35, flag 2).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import {
+  String as Str,
+  pipe,
+  Array as Arr,
+  Config,
+  Console,
+  Effect,
+  Exit,
+  FileSystem,
+  Option,
+  Path,
+  Schema,
+  Stream,
+} from "effect";
 import { ChildProcess } from "effect/process";
+
 import { parseSync } from "oxc-parser";
 
 /** One edge comment: where it stands, the rules it names, as written, and its reason. */
@@ -48,28 +62,34 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
     return yield* Unparsed.make({ path });
   }
 
-  return parsed.comments.flatMap((comment): Edge[] => {
+  return Arr.flatMap(parsed.comments, (comment): Edge[] => {
     const rest = DISABLE.exec(comment.value)?.[1];
 
     if (rest === undefined) {
       return [];
     }
 
-    const at = rest.search(REASON);
+    const at = pipe(rest, Str.search(REASON));
+    const listed = Option.match(at, { onNone: () => rest, onSome: (start) => pipe(rest, Str.slice(0, start)) });
 
-    const rules = (at < 0 ? rest : rest.slice(0, at))
-      .split(",")
-      .map((rule) => rule.trim())
-      .filter((rule) => rule !== "");
+    const rules = pipe(
+      Str.split(listed, ","),
+      Arr.map((rule) => Str.trim(rule)),
+      Arr.filter((rule) => rule !== ""),
+    );
 
-    if (!rules.some((rule) => EDGE_RULES.has(rule))) {
+    if (!Arr.some(rules, (rule) => EDGE_RULES.has(rule))) {
       return [];
     }
 
-    const reason = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
-    const line = text.slice(0, comment.start).split("\n").length;
+    const reason = Option.match(at, {
+      onNone: () => "",
+      onSome: (start) => pipe(rest, Str.slice(start), Str.replace(REASON, ""), Str.trim),
+    });
 
-    return [{ path, line, rules: rules.join(", "), reason }];
+    const line = pipe(text, Str.slice(0, comment.start), Str.split("\n")).length;
+
+    return [{ path, line, rules: Arr.join(rules, ", "), reason }];
   });
 });
 
@@ -122,18 +142,20 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   });
 
   if (code !== 0) {
-    return yield* GitFailed.make({ args: args.join(" "), code });
+    return yield* GitFailed.make({ args: Arr.join(args, " "), code });
   }
 
   return out;
 }, Effect.scoped);
 
-const lines = (text: string) => text.split("\n").filter((line) => line !== "");
+const lines = (text: string) => Arr.filter(Str.split(text, "\n"), (line) => line !== "");
 
 /** A note on one line of the diff, in GitHub's workflow command form. */
 const notice = (edge: Edge) => {
-  const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
-  const location = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
+  const escape = (s: string) =>
+    pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
+
+  const location = pipe(escape(edge.path), Str.replaceAll(":", "%3A"), Str.replaceAll(",", "%2C"));
 
   return `::notice file=${location},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
@@ -144,13 +166,13 @@ const main = Effect.gen(function* () {
   const args = process.argv.slice(2);
   const flag = args.indexOf("--base");
   const against = (flag < 0 ? undefined : args[flag + 1]) ?? "origin/main";
-  const top = (yield* git(["rev-parse", "--show-toplevel"])).trim();
+  const top = Str.trim(yield* git(["rev-parse", "--show-toplevel"]));
 
   const at = Effect.fnUntraced(function* (more: ReadonlyArray<string>) {
     return yield* git(["-C", top, ...more]);
   });
 
-  const base = (yield* at(["merge-base", against, "HEAD"])).trim();
+  const base = Str.trim(yield* at(["merge-base", against, "HEAD"]));
   const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
   const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));
   const fs = yield* FileSystem.FileSystem;
@@ -158,7 +180,7 @@ const main = Effect.gen(function* () {
   const before = new Map<string, string>();
   const after = new Map<string, string>();
 
-  for (const path of changed.filter((p) => CODE.test(p))) {
+  for (const path of Arr.filter(changed, (p) => CODE.test(p))) {
     if (atBase.has(path)) {
       before.set(path, yield* at(["show", `${base}:${path}`]));
     }
@@ -173,7 +195,7 @@ const main = Effect.gen(function* () {
   const head =
     found.length === 0 ? "No new edge comments in this pull request." : "Edges this pull request adds, for the owner:";
 
-  yield* Console.log([head, ...found.map(ask)].join("\n"));
+  yield* Console.log(Arr.join([head, ...Arr.map(found, ask)], "\n"));
   const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
 
   if (Option.isSome(summary)) {
@@ -181,8 +203,8 @@ const main = Effect.gen(function* () {
       yield* Console.log(notice(edge));
     }
 
-    const body = [`### ${head}`, "", ...found.map((edge) => `- \`${ask(edge)}\``), ""];
-    yield* fs.writeFileString(summary.value, `${body.join("\n")}\n`, { flag: "a" });
+    const body = [`### ${head}`, "", ...Arr.map(found, (edge) => `- \`${ask(edge)}\``), ""];
+    yield* fs.writeFileString(summary.value, `${Arr.join(body, "\n")}\n`, { flag: "a" });
   }
 });
 

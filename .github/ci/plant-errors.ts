@@ -4,7 +4,6 @@ import { cases, type Request } from "./plant-cases.ts";
 
 export const Failure = Schema.Struct({
   diagnostic: Schema.Literals([
-    "AssertionError: a notice names its process",
     "AssertionError: direct and nested pnpm versions differ from the explicit Node pin",
     "AssertionError: runtime discovery exceeded the existing command cleanup bound",
     "AssertionError: runtime discovery ignored the explicit Node pin",
@@ -32,6 +31,58 @@ const ErrorDetails = Schema.Struct({
   operator: Schema.optionalKey(Schema.String),
 });
 
+export const Issue = Schema.Struct({
+  kind: Schema.Literals([
+    "AssertionError",
+    "SyntaxError",
+    "ReferenceError",
+    "TypeError",
+    "RangeError",
+    "Error",
+    "timeout",
+    "unknown",
+  ]),
+  frame: Failure.fields.assertion,
+});
+
+/** Diagnostic only: closed error names and a position in the selected test, never error text. */
+export const issue = (key: Request["case"], input: unknown): typeof Issue.Type => {
+  let current = input;
+  const seen = new Set<unknown>();
+
+  while (!seen.has(current)) {
+    seen.add(current);
+
+    const decoded = Schema.decodeUnknownOption(ErrorDetails)(current);
+
+    if (Option.isNone(decoded)) {
+      break;
+    }
+
+    const error = decoded.value;
+
+    if (error.cause != null) {
+      current = error.cause;
+      continue;
+    }
+
+    const frame = new RegExp(`${Regex.escape(cases[key].test)}:([0-9]+):([0-9]+)`).exec(error.stack ?? "");
+
+    const position = Schema.decodeUnknownOption(Failure.fields.assertion)(
+      frame === null ? null : { line: Number(frame[1]), column: Number(frame[2]) },
+    );
+
+    const kind = Schema.decodeUnknownOption(Issue.fields.kind)(error.name);
+
+    return Issue.make({
+      kind: /^Test timed out in [0-9]+ms/.test(error.message) ? "timeout" : Option.getOrElse(kind, () => "unknown"),
+      frame: Option.getOrNull(position),
+    });
+  }
+
+  return Issue.make({ kind: "unknown", frame: null });
+};
+
 const Directory = Schema.String.check(Schema.isPattern(/^\/(?:[^/]+\/)*[^/]+$/));
 
 const Fixture = Schema.Struct({
@@ -45,10 +96,6 @@ const Fixture = Schema.Struct({
 
 const diagnostic = (key: Request["case"], error: typeof ErrorDetails.Type) => {
   const message = error.message;
-
-  if (key === "checklist-pid" && /^a notice names its process(?::|\n|$)/.test(message)) {
-    return "AssertionError: a notice names its process";
-  }
 
   if (key === "watcher-r1") {
     const received = /^expected \{\s*_tag: 'same'/.test(message)
@@ -121,6 +168,7 @@ export const failure = (key: Request["case"], errors: readonly unknown[]) => {
 
   while (!seen.has(current)) {
     seen.add(current);
+
     const decoded = Schema.decodeUnknownOption(ErrorDetails)(current);
 
     if (Option.isNone(decoded)) {

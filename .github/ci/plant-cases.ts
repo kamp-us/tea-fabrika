@@ -3,7 +3,6 @@ import { Effect, RegExp as Regex, Schema } from "effect";
 
 export const Request = Schema.Struct({
   case: Schema.Literals([
-    "checklist-pid",
     "watcher-r1",
     "host-pin",
     "host-discovery-timeout",
@@ -17,17 +16,6 @@ export const Request = Schema.Struct({
 export type Request = typeof Request.Type;
 
 export const cases = {
-  "checklist-pid": {
-    project: "next-integration",
-    file: "next/packages/libfabrika/src/cloudflare/runtime.ts",
-    test: "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts",
-    title:
-      "L13: notices name their process each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    selector:
-      "L13: notices name their process > each view.whole and view.patch for checklist:1 carries its pid and the update its Process published",
-    before: "p.publish(client, { ...update, pid: active })",
-    after: "p.publish(client, { ...update })",
-  },
   "watcher-r1": {
     project: "next-integration",
     file: "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts",
@@ -118,16 +106,19 @@ class UnsupportedEdit extends Schema.TaggedError<UnsupportedEdit, { readonly bra
 export const decodeRequest = Schema.decodeUnknownEffect(Request, { onExcessProperty: "error" });
 
 /** Require the exact unique fragment and lossless UTF-8 before changing any bytes. */
-export const derive = Effect.fn("plant.derive")(function* (key: Request["case"], bytes: Uint8Array) {
+const replace = Effect.fn("plant.replace")(function* (
+  bytes: Uint8Array,
+  selected: { readonly before: string; readonly after: string },
+) {
   const text = new TextDecoder().decode(bytes);
   const encoded = new TextEncoder().encode(text);
-  const selected = cases[key];
   const start = text.indexOf(selected.before);
 
   if (
     !bytes.every((value, i) => value === encoded[i]) ||
     encoded.length !== bytes.length ||
     start < 0 ||
+    (selected.after.includes(selected.before) && text.includes(selected.after)) ||
     text.includes(selected.before, start + 1)
   ) {
     return yield* UnsupportedEdit.make({});
@@ -135,6 +126,11 @@ export const derive = Effect.fn("plant.derive")(function* (key: Request["case"],
 
   return new TextEncoder().encode(text.slice(0, start) + selected.after + text.slice(start + selected.before.length));
 });
+
+export const derive = (key: Request["case"], bytes: Uint8Array) => replace(bytes, cases[key]);
+
+/** Retained cases run against the exact captured source bytes. */
+export const prepare = Effect.fn("plant.prepare")((_key: Request["case"], bytes: Uint8Array) => Effect.succeed(bytes));
 
 export const argv = (key: Request["case"], report: string): readonly string[] => [
   "-n",

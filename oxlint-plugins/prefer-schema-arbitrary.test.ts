@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -71,7 +72,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
       symlinkSync(join(root, "vendor"), join(dir, "vendor"));
     }
 
-    for (const [path, text] of Object.entries(files)) {
+    for (const [path, text] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(dir, path)), { recursive: true });
       writeFileSync(join(dir, path), text);
     }
@@ -79,14 +80,14 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     const ran = spawnSync(
       runner ? process.execPath : oxlint,
       runner
-        ? [join(root, "oxlint-plugins/lint.ts"), ...args, ...Object.keys(files)]
+        ? [join(root, "oxlint-plugins/lint.ts"), ...args, ...Rec.keys(files)]
         : [
             `--config=${join(dir, ".oxlintrc.json")}`,
             "--disable-nested-config",
             "--no-ignore",
             "--format=json",
             ...args,
-            ...Object.keys(files),
+            ...Rec.keys(files),
           ],
       { cwd: dir, encoding: "utf8", timeout: 10_000 },
     );
@@ -95,16 +96,18 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     expect(ran.signal).toBeNull();
 
     if (runner) {
+      // SAFETY: an empty hit list, given its element type: the runner's own run reports nothing.
       return { ran, hits: [] as Diagnostic[] };
     }
 
+    // SAFETY: the run's stdout is oxlint's JSON report, whose `diagnostics` hold the fields `Diagnostic` names.
     const report = JSON.parse(ran.stdout) as { diagnostics: Diagnostic[] };
     expect(
-      report.diagnostics.filter((d) => d.code.includes("parse")),
+      Arr.filter(report.diagnostics, (d) => d.code.includes("parse")),
       ran.stderr,
     ).toEqual([]);
 
-    return { ran, hits: report.diagnostics.filter((d) => d.code === code) };
+    return { ran, hits: Arr.filter(report.diagnostics, (d) => d.code === code) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -128,26 +131,27 @@ const cases = () => {
     const filename = "next/unit.test.ts";
     tester.run("prefer-schema-arbitrary", preferSchemaArbitrary, {
       valid: hits.length === 0 ? [{ code: text, filename }] : [],
-      invalid: hits.length === 0 ? [] : [{ code: text, filename, errors: hits.map((hit) => ({ ...hit })) }],
+      invalid: hits.length === 0 ? [] : [{ code: text, filename, errors: Arr.map(hits, (hit) => ({ ...hit })) }],
     });
     all.push({ text, hits });
   };
 
   /** One oxlint run over every case's file, through the repo's own config: the same reports. */
   const cli = () => {
-    const files = all.map((_, i) => `next/case${i}.test.ts`);
-    const { hits } = lint(Object.fromEntries(all.map(({ text }, i) => [files[i]!, text])));
+    const files = Arr.map(all, (_, i) => `next/case${i}.test.ts`);
+    const { hits } = lint(Rec.fromEntries(Arr.map(all, ({ text }, i) => [files[i]!, text])));
 
-    const found = files.map((file) =>
-      hits
-        .filter((d) => d.filename === file)
-        .map((d) => ({ line: d.labels[0]!.span.line, message: d.message }))
-        .sort((a, b) => a.line - b.line),
+    const found = Arr.map(files, (file) =>
+      pipe(
+        hits,
+        Arr.filter((d) => d.filename === file),
+        Arr.map((d) => ({ line: d.labels[0]!.span.line, message: d.message })),
+      ).sort((a, b) => a.line - b.line),
     );
 
     expect(found).toEqual(
-      all.map(({ hits }) =>
-        hits.map((hit) => ({ line: hit.line ?? expect.any(Number), message: expect.stringMatching(hit.message) })),
+      Arr.map(all, ({ hits }) =>
+        Arr.map(hits, (hit) => ({ line: hit.line ?? expect.any(Number), message: expect.stringMatching(hit.message) })),
       ),
     );
   };
@@ -230,8 +234,8 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
         ];
 
         want(
-          prefix + lines.join("\n"),
-          lines.map((_, i) => ({ line: i + 5, message: ADVICE })),
+          prefix + Arr.join(lines, "\n"),
+          Arr.map(lines, (_, i) => ({ line: i + 5, message: ADVICE })),
         );
       }),
       options,
@@ -257,9 +261,9 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
 
           const data = named
             ? [`${alias}({x: ${alias}({})})`]
-            : constructors.map((ctor) => `${alias}.${ctor}(${ctor === "record" ? `{x: ${alias}.string()}` : ""})`);
+            : Arr.map(constructors, (ctor) => `${alias}.${ctor}(${ctor === "record" ? `{x: ${alias}.string()}` : ""})`);
 
-          const lines = data.map((expr, i) =>
+          const lines = Arr.map(data, (expr, i) =>
             evidence === "type"
               ? `export const g${i}: ${named ? "import('fast-check')" : alias}.Arbitrary<typeof S.Type> = ${expr};`
               : `export const g${i} = ${expr}.map(S.${evidence === "case" ? "cases.x." : ""}make);`,
@@ -267,12 +271,14 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
 
           // Import-type annotations have no namespace binding; use the maker for named imports.
           const body =
-            named && evidence === "type" ? data.map((expr, i) => `export const g${i} = ${expr}.map(S.make);`) : lines;
+            named && evidence === "type"
+              ? Arr.map(data, (expr, i) => `export const g${i} = ${expr}.map(S.make);`)
+              : lines;
 
           // Each message holds the schema's name, S, and the nearby reason that excuses one.
           want(
-            prefix + body.join("\n"),
-            body.map((_, i) => ({ line: i + 4, message: /^(?=[^]*S)(?=[^]*nearby reason)/ })),
+            prefix + Arr.join(body, "\n"),
+            Arr.map(body, (_, i) => ({ line: i + 4, message: /^(?=[^]*S)(?=[^]*nearby reason)/ })),
           );
         },
       ),
@@ -331,7 +337,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
   it("T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too", () => {
     fc.assert(
       fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {
-        const text = `${imports(alias)}export const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
+        const text = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\n\nconst S = Schema.Struct({x: Schema.String});\n\nexport const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
 
         const { hits } = lint({
           [`next/unit.test.${ext}`]: text,

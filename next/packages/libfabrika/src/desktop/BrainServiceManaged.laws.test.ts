@@ -1,5 +1,6 @@
 // P19 next/. L1/L2/L4/L5 drive the real service through held native replies and TestClock.
 import { expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -8,7 +9,9 @@ import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Outside from "./BrainControl.test-support.ts";
@@ -45,15 +48,21 @@ const progress = Effect.fnUntraced(function* (outside: Outside, n: number, actio
     yield* outside.observe({ job: Outside.loaded(), listener: "waiting", children: "alive" });
   }
 
-  if (call.action === "ready" && !wait) {
+  if (call.action === "ready" && wait !== true) {
     yield* outside.observe({ listener: n % 3 === 0 ? "waiting" : "ready" });
   }
 
-  if (call.action === "inspect" && action === "stop" && outside.calls.includes("stop") && !wait && n % 3 !== 0) {
+  if (
+    call.action === "inspect" &&
+    action === "stop" &&
+    outside.calls.includes("stop") &&
+    wait !== true &&
+    n % 3 !== 0
+  ) {
     yield* outside.observe({ job: Outside.absent });
   }
 
-  if (call.action === "cleanup" && !wait) {
+  if (call.action === "cleanup" && wait !== true) {
     yield* outside.observe({ children: "gone", listener: "waiting" });
   }
 
@@ -88,15 +97,14 @@ it.effect.prop(
   [schedule],
   ([v]) =>
     Effect.gen(function* () {
-      const job =
-        v.initial === "absent"
-          ? Outside.absent
-          : v.initial === "foreign"
-            ? {
-                ...Outside.foreign,
-                args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
-              }
-            : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+      const job = Match.value(v.initial).pipe(
+        Match.when("absent", () => Outside.absent),
+        Match.when("foreign", () => ({
+          ...Outside.foreign,
+          args: v.sameArity ? Arr.map(Outside.spec.args, (arg) => `${arg}.foreign`) : Outside.foreign.args,
+        })),
+        Match.orElse(() => Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81)),
+      );
 
       const outside = yield* Outside.make({
         job,
@@ -120,8 +128,8 @@ it.effect.prop(
       }
 
       const wanted = v.initial === "absent" ? 1 : 0;
-      expect(outside.calls.filter((a) => a === "install")).toHaveLength(wanted);
-      expect(outside.calls.filter((a) => a === "start")).toHaveLength(wanted);
+      expect(Arr.filter(outside.calls, (a) => a === "install")).toHaveLength(wanted);
+      expect(Arr.filter(outside.calls, (a) => a === "start")).toHaveLength(wanted);
       expect(outside.calls).not.toContain("stop");
     }),
   checks(200),
@@ -231,7 +239,7 @@ it.effect.prop(
       const brain = Context.get(context, BrainService);
       const up = yield* Effect.forkScoped(brain.up);
 
-      for (let n = 0; n < 10 && !outside.pending.some((call) => call.action === "start"); n++) {
+      for (let n = 0; n < 10 && !Arr.some(outside.pending, (call) => call.action === "start"); n++) {
         yield* progress(outside, n, "up");
       }
 
@@ -269,7 +277,7 @@ it.effect.prop(
         expect(Exit.isSuccess(yield* finish(outside, repeat, "up", v.steps))).toBe(true);
       }
 
-      expect(outside.calls.filter((action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
+      expect(Arr.filter(outside.calls, (action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
       expect(outside.calls.indexOf("stop")).toBeGreaterThan(outside.calls.indexOf("start"));
     }),
   checks(150),
@@ -434,7 +442,7 @@ it.effect.prop(
           Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
           ...logs,
           Formatter.formatJson(
-            spans.map((s) => ({ attributes: [...s.attributes], events: s.events, status: s.status })),
+            Arr.map(spans, (s) => ({ attributes: [...s.attributes], events: s.events, status: s.status })),
           ),
           Outside.spec.url,
         ];
@@ -443,8 +451,8 @@ it.effect.prop(
           for (const form of [
             secret,
             encodeURIComponent(secret),
-            JSON.stringify(secret).slice(1, -1),
-            JSON.stringify([...new TextEncoder().encode(secret)]),
+            Str.slice(1, -1)(Formatter.formatJson(secret)),
+            Formatter.formatJson([...new TextEncoder().encode(secret)]),
           ]) {
             expect(output).not.toContain(form);
           }
@@ -466,7 +474,7 @@ it.effect.prop(
       const brain = Context.get(context, BrainService);
       const up = yield* Effect.forkScoped(brain.up);
 
-      for (let n = 0; n < 10 && !outside.pending.some((call) => call.action === "start"); n++) {
+      for (let n = 0; n < 10 && !Arr.some(outside.pending, (call) => call.action === "start"); n++) {
         yield* progress(outside, n, "up");
       }
 
@@ -476,8 +484,8 @@ it.effect.prop(
       yield* held?.fail("lost-bootstrap-race") ?? Effect.die("no start command to race");
       const result = yield* finish(outside, up, "up", v.steps);
       expect(Exit.isSuccess(result)).toBe(matching);
-      expect(outside.calls.filter((action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
-      expect(outside.calls.filter((action) => action === "start")).toHaveLength(1);
+      expect(Arr.filter(outside.calls, (action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
+      expect(Arr.filter(outside.calls, (action) => action === "start")).toHaveLength(1);
       expect(outside.calls).not.toContain("stop");
     }),
   checks(200),

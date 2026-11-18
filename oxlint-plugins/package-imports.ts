@@ -21,6 +21,7 @@
 // own config.
 import { matchesGlob } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { Array as Arr, pipe, Option, Predicate } from "effect";
 import { pathIn, type Node } from "./match.ts";
 
 interface Part {
@@ -37,26 +38,30 @@ interface Table {
 }
 
 const strings = (value: unknown): ReadonlyArray<string> =>
-  Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  Arr.isArray(value) ? Arr.filter(value, (item) => Predicate.isString(item)) : [];
 
-const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+const record = (value: unknown): value is Record<string, unknown> => Predicate.isObjectOrArray(value);
 
 /** The config's table, or `null` when the rule was given none. */
 const tableIn = (options: ReadonlyArray<unknown>): Table | null => {
   const [given] = options;
 
-  if (!record(given) || typeof given.scope !== "string" || !Array.isArray(given.parts)) {
+  if (!record(given) || !Predicate.isString(given.scope) || !Arr.isArray(given.parts)) {
     return null;
   }
 
   return {
     scope: given.scope,
-    parts: given.parts.filter(record).map((part) => ({
-      name: typeof part.name === "string" ? part.name : "",
-      files: strings(part.files),
-      may: new Set(strings(part.may)),
-      tests: Array.isArray(part.tests) ? strings(part.tests) : null,
-    })),
+    parts: pipe(
+      given.parts,
+      Arr.filter(record),
+      Arr.map((part) => ({
+        name: Predicate.isString(part.name) ? part.name : "",
+        files: strings(part.files),
+        may: new Set(strings(part.may)),
+        tests: Arr.isArray(part.tests) ? strings(part.tests) : null,
+      })),
+    ),
   };
 };
 
@@ -64,12 +69,12 @@ const isTest = (file: string): boolean => /\.test\.tsx?$/.test(file);
 
 /** The name is one of these packages, or a subpath of one. */
 const within = (packages: ReadonlyArray<string>, name: string): boolean =>
-  packages.some((pkg) => name === pkg || name.startsWith(`${pkg}/`));
+  Arr.some(packages, (pkg) => name === pkg || name.startsWith(`${pkg}/`));
 
 /** A plain string a module source holds: a literal, or a template with no `${}`. */
 const written = (source: Node | null | undefined): string | null => {
   if (source?.type === "Literal") {
-    return typeof source.value === "string" ? source.value : null;
+    return Predicate.isString(source.value) ? source.value : null;
   }
 
   return source?.type === "TemplateLiteral" && source.expressions.length === 0
@@ -111,17 +116,25 @@ export const packageImports: CreateRule = {
       return {};
     }
 
-    const part = table.parts.find((each) => each.files.some((glob) => matchesGlob(file, glob)));
+    const found = Arr.findFirst(table.parts, (each) => Arr.some(each.files, (glob) => matchesGlob(file, glob)));
     const test = isTest(file);
 
-    if (part === undefined || (test && part.tests === null)) {
+    if (Option.isNone(found) || (test && found.value.tests === null)) {
       return {};
     }
+
+    const part = found.value;
 
     // A test here is judged by its part's `tests`, every other file by its part's `may`.
     const tests = test ? part.tests : null;
 
-    const listed = (names: Iterable<string>) => [...names].map((name) => `"${name}"`).join(", ");
+    const listed = (names: Iterable<string>) =>
+      pipe(
+        [...names],
+        Arr.map((name) => `"${name}"`),
+        Arr.join(", "),
+      );
+
     const none = `imports none of ${table.scope}*`;
 
     const { who, takes, allowed } =

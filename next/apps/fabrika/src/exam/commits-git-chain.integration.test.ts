@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -74,9 +75,9 @@ describe("done", () => {
     r.sign("tests");
     r.change("b.ts");
     r.sign("build");
-    const outside = r.git("commit-tree", "-p", r.base, "-m", "x", r.head("HEAD^{tree}")).trim();
+    const outside = Str.trim(r.git("commit-tree", "-p", r.base, "-m", "x", r.head("HEAD^{tree}")));
     const forged = r.sign("tests", { sha: outside, version: 99 });
-    r.setNote(outside, JSON.stringify({ ...forged, sig: forged.sig.replace("A", "B") }));
+    r.setNote(outside, JSON.stringify({ ...forged, sig: pipe(forged.sig, Str.replace("A", "B")) }));
     expect(r.check().answers).toEqual([DONE]);
   });
 });
@@ -113,15 +114,15 @@ describe("ask exam_read (p85)", () => {
         });
 
         expect(out.answers).toEqual([ask(name)]);
-        const lines = out.out.split("\n");
-        expect(lines.some((l) => l.startsWith("::add-mask::"))).toBe(false);
+        const lines = Str.split(out.out, "\n");
+        expect(Arr.some(lines, (l) => pipe(l, Str.startsWith("::add-mask::")))).toBe(false);
         expect(lines).toContain(
           `::warning title=commits::ask owner exam_read ${prefix}%0A::add-mask::next/apps/fabrika/src/exam/commits.ts`,
         );
         const written = readFileSync(summary, "utf8");
         expect(written).toContain(JSON.stringify(name));
-        expect(written.split("\n").some((l) => l.startsWith("::"))).toBe(false);
-        expect(out.err.split("\n").some((l) => l.startsWith("::"))).toBe(false);
+        expect(Arr.some(Str.split(written, "\n"), (l) => pipe(l, Str.startsWith("::")))).toBe(false);
+        expect(Arr.some(Str.split(out.err, "\n"), (l) => pipe(l, Str.startsWith("::")))).toBe(false);
       }),
       runs,
     );
@@ -371,9 +372,9 @@ describe("chain after the merge (p86 and p89)", () => {
     r.git("commit", "-q", "--amend", "-m", "squash");
     const squash = r.head();
 
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, squash })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, squash })),
     }));
 
     log(r, moved);
@@ -429,9 +430,9 @@ describe("chain after the merge (p86 and p89)", () => {
     r.git("merge", "--squash", "-q", "pr");
     r.write("f.txt", "vuln\n");
     const squash = r.commit("squash that reverts the fix");
-    const forged = r.git("commit-tree", tree, "-p", fix, "-m", "forged").trim();
+    const forged = Str.trim(r.git("commit-tree", tree, "-p", fix, "-m", "forged"));
 
-    const rows = steps.map(({ note, commit }, i) => ({
+    const rows = Arr.map(steps, ({ note, commit }, i) => ({
       date: "2026-11-11",
       run: `r${i}`,
       attested: [
@@ -537,9 +538,9 @@ describe("chain after the merge (p86 and p89)", () => {
     const main = r.head();
     r.git("checkout", "-q", "-b", "log", main);
 
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, squash: fake })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, squash: fake })),
     }));
 
     log(r, moved);
@@ -551,11 +552,11 @@ describe("chain after the merge (p86 and p89)", () => {
     const r = new Repo();
     const steps = twoSteps(r);
     const { squash, rows } = squashed(r, steps);
-    const twin = r.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`)).trim();
+    const twin = Str.trim(r.git("commit-tree", "-p", r.base, "-m", "twin", r.head(`${r.base}^{tree}`)));
 
-    const moved = rows.map((row) => ({
+    const moved = Arr.map(rows, (row) => ({
       ...row,
-      attested: row.attested.map((l) => ({ ...l, base: twin })),
+      attested: Arr.map(row.attested, (l) => ({ ...l, base: twin })),
     }));
 
     log(r, moved);
@@ -568,7 +569,7 @@ describe("chain after the merge (p86 and p89)", () => {
     const steps = twoSteps(r);
     const { squash, rows } = squashed(r, steps);
     const main = r.head();
-    const line = JSON.stringify(rows[1]!).replaceAll('"attested"', '"\\u0061ttested"');
+    const line = pipe(JSON.stringify(rows[1]!), Str.replaceAll('"attested"', '"\\u0061ttested"'));
     r.write("field/runs.jsonl", `${line}\n`);
     r.commit("log");
     const out = r.run(["chain", "--base", main, "--head", "HEAD"]);

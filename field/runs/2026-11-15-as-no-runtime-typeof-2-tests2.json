@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-runtime-typeof-2-tests2",
+  "ticket": "1057",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T23:27:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second tests step of anti-slop judgment slice AS-no-runtime-typeof-2 (decision 0563 and its amendment), in next/ and our tooling, at ef8f220d4, the merge of origin/main (pull request 1366 included) into the slice branch. Rule anti-slop/no-runtime-typeof forced to error in a scratch config outside the repo over the slice's 18 folders. Hits met: 73, of which 32 in exam paths (exam-paths.json) and 41 in product files. The merge took origin/main's version of four test files: TomlEdit.test.ts, Handshake.laws.test.ts and next/programs/pipeline/src/Settings.test.ts had lost the first tests step's typeof fixes (12 hits came back), and next/programs/pipeline/src/QueueRunnerTest.ts kept no hit (main's version reads through Predicate.hasProperty). Fixed in exam paths: 19, all by hand edits through a scratch replace script outside the repo, each typeof check turned into the Effect Predicate guard that answers the same: the 12 lost fixes put back (isString, isNumber, isObject), and 7 formerly waiting on 1366: next/packages/libfabrika/src/settings/QuotaSettings.test.ts (typeof object and not null to isObjectOrArray, expect(typeof x).toBe(\"object\") to expect(x).toBeTypeOf(\"object\")), next/packages/libfabrika/src/settings/StartsTest.ts (isString, isObjectOrArray in the leak walker), next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts (isString), next/packages/libfabrika/src/runtime/Runner.integration.test.ts (an object with an id to Predicate.hasProperty, isString). Left in exam paths: 13, the same ones the first tests step left on purpose: the T737 oracles in next/packages/libfabrika/src/runtime/Program.test.ts:993, 996, 999, 1002 (2), 1004, 1359, 1368 (2) and next/packages/libfabrika/src/transport/Connection.test.ts:576 (2), whose read order law D4 checks, and the error class label in next/packages/libfabrika/src/cloudflare/supervision.laws.integration.test.ts:53 and next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts:346; their fit is the 0563 ignore line, which fails lint until the lock. Product hits left for the build: 38, in Runner.ts (12), Gateway.ts (6), telemetry/Sink.ts (6), cloudflare/connection.ts (4), ledger/internal/ledgerStore.ts (3), settings/JsonSchema.ts (2), runtime/RecoveryStore.ts (2), cloudflare/runtime.ts (2), runtime/QuotaRunner.ts (1); plus the build step's 3 left labels (Program.ts:574, telemetry/Trace.ts:329, cloudflare/platform.ts:56). No disable line, no lock line, no .oxlintrc.json change, no assertion deleted or narrowed, no law loosened, no product file touched.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "No law is new or changed in what it checks; each edit swaps a typeof read for the Predicate guard that answers the same, so no plant was run. Started time was not read at the start, so it is null. Checks at the working tree on ef8f220d4: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 fails only on oxlint-plugins/anti-slop.ts's audit asking to add folders now at zero to the rule's block (.agents/**, libfabrika src/*, access, processes, schedules, tezgah, tuval, programs checklist, counter, pipeline), which the owner ruled comes later with the locks; every other part passed. The list ratchet exits 0. One pnpm typecheck: exit 0. Tests, one file at a time: Handshake.laws.test.ts (2), programs/pipeline Settings.test.ts (2), TomlEdit.test.ts (18), QuotaSettings.test.ts (3), cloudflare/SettingsInput.test.ts (2) and cloudflare/SettingsStarts.test.ts (12) for StartsTest's leak walker, node/QuotaRunner.test.ts (7) and next/apps/fabrika/src/runtime-quotas.laws.test.ts (2) for QuotaRunnerTest, and runtime/Runner.integration.test.ts (117, run in the box under the cloud guard of pull request 1508): all green.",
+  "step": "tests"
+}

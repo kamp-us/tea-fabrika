@@ -1,3 +1,4 @@
+import { Predicate, Record as Rec, Result } from "effect";
 // Today's CI, serving both versions. ci-speed.yaml's shape (K1 to K7), the daily speed measure.
 import { parse } from "yaml";
 import { allSteps, compact, isMap, map } from "./shared.ts";
@@ -31,28 +32,28 @@ export const lintCiSpeed = (text: string): string[] => {
     }
   };
 
-  let workflow: Record<string, unknown>;
+  const parsed = Result.try(() => map(parse(text)));
 
-  try {
-    workflow = map(parse(text));
-  } catch {
+  if (Result.isFailure(parsed)) {
     return ["ci-speed.yaml: not valid YAML"];
   }
 
+  const workflow = parsed.success;
+
   const on = map(workflow["on"]);
   const crons = Array.isArray(on["schedule"]) ? on["schedule"].filter(isMap) : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+  require(JSON.stringify(Rec.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
     crons.length === 1 &&
     /^\d+ \d+ \* \* \*$/.test(
       String(crons[0]?.["cron"]),
     ), "K1: it runs on one daily schedule and by hand, nothing else");
 
-  const jobs = Object.values(map(workflow["jobs"]));
+  const jobs = Rec.values(map(workflow["jobs"]));
   const job = map(jobs[0]);
   require(jobs.length === 1, "K2: it has one job");
   require(compact(job["if"]) === "github.ref=='refs/heads/main'", "K2: the job runs main's copy only");
   const limit = job["timeout-minutes"];
-  require(typeof limit === "number" && limit > 0 && limit <= 30, "K2: the job sets timeout-minutes, at most 30");
+  require(Predicate.isNumber(limit) && limit > 0 && limit <= 30, "K2: the job sets timeout-minutes, at most 30");
 
   require(JSON.stringify(workflow["permissions"]) === "{}", "K3: the workflow's token grants nothing");
   require(JSON.stringify(job["permissions"]) ===
@@ -61,7 +62,7 @@ export const lintCiSpeed = (text: string): string[] => {
     ), "K3: the job's token reads actions, contents and pull requests and writes issues, nothing more");
 
   const list = allSteps(job);
-  const checkouts = list.filter((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  const checkouts = list.filter((s) => Predicate.isString(s["uses"]) && s["uses"].startsWith("actions/checkout@"));
   require(checkouts.length > 0 &&
     checkouts.every(
       (s) => map(s["with"])["persist-credentials"] === false,
@@ -75,7 +76,7 @@ export const lintCiSpeed = (text: string): string[] => {
         GH_TOKEN: `\${{ github.token }}`,
       }), "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash");
 
-  const cancels = list.filter((s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
+  const cancels = list.filter((s) => Predicate.isString(s["run"]) && s["run"].includes("run cancel"));
   require(cancels.length === 0, "K6: no step cancels the run: one job has nothing to cancel");
 
   // K7 (0541): it reads runs and writes its summary and its one issue, so its steps are the
@@ -88,7 +89,7 @@ export const lintCiSpeed = (text: string): string[] => {
         return "measure";
       }
 
-      return typeof s["run"] === "string" ? s["run"] : String(s["uses"]).replace(/@.*$/, "@");
+      return Predicate.isString(s["run"]) ? s["run"] : String(s["uses"]).replace(/@.*$/, "@");
     });
 
   require(JSON.stringify(work) ===

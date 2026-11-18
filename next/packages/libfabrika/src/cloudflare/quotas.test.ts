@@ -9,8 +9,8 @@ import { Writer } from "../ledger/WritePolicy.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
 import type { QuotasError, RecoveryReserveExhausted } from "../processes/Quotas.ts";
 import * as Declarations from "../settings/Declarations.ts";
+import * as Sources from "../settings/Fabrika.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
-import * as Sources from "../settings/Sources.ts";
 import { CommitReply, MailReplies } from "./bindings.ts";
 import * as QuotaSettings from "./QuotaSettings.ts";
 
@@ -30,6 +30,7 @@ const defaults = Effect.fnUntraced(function* (writes = 13_760, bytes = 1_000_000
     repo: Sources.file("repo.toml", empty),
     person: Sources.file("person.toml", { value: { limits: { writes, storage: `${bytes} B` } }, spans: [] }),
   });
+
   return yield* Snapshot.make(Declarations.all, resolved);
 });
 
