@@ -18,6 +18,10 @@ const RunsBody = Schema.fromJsonString(
         head_sha: Schema.String,
         status: Schema.String,
         conclusion: Schema.NullOr(Schema.String),
+        event: Schema.optional(Schema.String),
+        path: Schema.optional(Schema.String),
+        repository: Schema.optional(Schema.Struct({ id: Schema.Finite })),
+        head_repository: Schema.optional(Schema.NullOr(Schema.Struct({ id: Schema.Finite }))),
       }),
     ),
   }),
@@ -26,7 +30,22 @@ const RunsBody = Schema.fromJsonString(
 /** The runs in one page of a workflow's runs, in GitHub's order, newest first. */
 export const runsIn = (body: string): Effect.Effect<ReadonlyArray<Run>, Schema.SchemaError> =>
   Effect.map(Schema.decodeEffect(RunsBody)(body), ({ workflow_runs }) =>
-    workflow_runs.map((r) => ({ id: r.id, head: r.head_sha, status: r.status, conclusion: r.conclusion })),
+    workflow_runs.map((r) => ({
+      id: r.id,
+      head: r.head_sha,
+      status: r.status,
+      conclusion: r.conclusion,
+      ...(r.event !== undefined && r.path !== undefined && r.repository !== undefined && r.head_repository != null
+        ? {
+            source: {
+              event: r.event,
+              path: r.path,
+              repository: r.repository.id,
+              headRepository: r.head_repository.id,
+            },
+          }
+        : {}),
+    })),
   );
 
 const StepBody = Schema.Struct({

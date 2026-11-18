@@ -54,6 +54,18 @@ const slotsOf = (value: unknown): Record<string, unknown> => {
   return Result.getOrElse(decodeSlots(match?.[1] ?? ""), () => ({}));
 };
 
+/** Only a closed identity lookup may translate a selected slot into a shared group. */
+const rotationOf = (value: unknown): Record<string, unknown> => {
+  const match =
+    typeof value === "string"
+      ? /^scheduled-test-\$\{\{\s*fromJSON\('([^']*)'\)\[fromJSON\(needs\.select\.outputs\.slots\)\[matrix\.shard\]\]\s*\|\|\s*'1'\s*\}\}$/i.exec(
+          value,
+        )
+      : null;
+
+  return Result.getOrElse(decodeSlots(match?.[1] ?? ""), () => ({}));
+};
+
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
 const READS = { actions: "read", contents: "read" };
@@ -103,6 +115,10 @@ const SELECT_IF = `${STARTED} && github.event_name == 'workflow_dispatch' && git
 const SELECT_OUTPUTS = Object.fromEntries(
   ["scope", "legs", "files"].map((key) => [key, `\${{ steps.${SELECT_STEP}.outputs.${key} }}`]),
 );
+
+const SLOT_OUTPUT = `\${{ steps.${SELECT_STEP}.outputs.slots }}`;
+
+const RUN_NUMBER = `\${{ github.run_number }}`;
 
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
 
@@ -211,6 +227,17 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
   const fullMatrix = map(map(map(jobs[TESTS_JOB])["strategy"])["matrix"]);
   const changedStrategy = map(map(jobs[CHANGED_JOB])["strategy"]);
   const changedMatrix = map(changedStrategy["matrix"]);
+  const changedGroup = map(map(jobs[CHANGED_JOB])["concurrency"])["group"];
+  const rotation = rotationOf(changedGroup);
+
+  const rotated =
+    Object.keys(rotation).length === TEST_SLOTS.length &&
+    TEST_SLOTS.every((slot) => Object.hasOwn(rotation, slot) && String(rotation[slot]) === slot) &&
+    selectRuns.length === 1 &&
+    selectRuns[0]?.["id"] === SELECT_STEP &&
+    selectRuns[0]?.["run"] === SELECT &&
+    selectEnv["RUN_NUMBER"] === RUN_NUMBER &&
+    map(map(jobs[SELECT_JOB])["outputs"])["slots"] === SLOT_OUTPUT;
 
   const slotValues = Object.values(fullSlots).map((slot) =>
     typeof slot === "number" && Number.isInteger(slot) ? String(slot) : slot,
@@ -233,7 +260,7 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
         ? fullGroup
         : name === CHANGED_JOB
           ? typeof group === "string" &&
-            /^scheduled-test-\$\{\{\s*matrix\.shard\s*\}\}$/i.test(group) &&
+            (/^scheduled-test-\$\{\{\s*matrix\.shard\s*\}\}$/i.test(group) || rotated) &&
             typeof selectEnv["MOST"] === "number" &&
             Number.isInteger(selectEnv["MOST"]) &&
             selectEnv["MOST"] >= 1 &&
@@ -459,7 +486,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC17. `select` runs only on a hand start on a branch other than main, after the gate said
   // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
-  // runs every test there. It runs proof.ts once, in a step whose three outputs are the job's,
+  // runs every test there. It runs proof.ts once, in a step whose outputs are the job's,
   // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel`, SC6), the legs' test
   // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
   // whole history, to diff the branch with origin/main from their merge base, and keeps the record
@@ -471,17 +498,21 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const selectSteps = steps(select);
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
   const selectEnv = map(selectRuns[0]?.["env"]);
+  const rotates = Object.hasOwn(map(select["outputs"]), "slots");
+  const selectOutputs = rotates ? { ...SELECT_OUTPUTS, slots: SLOT_OUTPUT } : SELECT_OUTPUTS;
+  const selectKeys = rotates ? ["MOST", "LIMIT", "RECORD", "RUN_NUMBER"] : ["MOST", "LIMIT", "RECORD"];
   const selectCheckouts = selectSteps.filter((s) => uses(s, "actions/checkout"));
   const records = selectSteps.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === RECORD);
   require(SELECT_JOB in jobs &&
     JSON.stringify(select["needs"]) === JSON.stringify([GATE_JOB]) &&
     compact(select["if"]) === compact(SELECT_IF) &&
-    JSON.stringify(select["outputs"]) === JSON.stringify(SELECT_OUTPUTS) &&
+    JSON.stringify(select["outputs"]) === JSON.stringify(selectOutputs) &&
     selectRuns.length === 1 &&
     selectRuns[0]?.["id"] === SELECT_STEP &&
     selectRuns[0]?.["run"] === SELECT &&
     !("if" in (selectRuns[0] ?? {})) &&
-    JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(["MOST", "LIMIT", "RECORD"]) &&
+    JSON.stringify(Object.keys(selectEnv)) === JSON.stringify(selectKeys) &&
+    (!rotates || selectEnv["RUN_NUMBER"] === RUN_NUMBER) &&
     selectEnv["RECORD"] === RECORD &&
     selectCheckouts.length === 1 &&
     map(selectCheckouts[0]?.["with"])["fetch-depth"] === 0 &&
