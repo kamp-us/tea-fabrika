@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-17",
+  "ticket": "kamp-us/tea-fabrika#1153",
+  "pr": null,
+  "parent": null,
+  "active": null,
+  "model": null,
+  "effort": null,
+  "driver_caused": false,
+  "billed": null,
+  "base": "fbb7a36c0bdf085e5e154b7cb8f7d5e278826c53",
+  "head": "8a32bd9607ff2d6c7d296be9d658bee43b0cad84",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "run": "2026-11-17-t1153-build-quota-admission",
+  "started": null,
+  "ended": null,
+  "role": "build",
+  "step": "build",
+  "outcome": "pass",
+  "why": "In next/, the independent build read found ticket 1153's fixture-only repair matches the approved amended plan. No source change was needed. Actual source, before/after/restored snapshots, all 32 candidate and fault extraction hashes, and seven saved installed-module hashes matched. The retained 82 pure-case records consistently account for 710 builds and 824 sends; all three faults are red at their intended checks.",
+  "note": "The build step read source and saved proof without executing a test, extracted function, SQL fixture, compiler, lint, benchmark or workflow. Runtime suite, database support, product quota code, runner, shared setup, Vitest config and lockfile are byte-identical to base. All existing fixture SQL statements and driver calls remain; repeated admission construction intentionally reduces its associated setup work, so identical setup SQL counts are not claimed. Stable SQL proxies dispatch through reopened handles. Pure evidence does not supply actual SQL, reopen or replay proof. Stored extraction end-line labels undercount by one; anchors and hashes match, and independently recomputed locations are retained without changing original receipts. Whole-suite Linux proof and final review remain due. Start/end times, usage and costs are unknown.",
+  "sourceHashes": {
+    "next/packages/libfabrika/src/node/QuotaRunner.test.ts": "6104dd8c5524fa06430e84bc1be808269d4a0a1baf14fc1d38b6e29acfe7fba1"
+  }
+}

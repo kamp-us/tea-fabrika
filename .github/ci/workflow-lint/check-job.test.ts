@@ -76,6 +76,7 @@ const plants: Plant[] = [
   ],
   // F1 to F3, the field row check inside check (ticket 985). Source plants, each run once on
   // workflow-lint.ts and restored: the rows anywhere in check (red: before lint); F3 dropped (red: a legs job, a field job comes back).
+  // SAFETY: each row below is a plant's name and the function that applies it, written out by hand.
   ...(
     [
       [
@@ -96,6 +97,7 @@ const plants: Plant[] = [
       ["the row check runs on the check flag", (w) => (step(w, "check", "field rows")["if"] = checkFlag)],
       [
         "the row check without its base",
+        // SAFETY: `valid` gives check's field rows step an `env` map with BASE in it.
         (w) => Reflect.deleteProperty(step(w, "check", "field rows")["env"] as Record<string, string>, "BASE"),
       ],
       ["the row check bypassed", (w) => (step(w, "check", "field rows")["run"] = "echo passed")],
@@ -119,13 +121,37 @@ const plants: Plant[] = [
           w.jobs["ci-required"].needs.push("field");
         },
       ],
-    ] as [string, (w: Workflow) => unknown][]
+    ] as [string, (w: Workflow) => void][]
   ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
     fault,
     (w) => {
       mutate(w);
     },
   ]),
+  // 0587 (C1): jscpd is advice only, so a step that can fail the job, or that is gone, is refused.
+  [
+    "C1: the copies step can fail the job",
+    (w) => Reflect.deleteProperty(step(w, "check", "copies (advice)"), "continue-on-error"),
+  ],
+  [
+    "C1: the copies step is deleted",
+    (w) => {
+      w.jobs.check.steps.splice(place(w, "check", "copies (advice)"), 1);
+    },
+  ],
+  [
+    "C1: the copies step runs after lint",
+    (w) => {
+      const [copies] = w.jobs.check.steps.splice(place(w, "check", "copies (advice)"), 1);
+      w.jobs.check.steps.push(copies!);
+    },
+  ],
+  [
+    "C1: the copies step has no base",
+    (w) => {
+      step(w, "check", "copies (advice)")["env"] = {};
+    },
+  ],
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
   [
     "L7: the ratchet step is deleted",

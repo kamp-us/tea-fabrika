@@ -14,9 +14,10 @@ already has, and every place that still touches Node says so in a comment.
 ## Context
 
 Decided in [build on Effect](../docs/direction/build-on-effect.md), for the whole repo. AGENTS.md
-repeats the `next/` half (owner, 2026-11-09), and the lint rule `fabrika/no-node-imports` checks it
-in `next/`. [0040](0040-existing-tools-before-hand-written.md) covers checks and tools; this file
-covers product code.
+repeats the `next/` half (owner, 2026-11-09), and oxlint's `import/no-nodejs-modules` checks it in
+`next/` ([0573](0573-trusted-lint-rule-replaces-ours.md)).
+[0040](0040-existing-tools-before-hand-written.md) covers checks and tools; this file covers
+product code.
 
 ## Decision
 
@@ -36,7 +37,3 @@ covers product code.
 - One way to do a job across the repo, so code reads the same everywhere.
 - What would change it: a job where Effect's module keeps falling short, so the Node edge keeps
   growing.
-
-## Amendments
-
-- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-node-imports`, the rule named here, with oxlint's `import/no-nodejs-modules`, in the pull request that turns it on at zero hits.

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tezgah-support-parts-means-two-things",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/apps/fabrika/e2e/tezgah.test-support.ts",
+    "line": 151
+  },
+  "says": "In next/, the new function parts (the elements a locator matched, with names and boxes) reuses a word the same file already uses for a layout container's children, against AGENTS.md's rule that a short word keeps one meaning in its context.",
+  "proof": "tezgah.test-support.ts:50 and :444 read node.parts.length (a container's parts), and :151 declares const parts = (match: Locator) => ... returning matched elements' names and boxes.",
+  "cost": "A reader of drawnRule and foldRule next to drawn has to tell two kinds of parts apart; Playwright's own word for these is elements.",
+  "head": "6c295f7f353f7d30aedb264b58f771932a9dad1d",
+  "ticket": "kamp-us/tea-fabrika#1166",
+  "pr": "kamp-us/tea-fabrika#1612"
+}

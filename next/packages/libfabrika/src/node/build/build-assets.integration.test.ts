@@ -8,29 +8,51 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import type * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 import { check } from "./compiler.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 
 type Serve = {
-  readonly serveAsset?: (assets: Readonly<Record<string, Asset>>, request: Request) => Effect.Effect<Response, unknown>;
+  readonly serveAsset?: (assets: Readonly<Record<string, Asset>>, request: Request) => Effect.Effect<Response>;
 };
 
 const serving = async () => {
   const worker = await vi.importActual<Serve>(
     pathToFileURL(join(import.meta.dirname, "../../cloudflare/index.ts")).href,
   );
-  assert.equal(typeof worker.serveAsset, "function", "P16 library asset serving is absent");
+
+  assert.ok(Predicate.isFunction(worker.serveAsset), "P16 library asset serving is absent");
+
   return worker.serveAsset!;
 };
 
 // The installed packages' own versions, read now. A build report must say what really ran.
 const installed = (name: string) =>
+  // SAFETY: every installed package.json names its `version` as a string.
   (
     JSON.parse(readFileSync(join(import.meta.dirname, "../../../node_modules", name, "package.json"), "utf8")) as {
       version: string;
@@ -38,7 +60,9 @@ const installed = (name: string) =>
   ).version;
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
+
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
+
 // The clean-build property took 5.6 s for three samples under load. Budget 10 s per sample.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
 
@@ -53,14 +77,16 @@ const cssRules = (css: string) => {
       },
     },
   });
+
   return rules;
 };
 
 // Source locations change when the printer normalizes whitespace and escapes.
-const meaning = (rules: readonly Rule[]): unknown =>
+const meaning = (rules: readonly Rule[]): Schema.Json =>
   JSON.parse(JSON.stringify(rules, (key, value) => (key === "loc" ? undefined : value)));
 
 const names = fc.integer({ min: 0, max: 10000 }).map((n) => `View${n}`);
+
 const values = fc.string({ minLength: 1, maxLength: 30 });
 
 const graphs = fc.record({
@@ -70,6 +96,7 @@ const graphs = fc.record({
 });
 
 const cssForms = ["double string", "single string", "url", "single url", "double url"] as const;
+
 type CssForm = (typeof cssForms)[number];
 
 const cssImports = fc.record({
@@ -91,20 +118,26 @@ const cssImport = (
   url: string,
   continuation: string,
 ) => {
-  const quote = form.startsWith("single") ? "'" : form === "url" ? "" : '"';
-  const ref = [...path]
-    .map((char) => {
+  const quote = Function.pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
+
+  const ref = Arr.join(
+    Arr.map([...path], (char) => {
       const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
 
       if (!required && (escape === "literal" || !/[\s'"()]/.test(char))) {
         return char;
       }
 
-      return escape === "hex" ? `\\${char.codePointAt(0)!.toString(16)} ` : `\\${char}`;
-    })
-    .join("");
-  const target = `${quote}${quote && continuation ? `\\${continuation}` : ""}${ref}${quote}`;
-  return `@${keyword} ${form.endsWith("string") ? target : `${url}(${target})`}${media ? ` ${media}` : ""};`;
+      return escape === "hex"
+        ? `\\${Function.pipe(char, Str.codePointAt(0), Option.getOrThrow).toString(16)} `
+        : `\\${char}`;
+    }),
+    "",
+  );
+
+  const target = `${quote}${quote !== "" && continuation !== "" ? `\\${continuation}` : ""}${ref}${quote}`;
+
+  return `@${keyword} ${Function.pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
 };
 
 const homes: string[] = [];
@@ -126,10 +159,14 @@ type Options = {
 type Build = {
   readonly build: (
     o: Options,
-  ) => Effect.Effect<{ readonly brain: string; readonly assets: Readonly<Record<string, Asset>> }, unknown>;
+  ) => Effect.Effect<{ readonly brain: string; readonly assets: Readonly<Record<string, Asset>> }, BuildFailure>;
 };
 
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
+
 type Handle = { generate: (o: OutputOptions) => Promise<RolldownOutput>; close: () => Promise<void> };
+
 type Roll = { readonly rolldown: (o: RolldownOptions) => Promise<Handle> };
 
 const fixture = (name: string, value: string) => {
@@ -142,8 +179,10 @@ const fixture = (name: string, value: string) => {
   }
 
   symlinkSync(join(import.meta.dirname, "../../../node_modules/react"), join(home, "node_modules/react"));
+
   const pkg = join(home, "programs/compiler"),
     file = join(pkg, "window.tsx");
+
   mkdirSync(pkg, { recursive: true });
   // Match workspace resolution without asking the Compiler to compile installed dependencies.
   symlinkSync(pkg, join(home, "node_modules/@p16/compiler"), "dir");
@@ -161,8 +200,9 @@ const fixture = (name: string, value: string) => {
   writeFileSync(join(pkg, "window.css"), `b { color: rgb(12, 34, 56); }`);
   cpSync(join(ROOT, "next/apps/fabrika/src"), join(home, "src"), {
     recursive: true,
-    filter: (p) => !p.endsWith(".test.ts"),
+    filter: (p) => !Function.pipe(p, Str.endsWith(".test.ts")),
   });
+
   const options: Options = {
     out: join(home, "dist"),
     root: home,
@@ -172,13 +212,16 @@ const fixture = (name: string, value: string) => {
     ledger: [],
     chaos: false,
   };
+
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
+
   return { home, file, options };
 };
 
-const load = async () => {
+const load = () => {
   const file = join(import.meta.dirname, "build.ts");
   assert(existsSync(file), "P16 not built: libfabrika/build and embedded assets absent");
+
   return vi.importActual<Build>(pathToFileURL(file).href);
 };
 
@@ -204,19 +247,23 @@ describe("P16 assets and Compiler", () => {
   it(
     "outside metadata plants: malformed package and Compiler-ledger JSON fail in the typed channel",
     { timeout: buildTimeout(4) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, fc.constantFrom("manifest", "ledger"), async (value, kind) => {
           const f = fixture("View", value);
           previous(f, value);
           writeFileSync(join(f.home, "compiler-ledger.json"), "[]");
+
           const file =
             kind === "manifest" ? join(f.home, "programs/compiler/package.json") : join(f.home, "compiler-ledger.json");
+
           writeFileSync(file, `{${JSON.stringify(value)}`);
           const { ledger: _ledger, ...options } = f.options;
+
           const result = await Effect.runPromise(
             Effect.result((await load()).build(options)).pipe(Effect.provide(NodeServices.layer)),
           );
+
           expect(result).toMatchObject({
             _tag: "Failure",
             failure: { _tag: "BuildError", reason: kind === "manifest" ? "table" : "read" },
@@ -224,29 +271,31 @@ describe("P16 assets and Compiler", () => {
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 4 }) },
-      );
-    },
+      ),
   );
   it(
     "assets: entry, secondary chunks and CSS retain routes, hashes, MIME types and bytes; missing script is 404",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(names, values, async (name, value) => {
           const f = fixture(name, value),
             built = await run(f.options);
+
           const worker = { serveAsset: await serving() };
           expect(
-            Object.values(built.assets).filter((a) => a.type === "text/javascript; charset=utf-8").length,
+            Arr.filter(Rec.values(built.assets), (a) => a.type === "text/javascript; charset=utf-8").length,
           ).toBeGreaterThanOrEqual(2);
-          expect(Object.values(built.assets).some((a) => a.type === "text/css; charset=utf-8")).toBe(true);
+          expect(Arr.some(Rec.values(built.assets), (a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
-          for (const [route, asset] of Object.entries(built.assets)) {
-            expect(route.startsWith("/")).toBe(true);
+          for (const [route, asset] of Rec.toEntries(built.assets)) {
+            expect(Function.pipe(route, Str.startsWith("/"))).toBe(true);
             expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
+
             const response = await Effect.runPromise(
               worker.serveAsset(built.assets, new Request(`https://test.invalid${route}`)),
             );
+
             expect(response.status).toBe(200);
             expect(response.headers.get("content-type")).toBe(asset.type);
             expect(await response.text()).toBe(asset.body);
@@ -262,32 +311,35 @@ describe("P16 assets and Compiler", () => {
           ).toBe(404);
         }),
         runs,
-      );
-    },
+      ),
   );
-  it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, async () => {
-    await fc.assert(
+  it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, () =>
+    fc.assert(
       fc.asyncProperty(graphs, async ({ name, value }) => {
         const f = fixture(name, value),
           native = await vi.importActual<Roll>("rolldown"),
           expected = new Map<string, string>();
+
         writeFileSync(join(dirname(f.file), "window.css"), `b { --value: ${JSON.stringify(`${value}雪🫖`)}; }`);
         vi.doMock("rolldown", () => ({
           ...native,
           rolldown: async (options: RolldownOptions) => {
             const handle = await native.rolldown(options);
+
             return {
               ...handle,
               generate: async (options: OutputOptions) => {
                 const output = await handle.generate(options);
+
                 return {
                   ...output,
-                  output: output.output.map((item) => {
-                    if (item.type !== "asset" || typeof item.source !== "string") {
+                  output: Arr.map(output.output, (item) => {
+                    if (item.type !== "asset" || !Predicate.isString(item.source)) {
                       return item;
                     }
 
                     expected.set(`/${item.fileName}`, item.source);
+
                     return { ...item, source: new TextEncoder().encode(item.source) };
                   }),
                 };
@@ -312,23 +364,26 @@ describe("P16 assets and Compiler", () => {
         }
       }),
       runs,
-    );
-  });
+    ),
+  );
 
   for (const form of cssForms) {
     it(
       `CSS graph plant: ${form} with spaces, escapes and media lists includes every imported rule`,
       { timeout: buildTimeout(runs.numRuns + 1) },
-      async () => {
-        await fc.assert(
+      () =>
+        fc.assert(
           fc.asyncProperty(graphs, cssImports, async ({ name, value, id }, css) => {
             const f = fixture(name, value),
               pkg = dirname(f.file),
               nested = `styles${id}`;
+
             mkdirSync(join(pkg, nested));
+
             const file = `${css.name}${id}.css`,
               theme = `./${nested}/${file}`,
               tokens = `../tokens${id}.css`;
+
             writeFileSync(
               join(pkg, "window.css"),
               `${cssImport(theme, form, css.escape, css.media, css.keyword, css.url, css.continuation)} b { color: red; }`,
@@ -340,14 +395,18 @@ describe("P16 assets and Compiler", () => {
             writeFileSync(join(pkg, `tokens${id}.css`), `b { --tokens: ${id}; }`);
             const built = await run(f.options);
             const serveAsset = await serving();
+
             const verify = async (assets: Readonly<Record<string, Asset>>) => {
-              for (const [route, asset] of Object.entries(assets)) {
-                if (asset.type.startsWith("text/css")) {
+              for (const [route, asset] of Rec.toEntries(assets)) {
+                if (Function.pipe(asset.type, Str.startsWith("text/css"))) {
                   expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
                   continue;
                 }
 
-                const refs = [...asset.body.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g)].map((m) => m[1]!);
+                const refs = Arr.map(
+                  [...Function.pipe(asset.body, Str.matchAll(/(?:from\s*|import\s*\(?\s*)["']([^"']+)["']/g))],
+                  (m) => m[1]!,
+                );
 
                 for (const ref of refs) {
                   if (/^(?:data:|https?:|#)/.test(ref)) {
@@ -360,8 +419,12 @@ describe("P16 assets and Compiler", () => {
                 }
               }
             };
+
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
-            const stylesheet = Object.entries(built.assets).find(([, a]) => a.type.startsWith("text/css"));
+            const stylesheet = Option.getOrUndefined(
+              Arr.findFirst(Rec.toEntries(built.assets), ([, a]) => Function.pipe(a.type, Str.startsWith("text/css"))),
+            );
+
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
               verify({
@@ -370,14 +433,19 @@ describe("P16 assets and Compiler", () => {
               }),
             ).rejects.toThrow("local CSS import");
             await verify(built.assets);
-            const styles = Object.values(built.assets)
-              .filter((a) => a.type.startsWith("text/css"))
-              .map((a) => a.body)
-              .join("\n");
+
+            const styles = Arr.join(
+              Arr.map(
+                Arr.filter(Rec.values(built.assets), (a) => Function.pipe(a.type, Str.startsWith("text/css"))),
+                (a) => a.body,
+              ),
+              "\n",
+            );
+
             expect(styles).toContain(`--theme: ${id}`);
             expect(styles).toContain(`--tokens: ${id}`);
 
-            if (css.media) {
+            if (css.media !== "") {
               expect(styles).toContain(`@media ${css.media}`);
             }
           }),
@@ -399,16 +467,15 @@ describe("P16 assets and Compiler", () => {
             ],
             endOnFailure: true,
           },
-        );
-      },
+        ),
     );
   }
 
   it(
     "CSS imports keep remote rules and wrap local rules only when a media condition exists",
     { timeout: buildTimeout(runs.numRuns + 2) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           graphs,
           fc.constantFrom("", "print", "(min-width: 40em)"),
@@ -419,19 +486,28 @@ describe("P16 assets and Compiler", () => {
               remote = `@import url("${scheme}://test.invalid/theme${id}.css");`,
               body = `.inner${id} { --value: ${id}; }`,
               last = ".root { color: red; }";
+
             writeFileSync(join(pkg, `local${id}.css`), body);
             writeFileSync(join(pkg, "window.css"), `${remote}\n@import "./local${id}.css" ${condition};\n${last}`);
             const built = await run(f.options);
             const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
-            const stylesheets = Object.values(built.assets).filter((asset) => asset.type === "text/css; charset=utf-8");
+
+            const stylesheets = Arr.filter(
+              Rec.values(built.assets),
+              (asset) => asset.type === "text/css; charset=utf-8",
+            );
+
             expect(stylesheets).toHaveLength(1);
             const rules = cssRules(stylesheets[0]!.body);
+
             const verify = (actual: readonly Rule[]) =>
               expect(meaning(actual), "remote and local rules keep their order and conditions").toEqual(
                 meaning(cssRules(`${remote}\n${local}\n${last}`)),
               );
+
             verify(rules);
             const child = rules[1]!;
+
             const plants = [
               rules.slice(1), // Lost remote import.
               [rules[0]!, ...rules.slice(2)], // Lost local child.
@@ -459,47 +535,53 @@ describe("P16 assets and Compiler", () => {
             [{ name: "View", value: "css", id: 2 }, "print", "https"],
           ],
         },
-      );
-    },
+      ),
   );
-  it(
-    "Compiler: reachable refused TSX fails before replacing the last good brain",
-    { timeout: buildTimeout(8) },
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          names,
-          values,
-          fc.constantFrom("ref", "clock", "directive", "stale"),
-          async (name, value, kind) => {
-            const f = fixture(name, value),
-              good = `last-good-${value}`;
-            previous(f, good);
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
-            const path = "programs/compiler/window.tsx",
-              ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
-            expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
-            writeFileSync(f.file, source);
-            const result = await Effect.runPromise(
-              Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
-            );
-            expect(result).toMatchObject({
-              _tag: "Failure",
-              failure: { _tag: "BuildError", reason: "compiler" },
-            });
-            expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
-          },
-        ),
-        { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
-      );
-    },
+  it("Compiler: reachable refused TSX fails before replacing the last good brain", { timeout: buildTimeout(8) }, () =>
+    fc.assert(
+      fc.asyncProperty(
+        names,
+        values,
+        fc.constantFrom("ref", "clock", "directive", "stale"),
+        async (name, value, kind) => {
+          const f = fixture(name, value),
+            good = `last-good-${value}`;
+
+          previous(f, good);
+
+          const source = Match.value(kind).pipe(
+            Match.when(
+              "ref",
+              () =>
+                `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`,
+            ),
+            Match.when("clock", () => `export const ${name}=()=> <b>{Date.now()}</b>`),
+            Match.when(
+              "directive",
+              () => `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`,
+            ),
+            Match.orElse(() => `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`),
+          );
+
+          const path = "programs/compiler/window.tsx",
+            ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
+
+          expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
+          writeFileSync(f.file, source);
+
+          const result = await Effect.runPromise(
+            Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
+          );
+
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "BuildError", reason: "compiler" },
+          });
+          expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
+        },
+      ),
+      { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
+    ),
   );
   it("Compiler plants run independently against the moved real check for every refusal", () => {
     fc.assert(
@@ -528,25 +610,33 @@ describe("P16 cleanup and recording", () => {
   it(
     "the bundler keeps dynamic imports in one module, records its default phase and types acquisition failures",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           const f = fixture("View", value),
             entry = join(f.home, "dynamic.ts"),
             spans: Tracer.Span[] = [];
+
           writeFileSync(entry, 'export const load = () => import("./late.ts");');
           writeFileSync(join(f.home, "late.ts"), `export const text = ${JSON.stringify(value)};`);
+
           const tracer = Tracer.make({
             span: (options) => {
               const span = new Tracer.NativeSpan(options);
               spans.push(span);
+
               return span;
             },
           });
+
           const { bundle } = await import("./bundle.ts");
           const output = await Effect.runPromise(bundle(entry, []).pipe(Effect.withTracer(tracer)));
-          expect(output.output.filter((item) => item.type === "chunk")).toHaveLength(1);
-          expect(spans.find((span) => span.name === "build.bundle")?.attributes.get("phase")).toBe("bundle");
+          expect(Arr.filter(output.output, (item) => item.type === "chunk")).toHaveLength(1);
+          expect(
+            Option.getOrUndefined(Arr.findFirst(spans, (span) => span.name === "build.bundle"))?.attributes.get(
+              "phase",
+            ),
+          ).toBe("bundle");
           const native = await vi.importActual<Roll>("rolldown");
           vi.doMock("rolldown", () => ({
             ...native,
@@ -568,8 +658,7 @@ describe("P16 cleanup and recording", () => {
           }
         }),
         runs,
-      );
-    },
+      ),
   );
 
   for (const point of ["after backup", "before final", "after final"] as const) {
@@ -577,17 +666,21 @@ describe("P16 cleanup and recording", () => {
       it(
         `publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`,
         { timeout: buildTimeout(2) },
-        async () => {
-          await fc.assert(
+        () =>
+          fc.assert(
             fc.asyncProperty(values, async (value) => {
               const f = fixture("View", value);
               previous(f, value);
-              const entered = Effect.runSync(Deferred.make<void>()),
-                release = Effect.runSync(Deferred.make<void>());
+
+              const entered = Deferred.makeUnsafe<void>(),
+                release = Deferred.makeUnsafe<void>();
+
               let fired = false;
               const builder = await load();
+
               const task = Effect.gen(function* () {
                 const fs = yield* FileSystem.FileSystem;
+
                 const stop = Effect.gen(function* () {
                   fired = true;
                   yield* Deferred.succeed(entered, undefined);
@@ -595,20 +688,19 @@ describe("P16 cleanup and recording", () => {
                   if (interrupt) {
                     yield* Deferred.await(release);
                   } else {
-                    return yield* Effect.fail(
-                      PlatformError.systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "rename",
-                        description: "planted publication failure",
-                      }),
-                    );
+                    return yield* PlatformError.systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      description: "planted publication failure",
+                    });
                   }
                 });
+
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.gen(function* () {
-                    const backup = from === f.options.out && to.endsWith(".old");
-                    const final = to === f.options.out && !from.endsWith(".old");
+                    const backup = from === f.options.out && Function.pipe(to, Str.endsWith(".old"));
+                    const final = to === f.options.out && !Function.pipe(from, Str.endsWith(".old"));
 
                     if (!fired && point === "before final" && final) {
                       yield* stop;
@@ -620,6 +712,7 @@ describe("P16 cleanup and recording", () => {
                       yield* stop;
                     }
                   });
+
                 return yield* builder
                   .build(f.options)
                   .pipe(Effect.provideService(FileSystem.FileSystem, { ...fs, rename }));
@@ -650,8 +743,7 @@ describe("P16 cleanup and recording", () => {
               expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
             }),
             { ...runs, numRuns: runsFor({ fast: 2, full: 2 }), endOnFailure: true },
-          );
-        },
+          ),
       );
     }
   }
@@ -660,8 +752,8 @@ describe("P16 cleanup and recording", () => {
     it(
       `publication plant: interruption during an in-flight ${point} rename keeps a complete brain after delayed I/O settles`,
       { timeout: buildTimeout() },
-      async () => {
-        await fc.assert(
+      () =>
+        fc.assert(
           fc.asyncProperty(
             values,
             fc.record({
@@ -673,11 +765,14 @@ describe("P16 cleanup and recording", () => {
             async (value, delays) => {
               const f = fixture("View", value),
                 good = `last-good-${value}`,
-                entered = Effect.runSync(Deferred.make<void>()),
+                entered = Deferred.makeUnsafe<void>(),
                 pending: Fiber.Fiber<unknown, unknown>[] = [];
+
               previous(f, good);
+
               let fired = false,
                 complete: string | undefined;
+
               // Like Node's accepted disk requests, this work finishes even if its caller stops waiting.
               const delayed = <A, E>(work: Effect.Effect<A, E>, ms: number, signal = false) =>
                 Effect.callback<A, E>((resume) => {
@@ -688,28 +783,37 @@ describe("P16 cleanup and recording", () => {
                       }
 
                       yield* Effect.sleep(ms);
+
                       return yield* work;
                     }),
                   );
+
                   pending.push(io);
                   io.addObserver(resume);
                 });
+
               const builder = await load();
+
               const task = Effect.gen(function* () {
                 const fs = yield* FileSystem.FileSystem;
+
                 const rename: typeof fs.rename = (from, to) =>
                   Effect.suspend(() => {
-                    const backup = from === f.options.out && to.endsWith(".old"),
-                      final = to === f.options.out && !from.endsWith(".old"),
+                    const backup = from === f.options.out && Function.pipe(to, Str.endsWith(".old")),
+                      final = to === f.options.out && !Function.pipe(from, Str.endsWith(".old")),
                       selected = !fired && (point === "backup" ? backup : final);
 
                     if (selected) {
                       fired = true;
-                      complete = readFileSync(join(backup ? to.slice(0, -4) : from, "brain.mjs"), "utf8");
+                      complete = readFileSync(
+                        join(backup ? Function.pipe(to, Str.slice(0, -4)) : from, "brain.mjs"),
+                        "utf8",
+                      );
                     }
 
                     return delayed(fs.rename(from, to), selected ? delays.rename : 0, selected);
                   });
+
                 return yield* builder.build(f.options).pipe(
                   Effect.provideService(FileSystem.FileSystem, {
                     ...fs,
@@ -721,6 +825,7 @@ describe("P16 cleanup and recording", () => {
                   }),
                 );
               }).pipe(Effect.provide(NodeServices.layer));
+
               const fiber = Effect.runFork(task);
 
               try {
@@ -738,36 +843,40 @@ describe("P16 cleanup and recording", () => {
             },
           ),
           { ...runs, endOnFailure: true },
-        );
-      },
+        ),
     );
   }
 
   it(
     "cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles",
     { timeout: buildTimeout(2) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           for (const interrupt of [false, true]) {
             const f = fixture("View", value),
               entry = join(f.home, "inner.ts");
+
             writeFileSync(entry, `export const text=${JSON.stringify(value)};`);
             const native = await vi.importActual<Roll>("rolldown");
+
             let closed = false,
               opened = false;
-            const entered = Effect.runSync(Deferred.make<void>());
+
+            const entered = Deferred.makeUnsafe<void>();
             vi.doMock("rolldown", () => ({
               ...native,
               rolldown: async (options: RolldownOptions) => {
                 const handle = await native.rolldown(options);
                 opened = true;
+
                 return {
                   ...handle,
                   generate: () => {
                     Effect.runSync(Deferred.succeed(entered, undefined));
+
                     return interrupt
-                      ? new Promise<RolldownOutput>(() => {})
+                      ? Effect.runPromise(Effect.never)
                       : Promise.reject(Error("planted generate failure"));
                   },
                   close: async () => {
@@ -804,26 +913,28 @@ describe("P16 cleanup and recording", () => {
           }
         }),
         { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
-      );
-    },
+      ),
   );
   it(
     "cleanup: failures and interruption at each acquired Rolldown handle close it and preserve old output",
     { timeout: buildTimeout(6) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, fc.integer({ min: 0, max: 2 }), fc.boolean(), async (value, phase, interrupt) => {
           const f = fixture("View", value);
           previous(f, value);
+
           const native = await vi.importActual<Roll>("rolldown"),
             closed: boolean[] = [];
-          const entered = Effect.runSync(Deferred.make<void>());
+
+          const entered = Deferred.makeUnsafe<void>();
           let fired = false;
           vi.doMock("rolldown", () => ({
             ...native,
             rolldown: async (options: RolldownOptions) => {
               const handle = await native.rolldown(options),
                 index = closed.push(false) - 1;
+
               return {
                 ...handle,
                 generate: (o: OutputOptions) => {
@@ -833,8 +944,9 @@ describe("P16 cleanup and recording", () => {
 
                   fired = true;
                   Effect.runSync(Deferred.succeed(entered, undefined));
+
                   return interrupt
-                    ? new Promise<RolldownOutput>(() => {})
+                    ? Effect.runPromise(Effect.never)
                     : Promise.reject(new Error("planted private failure"));
                 },
                 close: async () => {
@@ -864,7 +976,7 @@ describe("P16 cleanup and recording", () => {
 
           expect(fired, "plant must reach selected real build phase").toBe(true);
           expect(closed.length).toBeGreaterThan(0);
-          expect(closed.every(Boolean)).toBe(true);
+          expect(Arr.every(closed, Boolean)).toBe(true);
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
           vi.doUnmock("rolldown");
           vi.resetModules();
@@ -873,14 +985,13 @@ describe("P16 cleanup and recording", () => {
           ...runs,
           numRuns: runsFor({ fast: 3, full: 6 }),
         },
-      );
-    },
+      ),
   );
   it(
     "asset collision plant: duplicate emitted routes fail without publishing partial output",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           const f = fixture("View", value);
           previous(f, value);
@@ -890,17 +1001,22 @@ describe("P16 cleanup and recording", () => {
             ...native,
             rolldown: async (options: RolldownOptions) => {
               const handle = await native.rolldown(options);
+
               return {
                 ...handle,
                 generate: async (o: OutputOptions) => {
                   const out = await handle.generate(o);
-                  const css = out.output.find((f) => f.fileName.endsWith(".css"));
 
-                  if (!css) {
+                  const css = Option.getOrUndefined(
+                    Arr.findFirst(out.output, (f) => Function.pipe(f.fileName, Str.endsWith(".css"))),
+                  );
+
+                  if (css === undefined) {
                     return out;
                   }
 
                   fired = true;
+
                   return { ...out, output: [...out.output, css] };
                 },
                 close: () => handle.close(),
@@ -908,9 +1024,11 @@ describe("P16 cleanup and recording", () => {
             },
           }));
           vi.resetModules();
+
           const result = await Effect.runPromise(
             Effect.result((await load()).build(f.options)).pipe(Effect.provide(NodeServices.layer)),
           );
+
           expect(fired).toBe(true);
           expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
@@ -918,24 +1036,29 @@ describe("P16 cleanup and recording", () => {
           vi.resetModules();
         }),
         runs,
-      );
-    },
+      ),
   );
   it(
     "recording: success and failure retain phases, outcomes, duration, versions, sizes and hashes without content",
     { timeout: buildTimeout() },
-    async () => {
+    () => {
       const versions = { rolldown: installed("rolldown"), effect: installed("effect") };
-      await fc.assert(
+
+      return fc.assert(
         fc.asyncProperty(values, async (value) => {
           for (const phase of ["success", "program", "window", "brain"] as const) {
             const f = fixture("View", value),
               spans: Tracer.Span[] = [];
+
             const fail = phase !== "success";
 
             if (fail) {
               writeFileSync(
-                phase === "brain" ? f.options.entry : phase === "window" ? f.file : join(dirname(f.file), "program.ts"),
+                Match.value(phase).pipe(
+                  Match.when("brain", () => f.options.entry),
+                  Match.when("window", () => f.file),
+                  Match.orElse(() => join(dirname(f.file), "program.ts")),
+                ),
                 "import './missing.ts';",
               );
             }
@@ -944,29 +1067,34 @@ describe("P16 cleanup and recording", () => {
               span: (o) => {
                 const span = new Tracer.NativeSpan(o);
                 spans.push(span);
+
                 return span;
               },
             });
+
             const result = await Effect.runPromise(
               Effect.result((await load()).build(f.options)).pipe(
                 Effect.withTracer(tracer),
                 Effect.provide(NodeServices.layer),
               ),
             );
+
             expect(result._tag).toBe(fail ? "Failure" : "Success");
-            const phases = spans.filter((s) => ["build.bundle", "build.emit"].includes(s.name));
-            expect(phases.some((s) => s.name === "build.bundle")).toBe(true);
-            const data = phases.map((s) => ({
+            const phases = Arr.filter(spans, (s) => ["build.bundle", "build.emit"].includes(s.name));
+            expect(Arr.some(phases, (s) => s.name === "build.bundle")).toBe(true);
+
+            const data = Arr.map(phases, (s) => ({
               name: s.name,
-              attributes: Object.fromEntries(s.attributes),
+              attributes: Rec.fromEntries(s.attributes),
               status: s.status,
             }));
+
             const verifyPhases = (rows: typeof data) => {
-              const bundles = rows.filter((r) => r.name === "build.bundle");
+              const bundles = Arr.filter(rows, (r) => r.name === "build.bundle");
               const order = ["program", "window", "brain"];
               const expected = fail ? order.slice(0, order.indexOf(phase) + 1) : order;
               expect(
-                bundles.map((r) => r.attributes.phase),
+                Arr.map(bundles, (r) => r.attributes.phase),
                 "every attempted bundle keeps its phase",
               ).toEqual(expected);
 
@@ -980,13 +1108,14 @@ describe("P16 cleanup and recording", () => {
                 expect(bundles.at(-1)?.attributes["error.type"]).toBe("BuildError");
               }
             };
+
             verifyPhases(data);
 
             // Plant: a typed version that is not the installed one.
             for (const key of ["rolldown.version", "effect.version"]) {
               expect(() =>
                 verifyPhases(
-                  data.map((row) => ({
+                  Arr.map(data, (row) => ({
                     ...row,
                     attributes: { ...row.attributes, [key]: `${String(row.attributes[key])}.0` },
                   })),
@@ -1000,19 +1129,21 @@ describe("P16 cleanup and recording", () => {
                 continue;
               }
 
-              const planted = data.map((row) => ({
+              const planted = Arr.map(data, (row) => ({
                 ...row,
-                attributes: Object.fromEntries(
-                  Object.entries(row.attributes).filter(
+                attributes: Rec.fromEntries(
+                  Arr.filter(
+                    Rec.toEntries(row.attributes),
                     ([key]) => key !== "phase" || (omit === "failed" && row.attributes.outcome !== "failure"),
                   ),
                 ),
               }));
+
               expect(() => verifyPhases(planted), `omit ${omit} phase attributes`).toThrow("keeps its phase");
             }
 
             if (fail) {
-              expect(() => verifyPhases(data.filter((row) => row.attributes.outcome !== "failure"))).toThrow(
+              expect(() => verifyPhases(Arr.filter(data, (row) => row.attributes.outcome !== "failure"))).toThrow(
                 "keeps its phase",
               );
             }
@@ -1024,15 +1155,17 @@ describe("P16 cleanup and recording", () => {
                 expect(row.status.endTime >= row.status.startTime).toBe(true);
               }
 
-              expect(Object.values(row.attributes).some((v) => v === "failure" || v === "success")).toBe(true);
+              expect(Arr.some(Rec.values(row.attributes), (v) => v === "failure" || v === "success")).toBe(true);
             }
 
-            expect(data.some((row) => Object.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(true);
-            const recorded = JSON.stringify(data.map(({ name, attributes }) => ({ name, attributes })));
+            expect(Arr.some(data, (row) => Rec.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(
+              true,
+            );
+            const recorded = JSON.stringify(Arr.map(data, ({ name, attributes }) => ({ name, attributes })));
 
             for (const marker of [ROOT, f.home, readFileSync(f.file, "utf8")]) {
               expect(recorded).not.toContain(marker);
-              expect(recorded).not.toContain(JSON.stringify(marker).slice(1, -1));
+              expect(recorded).not.toContain(Function.pipe(JSON.stringify(marker), Str.slice(1, -1)));
             }
 
             expect(recorded).toContain(JSON.stringify(versions.rolldown));
@@ -1041,12 +1174,13 @@ describe("P16 cleanup and recording", () => {
             if (fail) {
               expect(recorded).toContain("error.type");
             } else {
-              expect(data.some((s) => s.name === "build.emit")).toBe(true);
+              expect(Arr.some(data, (s) => s.name === "build.emit")).toBe(true);
               expect(recorded).toMatch(/[a-f0-9]{64}/);
               expect(
-                data
-                  .flatMap((row) => Object.entries(row.attributes))
-                  .some(([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0),
+                Arr.some(
+                  Arr.flatMap(data, (row) => Rec.toEntries(row.attributes)),
+                  ([key, value]) => /bytes|size/.test(key) && Predicate.isNumber(value) && value > 0,
+                ),
               ).toBe(true);
             }
           }
@@ -1068,6 +1202,7 @@ const windowRuns = { seed: 119120, numRuns: runsFor({ fast: 3, full: 4 }) };
 const windowHome = Effect.fn("p40.windowHome")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "p40w-" });
   yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
   yield* fs.makeDirectory(path.join(home, "node_modules/@p40"), { recursive: true });
@@ -1082,6 +1217,7 @@ const windowHome = Effect.fn("p40.windowHome")(function* () {
     path.join(home, "node_modules/react"),
   );
   yield* fs.copy(path.join(ROOT, "next/apps/fabrika/src"), path.join(home, "src"));
+
   return home;
 });
 
@@ -1089,19 +1225,23 @@ const windowHome = Effect.fn("p40.windowHome")(function* () {
 const windowModule = Effect.fn("p40.windowModule")(function* (home: string, id: string, marker: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const pkg = path.join(home, "programs", id);
   yield* fs.makeDirectory(pkg, { recursive: true });
   yield* fs.symlink(pkg, path.join(home, "node_modules/@p40", id));
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
+    Formatter.formatJson({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
   );
   yield* fs.writeFileString(path.join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
   yield* fs.writeFileString(
     path.join(pkg, "window.ts"),
-    `export const view = () => ${JSON.stringify(marker)}; export const more = import("./chunk.ts");`,
+    `export const view = () => ${Formatter.formatJson(marker)}; export const more = import("./chunk.ts");`,
   );
-  yield* fs.writeFileString(path.join(pkg, "chunk.ts"), `export const text = ${JSON.stringify(`${marker}-chunk`)};`);
+  yield* fs.writeFileString(
+    path.join(pkg, "chunk.ts"),
+    `export const text = ${Formatter.formatJson(`${marker}-chunk`)};`,
+  );
 });
 
 const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<number>) {
@@ -1109,6 +1249,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
   const { build } = yield* Effect.promise(load);
   const serveAsset = yield* Effect.promise(serving);
   const home = yield* windowHome();
+
   const options = {
     out: path.join(home, "dist"),
     root: home,
@@ -1117,31 +1258,36 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     ledger: [],
     chaos: false,
   };
+
   const markers = new Map<string, string>();
+
   let selected: ReadonlyArray<WindowPick> = [],
     builds = 0;
 
   const add = Effect.fnUntraced(function* (n: number) {
     const id = `w${markers.size}`,
       marker = `p40-window-${id}-${n}`;
+
     yield* windowModule(home, id, marker);
     markers.set(id, marker);
+
     return id;
   });
 
   const check = Effect.fnUntraced(function* () {
     const built = yield* build({
       ...options,
-      programs: selected.map((p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
+      programs: Arr.map(selected, (p) => ({ name: p.name, package: `@p40/${p.module}`, export: "program" })),
     });
+
     builds++;
-    const scripts = Object.entries(built.assets).filter(([, a]) => a.type === "text/javascript; charset=utf-8");
+    const scripts = Arr.filter(Rec.toEntries(built.assets), ([, a]) => a.type === "text/javascript; charset=utf-8");
     const entries = new Map<string, string>();
 
     for (const p of selected) {
       const marker = markers.get(p.module)!;
       // A window's entry is the one script that names its view; its chunk names `-chunk` instead.
-      const own = scripts.filter(([, a]) => a.body.includes(`${JSON.stringify(marker)}`));
+      const own = Arr.filter(scripts, ([, a]) => Function.pipe(a.body, Str.includes(`${JSON.stringify(marker)}`)));
       expect(own, `${p.name} has one window entry`).toHaveLength(1);
       const [route] = own[0]!;
       // Its route keeps the whole qualified name, so equal short names never meet on one route.
@@ -1151,7 +1297,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 
     expect(new Set(entries.values()).size).toBe(selected.length);
 
-    for (const [route, asset] of Object.entries(built.assets)) {
+    for (const [route, asset] of Rec.toEntries(built.assets)) {
       // A valid route: slash-led segments, none empty, `.` or `..`.
       expect(route).toMatch(/^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/);
       const response = yield* serveAsset(built.assets, new Request(`https://test.invalid${route}`));
@@ -1163,7 +1309,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 
   const steps: ReadonlyArray<{
     readonly possible: () => boolean;
-    readonly run: (n: number) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>;
+    readonly run: (n: number) => Effect.Effect<void, BuildFailure, FileSystem.FileSystem | Path.Path>;
   }> = [
     {
       possible: () => true,
@@ -1174,7 +1320,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     {
       possible: () => selected.length > 0,
       run: Effect.fnUntraced(function* (n) {
-        const short = selected[n % selected.length]!.name.split("/")[1]!;
+        const short = Str.split(selected[n % selected.length]!.name, "/")[1]!;
         selected = [...selected, { name: `fork${selected.length}/${short}`, module: yield* add(n) }];
       }),
     },
@@ -1182,7 +1328,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
   ];
 
   for (const n of tape) {
-    const possible = steps.filter((s) => s.possible());
+    const possible = Arr.filter(steps, (s) => s.possible());
     yield* possible[n % possible.length]!.run(Math.floor(n / possible.length));
   }
 
@@ -1198,13 +1344,12 @@ describe("P40 qualified window routes", () => {
   it(
     "L6: window programs with equal short names in different packs get their own valid routes",
     { timeout: 10 * windowRuns.numRuns * 10_000 },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (tape) => {
           await Effect.runPromise(Effect.scoped(windowWalk(tape)).pipe(Effect.provide(NodeServices.layer)));
         }),
         windowRuns,
-      );
-    },
+      ),
   );
 });

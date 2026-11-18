@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-lib-top-s1-review1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-16T01:08:40-08:00",
+  "ended": "2026-11-16T01:30:44-08:00",
+  "parent": null,
+  "active": null,
+  "role": "reviewer",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one review of slice 1 of the mock sweep's lib-top plan (docs/plan/quests/mock-lib-top-PLAN.md on fabrikalfa/mock-plans, with its amendments), in next/ and the lint tooling, at bc53c8553: merge-ready, no blocking class. Id.ts draws its 10 bytes from SecureRandom, catchDefect turns a throw into IdError entropy, Generator.layer keeps providing SecureRandom.layerWebCrypto (the ruling) and is typed Layer.Layer<Generator>. The pure advance step in place of the plan's throwing allocate keeps allocation synchronous: nothing yields between reading and writing the state, and both T4 plants turn T4 red against the real code. The exact-id checks on the two zero-byte laws only add assertions. The pair lock as two blocks is needed: lint.ts:195-209 with advice.ts's stale reports a warn line with no JSON.parse advice fire, and src/*.tsx has no file; a vi fire at warn still blocks, since advice.ts lets only a fire whose message starts with 'JSON.parse' advise. Each block writes out all six entries the top files took on main, with the same messages (checked by resolving every override for sample paths on main and on the head). The Reflect scenario's change from 'each glob its own file' to 'each file once' checks the same set of files with the options each really gets, so no reach is lost. One finding row: the crypto pattern doc's Id.ts line numbers went stale in the main merge.",
+  "plants": [
+    {
+      "law": "T4, both shared-fiber laws (Id.test.ts)",
+      "plant": "advance takes fresh whenever it is given, without now > last.at",
+      "result": "red"
+    },
+    {
+      "law": "T4, both shared-fiber laws (Id.test.ts)",
+      "plant": "Effect.yieldNow between advance and the write of last",
+      "result": "red"
+    },
+    {
+      "law": "T1, the nine entropy laws (Id.test.ts, Id.cause.test.ts)",
+      "plant": "the draw reads crypto.getRandomValues in place of secure.randomBytes",
+      "result": "red"
+    },
+    {
+      "law": "T2, C1 and the typed-entropy law",
+      "plant": "drop the draw's catchDefect",
+      "result": "red"
+    },
+    {
+      "law": "T3, bad clocks fail clock even when entropy fails",
+      "plant": "check the clock after the draw",
+      "result": "red"
+    },
+    {
+      "law": "T5, Generator.layer needs nothing (Id.types.test.ts)",
+      "plant": "Generator.layer without its SecureRandom provide and its type annotation; tsc -p next/packages/libfabrika fails at Id.types.test.ts:96",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_PROPERTIES in every vi ban folder",
+      "plant": "the lock blocks' vi entries renamed off vi",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_METHODS in every vi ban folder",
+      "plant": "fn deleted from the vitest/no-restricted-vi-methods block",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Node 26.13.0, TYPESAFE_API_KEY unset. Every plant ran in a scratch copy of the worktree, never in the branch. At bc53c8553: vitest on Id.test.ts, Id.cause.test.ts, Id.types.test.ts and oxlint-plugins/plants.test.ts, 287 of 287; one pnpm typecheck, exit 0; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint, 17 of 18 parts pass and lint:dead fails only on only-called-from-tests next/packages/libfabrika/src/Id.test-support.ts:generatorWith, the owner's call pending (its row, field/findings/2026-11-15-code-graph-misses-test-support-files.json, is right: code-graph 0.15.0's default testSupportFilePatterns list no *.test-support.ts and node-kinds.json sets none). Flaky check: next/apps/fabrika/src/exam/runner-contract-replay.test.ts ran 5 times, one per call, 5 of 5 tests passed each time in 32.6 to 35.2 s, load average about 4.3 on 4 cores; no repeat failure, so no finding row. loosening.sh on the merge base 5c94f12f4..HEAD: the 'removed law' hit is the shared-fiber law renamed and strengthened, the 'removed expect' hits are its allocated-order expects (replaced by the model's exact ids) and the Reflect scenario's uniqueness assert; the rest are unrecognized import and config lines; none loosens a law. Run on origin/main..HEAD the script also lists main's newer leakgrep changes, which this branch does not hold. A fold with fabrikalfa/mock-app-e2e-s1 conflicts in oxlint-plugins/builtin-plants.ts and plants.test.ts, as planned: its VI_METHODS and VI_PROPERTIES are a superset with a file field. A second pnpm lint with this row and the finding row added: field-check passes, lint:dead fails on the same one finding, and lint:promise-types died with EPIPE while another agent's tests ran in the box and passed alone with 0 findings.",
+  "step": "review",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-fold-1-build1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T01:33:54-08:00",
+  "ended": "2026-11-16T01:41:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fold of the mock sweep's reviewed lib-top slice 1 into stack layer 7, in next/ and the lint tooling: fabrikalfa/mock-lib-top-s1 at 3637964ea merged plainly into fabrikalfa/mock-fold-1 at 527076fe8 (merge base 5c94f12f4), merge commit 7a952e8b5, with no new law and no new behavior. Three files conflicted, each folded with both sides kept. .oxlintrc.json: both sides appended an override at the end of the list; the result keeps the stack's anti-slop/require-readable-spacing block, then the slice's vitest/no-restricted-vi-methods block and its two no-restricted-properties vi blocks (.ts at warn, .tsx at error), and parses as JSONC with 87 overrides. The stack changed no no-restricted-properties list since the base, so the slice's restated entry lists still hold every entry those files took. next/packages/libfabrika/src/Id.ts: the slice rewrote Generator.layer as makeGenerator over SecureRandom, and the stack only respaced the old generator and changed two expressions in it; the result is the slice's generator with the stack's S.decodeResult in place of S.decodeUnknownResult (the input is the schema's own encoded string) and the stack's blank lines around the multi-line draw binding and before its return. The stack's S.is(IdError) change has no site left, since the slice removed that Effect.try. next/packages/libfabrika/src/Id.test.ts: eleven hunks where the stack respaced the vi.spyOn tests and wrote Schema.decodeSync for Schema.decodeUnknownSync, and the slice replaced each spy with generatorWith; every hunk takes the slice's code with the stack's decodeSync and blank lines. Merge fallout, in the merge commit: pnpm format's lint fix added eight blank lines the stack's spacing rule asks of the slice's own code (Id.test.ts layout, predicted and checkSchedule; Id.cause.test.ts before a return; oxlint-plugins/plants.test.ts viGlobs). Id.cause.test.ts, Id.test-support.ts, Id.types.test.ts, builtin-plants.ts and plants.test.ts merged by themselves and use no name the stack renamed. Then .patterns/effect-crypto-through-services.md cites Id.ts:205-211 (makeGenerator through its randomBytes(10) draw) and Id.ts:263-265 (Generator.layer), the lines at this merge; the 177-182 and 233-235 given before were the slice's own numbers, before the stack's blank lines moved them.",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/Id.test.ts, Id.cause.test.ts (C1) and Id.types.test.ts, run together",
+      "result": "green, 32 of 32 in 3 files"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts, the REFLECT, TAGGED_ERROR, VI_METHODS and VI_PROPERTIES scenarios included",
+      "result": "green, 255 of 255"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Tests ran at 35f437572 (the merge plus the doc commit) under nice -n 15 with --maxWorkers=1. pnpm format exits 0 with 0 blocking and changes nothing after the merge. pnpm lint and pnpm typecheck were not run here: the coordinator runs them; lint:dead's known red on Id.test-support.ts:generatorWith waits on PR 1520, and no ledger row was added. loosening.sh 527076fe8 HEAD and loosening.sh 5c94f12f4 3637964ea give the same hit list, so the slice carried every hit and the merge added none: unrecognized changes in .oxlintrc.json, Id.cause.test.ts, Id.test-support.ts, Id.test.ts, Id.types.test.ts, builtin-plants.ts and plants.test.ts (import lines and the new blocks); Id.test.ts 'removed law', the rename of the shared-fibers law to the exact-ids T4 law, which asserts more; Id.test.ts 'removed expect', the spied check.run allocation expects that the exact predicted ids replace; plants.test.ts 'removed expect' on the REFLECT scenario, its one-file-per-glob check, dropped because the vi lock's src/*.ts glob and the src/* glob plant one file, which is now checked once with the options it gets. All were in the reviewed slice.",
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

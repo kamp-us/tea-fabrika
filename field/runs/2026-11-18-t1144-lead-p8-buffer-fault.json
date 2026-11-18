@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1144-lead-p8-buffer-fault",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-18T11:34:40Z",
+  "ended": "2026-11-18T11:36:05Z",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "session",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "head": "75683bfbd195afd7d12b45c8a55f359c44eaca0e",
+  "base": "84f51f8017e1d1a00b36f85dd1856f11b661da9b",
+  "why": "Today's CI tooling, tracker 1144. The approved plan's P8 plant, buffer every event write until onTestRunEnd, run once on a cloud box with a passing control before it and the exact restoration after it. The plan named disposable CI for this signal law (0594); the cloud box is not the owner's laptop, and vitest.hostrun.ts allows it there (CLAUDE_CODE_REMOTE on Linux). Head 75683bf is the PR after its merge of origin/main 84f51f8.",
+  "note": "Node 26.13.0, pnpm 12.16.1, `pnpm install --frozen-lockfile`, nice 15, one worker. (1) Control at 75683bf: `pnpm exec vitest run --maxWorkers=1 .github/ci/progress-reporter.integration.test.ts -t P8` exit 0, 1 passed and 1 skipped (P9, filtered), 10.6 s. (2) Plant on local branch scratch/p8-buffer-plant, commit a641f59e269ff6df397007e116b48b63c1d75b2d, never pushed: in .github/ci/progress-reporter.ts `recording`, `event` pushed each projected record into an array, and `end` wrote the array before the run-end record. Same command: exit 1, the P8 scenario failed at .github/ci/progress-reporter.integration.test.ts:309, `expect(before.files._tag).toBe(\"unavailable\")`, received `read`: the journal first showed the active test only after Vitest had ended the run and written its final JSON, so progress was not visible before the cutoff. That is the law's own assertion, not a timeout or a crash. (3) Restoration: back on fabrikalfa/1144-ci-progress at 75683bf, progress-reporter.ts identical to HEAD (sha256 ae54f3ee16552a4d0655d12b6c2c5af5a98eeb56040fcb95d7d6881b3a57d5e8, git diff empty). Whole file, P8 and P9: exit 0, 2 passed, 24.4 s. No receipt lines were printed by the local default reporter, so no journal bytes are claimed here. The scratch branch stays local.",
+  "plants": [
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.ts recording: buffer event writes until onTestRunEnd",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 1.5,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

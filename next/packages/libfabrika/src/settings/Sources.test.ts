@@ -10,19 +10,29 @@
 //   decoded values, and per dotted path the Origin of the source that supplied it, or `default`.
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
-import * as Setting from "./Setting.ts";
-import * as Sources from "./Sources.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const DEFAULT = 18787;
+
 const REPO = ".fabrika/fabrika.toml";
+
 const PERSON = "~/.fabrika/fabrika.toml";
 
 const declare = (path: string) =>
@@ -44,11 +54,13 @@ const KEYS = [
 ] as const;
 
 const ORDER = ["flag", "env", "repo", "person"] as const;
+
 type Slot = (typeof ORDER)[number];
 
 const parse = (text: string) =>
   Effect.gen(function* () {
     const toml = yield* Toml;
+
     return yield* toml.parse(text);
   }).pipe(Effect.provide(TomlParser.layer));
 
@@ -92,18 +104,22 @@ const build = (choices: ReadonlyArray<Choice>, noise: Readonly<Record<string, st
         person.push([key.path, c.person]);
       }
     });
+
     const repoFile = fileText(repo),
       personFile = fileText(person);
+
     const sources = {
       flags: Sources.flags(flags),
       env: Sources.env(env),
       repo: Sources.file(REPO, yield* parse(repoFile.text)),
       person: Sources.file(PERSON, yield* parse(personFile.text)),
     };
+
     return { sources, lines: { repo: repoFile.at, person: personFile.at } };
   });
 
 const ports = fc.integer({ min: 1, max: 65535 });
+
 // A pool where equal values are common: the default itself, one shared value, or any port.
 const value = (shared: number) => fc.oneof(fc.constant(DEFAULT), fc.constant(shared), ports);
 
@@ -120,40 +136,44 @@ const noise = fc.dictionary(
 );
 
 describe("L5, the highest present source wins per key, and so does its origin", () => {
-  it("flag, env, repo, person, default, per key, even when the values are equal", async () => {
-    await fc.assert(
+  it("flag, env, repo, person, default, per key, even when the values are equal", () =>
+    fc.assert(
       fc.asyncProperty(
         ports.chain((shared) => fc.tuple(choice(shared), choice(shared))),
         noise,
         async (picked, extra) => {
           const choices: Array<Choice> = picked.map((c) =>
-            Object.fromEntries(Object.entries(c).map(([slot, v]) => [slot, String(v)])),
+            Rec.fromEntries(Rec.toEntries<string, number>(c).map(([slot, v]) => [slot, String(v)])),
           );
+
           const { resolved, lines } = await Effect.runPromise(
             Effect.gen(function* () {
               const { sources, lines } = yield* build(choices, extra);
               const resolved = yield* Sources.resolve(group, sources);
+
               return { resolved, lines };
             }),
           );
+
           KEYS.forEach((key, n) => {
             const c = choices[n]!;
             const winner = ORDER.find((slot) => c[slot] !== undefined);
             const dotted = key.path.join(".");
             expect(resolved.values[key.name]).toBe(winner === undefined ? DEFAULT : Number(c[winner]));
+
             const want =
               winner === "repo" || winner === "person"
                 ? { _tag: "file", file: winner === "repo" ? REPO : PERSON, line: lines[winner][dotted] }
                 : winner === "env"
                   ? { _tag: "env", name: key.env }
                   : { _tag: winner ?? "default" };
+
             expect(resolved.origins[dotted]).toMatchObject(want);
           });
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
 const unreadable: Sources.Source = {
@@ -164,22 +184,26 @@ const unreadable: Sources.Source = {
 };
 
 describe("L6, a failed source or an invalid winner never falls through", () => {
-  it("a read failure fails the resolve, whatever lower sources hold", async () => {
-    await fc.assert(
+  it("a read failure fails the resolve, whatever lower sources hold", () =>
+    fc.assert(
       fc.asyncProperty(fc.constantFrom(...ORDER), ports, ports, async (failing, below, other) => {
         // Every source above the failing one is absent, and every one below holds a valid value.
         const lower = ORDER.slice(ORDER.indexOf(failing) + 1);
+
         const choices: Array<Choice> = [
-          Object.fromEntries(lower.map((slot) => [slot, String(below)])),
+          Rec.fromEntries(lower.map((slot) => [slot, String(below)])),
           { person: String(other) },
         ];
+
         const exit = await Effect.runPromiseExit(
           Effect.gen(function* () {
             const { sources } = yield* build(choices, {});
             const slot = failing === "flag" ? "flags" : failing;
+
             return yield* Sources.resolve(group, { ...sources, [slot]: unreadable });
           }),
         );
+
         expect(Exit.isFailure(exit)).toBe(true);
 
         if (Exit.isFailure(exit)) {
@@ -187,31 +211,37 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("an invalid value in the winning source fails, though a lower source holds a valid one", async () => {
+  it("an invalid value in the winning source fails, though a lower source holds a valid one", () => {
     // An empty string is supplied, not absent: it is invalid too.
     const invalid = fc.oneof(
       fc.integer({ min: 65536, max: 2 ** 30 }).map(String),
       fc.integer({ min: -(2 ** 30), max: 0 }).map(String),
       fc.constantFrom('""', '"abc"', "1.5", "true"),
     );
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.constantFrom(...ORDER), invalid, ports, async (winning, raw, below) => {
         const lower = ORDER.slice(ORDER.indexOf(winning) + 1);
+
         // A flag or the environment holds text; a file holds TOML.
-        const text = winning === "flag" || winning === "env" ? (raw.startsWith('"') ? raw.slice(1, -1) : raw) : raw;
+        const text =
+          winning === "flag" || winning === "env" ? (Str.startsWith('"')(raw) ? Str.slice(1, -1)(raw) : raw) : raw;
+
         const choices: Array<Choice> = [
-          { [winning]: text, ...Object.fromEntries(lower.map((slot) => [slot, String(below)])) },
+          { [winning]: text, ...Rec.fromEntries(lower.map((slot) => [slot, String(below)])) },
           {},
         ];
+
         const exit = await Effect.runPromiseExit(
           Effect.gen(function* () {
             const { sources } = yield* build(choices, {});
+
             return yield* Sources.resolve(group, sources);
           }),
         );
+
         expect(Exit.isFailure(exit), `${winning} = ${raw}`).toBe(true);
       }),
       check,

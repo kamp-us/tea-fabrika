@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-laws-closed-builds-stay-reachable",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "opus",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/packages/libfabrika/src/node/build/build.ts",
+    "line": 477
+  },
+  "says": "In the next/ watcher law file, a closed case's builds stay reachable for the rest of the file. A heap snapshot roots them in Rolldown's native global handles, which keep buildPrograms' plugin (the transform closure at build.ts:477) and with it that build's inputs map, every input file's text, so each law that runs the watcher under a custom tracer adds hundreds of MB of live heap that the next laws inherit.",
+  "proof": "Linux cloud box, pinned Node 26.13.0, FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts with NODE_OPTIONS=--expose-gc and a scratch afterEach that forces GC and prints heapUsed. At origin/main 0f41ba4c, live heap after each law: 385, 1346, 1415, 1459 and 1235 MB, with the save-driven L17/L18 law alone adding 961 MB. The old L10, which sets no tracer, added 44 MB. On branch fabrikalfa/l10-boot-drain the new L10, which needs a tracer for its rebuild spans, added about 520 MB over its 20 runs; with the tracer removed the run left 88 MB, though it then failed at its first install and did fewer rebuilds. Two whole-file runs on a draft of that branch died with V8's FATAL ERROR: Ineffective mark-compacts near heap limit (about 2040 MB) after 4 of 6 laws passed. In a fast-depth heap snapshot, the retainer path of an Effect Schema.ts source text is (Global handles) -> closure logger -> Context.plugins -> Object.transform -> closure transform -> Context.inputs -> Map, and another goes through PluginContextData.normalizedInputPlugins.",
+  "cost": "The watcher law file sits near the 2 GB default worker heap at full depth (1798 MB live at the committed head of ticket 1172), so one more law, or a run under memory pressure, ends in a heap OOM that reads as a flaky watcher law. Each new tracer-based watcher law adds its retention to every law after it.",
+  "head": "2f388a50dabbbb13dae1efdaa834ff565c398c29",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null
+}

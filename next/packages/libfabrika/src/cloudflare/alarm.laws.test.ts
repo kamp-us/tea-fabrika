@@ -1,25 +1,38 @@
 // Ticket 866, next/. Exercise the real Cloudflare Alarm through processRuntime.
-import { createHash } from "node:crypto";
 import {
   DurableObjectState as ObjectState,
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import type { ProjectBinding } from "./bindings.ts";
 import * as ProcessObject from "./ProcessObject.ts";
 import { processRuntime, settings } from "./runtime.ts";
 
 type State = Parameters<typeof processRuntime>[0];
+
 type Environment = Parameters<typeof processRuntime>[1];
+
+// SAFETY: each call gives `platform` what processRuntime and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation `Process.make` was handed.
 const platform = <A>(value: object): A => value as A;
 
 // Ticket 502 slice S2: keep only what the Process object's Layer hands to Alchemy's `make`, so law
@@ -29,11 +42,13 @@ const made = vi.hoisted((): { value?: object } => ({}));
 vi.mock("./objects.ts", async (original) => {
   const actual = await original<typeof import("./objects.ts")>();
   const { Layer } = await import("effect");
+
   return {
     ...actual,
     Process: {
       make: (implementation: object) => {
         made.value = implementation;
+
         return Layer.empty;
       },
     },
@@ -44,6 +59,28 @@ const unexpected = () => {
   throw new Error("unexpected platform call");
 };
 
+const lookup = "SELECT name FROM sqlite_master WHERE name='process_state'";
+
+// The Process object's own accounting (P34c), set up on each build: its two tables and its fault
+// slot, then the guard's fault check before a step. Each is asked for the object's own name only.
+const accounting = (name: string) =>
+  [
+    ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+    ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+    ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", name, ""],
+    ["SELECT value FROM quota_fault WHERE name=?", name],
+  ].map((call) => JSON.stringify(call));
+
+/** The object's store: the checkpoint lookup and its own accounting answer empty, and any other query throws. */
+const processSql = (name: string) => {
+  const allowed = new Set([JSON.stringify([lookup]), ...accounting(name)]);
+
+  return {
+    exec: (query: string, ...args: ReadonlyArray<unknown>) =>
+      allowed.has(JSON.stringify([query, ...args])) ? [] : unexpected(),
+  };
+};
+
 const checkAlarmTime = (at: number) => {
   if (at <= 0) {
     throw new TypeError("setAlarm requires a time greater than 0");
@@ -52,11 +89,10 @@ const checkAlarmTime = (at: number) => {
 
 // The process records its start with the Project object before it runs (T753), so the law's
 // environment carries a start's input, and its Project answers that one call and no other.
-const start = StartsTest.fixture({ name: "alarm-project", port: 8787 }, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-);
+const start = await Effect.runPromise(StartsTest.fixture({ name: "alarm-project", port: 8787 }));
 
 const categories = ["zero", "negative", "past", "now", "future", "far", "clear"] as const;
+
 type Move = (typeof categories)[number] | "replace" | "repeat" | "advance" | "clear-again";
 
 // fc.gen is needed because each draw depends on the alarm state reached by the previous operation.
@@ -70,6 +106,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
           let eligible: number | null = null;
           const captured = yield* Deferred.make<Alarm["Service"]>();
           const requests: number[] = [];
+
           const values = new Map<string, unknown>([
             [
               "descriptor",
@@ -82,9 +119,11 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               },
             ],
           ]);
+
           const storage = platform<State["storage"]>({
             get: async (key: string) => {
               expect(["descriptor", "wake"]).toContain(key);
+
               return values.get(key);
             },
             put: async (key: string, value: unknown) => {
@@ -93,6 +132,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             },
             delete: async (key: string) => {
               expect(key).toBe("wake");
+
               return values.delete(key);
             },
             setAlarm: async (at: number) => {
@@ -105,14 +145,10 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               armed = null;
               eligible = null;
             },
-            sql: {
-              exec: (query: string) => {
-                expect(query).toBe("SELECT name FROM sqlite_master WHERE name='process_state'");
-                return [];
-              },
-            },
+            sql: processSql("alarm:866"),
             transactionSync: unexpected,
           });
+
           yield* Effect.acquireRelease(
             Effect.sync(() =>
               vi.spyOn(SpanSink, "layer").mockReturnValue(
@@ -134,6 +170,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                   ProgramRunner,
                   Effect.gen(function* () {
                     yield* Deferred.succeed(captured, yield* Alarm);
+
                     return ProgramRunner.of({
                       init: () => Effect.void,
                       msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
@@ -149,17 +186,18 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
+
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               processRuntime(
-                platform<State>({ id: { name: JSON.stringify(["alarm-project", "alarm:866"]) }, storage }),
+                platform<State>({ id: { name: Formatter.formatJson(["alarm-project", "alarm:866"]) }, storage }),
                 platform<Environment>({
-                  INSTANCE: JSON.stringify(start),
+                  INSTANCE: Formatter.formatJson(start),
                   PROJECT: { getByName: () => project },
                   MEASUREMENTS: stub,
                 }),
@@ -168,6 +206,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             ),
             (runtime) => runtime.disposeEffect,
           );
+
           yield* runtime.contextEffect;
           const alarm = yield* Deferred.await(captured);
           let requested: number | null = null;
@@ -185,13 +224,16 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                     ? requested === null && covered.has("clear")
                     : true,
             );
+
             const missing = possible.filter((move) => !covered.has(move));
+
             const choices: Move[] =
               covered.has("clear") && !covered.has("clear-again") && requested === null
                 ? ["clear-again" as const]
                 : missing.length > 0
                   ? missing
                   : possible;
+
             const move: Move = draw(fc.constantFrom, ...choices);
             const before = requests.length;
 
@@ -203,6 +245,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               }
             } else {
               const gap = draw(fc.integer, { min: 1, max: now - 1 });
+
               const at: number | null =
                 move === "clear" || move === "clear-again"
                   ? null
@@ -221,6 +264,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
                               : move === "replace"
                                 ? requested! + draw(fc.integer, { min: 1, max: 1_000_000 })
                                 : now + gap;
+
               const exit = yield* Effect.exit(alarm.set(at));
               expect(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "alarm operation").toBe(
                 true,
@@ -290,6 +334,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
         Effect.gen(function* () {
           let now = deliveries[0]!;
           const dues: number[] = [];
+
           const values = new Map<string, unknown>([
             [
               "descriptor",
@@ -302,9 +347,11 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
               },
             ],
           ]);
+
           const storage = platform<State["storage"]>({
             get: (key: string) => {
               expect(["descriptor", "wake"]).toContain(key);
+
               // The platform's storage rejects; the service turns that into its typed failure.
               return key === "wake" && now.outcome === "storage"
                 ? Promise.reject(new Error(now.text))
@@ -314,13 +361,11 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             delete: unexpected,
             setAlarm: unexpected,
             deleteAlarm: unexpected,
-            // The one query a build makes: whether the object holds a checkpoint yet (none here).
-            sql: {
-              exec: (query: string) =>
-                query === "SELECT name FROM sqlite_master WHERE name='process_state'" ? [] : unexpected(),
-            },
+            // A build asks whether the object holds a checkpoint yet (none here) and sets up its accounting.
+            sql: processSql("alarm:502"),
             transactionSync: unexpected,
           });
+
           yield* Effect.acquireRelease(
             Effect.sync(() =>
               vi.spyOn(SpanSink, "layer").mockReturnValue(
@@ -347,11 +392,14 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                     due: (at) =>
                       Effect.suspend(() => {
                         dues.push(at);
-                        return now.outcome === "fails"
-                          ? Effect.fail(new LedgerError({ reason: "storage", message: now.text }))
-                          : now.outcome === "dies"
-                            ? Effect.die(new Error(now.text))
-                            : Effect.void;
+
+                        return Match.value(now.outcome).pipe(
+                          Match.when("fails", () =>
+                            Effect.fail(new LedgerError({ reason: "storage", message: now.text })),
+                          ),
+                          Match.when("dies", () => Effect.die(new Error(now.text))),
+                          Match.orElse(() => Effect.void),
+                        );
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,
@@ -362,11 +410,12 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
-          const stub = new Proxy({}, { get: unexpected });
-          const project = new Proxy(
-            {},
-            { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(start) : unexpected()) },
-          );
+          const stub = Stub.make<R2Bucket>(unexpected);
+
+          const project = Stub.make<ProjectBinding>(unexpected, {
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
+          });
+
           // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
           ProcessObject.layer({
             programs: {},
@@ -374,19 +423,23 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
               settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
           });
           const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
+
           const state = fromDurableObjectState(
             platform<Parameters<typeof fromDurableObjectState>[0]>({
-              id: { name: JSON.stringify(["alarm-project", "alarm:502"]) },
+              id: { name: Formatter.formatJson(["alarm-project", "alarm:502"]) },
               storage,
               abort: unexpected,
             }),
           );
+
           const environment = platform<WorkerEnvironment["Service"]>({
-            INSTANCE: JSON.stringify(start),
+            INSTANCE: Formatter.formatJson(start),
             PROJECT: { getByName: () => project },
             MEASUREMENTS: stub,
           });
+
           const context = platform<RuntimeContext["Service"]>({});
+
           const object = yield* constructor.pipe(
             Effect.flatten,
             Effect.provideService(WorkerEnvironment, environment),

@@ -2,6 +2,7 @@ import { SettingsStart } from "@kampus/libfabrika";
 import { Schema } from "effect";
 
 export const Settings = SettingsStart.Input;
+
 export type Settings = typeof Settings.Type;
 
 export const Founding = Schema.Struct({

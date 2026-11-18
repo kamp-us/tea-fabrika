@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0123-heartbeat-two-hours-under-three-hour-schedule",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0123-githubs-schedule-starts-the-mutation-run.md",
+    "line": 73
+  },
+  "says": "Today's tooling records: 0123's heartbeat goes red when a merge has waited more than two hours for a passing mutation run, but 0535 moved the mutation run to every 3 hours, and the two hours were derived from an hourly run.",
+  "proof": ".decisions/0123-githubs-schedule-starts-the-mutation-run.md:73 reads 'goes red when a merge on main has waited more than two hours for a passing run'; .decisions/0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md:47 says mutation starts 'from the schedule every 3 hours'; .agents/skills/mutation/scripts/heartbeat.ts:14 derives the two hours from a merge that 'waits up to one hour for the next' run. No record changes the heartbeat's limit.",
+  "cost": "Once mutation runs on 0535's schedule, a merge just after a run waits up to 3 hours for the next, so the heartbeat reads late between most runs and stops meaning anything.",
+  "head": "9c3d79cf2823cdf1325c4b311698dc9d639feed8",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627"
+}

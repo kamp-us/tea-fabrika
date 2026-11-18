@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s5-build2",
+  "ticket": "1056",
+  "pr": "1411",
+  "started": "2026-11-15T19:00:35-08:00",
+  "ended": "2026-11-15T19:09:15-08:00",
+  "parent": "2026-11-15-reflect-ban-s5-tests2",
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round 1 of slice 5 of the Reflect ban, in next/packages/libfabrika/src/settings, the product half. put in TomlParser.ts now steps into an array as into a table (Predicate.isObjectOrArray) and keeps the own-key read. A value that is neither cannot come from a parsed document, since toml-eslint-parser refuses a write through a scalar first, so put throws a TypeError there instead of skipping the step: the same loud failure main's Object.defineProperty on a primitive gave. The new array-of-tables law is green, and every settings law stays green, one file at a time.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Ran one at a time: all 15 non-integration test files in the settings folder, green; the new law also at full depth. pnpm format, pnpm lint (17 parts passed), the ratchet (exit 0), one pnpm typecheck after waiting for another agent's tsgo (exit 0). loosening.sh 20b31a965 HEAD: one 'unrecognized change' hit, the added runsFor import at TomlParser.test.ts line 12; no law loosened.",
+  "step": "build"
+}

@@ -1,0 +1,292 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-cloud-proof",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T16:33:50Z",
+  "ended": "2026-11-18T16:56:00Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "parked",
+  "why": "next/ L10 repair, cloud-box proof at 2f388a50 (ticket 1172). The repeat shape of the flake is fixed: the scenario law passed 5 of 5, L10 at full depth passed 10 of 10 on an idle box in 37 to 43 s (260 s before), and the whole law file passed twice in 216 and 221 s. The slowness shape is not: with a pnpm lint running beside it, L10 failed 3 of 3 with 'an owed install never came', the 3 s bound the plan kept per owed change. The plan's top doubt (50%) predicted this. Removing that dependence on the machine's speed (0052) and keeping the timeout (0036) pull apart, so the quest parks for the owner.",
+  "note": "Command: FABRIKA_TEST_DEPTH=full nice -n 15 pnpm exec vitest run --project next-integration --maxWorkers=1 next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts with -t naming the law. Linux cloud box, 4 CPUs, 16 GB, Node 26.13.0, TYPESAFE_API_KEY unset, seed 119120. The plants were run by the tests step on this same head (field/runs/2026-11-18-l10-boot-drain-tests1.json) and are not repeated here. No typecheck or lint gate ran (owner rule of 2026-11-18: CI judges those). Raw logs stay off git.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 22.2,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "head": "2f388a50dabbbb13dae1efdaa834ff565c398c29",
+  "runs": [
+    {
+      "label": "s-scenario-1",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 5245
+        }
+      }
+    },
+    {
+      "label": "s-scenario-2",
+      "exit": 0,
+      "seconds": 8,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 4961
+        }
+      }
+    },
+    {
+      "label": "s-scenario-3",
+      "exit": 0,
+      "seconds": 8,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 5342
+        }
+      }
+    },
+    {
+      "label": "s-scenario-4",
+      "exit": 0,
+      "seconds": 7,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 5066
+        }
+      }
+    },
+    {
+      "label": "s-scenario-5",
+      "exit": 0,
+      "seconds": 8,
+      "laws": {
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 5342
+        }
+      }
+    },
+    {
+      "label": "l10-idle-1",
+      "exit": 0,
+      "seconds": 40,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 37734
+        }
+      }
+    },
+    {
+      "label": "l10-idle-2",
+      "exit": 0,
+      "seconds": 43,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 39880
+        }
+      }
+    },
+    {
+      "label": "l10-idle-3",
+      "exit": 0,
+      "seconds": 43,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 40990
+        }
+      }
+    },
+    {
+      "label": "l10-idle-4",
+      "exit": 0,
+      "seconds": 42,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 39168
+        }
+      }
+    },
+    {
+      "label": "l10-idle-5",
+      "exit": 0,
+      "seconds": 39,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 37110
+        }
+      }
+    },
+    {
+      "label": "l10-idle-6",
+      "exit": 0,
+      "seconds": 40,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 37033
+        }
+      }
+    },
+    {
+      "label": "l10-idle-7",
+      "exit": 0,
+      "seconds": 40,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 37522
+        }
+      }
+    },
+    {
+      "label": "l10-idle-8",
+      "exit": 0,
+      "seconds": 39,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 36136
+        }
+      }
+    },
+    {
+      "label": "l10-idle-9",
+      "exit": 0,
+      "seconds": 37,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 35064
+        }
+      }
+    },
+    {
+      "label": "l10-idle-10",
+      "exit": 0,
+      "seconds": 37,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 34716
+        }
+      }
+    },
+    {
+      "label": "l10-load-1",
+      "exit": 1,
+      "seconds": 12,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "fail",
+          "ms": 8082
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; its lint:promise-types part was killed by the box memory limit each time",
+      "failure": "an owed install never came (the 3 s bound per owed change, watch.laws.integration.test.ts:1195)"
+    },
+    {
+      "label": "l10-load-2",
+      "exit": 1,
+      "seconds": 31,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "fail",
+          "ms": 25032
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; its lint:promise-types part was killed by the box memory limit each time",
+      "failure": "an owed install never came (the 3 s bound per owed change, watch.laws.integration.test.ts:1195)"
+    },
+    {
+      "label": "l10-load-3",
+      "exit": 1,
+      "seconds": 125,
+      "laws": {
+        "L10: a save changes the hash o": {
+          "result": "fail",
+          "ms": 120539
+        }
+      },
+      "load": "nice -n 15 pnpm lint in the same worktree, started 20 s before the law; its lint:promise-types part was killed by the box memory limit each time",
+      "failure": "an owed install never came (the 3 s bound per owed change, watch.laws.integration.test.ts:1195)"
+    },
+    {
+      "label": "whole-1",
+      "exit": 0,
+      "seconds": 216,
+      "laws": {
+        "L17/L18: every completed rebui": {
+          "result": "pass",
+          "ms": 22753
+        },
+        "L17/L18: save-driven rebuilds": {
+          "result": "pass",
+          "ms": 69826
+        },
+        "scenario: R1 a held same reply": {
+          "result": "pass",
+          "ms": 8055
+        },
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 41224
+        },
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 6675
+        },
+        "L18: every Rolldown watcher an": {
+          "result": "pass",
+          "ms": 64781
+        }
+      }
+    },
+    {
+      "label": "whole-2",
+      "exit": 0,
+      "seconds": 221,
+      "laws": {
+        "L17/L18: every completed rebui": {
+          "result": "pass",
+          "ms": 22809
+        },
+        "L17/L18: save-driven rebuilds": {
+          "result": "pass",
+          "ms": 73930
+        },
+        "scenario: R1 a held same reply": {
+          "result": "pass",
+          "ms": 8351
+        },
+        "L10: a save changes the hash o": {
+          "result": "pass",
+          "ms": 41772
+        },
+        "scenario: L10 repeats at boot": {
+          "result": "pass",
+          "ms": 6474
+        },
+        "L18: every Rolldown watcher an": {
+          "result": "pass",
+          "ms": 65114
+        }
+      }
+    }
+  ]
+}

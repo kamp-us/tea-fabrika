@@ -29,7 +29,7 @@
 // packages in node_modules. Uncommitted edits under `.agents/` in the main checkout are not in the
 // pin either; the launch prints one line when there are some.
 
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Console, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** The environment variable the pinned chain reads: its pin, as JSON. */
@@ -43,6 +43,7 @@ export const Pinned = Schema.Struct({
   commit: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
   folder: Schema.String,
 });
+
 export type Pinned = typeof Pinned.Type;
 
 const PinnedText = Schema.fromJsonString(Pinned);
@@ -53,13 +54,14 @@ export const PinState = Schema.TaggedUnion({
   pinned: { pin: Pinned },
   malformed: { value: Schema.String },
 });
+
 export type PinState = typeof PinState.Type;
 
 /** What FABRIKA_PIN's value says. A value that does not parse is never read as no pin. */
 export const pinState = (value: string | undefined): PinState =>
   value === undefined
     ? PinState.cases.unpinned.make({})
-    : Option.match(Schema.decodeUnknownOption(PinnedText)(value), {
+    : Option.match(Schema.decodeOption(PinnedText)(value), {
         onNone: () => PinState.cases.malformed.make({ value }),
         onSome: (pin) => PinState.cases.pinned.make({ pin }),
       });
@@ -71,7 +73,7 @@ export const pinText = (pin: Pinned): string => Schema.encodeSync(PinnedText)(pi
 export const pinnedScript = (folder: string, script: string): string =>
   `${folder}/.agents/skills/lead/scripts/${script}`;
 
-const short = (commit: string) => commit.slice(0, 12);
+const short = (commit: string) => pipe(commit, Str.slice(0, 12));
 
 /** The line the pinned chain prints at start: its commit, and what its quest's last process ran on. */
 export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
@@ -86,19 +88,23 @@ export const pinLine = (before: Pinned | undefined, now: Pinned): string =>
 // ---------------------------------------------------------------- the world
 
 /** A pin that could not be made, or a pinned run that could not start. */
-export class PinFailed extends Schema.TaggedError<PinFailed>()("PinFailed", { reason: Schema.String }) {}
+export class PinFailed extends Schema.TaggedError<PinFailed, { readonly brand: unique symbol }>()("PinFailed", {
+  reason: Schema.String,
+}) {}
 
 const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
   const handle = yield* command;
+
   const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
     concurrency: 2,
   });
-  return { code: Number(code), output: output.trim() };
+
+  return { code: Number(code), output: Str.trim(output) };
 }, Effect.scoped);
 
 const git = (main: string, args: ReadonlyArray<string>) => ran(ChildProcess.make("git", ["-C", main, ...args]));
 
-const failed = (reason: string) => () => new PinFailed({ reason });
+const failed = (reason: string) => () => PinFailed.make({ reason });
 
 /**
  * The quest's pin, made from the main checkout's commit and removed when the scope closes. Fails
@@ -112,12 +118,13 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const head = yield* git(o.main, ["rev-parse", "--verify", "HEAD^{commit}"]).pipe(
     Effect.mapError(failed("git could not start")),
   );
 
   if (head.code !== 0) {
-    return yield* new PinFailed({ reason: `the main checkout's commit cannot be read: ${head.output}` });
+    return yield* PinFailed.make({ reason: `the main checkout's commit cannot be read: ${head.output}` });
   }
 
   const dirty = yield* git(o.main, ["status", "--porcelain", "--", ...ARCHIVED]).pipe(
@@ -125,7 +132,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
   );
 
   if (dirty.output !== "") {
-    yield* Console.error(`pin: uncommitted changes under ${ARCHIVED.join(" and ")} are not in the pin`);
+    yield* Console.error(`pin: uncommitted changes under ${Arr.join(ARCHIVED, " and ")} are not in the pin`);
   }
 
   const folder = o.folder;
@@ -133,20 +140,23 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
     fs.makeDirectory(folder, { recursive: true }).pipe(Effect.mapError(failed(`${folder} cannot be made`))),
     () => fs.remove(folder, { recursive: true, force: true }).pipe(Effect.ignore),
   );
+
   const copied = yield* ran(
     ChildProcess.make("git", ["-C", o.main, "archive", "--format=tar", head.output, "--", ...ARCHIVED]).pipe(
       ChildProcess.pipeTo(ChildProcess.make("tar", ["-x", "-f", "-", "-C", folder])),
     ),
   ).pipe(Effect.mapError(failed("git archive or tar could not start")));
+
   const script = pinnedScript(folder, o.script);
 
   if (copied.code !== 0 || !(yield* fs.exists(script).pipe(Effect.orElseSucceed(() => false)))) {
-    return yield* new PinFailed({ reason: `the scripts at ${short(head.output)} were not copied: ${copied.output}` });
+    return yield* PinFailed.make({ reason: `the scripts at ${short(head.output)} were not copied: ${copied.output}` });
   }
 
   yield* fs
     .symlink(path.join(o.main, "node_modules"), path.join(folder, "node_modules"))
     .pipe(Effect.mapError(failed(`node_modules cannot be linked into ${folder}`)));
+
   return Pinned.make({ commit: head.output, folder });
 });
 
@@ -169,6 +179,7 @@ export const runPinned = Effect.fn("pin.runPinned")(
       stdout: "inherit",
       stderr: "inherit",
     });
+
     return Number(yield* handle.exitCode);
   },
   Effect.scoped,

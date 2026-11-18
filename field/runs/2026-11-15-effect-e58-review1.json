@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e58-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:54:04-08:00",
+  "ended": "2026-11-15T21:01:30-08:00",
+  "parent": "2026-11-15-effect-e58-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/, our tooling), head 9878b7bd4, against origin/main 37db01a: merge-ready, no findings. Recount with only strictEffectProvide at error: 2 hits on main (parallel.ts:163, script-reads.test.ts:38), 1 on the branch (parallel.ts:163). With all 135 checks at error, script-reads.test.ts holds the same hits of every other check before and after, so the fix adds no hit. The one hand edit swaps the Effect.runPromise plus Effect.provide(NodeServices.layer) helper for @effect/vitest's layer(NodeServices.layer) with it.effect, the shape .patterns/effect-tests-run-in-it-effect.md names; the block has one test and the platform layer holds no state, so sharing it isolates nothing away, and it.effect still wraps the body in Effect.scoped (installed @effect/vitest 4.1.3, internal.ts:353), so the temp folder is still removed. The law body and its assertions are unchanged. The left hit is rightly left: a runMain entry point, where the checker's own message says to disable it, no disable is allowed in this sweep yet, and E30's tests row and E50's lead row leave the same class for the owner and for E0. No lock, no tsconfig or LOCKED change, which is right: the folder is not at zero. No PR 1366 file is touched (its 58 files read, none in oxlint-plugins/). No law narrowed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Read-only apart from this row. Ran: effect-tsgo diagnostics on oxlint-plugins/tsconfig.json at main and at the head (strictEffectProvide alone, then all 135 at error); vitest oxlint-plugins/script-reads.test.ts, 12 passed at 9878b7bd4; tsc -p oxlint-plugins passed; pnpm lint with the heap setting, 17 parts passed; loosening.sh, one hit, the import line, no law loosened; leakgrep clean. 0557 checked: @kalfa/vitest does not export layer or it yet, and 12 tooling files already import @effect/vitest, so this follows its transition, not a walk-back. git merge-tree: no conflict with origin/main 9ca24b11b; an import-line conflict in script-reads.test.ts with effect-e31, e33 and e36, for the integrator. Not run: pnpm typecheck of the whole repo (oxlint-plugins' own typecheck covers the change), any .integration. law (none reached).",
+  "plants": [
+    {
+      "law": "oxlint-plugins/script-reads.test.ts: load > scenario: a folder on disk",
+      "plant": "scratch copy, script-reads.mjs load without .filter(isScript)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/script-reads.test.ts: load > scenario: a folder on disk",
+      "plant": "scratch copy, prose always answers an empty string",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/script-reads.test.ts: load > scenario: a folder on disk",
+      "plant": "scratch copy, readdirSync with recursive: false",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}

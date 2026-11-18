@@ -1,7 +1,5 @@
 /**
  * Where a local brain stands, and the machine that moves it.
- *
- * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
@@ -10,7 +8,6 @@ import { Schema } from "effect";
  * Schema for where a local brain stands: `starting`, `online`, `waiting` for a restart, `braked`,
  * `stopping` or `stopped`.
  *
- * @stability unstable
  * @category schemas
  */
 export const BrainState = Schema.TaggedUnion({
@@ -21,26 +18,25 @@ export const BrainState = Schema.TaggedUnion({
   stopping: {},
   stopped: {},
 });
+
 type BrainState = typeof BrainState.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("started"),
+const Msg = Schema.TaggedUnion({
+  started: {
     start: Schema.String,
     after: Schema.NullOr(Schema.String),
     build: Schema.String,
     reason: Schema.String,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("waiting"),
+  },
+  waiting: {
     after: Schema.String,
     until: Schema.Number,
     reason: Schema.String,
-  }),
-  Schema.Struct({ type: Schema.Literal("braked"), after: Schema.String, reason: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("stop") }),
-  Schema.Struct({ type: Schema.Literal("stopped") }),
-]);
+  },
+  braked: { after: Schema.String, reason: Schema.String },
+  stop: {},
+  stopped: {},
+});
 
 const terminal = (s: BrainState) => s._tag === "braked" || s._tag === "stopped";
 
@@ -54,7 +50,6 @@ const terminal = (s: BrainState) => s._tag === "braked" || s._tag === "stopped";
  * only `stopped` is taken, so a late `started` cannot bring a brain back that was told to stop. It
  * asks for no Cmds, and it starts from a saved state when it is given one.
  *
- * @stability unstable
  * @category machines
  */
 export const brainLife = Machine.make({

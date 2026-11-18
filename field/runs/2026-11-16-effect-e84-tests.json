@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e84-tests",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T00:50:39-08:00",
+  "ended": "2026-11-16T01:11:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E84 of the Effect-check sweep (preferSchemaOverJson in next/packages/libfabrika/src/runtime, cloudflare and gateway), in next/, on branch fabrikalfa/effect-e84 from fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds pull request 1366. By decision 0589's first amendment (judgment slices add no lock line and no LOCKED row; their locks land in one pull request at the end) it opens no pull request and commits no lock. Recount with only preferSchemaOverJson at error through an --lspconfig: 140 hits in the three folders, the plan's count (runtime 58, cloudflare 57, gateway 25), 118 in exam paths and 22 in product files. All 118 exam hits fixed in 40 files by hand edits with the Edit tool; libfabrika's count fell by exactly 118 (284 to 166), and 0 exam hits are left in the three folders. 20 of the 118 sit in pull request 1366's files (cloudflare ObjectService.test.ts 3, SettingsInput.test.ts 2, alarm.laws.test.ts 4; runtime ProcessStore.integration.test.ts 1, Runner.integration.test.ts 7, RuntimeCauseTest.ts 1): these take the exact lines of the E38 branch's commit 8753842fa, so the judgment fold merges them clean. Left for the build, 22 product hits, the same 22 the E38 branch's commit 173fe7008 fixed: cloudflare/connection.ts 297, 340; cloudflare/runtime.ts 952, 1151, 1178, 1384, 1416, 1449, 1498; gateway/Gateway.ts 936, 937, 1344, 1345, 1783, 1859, 1952 (two), 1953 (two), 1960; runtime/Runner.ts 395, 2530.",
+  "plants": [
+    {
+      "law": "L1 by hand: preferSchemaOverJson at error in libfabrika's runtime, cloudflare and gateway fails the checker on a new hit",
+      "plant": "a temporary overrides entry for src/cloudflare, src/gateway and src/runtime at preferSchemaOverJson error in next/packages/libfabrika/tsconfig.json, and yield* Effect.log(JSON.stringify({ plant: \"e84\" })) added in runtime/WatchersSql.ts's Effect.gen; effect-tsgo diagnostics on libfabrika's own config named WatchersSql.ts(67,25) error effect(preferSchemaOverJson); the file was restored by copy and the entry taken out",
+      "result": "red"
+    },
+    {
+      "law": "L2 by hand: the lock law sees a dropped glob",
+      "plant": "the same temporary entry with a temporary LOCKED row in oxlint-plugins/effect-checks.test.ts, then src/gateway/**/*.ts dropped from the entry's include; the law failed with 18 gateway files at off; both files restored, and neither is committed",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Fix shapes. A write of a value the test built is Formatter.formatJson, as E38 did (105 hits); the other 13 hits are the Schema forms below. Three reads became decodes in the Effect form: connection.test.ts's last frame through Schema.fromJsonString(Schema.Json); GatewayRevocation.integration.test.ts's saved binding, RepliesTest.ts's and RunnerRepliesTest.ts's stored reply through Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)), which drops two as-casts; RateLimitTest.ts's envelope through a Struct of v and build. RunnerSupervision.integration.test.ts's activity stand-in decodes its own row, with Effect.orDie, since a row it wrote that does not decode is a test bug. Gateway.laws.test.ts's two JSON round trips of a saved attachment now encode and decode through Schema.fromJsonString(Attached), as the product's load decodes it. leave.laws.test.ts's watch key is encoded through its own Key schema, which the law already decodes it with. TasksTest.ts's secret search keeps its replacer through Schema.fromJsonString(Schema.Unknown, { replacer }). Execution.test.ts went red on formatJson: formatJson writes a nested Error's message, which plain JSON leaves out, so the law would have measured something new; that line encodes through Schema.fromJsonString(Schema.Unknown), the same bytes as before, and is green. No decodeUnknownSync or other sync call was added, no assertion was dropped or narrowed, no cast, disable, lock line or ledger row was added. Checks: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; ratchet.ts exit 0; pnpm typecheck twice. The first ran with the temporary lock in place: libfabrika failed on the 22 product preferSchemaOverJson errors only, with no type error in a test file, and pnpm -r then stopped the other packages. The second ran on the final tree, with no lock: exit 0 in every package. Tests under nice -n 19 with --maxWorkers=1 and the pinned Node, one file at a time, 31 files, all green after the fix: the 19 touched non-integration test files, plus node/ErrorCause.test.ts (runs GatewayCauseTest and RuntimeCauseTest), node/runtime/RunnerHands.test.ts (RunnerHandsTest), seven readers of TasksTest and three of RepliesTest. Not run, since the brief keeps .integration. files to a box: the six touched .integration.test.ts files, and the suites only integration files run: ProjectAuditTest, RateLimitTest, IsolateUsageTest, MonitorTest, ProgramMailTest, RecoveryJournalTest, RunnerAdmissionTest, RunnerRepliesTest, StartChildTest, WatchersTest. One hit outside every row stays: next/packages/vitest/src/Recorder.test.ts, as the E38 rows say.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}

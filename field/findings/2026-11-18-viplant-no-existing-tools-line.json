@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-viplant-no-existing-tools-line",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "rule_break",
+  "location": {
+    "path": "oxlint-plugins/builtin-plants.ts",
+    "line": 139
+  },
+  "says": "The tests step added a new function, viPlant, which builds VI_METHODS and VI_PROPERTIES from one table, but the approved plan has no ## Existing tools section, so the search 0587 asks for each new helper is not recorded.",
+  "proof": "grep -n 'Existing tools' docs/plan/quests/mock-oxlint-plugins-PLAN.md prints nothing, while builtin-plants.ts:139 reads `const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean): Plant => ({`. nice -n 19 rg -n '\\): Plant =>|=> Plant' oxlint-plugins/ finds only this line and two test-local factories in runs-from-depth.test.ts:182,188, so no existing helper was missed.",
+  "cost": "Low: no copy was made, but a later reader cannot see that a search was done, and plancheck cannot catch a new function inside an existing file.",
+  "head": "ddff5897e1b3bd1536184fd0a2497cd823fb6f87",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1636"
+}

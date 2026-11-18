@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l13-guard-bundle-tests2",
+  "ticket": "kamp-us/tea-fabrika#1167",
+  "pr": "kamp-us/tea-fabrika#1622",
+  "started": "2026-11-18T05:43:17-08:00",
+  "ended": "2026-11-18T05:52:17-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, wrote G4 of the amended docs/plan/quests/l13-guard-bundle-PLAN.md. Added a phase writer (phases, with the Phase and Progress schemas) to next/apps/fabrika/e2e/node/P19Launchd.test-support.ts and called it around each of the four starts, the crash replacement, the four stops and the normal-exit fixture, so runs/p19/host.json names the phase in progress as it happens, keeps guardMs from the first write and keeps every field of today's final record. G4 in electron-launchd.visual.test.ts is a property over generated begin and end sequences through the real writer on a temp file (seed 119120, 100 runs through runsFor), with a coverage scenario that its generator reaches a stalled phase and each kind of end; G2's host half now also checks that a passing run's final record names no phase and holds its starts. The guard file and the race were not touched. G4's plants were red. The host half of G2 and G3 are not run here. No product file was touched.",
+  "note": "Started time is approximate; usage and cost are not recorded. Local runs put a Node 26.13.0 from a scratch folder first on PATH (the container has Node 22); no CI variable was set. A phase covers only the listed work: a stall between phases, or in the last stop and the guard's stop, leaves phase null with the finished lists, which says where it stopped. The fixture's time has no list in the record, so the writer drops it. A typecheck ran once at the end.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "01633e35c5181917008c3c8f90c6720b832ebfe1",
+  "plants": [
+    {
+      "law": "G4 the host record names the phase in progress and keeps each finished time",
+      "plant": "begin and end write nothing, only done writes the file: the record exists only at the end",
+      "result": "red"
+    },
+    {
+      "law": "G4 the host record names the phase in progress and keeps each finished time",
+      "plant": "end does not clear the phase: the record after an end still names the phase",
+      "result": "red"
+    }
+  ]
+}

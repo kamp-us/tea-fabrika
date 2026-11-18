@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-oxlint-plugins-plan",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-15T20:31:14-08:00",
+  "ended": "2026-11-15T20:34:48-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Plan for the mock sweep in the oxlint-plugins folder, our tooling: its one vi.fn on an oxlint report callback becomes a plain list the rule test owns, and vitest/no-restricted-vi-methods goes on for the folder by an override, with fn banned beside 0555's four methods (a call at 85%). Counted on main at f7169af: 1 vi.fn, 0 toHaveBeenCalled, 0 spyOn. No open questions.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from the plan file. plancheck --draft passes. One probe in the scratchpad: oxlint 1.90.0's vitest/no-restricted-vi-methods refuses vi.fn, vi.spyOn and v.fn after import { vi as v }. No test, install of new packages or typecheck ran; pnpm install --frozen-lockfile ran for the probe.",
+  "step": "plan"
+}

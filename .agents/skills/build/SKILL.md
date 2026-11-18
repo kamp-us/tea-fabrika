@@ -54,12 +54,12 @@ file in `field/findings/`.
 
 ## Go easy on the machine
 
-The test config and typecheck.sh hold worker, home and typecheck limits.
+The test config and typecheck.ts hold worker, home and typecheck limits.
 
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
   one, and its refusal prints the command to use instead.
-- **One `pnpm typecheck`, at the very end,** after the laws are green. `typecheck.sh` takes the one
+- **One `pnpm typecheck`, at the very end,** after the laws are green. `typecheck.ts` takes the one
   lock every shell shares, so a second one waits; start it in the background when another agent's
   `tsgo` runs (`pgrep -x tsgo`). It must pass whole, type laws included.
 - **Never run a test here that sends a real signal** (`kill`, `process.kill`, SIGTERM or SIGKILL),
@@ -115,6 +115,21 @@ These hold in every build round, so the brief does not repeat them.
   head. If every law was already green at the start and you changed nothing, do not commit: put
   `laws: green <the narrow test paths you ran>` just before the last line. End with one line:
   `answer: done <why>`, or `answer: send tests <why>` or `send plan <why>`.
+
+## Lint findings
+
+The two lint rules that `AGENTS.md`, "Checks", points here for, moved from there word for word:
+
+- **Never switch a lint rule off to pass.** A `// oxlint-disable-next-line <rule> -- <why>` is for a
+  line where the code is right and the rule does not fit, and its reason says why in plain words.
+  The rules are in `.oxlintrc.json` and `oxlint-plugins/`
+  ([its README](../../../oxlint-plugins/README.md)), the format settings in `.oxfmtrc.json`.
+- **An unused export fails lint** (`pnpm lint:dead` runs that part alone,
+  [0006](../../../.decisions/0006-no-unused-exports.md)). Check each finding
+  by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
+  owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
+  it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
+  file is deleted ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
 
 ## Never
 

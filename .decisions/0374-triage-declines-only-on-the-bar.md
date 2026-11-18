@@ -18,7 +18,7 @@ answers without one
 ([sort answers yes or no, the bar for a no](../docs/direction/sort-answers-yes-or-no.md#the-bar-for-a-no)).
 The rule "already carried by another ticket" was dropped on 2026-10-24 with fold
 ([0373](0373-triage-answers-by-what-they-do.md)). Today's list is
-`packages/pipeline/src/stages/sort/bar.ts`, which still holds `carried` until the rename to triage.
+`packages/pipeline/src/stages/sort/bar.ts`, which holds `carried` until the rename to triage.
 
 ## Decision
 

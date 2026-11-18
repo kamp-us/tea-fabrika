@@ -1,7 +1,7 @@
 ---
 id: 0469
 title: A UI check reads the most structured thing that shows the bug, tokens before the tree and boxes before pixels, and a found UI bug's fix lands with a law at the lowest layer that would have caught it
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+status: accepted
 date: 2026-11-07
 tags: [ui, verification, laws, layers]
 ---
@@ -17,7 +17,7 @@ const pins = [
 // Layers: 1 tokens, 2 machine, 3 DOM and ARIA, 4 layout, 5 golden images, 6 model judge, 7 a person.
 ```
 
-**What this decides:** where a UI check looks, in today's app first, and in every `next/` window.
+**What this decides:** where a UI check looks, in every `next/` window.
 
 ## Context
 

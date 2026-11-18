@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-reflect-ban-s13-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-17T17:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for slice 13 of the Reflect ban (0554, ticket 1056) in next/, the app's next/apps/fabrika/e2e/ folder, on docs/plan/quests/reflect-ban-PLAN.md amendment point 8, on fabrikalfa/reflect-rest from dc196e81e. Met 15 fires in 5 files, as point 8 counted them (11 get, 4 set); every one is gone and no Reflect line or disable line is left in e2e/. Kind 1 (client-protocol.test-support.ts :128, :269 and its uses; p14.test-support.ts :768 and :772): one Effect Schema each, every field optional and as loose as the old read (Schema.Unknown fields, so a body that is not an object reads as an empty one), decoded once with Schema.decodeUnknownOption; the nested letter name and watch client have their own small schema, so a refused inner value never drops the outer fields, as the old read kept them. client-protocol :228 read reach.reason._tag, a field the type has, so it is read plainly after the narrow on reach._tag === 'ended' (kind 4). Kind 7: first-window __p14Resends (:136, :241), page-runtime.laws __shows (:222, :224, :307) and tezgah-focus __deskSockets (:59, :70) are declared in a declare global block with their type, as one-file.visual.test.ts does; the as Array<WebSocket> cast at tezgah-focus :70 is gone. Kind 2: first-window :333 reads the span name through Predicate.hasProperty. .oxlintrc.json: next/apps/fabrika/e2e/* joins the warn Reflect block, as src/* did in slice 14 (e2e/node/** stays in the blocking block). Slice 15's fold is not done here.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "No new law: the plan's slice 13 rows are fixes held by L5 (lint). Where the code won over the plan: client-protocol :228 is kind 4, not kind 1 (the type names reason). Checks on dc196e81e plus the edits: pnpm format; pnpm lint exit 0 (18 parts); ratchet exit 0; effect-tsgo tsc --noEmit -p next/apps/fabrika clean, and a planted type error in tezgah-focus.visual.test.ts was reported, so the project covers e2e/. Vitest under CI=1, one file at a time, nice -n 15, maxWorkers 2, TYPESAFE_API_KEY unset, on Node 22: client-protocol.visual 4 passed (after apt-get install openssh-client for ssh-keygen), page-runtime.laws.visual 3, first-window.visual 4 (309 s), tezgah-focus.visual 1, tezgah-frame.visual 2, tezgah-fold.visual 1, one-file.visual 2, instance-wire.integration 15. Not run: resources.laws.visual.test.ts, which runs first-window.visual as a child process with planted faults and was cut off by the background time limit; first-window.visual itself passed alone. The box's Playwright 1.64.1 wants chromium_headless_shell-1248 and /opt/pw-browsers holds 1243, so the runs used a PLAYWRIGHT_BROWSERS_PATH folder of symlinks to 1243 in the scratch directory (nothing in the repo). The first attempt without it failed at browser launch, which is the box, not the code. Run start and end times were not captured. Usage and cost are unknown.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "the old line put back at next/apps/fabrika/e2e/tezgah-focus.visual.test.ts, for (const socket of Reflect.get(globalThis, \"__deskSockets\") as Array<WebSocket>); node oxlint-plugins/lint.ts on the file exits 1, blocking with 'eslint(no-restricted-properties) Reflect.get is restricted from being used'; restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

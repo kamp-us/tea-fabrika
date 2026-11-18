@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-plans-integrate",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T20:59:01-08:00",
+  "ended": "2026-11-15T21:08:10-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan step as the mock sweep's integrator: the 12 per-folder mock plans and their 12 plan run rows were brought unchanged from their fabrikalfa/mock-* branches onto fabrikalfa/mock-plans, for one draft plan pull request. No branch touched anything beyond its plan and its row. Three merge session rulings were applied as amendments dated 2026-11-16: the pipeline plan patches tea 0.25.0 with pnpm patch so its direct console.warn lines stay covered (new law L8, the patch rows, an upstream issue the same day); the lib-top plan keeps Id.Generator.layer providing SecureRandom unless a law says otherwise; the cloudflare plan holds raw console in libfabrika's product code with oxlint's built-in eslint/no-console (new law M12, in slice 1). Every other open question stays open and is listed in the pull request body.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "plancheck --draft passed on all 12 plans as brought in. The amendments first broke it on three files: a preamble before a kept question read as a question with no lean, and two bare folder words read as exam paths with no files row. Fixed by moving answered questions to an Answered questions section, folding the cloudflare amendment into its question, and adding a patches/ files row, as the app-src plan has. Then plancheck passed on all 12, and pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed. The cloudflare ruling named only no-console, so the process.stdout and process.stderr half of that plan's question stays open. kamp-us/demlik could not be read from this session, so tea's own decisions on warnings are left for the pipeline tests step to read before it writes the patch (0054). No test ran: the plan step only reads. The model is left out of this row on purpose.",
+  "step": "plan"
+}

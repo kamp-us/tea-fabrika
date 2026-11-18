@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e98-tests1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:15:34-08:00",
+  "ended": "2026-11-15T23:27:43-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E98 of the Effect sweep, in next/: the checks globalErrorInEffectCatch and globalErrorInEffectFailure over lib:runtime (next/packages/libfabrika/src/runtime). The branch fabrikalfa/effect-e98 was new, made from origin/main, which already holds PR 1366 and PR 1508. Count, with only the two checks at error through --lspconfig on next/packages/libfabrika/tsconfig.json: 9 hits in lib:runtime, all in exam paths (test files), none in product files and none left waiting on 1366. Folders with a hit: lib:runtime only, in two files. runtime/Runner.integration.test.ts held 8 (lines 1665, 1667, 1711, 1713, 1762, 1764, 1811, 1813: four Effect.tryPromise fixture wrappers whose catch built a global Error, each one catch hit and one failure hit). They now fail with a FixtureError tagged error declared beside the file's DiskError, keeping the original as cause (Schema.Defect). runtime/EffectFunctions.test.ts held 1 (line 983: the generated handler failure was Effect.fail(new Error(...))). It now yields a HandlerFailure tagged error with the same message; the runner still answers it as handler_failed. All 9 were hand edits with the Edit tool and a scratchpad one-liner for the four identical lines; no quick fix. Recount: 0 in lib:runtime. The same run still shows 18 hits outside this slice, in E51's folders (lib:transport 6, lib:cloudflare 5, lib:node 4, lib:gateway 2, lib:telemetry 1), left untouched. No law changed what it asserts, no lock line was added, and no build step is needed.",
+  "plants": [
+    {
+      "law": "T285 runner tracing keep-laws: generated operations keep names, attributes, parents, signer links and refusal spans (runtime/EffectFunctions.test.ts), with the handler failure now a HandlerFailure",
+      "plant": "runtime/Runner.ts answers a failed handler with Effect.die in place of err(job, \"handler_failed\")",
+      "result": "red"
+    },
+    {
+      "law": "the same law, to see whether it reads the answer's reason",
+      "plant": "runtime/Runner.ts answers a failed handler with err(job, \"bad_cmd\") in place of \"handler_failed\"",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Tests ran on the edited tree before the commit: runtime/EffectFunctions.test.ts (11 passed) and runtime/Runner.integration.test.ts (117 passed, run in the box after PR 1508). Each plant ran once and Runner.ts was restored by copy; git status showed only the two test files. The second plant stayed green: the tracing law checks that the handler's op succeeds and its cmd span ends failed, not which reason the answer carries. That gap was there before this slice. pnpm lint: 17 of 18 parts passed, and lint:promise-types was killed by the box's memory limit, then passed alone with 0 findings. The ratchet exited 0. No pnpm typecheck ran (step rules allow one at most); the checker's diagnostics run showed no type error in the two files.",
+  "step": "tests"
+}

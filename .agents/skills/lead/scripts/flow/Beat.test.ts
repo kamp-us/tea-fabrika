@@ -1,14 +1,18 @@
-import { Schema } from "effect";
+import { Array as Arr, DateTime, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Beat from "./Beat.ts";
 
 // Today's lead tooling: the beat is pure, so these laws step it by hand on fixed clocks.
 const options = { seed: 119120, numRuns: 300 };
+
 const T0 = Date.parse("2026-11-10T19:00:00.000Z");
+
 const phase = fc.constantFrom(...Beat.PHASES);
+
 const ms = (max: number) => fc.integer({ min: 0, max });
-const at = (offset: number) => new Date(T0 + offset);
+
+const at = (offset: number) => DateTime.toDateUtc(DateTime.makeUnsafe(T0 + offset));
 
 describe("Beat.enter and Beat.tick", () => {
   it("keeps `since` within one phase and restarts it on a new phase", () => {
@@ -40,7 +44,7 @@ describe("Beat.enter and Beat.tick", () => {
       fc.property(phase, ms(3_600_000), fc.boolean(), (p, d, heard) => {
         const beat = Beat.tick(Beat.enter(null, p, at(0)), at(d), heard ? at(d) : null);
         const encoded = Schema.encodeSync(Beat.Beat)(beat);
-        expect(Schema.decodeUnknownSync(Beat.Beat)(encoded)).toEqual(beat);
+        expect(Schema.decodeSync(Beat.Beat)(encoded)).toEqual(beat);
       }),
       options,
     );
@@ -106,7 +110,7 @@ describe("Beat.says", () => {
 
 describe("Beat.spoken", () => {
   it("format: hours and minutes, minutes, or seconds", () => {
-    const spans = [30_000, 12 * 60_000, 110 * 60_000].map(Beat.spoken);
+    const spans = Arr.map([30_000, 12 * 60_000, 110 * 60_000], Beat.spoken);
     expect(spans).toEqual(["30s", "12m", "1h50m"]);
   });
 });

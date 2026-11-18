@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 4ded6f283aa8
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/packages/libfabrika/src/node/repositories`, in next/
@@ -206,9 +206,72 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 - **If another mock slice lands its block first,** this slice adds its folder to that block's
   `files` and does not add a second one. Which slice turns the rule on for the folders already at
   zero is the sweep's order, not this plan's.
-- **The plants** go in `oxlint-plugins/builtin-plants.ts` as one `Plant` beside `REFLECT`, run by
+- **The plants** (amendment 2026-11-15, ruling 2: one lock shape, so these are node's shared
+  `VI_METHODS` set, with this plan's lines added to it, and node's M1 is the law) go in
+  `oxlint-plugins/builtin-plants.ts` as one `Plant` beside `REFLECT`, run by
   `oxlint-plugins/plants.test.ts` under a `*.test.ts` name inside this folder, the way the REFLECT
   plant runs in every folder a block lists.
+
+**Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
+`vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
+1.90.0 (the lockfile's) and 1.93.0 alike: `vi.spyOn(console, "warn").mockImplementation(() => {})`
+and `vi.fn().mockReturnValue(1)` pass, while the same call in parentheses is refused. The proof is
+the last `false` lines of `VI_METHODS` in `oxlint-plugins/builtin-plants.ts` on
+`fabrikalfa/mock-app-e2e-s1` at `f02b31948`, and the row
+`field/runs/2026-11-15-mock-app-e2e-tests1.json`. So every block of the lock sets two of oxlint's
+own rules over the same files: `vitest/no-restricted-vi-methods`, kept on as it is, and the
+built-in `eslint/no-restricted-properties` with one `object: "vi"` entry for each member the
+block bans, each with the same message as that member's entry in the vitest rule.
+`no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
+with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
+`import { vi as v }`. Both are trusted rules, as
+[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
+filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
+`no-restricted-properties` half stays until oxc fixes it.
+
+```jsonc
+// .oxlintrc.json, the lock as a pair (amendment 2026-11-16, lead ruling). A sketch; one block. It sits after the `JSON.parse` blocks, since now a second rule's options do depend on order.
+{
+  "files": ["next/packages/libfabrika/src/node/repositories/**"],
+  "rules": {
+    // Kept on as it is: the same members, with the same messages as below.
+    "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
+    "eslint/no-restricted-properties": [
+      "warn",
+      // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+    ]
+  }
+}
+```
+
+- **The `vi` entries join the list these files already take.** A block's options for a rule
+  replace an earlier block's, they do not merge, and oxlint takes the last matching block's. So the
+  lock's `no-restricted-properties` list writes out again every entry its files take today, at that
+  block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
+  out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main the folder takes the `warn` block that writes out `JSON.parse` alone, so the lock is one block, as the sketch shows. At `warn`, a `vi`
+  fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
+  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
+- **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
+  `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
+  path of every block that sets the vitest rule, through the same scenario. Refused:
+  `vi.spyOn(console, "warn").mockImplementation(() => undefined)`, `vi.fn().mockReturnValue(1)`,
+  and one plain call of each banned member. Taken: `vi.hoisted(() => 1)`, `vi.waitFor(() => 1)`,
+  a comment, a string and `other.fn()`. A line is held by the lock when either plant refuses it.
+  Red first: drop the block's `vi` entries from `no-restricted-properties`, and the two chained
+  lines are not refused, so the law is red; with them back, it is green. The plants of the entries
+  written out again, such as `REFLECT`, still pass in each locked path, which shows no entry was
+  lost.
+- **`VI_METHODS`' chained lines.** `VI_METHODS` keeps recording what the vitest rule does alone,
+  so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
+  pair refuses them, through `VI_PROPERTIES`.
+- **V2's alias** is the vitest rule's half: `no-restricted-properties` names the object `vi`, so it does not see `v.spyOn`. `VI_PROPERTIES` plants the alias line too and records what the pair does.
 
 ## One value traced: a bypassed `read`
 
@@ -223,18 +286,26 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L3 (rewritten). For a generated `wrong: Schema.Boolean`, `prepare` hashes the values twice over the same bytes, and it fails with `InvalidDocument` over a `SnapshotError` exactly when the second hash answers wrong | test, `it.effect.prop`, default runs, the package seed | Effect Arbitrary: Schema.Boolean | (a) `Load.ts` skips `Snapshot.read` and returns `make`'s snapshot: red on both cases; (b) `Load.ts` catches `read`'s failure and returns `make`'s snapshot: red when `wrong`; (c) `Snapshot.read` drops its hash compare (`Snapshot.ts:156`): red when `wrong` | next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts |
-| V1. In this folder, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, with 0555's messages; `vi.hoisted` passes, since 0555 does not decide it | lint | lint | delete one entry from the block: that line is not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
+| V1. In this folder, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, with 0555's messages; `vi.hoisted` passes, since 0555 does not decide it. Amendment 2026-11-15 (merge session ruling 2): this is node's M1 run in this folder, its lines node's shared `VI_METHODS` set, to which `vi.hoisted` is added as a line that passes | lint | lint | delete one entry from the block: that line is not refused, red. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | V2. The alias `import { vi as v } from "vitest"; v.spyOn(o, "m")` in this folder: the tests step plants it and records what oxlint does. If it is refused, it is a planted line of V1. If it is not, it goes in the plant as a line that passes, with a comment naming the gap, and a finding row says so; no hand-written rule is added (0573: a trusted rule first) | lint | lint | as V1 | oxlint-plugins/builtin-plants.ts |
 
 No law here needs a real resource: `Digest.layerWebCrypto` is in-process, and the `reader` stub and
 `FileSystem.layerNoop` stand in for git and the disk. So L3 runs on every pull request and is not
 an `.integration.` file (0536, 0581). No host-only law.
 
-The other laws in `OpenRepository.test.ts` keep their bodies. The first L3 law and L9 still use
-`fc.assert` with a hand seed; moving them to `it.effect.prop` is 0579's own sweep, not this one.
+The other laws in `OpenRepository.test.ts` keep their bodies. The source read found raw
+`fc.assert` and a hand seed in the first L3 law and L9. Those untouched laws wait for the
+separate sweep; any property rewritten here follows 0579, including its setup seed rule.
 
 ## Files
 
@@ -242,7 +313,7 @@ The other laws in `OpenRepository.test.ts` keep their bodies. The first L3 law a
 |---|---|---|---|
 | next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts | tests | tests | L3 "malformed snapshot" rewritten as above; the `vi` import goes; `Recorder`, `Option` and `Ref` imports come in |
 | .oxlintrc.json | tests | configuration | the block above, or this folder added to an existing block for the rule |
-| oxlint-plugins/builtin-plants.ts | tests | tests | V1's and V2's planted lines |
+| oxlint-plugins/builtin-plants.ts | tests | tests | V1's and V2's planted lines; and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | run the plant under a test file name in this folder |
 | next/packages/libfabrika/src/settings/Snapshot.test.ts | tests | tests | unchanged: L5 and L6 hold the `values: {}` fault; named so the review reads them |
 | oxlint-plugins/README.md | tests | docs | one row for `vitest/no-restricted-vi-methods`, naming 0555 and the folders it is on for |
@@ -250,15 +321,23 @@ The other laws in `OpenRepository.test.ts` keep their bodies. The first L3 law a
 | field/runs/2026-11-16-mock-node-repositories-review1.json | review | docs | the review's run row |
 
 No product file changes. So there is no build step: the rewritten law is green on main's product
-code, and its plants show it is live.
+code, and its plants show it is live. (Amendment 2026-11-15, merge session ruling 5: the build
+step still runs, changes nothing, says so, and runs the checks green; see "Steps".)
 
 ## Steps
 
+**Amendment (2026-11-15, merge session rulings 1 and 5).** The slice opens no pull request of its
+own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in its one pull request
+(0589, amended 2026-11-15), after these steps, one fresh agent each, in its own box. Step 2 was
+"none"; it now runs.
+
 1. **Tests:** writes L3, V1 and V2, runs each plant once and puts it back, and records the results
-   in its run row. Runs `nice -n 15 pnpm exec vitest run --maxWorkers=3` on
+   in its run row. Runs `nice -n 19 pnpm exec vitest run --maxWorkers=1` on
    `next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts` and
    `oxlint-plugins/plants.test.ts`, then `pnpm lint`.
-2. **Build:** none, since no product file changes.
+2. **Build:** no product file changes, so the build changes nothing, says so in its run row, and
+   runs the tests step's paths and `pnpm lint` green at the tests step's head, or sends back
+   (amended 2026-11-15; first "none").
 3. **Review:** the one review of the whole diff against this plan, 0555 and 0579, and the lead's
    read of the doubt above.
 
@@ -278,12 +357,20 @@ code, and its plants show it is live.
 
 ## Validation
 
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - `plancheck.sh --draft` on this file.
 - The tests step's narrow vitest runs and `pnpm lint`, as in Steps, at its pushed head.
 
 ## Size
 
-One pull request, landing whole. 0 product lines. Confidence 80%: the doubt is whether
+One slice, landing whole on the sweep's one fold branch, `fabrikalfa/mock-fold` (amended
+2026-11-15; first "one pull request"). 0 product lines. Confidence 80%: the doubt is whether
 `Layer.unwrap` and the Recorder type `digestHex` as sketched, which the first run tells.
 
 1. The law and the lock: about 50 test lines changed in `OpenRepository.test.ts`, about 20 lines
@@ -291,9 +378,10 @@ One pull request, landing whole. 0 product lines. Confidence 80%: the doubt is w
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15 at list price, as the recorder
 plan priced them: a tests step about $6 and a review about $3. This tests step is small, so $5;
-one likely send-back on the `values: {}` doubt, $4.
+one likely send-back on the `values: {}` doubt, $4. (Amendment 2026-11-15, ruling 5: a build that
+only runs checks, about $2, as the oxlint-plugins plan prices one.)
 
-Estimate: 3 steps, $12
+Estimate: 4 steps, $14
 
 ## Records
 

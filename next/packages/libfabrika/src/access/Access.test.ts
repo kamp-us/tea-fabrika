@@ -20,19 +20,28 @@
 //   else is `{reason: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 300;
 
 // The ids are in the open id study's TypeID shape; the prefixes are made up (the plan's "Ids").
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const OTHER = "person_01m6v5270hg0000000000000zz"; // some other person, on the same ledger
+
 const NAME = "home";
+
 const TO = "ledger:home";
+
 const SENT = "2026-11-07T21:10:01.204Z";
 
 const SAW = {
@@ -63,7 +72,8 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
   _tag: "founded",
@@ -150,22 +160,23 @@ const denied = (key: string, by: string): MemberEvent => ({
 const view = (m: Access) => ({
   person: m.person,
   name: m.name,
-  keys: [...m.keys.entries()]
-    .map(([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under }))
-    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+  keys: Arr.map([...m.keys.entries()], ([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under })).sort(
+    (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  ),
   spent: [...m.spent].sort(),
 });
 
 const isIn = (m: Access, key: string): boolean => "as" in admitted(m, key);
 
 const liveWith = (m: Access, rank: string): ReadonlyArray<string> =>
-  [...m.keys.entries()]
-    .filter(([key, k]) => k.rank === rank && k.live && !m.spent.has(key))
-    .map(([key]) => key)
-    .sort();
+  Arr.map(
+    Arr.filter([...m.keys.entries()], ([key, k]) => k.rank === rank && k.live && !m.spent.has(key)),
+    ([key]) => key,
+  ).sort();
 
 /** Recovery keys that are live and not spent: the sheets that still work. */
 const liveSheets = (m: Access) => liveWith(m, "recovery");
+
 const livePersons = (m: Access) => liveWith(m, "person");
 
 /** Every key above `key` live, walking `under` to a root. A loop counts as not live. */
@@ -188,11 +199,17 @@ const chainLive = (m: Access, key: string): boolean => {
 // ---- Random event lists, over a small pool of keys so events often touch the same keys ----
 
 const PERSONS = ["pA", "pB", "pC", "pD"] as const;
+
 const WINDOWS = ["wA", "wB", "wC", "wD"] as const; // WINDOWS[i] is PERSONS[i]'s window
+
 const LEAVES = ["t1", "t2", "t3", "g1", "g2"] as const; // tabs and agents, let in by a grant
+
 const SHEETS = ["r1", "r2", "r3"] as const;
+
 const STRANGER = "x1";
+
 const ALL: ReadonlyArray<string> = [...PERSONS, ...WINDOWS, ...LEAVES, ...SHEETS, STRANGER];
+
 // Keys no random list names, for a step a test adds on top.
 const FRESH_LEAF = "t9";
 
@@ -210,6 +227,7 @@ const signer = fc.oneof(
 const forWhom = fc.oneof({ weight: 9, arbitrary: fc.constant(P) }, { weight: 1, arbitrary: fc.constant(OTHER) });
 
 const anyKey = fc.constantFrom(...ALL);
+
 const drops = (most: number) => fc.uniqueArray(anyKey, { maxLength: most });
 
 const laterEvent: fc.Arbitrary<() => MemberEvent> = fc.oneof(
@@ -283,14 +301,14 @@ const first = fc
 /** A whole history: `founded` first, then up to 30 events of any kind. Each event gets its own id. */
 const history = fc
   .tuple(first, fc.array(laterEvent, { maxLength: 30 }))
-  .map(([head, rest]) => [head, ...rest.map((make) => make())]);
+  .map(([head, rest]) => [head, ...Arr.map(rest, (make) => make())]);
 
 /** A history with two devices from the start, so tests that need two live devices often get them. */
 const twoDevices = fc
   .tuple(fc.constantFrom(["pA", "pB"], ["pA", "pB", "pC"]), fc.array(laterEvent, { maxLength: 20 }))
-  .map(([keys, rest]) => [founded(keys, "wA"), ...rest.map((make) => make())]);
+  .map(([keys, rest]) => [founded(keys, "wA"), ...Arr.map(rest, (make) => make())]);
 
-const prefixes = (events: ReadonlyArray<MemberEvent>) => events.map((_, i) => foldAccess(events.slice(0, i + 1)));
+const prefixes = (events: ReadonlyArray<MemberEvent>) => Arr.map(events, (_, i) => foldAccess(events.slice(0, i + 1)));
 
 // Distinct from the fixed roots and windows used around each generated subject.
 const leafKey = fc
@@ -387,6 +405,7 @@ describe("p28, the traced history from the plan", () => {
           addedSheet("pB", "r1"),
           granted("pA", "g1", { as: "agent" }),
         ];
+
         const before = foldAccess(events);
         expect(before.person).toBe(P);
         expect(before.name).toBe(NAME);
@@ -471,7 +490,7 @@ describe("p28, founding", () => {
     fc.assert(
       fc.property(fc.uniqueArray(fc.string()), (keys) => {
         const m = foldAccess([founded(keys, null)]);
-        expect([...ALL, ...keys].filter((key) => isIn(m, key))).toEqual([]);
+        expect(Arr.filter([...ALL, ...keys], (key) => isIn(m, key))).toEqual([]);
       }),
       opts(["pA"]),
     );
@@ -485,6 +504,7 @@ describe("p28, founding", () => {
       keys: ["pC"],
       window: "wC",
     };
+
     fc.assert(
       fc.property(
         fc.string().filter((key) => !["pA", "wA", "t1"].includes(key)),
@@ -565,6 +585,7 @@ describe("p28, grants", () => {
             granted("pA", "g1", { as: "agent" }),
             addedSheet("pA", "r1"),
           ];
+
           const m = foldAccess(base);
 
           for (const by of ["wA", "t1", "g1", "r1"]) {
@@ -585,10 +606,16 @@ describe("p28, grants", () => {
     fc.assert(
       fc.property(history, (events) => {
         const m = foldAccess(events);
-        const weak = [...m.keys.entries()]
-          .filter(([key, k]) => k.rank !== "person" || m.spent.has(key))
-          .map(([key]) => key);
-        const target = [...m.keys.keys()].find((key) => isIn(m, key)) ?? "pA";
+
+        const weak = Arr.map(
+          Arr.filter([...m.keys.entries()], ([key, k]) => k.rank !== "person" || m.spent.has(key)),
+          ([key]) => key,
+        );
+
+        const target = Option.getOrElse(
+          Arr.findFirst([...m.keys.keys()], (key) => isIn(m, key)),
+          () => "pA",
+        );
 
         for (const by of weak) {
           ran++;
@@ -613,6 +640,7 @@ describe("p28, a removed key stays out", () => {
           granted("pA", key),
           granted("pB", key),
         ]);
+
         expect(isIn(m, key)).toBe(false);
         expect(m.keys.get(key)?.live).toBe(false);
       }),
@@ -631,6 +659,7 @@ describe("p28, a removed key stays out", () => {
             addedDevice("pB", root, "wA"),
             { _tag: "founded", id: P, name: NAME, keys: [root], window: "wA" },
           ]);
+
           expect(m.keys.get(root)?.live).toBe(false);
           expect(isIn(m, "wA")).toBe(false);
           expect(livePersons(m)).toEqual(["pB"]);
@@ -727,11 +756,13 @@ describe("p28, the grant tree", () => {
         for (const m of prefixes(events)) {
           for (const key of [...ALL, ...m.keys.keys()]) {
             const k = m.keys.get(key);
+
             const should =
               k !== undefined &&
               (k.rank === "window" || k.rank === "agent" || k.rank === "hands") &&
               k.live &&
               chainLive(m, key);
+
             const answer = admitted(m, key);
             expect(answer, key).toEqual(should ? { key, person: m.person, as: k?.rank } : { reason: "not_granted" });
           }
@@ -805,13 +836,18 @@ describe("p28, devices are equal roots", () => {
 
         ran++;
         const by = devices[pick % devices.length] ?? "pA";
-        const gone = devices.find((key) => key !== by) ?? "pB";
+
+        const gone = Option.getOrElse(
+          Arr.findFirst(devices, (key) => key !== by),
+          () => "pB",
+        );
+
         const [key, window] = FRESH_DEVICES[0];
         const drop = byAdd ? addedDevice(by, key, window, { drops: [gone] }) : revoked(by, gone);
         const after = foldAccess([...events, drop]);
         expect(after.keys.get(gone)?.live).toBe(false);
-        const others = devices.filter((d) => d !== gone);
-        expect(livePersons(after).filter((d) => others.includes(d))).toEqual(others);
+        const others = Arr.filter(devices, (d) => d !== gone);
+        expect(Arr.filter(livePersons(after), (d) => others.includes(d))).toEqual(others);
         expect(liveSheets(after)).toEqual(liveSheets(before));
         expect([...after.spent].sort()).toEqual([...before.spent].sort());
       }),
@@ -831,7 +867,7 @@ describe("p28, devices are equal roots", () => {
           return;
         }
 
-        const targets = [...m.keys.keys()].filter((key) => key !== one && key !== two);
+        const targets = Arr.filter([...m.keys.keys()], (key) => key !== one && key !== two);
         const target = targets[pick % Math.max(1, targets.length)];
 
         if (target === undefined) {
@@ -840,8 +876,10 @@ describe("p28, devices are equal roots", () => {
 
         ran++;
         const [key, window] = FRESH_DEVICES[0];
+
         const by = (signer: string) =>
           byAdd ? addedDevice(signer, key, window, { drops: [target] }) : revoked(signer, target);
+
         const viaOne = foldAccess([...events, by(one)]);
         const viaTwo = foldAccess([...events, by(two)]);
         expect(view(viaOne)).toEqual(view(viaTwo));
@@ -878,11 +916,13 @@ describe("p28, the sheet", () => {
         expect(isIn(once, "wY")).toBe(true);
         expect(livePersons(once)).toEqual(["pY"]);
         expect([...once.spent]).toEqual([key]);
+
         const twice = foldAccess([
           ...base,
           addedDevice(key, "pY", "wY", { old: "lost", drops: ["pA"] }),
           addedDevice(key, "pZ", "wZ", { old: "lost", drops: ["pY"] }),
         ]);
+
         expect(view(twice)).toEqual(view(once));
       }),
       opts("r1"),
@@ -1021,7 +1061,7 @@ describe("p28, the rule's answer for a key that is out", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const events = [founded(["pA", "pB"], "wA"), granted("pA", key), revoked("pB", key)];
-        const folded = events.reduce((at, event) => Result.getOrElse(allows(at, event), () => at), EMPTY);
+        const folded = Arr.reduce(events, EMPTY, (at, event) => Result.getOrElse(allows(at, event), () => at));
         const again = allows(folded, granted("pA", key));
         expect(Result.isFailure(again) && again.failure).toBe("revoked");
         expect(isIn(foldAccess([...events, granted("pA", key)]), key)).toBe(false);
@@ -1034,7 +1074,7 @@ describe("p28, the rule's answer for a key that is out", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const events = [founded(["pA", "pB"], "wA"), granted("pA", key)];
-        const folded = events.reduce((at, event) => Result.getOrElse(allows(at, event), () => at), EMPTY);
+        const folded = Arr.reduce(events, EMPTY, (at, event) => Result.getOrElse(allows(at, event), () => at));
         const again = allows(folded, granted("pB", key));
         expect(Result.isSuccess(again)).toBe(true);
 

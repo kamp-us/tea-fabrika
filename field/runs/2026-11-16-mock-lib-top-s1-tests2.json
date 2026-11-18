@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-lib-top-s1-tests2",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T00:44:37-08:00",
+  "ended": "2026-11-16T01:01:36-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, pair-lock round, for slice 1 of the mock sweep's lib-top plan (docs/plan/quests/mock-lib-top-PLAN.md on fabrikalfa/mock-plans, its amendment of 2026-11-16, lead ruling: the lock is a pair), in next/ and the lint tooling. oxlint's vitest/no-restricted-vi-methods misses a call chained onto the vi call (oxc issue 29656), so .oxlintrc.json now also sets eslint/no-restricted-properties with one object vi entry per banned member (fn, mock, doMock, spyOn, stubEnv), each with the vitest rule's message, on the vi ban's files. The plan's one-block sketch, at warn over src/*.ts and src/*.tsx, fails a whole pnpm lint: lint.ts reports a warn line of this rule with no JSON.parse advice fire left, and src/*.tsx has no file. The code wins, so the lock is two blocks: src/*.ts at warn, which Testing.ts's JSON.parse fire still holds, and src/*.tsx at error. Each restates the entries these files took before from the Reflect ban's warn block: Data.TaggedError, JSON.parse and the four Reflect entries. At warn a vi fire still blocks: advice.ts lets only a fire whose message starts with 'JSON.parse' advise, and the new scenario checks that on oxlint's own warning fires. VI_PROPERTIES in oxlint-plugins/builtin-plants.ts refuses the two chained forms and one plain call of each member, and takes vi.hoisted, vi.waitFor, a comment, a string and another object's fn. VI_METHODS gains the chained lines as false, under its own code, plus the same call in parentheses as true. The Reflect scenario planted one file per glob and asserted they were all different; the Reflect warn block's src/* and the lock's src/*.ts name the same file, so it now checks each planted file once, as the Data.TaggedError scenario does. No product file changed.",
+  "laws": [
+    {
+      "law": "L1 oxlint-plugins/plants.test.ts: scenario: VI_PROPERTIES' lines are refused exactly, and block, in every folder of every vi ban block",
+      "red": "green from the start, since this step adds the entries it checks; seen red under its plant: next/packages/libfabrika/src/planted.ts: expected [] to deeply equal [ 3, 4, 5, 6, 7, 8, 9 ]"
+    },
+    {
+      "law": "L1 oxlint-plugins/plants.test.ts: scenario: VI_METHODS' lines are refused exactly, in every folder of every vi ban block",
+      "red": "green, with the chained lines recorded as false; seen red under both of its plants"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: scenario: REFLECT's lines are refused exactly, in every folder of every ban block",
+      "red": "green; it first failed 'each glob gets a file of its own: expected 37 to be 38' once the lock's src/*.ts glob named the same file as src/*, a harness check, now one check per file"
+    },
+    {
+      "law": "oxlint-plugins/plants.test.ts: L2 scenario: the root rules and every override that sets no-restricted-properties carry the entry",
+      "red": "green: both new blocks carry Data.TaggedError"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L1, VI_PROPERTIES in every vi ban folder",
+      "plant": "drop the vi entries from no-restricted-properties in the lock's blocks (run on the one-block sketch and again on the two final blocks)",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_METHODS in every vi ban folder",
+      "plant": "delete the fn entry from the vitest/no-restricted-vi-methods block",
+      "result": "red"
+    },
+    {
+      "law": "L1, VI_METHODS in every vi ban folder",
+      "plant": "delete the spyOn entry from the vitest/no-restricted-vi-methods block",
+      "result": "red"
+    },
+    {
+      "law": "the lock on the real tree",
+      "plant": "put vi.spyOn(crypto, \"getRandomValues\").mockImplementation((a) => a) back in next/packages/libfabrika/src/Id.test.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Every plant ran once on a saved copy and was restored by copy; git status showed no product file. The Id.test.ts plant was linted with node oxlint-plugins/lint.ts on that one file: 1 blocking, eslint(no-restricted-properties) 'vi.spyOn' is restricted at Id.test.ts:22, and no fire from the vitest rule, which shows the chained miss on the real tree. The plan's sketch line uses () => undefined and the brief's () => {}; the plant uses the plan's, which is also the app-e2e branch's VI_METHODS line, so a fold merges the lines cleanly. pnpm format passes. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: oxlint passes; lint:promise-types died with EPIPE while another agent's lint ran in the box, and passed alone with 0 findings; lint:dead was killed once (exit 137) for memory, and alone flags only next/packages/libfabrika/src/Id.test-support.ts:generatorWith as only-called-from-tests, the owner's call pending, left untouched with node-kinds.json and the ledgers. The first whole lint, on the one-block sketch, reported '.oxlintrc.json: eslint(no-restricted-properties) has no fire left in next/packages/libfabrika/src/*.tsx', which is why the lock is two blocks. The list ratchet exits 0. Tests run, at head 7fd380799 plus this change: oxlint-plugins/plants.test.ts (255 passed), and next/packages/libfabrika/src/Id.test.ts, Id.cause.test.ts and Id.types.test.ts (32 passed). No pnpm typecheck.",
+  "step": "tests",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

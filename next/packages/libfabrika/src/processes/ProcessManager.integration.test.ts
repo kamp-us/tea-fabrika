@@ -1,7 +1,7 @@
 // Exam amendment, P33 / ticket 252. Replaces P9's per-build start identity only.
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Layer, Stream, Tracer } from "effect";
+import { Cause, Effect, Layer, Stream, Tracer, Schema } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -22,10 +22,17 @@ import {
 } from "./Process.test-support.ts";
 import { CoordinationLayer, ProcessManager } from "./ProcessManager.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const hash = fc.string({ minLength: 1, maxLength: 80 });
 
 const fixture = (hash: string) => {
   const CODE = { ...originalCode, hash };
+
   return { CODE, first: (id?: string, name?: string) => makeFirst(id, name, CODE) };
 };
 
@@ -34,7 +41,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
     const context = yield* Effect.context<R>();
     yield* Effect.promise(() =>
       fc.assert(
-        fc.asyncProperty(arb, (a) => Effect.runPromise(law(a).pipe(Effect.provideContext(context)))),
+        fc.asyncProperty(arb, (a) => Effect.runPromiseWith(context)(law(a))),
         {
           seed: 119120,
           numRuns: 40,
@@ -50,13 +57,16 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(fcExitReason, [], (reason) => {
       const store = storage();
       const spans: Tracer.NativeSpan[] = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
@@ -70,6 +80,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
   it.effect("fresh receive refuses missing and ended lives with the typed ended error", () =>
     check(fcExitReason, [], (reason) => {
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
@@ -93,6 +104,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(hash, ["build-a"], (hash) => {
       const { CODE, first } = fixture(hash);
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
@@ -117,6 +129,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
       const { first } = fixture(hash);
       const store = storage();
       const generated = ids(A);
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
@@ -132,6 +145,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
     check(hash, ["build-a"], (hash) => {
       const { first } = fixture(hash);
       const store = storage();
+
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
         expect((yield* Effect.flip(processes.start(first(), from({ seen: 5 })))).reason).toBe("refused");
@@ -143,9 +157,10 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 
 describe("p21, CoordinationLayer", () => {
   it.effect("gives mail and starts over the same ledger", () =>
-    check(fc.jsonValue(), [{ type: "save" }], (m) => {
+    check(fc.jsonValue(), [Tag.cases.save.make({})], (m) => {
       const { first } = fixture("build-a");
       const store = storage();
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const processes = yield* ProcessManager;
@@ -166,6 +181,7 @@ describe("p21, CoordinationLayer", () => {
       check(fc.jsonValue(), [1], (m) => {
         const { first } = fixture("build-a");
         const failure = new LedgerError({ reason });
+
         const broken = Layer.mergeAll(
           Layer.succeed(Ledger, {
             append: () => Effect.fail(failure),
@@ -175,6 +191,7 @@ describe("p21, CoordinationLayer", () => {
           Layer.succeed(LedgerTransaction, { transact: () => Effect.fail(failure) }),
           Layer.succeed(Doorbell, { ring: () => Effect.void }),
         );
+
         return Effect.gen(function* () {
           const processes = yield* ProcessManager;
           const mailbox = yield* Mailbox;

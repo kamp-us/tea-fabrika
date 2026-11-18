@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress-compiler",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": null,
+  "started": "2026-11-17T05:00:59-08:00",
+  "ended": "2026-11-17T05:06:02-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "Today's CI tooling, tracker 1144. Lead granted the ordinary compiler and full lint resources after local construction. Canonical whole typecheck passed all 30 workspaces and full normal lint passed all 18 checks. Fixed only progress.ts and progress.test.ts: three closed tagged schemas now use Schema.TaggedStruct, and two test callback wrappers now return a branded typed CallbackFailure made by its Schema constructor. No journal fields, assertions, counts or deadlines were removed. The original run row is retained unchanged.",
+  "note": "Whole format passed without unrelated source edits. First compiler run found five own Effect diagnostics. The initial fix exposed three additional own error-class conventions on the second compiler run; those were fixed, not suppressed. Both failed runs and their normal lint passes are preserved privately. Final canonical typecheck PID 13304 ran from 05:04:39 to 05:04:59 PT on Node 26.13.0 and pnpm 12.16.1 with the normal global lock and incremental caches, 30 workspace starts and completions, zero diagnostics. Final full normal lint PID 13305 ran from 05:04:39 to 05:05:23 PT and passed 18 checks. Affected safe laws passed: progress 5 on the final helper and time-table 8 after the schema change; unchanged scheduled 245 retain their earlier result. Every other tracked file hash and the index matched the pre-check snapshot before this row. No broad tests, protected process-signal fixture, overhead measurement, signing, push or CI dispatch ran. The lead still owes disposable P8 and overhead proof before review.",
+  "base": "019608e47a81051499323f8a388f62af97b0e7f2",
+  "sourceHashes": {
+    ".github/ci/progress.test.ts": "ac70ee1709484863dd8c3b6815195b80f4b778d09aac6d9fbce7c09ea29e691a",
+    ".github/ci/progress.ts": "5a0793bbdeaf03418bff05f382e828c829505b591c0d85e73c27bf97c62ec7aa"
+  },
+  "checks": {
+    "typecheck": {
+      "started": "2026-11-17T05:04:39.951963-08:00",
+      "ended": "2026-11-17T05:04:59.474246-08:00",
+      "pid": 13304,
+      "workspaces": 30,
+      "exitCode": 0
+    },
+    "lint": {
+      "started": "2026-11-17T05:04:39.951932-08:00",
+      "ended": "2026-11-17T05:05:23.587070-08:00",
+      "pid": 13305,
+      "parts": 18,
+      "exitCode": 0
+    }
+  },
+  "tokens": null,
+  "tools": null,
+  "minutes": 5.05,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

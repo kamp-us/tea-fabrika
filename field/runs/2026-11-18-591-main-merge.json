@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-591-main-merge",
+  "ticket": "591",
+  "pr": 1504,
+  "started": "2026-11-18T07:55:00-08:00",
+  "ended": "2026-11-18T08:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "merged",
+  "why": "A cloud lead session takes PR 1504 (0591, docs/plan/quests/exam-to-lint-PLAN.md) to ready under the sev0. The PR is not stale: main still holds next/apps/fabrika/src/exam/ and the readers list in .github/ci/changes.mjs. Main was merged in twice (2594c20 and d480d87). The first merge had 50 conflicts, nearly all where main's sweeps (Effect collections, readable spacing, anti-slop, the Effect-check locks) had rewritten exam files this branch moves; each moved copy took main's code plus the branch's intent, hunk by hunk. Main's change to the old node-kinds exam test (a convention may name a test-support file) went into oxlint-plugins/node-kinds.ts, and d480d87's @kalfa/config rule went into oxlint-plugins/next-manifests.ts and L9's settings-imports.test.ts. Three of main's new plant tests import oxlint-plugins/plant.ts from its new home. Slice E was not folded: it conflicts with main's sweeps in six laws files, so the plan is amended to land A, B and F here and C, D and E in a second pull request.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Mechanical merge, so no review agent (0589 amendments). Before the owner's 2026-11-18 rule that only pnpm format and the leak grep run before a push, pnpm format and the lint parts ran on the first merge: every part passed but lint:promise-types, which ran out of memory beside the others and passed alone with 0 findings, and lint:node-kinds, which found main's new convention entry and passed after the port. A narrow vitest run was stopped under the new rule; CI judges the tests and the typecheck. The box had Node 22, and the repo's test config refuses any Node but the pinned 26.13.0.",
+  "step": "lead"
+}

@@ -1,0 +1,19 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-lint-parts-die-with-epipe-on-a-shared-box",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/apps/fabrika/src/exam/promise-types.ts",
+    "line": 323
+  },
+  "says": "In a cloud box shared by several agents, pnpm lint (with NODE_OPTIONS=--max-old-space-size=6144) fails on parts that pass when run alone: lint:promise-types prints '0 findings' and then dies with EPIPE or 'unexpected end of file' in the finally that calls snapshot.dispose() and api.close() on the tsgo API process, and lint:kind and lint:dead sometimes fail the same way. A dead tsgo API process reads as a lint failure, so a step cannot tell a real hit from a box short of memory. Seen by four steps of ticket 766: the S2 tests and build steps and the S3 tests and build steps.",
+  "proof": "field/runs/2026-11-16-port-s2-tests.json and field/runs/2026-11-16-port-s2-build.json on branch fabrikalfa/port-0113-s02 (head 8b7a8b2), and field/runs/2026-11-16-port-s3-tests.json and field/runs/2026-11-16-port-s3-build.json on branch fabrikalfa/port-0113-s03: each records the part dying with EPIPE in the shared box and passing when rerun alone. Seen again by the S3 review at 8491d53 (field/runs/2026-11-16-port-s3-review.json): one pnpm lint passed whole, and the next, with the load average near 20 on 4 cores, failed lint:kind, lint:dead and lint:promise-types with 'Error: EPIPE: broken pipe, write'; all three passed run alone right after.",
+  "cost": "Every step in a shared box reruns lint parts by hand and has to judge whether a red part is real, and a real hit can be waved off as the same noise.",
+  "next": "Report a dead tsgo API process as its own failure line, apart from a lint hit, or run lint:promise-types alone, not beside the other parts, in parallel.ts.",
+  "head": "8491d530717778fe21794079ae940287c762fdef",
+  "ticket": null,
+  "pr": null
+}

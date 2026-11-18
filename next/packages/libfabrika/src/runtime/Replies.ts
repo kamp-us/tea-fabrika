@@ -2,8 +2,6 @@
  * Terminal replies: a program's refusal kept under its registered name and stable letter, so a
  * retry, a reopen or a successor process answers it again. This file holds the contract only
  * (0095); `RepliesSql.layer` keeps the replies in the runtime's recovery SQL.
- *
- * @stability unstable
  */
 import { Context, type Effect, Schema } from "effect";
 import type { Reply as ReplySchema } from "./internal/reply.ts";
@@ -13,7 +11,6 @@ import type { Reply as ReplySchema } from "./internal/reply.ts";
  * input it first answered, who wrote that input and for whom, a digest that binds the writer to
  * the input, and the refusal itself.
  *
- * @stability unstable
  * @category models
  */
 export type Reply = typeof ReplySchema.Type;
@@ -21,7 +18,6 @@ export type Reply = typeof ReplySchema.Type;
 /**
  * Error for a terminal reply that could not be read or stored.
  *
- * @stability unstable
  * @category errors
  */
 export class RepliesError extends Schema.TaggedError<RepliesError>()("RepliesError", {
@@ -46,7 +42,6 @@ export class RepliesError extends Schema.TaggedError<RepliesError>()("RepliesErr
  * A row that does not decode fails with `bad_row` and stays stored. It never reads as absent, so a
  * damaged reply cannot turn a refused letter into a fresh one.
  *
- * @stability unstable
  * @category services
  */
 export class Replies extends Context.Service<

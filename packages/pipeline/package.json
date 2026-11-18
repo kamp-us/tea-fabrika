@@ -46,7 +46,7 @@
   "peerDependencies": {
     "@agentclientprotocol/sdk": "catalog:",
     "@anthropic-ai/claude-agent-sdk": "catalog:",
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@effect/opentelemetry": "catalog:",
     "@opentelemetry/api": "catalog:",
     "@opentelemetry/exporter-trace-otlp-http": "catalog:",
@@ -84,7 +84,7 @@
   "devDependencies": {
     "@agentclientprotocol/sdk": "catalog:",
     "@anthropic-ai/claude-agent-sdk": "catalog:",
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@effect/opentelemetry": "catalog:",
     "@opentelemetry/api": "catalog:",
     "@opentelemetry/exporter-trace-otlp-http": "catalog:",

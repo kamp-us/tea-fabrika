@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-leakgrep-patch-laws-use-raw-fc-assert",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".agents/skills/lead/scripts/leakgrep.patches.test.ts",
+    "line": 81
+  },
+  "says": "In today's tooling, the four new property laws use fc.assert(fc.property(...)) with a hand seed, which decision 0579 (accepted 2026-11-15, covering our tooling) says is not the way; it.prop from @effect/vitest is already used in .agents (clauderow.test.ts line 352).",
+  "proof": "leakgrep.patches.test.ts:81 'const options = { seed: 1616, numRuns: runsFor({ fast: 4, full: 40 }) };' and lines 202, 225, 247, 262 'fc.assert(', against .decisions/0579-property-laws-use-it-prop.md:65 '`fc.assert(fc.property(...))` and `fc.asyncProperty` with a hand seed are not the way.'",
+  "cost": "Four more laws for the 0579 sweep to move, and one more file that shows agents the shape 0579 retired.",
+  "head": "19e9165ffe30b51028739845741db4c162a227e7",
+  "ticket": null,
+  "pr": null
+}

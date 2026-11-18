@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e29-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:16:08-08:00",
+  "ended": "2026-11-15T22:32:35-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of judgment slice E29 of the Effect-checker sweep (preferEffectArray) in next/: folders lib:node, app:e2e, prog:chaos and app:top, branch fabrikalfa/effect-e29 at 836fbe2. Merge-ready, findings 0. I read the whole diff from the merge base 37db01a: 80 files, of which 2 are field rows, 15 are product files and 63 are exam paths. No tsconfig, no tsconfig.base.json, no LOCKED row and no file of pull request 1366 (67 files) is touched. My recount at the head, with only this check at error through --lspconfig for libfabrika, the app and chaos, finds 0 hits in product files and 28 in app:e2e. All 28 sit inside Playwright page callbacks (evaluate and waitForFunction), where effect is not loaded, as the tests row says. Every find became Arr.findFirst, read in place as an Option or passed on with Option.getOrUndefined. A find with a non-null assertion, or a findIndex used as an index, became Option.getOrThrow: a miss now fails at once and no longer runs on with undefined or -1, which is stricter. Each sort or toSorted became Arr.sort with Order.String, the hand comparator byLabel, or Order.Tuple, on both sides of each toEqual, so the comparison as sets is the same. gitMemory's remoteHead keeps its fallback, because a worktree's head is never null. No comment line or disable line was dropped. Per file, the counts of it, describe, expect and each matcher are equal before and after, apart from one rewrite in supervision-spans: toBeGreaterThanOrEqual(0) on an index became toBe(true) on Option.isSome, which is the same assertion. Three planted breaks, done by reading: a missing secret span in supervision-spans, a missing file in stored's sorted lists, and no opening event in RecordPartResources. Each turns red, and the last now fails earlier than before. There is no new law and no plant to record, because a judgment slice writes no lock.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Ran at 836fbe2 on Node 26.13.0: the checker's diagnostics for 3 projects (recount above); loosening.sh 37db01a 836fbe2, whose hits are all 'unrecognized change' on import lines and 'removed expect' on rewritten expect lines, with no assertion removed or narrowed; governance.sh, word matches only, and no decision is walked back; git merge-tree against origin/main 623e161, which merges cleanly; the 47 non-visual test files the diff changes or whose product files it changes, one at a time under nice -n 19 vitest --maxWorkers=1, all green (Git.test.ts skips 1 by design), including every .integration. law the diff reaches; one pnpm typecheck (passed); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (17 parts passed). Not run: the .visual. tests (no Playwright browser here) and instance-wire.integration.test.ts (no ssh-keygen here; that file is unchanged).",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

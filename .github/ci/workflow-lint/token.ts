@@ -1,3 +1,4 @@
+import { Record as Rec } from "effect";
 // Today's CI, serving both versions. check.yaml's M1: changes' classify step and the test jobs' time
 // tables are the steps but the stop steps that get the token.
 import { map, type Rule, steps, TOKEN } from "./shared.ts";
@@ -13,13 +14,15 @@ export const token: Rule = ({ jobs }, require) => {
   // that get the token. A time table counts only in a test job and only with its exact env (TT1's
   // `timeTableEnv`): the same command in another job, or beside one more variable, gets no token.
   const classify = changeSteps.find((s) => s["id"] === "diff");
+
   const tables = TIMED_LEGS.flatMap(([name, report]) =>
     steps(map(jobs[name])).filter(
       (s) => s["run"] === TIME_TABLE && JSON.stringify(s["env"]) === JSON.stringify(timeTableEnv(report)),
     ),
   );
+
   require(map(classify?.["env"])["GITHUB_TOKEN"] === TOKEN, "M1: changes' classify step gets the token");
-  require(Object.entries(jobs).every(([, job]) =>
+  require(Rec.toEntries(jobs).every(([, job]) =>
     steps(map(job)).every(
       (s) => s === classify || tables.includes(s) || !/github\.token|secrets\.GITHUB_TOKEN/.test(JSON.stringify(s)),
     ),

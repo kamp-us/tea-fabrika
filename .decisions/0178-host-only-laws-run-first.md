@@ -1,12 +1,12 @@
 ---
 id: 0178
-title: A law that can only run on the real machine runs before the first review, and on the owner's Mac only after the lead's read and the owner's yes
+title: A law that can only run on the real machine runs before the first review, on disposable CI for launchd, Electron and process signals, and on the owner's Mac only after the lead's read and the owner's yes
 status: accepted
 date: 2026-11-13
 tags: [lead, lane, build, review, plan, host, electron, launchd, fixtures, vector, kill, signal, process-group, safety]
 ---
 
-# 0178: A law that can only run on the real machine runs before the first review, and on the owner's Mac only after the lead's read and the owner's yes
+# 0178: A law that can only run on the real machine runs before the first review, on disposable CI for launchd, Electron and process signals, and on the owner's Mac only after the lead's read and the owner's yes
 
 **What this decides:** a test that needs the real machine (launchd, the real Electron app, a real
 OS process or socket) is run right after the build, before any review starts, and never at the end
@@ -77,8 +77,12 @@ it has not passed there (owner, 2026-11-13).**
 - A build is not done while its host-only law has not passed on a real machine.
 - A fixture that stands in for a real tool's output is taken from a real run and labeled as a
   vector.
-- **On the owner's Mac, a host-only law runs only after two things (owner, 2026-11-13, after the
-  second case):**
+- **Laws that use launchd, real Electron or real process signals run on eligible disposable CI,
+  away from the owner's laptop** ([0594](0594-safe-checks-direct-mac-ci.md)). Mac-specific laws use
+  disposable macOS CI; a portable process-signal law may use disposable Linux CI. Their proof is
+  still obtained before the first review.
+- **Any other host-only law run on the owner's Mac runs only after two things (owner, 2026-11-13,
+  after the second case):**
   - the lead has read every line the test can reach that signals a process or calls launchd;
   - the owner has said yes.
 

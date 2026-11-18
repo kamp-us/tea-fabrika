@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-require-safety-comment-1-build1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:09:14-08:00",
+  "ended": "2026-11-15T22:20:14-08:00",
+  "parent": "2026-11-16-antislop-require-safety-comment-1-tests1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step of anti-slop judgment slice AS-require-safety-comment-1 (decisions 0561 and 0563), in next/ and our tooling. Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker, forced to error in a scratch config outside the repo, over next/packages/libfabrika/src/client, .agents and next/programs/tezgah, at c31f3c4. Hits met: 39, all in product files, none in a file of pull request 1366. Fixed: 36 by a SAFETY comment above the cast, its property or its statement, each read from the code (tea's types slot, which tea never reads, on 7 lines; empty arrays and null that only widen; JSON reads whose fields are each checked before use; the usage() exit that guards drive's two argument casts; LinkMsg's eleven type literals in WindowMachine's linkUpdate), and 3 by removing the cast with no change in behavior: tezgah program.ts compares tile ids with some(id === tile) in place of includes(tile as TileId); plants.ts takes the last BuildEntry with findLast(Schema.is(BuildEntry)) in place of an index and a cast; drive.ts's draft Sub already had the DepKeyedSub annotation, so its repeated cast went. Tool: a scratch script that inserts each written comment at its line, then two hand edits and the three code changes with the Edit tool; no checker quick fix. No assertion deleted or narrowed, no disable line, no lock line, no .oxlintrc.json change. Scratch count after: 0 in the three folders.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Left: 0. Waiting on 1366: 0. pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) now exit 1 for one reason only: oxlint-plugins/lint.ts says the rule has no hit left in .agents/**, next/packages/libfabrika/src/client/** and next/programs/tezgah/** and asks for those folders in the rule's .oxlintrc.json block, which is the lock line this slice may not add (owner ruling: locks come later in one PR); every other lint part passed. Ratchet exited 0. pnpm typecheck passed whole. Tests at c31f3c4 plus this diff, under nice -n 15 vitest --maxWorkers=3, one file at a time: agents, boxfiles, chain, codexexec, drive, gc, plants, quest, quests, gcloop, flow/machine, flow/walk, flow/landing (.agents), HandsMachine.laws, Tezgah.laws, WindowMachine.laws, Prefix.laws, WindowStart.laws (client), tezgah program.laws: all passed. box.test.ts failed 40 laws because ssh-keygen is missing in this box (spawnSync ssh-keygen ENOENT), as in the tests step; not counted. --changed origin/main did not run: the test config refuses it because the set reaches three host-only files (next/apps/fabrika/src/checklist-instance.laws.integration.test.ts, next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts, next/apps/fabrika/e2e/client-protocol.visual.test.ts), and the run with the cloud-box override was refused by this session's permission check, so those .integration. laws did not run here.",
+  "step": "build"
+}

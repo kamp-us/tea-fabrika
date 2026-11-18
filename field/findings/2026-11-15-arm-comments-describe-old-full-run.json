@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-arm-comments-describe-old-full-run",
+  "date": "2026-11-15",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".agents/skills/lead/scripts/pr/Arm.ts",
+    "line": 34
+  },
+  "says": "Arm.ts says scheduled.yaml's report job runs only on main and that a red leg's `stop the run` step cancels its own run; since pull request 1383 the report runs on every branch on `always()` and no step cancels the run, so SKIPPED_BY_DESIGN and the header describe a workflow that no longer exists.",
+  "proof": "Arm.ts line 34 reads \"(`if: always() && github.ref == 'refs/heads/main'`), so every green branch run skips it\" and line 9 names \"`stop the run`\"; .github/workflows/scheduled.yaml line 200 reads \"if: always()\" and workflow-lint SC4 fails any step that cancels the run.",
+  "cost": "A reader of the merge check trusts a skip rule and a cancel story that no longer happen, and may keep `report` in SKIPPED_BY_DESIGN, which would let a branch run whose report was skipped for a real fault count as green.",
+  "head": "82296f5cf0a6e9cb16c1217809ab5f7aa3576f5e",
+  "ticket": null,
+  "pr": null
+}

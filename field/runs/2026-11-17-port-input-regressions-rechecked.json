@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-port-input-regressions-rechecked",
+  "ticket": "766",
+  "pr": "kamp-us/tea-fabrika#1517",
+  "started": "2026-11-17T04:06:28-08:00",
+  "ended": "2026-11-17T04:10:26-08:00",
+  "parent": "2026-11-17-port-s1-s3-input-regressions",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's lead tooling S1/S3 fix round. The fieldrow property now calls the same exported configured command runner as the executable, with an explicit in-memory env; no test-only provider can hide the real entry point. The script law retains every original assertion and adds split-string aliases, quoted fragments, separators and quoted option values, with non-shell counterparts. All eight tests pass. Three temporary faults each failed at an intended assertion: drop empty env values, keep split-string quotes literal, ignore the long equals alias. Source restored byte for byte after each, then both full safe files passed again. Counts and seeds unchanged. No compiler or full API run; those slots were reserved by ticket1142.",
+  "plants": [
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "turn preserveEmptyStrings off in the actual configured command runner",
+      "result": "red"
+    },
+    {
+      "law": "with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes",
+      "plant": "replace env split-string lexical parsing with whitespace splitting",
+      "result": "red"
+    },
+    {
+      "law": "with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes",
+      "plant": "ignore --split-string= while retaining short -S support",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.0,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null
+}

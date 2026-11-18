@@ -6,11 +6,9 @@
  *
  * Its states: `idle`; `armed {since}`, the prefix pressed at `since`; `asking {tile, since}`, the
  * close of `tile` waiting for y or n, asked at `since`.
- *
- * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { TileId } from "../tezgah/Workspace.ts";
 
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
@@ -18,7 +16,6 @@ const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(
 /**
  * Schema for a window's prefix: idle, armed since a time, or asking about one tile's close.
  *
- * @stability unstable
  * @category schemas
  */
 export const Prefix = Schema.TaggedUnion({
@@ -30,31 +27,34 @@ export const Prefix = Schema.TaggedUnion({
 /**
  * A window's prefix, as `Prefix` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Prefix = typeof Prefix.Type;
 
-const Msg = Schema.Union([
+/**
+ * Schema for what a window's prefix machine takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const PrefixMsg = Schema.TaggedUnion({
   /** The prefix key, pressed at `at`. */
-  Schema.Struct({ type: Schema.Literal("arm"), at: Ms }),
+  arm: { at: Ms },
   /** A close of `tile` that waits for y or n, asked at `at`. */
-  Schema.Struct({ type: Schema.Literal("question"), tile: TileId, at: Ms }),
+  question: { tile: TileId, at: Ms },
   /** The key that ends it: a command, the prefix again, Escape, an unbound key or the answer. */
-  Schema.Struct({ type: Schema.Literal("done") }),
-]);
+  done: {},
+});
 
 type Step = readonly [Prefix, readonly []];
 
 /**
  * The prefix as one tea machine. Only an idle prefix arms, and only an armed one asks the close question.
  *
- * @stability unstable
  * @category machines
  */
 export const prefixMachine = Machine.make({
   model: Prefix,
-  msg: Msg,
+  msg: PrefixMsg,
   cmds: [],
   init: (loaded) => [loaded ?? Prefix.cases.idle.make({}), []],
   update: {

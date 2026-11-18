@@ -23,8 +23,12 @@ import {
   WORKERS,
 } from "./vitest.shards.ts";
 
-/** A file's row, or undefined when the table has none, as `Shards` reads it. */
-const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
+/** A file's row in `rows`, or undefined when the table has none, as `Shards` reads it. */
+const rowIn = (rows: Readonly<Record<string, number>>, path: string): number | undefined =>
+  Object.hasOwn(rows, path) ? rows[path] : undefined;
+
+/** A file's merge-line row, or undefined when the table has none. */
+const rowOf = (path: string): number | undefined => rowIn(measured, path);
 
 /** `Shards` over `rows` in place of the rows of this run's depth, so a law can name the depth it is about. */
 const shardsOver = (rows: Readonly<Record<string, number>>) =>
@@ -65,19 +69,18 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
 
 it("scenario: L6 the five measured heaviest next files occupy the five vitest machines with bounded loads", async () => {
   // Today's CI: the real table, the real file set and the workflow's own count of vitest machines,
-  // since the law is about today's split. The names are the five heaviest by the rows of runs
-  // 43544589151, 43551626086 and 43556494864, all integration files once RepositoriesGit's row was
-  // refreshed from memory git. The sixth heaviest shares a machine with the fifth.
+  // since the law is about today's split. The integration samples and QuotaRunner's two fast
+  // samples below name these five heaviest rows. The sixth heaviest shares a machine with the fifth.
   // Keep these names independent of the table so an accidentally tiny row cannot hide the file.
   // Plants, each run once on a copy of the table filled from integrationSamples, and restored: set the
   // Watchers row to 1.0, so it lands beside another of the five (red); add a leg "6" to the
   // workflow's next matrix, so the count no longer matches the five names (red).
   const heaviest = [
+    "next/packages/libfabrika/src/node/QuotaRunner.test.ts",
     "next/packages/libfabrika/src/node/Watchers.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChild.integration.test.ts",
     "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts",
-    "next/apps/fabrika/src/start-child.laws.integration.test.ts",
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
@@ -98,14 +101,14 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
 //   C: run 43657535864, a merge queue group of PR 1202 at bb299109b.
 // A sample is the sum of the file's test times as the verbose reporter printed them in that
 // run's job log, to one decimal. The job ids are kept because GitHub drops job logs after 90 days.
-// All 157 files have three samples. A 158th, ArchiveCryptoFailure.test.ts, was deleted after
-// these runs (ticket 996), and its samples went with it. Three files took over 60 s in these runs and were split
+// The original 157 files have three samples. A 158th, ArchiveCryptoFailure.test.ts, was deleted after
+// these runs (ticket 996), and its samples went with it; so did build.test.ts, whose law became the lint
+// rule fabrika/one-page-runtime, exam/node-kinds.test.ts, whose law became lint:node-kinds, and
+// exam/effect-checks.test.ts, which moved to oxlint-plugins/ (0591). Three files took over 60 s in these runs and were split
 // after them, every law moved unchanged: runner-contract.test.ts, readers.laws.test.ts and
 // RepositoriesGit.test.ts. Each part's sample is the sum of its own tests' times in the same log.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
 const nextSamples = {
-  // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/build.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/door-spans.test.ts": [11.5, 10.1, 12.6],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -119,11 +122,8 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/exam/commits.test.ts": [0.8, 0.7, 0.8],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/exam/compiler.test.ts": [0.0, 0.0, 0.0],
-  // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/apps/fabrika/src/exam/effect-checks.test.ts": [0.0, 0.0, 0.0],
-  // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/apps/fabrika/src/exam/node-kinds.test.ts": [0.1, 0.1, 0.1],
+  // Measured at its old path, next/apps/fabrika/src/exam/compiler.test.ts; 0591 moved it.
+  "next/packages/libfabrika/src/node/build/compiler.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/exam/ratchet.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -137,6 +137,7 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/apps/fabrika/src/runtime.decode.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
+  // Measured as next/apps/fabrika/src/settings-generated.integration.test.ts; 0591 left it plain.
   "next/apps/fabrika/src/settings-generated.test.ts": [4.8, 4.0, 5.3],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/apps/fabrika/src/settings.test.ts": [0.1, 0.1, 0.1],
@@ -250,6 +251,8 @@ const nextSamples = {
   "next/packages/libfabrika/src/node/ErrorCause.test.ts": [4.0, 3.4, 4.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/ErrorCause.types.test.ts": [0.0, 0.0, 0.0],
+  // Fast runs 44076978833/44078183666, attempt 1, jobs 134017776388/134021830466.
+  "next/packages/libfabrika/src/node/QuotaRunner.test.ts": [224.1, 346.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/node/dev/DevLife.laws.test.ts": [0.1, 0.2, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -258,16 +261,17 @@ const nextSamples = {
   "next/packages/libfabrika/src/node/launchd/LaunchdStatus.laws.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/launchd/ProcessGroups.laws.test.ts": [0.1, 0.0, 0.1],
+  // The repository files below took their `.integration.` names after these runs (ticket 1073, 0584).
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/Git.test.ts": [0.0, 0.0, 0.0],
+  "next/packages/libfabrika/src/node/repositories/Git.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts": [16.2, 13.0, 18.4],
+  "next/packages/libfabrika/src/node/repositories/OpenRepository.composed.integration.test.ts": [16.2, 13.0, 18.4],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.identity.test.ts": [43.6, 25.6, 31.9],
+  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.identity.integration.test.ts": [43.6, 25.6, 31.9],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts": [34.6, 16.4, 28.0],
+  "next/packages/libfabrika/src/node/repositories/RepositoriesGit.integration.test.ts": [34.6, 16.4, 28.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/node/repositories/Sources.test.ts": [20.4, 23.2, 27.9],
+  "next/packages/libfabrika/src/node/repositories/Sources.integration.test.ts": [20.4, 23.2, 27.9],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/node/settings/Command.test.ts": [0.8, 0.6, 0.9],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -355,11 +359,11 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/settings/Start.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/settings/Toml.types.test.ts": [0.0, 0.0, 0.0],
+  "kalfa/config/src/Toml.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/settings/TomlEdit.test.ts": [6.4, 5.6, 5.5],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/settings/TomlParser.test.ts": [0.2, 0.2, 0.2],
+  "kalfa/config/src/TomlParser.test.ts": [0.2, 0.2, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/telemetry/ErrorCause.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
@@ -451,10 +455,9 @@ const integrationSamples = {
   "next/apps/fabrika/src/door.integration.test.ts": [177.7, 117.3, 174.9],
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/apps/fabrika/src/exam/bytes.integration.test.ts": [6.0, 6.4, 7.0],
+  // Plain since ticket 1073: it reads repo files and runs Rolldown in memory (0584).
   // A job 132292933270, B job 132315559508, C job 132330501025.
-  "next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts": [13.9, 10.6, 15.9],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/clock.integration.test.ts": [0.0, 0.0, 0.0],
+  "next/apps/fabrika/src/exam/client-manager-contract.test.ts": [13.9, 10.6, 15.9],
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts": [77.1, 47.4, 61.7],
   // A job 132292933169, B job 132315559486, C job 132330501025.
@@ -466,33 +469,9 @@ const integrationSamples = {
   // A job 132292933192, B job 132315559467, C job 132330500983.
   "next/apps/fabrika/src/exam/deps.integration.test.ts": [6.5, 4.1, 4.1],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/edge-comment.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/edges.integration.test.ts": [2.8, 2.9, 4.2],
   // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/effect-functions.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/layers.integration.test.ts": [3.6, 4.0, 5.7],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/ledger-sql.integration.test.ts": [6.4, 5.6, 7.7],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-effect-run-outside-edge.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-of.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/no-promises.integration.test.ts": [31.2, 31.2, 44.2],
-  // A job 132292933169, B job 132315559486, C job 132330500993.
-  "next/apps/fabrika/src/exam/object-imports.integration.test.ts": [1.3, 1.5, 2.0],
-  // A job 132292933270, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/one-store-hook.integration.test.ts": [0.4, 0.3, 0.4],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/react-rules.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933270, B job 132315559508, C job 132330501001.
-  "next/apps/fabrika/src/exam/secret-types.integration.test.ts": [5.1, 5.3, 5.4],
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/exam/twin.integration.test.ts": [24.0, 16.0, 20.9],
   // A job 132292933169, B job 132315559497, C job 132330501014.
@@ -592,8 +571,9 @@ const integrationSamples = {
   "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts": [41.0, 44.8, 77.0],
   // A job 132292933221, B job 132315559486, C job 132330501014.
   "next/packages/libfabrika/src/node/build/css.integration.test.ts": [11.9, 13.3, 9.8],
+  // Plain since ticket 1073: it gives FileSystem generated failures, a stand-in (0584).
   // A job 132292933192, B job 132315559534, C job 132330500983.
-  "next/packages/libfabrika/src/node/build/error-cause.integration.test.ts": [0.4, 0.3, 0.3],
+  "next/packages/libfabrika/src/node/build/error-cause.test.ts": [0.4, 0.3, 0.3],
   // A job 132292933169, B job 132315559467, C job 132330501025.
   "next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts": [8.8, 10.4, 9.3],
   // A job 132292933221, B job 132315559497, C job 132330501014.
@@ -705,7 +685,7 @@ const e2eSamples = {
   overhead: [76.5, 69.8, 70.2],
 } as const;
 
-it("vector: L5 all 281 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
+it("vector: L5 all 268 next rows, vitest and end-to-end, are the median of three samples, or the larger of one or two", () => {
   // The medians of runs 43656757141, 43657195723 and 43657535864 for the `next` project's files,
   // of 43544589151, 43551626086 and 43556494864 for the integration files, and of 43601966383,
   // 43601964962 and 43605298688 for the end-to-end files, from the samples above.
@@ -720,7 +700,11 @@ it("vector: L5 all 281 next rows, vitest and end-to-end, are the median of three
       ([path, samples]) => [path, row(samples)],
     ),
   );
-  expect(Object.fromEntries(Object.entries(measured).filter(([path]) => path.startsWith("next/")))).toEqual(expected);
+  expect(
+    Object.fromEntries(
+      Object.entries(measured).filter(([path]) => path.startsWith("next/") || path.startsWith("kalfa/")),
+    ),
+  ).toEqual(expected);
 });
 
 it("vector: E5 each end-to-end row is the median of its three samples", () => {
@@ -1045,13 +1029,13 @@ describe("assign, for a file with no row", () => {
   });
 
   it("scenario: Shards spreads two new next/ files with no row over two machines", async () => {
-    // Today's CI. clock and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
+    // Today's CI. Access.types and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
     // machines tied at 0. The first new file counts the median and goes to shard 1/2, which leaves
     // shard 2/2 the least for the second. The rows are the merge line's, so the sequencer is built
     // over them: the config's own is over the full-depth rows when the schedule runs this test.
     const paths = [
-      "next/apps/fabrika/src/exam/clock.integration.test.ts",
-      "next/apps/fabrika/src/exam/compiler.test.ts",
+      "next/packages/libfabrika/src/access/Access.types.test.ts",
+      "next/packages/libfabrika/src/node/build/compiler.test.ts",
       "next/apps/toy/src/a.new.test.ts",
       "next/apps/toy/src/b.new.test.ts",
     ];
@@ -1084,9 +1068,406 @@ describe("measured", () => {
   });
 });
 
+// Today's CI, every test leg at full depth (`FABRIKA_TEST_DEPTH: full` in check.yaml and scheduled.yaml),
+// so the rows of `full` come from these three runs, attempt 1 of each:
+//   A: run 44201566907, a pull request check run: related legs 1 to 6 and the next e2e legs 1 and 2.
+//   B: run 44155250216, a scheduled full run on main: tests 1 to 5, tooling 1 and 2, e2e 1 and 2.
+//   C: run 44077224612, a scheduled full run on main, the same legs.
+// A sample is the file's seconds in its leg's time table ("Slowest test files", the ten slowest per
+// leg), as the leg's job log printed it: `(endTime - startTime) / 1000` of Vitest's report to one
+// decimal, which the shard-times law holds equal to what `shard-times` reads. A file missing from a
+// run was not among its leg's ten slowest there. Each sample is `[leg, seconds]`, the leg as the
+// run named it; `jobs` maps each run's leg to its job id, because GitHub drops job logs after 90
+// days. Related leg 7 of run A, the second tooling leg, has no log in hand. This fixed snapshot
+// copies the observations, never the table's computed weights. The two Toml settings files are in no
+// sample: their rows are not this table's to move. exam/no-promises.integration.test.ts's samples went
+// when 0591 moved its laws to oxlint-plugins/, with its full row.
+type Run = "A" | "B" | "C";
+const RUNS: readonly Run[] = ["A", "B", "C"];
+
+const fullSamples: {
+  readonly jobs: Readonly<Record<Run, Readonly<Record<string, number>>>>;
+  readonly files: Readonly<Record<string, Readonly<Partial<Record<Run, readonly [leg: string, seconds: number]>>>>>;
+} = {
+  jobs: {
+    A: {
+      "next-e2e-1": 134457005735,
+      "next-e2e-2": 134457005823,
+      "related-2": 134457805269,
+      "related-1": 134457805892,
+      "related-6": 134457806165,
+      "related-3": 134457806262,
+      "related-4": 134457806381,
+      "related-5": 134457806493,
+    },
+    B: {
+      "tests-5": 134294246588,
+      "tests-1": 134294246880,
+      "tests-tooling-1": 134294247039,
+      "tests-e2e-1": 134294247172,
+      "tests-3": 134294247213,
+      "tests-tooling-2": 134294247223,
+      "tests-e2e-2": 134294247344,
+      "tests-4": 134294247556,
+      "tests-2": 134294247591,
+    },
+    C: {
+      "tests-2": 134018347798,
+      "tests-tooling-1": 134018348044,
+      "tests-tooling-2": 134018348148,
+      "tests-e2e-2": 134018348222,
+      "tests-1": 134018348242,
+      "tests-5": 134018348309,
+      "tests-4": 134018348366,
+      "tests-e2e-1": 134018348402,
+      "tests-3": 134018348507,
+    },
+  },
+  files: {
+    ".agents/skills/lead/scripts/box.test.ts": {
+      A: ["related-6", 358.9],
+      B: ["tests-tooling-1", 416.4],
+      C: ["tests-tooling-1", 297.2],
+    },
+    ".agents/skills/lead/scripts/boxrm.guards.test.ts": {
+      A: ["related-6", 167.0],
+      B: ["tests-tooling-1", 200.1],
+      C: ["tests-tooling-1", 128.4],
+    },
+    ".agents/skills/lead/scripts/boxrm.storage.test.ts": {
+      B: ["tests-tooling-2", 200.1],
+      C: ["tests-tooling-2", 204.8],
+    },
+    ".agents/skills/lead/scripts/boxrm.test.ts": {
+      A: ["related-6", 171.6],
+      B: ["tests-tooling-1", 206.0],
+      C: ["tests-tooling-1", 134.1],
+    },
+    ".agents/skills/lead/scripts/land.test.ts": { B: ["tests-tooling-2", 45.2], C: ["tests-tooling-2", 43.7] },
+    ".agents/skills/lead/scripts/leakgrep.patches.test.ts": {
+      A: ["related-6", 166.1],
+      B: ["tests-tooling-1", 190.4],
+      C: ["tests-tooling-1", 162.9],
+    },
+    ".agents/skills/lead/scripts/leakgrep.test.ts": { C: ["tests-tooling-1", 29.4] },
+    ".agents/skills/lead/scripts/loosening.test.ts": { B: ["tests-tooling-2", 183.3], C: ["tests-tooling-2", 196.3] },
+    ".agents/skills/lead/scripts/mutbox.test.ts": { B: ["tests-tooling-2", 40.6], C: ["tests-tooling-2", 41.5] },
+    ".agents/skills/plan/scripts/plancheck.draft.test.ts": {
+      B: ["tests-tooling-2", 139.8],
+      C: ["tests-tooling-2", 162.7],
+    },
+    ".agents/skills/plan/scripts/plancheck.test.ts": {
+      A: ["related-6", 128.9],
+      B: ["tests-tooling-1", 142.5],
+      C: ["tests-tooling-1", 102.7],
+    },
+    ".agents/skills/step-commit/scripts/stepcommit.test.ts": {
+      B: ["tests-tooling-1", 41.7],
+      C: ["tests-tooling-1", 32.9],
+    },
+    ".github/ci/l11-exercise.test.ts": { B: ["tests-tooling-2", 35.3] },
+    ".github/ci/related.test.ts": { C: ["tests-tooling-2", 34.6] },
+    ".github/ci/workflow-lint/changes.test.ts": {
+      A: ["related-6", 67.6],
+      B: ["tests-tooling-2", 34.2],
+      C: ["tests-tooling-2", 36.3],
+    },
+    ".github/ci/workflow-lint/merge-line.test.ts": { A: ["related-6", 58.2], C: ["tests-tooling-1", 25.2] },
+    ".github/ci/workflow-lint/next-job.test.ts": { B: ["tests-tooling-1", 137.7], C: ["tests-tooling-2", 102.2] },
+    ".github/ci/workflow-lint/scheduled.test.ts": {
+      A: ["related-6", 81.9],
+      B: ["tests-tooling-1", 88.1],
+      C: ["tests-tooling-2", 64.0],
+    },
+    "next/apps/fabrika/e2e/chaos-revoke.integration.test.ts": {
+      A: ["related-5", 46.8],
+      B: ["tests-5", 48.1],
+      C: ["tests-3", 46.5],
+    },
+    "next/apps/fabrika/e2e/client-protocol.visual.test.ts": {
+      A: ["next-e2e-2", 45.8],
+      B: ["tests-e2e-2", 46.3],
+      C: ["tests-e2e-2", 48.2],
+    },
+    "next/apps/fabrika/e2e/first-window.visual.test.ts": {
+      A: ["next-e2e-2", 188.1],
+      B: ["tests-e2e-2", 188.1],
+      C: ["tests-e2e-2", 227.1],
+    },
+    "next/apps/fabrika/e2e/instance.visual.test.ts": {
+      A: ["next-e2e-2", 20.8],
+      B: ["tests-e2e-2", 20.8],
+      C: ["tests-e2e-2", 21.3],
+    },
+    "next/apps/fabrika/e2e/one-file.visual.test.ts": {
+      A: ["next-e2e-2", 10.9],
+      B: ["tests-e2e-2", 10.6],
+      C: ["tests-e2e-2", 11.4],
+    },
+    "next/apps/fabrika/e2e/page-runtime.laws.visual.test.ts": {
+      A: ["next-e2e-2", 12.7],
+      B: ["tests-e2e-2", 12.5],
+      C: ["tests-e2e-2", 13.1],
+    },
+    "next/apps/fabrika/e2e/reload.visual.test.ts": {
+      A: ["next-e2e-2", 110.1],
+      B: ["tests-e2e-2", 112.8],
+      C: ["tests-e2e-2", 116.6],
+    },
+    "next/apps/fabrika/e2e/resources.laws.visual.test.ts": {
+      A: ["next-e2e-1", 359.3],
+      B: ["tests-e2e-1", 335.1],
+      C: ["tests-e2e-1", 362.2],
+    },
+    "next/apps/fabrika/e2e/tezgah-focus.visual.test.ts": {
+      A: ["next-e2e-2", 25.9],
+      B: ["tests-e2e-2", 26.8],
+      C: ["tests-e2e-2", 27.2],
+    },
+    "next/apps/fabrika/e2e/tezgah-fold.visual.test.ts": {
+      A: ["next-e2e-2", 21.8],
+      B: ["tests-e2e-2", 22.9],
+      C: ["tests-e2e-2", 23.1],
+    },
+    "next/apps/fabrika/e2e/tezgah-frame.visual.test.ts": {
+      A: ["next-e2e-2", 40.6],
+      B: ["tests-e2e-2", 41.8],
+      C: ["tests-e2e-2", 42.7],
+    },
+    "next/apps/fabrika/src/brain-life.integration.test.ts": {
+      A: ["related-3", 43.5],
+      B: ["tests-4", 37.9],
+      C: ["tests-1", 40.2],
+    },
+    "next/apps/fabrika/src/build.integration.test.ts": {
+      A: ["related-1", 181.2],
+      B: ["tests-3", 260.4],
+      C: ["tests-1", 184.5],
+    },
+    "next/apps/fabrika/src/chaos.laws.integration.test.ts": {
+      A: ["related-3", 71.2],
+      B: ["tests-5", 71.0],
+      C: ["tests-5", 76.6],
+    },
+    "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts": {
+      A: ["related-1", 53.5],
+      B: ["tests-4", 92.7],
+      C: ["tests-1", 105.6],
+    },
+    "next/apps/fabrika/src/door.integration.test.ts": {
+      A: ["related-4", 159.0],
+      B: ["tests-3", 277.5],
+      C: ["tests-4", 175.5],
+    },
+    "next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts": {
+      A: ["related-5", 59.3],
+      B: ["tests-2", 53.4],
+      C: ["tests-2", 66.4],
+    },
+    "next/apps/fabrika/src/exam/commits-git-person.integration.test.ts": {
+      A: ["related-1", 61.7],
+      B: ["tests-4", 54.1],
+      C: ["tests-1", 60.5],
+    },
+    "next/apps/fabrika/src/exam/commits-git-signatures.integration.test.ts": {
+      A: ["related-4", 50.9],
+      B: ["tests-1", 94.2],
+      C: ["tests-4", 66.4],
+    },
+    "next/apps/fabrika/src/exam/commits-git-steps.integration.test.ts": {
+      A: ["related-5", 100.7],
+      B: ["tests-5", 101.0],
+      C: ["tests-5", 101.1],
+    },
+    "next/apps/fabrika/src/hands-launcher.integration.test.ts": { A: ["related-3", 39.5], C: ["tests-5", 49.2] },
+    "next/apps/fabrika/src/input-recording.integration.test.ts": { A: ["related-4", 45.3], C: ["tests-4", 46.9] },
+    "next/apps/fabrika/src/instance-one-file.integration.test.ts": { A: ["related-5", 34.1], B: ["tests-3", 49.2] },
+    "next/apps/fabrika/src/instance-records.integration.test.ts": {
+      A: ["related-2", 114.3],
+      B: ["tests-1", 117.8],
+      C: ["tests-2", 110.5],
+    },
+    "next/apps/fabrika/src/instance-wire.integration.test.ts": {
+      A: ["related-3", 211.6],
+      B: ["tests-5", 226.4],
+      C: ["tests-3", 217.3],
+    },
+    "next/apps/fabrika/src/runtime-quotas.laws.test.ts": { B: ["tests-2", 50.8], C: ["tests-2", 58.2] },
+    "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts": {
+      A: ["related-4", 162.0],
+      B: ["tests-4", 144.7],
+      C: ["tests-4", 157.3],
+    },
+    "next/apps/fabrika/src/runtime.laws.integration.test.ts": { A: ["related-1", 27.6] },
+    "next/apps/fabrika/src/settings-start.integration.test.ts": { A: ["related-3", 29.4], B: ["tests-4", 26.0] },
+    "next/apps/fabrika/src/start-child.laws.integration.test.ts": {
+      A: ["related-5", 219.4],
+      B: ["tests-2", 193.3],
+      C: ["tests-5", 213.5],
+    },
+    "next/apps/fabrika/src/tezgah-runner.laws.integration.test.ts": { A: ["related-1", 35.1] },
+    "next/apps/fabrika/src/worker-mail.integration.test.ts": {
+      A: ["related-2", 47.2],
+      B: ["tests-4", 44.2],
+      C: ["tests-1", 49.4],
+    },
+    "next/apps/fabrika/src/worker-supervision.integration.test.ts": { C: ["tests-3", 30.6] },
+    "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts": { B: ["tests-5", 44.8], C: ["tests-1", 33.6] },
+    "next/packages/libfabrika/src/cloudflare/connection.test.ts": { B: ["tests-1", 59.2] },
+    "next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts": { B: ["tests-1", 74.1], C: ["tests-1", 60.3] },
+    "next/packages/libfabrika/src/cloudflare/reload.laws.test.ts": { B: ["tests-5", 64.2], C: ["tests-2", 65.0] },
+    "next/packages/libfabrika/src/node/Children.integration.test.ts": {
+      A: ["related-2", 75.2],
+      B: ["tests-2", 76.7],
+      C: ["tests-2", 95.4],
+    },
+    "next/packages/libfabrika/src/node/ExitReason.integration.test.ts": { A: ["related-3", 44.3] },
+    "next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts": { A: ["related-1", 23.0] },
+    "next/packages/libfabrika/src/node/Monitor.integration.test.ts": {
+      A: ["related-2", 57.8],
+      B: ["tests-2", 71.8],
+      C: ["tests-5", 66.5],
+    },
+    "next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts": {
+      A: ["related-2", 170.5],
+      B: ["tests-1", 210.3],
+      C: ["tests-2", 219.8],
+    },
+    "next/packages/libfabrika/src/node/QuotaRunner.test.ts": { B: ["tests-3", 524.0], C: ["tests-3", 259.0] },
+    "next/packages/libfabrika/src/node/RecoveryStoreReads.integration.test.ts": {
+      A: ["related-5", 44.9],
+      B: ["tests-3", 50.0],
+    },
+    "next/packages/libfabrika/src/node/Reload.integration.test.ts": {
+      A: ["related-2", 54.3],
+      B: ["tests-1", 60.4],
+      C: ["tests-2", 78.0],
+    },
+    "next/packages/libfabrika/src/node/Replies.integration.test.ts": {
+      A: ["related-4", 45.5],
+      B: ["tests-3", 65.2],
+      C: ["tests-2", 60.0],
+    },
+    "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts": {
+      A: ["related-5", 89.4],
+      B: ["tests-4", 74.0],
+      C: ["tests-5", 92.9],
+    },
+    "next/packages/libfabrika/src/node/StartChild.integration.test.ts": {
+      A: ["related-3", 287.1],
+      B: ["tests-4", 198.2],
+      C: ["tests-3", 301.4],
+    },
+    "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts": {
+      A: ["related-5", 262.1],
+      B: ["tests-5", 281.8],
+      C: ["tests-5", 261.9],
+    },
+    "next/packages/libfabrika/src/node/StartChildExit.integration.test.ts": {
+      A: ["related-3", 99.1],
+      B: ["tests-2", 84.8],
+      C: ["tests-3", 99.9],
+    },
+    "next/packages/libfabrika/src/node/Watchers.integration.test.ts": {
+      A: ["related-1", 144.8],
+      B: ["tests-1", 193.7],
+      C: ["tests-1", 147.8],
+    },
+    "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts": {
+      A: ["related-4", 39.5],
+      B: ["tests-5", 44.2],
+      C: ["tests-4", 44.3],
+    },
+    "next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts": {
+      A: ["related-4", 58.0],
+      B: ["tests-3", 99.8],
+      C: ["tests-4", 64.6],
+    },
+    "next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts": {
+      A: ["related-2", 122.0],
+      B: ["tests-2", 127.6],
+      C: ["tests-1", 122.1],
+    },
+    "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts": {
+      A: ["related-2", 402.7],
+      B: ["tests-2", 402.7],
+      C: ["tests-2", 440.3],
+    },
+    "next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts": {
+      A: ["related-4", 216.6],
+      B: ["tests-5", 297.0],
+      C: ["tests-4", 249.9],
+    },
+    "next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts": {
+      A: ["related-2", 50.5],
+      C: ["tests-5", 62.7],
+    },
+    "next/packages/libfabrika/src/node/repositories/OpenRepository.integration.test.ts": {
+      A: ["related-3", 90.2],
+      B: ["tests-1", 125.8],
+      C: ["tests-3", 90.1],
+    },
+    "next/packages/libfabrika/src/node/repositories/RepositoriesGit.identity.integration.test.ts": {
+      A: ["related-3", 326.4],
+      B: ["tests-2", 282.7],
+      C: ["tests-3", 344.1],
+    },
+    "next/packages/libfabrika/src/node/repositories/RepositoriesGit.integration.test.ts": {
+      A: ["related-4", 132.1],
+      B: ["tests-4", 244.0],
+      C: ["tests-4", 200.0],
+    },
+    "next/packages/libfabrika/src/node/repositories/Sources.integration.test.ts": {
+      A: ["related-2", 72.0],
+      B: ["tests-2", 61.7],
+      C: ["tests-3", 81.0],
+    },
+    "next/packages/libfabrika/src/node/runtime/RunnerHands.integration.test.ts": {
+      A: ["related-5", 83.8],
+      B: ["tests-5", 82.2],
+      C: ["tests-5", 83.6],
+    },
+    "next/packages/libfabrika/src/node/runtime/RunnerHands.test.ts": { B: ["tests-4", 46.8], C: ["tests-3", 64.8] },
+    "next/packages/libfabrika/src/node/tasks/TasksDiscovery.integration.test.ts": {
+      A: ["related-5", 52.5],
+      B: ["tests-1", 77.1],
+      C: ["tests-2", 75.1],
+    },
+    "next/packages/libfabrika/src/runtime/Runner.integration.test.ts": {
+      A: ["related-1", 76.3],
+      B: ["tests-3", 133.4],
+      C: ["tests-1", 80.8],
+    },
+    "next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts": {
+      A: ["related-1", 51.3],
+      B: ["tests-1", 75.5],
+      C: ["tests-5", 69.6],
+    },
+    "next/packages/libfabrika/src/tasks/internal/task.test.ts": { B: ["tests-3", 47.0] },
+    "next/packages/tuval/src/browser/key.laws.visual.test.ts": {
+      A: ["next-e2e-2", 4.5],
+      B: ["tests-e2e-2", 4.4],
+      C: ["tests-e2e-2", 4.6],
+    },
+    "next/programs/pipeline/src/node/queue.laws.integration.test.ts": {
+      A: ["related-1", 34.0],
+      B: ["tests-3", 55.6],
+      C: ["tests-4", 41.5],
+    },
+    "oxlint-plugins/advice.test.ts": { B: ["tests-tooling-2", 131.2], C: ["tests-tooling-1", 103.9] },
+    "oxlint-plugins/decode-guards.test.ts": { A: ["related-6", 39.1], B: ["tests-tooling-1", 38.7] },
+    "oxlint-plugins/plants.test.ts": {
+      A: ["related-6", 74.3],
+      B: ["tests-tooling-1", 82.1],
+      C: ["tests-tooling-1", 55.7],
+    },
+    "scripts/caps.test.ts": { B: ["tests-tooling-2", 189.4], C: ["tests-tooling-2", 191.9] },
+  },
+};
+
 describe("full, the rows at full depth", () => {
   const WATCH = "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts";
-  const GIT = "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts";
+  const GIT = "next/packages/libfabrika/src/node/repositories/RepositoriesGit.integration.test.ts";
 
   it("names only files that are in the repo, so a renamed file cannot quietly keep a row", () => {
     const keys = Object.keys(full);
@@ -1096,18 +1477,53 @@ describe("full, the rows at full depth", () => {
   });
 
   it("vector: F1 a run at full depth reads a file's full row first, then its merge-line row, and a fast run only the merge-line rows", () => {
-    // The two files of scheduled runs 43723335863 and 43771306886: watch.laws had no row at all, and
-    // RepositoriesGit's row was its 28 s on memory git, while the schedule runs real git beside it.
-    // The visual file has no full row, so its merge-line row stands at both depths.
-    // Plant, run once and restored: `rowsAt` answers `measured` at both depths (red, both files).
+    // Three files of scheduled runs 43723335863 and 43771306886, and of the refresh from fullSamples:
+    // watch.laws had no merge-line row at all, RepositoriesGit's was its 28 s on memory git while the
+    // schedule runs real git beside it, and the visual file's merge-line row is the one a pull
+    // request's sizing reads while the e2e legs, which run at full depth, split by its full row.
+    // Plant, run once and restored: `rowsAt` answers `measured` at both depths (red, all three files).
     const visual = "next/apps/fabrika/e2e/resources.laws.visual.test.ts";
     expect(rowsAt("fast")).toBe(measured);
     expect([WATCH, GIT, visual].map((path) => measured[path])).toEqual([undefined, 28, 366.6]);
-    expect([WATCH, GIT, visual].map((path) => rowsAt("full")[path])).toEqual([380.2, 167.8, 366.6]);
+    expect([WATCH, GIT, visual].map((path) => rowsAt("full")[path])).toEqual([402.7, 200, 359.3]);
 
     for (const [path, seconds] of Object.entries(full)) {
       expect(rowsAt("full")[path], path).toBe(seconds);
     }
+  });
+
+  it("vector: F3 each sampled file's full row is the median of its samples, or the larger of those in hand, and every sample names a leg with a job", () => {
+    // fullSamples above is the whole observation set the rows were refreshed from. The rule is the
+    // test file's own `row`, as for the merge line's rows (L5). A sample's run and leg must have a
+    // job id, so a later reader can find the log. Coverage: a file with three samples and a file
+    // with fewer both occur, so both branches of `row` are held.
+    // Plant, run once and restored: watch.laws's full row at 380.2, its row before this refresh (red,
+    // naming that file).
+    const counts = new Set<number>();
+
+    for (const [path, runs] of Object.entries(fullSamples.files)) {
+      const samples = RUNS.flatMap((run) => {
+        const sample = runs[run];
+
+        if (sample === undefined) {
+          return [];
+        }
+
+        expect(fullSamples.jobs[run][sample[0]], `${path}: run ${run}, leg ${sample[0]} has a job id`).toBeTypeOf(
+          "number",
+        );
+        return [sample[1]];
+      });
+      counts.add(samples.length);
+      expect(samples.length, path).toBeGreaterThanOrEqual(1);
+      expect.soft(full[path], path).toBe(row(samples));
+    }
+
+    expect(counts.has(3), "a file with three samples").toBe(true);
+    expect(
+      [...counts].some((count) => count < 3),
+      "a file with fewer than three samples",
+    ).toBe(true);
   });
 
   it("scenario: F2 at full depth the schedule's vitest legs balance by full seconds, and each starts its heaviest file first", async () => {
@@ -1129,17 +1545,21 @@ describe("full, the rows at full depth", () => {
     const seen: string[] = [];
 
     for (let index = 1; index <= legs; index++) {
+      // CI keeps no results cache, so neither does this leg: a file that failed in a local run would
+      // otherwise start first, by vitest's failed-first rule, and the leg would not be CI's (0052).
       const vitest = await createVitest("test", {
         root: ROOT,
         watch: false,
+        cache: false,
         project: ["next", "next-integration"],
         shard: `${index}/${legs}`,
       });
 
       try {
-        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
-          relative(ROOT, spec.moduleId).startsWith("next/"),
-        );
+        const specs = (await vitest.globTestSpecifications()).filter((spec) => {
+          const path = relative(ROOT, spec.moduleId);
+          return path.startsWith("next/") || path.startsWith("kalfa/");
+        });
         const sequencer = new Sequencer(vitest);
         const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
         const seconds = order.map((path) => rows[path] ?? noRow);
@@ -1188,17 +1608,20 @@ describe("Shards", () => {
 
     for (let index = 1; index <= legs; index++) {
       // The vitest legs' projects, as the schedule runs them; a pull request's `next` alone is a part.
+      // No results cache, as in CI, so a file that failed locally does not start first (0052).
       const vitest = await createVitest("test", {
         root: ROOT,
         watch: false,
+        cache: false,
         project: ["next", "next-integration"],
         shard: `${index}/${legs}`,
       });
 
       try {
-        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
-          relative(ROOT, spec.moduleId).startsWith("next/"),
-        );
+        const specs = (await vitest.globTestSpecifications()).filter((spec) => {
+          const path = relative(ROOT, spec.moduleId);
+          return path.startsWith("next/") || path.startsWith("kalfa/");
+        });
         const sequencer = new vitest.config.sequence.sequencer(vitest);
         const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
         const seconds = order.map((path) => rows[path] ?? noRow);
@@ -1216,13 +1639,13 @@ describe("Shards", () => {
     // vitest 5's `groupSpecs` runs every project of one group order in one pool, a project of one
     // isolated file at a time in a pool of its own, and a file that failed last time first; `sort`
     // keeps the pools apart and orders only by seconds inside them. Projects a and c share group 0's
-    // pool, d runs one file at a time and b is group 1. clock and compiler both have rows of 0.0 s,
+    // pool, d runs one file at a time and b is group 1. Access.types and compiler both have rows of 0.0 s,
     // so vitest's own order of the two (larger file first) stands.
     // Plants, each run once and restored: order by seconds alone (red: Watchers, in group 1, comes
     // first); key the pool by project too (red: admission, in project c, comes after runner); drop
     // the one-at-a-time pool (red: StartChild comes before admission); drop the failed-first term
     // (red: the failed light file comes after the heavier one); break equal seconds by path (red:
-    // clock comes before compiler). The rows are the merge line's, so the sequencer is built over them.
+    // Access.types, the smaller, comes before compiler). The rows are the merge line's, so the sequencer is built over them.
     const project = (name: string, groupOrder: number, maxWorkers: number) => ({
       name,
       config: { sequence: { groupOrder }, isolate: true, maxWorkers },
@@ -1235,8 +1658,10 @@ describe("Shards", () => {
     const admission = spec("next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", "c");
     const startChild = spec("next/packages/libfabrika/src/node/StartChild.integration.test.ts", "d", 0, 1);
     const runner = spec("next/packages/libfabrika/src/runtime/Runner.integration.test.ts", "a");
-    const clock = spec("next/apps/fabrika/src/exam/clock.integration.test.ts", "a");
-    const compiler = spec("next/apps/fabrika/src/exam/compiler.test.ts", "a");
+    // 0591 moved the exam's clock and compiler tests; the compiler laws keep their 0.0 s row at their
+    // new path, and Access.types stands in for clock: a 0.0 s file, smaller, whose path sorts first.
+    const clock = spec("next/packages/libfabrika/src/access/Access.types.test.ts", "a");
+    const compiler = spec("next/packages/libfabrika/src/node/build/compiler.test.ts", "a");
     const failedLight = spec("next/packages/libfabrika/src/ledger/Ledger.integration.test.ts", "a");
     expect(
       [watchers, admission, startChild, runner, clock, compiler, failedLight].map((s) =>
@@ -1316,13 +1741,17 @@ describe("Shards", () => {
 
   it("scenario: a list holding a lane file and another file is split as `assign` does, from zeros", async () => {
     // Only a list of lane files only starts from `restLoads`: the rest step shares those machines.
-    // Plant: start from `restLoads` when any file is a lane file.
+    // `assign` reads the rows of this run's depth, the ones the sequencer reads: every tooling leg of
+    // CI runs at full depth, where a file's full row comes first.
+    // Plants, each run once and restored: start from `restLoads` when any file is a lane file (red);
+    // keep `measured` and run at full depth (red on a tooling file with a full row, such as box.test.ts).
     const lanes = readdirSync(join(ROOT, LANES))
       .filter((name) => /^lane\..*\.test\.ts$/.test(name))
       .map((name) => `${LANES}/${name}`);
-    const others = Object.keys(measured).filter((path) => !path.startsWith("next/") && !inLaneStep(path));
+    const rows = rowsAt(depth);
+    const others = Object.keys(rows).filter((path) => !path.startsWith("next/") && !inLaneStep(path));
     const paths = [...lanes, ...others];
-    const files = paths.map((path) => ({ path, seconds: rowOf(path) }));
+    const files = paths.map((path) => ({ path, seconds: rowIn(rows, path) }));
     const placed = assign(files, 6);
 
     for (const index of [1, 2, 3, 4, 5, 6]) {
@@ -1403,46 +1832,60 @@ describe("the end-to-end legs", () => {
   };
 
   it("scenario: E4 the workflow runs the fewest e2e legs whose longest leg fits in half the job's limit", async () => {
-    // The real table with its fallback, the real end-to-end selection and check.yaml, since the law
-    // is about today's legs. A leg's job is its longest `assign` share plus the overhead, the median
-    // of e2eSamples' three; it must fit in half of the next job's `timeout-minutes`, the 2x room that
-    // limit's own comment sizes. Fewest legs wins over the fastest split: the free plan's 20 jobs at
-    // once is what kept the queue waiting. The worst run seen, job 132468626169 (PR 1208's queue
-    // group), was canceled at 17 min with resources.laws still running after 622 s; alone on its
-    // leg it would have ended near 11.5 min.
+    // The real tables with their fallback, the real end-to-end selection and check.yaml, since the
+    // law is about today's legs. A leg's job is its longest `assign` share plus the overhead, the
+    // median of e2eSamples' three; it must fit in half of the next job's `timeout-minutes`, the 2x
+    // room that limit's own comment sizes. Fewest legs wins over the fastest split: the free plan's
+    // 20 jobs at once is what kept the queue waiting. The worst run seen, job 132468626169 (PR 1208's
+    // queue group), was canceled at 17 min with resources.laws still running after 622 s; alone on
+    // its leg it would have ended near 11.5 min.
+    // Both tables are held: the merge-line rows a pull request's sizing reads, and the full rows the
+    // legs split by, since every leg runs at full depth (the full table has rows for the visual files
+    // from the refresh of fullSamples).
     // Plants, each run once with the 8 rows filled from e2eSamples, and restored: legs e2e-3 and
     // `/3` in check.yaml (red: the fewest that fit is 2; workflow-lint stayed green); chaos-revoke's
-    // row at 300 (red: the fewest is 3); resources.laws's row at 500 (red, naming that file).
-    // Without the rows every file counts the median, so 1 leg fits (red).
+    // row at 300 (red: the fewest is 3); resources.laws's merge-line row at 500, then its full row at
+    // 500 (each red, naming that file and its table). Without the rows every file counts the median,
+    // so 1 leg fits (red).
     const limit = nextMinutes(workflow) * 60;
     expect(limit).toBeGreaterThan(0);
     const budget = limit / 2 - median(e2eSamples.overhead);
     // legs.ts sizes a pull request's end-to-end legs on this same budget; its vitest legs take the
     // size step's BUDGET setting, capped at their own, shorter setup's room (legs.test.ts).
     expect(room(nextMinutes(workflow), E2E_SETUP)).toBe(budget);
-    const files = (await visualFiles(ROOT)).map((path) => ({ path, seconds: rowOf(path) }));
-    expect(files.length).toBeGreaterThan(0);
-    const heaviest = files.toSorted((x, y) => (y.seconds ?? noRow) - (x.seconds ?? noRow))[0]!;
-    // No count of legs makes a leg shorter than its heaviest file: that file must be split.
-    expect(
-      heaviest.seconds ?? noRow,
-      `${heaviest.path} alone takes over the ${budget} s a leg has; split the file, as its own ticket`,
-    ).toBeLessThanOrEqual(budget);
-    const fewest = Array.from({ length: files.length }, (_, i) => i + 1).find(
-      (count) => longest(files, count) <= budget,
-    );
-    expect(e2eLegs(workflow), `the fewest e2e legs that fit is ${fewest}`).toHaveLength(fewest!);
+
+    for (const [table, rows] of [
+      ["merge-line rows", measured],
+      ["full rows", rowsAt("full")],
+    ] as const) {
+      const files = (await visualFiles(ROOT)).map((path) => ({ path, seconds: rowIn(rows, path) }));
+      expect(files.length).toBeGreaterThan(0);
+      const heaviest = files.toSorted((x, y) => (y.seconds ?? noRow) - (x.seconds ?? noRow))[0]!;
+      // No count of legs makes a leg shorter than its heaviest file: that file must be split.
+      expect(
+        heaviest.seconds ?? noRow,
+        `${heaviest.path} alone takes over the ${budget} s a leg has at ${table}; split the file, as its own ticket`,
+      ).toBeLessThanOrEqual(budget);
+      const fewest = Array.from({ length: files.length }, (_, i) => i + 1).find(
+        (count) => longest(files, count) <= budget,
+      );
+      expect(e2eLegs(workflow), `at ${table} the fewest e2e legs that fit is ${fewest}`).toHaveLength(fewest!);
+    }
   });
 
   it("scenario: E6 each e2e leg keeps exactly assign's files for it, and every end-to-end file runs once", async () => {
     // The real config's visual project, as `vitest run --project next-visual --shard k/N` reads it,
     // with N the workflow's count of e2e legs; nothing runs. As the two-new-files Shards scenario.
-    // Plant (T967, then on vitest.e2e.config.ts): drop `sequence.sequencer`, so Vitest's own split by
-    // count keeps other files on each leg (red, with the rows and without them).
+    // `assign` reads the rows of this run's depth, the ones the sequencer reads: every e2e leg of CI
+    // runs at full depth, where the visual files have full rows.
+    // Plants: drop `sequence.sequencer`, so Vitest's own split by count keeps other files on each leg
+    // (red, with the rows and without them; T967, then on vitest.e2e.config.ts); keep `assign` over
+    // `measured` and run with FABRIKA_TEST_DEPTH=full (red: the split is 1 and 11 files, against 5 and 7).
     const count = e2eLegs(workflow).length;
     const files = await visualFiles(ROOT);
+    const rows = rowsAt(depth);
     const placed = assign(
-      files.map((path) => ({ path, seconds: rowOf(path) })),
+      files.map((path) => ({ path, seconds: rowIn(rows, path) })),
       count,
     );
     const kept: string[][] = [];
@@ -1475,14 +1918,21 @@ describe("the end-to-end legs", () => {
     // setup file and no `passWithNoTests`, so a leg with no file fails; `Shards` is the root's
     // sequencer, which every project shares. Plants, each run once on vitest.config.ts and restored:
     // the project's `testTimeout` 60_000 (red); its include `next/apps/fabrika/e2e/*.visual.test.ts`
-    // (red, here and in E8).
+    // (red, here and in E8). It extends nothing from the root, so it carries the host-only guard
+    // itself (0178, caps.test.ts holds what the guard does).
     expect(projects.find((project) => project.test.name === "next-visual")).toEqual({
       extends: false,
+      plugins: [expect.objectContaining({ name: "fabrika-local-host-only" })],
       test: {
         name: "next-visual",
         root: ROOT,
         include: ["next/**/*.visual.test.{ts,tsx}"],
-        exclude: [...configDefaults.exclude, ".agents/skills/*/scripts/**/fixtures/**", "next/**/dist/**"],
+        exclude: [
+          ...configDefaults.exclude,
+          ".agents/skills/*/scripts/**/fixtures/**",
+          "next/**/dist/**",
+          "kalfa/**/dist/**",
+        ],
         maxWorkers: 1,
         fileParallelism: false,
         testTimeout: 120_000,

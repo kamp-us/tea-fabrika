@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1161-review2",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623",
+  "started": "2026-11-18T06:18:20-08:00",
+  "ended": "2026-11-18T06:29:30-08:00",
+  "parent": "2026-11-18-t1161-review1",
+  "active": null,
+  "driver_caused": false,
+  "role": "reviewer",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "c83fe39bc955f719297843d0cf36f643235f4065",
+  "base": "279f97ee057e3793c7c9e6aad8b942f3171ba780",
+  "why": "Recheck of ticket 1161's fix round, today's CI (.github/), at c83fe39bc. All five faults are fixed. SC21 now catches toJSON(github['event']), toJSON(github.event.*), toJSON(github.*) and the capital forms. SC17 holds SCOPE and LAW to the exact ${{ }} expressions. The law input's description has a plant. P6, P8 to P11 and S9 are it.prop with Schema inputs and no seed in the law. The hand start's values are called inputs. The merge 84b94b0bb keeps every main-side line of 279f97ee0: main's listings result is renamed reach and is read exactly as main reads it, and the merged yaml, scheduled.ts and both test files differ from main only by the branch's own lines. SC21 gives no false alarm on the real scheduled.yaml. It does flag the plain word GitHub in prose (a step name or a run line), which is a finding row. Merge-ready.",
+  "note": "Read-only apart from this row. Container Node 22.23.5, CI=1, nice 19, one worker, fresh scratch copy of the head outside the repo. proof.test.ts 21 passed, scheduled.test.ts 313 passed. Plants run once each in the scratch copy and restored by cmp. A scratch node script ran lintScheduled at the head: the real file gives []; 12 read forms are caught; github.sha, github['sha'], github.event_name, github.event.pull_request.head.sha and actions/github-script pass; the prose 'Publish to GitHub', 'see github docs' and 'uses GitHub's runner' are wrongly named by SC21. Three finding rows. No finding of review 1 is withdrawn. D1 is the lead's: run 44315669639 read scope=changed. No pnpm typecheck (review rule).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": null,
+  "plants": [
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21",
+      "plant": ".github/ci/workflow-lint/scheduled.ts READS_INPUTS: the bare github.event pattern dropped",
+      "result": "red"
+    },
+    {
+      "law": "S10 SC17: SCOPE and LAW are the bare text inputs.scope and inputs.law",
+      "plant": ".github/ci/workflow-lint/scheduled.ts readsOnly: the ${{ }} check dropped, compact alone",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of the hand start's inputs anywhere but select's set step is named by SC21",
+      "plant": ".github/ci/workflow-lint/scheduled.ts READS_INPUTS: the github.* pattern dropped",
+      "result": "red"
+    },
+    {
+      "law": "S9 a read of another property of github or of its event is not named by SC21",
+      "plant": ".github/ci/workflow-lint/scheduled.ts readsInputs: the bracket-to-dot rewrite dropped",
+      "result": "red"
+    }
+  ]
+}

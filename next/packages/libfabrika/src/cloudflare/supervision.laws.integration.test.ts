@@ -1,7 +1,8 @@
 // P12, next/. Real box methods, execution adapters, runner, manager, receipts and SQLite.
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -17,13 +18,29 @@ import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts"
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
+/** The rejection a stand-in RPC answers with, as a lost call to another object rejects. */
+class RpcFault extends Schema.TaggedError<RpcFault, { readonly brand: unique symbol }>()("RpcFault", {
+  message: Schema.String,
+}) {}
+
 const NAME = "counter:1";
+
 const BUILD = "build-a";
+
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for });
+
 const Model = Schema.Struct({ count: Schema.Int });
-const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+
+const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 
 type Move = "rpc" | "decode" | "throw";
 
@@ -32,15 +49,14 @@ const thrown = fc.oneof(
     .tuple(fc.constantFrom("Error", "TypeError", "RangeError", "SyntaxError", "custom"), fc.string())
     .map(([kind, message]) => {
       class ProgramError extends Error {}
-      return kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : new Error(message);
+
+      return Match.value(kind).pipe(
+        Match.when("TypeError", () => new TypeError(message)),
+        Match.when("RangeError", () => new RangeError(message)),
+        Match.when("SyntaxError", () => new SyntaxError(message)),
+        Match.when("custom", () => new ProgramError(message)),
+        Match.orElse(() => new Error(message)),
+      );
     }),
   fc.jsonValue(),
   fc.constant(undefined),
@@ -53,18 +69,23 @@ const failureClass = (value: unknown) =>
   value instanceof Error ? value.constructor.name : value === null ? "null" : typeof value;
 
 type Policy = typeof Supervision.Type.policy;
+
 type Policies = { program?: Policy; wiring?: Policy | null };
 
 const world = (adapter: "node" | "worker", limit: number | undefined, failure: unknown, policies?: Policies) => {
   const ledger = storage(),
     state = storage();
+
   const next = ids(...PIDS);
+
   let move: Move | "ok" = "ok",
     calls = 0,
     alarm: number | null = null;
+
   const recovery = RecoveryStore.layer(state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   const journal = recoveryStore(state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   let initialized = 0;
+
   const program = {
     name: "counter",
     ...(limit === undefined ? {} : { maxDeliveries: limit }),
@@ -74,6 +95,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
       cmds: [],
       init: (saved) => {
         initialized++;
+
         return [saved ?? { count: 0 }, []];
       },
       update: {
@@ -97,25 +119,31 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
     writes: {},
     wake: () => null,
   } as const;
+
   const manager = ProcessManager.layer(brain(), next.next).pipe(Layer.provideMerge(data(ledger.sql)));
+
   const layer = () => {
     const declared = { ...program, ...(policies?.program === undefined ? {} : { policy: policies.program }) };
+
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const real = yield* ProgramLoader;
         const loaded = yield* real.load("counter", BUILD);
         const Box = programBox(declared, BUILD);
         const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
         const declaration =
           adapter === "node"
             ? loaded.declaration
-            : Schema.decodeUnknownSync(Declaration)(
+            : yield* Schema.decodeUnknownEffect(Declaration)(
                 yield* Effect.tryPromise({
                   try: () => box.describe(),
                   catch: (cause) => new ProgramDown({ reason: "load", cause }),
                 }),
               );
+
         const execution =
           adapter === "node"
             ? loaded.execution
@@ -123,7 +151,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 init: (s) => box.init(s),
                 fresh: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                    return Effect.runPromiseWith(context)(
+                      Effect.fail(RpcFault.make({ message: "transport failed before checking" })),
+                    );
                   }
 
                   if (move === "decode") {
@@ -136,7 +166,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));
+                    return Effect.runPromiseWith(context)(
+                      Effect.fail(RpcFault.make({ message: "transport failed before the program" })),
+                    );
                   }
 
                   if (move === "decode") {
@@ -151,9 +183,11 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 check: (k, f) => box.check(k, f),
                 admit: (m) => box.admit(m),
               });
+
         return { load: () => Effect.succeed({ ...loaded, declaration, execution }) };
       }),
     ).pipe(Layer.provide(ProgramLoader.layer({ counter: declared }, {})));
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.map(Mailbox, (mailbox) => ({
@@ -168,6 +202,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
         own: () => Effect.die("no write declared"),
       })),
     ).pipe(Layer.provide(Mailbox.layer));
+
     return ProgramRunner.layer(
       { id: A, name: NAME, program: "counter", build: BUILD, owner },
       {
@@ -203,6 +238,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
       ),
     );
   };
+
   return {
     ledger,
     state,
@@ -226,6 +262,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
       expect(saved).not.toBeNull();
       // The journal keeps the restart wait in its start until the restart brake trips (P34c slice 2).
       const at = saved?.journal;
+
       const until =
         at?._tag === "waiting_recovery" || at?._tag === "writing_down"
           ? at.recovery.until
@@ -250,7 +287,7 @@ const incoming = (letter: string, n: number): Incoming =>
       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
       by: owner,
       arrivedAt: 0,
-      input: { type: "add", n },
+      input: { ...Tag.cases.add.make({}), n },
     },
     sentAt: from().sentAt,
     seen: 0,
@@ -281,11 +318,14 @@ const policySamples = fc
 
 it("P1: the Worker description carries the checked policy and rejects corrupt RPC declarations", async () => {
   type Model = { policy: Policy | undefined; valid: boolean; checked: boolean };
+
   type Real = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: number };
+
   const checkPolicy = (value: unknown, policy: Policy | undefined) => {
     const fields = Schema.decodeUnknownSync(Schema.Struct({ policy: Schema.optionalKey(Schema.Unknown) }))(value);
     expect(fields).toEqual(policy === undefined ? {} : { policy });
   };
+
   const commands = fc.commands<Model, Real, false>(
     [
       fc.option(policySamples, { nil: undefined }).map((policy): fc.AsyncCommand<Model, Real> => ({
@@ -313,17 +353,21 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
             const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][
               Math.floor(field / 3)
             ]!;
-            const value = field % 3 === 0 ? 0 : field % 3 === 1 ? -1 : 0.5;
+
+            const value = Match.value(field % 3).pipe(
+              Match.when(0, () => 0),
+              Match.when(1, () => -1),
+              Match.orElse(() => 0.5),
+            );
+
             r.raw.policy = field < 9 ? { ...p, [key]: value } : { ...p, backoff: { ...p.backoff, [key]: value } };
           } else {
-            r.raw.policy =
-              field === 18
-                ? { ...p, maxDeliveries: 33 }
-                : field === 19
-                  ? { ...p, intensity: p.maxDeliveries - 1 }
-                  : field === 20
-                    ? { ...p, backoff: { ...p.backoff, minMs: p.backoff.maxMs + 1 } }
-                    : { ...p, periodMs: p.intensity * p.backoff.minMs };
+            r.raw.policy = Match.value(field).pipe(
+              Match.when(18, () => ({ ...p, maxDeliveries: 33 })),
+              Match.when(19, () => ({ ...p, intensity: p.maxDeliveries - 1 })),
+              Match.when(20, () => ({ ...p, backoff: { ...p.backoff, minMs: p.backoff.maxMs + 1 } })),
+              Match.orElse(() => ({ ...p, periodMs: p.intensity * p.backoff.minMs })),
+            );
           }
 
           m.valid = false;
@@ -361,8 +405,9 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
               cmds: [],
               inputs: {},
               writes: {},
-              ...(Object.hasOwn(r.raw, "policy") ? { policy: r.raw.policy } : {}),
+              ...(Rec.has(r.raw, "policy") ? { policy: r.raw.policy } : {}),
             };
+
             const decoded = Schema.decodeUnknownOption(Declaration)(r.described ?? raw);
             expect(decoded._tag).toBe(m.valid ? "Some" : "None");
 
@@ -385,6 +430,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
     ],
     { maxCommands: 80, size: "max" },
   );
+
   await fc.assert(
     fc.asyncProperty(commands, async (moves) => {
       const real: Real = { raw: {}, checked: null, described: null, calls: 0 };
@@ -396,6 +442,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
           cmds: [],
           init: () => {
             real.calls++;
+
             return [{ count: 0 }, []];
           },
           update: { add: (s, m) => [{ count: s.count + m.n }, []] },
@@ -426,6 +473,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
     pending: { until: number; brake: boolean } | null;
     letter: string | null;
   };
+
   const commands = fc.commands<Model, { run: (action: string, m: Model, edge: number) => Promise<void> }, false>(
     [
       fc.constantFrom("open", "crash", "resend", "reopen", "due").chain((action) =>
@@ -448,6 +496,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
     ],
     { maxCommands: 100, size: "max" },
   );
+
   await fc.assert(
     fc.asyncProperty(
       fc.constantFrom("program", "wiring", "default"),
@@ -463,12 +512,20 @@ it("P2: runners select policy before init and retain policy, pending recovery an
               periodMs: period,
               backoff: { minMs: 1, maxMs: 1, resetAfterMs: 100_000 },
             };
+
             const wiring: Policy = { ...program, periodMs: period * 4 };
+
             const policies: Policies = {
               ...(source === "program" ? { program } : {}),
               wiring: source === "default" ? null : wiring,
             };
-            const expected = source === "program" ? program : source === "wiring" ? wiring : defaultPolicy;
+
+            const expected = Match.value(source).pipe(
+              Match.when("program", () => program),
+              Match.when("wiring", () => wiring),
+              Match.orElse(() => defaultPolicy),
+            );
+
             const w = yield* Effect.acquireRelease(
               Effect.sync(() => world(adapter, 1, new TypeError("program crash"), policies)),
               (w) =>
@@ -477,15 +534,18 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                   w.state.db().close();
                 }),
             );
+
             yield* TestClock.setTime(0);
             yield* w.boot;
             const context = yield* Effect.context<never>();
+
             const real = {
               run: (action: string, m: Model, edge: number) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(context)(
                   Effect.gen(function* () {
                     const invoke = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
                       ProgramRunner.use(f).pipe(Effect.provide(w.layer()));
+
                     const before = yield* w.snapshot;
 
                     if (action === "open") {
@@ -521,14 +581,14 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                       expect(yield* w.snapshot).toEqual(before);
                     } else {
                       const pending = m.pending!;
-                      const at =
-                        edge === 0
-                          ? pending.until - 1
-                          : edge === 1
-                            ? pending.until
-                            : edge === 2
-                              ? (m.restarts[0] ?? m.now) + program.periodMs + 1
-                              : (m.restarts[0] ?? m.now) + wiring.periodMs + 1;
+
+                      const at = Match.value(edge).pipe(
+                        Match.when(0, () => pending.until - 1),
+                        Match.when(1, () => pending.until),
+                        Match.when(2, () => (m.restarts[0] ?? m.now) + program.periodMs + 1),
+                        Match.orElse(() => (m.restarts[0] ?? m.now) + wiring.periodMs + 1),
+                      );
+
                       m.now = Math.max(m.now, at);
                       yield* TestClock.setTime(m.now);
                       w.move("ok");
@@ -576,6 +636,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                   }).pipe(Effect.provide(context)),
                 ),
             };
+
             yield* Effect.tryPromise({
               try: () =>
                 fc.asyncModelRun(
@@ -659,6 +720,7 @@ for (const source of ["rpc", "decode"] as const) {
               const dead = (yield* Effect.forEach(PIDS, (p) => w.read(`${p}/dead`), {
                 concurrency: 1,
               })).flat();
+
               expect(dead).toHaveLength(crashes === sample.limit ? 1 : 0);
               expect(yield* w.read(`${NAME}/inbox`)).toEqual([]);
 
@@ -735,10 +797,12 @@ it("the real Worker box records the same thrown class as Node under supervision"
             const w = world(adapter, 1, failure);
             yield* w.boot;
             w.move("throw");
+
             const exit = yield* ProgramRunner.use((r) => r.msg(incoming(letter, 1))).pipe(
               Effect.provide(w.layer()),
               Effect.exit,
             );
+
             expect(exit).toMatchObject({ _tag: "Success", value: { _tag: "refused", reason: "dead" } });
             receipts.push(yield* w.receipt(letter));
             dead.push(

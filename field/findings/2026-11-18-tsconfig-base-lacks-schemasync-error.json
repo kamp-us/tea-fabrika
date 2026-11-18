@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tsconfig-base-lacks-schemasync-error",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "tsconfig.base.json",
+    "line": 1
+  },
+  "says": "0576 decides the Effect checker's schemaSync is an error for next/ and our tooling, and 0215 now says so, but tsconfig.base.json does not set it. Ticket text: set schemaSync to error in tsconfig.base.json once the sweep brings each folder to zero hits.",
+  "proof": "`grep -n schemaSync tsconfig.base.json` prints nothing.",
+  "cost": "0215 states a rule the type check does not yet hold, so a new sync decode passes.",
+  "head": "7b63f09b0a109363abe07f950ad7e02f6f5ce9e6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1632"
+}

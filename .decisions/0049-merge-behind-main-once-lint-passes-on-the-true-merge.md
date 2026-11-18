@@ -1,7 +1,7 @@
 ---
 id: 0049
 title: The lead's merge script may land a green pull request that is behind main, once pnpm lint passes on its head merged with current main, with the head pinned and no override flag
-status: amended-in-part by [0097](0097-a-green-pull-request-lands-without-catching-up.md), [0116](0116-github-requires-ci-required-on-main.md), [0146](0146-a-pull-request-lands-only-on-ci-that-saw-main.md), [0162](0162-no-friction-before-a-merge.md)
+status: superseded by [0162](0162-no-friction-before-a-merge.md)
 date: 2026-11-10
 tags: [merge, lead, catchup, freshmain, behind, lint, ci]
 ---
@@ -48,8 +48,8 @@ that rule for a repo with no queue.
 
 This amends, in part, [0014](0014-the-lead-merges-when-every-step-passed.md): "CI green on the head"
 now holds for a head behind main once the lint on its true merge passed. It sits beside
-[0004](0004-squash-merges-and-native-stacks.md), which still holds: every pull request squash-merges,
-and a single pull request catches up by merging main in, never by a rebase.
+[0004](0004-squash-merges-and-native-stacks.md): every pull request squash-merges, and a single pull
+request catches up by merging main in, never by a rebase.
 
 ## Decision
 
@@ -80,9 +80,3 @@ behind main, on purpose, once `pnpm lint` passes on the true merge of its head w
   lead tooling change that follows this decision. It must keep the head pinned, as
   `--match-head-commit` does today. `--admin` and `--auto` stay out unless that change's own
   reasoning shows one is the plain way.
-
-## Amendments
-
-- 2026-11-11: the owner turned off the ruleset's "require branches to be up to date" rule on main, so
-  `gh` no longer refuses a pull request as `BEHIND`. The REST merge fallback left `catchup.sh`: a
-  pull request behind main lands with the plain pinned `gh pr merge`.

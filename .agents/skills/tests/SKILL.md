@@ -73,7 +73,7 @@ this skill for the law. The reviewer reads that law on its recheck.
      and its law is not done. An old plant test may go, since it is not a law; removing or
      narrowing a law still waits on the owner
      ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). A lint rule's own
-     planted lines (`oxlint-plugins/plants.test.ts`, `next/apps/fabrika/src/exam/plant.ts`) are its
+     planted lines (`oxlint-plugins/plants.test.ts`, `oxlint-plugins/plant.ts`) are its
      test inputs and stay. Each law names its plant in a comment, as the neighbors do.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
    - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
@@ -127,7 +127,7 @@ date and a short slug. The lead saves it unchanged as its own file in `field/fin
 
 ## Go easy on the machine
 
-The test config and typecheck.sh hold worker, home and typecheck limits.
+The test config and typecheck.ts hold worker, home and typecheck limits.
 
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned

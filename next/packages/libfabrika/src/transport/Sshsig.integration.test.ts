@@ -10,7 +10,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
+import * as Str from "effect/String";
 import {
   SPACE,
   refused,
@@ -50,12 +51,14 @@ const keygen = (args: ReadonlyArray<string>, input?: string) =>
 const file = (home: string, name: string, body: string, mode = 0o644): string => {
   const path = join(home, name);
   writeFileSync(path, body, { mode });
+
   return path;
 };
 
 /** An unencrypted `openssh-key-v1` private key file, so `ssh-keygen` can sign with a WebCrypto key. */
 const opensshPrivate = (key: Key): string => {
   const checkWord = u32(0x5a5a5a5a);
+
   const inner = join8(
     checkWord,
     checkWord,
@@ -64,7 +67,9 @@ const opensshPrivate = (key: Key): string => {
     str(join8(key.seed, key.publicKey)),
     str("same@fabrika.test"),
   );
+
   const pad = Uint8Array.from({ length: (8 - (inner.length % 8)) % 8 }, (_, i) => i + 1);
+
   const blob = join8(
     utf8("openssh-key-v1\0"),
     str("none"),
@@ -74,6 +79,7 @@ const opensshPrivate = (key: Key): string => {
     str(keyBlob(key.publicKey)),
     str(join8(inner, pad)),
   );
+
   return `-----BEGIN OPENSSH PRIVATE KEY-----\n${rows(base64(blob))}\n-----END OPENSSH PRIVATE KEY-----\n`;
 };
 
@@ -86,16 +92,20 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const armored = yield* write(key, body);
       const allowed = file(home, "ours.allowed", `ours@fabrika.test ${key.line}\n`);
       const sig = file(home, "ours.sig", armored);
+
       const run = yield* keygen(
         ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", SPACE, "-s", sig],
         body,
       );
+
       expect(run.status, run.stderr).toBe(0);
       expect(yield* check(armored, [key.line], body)).toStrictEqual({ signer: key.line });
+
       const elsewhere = yield* keygen(
         ["-Y", "verify", "-f", allowed, "-I", "ours@fabrika.test", "-n", "fabrika-other", "-s", sig],
         body,
       );
+
       expect(elsewhere.status).not.toBe(0);
     }),
   );
@@ -106,7 +116,7 @@ describe("p44, one signature shape, with real ssh-keygen", () => {
       const made = join(home, "made");
       const keys = yield* keygen(["-q", "-t", "ed25519", "-N", "", "-C", "made@fabrika.test", "-f", made]);
       expect(keys.status, keys.stderr).toBe(0);
-      const line = readFileSync(`${made}.pub`, "utf8").trim();
+      const line = Str.trim(readFileSync(`${made}.pub`, "utf8"));
       const body = "made by ssh-keygen\nä ü ş\n";
 
       for (const options of [[], ["-O", "hashalg=sha256"]]) {

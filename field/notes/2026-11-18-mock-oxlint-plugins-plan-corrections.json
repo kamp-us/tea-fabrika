@@ -1,0 +1,19 @@
+{
+  "id": "2026-11-18-mock-oxlint-plugins-plan-corrections",
+  "date": "2026-11-18",
+  "quests": [
+    "kamp-us/tea-fabrika#1067"
+  ],
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "what": "Two places where the approved plan docs/plan/quests/mock-oxlint-plugins-PLAN.md does not match how the slice landed, written under Plan corrections in PR 1636 and not edited in the plan. First, its Steps amendment of 2026-11-15 says the slice lands on the sweep's fold branch fabrikalfa/mock-fold; that branch does not exist, the sweep's first slice landed as its own pull request to main (PR 1526), and this slice follows it as PR 1636 from its own branch, as the coordinator's brief asked. Second, the tests step added a new helper, viPlant in oxlint-plugins/builtin-plants.ts, which the plan does not name, so the plan has no Existing tools line for it (0587); the review searched and found no existing helper it should have used.",
+  "cause": "The plan was amended for a fold branch before the sweep changed to one pull request per slice; and the plan sketched VI_METHODS as another slice's existing set, which had not landed, so the tests step built both plants from one table with a helper of its own.",
+  "primitive": "Check",
+  "fix": "plancheck reads a plan's landing branch against the branches that exist, and a tests step that adds a function not named in the plan's files table reports it so the lead adds the Existing tools line before the review.",
+  "test": "The next sweep slice whose plan names a fold branch, or whose tests step adds a helper, is caught before its review.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1636",
+    "https://github.com/kamp-us/tea-fabrika/pull/1526"
+  ]
+}

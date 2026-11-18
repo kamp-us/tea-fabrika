@@ -11,11 +11,17 @@ export interface Plant {
 }
 
 const NUM = "declare const x: number;";
+
 const NUMS = ["declare const x: number;", "declare const y: number;", "declare const z: number;"];
+
 const STR = "declare const s: string;";
+
 const XS = "declare const xs: number[];";
+
 const FN = "declare const f: () => void;";
+
 const P = "declare const p: Promise<number>;";
+
 const TEST = 'import {describe, expect, it, vi} from "vitest";';
 
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
@@ -53,6 +59,104 @@ export const REFLECT: Plant = {
     ['export const l: unknown = R.get(x, "a");', false],
   ],
 };
+
+/**
+ * L10 of the Reflect ban (decision 0554, after the fold): the base blocks of `.oxlintrc.json` hold the
+ * ban for all of `next/`, so a folder no block names is refused too, a new package or program and a
+ * new folder beside the named ones included. Each entry is a folder's path with `NAME` where
+ * plants.test.ts puts a generated name; it plants REFLECT's lines in a file of that folder.
+ * Plant: leave the four Reflect entries out of the base block for all of `next/` (its one glob is
+ * `next/` then two stars, a slash and one star), and these folders are not refused.
+ */
+export const REFLECT_NEW_FOLDERS: readonly string[] = [
+  "next/NAME",
+  "next/apps/NAME",
+  "next/apps/NAME/src",
+  "next/apps/fabrika/src/NAME",
+  "next/apps/fabrika/e2e/NAME",
+  "next/packages/NAME/src",
+  "next/packages/libfabrika/src/NAME",
+  "next/programs/NAME/src",
+];
+
+/**
+ * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
+ * oxlint's `no-restricted-properties` resolves. It stands beside `fabrika/no-data-taggederror`,
+ * which stays because only it refuses the name in a type position (`DATA_TAGGEDERROR` in
+ * plants.test.ts), and the Effect checker's `preferSchemaTaggedError`, which holds every
+ * type-checked class. plants.test.ts runs these lines and ours in every folder of every block that
+ * sets the rule, at the root and at a path under no block.
+ * Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
+ * lines are not refused.
+ */
+export const TAGGED_ERROR: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ['import {Data} from "effect";', "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    ["export const { TaggedError } = Data;", true],
+    ['export const indexed = Data["TaggedError"];', true],
+    ["export const optional = Data?.TaggedError;", true],
+    // Not the ban: another object's member, a comment, a string. A type position is not this
+    // rule's: `fabrika/no-data-taggederror` refuses it, and plants.test.ts holds that in every folder.
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+    // A documented miss: an alias of Data is not followed. In a type-checked file the checker's
+    // preferSchemaTaggedError still catches the class; in an untyped script nothing does.
+    ["const D = Data;", false],
+    ['export class E extends D.TaggedError("E") {}', false],
+  ],
+};
+
+/**
+ * The lines of the `vi` lock (decisions 0555, 0579), each with whether oxlint's `vitest` rule alone
+ * refuses it and whether `eslint/no-restricted-properties` alone does. The vitest rule misses a call
+ * chained onto the `vi` call (oxc#29656), and the properties rule never sees `v` after
+ * `import { vi as v }`; the lock holds a line when either refuses it.
+ */
+const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: boolean])[] = [
+  ["const a = vi.fn();", true, true],
+  ["const b = v.fn();", true, false],
+  ['vi.spyOn(console, "log");', true, true],
+  ['vi.mock("./c.ts");', true, true],
+  ['vi.doMock("./d.ts");', true, true],
+  ['vi.stubEnv("E", "f");', true, true],
+  // Chained: the vitest rule does not see these, the member access is refused by the properties rule.
+  ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', false, true],
+  ["const m = vi.fn().mockReturnValue(1);", false, true],
+  // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
+  ["const n = vi.hoisted(() => 1);", false, false],
+  ["const o = vi.waitFor(() => 1);", false, false],
+  ["// vi.fn() in a comment", false, false],
+  ['const q = "vi.fn()";', false, false],
+  ["other.fn();", false, false],
+  ['const g: Array<string> = []; g.push("h");', false, false],
+];
+
+const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean): Plant => ({
+  code,
+  file: "planted.test.ts",
+  prelude: [TEST, 'import { vi as v } from "vitest";', "declare const other: { fn: () => void };"],
+  lines: VI_LOCK.map((line) => [line[0], pick(line)]),
+});
+
+/**
+ * M2 of the mock sweep's lock (decisions 0555, 0579): what oxlint's `vitest/no-restricted-vi-methods`
+ * refuses alone, in a test file under `oxlint-plugins/`. A chained call stays `false` here: the
+ * rule does not see it, and `VI_PROPERTIES` refuses it.
+ * Plant: delete the lock's block from `.oxlintrc.json`, and the refused lines are not refused.
+ */
+export const VI_METHODS: Plant = viPlant("vitest(no-restricted-vi-methods)", ([, vitest]) => vitest);
+
+/**
+ * M2's second half (the lock's amendment of 2026-11-16): what `eslint/no-restricted-properties`
+ * refuses alone, under the code `REFLECT` has. plants.test.ts holds a line when either plant refuses it.
+ * Plant: drop the block's `vi` entries from that rule, and the chained lines are not refused.
+ */
+export const VI_PROPERTIES: Plant = viPlant("eslint(no-restricted-properties)", ([, , properties]) => properties);
 
 const eslint: readonly Plant[] = [
   REFLECT,
@@ -673,6 +777,7 @@ const typescript: readonly Plant[] = [
 ];
 
 const vitest: readonly Plant[] = [
+  VI_METHODS,
   {
     code: "vitest(valid-describe-callback)",
     file: "planted.test.ts",
@@ -1134,6 +1239,110 @@ const react: readonly Plant[] = [
   },
 ];
 
+/**
+ * A plant at real `next/` paths, for oxlint's rules that `.oxlintrc.json` turns on only in `next/`'s
+ * `.tsx` files, tests left out: React's `refs`, `immutability`, `display-name` and `purity`.
+ * plants.test.ts lints the files whole through `plant.ts`, at these paths. `fires` names, for each
+ * rule's code, the lines it must refuse in each file; a file it does not name must have none.
+ */
+interface PathPlant {
+  readonly files: Readonly<Record<string, string>>;
+  readonly fires: Readonly<Record<string, Readonly<Record<string, readonly number[]>>>>;
+}
+
+const VIEW = "next/packages/tuval/src/window/view.tsx";
+
+/** The view's test copy, which the config leaves out of every React rule. */
+export const CLOCK_VIEW_TEST = "next/packages/tuval/src/window/view.test.tsx";
+
+/**
+ * The clock in a view (C1, owner 2026-11-05), the exam's `clock.integration.test.ts` until 0591:
+ * React's `react/purity` refuses a clock or random read in render and lets an inline handler pass.
+ * It also fires on line 11, a helper made in render that only a handler calls: the false alarm
+ * experiment 194 saw at the slice's `main.tsx:146`; `no-clock-in-view` refuses that line anyway.
+ * `no-clock-in-view.test.ts` plants these same files for our rule. Plant: turn `react/purity` off in
+ * the config's `.tsx` block for `next/`, and lines 2, 3 and 11 pass.
+ */
+const VIEW_TEXT = [
+  "declare const send: (m: {type: string; at?: number}) => void;", // 1
+  "export const When = () => <time>{Date.now()}</time>;", // 2: render
+  "export const Roll = () => <b>{Math.random()}</b>;", // 3: render
+  "export const Press = () => (", // 4
+  '\t<button type="button" onClick={() => send({type: "press", at: performance.now()})} />', // 5: handler
+  ");", // 6
+  // Experiment 195's plant: 0.156.0's Compiler refused it, 0.157.0's compiles it.
+  "const Tile = (props: {readonly focus: () => void}) => (", // 7
+  '\t<button type="button" onClick={props.focus} />', // 8
+  ");", // 9
+  "export const Desk = (props: {readonly tiles: readonly string[]; readonly go: (s: string) => void}) => {", // 10
+  "\tconst said = () => new Date().toISOString();", // 11: a handler's helper
+  "\tconst focus = (tile: string) => props.go(tile + said());", // 12
+  "\treturn <main>{props.tiles.map((t) => <Tile key={t} focus={() => focus(t)} />)}</main>;", // 13
+  "};", // 14
+  "export const Id = () => <b onClick={() => send({type: crypto.randomUUID()})} />;", // 15
+  "export const Old = () => <b onClick={() => send({type: String(Date())})} />;", // 16
+].join("\n");
+
+export const CLOCK_VIEW: PathPlant = {
+  files: {
+    [VIEW]: VIEW_TEXT,
+    [CLOCK_VIEW_TEST]: VIEW_TEXT,
+    "next/packages/tuval/src/window/clean.tsx": [
+      "declare const send: (m: {type: string}) => void;",
+      "export const Shown = (props: {readonly at: number}) => <time>{new Date(props.at).toISOString()}</time>;",
+      'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
+    ].join("\n"),
+    "next/packages/tuval/src/window/model.ts": "export const now = () => Date.now();",
+  },
+  fires: { "react(purity)": { [VIEW]: [2, 3, 11] } },
+};
+
+const FIRES_TSX = "next/packages/tuval/src/window/fires.tsx";
+
+const REACT_FIRES = [
+  'import {memo, useId, useRef} from "react";', // 1
+  "export const Tip = () => {", // 2
+  "\tconst id = useRef(Math.random()).current;", // 3: refs, read in render
+  "\treturn <b id={String(id)} />;", // 4
+  "};", // 5
+  "export const Rows = (props: {readonly rows: readonly string[]}) => {", // 6
+  "\tlet i = 0;", // 7
+  "\treturn <ul>{props.rows.map((r) => { i += 1; return <li key={r}>{i}</li>; })}</ul>;", // 8: immutability
+  "};", // 9
+  "export const Tile = memo(() => <b />);", // 10: display-name
+  "export const kept = useId;", // 11
+].join("\n");
+
+/**
+ * React's own rules (exam item 13, C2, C3 and C6), the exam's `react-rules.integration.test.ts` until
+ * 0591: a ref read in render, a change after render and an unnamed memo fire; the same views written
+ * the Compiler's way pass, and so does a test copy. Plant: turn `react/immutability` off in the
+ * config's `.tsx` block for `next/`, and line 8 passes.
+ */
+const REACT_RULES: PathPlant = {
+  files: {
+    [FIRES_TSX]: REACT_FIRES,
+    "next/packages/tuval/src/window/passes.tsx": [
+      'import {useId} from "react";',
+      "export const Tip = () => {",
+      "\tconst id = useId();",
+      "\treturn <b id={id} />;",
+      "};",
+      "export const Rows = (props: {readonly rows: readonly string[]}) => (",
+      "\t<ul>{props.rows.map((r, i) => <li key={r}>{i + 1}</li>)}</ul>",
+      ");",
+    ].join("\n"),
+    "next/packages/tuval/src/window/fires.test.tsx": REACT_FIRES,
+  },
+  fires: {
+    "react(refs)": { [FIRES_TSX]: [3] },
+    "react(immutability)": { [FIRES_TSX]: [8] },
+    "react(display-name)": { [FIRES_TSX]: [10] },
+  },
+};
+
+export const NEXT_TSX_PLANTS: readonly PathPlant[] = [CLOCK_VIEW, REACT_RULES];
+
 export const BUILTIN_PLANTS: readonly Plant[] = [
   ...eslint,
   ...oxc,
@@ -1144,3 +1353,21 @@ export const BUILTIN_PLANTS: readonly Plant[] = [
   ...promise,
   ...react,
 ];
+
+/** A3b's exact grant entry: raw Node console calls are refused, while Effect Console calls pass. */
+export const GRANT_NO_CONSOLE = {
+  code: "eslint(no-console)",
+  rule: "eslint/no-console",
+  file: "next/apps/fabrika/grant.ts",
+  text: [
+    'import {NodeRuntime} from "@effect/platform-node";',
+    'import {Console, Effect} from "effect";',
+    'console.log("extra");',
+    'export const nested = () => console.log("inside");',
+    '// console.log("comment")',
+    'export const text = "console.log";',
+    'export const allowed = Console.log("ok");',
+    "NodeRuntime.runMain(Effect.void);",
+  ].join("\n"),
+  lines: [3, 4],
+} as const;

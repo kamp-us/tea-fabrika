@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t753-l16-full-depth-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1591",
+  "started": "2026-11-17T17:16:00-08:00",
+  "ended": "2026-11-17T17:48:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, wrote the laws of docs/plan/quests/t753-l16-full-depth-PLAN.md: A1 to A5 (spans of one call commit together) as a suite in libfabrika's telemetry module run by node/SinkBatch.test.ts, A6 (every Process and Project call commits its spans in at most 2 and 1 sink transactions) in cloudflare/call-spans.laws.test.ts, and B1 to B3 (a runner reads its lifecycle once per serial step; what it answers follows the process table; only its own built-in exit writes normal) as a suite in runtime/RunnerLifecycleTest.ts run by node/RunnerLifecycle.test.ts. On main, A2, A3, A4, A6 and B1 are red for the reason the plan gives (a flush inside a batch ships 0 of 1 span, the wrapping tracer's tag is missing, a late span is lost, a Project call lands 2 spans in 2 transactions where a Process msg lands 37 in 37, a counter step reads the lifecycle 12 times against a budget of 3). A1, A5, B2 and B3 are green on main and each bit under its plant. The three product files and L16 are untouched.",
+  "note": "Started time is the first observed shell timestamp; usage and cost are not recorded. Plants that need the build's code are named, not run: A2 (flush skips the open batch), A3 (restore the tracer swap), A4 (ignore the batch's sink; drop the closed check), A6 (remove the batch from attributed or wrapped; batch outside the runner's flush) and the B2 snapshot plants (exit does not drop it; kept past a step; live without the process id). The ChildrenLedger stop_child path of B3 and the stop_child and start_child moves of B1 are not walked: the runner world has no Children service. Process call bound of 2 transactions and B1's budget of 3 reads per serial step are read from the plan's walk-through and are unmeasured against the build.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "b6f330ff0e5a3e131ea9af58a3215a4baeade42e",
+  "plants": [
+    { "law": "A1 spans ended inside a batch land together when it ends, and spans outside one land at once", "plant": "The batch's collecting tracer commits each span as it ends", "result": "red" },
+    { "law": "A1 spans ended inside a batch land together when it ends, and spans outside one land at once", "plant": "Effect.ensuring in batch becomes Effect.tap, so a failed or interrupted call commits nothing", "result": "red" },
+    { "law": "A5 a batch that meets a full disk is held whole and no span is dropped", "plant": "A failed commit drops its batch instead of holding it", "result": "red" },
+    { "law": "B2 what a runner answers follows the process table", "plant": "The runner's ended check keeps its first answer for the runner's life", "result": "red" },
+    { "law": "B3 a process's normal exit is written only by its own runner's built-in exit", "plant": "A person's restart writes its exit line as normal", "result": "red" },
+    { "law": "B3 a process's normal exit is written only by its own runner's built-in exit", "plant": "A crash writes its exit line as normal", "result": "red" }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unknown-type-aliases-1-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:45:01-08:00",
+  "ended": "2026-11-15T21:49:32-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Slice AS-no-unknown-type-aliases-1 of the anti-slop judgment sweep, on branch fabrikalfa/antislop-no-unknown-type-aliases-1, no pull request (owner ruling: one per sweep). anti-slop/no-unknown-type-aliases, forced to error in a scratch config outside the repo, met 3 hits at bcad008 in next/packages/libfabrika/src/runtime, next/programs/checklist and next/programs/inbox, one per folder; none is in pull request 1366's files. Two are exam paths and are fixed here by hand edits: next/programs/inbox/src/RunnerTest.ts:8 and next/programs/checklist/src/RunnerTest.ts:26, where `type Writer = unknown` becomes `Incoming[\"envelope\"][\"by\"]`, the writer type the runner's Incoming schema decodes, imported as a type from libfabrika's front so each program still imports only the front (0062). The app's suites already pass real Writer values. One is a product file, left for the build: next/packages/libfabrika/src/runtime/Entry.ts:38, `export type View = unknown`, which about 37 lines in next/ name; Effect's Schema.Json type is a likely target, but the build decides. No disable line, no lock line, no .oxlintrc.json change, no assertion touched.",
+  "plants": [
+    { "law": "anti-slop/no-unknown-type-aliases over next/programs/inbox (scratch config)", "plant": "next/programs/inbox/src/RunnerTest.ts: Writer put back to `unknown`; the rule gave 1 hit, then the file was restored by copy and the two program folders gave 0", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Ran at bcad008 plus this change: pnpm --filter typecheck for @kampus/inbox, @kampus/checklist and @kampus/fabrika (all clean); vitest program.laws.test.ts for inbox (3 of 3) and checklist (13 of 13). The two suites the edited files hold run only from next/apps/fabrika/src/inbox-runner.laws.integration.test.ts and checklist-runner.laws.integration.test.ts, which the test config refuses locally (0178); they run in the scheduled full run.",
+  "step": "tests"
+}

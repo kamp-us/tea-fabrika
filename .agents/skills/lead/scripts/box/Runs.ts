@@ -1,6 +1,6 @@
 // Runs: before a box folder goes, its `runs/` (raw samples, never in git) moves into MAIN's
-// `runs/<box>/`. This file is the contract only (0095): `RunsProcess.layer` runs keepruns.sh,
-// `RunsTest.layer` answers from memory. Today's lead tooling, run on our own laptop.
+// `runs/<box>/`. This file is the contract only (0095): `RunsFs.layer` moves it on the file
+// system, `RunsTest.layer` answers from memory. Today's lead tooling, run on our own laptop.
 import { Context } from "effect";
 import type { Effect } from "effect";
 

@@ -16,13 +16,27 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
-import { Exit, Schema } from "effect";
+import { Array as Arr, String as Str, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  notice: {},
+  remove: {},
+  rename: {},
+  timer: {},
+  uncheck: {},
+});
+
 const SEED = 119120;
+
 const PID = "process_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const DAY = 86_400_000;
 
 // The exam's own statement of the view, pinned to the schema's type (0135).
@@ -38,13 +52,16 @@ type View = {
 expectTypeOf<View>().toEqualTypeOf<typeof checklistView.Type>();
 
 type Model = typeof checklistMachine.model.Type;
+
 type Msg = typeof checklistMachine.msg.Type;
 
 const decode = Schema.decodeUnknownSync(checklistWindow.data);
+
 const client = clientMachineFor({ decode: () => decode });
+
 type ClientModel = ReturnType<typeof client.init>[0];
 
-const POOL = ["milk", "bread", "eggs", "tea", "a".repeat(80)] as const;
+const POOL = ["milk", "bread", "eggs", "tea", Str.repeat(80)("a")] as const;
 
 const choice = fc.record({
   move: fc.nat(),
@@ -58,20 +75,21 @@ type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 
 /** The Msgs the folded model allows now, each with the item it names read off the model. */
 const moves = (m: Model, now: number, c: Choice): ReadonlyArray<Msg> => {
-  const names = m.items.map((i) => i.name);
+  const names = Arr.map(m.items, (i) => i.name);
   const held = names.length === 0 ? null : names[c.pick % names.length]!;
+
   const out: Array<Msg> = [
-    { type: "add", name: c.name },
-    { type: "timer", at: checklist.wake(m) ?? now, arrivedAt: now + c.later },
+    { ...Tag.cases.add.make({}), name: c.name },
+    { ...Tag.cases.timer.make({}), at: checklist.wake(m) ?? now, arrivedAt: now + c.later },
   ];
 
   if (held !== null) {
     out.push(
-      { type: "add", name: held },
-      { type: "rename", name: held, to: c.name },
-      { type: "remove", name: held },
-      { type: "check", name: held },
-      { type: "uncheck", name: held },
+      { ...Tag.cases.add.make({}), name: held },
+      { ...Tag.cases.rename.make({}), name: held, to: c.name },
+      { ...Tag.cases.remove.make({}), name: held },
+      { ...Tag.cases.check.make({}), name: held },
+      { ...Tag.cases.uncheck.make({}), name: held },
     );
   }
 
@@ -92,11 +110,13 @@ const walk = (list: ReadonlyArray<Choice>, each: (s: Step) => void) => {
   let rev = 0;
   let view: View = checklist.view.select(model);
   const [c0] = client.init(null, {});
+
   let shown: ClientModel = applyCell(client, c0, {
-    type: "notice",
+    ...Tag.cases.notice.make({}),
     pid: PID,
     note: { type: "whole", rev, view },
   })[0];
+
   expect(shown.views[PID]).toEqual({ rev, view });
 
   for (const c of list) {
@@ -107,13 +127,15 @@ const walk = (list: ReadonlyArray<Choice>, each: (s: Step) => void) => {
     if (!refused) {
       const before = view;
       model = applyCell(checklistMachine, model, msg)[0];
-      now = msg.type === "timer" ? msg.arrivedAt : now;
+      now = msg._tag === "timer" ? msg.arrivedAt : now;
       view = checklist.view.select(model);
       rev += 1;
+
       const note = c.whole
         ? { type: "whole", rev, view }
         : { type: "patch", base: rev - 1, rev, patch: diff(before, view) };
-      shown = applyCell(client, shown, { type: "notice", pid: PID, note })[0];
+
+      shown = applyCell(client, shown, { ...Tag.cases.notice.make({}), pid: PID, note })[0];
     }
 
     each({ msg, refused, view, shown: shown.views[PID] });
@@ -130,8 +152,8 @@ describe("L23: the checklist through the real client", () => {
         walk(list, (s) => {
           seen.refused += s.refused ? 1 : 0;
           seen.patched += s.refused ? 0 : 1;
-          seen.removed += !s.refused && s.msg.type === "remove" ? 1 : 0;
-          seen.late += s.view.items.some((i) => i.state === "late") ? 1 : 0;
+          seen.removed += !s.refused && s.msg._tag === "remove" ? 1 : 0;
+          seen.late += Arr.some(s.view.items, (i) => i.state === "late") ? 1 : 0;
           expect(s.shown?.view, `after ${JSON.stringify(s.msg)}`).toEqual(s.view);
         });
       }),

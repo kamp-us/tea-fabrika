@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1135-input-equality-repair",
+  "ticket": "kamp-us/tea-fabrika#1135",
+  "pr": "kamp-us/tea-fabrika#1566",
+  "started": "2026-11-17T13:32:57Z",
+  "ended": "2026-11-17T13:40:55Z",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling for next/ L11 validates identical raw inputs once within each comparison. Different inputs retain the original strict parsing, completeness checks and canonical comparison. The law serializes its unchanged before trace once and adds cheap generated checks for identical invalid inputs. All 24 existing pure laws pass. The observed CI timeout stays recorded, and local improvements do not prove a cloud speed guarantee.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "driver_caused": false,
+  "head": "7c47851c66e90671861470c046e16886d929338a",
+  "base": "a09766f8123f81454ff68b9148a542dbe87d4ca2",
+  "plan": "d022391308a6de07b30c49617bd697405284d21ec58d224ab7d71ad41c51d01d",
+  "observedFailure": {
+    "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44091042329",
+    "law": "private input equality compares complete ordered values and every changed point",
+    "durationMs": 86314.189708,
+    "limitMs": 60000,
+    "otherAssertionsPassed": 1063,
+    "otherLeg": "canceled",
+    "cpuCauseProven": false
+  },
+  "measurements": {
+    "scope": "Eight identical-input comparisons on the existing synthetic full trace builder, each in a fresh process with no comparator warmup. Inputs were built before profiling and matched by digest and byte count. No input content cache was added.",
+    "calls": 8,
+    "eventsEach": 15802,
+    "beforeMs": 748.073542,
+    "afterMs": 314.388791,
+    "beforeCpuUserMicros": 916725,
+    "beforeCpuSystemMicros": 22114,
+    "afterCpuUserMicros": 449843,
+    "afterCpuSystemMicros": 11775,
+    "beforeProfileSamples": 547,
+    "beforeReadTraceSamples": 360,
+    "beforeEncodeSamples": 80,
+    "afterProfileSamples": 250,
+    "targetLawBeforeSeconds": 25.32,
+    "targetLawCandidateSeconds": 19.08,
+    "finalExecutorFileSeconds": 29.41,
+    "oldAndNewSemanticCasesMatched": 15
+  },
+  "checks": {
+    "executorLaws": 20,
+    "machineLaws": 2,
+    "workflowLaws": 2,
+    "samplesPerPropertyUnchanged": 100,
+    "seedUnchanged": 119120,
+    "format": true,
+    "scopedLint": true,
+    "workflowLint": true,
+    "compilerRun": false,
+    "fullLintRun": false,
+    "ciDispatch": false,
+    "protectedCollectionRun": false,
+    "sourceHashes": {
+      ".github/ci/l11-exercise.ts": "ddf6778e28f8cc4ecedcb7baacce1b62398e2c52c8825aedb5a5be00f4537c31",
+      ".github/ci/l11-exercise.test.ts": "4eaeafd16dcf7291445f1fbad1f1103ded611c040322cc30feae87ab5bc86c34"
+    }
+  },
+  "plants": [
+    {
+      "law": "private input equality compares complete ordered values and every changed point",
+      "plant": "Credit identical raw text before validating it.",
+      "result": "red",
+      "failure": "The generated invalid-input check expected failure and received success.",
+      "restored": true
+    }
+  ],
+  "constructionIssues": [
+    "Scoped lint found missing blank lines around the new loop. Adding the required spacing fixed all four findings; the final scoped lint passed."
+  ],
+  "limits": [
+    "The measured local speed change covers identical raw inputs, not a cloud workload guarantee.",
+    "No structural comparator, cross-call content cache or canonical trace hash change was introduced.",
+    "All complete walks, siblings, changed points, values, input bounds, assertions, strict schemas and the 60000 ms deadline remain.",
+    "Independent source review, lead checks and a new branch proof remain outside this construction run.",
+    "No actual L11 comparison, input equality, output fault or ten-slot batch result is claimed."
+  ]
+}

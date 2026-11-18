@@ -57,5 +57,5 @@ area updates its row in the same pull request (owner, 2026-11-09).**
   rows (10 differ).
 - A builder whose diff changes a modeled behavior touches one more file. A row's `path:line` can go
   stale when nearby code moves; the lead reads it at merge until a check exists.
-- Not decided here: a check in code that every cited `path:line` still holds, and tables for DDD,
+- Not decided here: a check in code that every cited `path:line` still points at the line it names, and tables for DDD,
   Linear, tmux and i3.

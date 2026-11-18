@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s2-review-round2",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-16T00:55:01-08:00",
+  "ended": "2026-11-16T01:05:00-08:00",
+  "parent": "2026-11-16-port-s2-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice S2 of docs/plan/quests/port-scripts-0113-PLAN.md, in our tooling, after the fix round (1dae5d1..b74ad2b): both blocking classes are fixed and the slice is merge-ready. The Git model now takes git's best common ancestors and refuses unless there is exactly one, and its file diff answers only when the lines outside the shared start and end share nothing, so every smallest diff changes the same lines; it refuses moved and swapped lines, empty files and a missing last newline. The integration law walks histories move by move against the history built so far, with no-ff merges, an ancestor merge, main into work and a criss-cross, pins both counterexamples from the first review in examples, and checks its coverage in the reporter. A new law runs node governance.ts as a process and holds exits 0, 1 and 2. endOnFailure stops only the shrinking; a counterexample still fails the law. The merge 6c70be7 is git's automatic merge (its tree equals merge-tree's), and GitProcess.ts now builds GitError with make.",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest's merge base back to breadth first from HEAD, the first commit main also reaches",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest's file diff answers every shape (the shared-lines check never refuses)",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: GitProcess and GitTest answer top and a three-dot diff alike, and both refuse an unknown ref",
+      "plant": "GitTest answers with the first of several best merge bases",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/git/git.integration.test.ts: property: node governance.ts exits 0 with the in-process lines, 1 when git cannot answer and 2 on a bad command line",
+      "plant": "governance.ts's main maps a clean run to exit 1",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Cloud twin review step, one session, no subagents. The date is the UTC day; the times are Pacific. After moving to b74ad2b the index and work tree still held 1dae5d1; restored with git checkout HEAD -- . and git rm of five files main deleted, then git status was clean. Plants ran in a scratch copy under an untracked folder, deleted after each run. Ran at b74ad2b: governance.test.ts and the five flow/ test files (48 passed); git.integration.test.ts in this box with no override (3 passed at fast depth, and at full depth in 56.5 s, the slowest law 28.3 s of its 60 s limit). Under the shared lock: pnpm typecheck passed, .agents included; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, all 19 parts passed. loosening.sh 6c70be7 HEAD: 0 hits; from 1dae5d1 its hits are all main's own merged changes. The three finding rows of the first review stand.",
+  "step": "review",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

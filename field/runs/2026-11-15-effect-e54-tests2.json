@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e54-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:55:03-08:00",
+  "ended": "2026-11-15T21:01:00-08:00",
+  "parent": "2026-11-15-effect-e54-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for slice E54 (newPromise) after review1 sent it back for a missing lock. Added newPromise at error under the @effect/language-service plugin overrides in three package tsconfigs: next/apps/fabrika/tsconfig.json for e2e/**/*.ts only (src/ keeps its 32 hits for slice E92), next/packages/tuval/tsconfig.json and next/packages/libfabrika/tsconfig.json for src/**/*.ts and src/**/*.tsx. Nothing in tsconfig.base.json and no LOCKED row. With the lock on, the 9 ignore lines take effect and the TS377000 no-effect warnings are gone: pnpm typecheck exits 0. Law L1's plant was run once per package: one `new Promise` line appended to a locked file made the package tsc exit 1 with effect(newPromise), then the file was restored by copy. On the review's non-blocking note for fetch.test.ts:242: Effect.sleep(0) is not the fix in effect 4.1.3, because sleepMillis returns yieldNow for 0 ms (node_modules/effect/src/internal/effect.ts), and effectSleepZeroToYieldNow is at error in tsconfig.base.json. The line now uses Effect.sleep(\"1 millis\"), one real setTimeout turn, the same as the old setTimeout(0), which Node runs at 1 ms. The 7 fixes and 9 ignore lines from tests1 are unchanged.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Hits: 16 met in tests1, 7 fixed by hand, 9 kept as the checker's own ignore line, 0 left in the locked folders, 0 in pull request 1366's files. No product file changed, so no build step is needed. Ran on this round's content: fetch.test.ts 9 passed; pnpm lint passed with NODE_OPTIONS=--max-old-space-size=6144; ratchet.ts exit 0; pnpm typecheck exit 0 with no TS377 or error lines. The three .visual. files were not run (the step rules forbid it here). Slices E14 and E17 also add a plugins block to libfabrika's tsconfig, and E14 to the app's: the integrator merges the overrides arrays into one. By owner ruling no pull request is opened.",
+  "driver_caused": false,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "plants": [
+    {
+      "law": "L1, newPromise locked in next/apps/fabrika e2e",
+      "plant": "appended `export const planted = new Promise<void>((settle) => settle());` to e2e/instance.visual.test.ts; tsc -p next/apps/fabrika exit 1: e2e/instance.visual.test.ts(363,24): error TS377080: This code constructs `new Promise(...)`, prefer Effect APIs ... effect(newPromise)",
+      "result": "red"
+    },
+    {
+      "law": "L1, newPromise locked in next/packages/tuval",
+      "plant": "appended the same line to src/browser/key.laws.visual.test.ts; tsc -p next/packages/tuval exit 1: src/browser/key.laws.visual.test.ts(307,24): error TS377080 ... effect(newPromise)",
+      "result": "red"
+    },
+    {
+      "law": "L1, newPromise locked in next/packages/libfabrika",
+      "plant": "appended the same line to src/cloudflare/fetch.test.ts; tsc -p next/packages/libfabrika exit 1: src/cloudflare/fetch.test.ts(284,24): error TS377080 ... effect(newPromise)",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/fetch.test.ts: requests that arrive before any read of the recorded start has finished each read for themselves",
+      "plant": "fetch.ts httpContext shares one in-flight read per env; AssertionError: expected [ [Function] ] to have a length of 2 but got 1",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

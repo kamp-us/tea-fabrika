@@ -12,8 +12,20 @@
 // p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
 // it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
+import * as PublicKey from "./PublicKey.ts";
+import * as SshsigTest from "./Sshsig.test-support.ts";
 import {
   SPACE,
   refused,
@@ -47,11 +59,24 @@ import {
   write,
   signedByHand,
 } from "./Sshsig.test-support.ts";
+import { checkSshsig } from "./Sshsig.ts";
 import type { writeSshsig } from "./Sshsig.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const runs = { seed: SEED, numRuns: 40 };
+
 const bodyArb = fc.string({ unit: "binary" });
+
 const wrongType = fc.string().filter((type) => type !== "ssh-ed25519");
 
 describe("the test's own wire helpers", () => {
@@ -93,17 +118,20 @@ describe("p27, the saved ssh-keygen vectors", () => {
     }),
   );
 
-  it("finds the signer among other keys and garbage, by its key, not its place", async () => {
+  it("finds the signer among other keys and garbage, by its key, not its place", () => {
     // Plant: choose the first parseable signer without comparing its blob. Signer equality fails.
     const others = fc.array(fc.oneof(fc.constantFrom(other, ecdsa), fc.string()));
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(others, fc.nat(), others, fc.nat(), (before, place, more, barePlace) =>
         Effect.runPromise(
           Effect.gen(function* () {
             const insert = (lines: string[], line: string, n: number) => {
               const at = n % (lines.length + 1);
+
               return [...lines.slice(0, at), line, ...lines.slice(at)];
             };
+
             expect(yield* check(goodSig, insert(before, signer, place))).toStrictEqual({ signer });
             const bare = lineFor(good.key);
             expect(yield* check(goodSig, insert(more, bare, barePlace))).toStrictEqual({
@@ -116,9 +144,9 @@ describe("p27, the saved ssh-keygen vectors", () => {
     );
   });
 
-  it("refuses with no signers, and with only lines that are not keys", async () => {
+  it("refuses with no signers, and with only lines that are not keys", () =>
     // Plant: return a key on parser or signer lookup failure. The empty-list refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         fc.array(
           fc.oneof(
@@ -135,12 +163,12 @@ describe("p27, the saved ssh-keygen vectors", () => {
           ),
       ),
       { ...runs, examples: [[["ssh-ed25519", "ssh-ed25519 !!!"]]] },
-    );
-  });
+    ));
 });
 
 describe("p27, blobs built by hand from good.sig's bytes", () => {
   const shortKey = keyBlob(goodKey.slice(0, 31));
+
   const cases: ReadonlyArray<readonly [string, string, ReadonlyArray<string>]> = [
     ["version 2", armor(build({ ...good, version: 2 })), [signer]],
     ["version 0", armor(build({ ...good, version: 0 })), [signer]],
@@ -169,12 +197,13 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
       armor(build({ ...good, signature: join8(str("ssh-rsa"), str(goodRaw)) })),
       [signer],
     ],
-    ["armor with its END line cut", goodSig.replace("-----END SSH SIGNATURE-----\n", ""), [signer]],
-    ["armor with its BEGIN line cut", goodSig.replace("-----BEGIN SSH SIGNATURE-----\n", ""), [signer]],
-    ["a body that is not base64", goodSig.replace("U1NIU0lH", "U1NIU0l!"), [signer]],
+    ["armor with its END line cut", Str.replace("-----END SSH SIGNATURE-----\n", "")(goodSig), [signer]],
+    ["armor with its BEGIN line cut", Str.replace("-----BEGIN SSH SIGNATURE-----\n", "")(goodSig), [signer]],
+    ["a body that is not base64", Str.replace("U1NIU0lH", "U1NIU0l!")(goodSig), [signer]],
     ["an empty text", "", [signer]],
   ];
-  it("refuses malformed blobs and armor with the same answer", async () => {
+
+  it("refuses malformed blobs and armor with the same answer", () => {
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
     const built = fc
       .oneof(
@@ -199,6 +228,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         wrongType.map((type) => build({ ...good, signature: join8(str(type), str(goodRaw)) })),
       )
       .map((bytes) => ({ armored: armor(bytes), signers: [signer] }));
+
     const malformed = fc.oneof(
       built,
       fc
@@ -206,6 +236,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         .filter((bytes) => bytes.length !== 32)
         .map((bytes) => {
           const key = keyBlob(bytes);
+
           return { armored: armor(build({ ...good, key })), signers: [signer, lineFor(key)] };
         }),
       fc.string().map((body) => ({
@@ -213,7 +244,8 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         signers: [signer],
       })),
     );
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(malformed, ({ armored, signers }) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -221,21 +253,21 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
           }),
         ),
       ),
-      { ...runs, examples: cases.map(([, armored, signers]) => [{ armored, signers: [...signers] }]) },
+      { ...runs, examples: Arr.map(cases, ([, armored, signers]) => [{ armored, signers: [...signers] }]) },
     );
   });
 
-  it("passes sha512 and sha256 signed by hand, and refuses sha384 signed the same way", async () => {
+  it("passes sha512 and sha256 signed by hand, and refuses sha384 signed the same way", () =>
     // Plant: remove SHA-256 from HASHES. The SHA-256 signer equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, fc.string(), (body, comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
             const key = yield* freshKey(comment);
             const bytes = utf8(body);
-            const sha512 = yield* signedByHand(key, "sha512", yield* digest("SHA-512", bytes));
-            const sha256 = yield* signedByHand(key, "sha256", yield* digest("SHA-256", bytes));
-            const sha384 = yield* signedByHand(key, "sha384", yield* digest("SHA-384", bytes));
+            const sha512 = yield* signedByHand(key.publicKey, signWith(key), "sha512", yield* digest("SHA-512", bytes));
+            const sha256 = yield* signedByHand(key.publicKey, signWith(key), "sha256", yield* digest("SHA-256", bytes));
+            const sha384 = yield* signedByHand(key.publicKey, signWith(key), "sha384", yield* digest("SHA-384", bytes));
             expect(yield* check(sha512, [key.line], body)).toStrictEqual({ signer: key.line });
             expect(yield* check(sha256, [key.line], body)).toStrictEqual({ signer: key.line });
             expect(yield* check(sha384, [key.line], body)).toStrictEqual(refused);
@@ -243,12 +275,11 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
         ),
       ),
       { ...runs, examples: [[text, "hand@fabrika.test"]] },
-    );
-  });
+    ));
 
-  it("refuses a good signature checked under another space's bytes", async () => {
+  it("refuses a good signature checked under another space's bytes", () =>
     // Plant: accept even when Ed25519 verification is false. The signed-space refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         bodyArb,
         fc.string().filter((s) => s !== SPACE),
@@ -258,6 +289,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
               // Signed as "fabrika-other" but labelled "fabrika-client": the space is in the signed bytes.
               const key = yield* freshKey();
               const raw = yield* signWith(key)(toSign(space, "sha512", yield* digest("SHA-512", utf8(body))));
+
               const armored = armor(
                 build({
                   magic: utf8("SSHSIG"),
@@ -269,19 +301,19 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
                   signature: join8(str("ssh-ed25519"), str(raw)),
                 }),
               );
+
               expect(yield* check(armored, [key.line], body)).toStrictEqual(refused);
             }),
           ),
       ),
       { ...runs, examples: [[text, "fabrika-other"]] },
-    );
-  });
+    ));
 });
 
 describe("KeyLine", () => {
-  it("decodes an ssh-ed25519 line, with or without its comment, and keeps it as given", async () => {
+  it("decodes an ssh-ed25519 line, with or without its comment, and keeps it as given", () =>
     // Plant: use Schema.Trim for KeyLine. Exact decoded-line equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.uint8Array({ minLength: 32, maxLength: 32 }), fc.string(), (bytes, comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -293,19 +325,19 @@ describe("KeyLine", () => {
         ),
       ),
       { ...runs, examples: [[goodKey, "signer@fabrika.test"]] },
-    );
-  });
+    ));
 
   const bad: ReadonlyArray<readonly [string, string]> = [
     ["an ECDSA line", ecdsa],
     ["an empty line", ""],
     ["a line with no key", "ssh-ed25519"],
     ["a line whose key is not base64", "ssh-ed25519 !!!notbase64 x@fabrika.test"],
-    ["an ssh-ed25519 line holding an ECDSA blob", `ssh-ed25519 ${ecdsa.split(" ")[1] ?? ""}`],
+    ["an ssh-ed25519 line holding an ECDSA blob", `ssh-ed25519 ${Str.split(ecdsa, " ")[1] ?? ""}`],
     ["a key of 31 bytes", lineFor(keyBlob(goodKey.slice(0, 31)))],
     ["a key blob with a byte after it", lineFor(join8(good.key, Uint8Array.of(0)))],
   ];
-  it("refuses malformed and non-Ed25519 key lines", async () => {
+
+  it("refuses malformed and non-Ed25519 key lines", () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = fc.oneof(
       fc
@@ -316,7 +348,8 @@ describe("KeyLine", () => {
       fc.string().map((s) => `ssh-ed25519 !${s}`),
       wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${base64(good.key)}`),
     );
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(invalid, (line) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -325,13 +358,13 @@ describe("KeyLine", () => {
           }),
         ),
       ),
-      { ...runs, examples: bad.map(([, line]) => [line]) },
+      { ...runs, examples: Arr.map(bad, ([, line]) => [line]) },
     );
   });
 
-  it("keeps a comment as given, runs of spaces and a tab inside it too", async () => {
+  it("keeps a comment as given, runs of spaces and a tab inside it too", () =>
     // Plant: trim decoded lines and strip returned comments. Exact line equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, (comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -342,12 +375,12 @@ describe("KeyLine", () => {
         ),
       ),
       { ...runs, examples: [["my  laptop\tat home"]] },
-    );
-  });
+    ));
 
   it("is the only line writeSshsig takes: a plain string does not typecheck", () => {
     // Compile-time type law. The owner rule keeps this as a type check.
     type Line = Parameters<typeof writeSshsig>[0]["line"];
+
     // @ts-expect-error a plain string is not a KeyLine: decode it first, so a bad line never reaches the writer
     const plain: Line = signer;
     expect(plain).toBe(signer);
@@ -361,6 +394,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
   const signedThenSwapped = (key: Key, swap: (raw: Uint8Array) => Partial<Blob>, body = text) =>
     Effect.gen(function* () {
       const raw = yield* signWith(key)(toSign(SPACE, "sha512", yield* digest("SHA-512", utf8(body))));
+
       return armor(
         build({
           magic: utf8("SSHSIG"),
@@ -374,9 +408,10 @@ describe("p27, each field exactly, never a prefix of it", () => {
         }),
       );
     });
-  it("passes the same blob with nothing swapped, so each refusal below is the swap's", async () => {
+
+  it("passes the same blob with nothing swapped, so each refusal below is the swap's", () =>
     // Plant: refuse every verified Ed25519 signature. The signer equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, (body) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -388,12 +423,11 @@ describe("p27, each field exactly, never a prefix of it", () => {
         ),
       ),
       { ...runs, examples: [[text]] },
-    );
-  });
+    ));
 
-  it("refuses any other key type, even with a line holding that blob named", async () => {
+  it("refuses any other key type, even with a line holding that blob named", () =>
     // Plant: ignore the embedded Ed25519 algorithm name. The key-type refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, wrongType, (body, type) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -411,16 +445,16 @@ describe("p27, each field exactly, never a prefix of it", () => {
           [text, ""],
         ],
       },
-    );
-  });
+    ));
 
-  it("refuses any other signature type", async () => {
+  it("refuses any other signature type", () =>
     // Plant: ignore the embedded Ed25519 algorithm name. The signature-type refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, wrongType, (body, type) =>
         Effect.runPromise(
           Effect.gen(function* () {
             const key = yield* freshKey();
+
             const armored = yield* signedThenSwapped(
               key,
               (raw) => ({
@@ -428,6 +462,7 @@ describe("p27, each field exactly, never a prefix of it", () => {
               }),
               body,
             );
+
             expect(yield* check(armored, [key.line], body)).toStrictEqual(refused);
           }),
         ),
@@ -439,12 +474,11 @@ describe("p27, each field exactly, never a prefix of it", () => {
           [text, ""],
         ],
       },
-    );
-  });
+    ));
 
-  it("KeyLine refuses any other blob type", async () => {
+  it("KeyLine refuses any other blob type", () =>
     // Plant: ignore the embedded Ed25519 algorithm name. Exit.isFailure must become false.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.uint8Array({ minLength: 32, maxLength: 32 }), wrongType, (bytes, type) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -460,12 +494,11 @@ describe("p27, each field exactly, never a prefix of it", () => {
           [goodKey, ""],
         ],
       },
-    );
-  });
+    ));
 
-  it("refuses any other namespace field, signed over the whole space", async () => {
+  it("refuses any other namespace field, signed over the whole space", () =>
     // Plant: ignore the embedded namespace comparison. The namespace refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         bodyArb,
         fc.string().filter((s) => s !== SPACE),
@@ -486,33 +519,40 @@ describe("p27, each field exactly, never a prefix of it", () => {
           [text, ""],
         ],
       },
-    );
-  });
+    ));
 });
 
 describe("p27, the armor's own words", () => {
   const BEGIN = "-----BEGIN SSH SIGNATURE-----";
   const END = "-----END SSH SIGNATURE-----";
+
   // Each the same length as the line it stands in for, so only its words differ.
   const cases: ReadonlyArray<readonly [string, string]> = [
-    ["a bad BEGIN line and a good END line", goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")],
-    ["another kind's BEGIN line", goodSig.replace(BEGIN, "-----BEGIN PGP SIGNATURE-----")],
-    ["a good BEGIN line and a bad END line", goodSig.replace(END, "-----END SSH SIGNATURX-----")],
-    ["another kind's END line", goodSig.replace(END, "-----END PGP SIGNATURE-----")],
+    ["a bad BEGIN line and a good END line", Str.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")(goodSig)],
+    ["another kind's BEGIN line", Str.replace(BEGIN, "-----BEGIN PGP SIGNATURE-----")(goodSig)],
+    ["a good BEGIN line and a bad END line", Str.replace(END, "-----END SSH SIGNATURX-----")(goodSig)],
+    ["another kind's END line", Str.replace(END, "-----END PGP SIGNATURE-----")(goodSig)],
     [
       "both lines bad",
-      goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----").replace(END, "-----END SSH SIGNATURX-----"),
+      Function.pipe(
+        goodSig,
+        Str.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----"),
+        Str.replace(END, "-----END SSH SIGNATURX-----"),
+      ),
     ],
   ];
-  it("refuses changed armor words of the same length", async () => {
+
+  it("refuses changed armor words of the same length", () => {
     // Plant: check marker lengths alone. The changed-marker refusal must fail.
     const changed = fc.tuple(fc.nat(), fc.integer({ min: 1, max: 127 }), fc.boolean()).map(([place, delta, begin]) => {
       const word = begin ? BEGIN : END;
       const at = place % word.length;
-      const swap = String.fromCharCode((word.charCodeAt(at) + delta) % 128);
-      return goodSig.replace(word, `${word.slice(0, at)}${swap}${word.slice(at + 1)}`);
+      const swap = String.fromCharCode((Option.getOrThrow(Str.charCodeAt(word, at)) + delta) % 128);
+
+      return Str.replace(word, `${Str.slice(0, at)(word)}${swap}${Str.slice(at + 1)(word)}`)(goodSig);
     });
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(changed, (armored) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -522,7 +562,7 @@ describe("p27, the armor's own words", () => {
           }),
         ),
       ),
-      { ...runs, examples: cases.map(([, armored]) => [armored]) },
+      { ...runs, examples: Arr.map(cases, ([, armored]) => [armored]) },
     );
   });
 });
@@ -530,11 +570,12 @@ describe("p27, the armor's own words", () => {
 // A key line is `<type> <base64> [comment]`. Between its parts it takes a run of spaces or tabs,
 // as OpenSSH's own reader does (the lead's call on P7), and the key is the same one.
 describe("a key line's parts and its type", () => {
-  const [type = "", key = "", comment = ""] = signer.split(" ");
-  it("KeyLine takes runs of spaces and tabs and matches the same key", async () => {
+  const [type = "", key = "", comment = ""] = Str.split(signer, " ");
+  it("KeyLine takes runs of spaces and tabs and matches the same key", () => {
     // Plant: normalize the returned signer to two space-separated words. Exact equality fails.
-    const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => chars.join(""));
-    await fc.assert(
+    const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => Arr.join(chars, ""));
+
+    return fc.assert(
       fc.asyncProperty(gap, gap, (before, after) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -560,10 +601,12 @@ describe("a key line's parts and its type", () => {
     ["an ECDSA type word over an Ed25519 blob", `ecdsa-sha2-nistp256 ${key}`],
     ["an RSA type word over an Ed25519 blob", `ssh-rsa ${key} signer@fabrika.test`],
   ];
-  it("KeyLine refuses a different type word and never matches it as a signer", async () => {
+
+  it("KeyLine refuses a different type word and never matches it as a signer", () => {
     // Plant: ignore the outer key type word. Exit.isFailure must become false.
     const invalid = wrongType.filter((type) => !/\s/.test(type)).map((type) => `${type} ${key} ${comment}`);
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(invalid, (line) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -573,7 +616,7 @@ describe("a key line's parts and its type", () => {
           }),
         ),
       ),
-      { ...runs, examples: bad.map(([, line]) => [line]) },
+      { ...runs, examples: Arr.map(bad, ([, line]) => [line]) },
     );
   });
 });
@@ -581,9 +624,9 @@ describe("a key line's parts and its type", () => {
 describe("properties", () => {
   const runs = { seed: SEED, endOnFailure: true };
 
-  it("round trip: any text, a fresh key, its line among any others, gives that line back", async () => {
+  it("round trip: any text, a fresh key, its line among any others, gives that line back", () =>
     // Plant: choose the first parseable signer without comparing its blob. Signer equality fails.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         fc.string({ unit: "binary" }),
         fc.array(fc.oneof(fc.constant(other), fc.constant(ecdsa), fc.string()), { maxLength: 4 }),
@@ -601,48 +644,54 @@ describe("properties", () => {
           ),
       ),
       { ...runs, numRuns: 40 },
-    );
-  });
+    ));
 
-  it("any change to the text refuses", async () => {
-    // Plant: accept even when Ed25519 verification is false. The changed-text refusal must fail.
-    const key = await Effect.runPromise(freshKey());
-    await fc.assert(
-      fc.asyncProperty(
-        fc.string({ unit: "binary", minLength: 1 }),
-        fc.nat(),
-        fc.string({ unit: "binary", minLength: 1, maxLength: 1 }),
-        (body, place, swap) => {
-          const chars = [...body];
-          const i = place % chars.length;
-          const changed = [...chars.slice(0, i), swap, ...chars.slice(i + 1)].join("");
-          fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
-          return Effect.runPromise(
-            Effect.gen(function* () {
-              const armored = yield* write(key, body);
-              expect(yield* check(armored, [key.line], changed)).toStrictEqual(refused);
-            }),
-          );
-        },
-      ),
-      { ...runs, numRuns: 60 },
-    );
-  });
+  it.live("any change to the text refuses", () =>
+    Effect.gen(function* () {
+      // Plant: accept even when Ed25519 verification is false. The changed-text refusal must fail.
+      const key = yield* freshKey();
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(
+            fc.string({ unit: "binary", minLength: 1 }),
+            fc.nat(),
+            fc.string({ unit: "binary", minLength: 1, maxLength: 1 }),
+            (body, place, swap) => {
+              const chars = [...body];
+              const i = place % chars.length;
+              const changed = Arr.join([...chars.slice(0, i), swap, ...chars.slice(i + 1)], "");
+              fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
 
-  it("any one changed base64 character that changes the blob refuses", async () => {
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  const armored = yield* write(key, body);
+                  expect(yield* check(armored, [key.line], changed)).toStrictEqual(refused);
+                }),
+              );
+            },
+          ),
+          { ...runs, numRuns: 60 },
+        ),
+      );
+    }),
+  );
+
+  it("any one changed base64 character that changes the blob refuses", () => {
     // Plant: accept even when Ed25519 verification is false. The changed-blob refusal must fail.
-    const lines = goodSig.split("\n");
+    const lines = Str.split(goodSig, "\n");
     const body = lines.slice(1, -2); // the rows between BEGIN and END
     const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    await fc.assert(
+
+    return fc.assert(
       fc.asyncProperty(fc.nat(), fc.nat(), fc.constantFrom(...ALPHABET), (row, col, swap) => {
         const r = row % body.length;
         const line = body[r] ?? "";
         const c = col % line.length;
-        const changedRow = `${line.slice(0, c)}${swap}${line.slice(c + 1)}`;
-        const changed = [lines[0], ...body.map((x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
-        const armored = changed.join("\n");
+        const changedRow = `${Str.slice(0, c)(line)}${swap}${Str.slice(c + 1)(line)}`;
+        const changed = [lines[0] ?? "", ...Arr.map(body, (x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
+        const armored = Arr.join(changed, "\n");
         fc.pre(Buffer.compare(Buffer.from(unarmor(armored)), Buffer.from(unarmor(goodSig))) !== 0);
+
         return Effect.runPromise(
           Effect.gen(function* () {
             expect(yield* check(armored, [signer, other, ecdsa])).toStrictEqual(refused);
@@ -673,27 +722,90 @@ describe("properties", () => {
     )
     .map(([magic, version, fields]) => join8(magic, u32(version), ...fields));
 
-  it("total: any armored text or bytes gets an answer, never a failure or a defect", async () => {
-    // Plant: return a key on parser failure. The malformed-input refusal must fail.
-    const answers = (armored: string) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const exit = yield* Effect.exit(check(armored, [signer, other, ecdsa, "garbage"]));
-          expect(Exit.isSuccess(exit)).toBe(true);
-          expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
+  it.live("total: any armored text or bytes gets an answer, never a failure or a defect", () =>
+    Effect.gen(function* () {
+      // Plant: return a key on parser failure. The malformed-input refusal must fail.
+      const answers = (armored: string) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const exit = yield* Effect.exit(check(armored, [signer, other, ecdsa, "garbage"]));
+            expect(Exit.isSuccess(exit)).toBe(true);
+            expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
+          }),
+        );
+
+      yield* promised(() =>
+        fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
+          ...runs,
+          numRuns: 150,
         }),
       );
-    await fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
-      ...runs,
-      numRuns: 150,
-    });
-    await fc.assert(
-      fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 150 },
-    );
-    await fc.assert(
-      fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 300 },
-    );
-  });
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
+          { ...runs, numRuns: 150 },
+        ),
+      );
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
+          { ...runs, numRuns: 300 },
+        ),
+      );
+    }),
+  );
+});
+
+// Plants: changed text, blob fingerprint, namespace, version and signature wrapper.
+it("a proof passes the door's SSHSIG check for its text and key only, and the fingerprint is the door's", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.string(), fc.string(), fc.uint8Array({ minLength: 32, maxLength: 32 }), (text, other, seed) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const key = yield* SshsigTest.identity;
+          const stranger = yield* SshsigTest.identity;
+          const armored = yield* key.proof(text);
+
+          expect(yield* checkSshsig({ text, armored, space: SPACE, signers: [key.line] })).toEqual({
+            signer: key.line,
+          });
+          expect(yield* checkSshsig({ text, armored, space: SPACE, signers: [stranger.line] })).toEqual({
+            reason: "bad_signature",
+          });
+
+          if (other !== text) {
+            expect(yield* checkSshsig({ text: other, armored, space: SPACE, signers: [key.line] })).toEqual({
+              reason: "bad_signature",
+            });
+          }
+
+          const raw = Base64Url.decode(key.raw);
+          expect(raw._tag).toBe("Success");
+
+          if (raw._tag === "Success") {
+            expect(key.fingerprint).toBe(yield* PublicKey.fingerprint(raw.success));
+            expect(key.line).toBe(yield* PublicKey.line(raw.success));
+          }
+
+          // ssh-keygen's fingerprint is over the whole blob the key line carries, not the 32 raw bytes.
+          const blob = yield* Effect.fromResult(Base64.decode(Str.slice("ssh-ed25519 ".length)(key.line)));
+          const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, blob));
+          expect(key.sshFingerprint).toBe(`SHA256:${Str.replace(/=+$/, "")(Base64.encode(hashed))}`);
+          expect(key.sshFingerprint).not.toBe(key.fingerprint);
+
+          // A known seed gives the same identity each time, so a saved key keeps its name.
+          const bytes = seed;
+          const once = yield* SshsigTest.identityFrom(bytes);
+          const again = yield* SshsigTest.identityFrom(bytes);
+          expect([again.raw, again.line, again.fingerprint, again.sshFingerprint]).toEqual([
+            once.raw,
+            once.line,
+            once.fingerprint,
+            once.sshFingerprint,
+          ]);
+        }).pipe(Effect.provide(Digest.layerWebCrypto)),
+      ),
+    ),
+    { seed: SEED, numRuns: 100 },
+  );
 });

@@ -7,8 +7,16 @@ import * as fc from "fast-check";
 import * as RateLimit from "../RateLimit.ts";
 import * as Rate from "./rateLimit.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  take: {},
+});
+
 type Model = typeof Rate.machine.model.Type;
+
 type Msg = typeof Rate.machine.msg.Type;
+
 type Cmd = ReturnType<typeof Rate.machine.init>[1][number];
 
 const Policy = Schema.Struct({
@@ -27,16 +35,19 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
 
   for (const pick of picks) {
     const p = state._tag !== "fresh" ? state.policy : initial;
+
     // Read the state before choosing a repeat, a backward clock, expiry, skipped windows or a policy change.
     const times =
       state._tag !== "fresh"
         ? [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3]
         : [18];
+
     const msg: Msg = {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at: times[pick % times.length]!,
-      policy: pick % 7 === 0 ? (pick % 2 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
+      policy: pick % 7 === 0 ? (pick % 2 !== 0 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
     };
+
     messages.push(msg);
     state = applyCell<Model, Msg, Cmd>(Rate.machine, state, msg)[0];
   }
@@ -59,7 +70,7 @@ it.prop(
         let trusted = -Infinity;
 
         for (const { msg, cmds, next } of steps) {
-          if (msg.type !== "take") {
+          if (msg._tag !== "take") {
             return "the generated trace supplied an answer without a pending command";
           }
 
@@ -112,11 +123,13 @@ it.prop(
   { window: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1000 })) },
   ({ window }) => {
     const state = Rate.machine.init(null, {})[0];
+
     const [next, cmds] = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at: Number.MAX_SAFE_INTEGER,
       policy: { limit: 1, window },
     });
+
     expect(next).toEqual(state);
     expect(cmds).toHaveLength(1);
     expect(cmds[0]!.decision).toMatchObject({ _tag: "invalid", cause: expect.anything() });
@@ -127,15 +140,19 @@ it.prop(
 it("vector: expiry is half-open, just before, at and after the end", () => {
   // The plan pins the exact boundary as well as generating time walks above.
   let state = Rate.machine.init(null, {})[0];
+
   const take = (at: number) => {
     const result = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
-      type: "take",
+      ...Tag.cases.take.make({}),
       at,
       policy: { limit: 1, window: 60 },
     });
+
     state = result[0];
+
     return result[1][0]!.decision;
   };
+
   expect(take(18)).toEqual({ _tag: "allowed", count: 1, ttl: 42 });
   expect(take(59)).toEqual({ _tag: "refused", retryAfter: 1 });
   expect(take(60)).toEqual({ _tag: "allowed", count: 1, ttl: 60 });
@@ -160,9 +177,8 @@ it("T843 policy: positive safe integers only (50 runs)", () => {
 });
 
 // Compile-only: full cannot carry a growing used count; the reducer's schema defines the states.
-const fullType = (model: Extract<Model, { _tag: "full" }>) => {
+const fullType = (model: Extract<Model, { _tag: "full" }>) =>
   // @ts-expect-error full represents exactly the policy limit and has no growing attempt counter.
-  return model.used;
-};
+  model.used;
 
 void fullType;

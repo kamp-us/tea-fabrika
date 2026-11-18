@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e32-review2",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-15T23:28:54-08:00",
+  "ended": "2026-11-15T23:41:01-08:00",
+  "parent": "2026-11-15-t1075-e32-tests2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1075, review: done. Recheck of E32 (asyncFunction, judgment slice) at 2fc330a, in next/ tests and tooling, against the five faults of review1 and the rulings in judgment-rulings-0026.md on fabrikalfa/twin-tools. Fault 1 fixed: async test bodies in folders where fabrika/no-effect-promise blocks are it.live with an object-form Effect.tryPromise helper and a tagged TestFailure, and settings/Files.test.ts runs its validation Effect with Effect.exit. Fault 2 withdrawn: ruling Q1-3 puts asyncFunction inside fast-check with 0579's it.effect.prop move, not this sweep, and Q5's no exception means no ignore line, which the branch adds none of; the claim about @effect/vitest 4.1.3 holds, since its prop inputs are Schema or effect/Arbitrary only (src/index.ts Arbitraries type, src/internal/internal.ts compileArbitraryInput), with no fast-check bridge. Fault 3 fixed: the 19 async describe callbacks await their plant at module top. Fault 4 withdrawn: the rulings land the lock and the reasoned lines together in the one sweep PR; the row's six zero folders match a recount, and its exclude names the four .github/ci .mjs files by exact path, as ruling Q4 and the 0565 amendment ask. Fault 5 fixed: the row's left list holds 266 file:line entries, identical to the checker's 266 hits in the row's folders. Recording the 41 reasoned lines in the row is right: a planted @effect-diagnostics-next-line asyncFunction:off line gave warning TS377000 (directive has no effect) in libfabrika's tsc. The merge c7705dd keeps both of main's vendor symlinks in oxlint-plugins/plants.test.ts and changes nothing else of main's.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Read-only apart from this row. Ran at 2fc330a: effect-tsgo diagnostics with only asyncFunction at error over the nine projects (row folders 266, app:src, lib:runtime and lib:cloudflare left to E78); pnpm lint (exit 0, heap 6144); pnpm typecheck (exit 0); vitest one file at a time, all green: settings/Files, .github/ci related, shard-rows, time-table and gate, oxlint-plugins modules, plants and no-default-export, transport/Connection, app exam deps.integration, counter runner.laws.integration, checklist and tezgah program.laws; 3 plants in a scratch worktree, all red, then undone (a changed message in Files.test.ts, a rejected promise through the helper in related.test.ts, a changed line in modules.test.ts). loosening.sh b510ed2..HEAD: 151 hits, all re-indents into Effect.gen; per-file counts of expect and assert calls and timeouts are unchanged, and no comment line was lost. git merge-tree with origin/main: no conflict. One finding row: the TestFailure class and promised helper are copied into 40 test files. Not run: the visual files, which need Electron. For the integrator: the 5 Node-side visual helpers and hooks left in app e2e keep that folder unlocked until fixed.",
+  "step": "review"
+}

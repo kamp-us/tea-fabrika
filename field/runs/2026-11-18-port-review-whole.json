@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-port-review-whole",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1517",
+  "started": "2026-11-18T08:29:32-08:00",
+  "ended": "2026-11-18T08:47:00-08:00",
+  "parent": "2026-11-18-port-s3-tests-round3",
+  "active": null,
+  "driver_caused": false,
+  "role": "reviewer",
+  "step": "review",
+  "model": "claude-opus",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "8e0929db6a039bd030568eb03217072472850d97",
+  "base": "2594c20d1aae6b5677ee0dab57c09da1f57f949a",
+  "why": "The whole-PR review of ticket 766's slices S1 to S4 in today's lead tooling (the lint hold, governance.ts, fieldrow.ts, box/RunsFs.ts), judgment code only under 0589's amendments: merge-ready, three finding rows. fieldrow.ts gives main's fieldrow.py rows field for field: a scratch differential ran main's fieldrow.py and fieldrow.ts on the same 200 generated events files and flags (requested profiles first-wins, empty and missing flags and CODEX_MODEL/CODEX_EFFORT, prototype and unknown models, receipts, given times in three offsets) and every parsed row and exit code agreed; the bytes differ only in JSON spacing, which no reader compares. On inputs box.sh never sends they differ (an empty --step, a Z time, a 5.0 or true token count, an empty receipt), the first finding row. governance.ts matches governance.sh on lines and order; 30e527c2's tag change reads CRLF decision files as Python's read_text did (checked by running both on one scratch repo); it exits 2 on an extra argument and 1 outside a repo where the shell gave 0 and 128, which no caller reads apart. box.ts, gc.ts and box/BoxTestGit.ts after the main merge keep main's code with RunsFs.layer(MAIN) in place of RunsProcess, so box rm's exits and lines and gc's 'could not keep its runs/' line and dry-run path hold; the branch merges with origin/main 242e0155 clean. The cross-device refusal keeps the folder and prints it, so no data is lost. loosening.sh: 6 hits, none a loosening.",
+  "note": "Read-only apart from this row. Pinned Node 26.13.0, nice 19, one worker, TYPESAFE_API_KEY unset. Plants ran in a scratch copy outside the repo (git archive of HEAD with node_modules linked) and were restored. Not run: lint, typecheck, --changed and the full suite (owner rule: CI judges them), git.integration.test.ts and the box rm suites (S2 and S4 reviews ran them). f40d0a62 and 30e527c2 have no run rows; their new CRLF scenario law is planted here. Finding rows: fieldrow.ts and fieldrow.py disagree on inputs box.sh never sends; the lint hold passes a shell or Python file with another extension or a launcher it does not name; the shrink law still accepts the three ported paths back on NOT_YET_PORTED.",
+  "plants": [
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "fieldrow.ts profileIn never returns a profile",
+      "result": "red"
+    },
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "fieldrow.ts takes the change time, not the birth time, as the start bound",
+      "result": "red"
+    },
+    {
+      "law": "The Codex row's fields, sums and list price match fieldrow.py's for the same events file",
+      "plant": "fieldrow.ts drops `ask.model.flag !== null` from requested (equivalent, a set flag already makes modelValue non-null)",
+      "result": "green"
+    },
+    {
+      "law": "scenario: a changed word in tags matches a CRLF decision",
+      "plant": "governance.ts TAGS back to the LF-only pattern",
+      "result": "red"
+    },
+    {
+      "law": "moves every file of a folder's runs/ into MAIN's runs/<name>/ and never overwrites one there",
+      "plant": "RunsFs.ts free() skips <name>-1",
+      "result": "red"
+    },
+    {
+      "law": "property: a runs/ that is a file, any runs/ link, MAIN's own runs/ or a refused write keeps the folder and changes nothing",
+      "plant": "RunsFs.ts MAIN real-path check dropped (equivalent, rename into its own subtree refuses on the model and on a real disk)",
+      "result": "green"
+    },
+    {
+      "law": "with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes",
+      "plant": "tracked-scripts.ts RUNS_AS_SCRIPT without python",
+      "result": "red"
+    },
+    {
+      "law": "pinned: the list only shrinks, so every entry is one of the 16 scripts the plan names, once",
+      "plant": "governance.sh added back to NOT_YET_PORTED (the finding row)",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 17.5,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": null
+}

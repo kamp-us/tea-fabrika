@@ -6,10 +6,13 @@
  * Every call reads the whole stream from the start and folds it, so the view is always what the
  * log says now. Entries whose tag is not a membership event are skipped, and an entry that does
  * not decode fails the call with a `LedgerError` of reason `bad_row`.
- *
- * @stability unstable
  */
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";
@@ -19,13 +22,15 @@ import type { Access, Folded, Reason } from "./Access.ts";
 import { eventId, MemberEvent, members, signedBy, subject } from "./Access.ts";
 import { allows, EMPTY } from "./AccessFold.ts";
 
+import * as Arr from "effect/Array";
 import { ClientManager, Written, type Founder } from "./ClientManager.ts";
 
 const MEMBERS = "gateway/access";
 
 const tag = (word: string): string => `fab.access.${word}`;
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
+
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
 /** One entry of `gateway/access` and the event it holds; a case this piece does not know is none. */
@@ -48,7 +53,7 @@ const row = Effect.fnUntraced(function* (entry: Entry) {
   const event = decodeEvent(valueFor(entry));
 
   if (Result.isFailure(event)) {
-    return yield* new LedgerError({ reason: "bad_row", cause: event.failure });
+    return yield* LedgerError.make({ reason: "bad_row", cause: event.failure });
   }
 
   return { entry, event: event.success } satisfies Row;
@@ -81,10 +86,11 @@ const current = ({ folded }: Replayed): Access => members(folded);
 const view = (replayed: Replayed) => {
   const { rows, skipped } = replayed;
   const { keys } = current(replayed);
+
   return {
     [tag("events")]: rows.length,
     [tag("keys")]: keys.size,
-    [tag("live")]: [...keys.values()].filter((k) => k.live).length,
+    [tag("live")]: Arr.filter([...keys.values()], (k) => k.live).length,
     [tag("ignored")]: skipped.size,
   };
 };
@@ -107,7 +113,6 @@ const view = (replayed: Replayed) => {
  * If the founding is refused for any reason but `id_reused`, the call fails with a `LedgerError`
  * of reason `refused`, since a stream with no `founded` would start with no members.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (
@@ -124,6 +129,7 @@ export const layer = (
     ClientManager,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
+
       const founding = MemberEvent.cases.founded.make({
         id: founder.person,
         name: founder.name,
@@ -153,7 +159,7 @@ export const layer = (
         const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
 
         if (placed._tag === "refused" && placed.reason !== "id_reused") {
-          return yield* new LedgerError({
+          return yield* LedgerError.make({
             reason: "refused",
             message: `founded refused: ${placed.reason}`,
           });
@@ -171,6 +177,7 @@ export const layer = (
             refused: ({ reason }) => ({ [tag("reason")]: reason }),
           }),
         });
+
         return written;
       });
 
@@ -189,7 +196,7 @@ export const layer = (
 
           // An event already in the log goes to the referee as it is: a resend gets its first
           // placing, and the answer is what the fold did with it then.
-          if (!before.rows.some(({ entry }) => entry.id === id)) {
+          if (!Arr.some(before.rows, ({ entry }) => entry.id === id)) {
             const verdict = allows(before.folded, event);
 
             if (Result.isFailure(verdict)) {
@@ -204,6 +211,7 @@ export const layer = (
           }
 
           const reason = (yield* read).skipped.get(placed.rev);
+
           return yield* answer(
             reason === undefined
               ? Written.cases.applied.make({ rev: placed.rev })
@@ -220,6 +228,7 @@ export const layer = (
           Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
         );
       });
+
       return {
         members: members(),
         write,

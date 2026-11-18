@@ -45,12 +45,28 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
+import {
+  Array as Arr,
+  String as Str,
+  pipe,
+  Console,
+  DateTime,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Order,
+  Predicate,
+  Result,
+  Schema,
+} from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 /** One call's tokens by how they are priced: uncached input, the two cache writes, cache reads, output. */
 export interface Tokens {
@@ -104,6 +120,7 @@ const ROUTING = [
 ] as const;
 
 const Count = Schema.optionalKey(Schema.NullOr(Schema.Int));
+
 const Routed = Schema.optionalKey(Schema.NullOr(Schema.String));
 
 /** A message's `usage`, as the Messages API writes it. Other fields are not read. */
@@ -119,14 +136,18 @@ const Usage = Schema.Struct({
   service_tier: Routed,
   speed: Routed,
 });
+
 type Usage = typeof Usage.Type;
 
-const Field = Schema.optionalKey(Schema.Unknown);
+const Field = Schema.optionalKey(Schema.Json);
 
 /** The four fields read from a transcript line, and the four read from its message. */
 const Line = Schema.Struct({ type: Field, timestamp: Field, uuid: Field, message: Field });
+
 const Message = Schema.Struct({ id: Field, model: Field, content: Field, usage: Field });
+
 const ToolUse = Schema.Struct({ type: Schema.Literal("tool_use") });
+
 /** A usage that says nothing: `{}`. */
 const Empty = Schema.Record(Schema.String, Schema.Never);
 
@@ -134,8 +155,11 @@ const Empty = Schema.Record(Schema.String, Schema.Never);
 const Meta = Schema.Struct({ effort: Schema.optionalKey(Schema.NullOr(Schema.String)), finished: Field });
 
 const decodeLine = Schema.decodeUnknownResult(Schema.fromJsonString(Line));
+
 const decodeMessage = Schema.decodeUnknownResult(Message);
+
 const decodeUsage = Schema.decodeUnknownResult(Usage);
+
 const decodeMeta = Schema.decodeUnknownResult(Schema.fromJsonString(Meta));
 
 /** One model call: when its first line was written, its model, its tokens, tool calls and list dollars. */
@@ -154,11 +178,12 @@ export interface Transcript {
   readonly last: string | null;
 }
 
-const refuse = (reason: string) => Result.fail(new Refused({ reason }));
+const refuse = (reason: string) => Result.fail(Refused.make({ reason }));
 
 /** A usage's tokens by price. */
 const split = (usage: Usage): Tokens => {
   const write1h = usage.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+
   return {
     input: usage.input_tokens ?? 0,
     write5m: usage.cache_creation?.ephemeral_5m_input_tokens ?? (usage.cache_creation_input_tokens ?? 0) - write1h,
@@ -169,7 +194,7 @@ const split = (usage: Usage): Tokens => {
 };
 
 /** One call's list dollars, or a refusal when its price is not here. */
-const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<number, Refused> => {
+const priced = (model: Schema.Json | undefined, usage: Usage, tokens: Tokens): Result.Result<number, Refused> => {
   for (const [key, wanted] of ROUTING) {
     const got = usage[key] ?? wanted;
 
@@ -178,7 +203,7 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
     }
   }
 
-  if (typeof model !== "string") {
+  if (!Predicate.isString(model)) {
     return refuse("a call names no model, so it has no list price");
   }
 
@@ -190,6 +215,7 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
 
   const prompt = tokens.input + tokens.write5m + tokens.write1h + tokens.read;
   const price = listed.long !== undefined && prompt > 100_000 ? listed.long : listed.price;
+
   // Added in this order, as the Python script did, so the sum is the same number to the last bit.
   return Result.succeed(
     tokens.input * price.input +
@@ -200,13 +226,14 @@ const priced = (model: unknown, usage: Usage, tokens: Tokens): Result.Result<num
   );
 };
 
-const named = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+const named = (value: Schema.Json | undefined): string | null =>
+  Predicate.isString(value) && value !== "" ? value : null;
 
 /** A transcript's calls and its first and last timestamp, or the first refusal. */
 export const read = (text: string): Result.Result<Transcript, Refused> => {
   interface Draft {
     readonly at: string | null;
-    readonly model: unknown;
+    readonly model: Schema.Json | undefined;
     readonly usage: Usage;
     readonly line: number;
     tools: number;
@@ -217,7 +244,7 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
   let first: string | null = null;
   let last: string | null = null;
 
-  for (const [i, json] of text.split("\n").entries()) {
+  for (const [i, json] of Str.split(text, "\n").entries()) {
     const line = decodeLine(json);
 
     if (Result.isFailure(line)) {
@@ -245,7 +272,7 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
       return refuse(`line ${i + 1}: a call's usage could not be read`);
     }
 
-    const tools = Array.isArray(content) ? content.filter(Schema.is(ToolUse)).length : 0;
+    const tools = Arr.isArray(content) ? Arr.filter(content, Schema.is(ToolUse)).length : 0;
     const key = named(id) ?? named(line.success.uuid);
     const seen = key === null ? undefined : byKey.get(key);
 
@@ -284,14 +311,15 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
  * of halves of the last place, so only that case is mended.
  */
 export const rounded = (x: number, places: number): number => {
-  const digits = Number(Math.abs(x).toFixed(places).replace(".", ""));
+  const digits = Number(pipe(Math.abs(x).toFixed(places), Str.replace(".", "")));
   const halves = Math.abs(x) * 2 ** (places + 1);
   const tie = Number.isInteger(halves) && halves % 2 === 1;
+
   return Math.sign(x) * Number(`${tie && digits % 2 === 1 ? digits - 1 : digits}e-${places}`);
 };
 
 /** A count with a comma between each three digits: 1,234,567. */
-const grouped = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+const grouped = (n: number): string => pipe(String(n), Str.replace(/\B(?=(\d{3})+(?!\d))/g, ","));
 
 /** A timestamp names its zone: `Z` or an offset, after a time. */
 const ZONED = /T.*(?:Z|[+-]\d{2}:?\d{2})$/;
@@ -299,6 +327,7 @@ const ZONED = /T.*(?:Z|[+-]\d{2}:?\d{2})$/;
 /** The instant a transcript's timestamp names, or a refusal when it names none. */
 const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
   const made = at !== null && ZONED.test(at) ? DateTime.make(at) : Option.none();
+
   return Option.isSome(made)
     ? Result.succeed(DateTime.toUtc(made.value))
     : refuse(`a timestamp is missing or names no time zone: ${JSON.stringify(at)}`);
@@ -307,7 +336,8 @@ const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
 /** An instant as that zone's clock reads it, to the second: `2026-11-10T00:12:15-08:00`. */
 const local = (zone: DateTime.TimeZone, at: DateTime.Utc): string => {
   const zoned = DateTime.setZone(at, zone);
-  return `${DateTime.formatIsoOffset(zoned).slice(0, 19)}${DateTime.zonedOffsetIso(zoned)}`;
+
+  return `${pipe(DateTime.formatIsoOffset(zoned), Str.slice(0, 19))}${DateTime.zonedOffsetIso(zoned)}`;
 };
 
 /** How a row's run was paid, when the caller says. */
@@ -345,16 +375,16 @@ const Row = Schema.Struct({
   effort: Text,
   outcome: Text,
   reason: Schema.String,
-  tokens: Schema.Number,
-  tools: Schema.Number,
-  minutes: Schema.Number,
+  tokens: Schema.Finite,
+  tools: Schema.Finite,
+  minutes: Schema.Finite,
   note: Text,
   costUsd: Schema.Null,
-  listUsd: Schema.Number,
-  billed: Schema.Number,
-  inputTokens: Schema.Number,
-  cachedTokens: Schema.Number,
-  outputTokens: Schema.Number,
+  listUsd: Schema.Finite,
+  billed: Schema.Finite,
+  inputTokens: Schema.Finite,
+  cachedTokens: Schema.Finite,
+  outputTokens: Schema.Finite,
   billing: Schema.optionalKey(Billing),
   corrects: Schema.optionalKey(Schema.String),
   step: Schema.optionalKey(Schema.String),
@@ -362,34 +392,37 @@ const Row = Schema.Struct({
 
 /** One model call of a transcript, for the cost curve. */
 const Turn = Schema.Struct({
-  call: Schema.Number,
+  call: Schema.Finite,
   at: Schema.String,
-  context: Schema.Number,
-  write: Schema.Number,
-  output: Schema.Number,
-  tools: Schema.Number,
-  usd: Schema.Number,
-  total: Schema.Number,
+  context: Schema.Finite,
+  write: Schema.Finite,
+  output: Schema.Finite,
+  tools: Schema.Finite,
+  usd: Schema.Finite,
+  total: Schema.Finite,
 });
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(Row));
+
 const encodeTurn = Schema.encodeSync(Schema.fromJsonString(Turn));
 
 const load = Effect.fn("clauderow.load")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
+
   const text = yield* fs
     .readFileString(path)
-    .pipe(Effect.mapError(() => new Refused({ reason: `${path} could not be read` })));
+    .pipe(Effect.mapError(() => Refused.make({ reason: `${path} could not be read` })));
+
   return yield* Effect.fromResult(read(text));
 });
 
 /** What the `.meta.json` beside a transcript says, or nothing when there is none. */
 const beside = Effect.fn("clauderow.beside")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
-  const meta = `${path.slice(0, -".jsonl".length)}.meta.json`;
-  const unreadable = Effect.mapError(() => new Refused({ reason: `${meta} could not be read` }));
+  const meta = `${pipe(path, Str.slice(0, -".jsonl".length))}.meta.json`;
+  const unreadable = Effect.mapError(() => Refused.make({ reason: `${meta} could not be read` }));
 
-  if (!path.endsWith(".jsonl") || !(yield* fs.exists(meta).pipe(unreadable))) {
+  if (!pipe(path, Str.endsWith(".jsonl")) || !(yield* fs.exists(meta).pipe(unreadable))) {
     return {};
   }
 
@@ -403,33 +436,39 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   const final = calls.at(-1);
 
   if (final === undefined) {
-    return yield* new Refused({ reason: `no model calls in ${path}` });
+    return yield* Refused.make({ reason: `no model calls in ${path}` });
   }
 
   const meta = yield* beside(path);
   const begun = yield* Effect.fromResult(instant(first));
   const ended = yield* Effect.fromResult(instant(last));
   const open = meta.finished === false;
-  const models = [...new Set(calls.map((call) => call.model))].toSorted();
-  const reads = [...new Set(models.map((model) => PRICES.get(model)?.read ?? ""))].toSorted();
-  const sum = (pick: (call: Call) => number) => calls.reduce((total, call) => total + pick(call), 0);
+  const models = Arr.sort(new Set(Arr.map(calls, (call) => call.model)), Order.String);
+  const reads = Arr.sort(new Set(Arr.map(models, (model) => PRICES.get(model)?.read ?? "")), Order.String);
+  const sum = (pick: (call: Call) => number) => Arr.reduce(calls, 0, (total, call) => total + pick(call));
   const input = sum((call) => call.tokens.input);
   const write5m = sum((call) => call.tokens.write5m);
   const write1h = sum((call) => call.tokens.write1h);
   const cached = sum((call) => call.tokens.read);
   const output = sum((call) => call.tokens.output);
   const { tokens } = final;
-  const reason = [
-    ask.reason,
-    ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
-    ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
-    ` out ${grouped(output)}. Dollars are list price (${SOURCE}, read ${reads.join(", ")}).`,
-    open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
-    ask.billing === null ? "" : ` Billing \`${ask.billing}\` as the caller gave it; the transcript does not record it.`,
-  ].join("");
+
+  const reason = Arr.join(
+    [
+      ask.reason,
+      ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
+      ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
+      ` out ${grouped(output)}. Dollars are list price (${SOURCE}, read ${Arr.join(reads, ", ")}).`,
+      open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
+      ask.billing === null
+        ? ""
+        : ` Billing \`${ask.billing}\` as the caller gave it; the transcript does not record it.`,
+    ],
+    "",
+  );
 
   return encodeRow({
-    date: local(zone, begun).slice(0, 10),
+    date: pipe(local(zone, begun), Str.slice(0, 10)),
     run: ask.run,
     ticket: ask.ticket,
     pr: ask.pr,
@@ -438,10 +477,10 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
     parent: ask.parent,
     active: null,
     role: ask.role,
-    model: models.join("+"),
+    model: Arr.join(models, "+"),
     effort: meta.effort ?? null,
     outcome: ask.outcome,
-    reason: reason.trim(),
+    reason: Str.trim(reason),
     tokens: tokens.input + tokens.write5m + tokens.write1h + tokens.read + tokens.output,
     tools: sum((call) => call.tools),
     // Seconds first, then minutes, as the Python script divided.
@@ -532,12 +571,12 @@ const clauderow = Command.make(
       }
 
       if (run === null) {
-        return yield* new Refused({
+        return yield* Refused.make({
           reason: "--run is required: a row needs its id so parent and corrects can name it",
         });
       }
 
-      return yield* Console.log(yield* row(transcript, { ...ask, run, reason: reason.join(" ") }));
+      return yield* Console.log(yield* row(transcript, { ...ask, run, reason: Arr.join(reason, " ") }));
     }).pipe(Effect.tapError((refused) => Console.error(`clauderow: ${refused.reason}`))),
 );
 

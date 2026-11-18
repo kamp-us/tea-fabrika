@@ -31,11 +31,19 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import { String as Str, pipe, Array as Arr, Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
+
 export const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
+
 export const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
 
 export const Body = Schema.Union([
@@ -53,21 +61,21 @@ export const RefusalCases = Arbitrary.schema(
 );
 
 export const ReplayCases = Arbitrary.array(Arbitrary.schema(Body), { minLength: 0, maxLength: 32 });
+
 const Model = Schema.Struct({ body: Schema.String, version: Schema.Int });
+
 type Model = typeof Model.Type;
 
-export const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("save"),
-    body: Schema.String,
-    base: Schema.Number,
-    work: Schema.Boolean,
-  }),
+export const Msg = Schema.TaggedUnion({
+  save: { body: Schema.String, base: Schema.Finite, work: Schema.Boolean },
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
-  Schema.Struct({ type: Schema.Literal("guard"), body: Schema.String }),
-]);
+  guard: { body: Schema.String },
+});
+
 type Msg = typeof Msg.Type;
+
 const probe = Cmd.make("probe", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
 export const empty = { body: "", version: 0 };
 
 export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws = false) => {
@@ -89,6 +97,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
       probe_err: (s) => [s, []],
     },
   });
+
   return Program.make({
     name: "notes-exam",
     machine,
@@ -100,7 +109,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
       guard: { description: "Exam person-only save", personOnly: true },
       // A read port: never a write, so a fresh input naming it is bad_msg.
       peek: Input.cases.read.make({
-        schema: Schema.Struct({ type: Schema.Literal("peek") }),
+        schema: Schema.TaggedStruct("peek", {}),
         description: "Exam read",
         answer: (v: Model) => v.version,
       }),
@@ -112,22 +121,25 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
 };
 
 export const person = "person_0000000000e008000000000001";
-export const process = Schema.decodeUnknownSync(Id.Process)("process_0000000000e008000000000001");
+
+export const process = Schema.decodeSync(Id.Process)("process_0000000000e008000000000001");
+
 export const writer = Writer.cases.agent.make({ key: "SHA256:exam-agent", for: person });
 
 const name = "notes-exam:1";
+
 export const build = "p8-exam";
 
 export const id = (prefix: "input" | "letter", n: number) =>
-  `${prefix}_0000000000e008${n.toString(16).padStart(12, "0")}`;
+  `${prefix}_0000000000e008${pipe(n.toString(16), Str.padStart(12, "0"))}`;
 
 export const incoming = (n: number, body: string, base = 0, work = false): Incoming => ({
   id: id("letter", n),
   envelope: {
-    id: Schema.decodeUnknownSync(Id.InputId)(id("input", n)),
+    id: Schema.decodeSync(Id.InputId)(id("input", n)),
     by: writer,
     arrivedAt: n,
-    input: { type: "save", body, base, work },
+    input: { ...Tag.cases.save.make({}), body, base, work },
   },
   sentAt: "2030-01-01T00:00:00Z",
   seen: 0,
@@ -139,28 +151,36 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db);
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
   const ledger = Layer.mergeAll(LedgerSql.layer(sql, { reader: "p8" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(quiet),
   );
+
   let nextProcess = 0;
+
   const manager = ProcessManager.layer(
     {
       owner: Owner.cases.brain.make({}),
       recipient: Recipient.cases.client.make({ client: "exam", session: process }),
       by: "SHA256:exam-brain",
     },
-    Effect.sync(() => `process_0000000000e008${(++nextProcess).toString(16).padStart(12, "0")}`),
+    Effect.sync(() => `process_0000000000e008${pipe((++nextProcess).toString(16), Str.padStart(12, "0"))}`),
   ).pipe(Layer.provide(ledger));
+
   const shared = Layer.mergeAll(Mailbox.layer, ProcessStore.layer(sql, { process })).pipe(Layer.provideMerge(ledger));
   const mail = yield* Mailbox.pipe(Effect.provide(shared));
   const store = yield* ProcessStore.pipe(Effect.provide(shared));
   const log = yield* Ledger.pipe(Effect.provide(ledger));
+
   const updates: Update[] = [],
     calls: string[] = [];
+
   let blockAppend = false;
   let alarmAt: number | null = null;
+
   const append = (i: Incoming) =>
     mail.send(name, i.id, i.envelope.input, {
       by: i.envelope.by.key,
@@ -171,6 +191,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       traceId: i.span.traceId,
       build,
     });
+
   const wiring = Layer.mergeAll(
     shared,
     ProgramLoader.layer(
@@ -179,6 +200,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         probe: () =>
           Effect.sync(() => {
             calls.push("cmd");
+
             return Outcome.ok(null);
           }),
       },
@@ -186,6 +208,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     Layer.succeed(CheckedWriter, {
       append: (i) => {
         calls.push("append");
+
         return blockAppend ? Effect.succeed(Appended.cases.refused.make({ reason: "seen_ahead" })) : append(i);
       },
       commit: () => Effect.die("exam has no writes"),
@@ -205,6 +228,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     }),
     Layer.succeed(Recording, { flush: Effect.void }),
   );
+
   // P34 (PR 760): every runner is supervised, so recovery and the ProcessManager are always wired,
   // and its process is started first, as libfabrika's runner.test.ts boots it.
   const boot = ProcessManager.use((p) =>
@@ -222,6 +246,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       ),
     ),
   ).pipe(Effect.provide(manager));
+
   const runner = () =>
     boot.pipe(
       Effect.andThen(
@@ -235,6 +260,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         ),
       ),
     );
+
   return {
     runner,
     // The Gateway law's door reads these (runner-contract-replay.test.ts).
@@ -260,10 +286,12 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         yield* runner.due(at);
       }),
     receipts: () =>
-      sql.exec("SELECT value FROM process_receipts WHERE name=?", name).map((row) => JSON.parse(String(row.value))),
+      Arr.map(sql.exec("SELECT value FROM process_receipts WHERE name=?", name), (row) =>
+        JSON.parse(String(row.value)),
+      ),
     dead: () => sql.exec("SELECT * FROM entries WHERE stream LIKE '%/dead'"),
     down: () => sql.exec("SELECT * FROM entries WHERE \"_tag\"='down'"),
   };
 });
 
-export const unchanged = (before: unknown, after: unknown) => expect(after).toEqual(before);
+export const unchanged = <A>(before: A, after: A) => expect(after).toEqual(before);

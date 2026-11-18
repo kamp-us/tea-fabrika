@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-not-yet-ported-law-allows-ported-back",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus",
+  "rule": "missing_test",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.test.ts",
+    "line": 212
+  },
+  "says": "In today's tooling, the law 'pinned: the list only shrinks' checks NOT_YET_PORTED against a fixed set that still holds the three scripts this PR ported (fieldrow.py, governance.sh, keepruns.sh), so one of them can be added back to the list, with its file, and lint and the law stay green, against 0113's 'No entry is added to the script list'.",
+  "proof": "In a scratch copy of the branch at 8e0929db, adding \".agents/skills/lead/scripts/governance.sh\" to NOT_YET_PORTED in oxlint-plugins/tracked-scripts.ts and running vitest on oxlint-plugins/tracked-scripts.test.ts gave 6 passed of 6. PLANNED lists the three ported paths at lines 212 to 214.",
+  "cost": "A revert or a copy of an old script can come back with its list line and pass the hold, so 'only shrinks' holds only against new paths, not against ported ones.",
+  "head": "8e0929db6a039bd030568eb03217072472850d97",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": "kamp-us/tea-fabrika#1517"
+}

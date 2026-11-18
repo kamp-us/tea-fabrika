@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // P39 slice 4a, next/: the hands client's fake `Commands`, the only `Commands` layer in 4a, and the
 // cut points the laws put around `Commands` and `Journal`. A cut fails, stops or pauses a call
 // before or after it delegates: before, the command never ran or the entry was never saved; after,
@@ -6,7 +7,10 @@
 // call until the law resumes it, so a law can drop the socket while local work is in flight. The
 // fakes keep their own timeline of what really ran and what was really saved, the oracle the laws
 // read; they never read the client's state.
-import { Deferred, Effect, Layer, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";
@@ -27,6 +31,7 @@ export const Event = Schema.TaggedUnion({
   saved: { task: Schema.String, entry: Schema.Unknown },
   crash: {},
 });
+
 export type Event = typeof Event.Type;
 
 /** What the fakes saw, and the cut armed now. */
@@ -78,6 +83,7 @@ const take = (s: Seen, op: Armed["op"], at: Cut): CutMode | null => {
   }
 
   s.armed = null;
+
   return armed.mode;
 };
 
@@ -104,7 +110,7 @@ export const fakeCommands = (s: Seen) =>
           yield* hold(s, "execute", before === "fail" ? "stop" : before);
         }
 
-        const result = fakeResult(s.events.filter((e) => e._tag === "ran").length + 1);
+        const result = fakeResult(Arr.filter(s.events, (e) => e._tag === "ran").length + 1);
         s.events.push(Event.cases.ran.make({ command, result }));
         const after = take(s, "execute", "after");
 
@@ -126,12 +132,13 @@ export const cutJournal = (s: Seen) =>
     Journal,
     Effect.gen(function* () {
       const inner = yield* Journal;
+
       const around = <A>(op: "read" | "write", work: Effect.Effect<A, JournalError>, saved: () => void) =>
         Effect.gen(function* () {
           const before = take(s, op, "before");
 
           if (before === "fail") {
-            return yield* new JournalError({ reason: "storage" });
+            return yield* JournalError.make({ reason: "storage" });
           }
 
           if (before !== null) {
@@ -143,7 +150,7 @@ export const cutJournal = (s: Seen) =>
           const after = take(s, op, "after");
 
           if (after === "fail") {
-            return yield* new JournalError({ reason: "storage" });
+            return yield* JournalError.make({ reason: "storage" });
           }
 
           if (after !== null) {
@@ -152,6 +159,7 @@ export const cutJournal = (s: Seen) =>
 
           return value;
         });
+
       return {
         read: (task: string) => around("read", inner.read(task), () => {}),
         write: (task: string, entry: Parameters<typeof inner.write>[1]) =>
@@ -161,6 +169,7 @@ export const cutJournal = (s: Seen) =>
   );
 
 const isEntry = Schema.is(Entry);
+
 const interrupted = Result.cases.unknown.make({ reason: "interrupted" });
 
 /**

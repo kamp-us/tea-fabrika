@@ -12,7 +12,7 @@
 // the freeze canceled a run of, with whether its branch holds main's head, and the lead merges main
 // into each and pushes, which starts a fresh run on today's main.
 import type { Duration } from "effect";
-import { Console, Effect, Schema } from "effect";
+import { Console, Effect, Schema, Array as Arr, pipe, Option, Order } from "effect";
 import { Branches } from "../../lead/scripts/pr/Branches.ts";
 import { type PullRequest, PullRequests } from "../../lead/scripts/pr/PullRequests.ts";
 import { Alerts } from "./Alerts.ts";
@@ -27,29 +27,40 @@ export const FULL_RUN = "gh workflow run scheduled.yaml --ref main";
 /** The lines of the latest sev0, from its `opened` on; all of them before any sev0. */
 export const latest = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<Level.Entry> =>
   entries.slice(
-    Math.max(
-      0,
-      entries.findLastIndex((e) => e._tag === "opened"),
+    Option.getOrElse(
+      Arr.findLastIndex(entries, (e) => e._tag === "opened"),
+      () => 0,
     ),
   );
 
 /** The open pull requests the latest sev0 canceled a run of, each once, by number. */
 export const owed = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>) => {
-  const hit = new Set(latest(entries).flatMap((e) => (e._tag === "canceled" ? [e.run.branch] : [])));
-  return prs.filter((pr) => pr.state === "OPEN" && hit.has(pr.head)).toSorted((a, b) => a.number - b.number);
+  const hit = new Set(Arr.flatMap(latest(entries), (e) => (e._tag === "canceled" ? [e.run.branch] : [])));
+
+  return Arr.sort(
+    Arr.filter(prs, (pr) => pr.state === "OPEN" && hit.has(pr.head)),
+    Order.mapInput(Order.Number, (pr: PullRequest) => pr.number),
+  );
 };
 
 /** One pull request the lead walks after a sev0, and how its branch stands to main. */
 export const Walk = Schema.TaggedUnion({
-  behind: { pr: Schema.Number, branch: Schema.String, commits: Schema.Number },
-  holds: { pr: Schema.Number, branch: Schema.String },
-  unknown: { pr: Schema.Number, branch: Schema.String, reason: Schema.String },
+  behind: { pr: Schema.Finite, branch: Schema.String, commits: Schema.Finite },
+  holds: { pr: Schema.Finite, branch: Schema.String },
+  unknown: { pr: Schema.Finite, branch: Schema.String, reason: Schema.String },
 });
+
 export type Walk = typeof Walk.Type;
 
 /** The walk in the order the lead takes it: the ones a merge of main helps first, then the rest. */
 export const ordered = (walk: ReadonlyArray<Walk>): ReadonlyArray<Walk> =>
-  walk.toSorted((a, b) => Number(a._tag === "holds") - Number(b._tag === "holds") || a.pr - b.pr);
+  Arr.sort(
+    walk,
+    Order.combine(
+      Order.mapInput(Order.Boolean, (w: Walk) => w._tag === "holds"),
+      Order.mapInput(Order.Number, (w: Walk) => w.pr),
+    ),
+  );
 
 const walkLine = (w: Walk): string => {
   switch (w._tag) {
@@ -67,8 +78,8 @@ export const nextLines = (walk: ReadonlyArray<Walk>): ReadonlyArray<string> => [
   walk.length === 0
     ? "sev: the freeze canceled no run of an open pull request"
     : `sev: ${walk.length} open pull requests had runs canceled; walk them in this order, on the merge line:`,
-  ...ordered(walk).map((w) => `  ${walkLine(w)}`),
-  `sev: start the 3-hour full run by hand, since the freeze canceled it: ${FULL_RUN}`,
+  ...Arr.map(ordered(walk), (w) => `  ${walkLine(w)}`),
+  `sev: start the full run by hand, since the freeze canceled it: ${FULL_RUN}`,
 ];
 
 /** The latest sev0's log, as lines for the write-up. */
@@ -81,11 +92,11 @@ export const summary = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<stri
   for (const e of latest(entries)) {
     switch (e._tag) {
       case "opened":
-        lines.push(`${e.at} opened by the owner: ${e.reason}; allowed: ${e.allow.join(", ") || "none"}`);
+        lines.push(`${e.at} opened by the owner: ${e.reason}; allowed: ${Arr.join(e.allow, ", ") || "none"}`);
         lines.push(
           e.issues === null
             ? "  the open ci-scheduled issues could not be read"
-            : `  over ci-scheduled issues: ${e.issues.join(", ") || "none"}`,
+            : `  over ci-scheduled issues: ${Arr.join(Arr.map(e.issues, String), ", ") || "none"}`,
         );
         break;
       case "allowed":
@@ -99,6 +110,8 @@ export const summary = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<stri
         canceled.add(e.run.branch);
         break;
       case "failed":
+      case "refused":
+      case "limited":
         failed += 1;
         break;
       case "closed":
@@ -117,11 +130,11 @@ export const summary = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<stri
 export const levelLines = (level: Level.Level): ReadonlyArray<string> => {
   switch (level._tag) {
     case "sev0":
-      return [`sev0 since ${level.since}: ${level.reason}`, `  allowed: ${level.allow.join(", ") || "none"}`];
+      return [`sev0 since ${level.since}: ${level.reason}`, `  allowed: ${Arr.join(level.allow, ", ") || "none"}`];
     case "sev1":
       return [
         `sev1 since ${level.issues[0]?.since ?? "now"}: ${level.issues.length} ci-scheduled issues open`,
-        ...level.issues.map((i) => `  issue ${i.number} since ${i.since}: ${i.title}`),
+        ...Arr.map(level.issues, (i) => `  issue ${i.number} since ${i.since}: ${i.title}`),
       ];
     case "none":
       return ["none: no sev0 is open, and no ci-scheduled issue is open"];
@@ -144,10 +157,16 @@ export const open = Effect.fn("Incident.open")(function* (given: Open) {
       by: "owner",
       reason: given.reason,
       allow,
-      issues: issues._tag === "Success" ? issues.success.map((i) => i.number) : null,
+      issues: issues._tag === "Success" ? Arr.map(issues.success, (i) => i.number) : null,
     }),
   );
-  yield* Console.log(`sev: sev0 open; kept: the merge queue${allow.map((b) => `, ${b}`).join("")}`);
+  yield* Console.log(
+    `sev: sev0 open; kept: the merge queue${pipe(
+      allow,
+      Arr.map((b) => `, ${b}`),
+      Arr.join(""),
+    )}`,
+  );
 });
 
 /** Makes `branch` the only allowed branch: the next fix in line. The one before is canceled from now. */
@@ -207,9 +226,9 @@ export const close = Effect.fn("Incident.close")(function* (
   for (const line of [
     ...nextLines(walk),
     "sev: for the write-up:",
-    ...summary(entries).map((l) => `  ${l}`),
+    ...Arr.map(summary(entries), (l) => `  ${l}`),
     issues._tag === "Success"
-      ? `sev: now ${levelLines(level).join("\n  ")}`
+      ? `sev: now ${Arr.join(levelLines(level), "\n  ")}`
       : `sev: could not read the ci-scheduled issues (${issues.failure.reason}); run status`,
   ]) {
     yield* Console.log(line);

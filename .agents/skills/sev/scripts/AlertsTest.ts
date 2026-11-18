@@ -9,6 +9,6 @@ export const layer = (issues: ReadonlyArray<Alert> | { readonly failing: string 
   Layer.succeed(
     Alerts,
     Alerts.of({
-      open: "failing" in issues ? Effect.fail(new AlertsError({ reason: issues.failing })) : Effect.succeed(issues),
+      open: "failing" in issues ? Effect.fail(AlertsError.make({ reason: issues.failing })) : Effect.succeed(issues),
     }),
   );

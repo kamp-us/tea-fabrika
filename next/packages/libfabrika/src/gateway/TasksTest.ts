@@ -24,25 +24,31 @@
 // answering every open task of every key (G1), and take the stream name from the params (G2).
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Deferred,
-  Effect,
-  Fiber,
-  Layer,
-  Logger,
-  Option,
-  Redacted,
-  Result as R,
-  Schema,
-  type Scope,
-  Semaphore,
-  Tracer,
-} from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
+import type { News } from "../runtime/News.ts";
 import type { Sql } from "../Sql.ts";
 import { Task, State, type Request, Request as RequestSchema, Result as TaskResult } from "../tasks/Task.ts";
 import { Tasks, targetStream } from "../tasks/Tasks.ts";
@@ -50,6 +56,12 @@ import { Chain, REFUSED } from "../telemetry/Trace.ts";
 import { connection } from "../transport/Connection.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 import { Gateway, type ConnectionId } from "./Gateway.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  input: {},
+});
 
 /** The gateway over one real store. It needs the `MailWakeups` the suite gives it, which records each
  *  wake. `rings` is every ring the store's ledger asked its doorbell for, in order (G2). */
@@ -63,7 +75,9 @@ export type Store = {
 };
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const URL = "https://fabrika.test/tasks";
+
 const SENT = "2026-11-12T10:00:00.000Z";
 
 const pick = <A>(values: ReadonlyArray<A>, n: number): A =>
@@ -72,7 +86,7 @@ const pick = <A>(values: ReadonlyArray<A>, n: number): A =>
 const text = (s: string) => new TextEncoder().encode(s);
 
 const join = (...parts: ReadonlyArray<Uint8Array>) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
   let offset = 0;
 
   for (const p of parts) {
@@ -86,16 +100,20 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
 const u32 = (n: number) => {
   const a = new Uint8Array(4);
   new DataView(a.buffer).setUint32(0, n);
+
   return a;
 };
 
 const field = (a: string | Uint8Array) => {
-  const bytes = typeof a === "string" ? text(a) : a;
+  const bytes = Predicate.isString(a) ? text(a) : a;
+
   return join(u32(bytes.length), bytes);
 };
 
 // A shared suite is not a `*.test.ts` file, so its failures are tagged like product code's.
-class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
+class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()("CryptoFailed", {
+  cause: Schema.Defect(),
+}) {}
 
 const fail = (cause: unknown) => new CryptoFailed({ cause });
 
@@ -114,12 +132,15 @@ const key = Effect.fnUntraced(function* () {
   const exported = yield* Effect.tryPromise({ try: () => s.exportKey("pkcs8", pair.privateKey), catch: fail });
   const stored = Redacted.make(Base64.encode(new Uint8Array(exported)));
   const blob = join(field("ssh-ed25519"), field(bytes));
+
   const fingerprint = Effect.fnUntraced(function* (value: Uint8Array) {
     const bytes = new Uint8Array(value);
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes a generated public key
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", bytes), catch: fail });
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
+
   return {
     stored,
     raw: Base64Url.encode(bytes),
@@ -138,6 +159,7 @@ const key = Effect.fnUntraced(function* () {
       // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs the test message
       const signature = yield* Effect.tryPromise({ try: () => s.sign(ed, signer, body), catch: fail });
       const signed = new Uint8Array(signature);
+
       const packed = join(
         text("SSHSIG"),
         u32(1),
@@ -147,9 +169,10 @@ const key = Effect.fnUntraced(function* () {
         field("sha512"),
         field(join(field("ssh-ed25519"), field(signed))),
       );
-      return `-----BEGIN SSH SIGNATURE-----\n${Base64.encode(packed)
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+
+      return `-----BEGIN SSH SIGNATURE-----\n${Option.getOrUndefined(
+        Option.map(Str.match(/.{1,70}/g)(Base64.encode(packed)), (lines) => Arr.join(lines, "\n")),
+      )}\n-----END SSH SIGNATURE-----\n`;
     }),
   };
 });
@@ -192,11 +215,15 @@ const Tape = Schema.Struct({
   cells: Schema.Array(Cell).check(Schema.isMinLength(60), Schema.isMaxLength(100)),
   secret: Schema.String.check(Schema.isPattern(/^[a-z]{12,24}$/)),
 });
+
 type Tape = typeof Tape.Type;
+
 const last = <A>(values: ReadonlyArray<A>): A => values.at(-1) ?? expect.fail("an accepted transition has an event");
+
 const TakeReply = Schema.TaggedUnion({ idle: {}, refused: { reason: Schema.String } });
 
 type Saved = { request: Request; task: Task; starts?: unknown; finish?: unknown };
+
 const phase = (s: Saved) => s.task.state._tag;
 
 const assignment = (s: Saved) => {
@@ -230,22 +257,28 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   const stranger = yield* key();
   const keys = yield* Effect.forEach([0, 1, 2, 3], () => key(), { concurrency: 1 });
   const turn = yield* Semaphore.make(1);
+
   const logs: Array<unknown> = [],
     spans: Array<Tracer.Span> = [],
     attachments: Array<unknown> = [];
+
   const logger = Logger.layer([
     Logger.map(Logger.formatStructured, (entry) => {
       logs.push(entry);
     }),
   ]);
+
   const urls: Array<string> = [URL];
-  const notices: Array<unknown> = [],
+
+  const notices: Array<{ client: string; news: News }> = [],
     delivered: Array<unknown> = [],
     opened: Array<unknown> = [],
     frames: Array<string> = [];
+
   const controls: { pause: null | { entered: Deferred.Deferred<void>; release: Deferred.Deferred<void> } } = {
     pause: null,
   };
+
   /**
    * W1: every wake the gateway asked for, the name it named, and whether the shared turn was free then.
    * W2: the span current when it asked, which the real layer sends on as the requester's parent.
@@ -255,13 +288,16 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     readonly free: boolean;
     readonly trace: { readonly traceId: string; readonly spanId: string } | undefined;
   }> = [];
+
   /** W2b: every routed call, its answer and the spans it opened at the door. */
   const calls: Array<{
     readonly method: string;
     readonly answer: typeof Answer.Type;
     readonly spans: ReadonlyArray<Tracer.Span>;
   }> = [];
+
   const wakeFault = { fail: false };
+
   const wakeups = Layer.succeed(MailWakeups, {
     wake: (name: string) =>
       Effect.gen(function* () {
@@ -273,11 +309,14 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
 
         if (wakeFault.fail) {
           wakeFault.fail = false;
+
           return yield* new MailWakeupsError({ reason: "unavailable" });
         }
       }),
   });
+
   const gatewayFor = () => store.gateway(options).pipe(Layer.provide(wakeups));
+
   const options: Parameters<typeof Gateway.layer<Schema.Json, never, never, never>>[0] = {
     sql: store.sql,
     founder: {
@@ -316,6 +355,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     open: (process, client) =>
       Effect.sync(() => {
         opened.push({ process, client });
+
         return null;
       }),
     deliver: (_p, envelope) =>
@@ -329,20 +369,25 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     inputs: { schema: Schema.Json, personOnly: [], raw: [] },
     events: { personOnly: [] },
   };
+
   let life = yield* Layer.build(gatewayFor());
   const delegate = yield* Effect.tracer.pipe(Effect.provide(life));
+
   const tracer = Tracer.make({
     span: (init) => {
       const span = delegate.span(init);
       spans.push(span);
+
       return span;
     },
   });
+
   const trace = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.withTracer(tracer), Effect.provide(logger));
   const door = () => Gateway.pipe(Effect.provide(life));
   let d = yield* door();
   const j = <A, E>(f: (tasks: Tasks["Service"]) => Effect.Effect<A, E>) => Tasks.use(f).pipe(Effect.provide(life));
   const clients: Array<Client> = [];
+
   const grant = Effect.fnUntraced(function* (k: Key, role: Client["role"], id: string) {
     const value = grantText({
       id,
@@ -353,8 +398,10 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       sentAt: SENT,
       saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: [] },
     });
+
     expect((yield* d.grant({ text: value, armored: yield* root.sign(value) }))._tag).toBe("applied");
   });
+
   const hello = Effect.fnUntraced(function* (
     k: Key,
     role: Client["role"],
@@ -365,6 +412,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     const nonce = yield* d.challenge(client);
     const tab = String(client);
     urls.push(`${URL}/client/${encodeURIComponent(k.fingerprint)}/${encodeURIComponent(tab)}`);
+
     const checked = yield* d.initialize(
       client,
       {
@@ -382,30 +430,35 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       },
       { url: URL, tab, name: k.fingerprint },
     );
+
     expect(checked._tag).toBe("online");
     const c: Client = { client, key: k, role, has, build, live: true };
     clients.push(c);
+
     return c;
   });
+
   const revoke = Effect.fnUntraced(function* (c: Client, id: string, ancestor = false) {
     const value = revokeText({
       id,
-      key: ancestor ? root.line : c.key.raw,
+      key: ancestor === true ? root.line : c.key.raw,
       for: PERSON,
       to: "tasks-law",
       sentAt: SENT,
       saw: { label: "test", location: "test", method: "command", check: "touch" },
     });
+
     // A second gateway over the same store takes the membership write before a held call.
     const b = yield* Gateway.pipe(Effect.provide(gatewayFor()));
-    expect((yield* b.grant({ text: value, armored: yield* (ancestor ? backup : root).sign(value) }))._tag).toBe(
-      "applied",
-    );
+    expect(
+      (yield* b.grant({ text: value, armored: yield* (ancestor === true ? backup : root).sign(value) }))._tag,
+    ).toBe("applied");
 
-    for (const old of clients.filter((x) => ancestor || x.key.raw === c.key.raw)) {
+    for (const old of Arr.filter(clients, (x) => ancestor || x.key.raw === c.key.raw)) {
       old.live = false;
     }
   });
+
   const tryGrant = Effect.fnUntraced(function* (c: Client, id: string) {
     const value = grantText({
       id,
@@ -416,10 +469,12 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       sentAt: SENT,
       saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
     });
+
     const answer = yield* trace(d.grant({ text: value, armored: yield* c.key.sign(value) }));
     expect(answer._tag).toBe("refused");
   });
-  const route = Effect.fnUntraced(function* (c: Client, method: string, params: unknown) {
+
+  const route = Effect.fnUntraced(function* (c: Client, method: string, params: Schema.Json) {
     // oxlint-disable-next-line fabrika/no-ledger-sql -- edge: this security law audits persisted input records
     const inputRows = () => store.sql.exec("SELECT * FROM entries WHERE stream='gateway/inputs'");
     const beforeInputs = inputRows();
@@ -427,7 +482,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     const answer = yield* trace(d.route(c.client, method, params));
     calls.push({ method, answer, spans: spans.slice(spanned) });
 
-    if (method.startsWith("tasks.")) {
+    if (Str.startsWith("tasks.")(method)) {
       expect(inputRows()).toEqual(beforeInputs);
     }
 
@@ -441,6 +496,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       has: c.has,
       ...(c.build === undefined ? {} : { build: c.build }),
     });
+
     const transport = connection({
       reader: c.client,
       session: c.client,
@@ -459,20 +515,25 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       wait: () => (answer._tag === "refused" ? Effect.fail(answer) : Effect.die("hands ledger.wait must be refused")),
       call: () => Effect.succeed(answer),
     });
-    yield* trace(transport.frame(JSON.stringify({ jsonrpc: "2.0", id: frames.length, method, params })));
+
+    yield* trace(transport.frame(Formatter.formatJson({ jsonrpc: "2.0", id: frames.length, method, params })));
+
     return answer;
   });
+
   /**
    * W2b: two calls through a second door over the same store whose budget is one call a minute; a
    * new budget starts a new window, so the first spends it and the second is over it.
    */
-  const routeLimited = Effect.fnUntraced(function* (c: Client, method: string, params: unknown) {
+  const routeLimited = Effect.fnUntraced(function* (c: Client, method: string, params: Schema.Json) {
     const tight = store.gateway({ ...options, rateLimit: { limit: 1, window: 60_000 } }).pipe(Layer.provide(wakeups));
+
     return yield* Gateway.use((g) =>
       Effect.gen(function* () {
         yield* trace(g.route(c.client, method, params));
         const spanned = spans.length;
         const answer = yield* trace(g.route(c.client, method, params));
+
         return { answer, spans: spans.slice(spanned) };
       }),
     ).pipe(Effect.provide(tight));
@@ -486,10 +547,11 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   const other = yield* hello(pick(keys, 1), "hands", ["git", "node", "docker"], "other-build");
   yield* hello(pick(keys, 2), "window", ["git", "node", "docker"], "window-build");
   yield* hello(pick(keys, 3), "agent", ["git", "node", "docker"], "agent-build");
+
   return {
     store,
     root,
-    privateKeys: [root.stored, backup.stored, stranger.stored, ...keys.map((key) => key.stored)],
+    privateKeys: [root.stored, backup.stored, stranger.stored, ...Arr.map(keys, (key) => key.stored)],
     primary,
     other,
     clients,
@@ -507,7 +569,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     wakeFault,
     rings: store.rings,
     /** One call straight at the door, as a connection's `call` makes it, with no frame around it. */
-    door: (c: Client, method: string, params: unknown) => trace(d.route(c.client, method, params)),
+    door: (c: Client, method: string, params: Schema.Json) => trace(d.route(c.client, method, params)),
     keys,
     grant,
     hello,
@@ -544,10 +606,12 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
     const saved: Array<Saved> = [];
     let current = w.primary;
     let sequence = 0;
+
     const said = (cell: Cell) => ({
       sentAt: cell.sentAt,
-      seen: cell.seen % (Math.max(0, ...saved.flatMap((s) => s.task.events.map((event) => event.rev))) + 1),
+      seen: cell.seen % (Math.max(0, ...Arr.flatMap(saved, (s) => Arr.map(s.task.events, (event) => event.rev))) + 1),
     });
+
     const add = Effect.fnUntraced(function* (process: string, cell: Cell) {
       const request = {
         ...tape.request,
@@ -556,6 +620,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         target: w.primary.key.fingerprint,
         needs: ["git"],
       };
+
       yield* w.j((j) =>
         j.request(request, {
           by: "trusted-program",
@@ -571,19 +636,23 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       expect(task.state).toEqual(State.cases.requested.make({ request }));
       saved.push({ request, task });
     });
+
     yield* add(tape.request.process, pick(tape.cells, 0));
-    const beforeHello = JSON.stringify(saved.map((s) => s.task));
-    expect(w.notices.filter((n) => JSON.stringify(n).includes("tasks."))).toEqual([]);
-    expect(JSON.stringify(yield* w.j((j) => j.read(pick(saved, 0).request.id)))).toBe(
-      JSON.stringify(pick(saved, 0).task),
+    const beforeHello = Formatter.formatJson(Arr.map(saved, (s) => s.task));
+    expect(Arr.filter(w.notices, (n) => Str.includes("tasks.")(JSON.stringify(n)))).toEqual([]);
+    expect(Formatter.formatJson(yield* w.j((j) => j.read(pick(saved, 0).request.id)))).toBe(
+      Formatter.formatJson(pick(saved, 0).task),
     );
     expect(beforeHello).not.toBe("");
+
     const unchanged = Effect.fnUntraced(function* () {
       for (const s of saved) {
         expect(yield* w.j((j) => j.read(s.request.id))).toEqual(s.task);
       }
     });
+
     const snapshot = (s: Saved) => ({ process: s.request.process, task: s.request.id });
+
     const checkEvent = (s: Saved, c: Client, cell: Cell, seen: number) => {
       const event = last(s.task.events);
       expect(event.by).toBe(c.key.fingerprint);
@@ -600,8 +669,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       expect(event.traceId).toMatch(/^[0-9a-f]{32}$/);
       expect(event.arrivedAt).toBeGreaterThanOrEqual(0);
     };
+
     /** W2: the trace of every wake so far, so no two calls' wakes share one. */
     const traces = new Set<string>();
+
     /**
      * W1: a finish the gateway took woke its requester's name once, outside the turn; any other call
      * woke nobody. W2: that wake carries the trace of the call's own `gateway.tasks` span, and its
@@ -612,16 +683,17 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
       if (!finished) {
         expect(fresh, "W1: a refused call wakes nobody").toEqual([]);
+
         return undefined;
       }
 
       expect(
-        fresh.map(({ name, free }) => ({ name, free })),
+        Arr.map(fresh, ({ name, free }) => ({ name, free })),
         "W1: a taken finish wakes the requester's name once, after the write turn",
       ).toEqual([{ name: s.request.name, free: true }]);
       done.add("woke");
       const trace = pick(fresh, 0).trace ?? expect.fail("W2: a taken finish's wake carries a trace");
-      const tasks = last(w.calls).spans.filter((span) => span.name === "gateway.tasks");
+      const tasks = Arr.filter(last(w.calls).spans, (span) => span.name === "gateway.tasks");
       expect(tasks, "W2: the finish ran in one gateway.tasks span").toHaveLength(1);
       const span = pick(tasks, 0);
       expect(trace.traceId, "W2: the wake joins the trace of the call's gateway.tasks span").toBe(span.traceId);
@@ -631,12 +703,14 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       ).toBe(trace.spanId);
       expect(traces.has(trace.traceId), "W2: two calls' wakes never share a trace").toBe(false);
       traces.add(trace.traceId);
+
       return trace.traceId;
     };
+
     /** W2b: each tasks call that reaches the tasks branch has one `gateway.route` span, and it holds the answer's tag as its outcome. */
     const outcomes = (from: number) => {
-      for (const call of w.calls.slice(from).filter((call) => call.method.startsWith("tasks."))) {
-        const routes = call.spans.filter((span) => span.name === "gateway.route");
+      for (const call of Arr.filter(w.calls.slice(from), (call) => Str.startsWith("tasks.")(call.method))) {
+        const routes = Arr.filter(call.spans, (span) => span.name === "gateway.route");
         expect(routes, `W2b: ${call.method} opens one gateway.route span`).toHaveLength(1);
         expect(
           pick(routes, 0).attributes.get("fab.gateway.outcome"),
@@ -644,17 +718,22 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         ).toBe(call.answer._tag);
       }
     };
+
     const take = Effect.fnUntraced(function* (s: Saved, cell: Cell) {
       const before = s.task;
-      const candidates = saved.filter(
+
+      const candidates = Arr.filter(
+        saved,
         (other) => other.request.process === s.request.process && phase(other) !== "finished",
       );
+
       const metadata = said(cell);
       const answer = yield* w.route(current, "tasks.take", { process: s.request.process, ...metadata });
       const able = current.live && current.role === "hands" && current.build !== undefined;
 
       if (!able || (candidates.length === 1 && !current.has.includes("git"))) {
         refused(answer);
+
         return;
       }
 
@@ -668,7 +747,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         done.add("ambiguous");
       } else {
         const selected = pick(candidates, 0);
-        const task = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(result).task;
+        const task = (yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(result)).task;
         expect(task).toEqual(yield* w.j((j) => j.read(selected.request.id)));
 
         if (phase(selected) === "requested") {
@@ -701,17 +780,20 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       const called = w.calls.length;
       const s = pick(saved, cell.pick);
       const p = phase(s);
-      const available = moves[focus].filter((move) =>
-        move === "race"
-          ? current.live && current.build !== undefined && current.has.includes("git") && p !== "requested"
-          : move === "revoke"
-            ? current.live && p !== "requested"
-            : move === "retry"
-              ? p === "started" || p === "finished"
-              : move === "wrong"
-                ? p !== "requested"
-                : true,
+
+      const available = Arr.filter(moves[focus], (move) =>
+        Match.value(move).pipe(
+          Match.when(
+            "race",
+            () => current.live && current.build !== undefined && current.has.includes("git") && p !== "requested",
+          ),
+          Match.when("revoke", () => current.live && p !== "requested"),
+          Match.when("retry", () => p === "started" || p === "finished"),
+          Match.when("wrong", () => p !== "requested"),
+          Match.orElse(() => true),
+        ),
       );
+
       const move = pick(available, cell.move);
       done.add(move);
 
@@ -735,18 +817,21 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           }
 
           const method = p === "assigned" ? "tasks.started" : "tasks.finish";
+
           const params = {
             ...snapshot(s),
             execution: assignment(s).execution,
             ...said(cell),
             ...(method === "tasks.finish" ? { result: cell.result } : {}),
           };
+
           const failing = w.wakeFault.fail;
           const woken = w.wakes.length;
           const answer = yield* w.route(current, method, params);
           const able = current.live && current.build !== undefined && current.has.includes("git");
 
           const wake = focus === "W1" ? woke(s, woken, able && method === "tasks.finish") : undefined;
+
           /** W2: a first finish's wake carries the trace its `finished` event saved. */
           const traced = () => {
             if (wake !== undefined) {
@@ -813,31 +898,33 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         }
       } else if (move === "role") {
         const c = pick(
-          w.clients.filter((x) => x.role !== "hands"),
+          Arr.filter(w.clients, (x) => x.role !== "hands"),
           cell.pick,
         );
 
         for (const method of ["tasks.take", "tasks.read", "tasks.started", "tasks.finish"]) {
-          const params =
-            method === "tasks.take"
-              ? { process: s.request.process, ...said(cell) }
-              : method === "tasks.read"
-                ? snapshot(s)
-                : {
-                    ...snapshot(s),
-                    execution: p === "requested" ? "unknown" : assignment(s).execution,
-                    ...said(cell),
-                    ...(method === "tasks.finish" ? { result: cell.result } : {}),
-                  };
+          const params = Match.value(method).pipe(
+            Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+            Match.when("tasks.read", () => snapshot(s)),
+            Match.orElse(() => ({
+              ...snapshot(s),
+              execution: p === "requested" ? "unknown" : assignment(s).execution,
+              ...said(cell),
+              ...(method === "tasks.finish" ? { result: cell.result } : {}),
+            })),
+          );
+
           refused(yield* w.route(c, method, params));
         }
 
         done.add(c.role);
       } else if (move === "wrong") {
         const params = { ...snapshot(s), execution: assignment(s).execution, ...said(cell) };
+
         const wrongProcess = yield* Id.Generator.use((g) => g.next(Id.Process)).pipe(
           Effect.provide(Id.Generator.layer),
         );
+
         const methods = ["tasks.read", "tasks.started", "tasks.finish"];
 
         for (const method of methods) {
@@ -845,6 +932,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             method === "tasks.read"
               ? snapshot(s)
               : { ...params, ...(method === "tasks.finish" ? { result: cell.result } : {}) };
+
           refused(yield* w.route(w.other, method, base));
           refused(yield* w.route(current, method, { ...base, process: wrongProcess }));
 
@@ -862,11 +950,13 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
         const changed = { ...said(cell), sentAt: `${cell.sentAt}-retry` };
         const woken = w.wakes.length;
+
         const start = yield* w.route(current, "tasks.started", {
           ...snapshot(s),
           execution: assignment(s).execution,
           ...changed,
         });
+
         const able = current.live && current.build !== undefined && current.has.includes("git");
 
         if (able) {
@@ -883,6 +973,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         if (p === "finished" && s.task.state._tag === "finished") {
           const failing = w.wakeFault.fail;
           const before = w.wakes.length;
+
           const finish = yield* w.route(current, "tasks.finish", {
             ...snapshot(s),
             execution: assignment(s).execution,
@@ -925,26 +1016,29 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       } else if (move === "race") {
         const entered = yield* Deferred.make<void>(),
           release = yield* Deferred.make<void>();
+
         w.controls.pause = { entered, release };
+
         const method = pick(
           p === "finished"
             ? ["tasks.read", "tasks.finish"]
             : ["tasks.take", "tasks.read", "tasks.started", ...(p === "started" ? ["tasks.finish"] : [])],
           cell.variant,
         );
-        const params =
-          method === "tasks.take"
-            ? { process: s.request.process, ...said(cell) }
-            : method === "tasks.read"
-              ? snapshot(s)
-              : {
-                  ...snapshot(s),
-                  execution: assignment(s).execution,
-                  ...said(cell),
-                  ...(method === "tasks.finish"
-                    ? { result: s.task.state._tag === "finished" ? s.task.state.result : cell.result }
-                    : {}),
-                };
+
+        const params = Match.value(method).pipe(
+          Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+          Match.when("tasks.read", () => snapshot(s)),
+          Match.orElse(() => ({
+            ...snapshot(s),
+            execution: assignment(s).execution,
+            ...said(cell),
+            ...(method === "tasks.finish"
+              ? { result: s.task.state._tag === "finished" ? s.task.state.result : cell.result }
+              : {}),
+          })),
+        );
+
         const pending = yield* Effect.forkScoped(w.route(current, method, params));
         yield* Effect.raceFirst(
           Deferred.await(entered),
@@ -977,6 +1071,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           ],
           cell.variant,
         );
+
         const before = [w.delivered.length, w.opened.length];
         refused(
           yield* w.route(current, method, {
@@ -984,7 +1079,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             stream: "gateway/access",
             after: 0,
             letter: `letter-${sequence++}`,
-            m: { type: "input" },
+            m: Tag.cases.input.make({}),
             sentAt: SENT,
             seen: 0,
             key: w.other.key.raw,
@@ -998,28 +1093,32 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         done.add(`forbidden:${method}`);
       } else if (move === "malformed" || move === "reserved") {
         const method = pick(["tasks.take", "tasks.read", "tasks.started", "tasks.finish"], cell.pick);
-        const base =
-          method === "tasks.take"
-            ? { process: s.request.process, ...said(cell) }
-            : method === "tasks.read"
-              ? snapshot(s)
-              : {
-                  ...snapshot(s),
-                  execution: p === "requested" ? "unknown" : assignment(s).execution,
-                  ...said(cell),
-                  ...(method === "tasks.finish" ? { result: cell.result } : {}),
-                };
+
+        const base = Match.value(method).pipe(
+          Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+          Match.when("tasks.read", () => snapshot(s)),
+          Match.orElse(() => ({
+            ...snapshot(s),
+            execution: p === "requested" ? "unknown" : assignment(s).execution,
+            ...said(cell),
+            ...(method === "tasks.finish" ? { result: cell.result } : {}),
+          })),
+        );
+
         const field = pick(
           move === "reserved"
             ? ["id", "by", "for", "arrivedAt"]
             : ["target", "as", "has", "build", "connection", "extra"],
           cell.variant,
         );
+
         // oxlint-disable-next-line fabrika/no-ledger-sql -- edge: the security law audits raw output without granting hands ledger access
         const inputs = () => w.store.sql.exec("SELECT * FROM entries WHERE stream='gateway/inputs'");
         const beforeInputs = inputs();
+
         const storedRows = () =>
-          ["entries", "measurements", "unsent"].map((table) => w.store.sql.exec(`SELECT * FROM "${table}"`));
+          Arr.map(["entries", "measurements", "unsent"], (table) => w.store.sql.exec(`SELECT * FROM "${table}"`));
+
         const beforeStored = move === "reserved" ? storedRows() : [];
         const answer = yield* w.route(current, method, { ...base, [field]: tape.secret });
 
@@ -1028,8 +1127,8 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           expect(storedRows()).toEqual(beforeStored);
           const sums = w.store.sql.exec("SELECT * FROM sums WHERE refused='reserved'");
           expect(sums.length).toBeGreaterThan(0);
-          expect(new Set(sums.map((row) => JSON.stringify([row.piece, row.hour]))).size).toBe(sums.length);
-          expect(sums.every((row) => Number(row.count) > 0)).toBe(true);
+          expect(new Set(Arr.map(sums, (row) => JSON.stringify([row.piece, row.hour]))).size).toBe(sums.length);
+          expect(Arr.every(sums, (row) => Number(row.count) > 0)).toBe(true);
         }
 
         refused(answer);
@@ -1055,7 +1154,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       }
 
       yield* unchanged();
-      expect(w.notices.filter((n) => JSON.stringify(n).includes("tasks."))).toEqual([]);
+      expect(Arr.filter(w.notices, (n) => Str.includes("tasks.")(JSON.stringify(n)))).toEqual([]);
     }
 
     if (focus === "W1") {
@@ -1065,11 +1164,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       expect(limited.answer, "W2b: a tasks call over its budget is rate refused").toMatchObject({
         reason: "rate_limited",
       });
-      const routes = limited.spans.filter((span) => span.name === "gateway.route");
+      const routes = Arr.filter(limited.spans, (span) => span.name === "gateway.route");
       expect(routes, "W2b: a rate-refused tasks call opens only refuseRate's span").toHaveLength(1);
       expect(pick(routes, 0).attributes.get(REFUSED)).toBe("rate_limited");
       expect(pick(routes, 0).attributes.has("fab.gateway.outcome")).toBe(false);
-      expect(limited.spans.filter((span) => span.name === "gateway.tasks")).toEqual([]);
+      expect(Arr.filter(limited.spans, (span) => span.name === "gateway.tasks")).toEqual([]);
       expect(yield* w.j((j) => j.read(s.request.id))).toEqual(s.task);
     }
 
@@ -1084,9 +1183,9 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
       const outputs: Record<string, unknown> = {
         frames: w.frames,
-        urls: w.urls.flatMap((url) => [url, encodeURIComponent(url), decodeURIComponent(url)]),
+        urls: Arr.flatMap(w.urls, (url) => [url, encodeURIComponent(url), decodeURIComponent(url)]),
         logs: w.logs,
-        spans: w.spans.map((span) => ({
+        spans: Arr.map(w.spans, (span) => ({
           name: span.name,
           attributes: [...span.attributes],
           // The `Span` contract names no `events`; the native span keeps them, so read them when there.
@@ -1097,20 +1196,22 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         attachments: w.attachments,
         ledger: [],
       };
-      const tables = w.store.sql
-        .exec("SELECT name FROM sqlite_master WHERE type='table'")
-        .map((row) => String(row.name));
+
+      const tables = Arr.map(w.store.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) =>
+        String(row.name),
+      );
 
       for (const table of tables) {
-        const rows = w.store.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`);
+        const rows = w.store.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`);
 
         if (table === "entries") {
           outputs.ledger = rows;
 
-          for (const row of rows.filter((row) => row._tag === "initialized")) {
-            const { url } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ url: Schema.String })))(
-              row.body,
-            );
+          for (const row of Arr.filter(rows, (row) => row._tag === "initialized")) {
+            const { url } = yield* Schema.decodeUnknownEffect(
+              Schema.fromJsonString(Schema.Struct({ url: Schema.String })),
+            )(row.body);
+
             outputs.urls = [outputs.urls, url, encodeURIComponent(url), decodeURIComponent(url)];
           }
         } else if (table === "gateway_state") {
@@ -1122,16 +1223,19 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         }
       }
 
-      for (const [name, value] of Object.entries(outputs)) {
-        const encoded = JSON.stringify(value, (_key, item: unknown) =>
-          typeof item === "bigint"
-            ? String(item)
-            : item instanceof Map
-              ? [...item]
-              : item instanceof Error
-                ? { name: item.name, message: item.message, cause: item.cause }
-                : item,
-        );
+      for (const [name, value] of Rec.toEntries(outputs)) {
+        const encoded = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown, {
+            replacer: (_key, item: unknown) =>
+              Predicate.isBigInt(item)
+                ? String(item)
+                : item instanceof Map
+                  ? [...item]
+                  : item instanceof Error
+                    ? { name: item.name, message: item.message, cause: item.cause }
+                    : item,
+          }),
+        )(value).pipe(Effect.orDie);
 
         for (const sentinel of sentinels) {
           for (const form of [
@@ -1141,7 +1245,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             Base64.encode(text(sentinel)),
             Base64Url.encode(text(sentinel)),
           ]) {
-            expect(encoded.includes(form), name).toBe(false);
+            expect(Str.includes(form)(encoded), name).toBe(false);
           }
         }
       }
@@ -1223,7 +1327,9 @@ const required: Record<Focus, ReadonlyArray<string>> = {
 // --- P39 slice 4a: G1's list half and G2 ------------------------------------------------------------
 
 const Pointer = Schema.Struct({ id: Schema.String, process: Schema.String });
+
 const Listed = Schema.Struct({ tasks: Schema.Array(Pointer), rev: Schema.Int });
+
 const Ready = Schema.Struct({ rev: Schema.Int });
 
 /** One task the walk asked for and has not finished: which phase it is in, and its execution once taken. */
@@ -1263,7 +1369,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
   Effect.fnUntraced(function* (tape: Tape) {
     const w = yield* world(open);
     const hands = [w.primary, w.other];
-    const strangers = w.clients.filter((c) => c.role !== "hands");
+    const strangers = Arr.filter(w.clients, (c) => c.role !== "hands");
     const asked = new Map<string, Array<Asked>>();
     const saved: Array<Request> = [];
     /** The rev each key's last list answered, and how many requests for it were accepted since. */
@@ -1281,9 +1387,12 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
     /** `tasks.list` by a hands key: exactly its open tasks as pointers, and a cursor that moved only for its own requests. */
     const list = Effect.fnUntraced(function* (c: Client) {
-      const listed = Schema.decodeUnknownSync(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
-      const wanted = mine(c).map((a) => ({ id: a.request.id, process: a.request.process }));
-      const order = (all: ReadonlyArray<{ readonly id: string }>) => [...all].sort((a, b) => a.id.localeCompare(b.id));
+      const listed = yield* Schema.decodeUnknownEffect(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
+      const wanted = Arr.map(mine(c), (a) => ({ id: a.request.id, process: a.request.process }));
+
+      const order = (all: ReadonlyArray<{ readonly id: string }>) =>
+        [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
+
       expect(order(listed.tasks), "G1: tasks.list answers exactly the caller's open tasks, as pointers").toEqual(
         order(wanted),
       );
@@ -1293,25 +1402,29 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
         `G1: the cursor moves only when a request for this key was accepted (was ${before.rev}, ${before.since} since, now ${listed.rev})`,
       ).toBe(true);
       expect(listed.rev === 0, "G1: the cursor is 0 only before the key's first request").toBe(
-        saved.every((r) => r.target !== c.key.fingerprint),
+        Arr.every(saved, (r) => r.target !== c.key.fingerprint),
       );
       seen.set(c.key.fingerprint, { rev: listed.rev, since: 0 });
       done.add(`list:${c === w.primary ? "hands-1" : "hands-2"}`);
       done.add(wanted.length > 0 ? "list:open" : "list:empty");
+
       return listed;
     });
 
     for (const cell of tape.cells) {
       const c = pick(hands, cell.pick);
       const pending = mine(c);
-      const available = targetMoves[focus].filter((move) =>
+
+      const available = Arr.filter(targetMoves[focus], (move) =>
         move === "repeat" || move === "conflict" ? saved.length > 0 : move === "advance" ? pending.length > 0 : true,
       );
+
       const move = pick(available, cell.move);
       done.add(move);
 
       if (move === "request") {
         const process = yield* Id.Generator.use((g) => g.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer));
+
         const request = {
           ...tape.request,
           process,
@@ -1319,6 +1432,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
           target: c.key.fingerprint,
           needs: ["git"],
         };
+
         const before = w.rings.length;
         yield* w.j((j) =>
           j.request(request, {
@@ -1337,20 +1451,20 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
         seen.set(c.key.fingerprint, { ...count, since: count.since + 1 });
         const rung = w.rings.slice(before);
 
-        for (const h of hands.filter((h) => h !== c)) {
+        for (const h of Arr.filter(hands, (h) => h !== c)) {
           expect(
-            rung.filter((r) => r.stream === targetStream(h.key.fingerprint)),
+            Arr.filter(rung, (r) => r.stream === targetStream(h.key.fingerprint)),
             "G2: a request for one key rings no other key's stream",
           ).toEqual([]);
         }
 
         const after = parked.get(c.key.fingerprint);
-        const own = rung.filter((r) => r.stream === targetStream(c.key.fingerprint));
+        const own = Arr.filter(rung, (r) => r.stream === targetStream(c.key.fingerprint));
         // The request's pointer is now the last line of the key's stream.
         const { rev } = yield* w.j((j) => j.forTarget(c.key.fingerprint));
         const due = after !== undefined && rev > after;
         expect(
-          own.map((r) => r.rev),
+          Arr.map(own, (r) => r.rev),
           `G2: a request for a parked key rings its stream once, at its new line's rev, when that line is past the parked rev (parked ${after}, line ${rev}); else it rings nothing`,
         ).toEqual(due ? [rev] : []);
 
@@ -1363,6 +1477,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
       } else if (move === "repeat" || move === "conflict") {
         const first = pick(saved, cell.variant);
         const changed = move === "repeat" ? first : { ...first, name: `${first.name}-changed` };
+
         const answer = yield* Effect.result(
           w.j((j) =>
             j.request(changed, {
@@ -1376,6 +1491,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
             }),
           ),
         );
+
         expect(R.isSuccess(answer), `G1: a ${move} answers as the tasks service always did`).toBe(move === "repeat");
         // Nothing new for the key: its next list must answer the same cursor.
       } else if (move === "advance") {
@@ -1384,11 +1500,15 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         if (a.phase === "requested") {
           const answer = accepted(yield* w.door(c, "tasks.take", { process: a.request.process, ...meta }));
-          const task = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(answer).task;
+
+          const task = (yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(answer))
+            .task;
+
           a.phase = "assigned";
           a.execution = assignment({ request: a.request, task }).execution;
         } else {
           const method = a.phase === "assigned" ? "tasks.started" : "tasks.finish";
+
           const params = {
             process: a.request.process,
             task: a.request.id,
@@ -1396,6 +1516,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
             ...meta,
             ...(method === "tasks.finish" ? { result: cell.result } : {}),
           };
+
           accepted(yield* w.door(c, method, params));
 
           if (a.phase === "assigned") {
@@ -1403,15 +1524,17 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
           } else {
             asked.set(
               c.key.fingerprint,
-              pending.filter((o) => o !== a),
+              Arr.filter(pending, (o) => o !== a),
             );
             done.add("finished");
           }
         }
       } else if (move === "list") {
-        const finished = saved.some(
-          (r) => r.target === c.key.fingerprint && !pending.some((o) => o.request.id === r.id),
+        const finished = Arr.some(
+          saved,
+          (r) => r.target === c.key.fingerprint && !Arr.some(pending, (o) => o.request.id === r.id),
         );
+
         yield* list(c);
 
         if (finished) {
@@ -1429,7 +1552,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         if (after < rev) {
           expect(
-            Schema.decodeUnknownSync(Ready)(accepted(answer)),
+            yield* Schema.decodeUnknownEffect(Ready)(accepted(answer)),
             "G2: a stream past `after` answers at once",
           ).toEqual({
             rev,
@@ -1486,6 +1609,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         Effect.gen(function* () {
           const done = new Set<string>();
           const law = targetWalk(open, focus, done);
+
           const result = yield* Arbitrary.checkEffect(
             Arbitrary.schema(Tape),
             (tape) =>
@@ -1495,6 +1619,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               ),
             { seed: 119120, runs: runsFor({ fast: 10, full: focus === "G1" ? 100 : 60 }), concurrency: 1 },
           );
+
           expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
           expect([...done]).toEqual(expect.arrayContaining([...targetRequired[focus]]));
         }),
@@ -1502,7 +1627,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     );
   }
 
-  for (const focus of Object.keys(moves) as Array<Focus>) {
+  // SAFETY: `Object.keys` of the `moves` table answers its own keys, which `Focus` names.
+  for (const focus of Rec.keys(moves) as Array<Focus>) {
     it.effect(
       focus === "W1"
         ? "W1: an accepted or repeated tasks.finish wakes the requester's name after the write turn and before it answers; a failed wake answers refused unavailable and leaves the task finished; W2 and W2b: that wake joins the finish's trace, and each tasks call that reaches the tasks branch has one gateway.route span with its outcome"
@@ -1511,6 +1637,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         Effect.gen(function* () {
           const done = new Set<string>();
           const law = walk(open, focus, done);
+
           const result = yield* Arbitrary.checkEffect(
             Arbitrary.schema(Tape),
             (tape) =>
@@ -1533,6 +1660,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               concurrency: 1,
             },
           );
+
           expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
           expect([...done]).toEqual(expect.arrayContaining([...required[focus]]));
         }),

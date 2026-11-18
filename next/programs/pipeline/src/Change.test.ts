@@ -2,7 +2,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Checks } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Path } from "@kampus/libfabrika/codehost/CodeHost";
-import { Schema } from "effect";
+import { Schema, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import picomatch from "picomatch/posix.js";
 import * as Change from "./Change.ts";
@@ -17,7 +17,8 @@ const current = fc
     fc
       .tuple(CiTest.run, CiTest.run, CiTest.run, CiTest.run)
       .map(([a, b, c, d]) => [
-        ...runs.filter(
+        ...Arr.filter(
+          runs,
           (r) =>
             !same(r, { name: "a\u0000b", source: "c" }) &&
             !same(r, { name: "a", source: "b\u0000c" }) &&
@@ -34,23 +35,34 @@ const check = fc
   .record({ name: CiTest.word, source: fc.option(CiTest.word, { nil: undefined }) })
   .map(({ name, source }) => (source === undefined ? { name } : { name, source }));
 
-const normalize = (values: ReadonlyArray<unknown>) => [...new Set(values.map((v) => JSON.stringify(v)))].sort();
+const normalize = (values: ReadonlyArray<unknown>) => [...new Set(Arr.map(values, (v) => JSON.stringify(v)))].sort();
 
 const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Checks.Type) => {
-  const asked = checks.filter((c, i) => !checks.slice(0, i).some((p) => same(p, c)));
-  const selected = runs.filter((r) =>
-    asked.some((c) => c.name === r.name && (c.source === undefined || c.source === r.source)),
+  const asked = Arr.filter(checks, (c, i) => !Arr.some(checks.slice(0, i), (p) => same(p, c)));
+
+  const selected = Arr.filter(runs, (r) =>
+    Arr.some(asked, (c) => c.name === r.name && (c.source === undefined || c.source === r.source)),
   );
-  const red = selected.filter(
+
+  const red = Arr.filter(
+    selected,
     (r) => r.status._tag === "done" && ["failure", "timed_out"].includes(r.status.conclusion),
   );
-  const lost = selected.filter(
+
+  const lost = Arr.filter(
+    selected,
     (r) => r.status._tag === "done" && ["cancelled", "startup_failure"].includes(r.status.conclusion),
   );
-  const pending = asked.filter((c) => {
-    const matching = selected.filter((r) => r.name === c.name && (c.source === undefined || c.source === r.source));
-    return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
+
+  const pending = Arr.filter(asked, (c) => {
+    const matching = Arr.filter(
+      selected,
+      (r) => r.name === c.name && (c.source === undefined || c.source === r.source),
+    );
+
+    return matching.length === 0 || Arr.some(matching, (r) => r.status._tag !== "done");
   });
+
   return red.length > 0
     ? { tag: "red", values: red }
     : lost.length > 0
@@ -81,6 +93,7 @@ describe("L5: the verdict", () => {
         )
         .map(([checks, shuffled, extra]) => ({ runs, checks: [checks[0]!, ...checks] as const, shuffled, extra })),
     );
+
     fc.assert(
       fc.property(cases, ({ checks, runs, shuffled, extra }) => {
         expect(Schema.is(Checks)(runs)).toBe(true);
@@ -94,7 +107,15 @@ describe("L5: the verdict", () => {
         const repeated = Change.verdict([...checks, ...checks], shuffled);
         expect(repeated._tag).toBe(answer._tag);
         expect(normalize(repeated._tag === "pending" ? repeated.checks : repeated.runs)).toEqual(normalize(values));
-        const unused = { ...extra, name: `${checks.map((c) => c.name).join("")}unused` };
+
+        const unused = {
+          ...extra,
+          name: `${Arr.join(
+            Arr.map(checks, (c) => c.name),
+            "",
+          )}unused`,
+        };
+
         const added = Change.verdict(checks, [...runs, unused]);
         expect(added._tag).toBe(answer._tag);
         expect(normalize(added._tag === "pending" ? added.checks : added.runs)).toEqual(normalize(values));
@@ -121,7 +142,7 @@ const segment = fc.oneof(
 
 const path = fc
   .array(segment, { minLength: 1, maxLength: 5 })
-  .map((parts) => Schema.decodeUnknownSync(Path)(parts.join("/")));
+  .map((parts) => Schema.decodeSync(Path)(Arr.join(parts, "/")));
 
 const glob = fc
   .oneof(
@@ -143,14 +164,16 @@ describe("L6: kind is the heaviest", () => {
           const expected =
             paths.length === 0
               ? "code"
-              : paths.reduce<"rows" | "docs" | "code">((heavy, p) => {
-                  const kind = kinds.docs.some((g) => picomatch(g)(p))
+              : Arr.reduce(paths, "rows", (heavy: "rows" | "docs" | "code", p) => {
+                  const kind = Arr.some(kinds.docs, (g) => picomatch(g)(p))
                     ? "docs"
-                    : kinds.rows.some((g) => picomatch(g)(p))
+                    : Arr.some(kinds.rows, (g) => picomatch(g)(p))
                       ? "rows"
                       : "code";
+
                   return weight[kind] > weight[heavy] ? kind : heavy;
-                }, "rows");
+                });
+
           expect(Change.kind(kinds, paths)).toBe(expected);
           expect(Change.kind(kinds, null)).toBe("code");
           expect(Change.kind(kinds, [])).toBe("code");
@@ -168,10 +191,8 @@ describe("L6: kind is the heaviest", () => {
             expect(weight[Change.kind(kinds, [...paths, added])]).toBeGreaterThanOrEqual(weight[expected]);
           }
 
-          const both = Schema.decodeUnknownSync(Change.Glob)("**");
-          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeUnknownSync(Path)("docs/a b.md")])).toBe(
-            "docs",
-          );
+          const both = Schema.decodeSync(Change.Glob)("**");
+          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeSync(Path)("docs/a b.md")])).toBe("docs");
         },
       ),
       { seed: 119120, numRuns: 500 },
@@ -186,6 +207,9 @@ const emptyIsInvalid = (runs: typeof Checks.Type) => {
 };
 
 type Model = ReturnType<typeof merger>["machine"]["model"]["Type"];
+
 type Checking = Extract<Model, { readonly _tag: "checking" }>;
+
 expectTypeOf<readonly []>().not.toExtend<Checking["checks"]>();
+
 void emptyIsInvalid;

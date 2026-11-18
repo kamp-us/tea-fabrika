@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-gateway-processes-telemetry-s1-tests2",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T00:10:55-08:00",
+  "ended": "2026-11-16T00:46:56-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round for slice 1 of the mock sweep (decision 0555, plan at 14e9b3134), in next/ and the lint plants, sent back by the build for two Effect-checker errors in the tests step's own next/packages/libfabrika/src/crypto.test-support.ts and a merge of origin/main. globalErrorInEffectCatch: the catch of paused's real digest now builds Effect's own tagged Cause.UnknownError with WebCrypto's failure as its cause. A Schema.TaggedError class of our own was tried first and refused by fabrika/modules rule 4 (0043): a shared top file holds no error, and its layer row may import only next-vitest. cryptoRandomUUID: paused's stand-in no longer gives randomUUID; no law reaches it, and Stub.make throws for a member a law does not give, so the three paused-hash laws prove it unused by staying green. The merge of origin/main conflicted in oxlint-plugins/builtin-plants.ts and oxlint-plugins/plants.test.ts: both plant sets stay (VI_METHODS and TAGGED_ERROR), and the M1 vi scenario is rewritten on main's inConfigCopy, globsHolding and textOf helpers, which replaced this branch's tempRepo, printedConfig and lintIn, with the same globs, coverage check, files and expected lines. No law is loosened.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: M1 of the mock sweep, scenario: VI_METHODS' lines are refused exactly, in every folder of every block that sets the rule",
+      "red": "not new: moved onto main's helpers in the merge; green, and red under its plant"
+    },
+    {
+      "law": "next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts: the three paused-hash laws (M1/M5)",
+      "red": "not new: their stand-in changed only in its error type and lost randomUUID; green on the build's product"
+    }
+  ],
+  "plants": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: M1 VI_METHODS scenario, after the merge",
+      "plant": "drop the spyOn entry from the vitest/no-restricted-vi-methods block of .oxlintrc.json: gateway/planted-vi-0.test.ts refused [3, 4, 5, 7] where [3, 4, 5, 6, 7] was wanted; restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 36,
+  "note": "Ran one file at a time with nice -n 19 and --maxWorkers=1, at the merged tree with the fix: telemetry/ErrorCause.test.ts 6 passed, gateway/GatewayRevocation.integration.test.ts 16 passed (in the box, no override, main holds PR 1508), oxlint-plugins/plants.test.ts 254 passed, oxlint-plugins/modules.test.ts 16 passed. pnpm typecheck passed (the first run also lost packages/pipeline to an out-of-memory kill; its own typecheck passed alone, then the whole run passed). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 15 of 18 parts passed; lint:kind, lint:dead and lint:promise-types died with EPIPE beside an out-of-memory kill of tsgo, and each passed when run again alone. The merge is its own commit; the crypto fix and this row are a second.",
+  "step": "tests"
+}

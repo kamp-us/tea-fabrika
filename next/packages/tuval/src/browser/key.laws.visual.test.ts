@@ -16,14 +16,20 @@
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect } from "effect";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
 
 const SEED = 119120;
+
 const ORIGIN = "http://127.0.0.1";
+
 const ENTRY = "\0key-laws-entry";
+
 const HERE = new URL(".", import.meta.url).pathname;
 
 /** The page's handle on the real layer: each call one Effect run in the tab, its answer as data. */
@@ -63,7 +69,9 @@ const bundled = Effect.gen(function* () {
     ),
     (bundle) => Effect.promise(() => bundle.close()),
   );
+
   const { output } = yield* Effect.promise(() => bundle.generate({ format: "esm" }));
+
   return output[0].code;
 });
 
@@ -81,7 +89,7 @@ const profile = (b: Browser, script: string) =>
     Effect.tap((context) =>
       Effect.promise(() =>
         context.route(`${ORIGIN}/**`, (route) =>
-          route.request().url().endsWith("/key.js")
+          Str.endsWith("/key.js")(route.request().url())
             ? route.fulfill({ contentType: "text/javascript", body: script })
             : route.fulfill({
                 contentType: "text/html",
@@ -105,6 +113,17 @@ const tab = (context: Awaited<ReturnType<Browser["newContext"]>>) =>
     ),
   );
 
+declare global {
+  // What the tab entry (`PAGE_ENTRY` above) puts on the page for this law.
+  var __key: {
+    current(rejected: string | null): Promise<Answer<Key>>;
+    claim(): Promise<Answer<boolean>>;
+  };
+
+  // The tab's own IndexedDB open, kept while `failStore` makes it refuse.
+  var __realOpen: IDBFactory["open"] | undefined;
+}
+
 type Answer<A> = {
   readonly ok?: A;
   readonly err?: { readonly _tag: string; readonly op: string; readonly error: string };
@@ -113,35 +132,42 @@ type Answer<A> = {
 type Key = { readonly fingerprint: string; readonly found: "created" | "reused" | "replaced" };
 
 const current = (page: Page, rejected: string | null) =>
-  Effect.promise((): Promise<Answer<Key>> =>
-    page.evaluate((r) => Reflect.get(globalThis, "__key").current(r), rejected),
-  );
+  Effect.promise((): Promise<Answer<Key>> => page.evaluate((r) => globalThis.__key.current(r), rejected));
 
 const claim = (page: Page) =>
-  Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => Reflect.get(globalThis, "__key").claim()));
+  Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => globalThis.__key.claim()));
+
+/** One stored value, described: a key by its type and whether it can leave, bytes and strings as hex. */
+type Stored = {
+  readonly kind: string;
+  readonly extractable?: boolean;
+  readonly exported?: boolean;
+  readonly hex?: string;
+};
 
 /** Every value the profile's IndexedDB holds, described: private keys by their extractability, bytes and
- *  strings as hex, so the law can say no private material is stored. */
+ *  strings as hex, so the law can say no private material is stored. The page sends the raw bytes and the
+ *  hex is made here, since the function given to `page.evaluate` runs in the page, where no module import
+ *  reaches. */
 const stored = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(async () => {
-      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
-      const hex = (b: ArrayBufferLike | ArrayBufferView) =>
-        [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; bytes?: Array<number> }> = [];
+
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
             () => true,
             () => false,
           );
+
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
-          out.push({ kind: "bytes", hex: hex(v) });
+          out.push({ kind: "bytes", bytes: [...new Uint8Array(ArrayBuffer.isView(v) ? v.buffer : v)] });
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
         } else if (typeof v === "string") {
-          out.push({
-            kind: "string",
-            hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
-          });
+          out.push({ kind: "string", bytes: [...new TextEncoder().encode(v)] });
+          // oxlint-disable-next-line anti-slop/no-runtime-typeof -- runs in the page through page.evaluate, where Effect is not loaded
         } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
             await walk(one);
@@ -150,6 +176,7 @@ const stored = (page: Page) =>
       };
 
       for (const info of await indexedDB.databases()) {
+        // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         const db = await new Promise<IDBDatabase>((ok, no) => {
           const open = indexedDB.open(info.name!);
           open.onsuccess = () => ok(open.result);
@@ -157,6 +184,7 @@ const stored = (page: Page) =>
         });
 
         for (const name of db.objectStoreNames) {
+          // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
           const all = await new Promise<Array<unknown>>((ok, no) => {
             const req = db.transaction(name, "readonly").objectStore(name).getAll();
             req.onsuccess = () => ok(req.result);
@@ -173,6 +201,21 @@ const stored = (page: Page) =>
 
       return out;
     }),
+  ).pipe(
+    Effect.map(
+      Arr.map(({ bytes, ...rest }): Stored =>
+        bytes === undefined
+          ? rest
+          : {
+              ...rest,
+              hex: Function.pipe(
+                bytes,
+                Arr.map((x) => x.toString(16).padStart(2, "0")),
+                Arr.join(""),
+              ),
+            },
+      ),
+    ),
   );
 
 /** Makes the tab's IndexedDB refuse to open, as private mode, a full quota or a block does. */
@@ -180,7 +223,7 @@ const failStore = (page: Page, name: string) =>
   Effect.promise(() =>
     page.evaluate((n) => {
       const real = indexedDB.open.bind(indexedDB);
-      Reflect.set(globalThis, "__realOpen", real);
+      globalThis.__realOpen = real;
       indexedDB.open = () => {
         throw new DOMException("refused", n);
       };
@@ -188,7 +231,13 @@ const failStore = (page: Page, name: string) =>
   );
 
 const healStore = (page: Page) =>
-  Effect.promise(() => page.evaluate(() => (indexedDB.open = Reflect.get(globalThis, "__realOpen"))));
+  Effect.promise(() =>
+    page.evaluate(() => {
+      if (globalThis.__realOpen !== undefined) {
+        indexedDB.open = globalThis.__realOpen;
+      }
+    }),
+  );
 
 /** Ed25519's PKCS #8 prefix: private bytes stored in the clear would start with it. */
 const PKCS8_ED25519 = "302e020100300506032b657004220420";
@@ -205,6 +254,7 @@ describe("L3: the browser key store", () => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser;
           const script = yield* bundled;
           const seen = { created: 0, adopted: 0, failed: 0, claimed: 0 };
@@ -214,20 +264,23 @@ describe("L3: the browser key store", () => {
                 fc.integer({ min: 1, max: 3 }),
                 fc.array(move, { minLength: 1, maxLength: 10 }),
                 (tabs, moves) =>
-                  Effect.runPromise(
+                  Effect.runPromiseWith(services)(
                     Effect.scoped(
                       Effect.gen(function* () {
                         const context = yield* profile(b, script);
+
                         const pages = yield* Effect.forEach(Array.from({ length: tabs }), () => tab(context), {
                           concurrency: 1,
                         });
+
                         // A fresh profile: every tab asks at once, and all get the one stored key.
                         const first = yield* Effect.forEach(pages, (p) => current(p, null), {
                           concurrency: "unbounded",
                         });
-                        const prints = new Set(first.map((a) => a.ok?.fingerprint));
+
+                        const prints = new Set(Arr.map(first, (a) => a.ok?.fingerprint));
                         expect(prints.size, "racing tabs made more than one key").toBe(1);
-                        expect(first.filter((a) => a.ok?.found === "created")).toHaveLength(1);
+                        expect(Arr.filter(first, (a) => a.ok?.found === "created")).toHaveLength(1);
                         seen.created++;
                         let stored_ = first[0]!.ok!.fingerprint;
                         const removed: Array<string> = [];
@@ -277,14 +330,17 @@ describe("L3: the browser key store", () => {
                         }
 
                         const rest = yield* stored(pages[0]!);
-                        expect(rest.filter((v) => v.kind === "key:private").length).toBeGreaterThan(0);
+                        expect(Arr.filter(rest, (v) => v.kind === "key:private").length).toBeGreaterThan(0);
 
                         for (const v of rest) {
                           expect(
                             v.kind === "key:private" ? [v.extractable, v.exported] : [false, false],
                             "a private key can leave",
                           ).toEqual([false, false]);
-                          expect(v.hex?.includes(PKCS8_ED25519) ?? false, "private bytes are stored").toBe(false);
+                          expect(
+                            v.hex !== undefined && Str.includes(PKCS8_ED25519)(v.hex),
+                            "private bytes are stored",
+                          ).toBe(false);
                         }
                       }),
                     ),

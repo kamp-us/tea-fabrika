@@ -1,0 +1,258 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l13-guard-bundle-host",
+  "ticket": "kamp-us/tea-fabrika#1167",
+  "pr": "kamp-us/tea-fabrika#1622",
+  "started": "2026-11-18T13:17:43+00:00",
+  "ended": "2026-11-18T17:47:00+00:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "lead",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice B's host proof (G2's host half and G3, as amended), next/: L13's whole file (electron-launchd.visual.test.ts, which holds the pinned law with G1, G2's crash half, G4 and the scenario) ran on host.yaml's disposable macos-15 runner, never the owner's laptop (0594). 20 runs counted toward G3: the guard was ready inside its unchanged 5 s bound in every one, guardMs from 101 to 310 ms. L13 itself failed twice for other causes, each now its own ticket: run 3, the 120 s vitest timeout after the guard was ready (ticket 1168), and run 6, HostError normal-exit-restarted in phase 'fixture' (ticket 1169). 8 more runs did not count: canceled before a runner took them, or by the next push. Each passing run from 08af9f5dc on ended with phase null.",
+  "note": "Started by hand with workflow_dispatch (suite l13) one at a time per head, since host.yaml's concurrency group cancels a second run at the same head; plus the pull_request runs. Each run's guardMs, phase, starts and stops were read from the run's printed runs/p19/host.json in its job log. Ticket 1167 stays open until 1168 and 1169 are fixed (fabrikaa's ruling on mail 0004).",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 269.3,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "billing": null,
+  "checkedHead": "7d013e0189be558c8cd1281cd5fe21cd0e79d811",
+  "guardedLawsRun": true,
+  "guardMs": {
+    "counted": 20,
+    "min": 101,
+    "max": 310
+  },
+  "runs": [
+    {
+      "count": 1,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44312250473",
+      "head": "24cea938b",
+      "trigger": "pull_request",
+      "result": "success",
+      "guardMs": 103
+    },
+    {
+      "count": 2,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44312306126",
+      "head": "24cea938b",
+      "trigger": "workflow_dispatch",
+      "result": "success",
+      "guardMs": 203
+    },
+    {
+      "count": 3,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44313709458",
+      "head": "43dcdfb63",
+      "trigger": "workflow_dispatch",
+      "result": "failure: test timed out in 120000ms after the guard was ready",
+      "guardMs": 216
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44312779671",
+      "head": "43dcdfb63",
+      "trigger": "pull_request",
+      "result": "cancelled before a runner, no step ran (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44315803655",
+      "head": "5b8e17238",
+      "trigger": "pull_request",
+      "result": "cancelled by the next push (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44316146622",
+      "head": "346eece2d",
+      "trigger": "pull_request",
+      "result": "cancelled by the next push (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 4,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44316262123",
+      "head": "01633e35c",
+      "trigger": "pull_request",
+      "result": "success (L13 step 127 s; starts 14468,7541,9581,11426)",
+      "guardMs": 310
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44315483581",
+      "head": "43dcdfb63",
+      "trigger": "workflow_dispatch",
+      "result": "cancelled after 15 min with no runner, no step ran (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 5,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44317301228",
+      "head": "01633e35c",
+      "trigger": "workflow_dispatch",
+      "result": "success (L13 step 58 s)",
+      "guardMs": 102
+    },
+    {
+      "count": 6,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44318418776",
+      "head": "08af9f5dc",
+      "trigger": "pull_request",
+      "result": "failure: HostError normal-exit-restarted at P19Launchd.test-support.ts:583, phase \"fixture\"",
+      "guardMs": 207
+    },
+    {
+      "count": 7,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44318917343",
+      "head": "08af9f5dc",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 102
+    },
+    {
+      "count": 8,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44320475772",
+      "head": "08af9f5dc",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 105
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44320639254",
+      "head": "7d013e018",
+      "trigger": "pull_request",
+      "result": "cancelled with no runner (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 9,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44322205303",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 105
+    },
+    {
+      "count": 10,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44323849813",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 101
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44325745620",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "cancelled after 15 min with no runner (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 11,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44329030397",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 103
+    },
+    {
+      "count": 12,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44330936623",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 105
+    },
+    {
+      "count": 13,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44332803225",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 102
+    },
+    {
+      "count": 14,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44334621413",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 103
+    },
+    {
+      "count": 15,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44338032329",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 103
+    },
+    {
+      "count": 16,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44339806198",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 205
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44343357857",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "cancelled after 15 min with no runner (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 17,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44346783204",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 103
+    },
+    {
+      "count": 18,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44350283694",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null (starts up to 10.4 s)",
+      "guardMs": 102
+    },
+    {
+      "count": 19,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44354060264",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 103
+    },
+    {
+      "count": null,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44355967395",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "cancelled after 15 min with no runner (not counted)",
+      "guardMs": null
+    },
+    {
+      "count": 20,
+      "url": "https://github.com/kamp-us/tea-fabrika/actions/runs/44359267072",
+      "head": "7d013e018",
+      "trigger": "workflow_dispatch",
+      "result": "success, phase null",
+      "guardMs": 102
+    }
+  ]
+}

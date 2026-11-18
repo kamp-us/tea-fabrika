@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e79-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:46:37-08:00",
+  "ended": "2026-11-15T21:13:15-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E79 of the Effect-checker sweep, check preferEffectString, in next/ (folders app:src, lib:runtime, lib:settings, lib:telemetry, lib:cloudflare, lib:processes, lib:ledger, lib:gateway). Counted with only this check at error through --lspconfig on next/packages/libfabrika and next/apps/fabrika, nothing written to a tsconfig: 756 hits met, as the plan planned. 616 were in exam paths, 49 in product files, and 91 in files of pull request 1366. All 616 exam-path hits are fixed and the recount is 0 there. The checker has no quick fix for this check (checkerfix.mjs fixed 0 of 9 on settings/Print.test.ts), so a codemod kept in the scratchpad, never committed, rewrote 599 hits (569 in a first pass, 30 more in a second pass for chained calls the first pass skipped): a native call becomes the effect/String call, with the string last (Str.slice(1)(s)), split data-first (Str.split(s, sep)), and an import added (namespace effect/String in libfabrika, the barrel String as Str in the app). 17 hits were hand edits because the Effect form answers an Option or takes no position argument: match, indexOf, lastIndexOf, at and one optional chain. Each keeps what the code answered: Option.getOrNull where a law asserted null or a length, Option.getOrElse(-1) where the index fed a comparison, Arr.lastNonEmpty(Str.split(s, sep)) for the text after the last separator, and Str.includes(piece, position) for indexOf(piece, position) === -1. No assertion was dropped or narrowed and no law was loosened. pnpm format hoisted the import block above the header comment in each file where the codemod added an import under one; every header was put back on top and the format is stable. Comment-line counts are unchanged in every touched file. Left for the build step, 49 product hits: app/build.ts:61,61; lib/cloudflare/control.ts:148; lib/cloudflare/fetch.ts:90,102,104; lib/cloudflare/platform.ts:88,89,89; lib/processes/Mailbox.ts:262; lib/processes/Process.ts:129,130,437,438; lib/runtime/Execution.ts:74; lib/runtime/Patch.ts:21,21,133,137,137,143,143; lib/runtime/Window.ts:123,124; lib/settings/Files.ts:198; lib/settings/Print.ts:20; lib/settings/Reference.ts:104,104; lib/settings/Setting.ts:98; lib/settings/Snapshot.ts:75,75,76,76; lib/settings/TomlParser.ts:59,62,64,217,219; lib/settings/internal/edit.ts:88,93,93,99,174,174,180; lib/telemetry/Archive.ts:26; lib/telemetry/Trace.ts:342,343; lib/telemetry/internal/measurements.ts:224. Waiting on 1366, 91 hits, not touched: app/record-wire.test-support.ts 2; app/runtime-recovery.laws.integration.test.ts 10; lib/cloudflare/ObjectService.test.ts 1; lib/cloudflare/alarm.laws.test.ts 2; lib/cloudflare/connection.ts 3; lib/cloudflare/runtime.ts 11; lib/gateway/Gateway.ts 7; lib/ledger/Log.ts 1; lib/processes/internal/programMail.test.ts 1; lib/runtime/ProcessStore.ts 2; lib/runtime/Runner.integration.test.ts 17; lib/runtime/Runner.ts 6; lib/settings/StartsTest.ts 7; lib/telemetry/Sink.ts 21. Lock: none, by the owner ruling.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/build.test.ts, format: the page entry starts its one Effect program through runMain, once, and calls no Effect.run* (its match assertions now read Option.getOrNull(Str.match(...)))",
+      "plant": "next/apps/fabrika/src/entry/browser.tsx: an appended export that calls Effect.runSync(Effect.void)",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/settings/TomlEdit.test.ts, L3 insertion keeps legal root, explicit, implicit, dotted and inline parents (its retained helper now reads Str.indexOf with Option.getOrElse)",
+      "plant": "next/packages/libfabrika/src/settings/internal/edit.ts:245: set inserts into a copy of the text with one comment changed (# note-1-雪 to # note-1-X)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Checks: pnpm format, pnpm lint (with NODE_OPTIONS=--max-old-space-size=6144) passed, the list ratchet exited 0, and one pnpm typecheck passed. Tests ran on the working tree over base 37db01a, before the commit: vitest --changed HEAD, project next, 54 files and 415 tests passed; project next-integration, 80 of 81 files passed (1003 tests). The one failure, next/apps/fabrika/src/instance-wire.integration.test.ts (pinned: checklist stays reachable after its first add on the real dev.ts), is the box: spawn ssh-keygen ENOENT, the cloud box has no ssh-keygen; it counts as neither red nor green. Each plant ran once and was restored by copy. Repeat counts that are computed (generator values, guarded sums) were read by hand: none can be negative, where Effect returns an empty string and the native call threw.",
+  "step": "tests"
+}
