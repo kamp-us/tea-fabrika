@@ -41,6 +41,8 @@ import {
   type Key,
   letter,
   PROJECT,
+  type ProjectTemplate,
+  projectTemplate,
   SENT,
 } from "./start-child.test-support.ts";
 
@@ -556,13 +558,14 @@ type StorageCut = { path: StoragePath; operation: number; statement: string };
 
 const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
+  template: ProjectTemplate,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
     call: Effect.Effect<unknown, Rejected>,
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
-  const fixture = yield* childProject();
+  const fixture = yield* childProject(template);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
@@ -703,11 +706,15 @@ const storageCall = Effect.fnUntraced(function* (
 });
 
 const storageSecrets = Effect.fnUntraced(function* () {
+  // Every cut, the inventory's included, restarts its own copy of one booted Project. A cold boot
+  // of its own per cut was about half of this law's time: 16.5 ms and 264 statements, against
+  // about 10 ms and 99 statements for a restart (profiled on 2026-11-17).
+  const template = yield* projectTemplate();
   const remaining: Array<StorageCut> = [];
 
   for (const path of StoragePath) {
     yield* Effect.scoped(
-      storageCall(path, (fixture, call) =>
+      storageCall(path, template, (fixture, call) =>
         Effect.gen(function* () {
           fixture.observe();
           yield* call;
@@ -765,7 +772,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       const outputs: Record<ChildOutput, Array<string>> = { reply: [], row: [], span: [], log: [] };
 
       const printed = yield* Effect.scoped(
-        storageCall(cut.path, (fixture, call, reopen) =>
+        storageCall(cut.path, template, (fixture, call, reopen) =>
           Effect.gen(function* () {
             fixture.observe(cut.operation, fault);
             const outcome = yield* call.pipe(Effect.result);
