@@ -294,6 +294,38 @@ describe("PullRequestsGh native stack merge", () => {
     );
   });
 
+  it.effect("scenario: a boolean-like branch stays a string in the GraphQL queue lookup", () => {
+    const original = selection();
+    const fixture: StackFixture = {
+      selected: {
+        ...original,
+        base: "false",
+        layers: original.layers.map((layer, index) => (index === 0 ? { ...layer, base: "false" } : layer)),
+      },
+      reply: JSON.stringify({ status: "enqueued" }),
+    };
+
+    return withStack(
+      fixture,
+      Effect.gen(function* () {
+        const answer = yield* runStack(fixture);
+        const calls = yield* Recorder.calls(ChildProcessSpawner.ChildProcessSpawner, "spawn");
+        const command = calls.find(
+          ([spawned]) => ChildProcess.isStandardCommand(spawned) && spawned.args[1] === "graphql",
+        )?.[0];
+
+        if (command === undefined || !ChildProcess.isStandardCommand(command)) {
+          return yield* Effect.die("expected the effective branch queue query");
+        }
+
+        expect(answer._tag).toBe("enqueued");
+        for (const value of ["owner=owner", "name=repo", "branch=false"]) {
+          expect(command.args[command.args.indexOf(value) - 1]).toBe("-f");
+        }
+      }),
+    );
+  });
+
   it.effect("scenario: an open child retargeted after its parent squash is checked from the squash commit", () => {
     const parentCommit = "a".repeat(40);
     const fixture: StackFixture = {
