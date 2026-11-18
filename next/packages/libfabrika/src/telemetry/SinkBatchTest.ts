@@ -39,7 +39,7 @@ const REQUIRED: Record<string, ReadonlyArray<string>> = {
   A1: ["outside", "inside", "ok", "fail", "interrupt", "failed span", "interrupted span"],
   A2: ["spans before the flush", "spans after the flush"],
   A3: ["tags"],
-  A4: ["other sink", "late span started inside", "late span started after"],
+  A4: ["other sink", "other sink's tracer running", "late span started inside", "late span started after"],
   A5: ["disk filled", "disk held"],
 };
 
@@ -371,7 +371,9 @@ export const suite = (memory: Memory, runs: number) =>
 
     // Plants (after build, they need the build's Sink.ts): the batch ignores whose sink opened it, so a
     // span of the other sink lands in the wrong database; and the `closed` check is dropped, so a late span
-    // never lands. The late-span case is red on main already: its spans go to a list nobody reads.
+    // never lands. The late-span case is red on main already: its spans go to a list nobody reads. And the
+    // collecting tracer keeps a running span only when this sink made it, so `&& made.owner === self` is
+    // dropped: a batch that runs under another sink's tracer keeps that sink's span, which lands there.
     it.effect.prop(
       "A4 a batch belongs to its sink, and a span that ends after its batch closed lands at once",
       {
@@ -380,8 +382,9 @@ export const suite = (memory: Memory, runs: number) =>
         lateSpans: Schema.Array(Schema.Struct({ name: Piece, started: Schema.Literals(["inside", "after"]) })).check(
           Schema.isMaxLength(3),
         ),
+        crossed: Schema.Array(Tree).check(Schema.isMaxLength(3)),
       },
-      ({ mine, other, lateSpans }) =>
+      ({ mine, other, lateSpans, crossed }) =>
         Effect.scoped(
           Effect.gen(function* () {
             const a = yield* open(memory, "a4-a");
@@ -448,6 +451,25 @@ export const suite = (memory: Memory, runs: number) =>
             );
             expect(a.landings.length - landed, "each late span in its own transaction").toBe(lateSpans.length);
             expect(b.rows("unsent")).toBe(spansIn(other));
+
+            // The other direction: b's batch runs while a's tracer is the running one. Each span lands in the
+            // sink whose batch made it, b's, in one transaction, and a keeps what it had.
+            if (crossed.length > 0) {
+              reach("A4", "other sink's tracer running");
+            }
+
+            const heldByB = b.landings.length;
+            yield* b.sink
+              .batch(Effect.forEach(crossed, (one) => tree(one), { concurrency: 1, discard: true }))
+              .pipe(Effect.withTracer(a.tracer));
+            expect(
+              a.rows("unsent"),
+              "a batch of one sink under another sink's tracer left that sink's database alone",
+            ).toBe(spansIn(mine) + lateSpans.length);
+            expect(b.rows("unsent"), "each span landed in the sink whose batch ran").toBe(
+              spansIn(other) + spansIn(crossed),
+            );
+            expect(b.landings.length - heldByB, "in one transaction").toBe(crossed.length > 0 ? 1 : 0);
           }),
         ),
       options,
