@@ -132,8 +132,9 @@ tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
   automatic CI already covers takes shared slots from every other pull request.
 - **The code-quality sweeps count as sev work:** lint rules, Effect checks, mock and exam sweeps. Bad
   code on main poisons every later agent's context.
-- **A leak grep checks only a branch's own commits,** from its merge base. In a shallow clone it
-  reaches the base or refuses; it never scans main's old history.
+- **A leak grep checks only a branch's own commits.** Only `base..head` and `--not --remotes=origin`
+  read just those; `base...head` also reads main's new commits. In a shallow clone the check
+  deepens until the range is whole or refuses; it never scans main's old history.
 
 ## The write-up
 
