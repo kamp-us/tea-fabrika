@@ -178,6 +178,8 @@ describe("T325 K6 botpush, today's tooling", () => {
       }),
       {
         ...options,
+        // numRuns must cover every pinned example, or fast-check drops the ones past it.
+        numRuns: 20,
         // pinned: earlier commits, a saved source and diverged main must all be scanned, in a tree with
         // step notes and in one without.
         examples: ranges.flatMap((range) =>
