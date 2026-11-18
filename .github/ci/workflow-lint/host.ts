@@ -6,6 +6,7 @@ const PATHS = [
   "next/packages/libfabrika/src/node/launchd/**",
   "next/apps/fabrika/e2e/electron-launchd.visual.test.ts",
   "next/apps/fabrika/e2e/node/P19Launchd.test-support.ts",
+  "next/apps/fabrika/e2e/node/P19Guard.test-support.ts",
   "next/apps/fabrika/e2e/node/P19Brain.test-support.ts",
   "fixtures/next/p19-launchd/brain.ts",
   ".github/workflows/host.yaml",
