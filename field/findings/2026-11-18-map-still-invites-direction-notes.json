@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-map-still-invites-direction-notes",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "AGENTS.md",
+    "line": 54
+  },
+  "says": "Both versions' map: the Write cell for docs/direction/ says to write a note there when a decision needs the long reasoning, and line 63 says to add the note under docs/direction/ when a draft settles, while 0130 says no new note is written there and long reasoning goes in the decision's Context or its experiment.",
+  "proof": "AGENTS.md:54 'A note there when a decision needs the long reasoning' and AGENTS.md:63 'add the note under `docs/direction/` too' against .decisions/0130-every-piece-of-knowledge-has-one-home.md:64 'No new note is written under `docs/direction/`. Long reasoning that a decision needs goes in the decision's own Context'",
+  "cost": "agents keep writing direction notes that 0130 says must be emptied and removed, and the map spends bytes on a home that is going away",
+  "head": "50266396c7c8d538722bf333fef384d6d4e8a19d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}

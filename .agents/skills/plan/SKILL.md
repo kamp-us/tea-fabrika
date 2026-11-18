@@ -19,7 +19,9 @@ when to keep going and how to write for a reader who saw none of the work.
 1. **Look around first.** Read `AGENTS.md` whole, then `next/AGENTS.md` for `next/` work, then
    `docs/plan/README.md`, the tier rows the brief names (`docs/plan/tier-1.md`, `tier-1-detail.md`),
    every direction note a row cites, and any note `rg -n "<row or word>" docs` finds. Open the code
-   the plan will change and its neighbors before you design anything.
+   the plan will change and its neighbors before you design anything. Read
+   [the design reference](references/design.md) too: the rules a plan or a design follows, moved
+   there from `AGENTS.md`.
 2. **Read the code as built,** on main. Read the installed versions in `pnpm-lock.yaml` (Effect,
    `@demlik/tea`, vitest, any patch in `patches/`) and check every API against that version.
    Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
@@ -63,7 +65,8 @@ when to keep going and how to write for a reader who saw none of the work.
   `.integration.` law says in the plan why no stand-in will do
   ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
-- Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
+- Screenshots at five layouts when a window changes
+  ([changing the product](../guidelines/references/changing-the-product.md), "Shoot more than one layout").
 - **Existing tools first** ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
   [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)). Before a new helper,
   function or tool, look for one in the repo, in the packages it already installs and on npm. Give

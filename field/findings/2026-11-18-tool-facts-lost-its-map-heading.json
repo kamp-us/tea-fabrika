@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tool-facts-lost-its-map-heading",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "AGENTS.md",
+    "line": 162
+  },
+  "says": "The 'Tool facts that cost us time' section moved to the lead skill, but the map kept only a sentence that starts with those words, not the heading that 0609 says a moved section keeps.",
+  "proof": ".decisions/0609-agents-md-follows-memory-guide.md:81-82 'the map keeps its heading and one line that says when to read it and links it' against AGENTS.md:162, a plain paragraph line; at 50266396c it was the heading '### Tool facts that cost us time'; `grep -n '^#' AGENTS.md` lists no such heading",
+  "cost": "small today, since no file links the anchor, but putting the heading back makes the root 201 lines, so the cut sits on 0609's limit only by leaving out a part 0609 requires",
+  "head": "1b75294dc0b6c45faa227dcd92fc0dd34e34d1c7",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}
