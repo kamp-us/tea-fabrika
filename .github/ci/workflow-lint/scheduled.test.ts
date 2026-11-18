@@ -98,13 +98,6 @@ const pinsIn = (w: Workflow): [Record<string, unknown>, Record<string, unknown>]
   return [JSON.parse(found[0]![1]!), JSON.parse(found[1]![1]!)];
 };
 
-/** Rewrites the `tests` group from `change`d copies of its two pin maps. */
-const repin = (w: Workflow, change: (main: Record<string, unknown>, proof: Record<string, unknown>) => void) => {
-  const [main, proof] = pinsIn(w);
-  change(main, proof);
-  w.jobs["tests"]!.concurrency!["group"] = groupOf(main, proof);
-};
-
 /** The `changed` group's closed identity lookup over the proof groups. */
 const rotationSlots = (count: number): Record<string, string> =>
   Object.fromEntries(upTo(count).map((slot) => [slot, slot]));

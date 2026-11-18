@@ -37,8 +37,9 @@ the owner's call, in the middle of the tests step.
 |---|---|---|
 | 11f497c | The signed plan, the plan's run row, the finding row | pushed |
 | 8eab399 | Slice 1, the merge line leaves the groups | pushed; lint and its tests green in the tests step |
-| 7de62f9 | Slice 2 so far (WIP) | pushed; laws may be red |
-| the commit after it | This file and the tests run row | pushed |
+| 7de62f9 | Slice 2 so far (WIP) | pushed |
+| 832cfe4 | This file and the first tests run row | pushed |
+| the commit after it | S7, the plants, lint, ratchet, typecheck; this file; the second tests run row | the tests step's last commit |
 
 8eab399's message carries a `Co-authored-by: Claude` trailer that the commit script added. The
 tests step points out that 0161 says no trailer names a chat tool. It is left as it is, since
@@ -52,16 +53,15 @@ history is never rewritten; the squash message is what lands on main.
 | R3 | `related-selection.test.ts` | written, green; plants seen red |
 | W1 | the wiring fixture, read by 24 test files | green, all 24 run |
 | P1, P2, P4, P5 | `proof.test.ts` | written, green (12 of 12); plants seen red |
-| P3 | `proof.test.ts`, a `@ts-expect-error` | written; `pnpm typecheck` and its plant (a default of 9) not run |
-| S1 to S6 | `workflow-lint/scheduled.test.ts` | written, green (282 of 282); the plants on scheduled.ts's own rules (drop "value in 1..M", admit any extra env key, drop "first legs in order", a numeric `max-parallel` for `tests`) are written but not seen red |
-| S7 | `workflow-lint/scheduled.integration.test.ts` | NOT written; the file still draws nine `scheduled-test-` slots and will fail against the new scheduled.ts |
+| P3 | `proof.test.ts`, a `@ts-expect-error` | written; plant (a default of 9) seen red in `pnpm typecheck` (`proof.test.ts(206,7)` unused directive); clean `pnpm typecheck` green |
+| S1 to S6 | `workflow-lint/scheduled.test.ts` | written, green (282 of 282); the four plants on scheduled.ts's own rules (drop "value in 1..M", admit any extra env key, drop "first legs in order", any `max-parallel` for `tests`) each seen red, then restored |
+| S7 | `workflow-lint/scheduled.integration.test.ts` | written: the split walk, the private group, the extra job and changed matrix past `PROOF_SLOTS`, a pin past its count, a wrong budget, `scheduled-test-`, and a pinned case that builds 0595's old shape inline. Not run by vitest on the laptop (the config refuses an integration file, 0178): it runs in CI's full run. Its builder and cases were run by a plain node script against the real scheduled.ts and behave as written; its plant (the 0595 scheduled.ts put back) printed the sentinel for the old shape and refused every split, red |
 
 ## Not consistent yet
 
-- `scheduled.integration.test.ts` (S7), as above.
-- Slice 2 has had no `pnpm lint`, no ratchet and no `pnpm typecheck`. The last `pnpm format`
-  exited 1 for a reason nobody saw; `node oxlint-plugins/lint.ts 2>&1 | grep -v "advice, this
-  folder"` shows it.
+- `scheduled.integration.test.ts` (S7) has not been run by vitest anywhere yet. It runs in the full
+  run in CI, so the first red or green there is the real answer; the review must read that result.
+- Slice 3 (the glossary `full run` row) is not written; it is the build's.
 
 ## Calls the tests step took, for the review to check
 
@@ -79,16 +79,15 @@ history is never rewritten; the squash message is what lands on main.
 
 ## Next step
 
-1. The tests step goes on: write S7, see the four scheduled.ts plants red, run `pnpm format`,
-   `pnpm lint`, the ratchet and one `pnpm typecheck` (P3), then commit slice 2 as one tests commit
-   in place of the WIP state.
-2. The build step: slice 3, the glossary `full run` row in `.glossary/TERMS.md`, and the whole
-   branch's checks (`--changed origin/main` once, one typecheck).
-3. One review of the whole diff against the plan, including the two lint replacements above.
-4. The pull request's description, written from the diff with the pr skill, with the
+1. The build step: slice 3, the glossary `full run` row in `.glossary/TERMS.md`, and the whole
+   branch's checks (`--changed origin/main` once, one typecheck). The tests step is done: lint, the
+   ratchet and one `pnpm typecheck` passed on the tests commit, every plant seen red, S7 left to CI.
+2. One review of the whole diff against the plan, including the two lint replacements above, S7's
+   CI result and the run counts S7 uses (3 and 5, not the plan's 100, since each case spawns node).
+3. The pull request's description, written from the diff with the pr skill, with the
    Removed/Replacement table and the "lint replacements" heading. Then it is merge-ready when the
    review says so and `ci-required` is green at that head. Landing is the owner's admin merge from
    the laptop, not the merge queue.
-5. Real-run proof, per the owner's rule (CI only): the pull request's own check runs (merge-line
+4. Real-run proof, per the owner's rule (CI only): the pull request's own check runs (merge-line
    legs start within about 0.1 minutes of being created) and the next automatic main full run
    after the merge. No full run by hand.
