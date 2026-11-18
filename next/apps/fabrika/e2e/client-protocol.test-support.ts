@@ -125,7 +125,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     );
     const r = yield* reader(h, dev);
     const inbox = yield* r.read(`${PROCESS}/inbox`);
-    const sent = inbox.filter((e) => Reflect.get(Object(Reflect.get(Object(e.body), "m")), "name") === "milk");
+    const sent = inbox.filter((e) => named(e.body) === "milk");
 
     return { first, kept, sent: sent.length };
   });
@@ -225,12 +225,11 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       state: Effect.map(state, (s) => {
         const reach = s.tiles[0]?.reach;
         const tag: string = reach?._tag ?? "missing";
-        const reason = Reflect.get(Object(Reflect.get(Object(reach), "reason")), "_tag");
 
         return s.link._tag !== "online"
           ? "Connecting"
-          : tag === "ended"
-            ? `Ended (${String(reason)})`
+          : reach?._tag === "ended"
+            ? `Ended (${reach.reason._tag})`
             : tag === "open"
               ? "Online"
               : tag === "missing"
@@ -266,7 +265,34 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
 type Fact = Entry;
 
-const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
+/** What the suite reads of a fact's body, or of a start's answer. Every field is optional and as loose
+ *  as the read it replaces: a body that holds none of them, or is not an object at all, reads as an
+ *  empty one, and a field of another shape still reads as itself. */
+const Body = Schema.Struct({
+  process: Schema.optionalKey(Schema.Unknown),
+  ref: Schema.optionalKey(Schema.Unknown),
+  reason: Schema.optionalKey(Schema.Unknown),
+  m: Schema.optionalKey(Schema.Unknown),
+  to: Schema.optionalKey(Schema.Unknown),
+});
+
+/** What the suite reads of a letter's `m`. */
+const Letter = Schema.Struct({ name: Schema.optionalKey(Schema.Unknown) });
+
+/** What the suite reads of a watch's `to`. */
+const Watcher = Schema.Struct({ client: Schema.optionalKey(Schema.Unknown) });
+
+const NO_BODY: typeof Body.Type = {};
+
+const read = (body: unknown): typeof Body.Type =>
+  Option.getOrElse(Schema.decodeUnknownOption(Body)(body), () => NO_BODY);
+
+/** The name of the letter an entry's body carries, if it carries one. */
+const named = (body: unknown): unknown => Option.getOrUndefined(Schema.decodeUnknownOption(Letter)(read(body).m))?.name;
+
+/** The client a watch's body is for, if it names one. */
+const watcher = (body: unknown): unknown =>
+  Option.getOrUndefined(Schema.decodeUnknownOption(Watcher)(read(body).to))?.client;
 
 /**
  * The app's own build, started in this process on a held port as `dev.ts` starts it, for the person
@@ -353,7 +379,7 @@ const invoke = Effect.fnUntraced(function* <A>(method: string, call: () => Promi
 const newest = (facts: ReadonlyArray<Fact>) =>
   facts
     .filter((f) => f._tag === "started" || f._tag === "restarted")
-    .map((f) => String(field(f.body, "process")))
+    .map((f) => String(read(f.body).process))
     .at(-1);
 
 /**
@@ -399,7 +425,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
         s.from(),
       ),
     );
-    const second = String(field(started, "process"));
+    const second = String(read(started).process);
     yield* until(
       `${backend.name}: the tile is online on the successor`,
       Effect.gen(function* () {
@@ -418,19 +444,17 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
 
     const restarted = (yield* s.facts(`processes/${PROCESS}`)).find(
-      (f) => f._tag === "restarted" && field(f.body, "process") === second,
+      (f) => f._tag === "restarted" && read(f.body).process === second,
     );
 
-    const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => field(field(f.body, "m"), "name") === "milk");
+    const sent = (yield* s.facts(`${PROCESS}/inbox`)).filter((f) => named(f.body) === "milk");
 
-    const watches = (yield* s.facts("processes")).filter(
-      (f) => f._tag === "monitored" && field(field(f.body, "to"), "client") === tab,
-    );
+    const watches = (yield* s.facts("processes")).filter((f) => f._tag === "monitored" && watcher(f.body) === tab);
 
     yield* backend.close;
 
     const ends = (stream: ReadonlyArray<Fact>) =>
-      stream.filter((f) => f._tag === "demonitored" && field(field(f.body, "to"), "client") === tab);
+      stream.filter((f) => f._tag === "demonitored" && watcher(f.body) === tab);
 
     yield* until(
       `${backend.name}: its session's watch ended after the close`,
@@ -446,10 +470,10 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       shownPid,
       restartedAt: restarted?.rev ?? null,
       sent: sent.map((f) => f.rev),
-      watched: watches.map((f) => ({ ref: String(field(f.body, "ref")), process: String(field(f.body, "process")) })),
+      watched: watches.map((f) => ({ ref: String(read(f.body).ref), process: String(read(f.body).process) })),
       unwatched: ends(yield* s.facts("processes")).map((f) => ({
-        ref: String(field(f.body, "ref")),
-        reason: String(field(f.body, "reason")),
+        ref: String(read(f.body).ref),
+        reason: String(read(f.body).reason),
       })),
     };
   });

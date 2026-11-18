@@ -51,12 +51,17 @@ const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
  *  is 85: past the 80 a cursor key once held (plan amendment 10: up to 256). */
 const LONG = "a row whose name is as long as the checklist field takes, eighty characters in all".slice(0, 80);
 
+declare global {
+  // What `keepSockets` keeps on the page: every socket the page opened, for `loseLink` to close.
+  var __deskSockets: Array<WebSocket>;
+}
+
 /** Runs inside Chromium before the page script: every socket the page opens is kept, so the law
  *  can lose the link as a network drop would, with the page's own redial bringing it back. */
 const keepSockets = () => {
   const NativeSocket = WebSocket;
   const opened: Array<WebSocket> = [];
-  Reflect.set(globalThis, "__deskSockets", opened);
+  globalThis.__deskSockets = opened;
   globalThis.WebSocket = class extends NativeSocket {
     constructor(url: string | URL, protocols?: string | Array<string>) {
       super(url, protocols);
@@ -67,7 +72,7 @@ const keepSockets = () => {
 
 /** Closes every socket the page opened, in the page: the link is lost until the page dials again. */
 const loseLink = () => {
-  for (const socket of Reflect.get(globalThis, "__deskSockets") as Array<WebSocket>) {
+  for (const socket of globalThis.__deskSockets) {
     socket.close(4000, "the law loses the link");
   }
 };

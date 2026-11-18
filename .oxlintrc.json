@@ -2468,6 +2468,7 @@
       // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
       // this list for the one above when its JSON.parse line goes.
       "files": [
+        "next/apps/fabrika/e2e/*",
         "next/apps/fabrika/src/*",
         "next/apps/fabrika/src/exam/**",
         "next/packages/libfabrika/src/*",
