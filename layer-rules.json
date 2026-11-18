@@ -253,6 +253,11 @@
       ]
     },
     {
+      "name": "next-email",
+      "layer": 6,
+      "paths": ["next/packages/libfabrika/src/email"]
+    },
+    {
       "name": "next-access",
       "layer": 5,
       "paths": ["next/packages/libfabrika/src/access"],
