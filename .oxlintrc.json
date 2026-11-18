@@ -2846,6 +2846,92 @@
       "rules": { "fabrika/jsdocs": "off" }
     },
     {
+      // Q8 (decision 0600, docs/plan/quests/kalfa-quality-stryker-PLAN.md): @kalfa/quality reaches no product. An override replaces a rule's options, so this repeats the base entries and adds its own.
+      "files": ["kalfa/quality/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kampus/*", "@tea-fabrika/*"],
+                "message": "Q8 (decision 0600): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+              },
+              {
+                "group": ["**/next/**", "**/packages/**", "**/.github/**"],
+                "message": "Q8 (decision 0600): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // Q15: the front file and the schemas load no Stryker. It repeats Q8's entries, which it replaces for these two files.
+      "files": ["kalfa/quality/src/stryker/index.ts", "kalfa/quality/src/stryker/Plant.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@stryker-mutator/*"],
+                "message": "Q15 (decision 0600): importing @kalfa/quality/stryker loads no Stryker. Plant.ts and index.ts hold only schemas; the instrumenter and the runner load in node/MutantsStryker.ts."
+              },
+              {
+                "group": ["@kampus/*", "@tea-fabrika/*"],
+                "message": "Q8 (decision 0600): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+              },
+              {
+                "group": ["**/next/**", "**/packages/**", "**/.github/**"],
+                "message": "Q8 (decision 0600): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
       // CI paths, law 20 (the plan for CI paths, slice 2): the tests on the reader list in
       // .github/ci/changes.mjs, which a comment-only change still runs, may import the exam's plant
       // helper. Each block repeats the rule as its own folder's override has it, less the plant entry:
@@ -3046,6 +3132,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/tasks/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
@@ -3171,6 +3258,7 @@
         "kalfa/config/src/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/inbox/**"
@@ -3183,6 +3271,7 @@
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/repositories/**",
+        "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
         "next/programs/inbox/**"

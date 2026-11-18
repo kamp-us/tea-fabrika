@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-check-yaml-tsc-cache-lacks-kalfa",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/workflows/check.yaml",
+    "line": 383
+  },
+  "says": "check.yaml's typecheck-job tsc cache path lists (restore and save, lines 383 to 392) have no `kalfa/*/node_modules/.cache/tsc` entry, so once pnpm-workspace.yaml lists `kalfa/*` the workflow-lint guard fails.",
+  "proof": "With `- kalfa/*` added to pnpm-workspace.yaml's packages, `node .github/ci/workflow-lint.ts` prints `check.yaml: the tsc cache restores and saves node_modules/.cache/tsc in each pnpm-workspace.yaml package glob, in its order` and `workflow-lint: 1 errors`; it passes without that line. The check is .github/ci/workflow-lint/caches.ts:168-172.",
+  "cost": "CI's workflow-lint step is red for any pull request that adds the `kalfa/*` workspace line until check.yaml lists the glob.",
+  "head": "460968937fcde42e8468cf6597a6db8d537db854",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1603"
+}

@@ -459,10 +459,25 @@ importers:
 
   .github/ci:
     dependencies:
+      '@kalfa/quality':
+        specifier: workspace:*
+        version: link:../../kalfa/quality
+      '@stryker-mutator/core':
+        specifier: 'catalog:'
+        version: 10.1.1(@types/node@26.6.6)
+      '@stryker-mutator/instrumenter':
+        specifier: 'catalog:'
+        version: 10.1.1
+      '@stryker-mutator/vitest-runner':
+        specifier: 'catalog:'
+        version: 10.1.1(@stryker-mutator/core@10.1.1(@types/node@26.6.6))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       effect:
         specifier: 4.1.3
         version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
     devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.3(patch_hash=01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
       oxc-parser:
         specifier: 'catalog:'
         version: 0.157.0
@@ -662,6 +677,39 @@ importers:
       '@rslib/core':
         specifier: 'catalog:'
         version: 1.0.5(typescript@7.0.2)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9)
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+
+  kalfa/quality:
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.3(patch_hash=01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01)(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(redis@6.3.0(@opentelemetry/api@1.9.1))
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.3(effect@4.1.3(patch_hash=062265f7196a83cf802cda9213efbaee1e0e24b42f5bd9d92f0310e770d939f9))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@stryker-mutator/core':
+        specifier: 'catalog:'
+        version: 10.1.1(@types/node@26.6.6)
+      '@stryker-mutator/instrumenter':
+        specifier: 'catalog:'
+        version: 10.1.1
+      '@stryker-mutator/vitest-runner':
+        specifier: 'catalog:'
+        version: 10.1.1(@stryker-mutator/core@10.1.1(@types/node@26.6.6))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.6
