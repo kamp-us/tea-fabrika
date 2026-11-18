@@ -84,6 +84,14 @@ the law and in `watch.ts` turned it red. L10 shows the same "one install per eve
 boot, under load. That flake is a [finding](../../field/findings/2026-11-18-watch-l10-boot-drain-saw-repeated-installs.json)
 and needs its own ticket and fix.
 
+*2026-11-18:* The L10 repair, ticket 1172, in `next/`, fixes that flake by the owner's two rulings.
+L10 now checks every install by program and hash: each boot or save owes one change, and any other
+install must be an unchanged repeat inside its own program's rebuild. It waits on events with no
+clock, and only the test's own time limit backs a silent watcher. No product code changed. On the
+Linux cloud box at full depth, L10 passed 10 of 10 idle and 3 of 3 beside a `pnpm lint`, the load
+that failed it before, and it now takes about 40 s instead of 260 s. Left as findings: the law file's
+heap near its 2 GB limit, the waits that miss a dead product stream, and the other clocks in the file.
+
 *2026-11-17:* [Settings slice 1](https://github.com/kamp-us/tea-fabrika/pull/1427), ticket 1076,
 generalizes the engine in `next/`. One `App` value supplies the settings file names, environment
 prefix, home variable, version key and list command. Fabrika keeps its existing names through its

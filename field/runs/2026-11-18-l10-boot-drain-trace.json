@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-trace",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T12:04:18-08:00",
+  "ended": "2026-11-18T12:06:30-08:00",
+  "parent": "2026-11-18-l10-boot-drain-cloud-proof2",
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "next/ ticket 1172, the plan's Records trace: L10 at 1fe5971d, full depth, run once 20 s after a nice -n 15 pnpm lint started, with scratch-only TRACE lines in L10 (never committed). It passed in 128.4 s. It saw no repeated installs and no spurious Rolldown notifications, so this load did not reproduce the finding's run-2 shape. Over 20 cases: 97 installs (p15/one 20 boot and 27 watch changes, p15/two 20 boot and 30 watch changes, 0 repeats); writes shared/shared.ts 12, programs/one/own.ts 15, programs/two/own.ts 18, shared/unused.ts 11; change reports shared/shared.ts 12 from each watcher, programs/one/own.ts 15 all from p15/one, programs/two/own.ts 18 all from p15/two, shared/unused.ts 0; 57 restarts, one per watch install; at each case's last settle 97 ENDs, 97 rebuilds started and 97 ended.",
+  "note": "Same Claude subagent (step-tests) as tests1 and tests2, resumed by the lead. The lines are in one fiber's order. A pnpm format in the main worktree also ran at the start, so the load was more than one lint; the lint beside it lost lint:promise-types (likely the memory kill) and failed format and lint.ts on the scratch TRACE lines only. A fast-depth check before it saw two change reports from p15/two's watcher for one shared/shared.ts write. First lines of one case: install p15/one boot 6d399900 change; install p15/two boot 0ce19bda change; settle ends 1/1 rebuilds 2/2; write shared/shared.ts; change-report from p15/two; restart p15/two; change-report from p15/one; restart p15/one; install p15/one watch 9071d789 change; install p15/two watch 21be2203 change; settle ends 2/2 rebuilds 4/4.",
+  "tokens": null,
+  "tools": 11,
+  "minutes": 5.3,
+  "costUsd": null,
+  "billed": null
+}

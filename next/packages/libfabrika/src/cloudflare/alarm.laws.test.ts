@@ -1,4 +1,4 @@
-// Ticket 866, next/. Exercise the real Cloudflare Alarm through processRuntime.
+// Ticket 866, next/. Exercise the real Cloudflare Alarm through the Process layer and its runtime.
 import {
   DurableObjectState as ObjectState,
   fromDurableObjectState,
@@ -13,10 +13,9 @@ import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
-import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 import fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Alarm } from "../runtime/Entry.ts";
@@ -26,38 +25,37 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import type { ProjectBinding } from "./bindings.ts";
 import * as ProcessObject from "./ProcessObject.ts";
-import { processRuntime, settings } from "./runtime.ts";
+import { processLayer, RunnerLayer, SettingsRuntime, settings, SinkLayer } from "./runtime.ts";
 
-type State = Parameters<typeof processRuntime>[0];
+type State = Parameters<typeof processLayer>[0];
 
-type Environment = Parameters<typeof processRuntime>[1];
+type Environment = Parameters<typeof processLayer>[1];
 
-// SAFETY: each call gives `platform` what processRuntime and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation `Process.make` was handed.
+// SAFETY: each call gives `platform` what processLayer and the Process object read in its law: the id, the storage calls, the bindings, the (empty) runtime context, or the implementation the Process object hands to `make`.
 const platform = <A>(value: object): A => value as A;
-
-// Ticket 502 slice S2: keep only what the Process object's Layer hands to Alchemy's `make`, so law
-// A2 can run its `alarm` slot on Node. Every other name in objects.ts stays as it is.
-const made = vi.hoisted((): { value?: object } => ({}));
-
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-
-  return {
-    ...actual,
-    Process: {
-      make: (implementation: object) => {
-        made.value = implementation;
-
-        return Layer.empty;
-      },
-    },
-  };
-});
 
 const unexpected = () => {
   throw new Error("unexpected platform call");
 };
+
+/** A span sink that writes nothing: these laws read the alarm, not the spans. */
+const quietSink: typeof SpanSink.layer = () =>
+  Layer.succeed(SpanSink, {
+    batch: (work) => work,
+    flush: Effect.succeed({ sent: 0 }),
+    check: Effect.void,
+    summaries: unexpected,
+    sums: unexpected,
+  });
+
+/**
+ * The Process object's two parts a law hands in, through the References a live object leaves at
+ * their defaults: the quiet sink, and the law's own runner. Plant, run once (mock sweep slice 2):
+ * `processLogic` names `ProgramRunner.withLoader` again, past `RunnerLayer`: A1 gets no `Alarm` and
+ * is red at its timeout, and A2 runs no saved wake.
+ */
+const parts = (runner: typeof ProgramRunner.withLoader) =>
+  Layer.merge(Layer.succeed(SinkLayer, quietSink), Layer.succeed(RunnerLayer, runner));
 
 const lookup = "SELECT name FROM sqlite_master WHERE name='process_state'";
 
@@ -149,61 +147,44 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
             transactionSync: unexpected,
           });
 
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(SpanSink, "layer").mockReturnValue(
-                Layer.succeed(SpanSink, {
-                  batch: (work) => work,
-                  flush: Effect.succeed({ sent: 0 }),
-                  check: Effect.void,
-                  summaries: unexpected,
-                  sums: unexpected,
-                }),
-              ),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(ProgramRunner, "withLoader").mockImplementation(() =>
-                Layer.effect(
-                  ProgramRunner,
-                  Effect.gen(function* () {
-                    yield* Deferred.succeed(captured, yield* Alarm);
+          // The law hands in the Process object's two parts: a sink that writes nothing, and a runner
+          // that hands the law the `Alarm` service it was built with.
+          const runnerLayer: typeof ProgramRunner.withLoader = () =>
+            Layer.effect(
+              ProgramRunner,
+              Effect.gen(function* () {
+                yield* Deferred.succeed(captured, yield* Alarm);
 
-                    return ProgramRunner.of({
-                      init: () => Effect.void,
-                      msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
-                      open: () => Effect.succeed({ rev: 0, view: {} }),
-                      due: () => Effect.void,
-                      mailed: Effect.void,
-                      restart: () => Effect.void,
-                      swap: () => Effect.sync(unexpected),
-                    });
-                  }),
-                ),
-              ),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
+                return ProgramRunner.of({
+                  init: () => Effect.void,
+                  msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
+                  open: () => Effect.succeed({ rev: 0, view: {} }),
+                  due: () => Effect.void,
+                  mailed: Effect.void,
+                  restart: () => Effect.void,
+                  swap: () => Effect.sync(unexpected),
+                });
+              }),
+            );
+
           const stub = Stub.make<R2Bucket>(unexpected);
 
           const project = Stub.make<ProjectBinding>(unexpected, {
             settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
           });
 
+          const layer = processLayer(
+            platform<State>({ id: { name: Formatter.formatJson(["alarm-project", "alarm:866"]) }, storage }),
+            platform<Environment>({
+              INSTANCE: Formatter.formatJson(start),
+              PROJECT: { getByName: () => project },
+              MEASUREMENTS: stub,
+            }),
+            {},
+          ).pipe(Layer.provide(parts(runnerLayer)));
+
           const runtime = yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              processRuntime(
-                platform<State>({ id: { name: Formatter.formatJson(["alarm-project", "alarm:866"]) }, storage }),
-                platform<Environment>({
-                  INSTANCE: Formatter.formatJson(start),
-                  PROJECT: { getByName: () => project },
-                  MEASUREMENTS: stub,
-                }),
-                {},
-              ),
-            ),
+            Effect.sync(() => SettingsRuntime.runtime(layer)),
             (runtime) => runtime.disposeEffect,
           );
 
@@ -366,50 +347,31 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             transactionSync: unexpected,
           });
 
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(SpanSink, "layer").mockReturnValue(
-                Layer.succeed(SpanSink, {
-                  batch: (work) => work,
-                  flush: Effect.succeed({ sent: 0 }),
-                  check: Effect.void,
-                  summaries: unexpected,
-                  sums: unexpected,
-                }),
-              ),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
-          yield* Effect.acquireRelease(
-            Effect.sync(() =>
-              vi.spyOn(ProgramRunner, "withLoader").mockImplementation(() =>
-                Layer.succeed(
-                  ProgramRunner,
-                  ProgramRunner.of({
-                    init: () => Effect.void,
-                    msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
-                    open: () => Effect.succeed({ rev: 0, view: {} }),
-                    due: (at) =>
-                      Effect.suspend(() => {
-                        dues.push(at);
+          // The law hands in the Process object's two parts: a sink that writes nothing, and a runner
+          // whose `due` answers as the delivery says.
+          const runnerLayer: typeof ProgramRunner.withLoader = () =>
+            Layer.succeed(
+              ProgramRunner,
+              ProgramRunner.of({
+                init: () => Effect.void,
+                msg: () => Effect.succeed(Sent.cases.accepted.make({ rev: 0, pos: 0 })),
+                open: () => Effect.succeed({ rev: 0, view: {} }),
+                due: (at) =>
+                  Effect.suspend(() => {
+                    dues.push(at);
 
-                        return Match.value(now.outcome).pipe(
-                          Match.when("fails", () =>
-                            Effect.fail(new LedgerError({ reason: "storage", message: now.text })),
-                          ),
-                          Match.when("dies", () => Effect.die(new Error(now.text))),
-                          Match.orElse(() => Effect.void),
-                        );
-                      }),
-                    mailed: Effect.void,
-                    restart: () => Effect.void,
-                    swap: unexpected,
+                    return Match.value(now.outcome).pipe(
+                      Match.when("fails", () => Effect.fail(new LedgerError({ reason: "storage", message: now.text }))),
+                      Match.when("dies", () => Effect.die(new Error(now.text))),
+                      Match.orElse(() => Effect.void),
+                    );
                   }),
-                ),
-              ),
-            ),
-            (spy) => Effect.sync(() => spy.mockRestore()),
-          );
+                mailed: Effect.void,
+                restart: () => Effect.void,
+                swap: unexpected,
+              }),
+            );
+
           const stub = Stub.make<R2Bucket>(unexpected);
 
           const project = Stub.make<ProjectBinding>(unexpected, {
@@ -417,12 +379,11 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
           });
 
           // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
-          ProcessObject.layer({
+          const constructor: Constructor = ProcessObject.implementation({
             programs: {},
             input: (env) =>
               settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
           });
-          const constructor = platform<Constructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
 
           const state = fromDurableObjectState(
             platform<Parameters<typeof fromDurableObjectState>[0]>({
@@ -445,6 +406,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             Effect.provideService(WorkerEnvironment, environment),
             Effect.provideService(ObjectState, state),
             Effect.provideService(RuntimeContext, context),
+            Effect.provide(parts(runnerLayer)),
           );
 
           for (const delivery of deliveries) {

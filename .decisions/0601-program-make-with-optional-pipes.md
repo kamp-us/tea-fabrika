@@ -80,8 +80,8 @@ What makes it safe to run a program's Effects inside one tea Cmd. Each fact was 
 - Long work uses tea's `owed()` and `dispatch(msg, { answerTo })`, from demlik's pull requests
   [982](https://github.com/kamp-us/demlik/pull/982) and
   [983](https://github.com/kamp-us/demlik/pull/983). Both merged after tea 0.29.0 was published,
-  so 0.29.0 does not ship them. The build moves tea to 0.29.0 for the logged store, and long work
-  through `owed()` and `answerTo` waits for the next demlik release or a local `pnpm patch`.
+  so 0.29.0 does not ship them. The repo's patch for tea, named in `pnpm-workspace.yaml`'s
+  `patchedDependencies`, carries them until a demlik release does.
 
 The known ways it follows:
 
@@ -99,25 +99,26 @@ The known ways it follows:
 - Effect's own split: `effect` defines `FileSystem`, and `@effect/platform-node` implements it.
   Effect's one big standard library package is the part we do not copy.
 
-How it relates to older records. Each is amended in part, and only its `status:` line changes:
+How it relates to older records. It amended each of these in part, and at the time only the older
+record's `status:` line changed. The table says what this record replaces in each:
 
-| Record | What still holds | What this replaces |
-|---|---|---|
-| [0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md) | OTP's supervisor as the model, and a person restarts a name past its limit | A restart inside intensity at once, with no backoff. The policy is a `Schedule` in a Layer, so it may back off |
-| [0046](0046-one-tea-machine-per-file.md) | Every other state machine is a tea machine, one per file | A program is written with `Program.make`, whose `make` makes its tea machine; its functions may call services |
-| [0070](0070-flow-runner-stays-a-machine.md) | The flow runner stays a tea machine, and the lead scripts have no `Program.make`, until a program runs outside the app | Its open item: kalfa defines the program, the ledger and the wire, and libfabrika implements them |
-| [0253](0253-init-cmds-run-once-per-process.md) | A program has no `main` | `init` is an Effect run once, with no init Cmds. If it fails, the process does not start |
-| [0254](0254-tea-is-the-one-engine.md) | tea holds the state that moves; the bans on Effect `Workflow`, replay engines and actor runtimes; Effect under tea's Cmds | The deciding moves from a pure tea `update` into the program's Effects, run inside one tea Cmd. Boot installs the committed state; it never folds facts through `update` |
-| [0256](0256-a-program-is-one-program-make.md) | One `Program.make` in Effect's `X.make` style, never `defineProgram` or a plain object; nothing written twice | The exported `Machine.make` value, types read off it, and `view: (m) => ...`. Now `Program.make(name)(fn)` and its pipes, types from schemas |
-| [0257](0257-a-programs-api-has-one-way.md) | The rule: one meaning per word, one way per job, links by reference or tsc, unused parts left out, `Program.make` only | The older shape's parts it names (`refuse`, the saved version, a Msg built from inputs) are not in the core |
-| [0258](0258-inputs-are-plain-data.md) | An input is plain data; `personOnly: true` and the `FromPerson` brand, as fabrika's own rules | `Input.make`, `Input.group` and a Msg built from them. A program's inputs are one schema that `Program.inputs` takes |
-| [0259](0259-each-event-brings-its-write.md) | `Fact` is `Event`; an event names its stream once | An event's write as a tea Cmd listed in a machine's `cmds`, and `Program.make` reading events off `cmds`. A program has no `cmds` |
-| [0260](0260-an-output-is-a-model-value.md) | An output is picked from the state, is never a Cmd and is kept nowhere | An output is made by `Program.outputs`' Effect, the first one right after `init`; without `outputs` it is the state. Whether one is sent only on change, and what `null` means, are open |
-| [0556](0556-kalfa-holds-our-tooling-packages.md) | The `@kalfa` scope, the `kalfa/` folder, all private | `@kalfa` also holds small libraries of one domain each, which are not tooling or infra |
-| [0578](0578-tea-cell-answers-a-step.md) | Every hand-written tea cell answers a `Step`, through our tea patch | A program's functions are not cells. They answer Effects |
-| [0585](0585-kalfa-is-six-domain-packages.md) | The tooling packages by domain, the `kalfa` command, and the cap on tooling packages | `@kalfa/program`, `@kalfa/ledger` and `@kalfa/transport` join `kalfa/` beside them |
+| Record | What this replaces |
+|---|---|
+| [0016](0016-tier-1-supervision-is-otps-top-level-supervisor.md) | A restart inside intensity at once, with no backoff. The policy is a `Schedule` in a Layer, so it may back off |
+| [0046](0046-one-tea-machine-per-file.md) | A program is written with `Program.make`, whose `make` makes its tea machine; its functions may call services |
+| [0070](0070-flow-runner-stays-a-machine.md) | Its open item: kalfa defines the program, the ledger and the wire, and libfabrika implements them |
+| [0253](0253-init-cmds-run-once-per-process.md) | `init` is an Effect run once, with no init Cmds. If it fails, the process does not start |
+| [0254](0254-tea-is-the-one-engine.md) | The deciding moves from a pure tea `update` into the program's Effects, run inside one tea Cmd. Boot installs the committed state; it never folds facts through `update` |
+| [0256](0256-a-program-is-one-program-make.md) | The exported `Machine.make` value, types read off it, and `view: (m) => ...`. Now `Program.make(name)(fn)` and its pipes, types from schemas |
+| [0257](0257-a-programs-api-has-one-way.md) | The older shape's parts it names (`refuse`, the saved version, a Msg built from inputs) are not in the core |
+| [0258](0258-inputs-are-plain-data.md) | `Input.make`, `Input.group` and a Msg built from them. A program's inputs are one schema that `Program.inputs` takes |
+| [0259](0259-each-event-brings-its-write.md) | An event's write as a tea Cmd listed in a machine's `cmds`, and `Program.make` reading events off `cmds`. A program has no `cmds` |
+| [0260](0260-an-output-is-a-model-value.md) | An output is made by `Program.outputs`' Effect, the first one right after `init`; without `outputs` it is the state. Whether one is sent only on change, and what `null` means, are open |
+| [0556](0556-kalfa-holds-our-tooling-packages.md) | `@kalfa` also holds small libraries of one domain each, which are not tooling or infra |
+| [0578](0578-tea-cell-answers-a-step.md) | A program's functions are not cells. They answer Effects |
+| [0585](0585-kalfa-is-six-domain-packages.md) | `@kalfa/program`, `@kalfa/ledger` and `@kalfa/transport` join `kalfa/` beside them |
 
-Four direction notes change their `state:` line the same way:
+Four direction notes changed their `state:` line the same way:
 [a program's shape](../docs/direction/program-shape.md),
 [tea is the engine](../docs/direction/tea-is-the-engine.md),
 [init runs once per process](../docs/direction/init-runs-once-per-process.md) and
@@ -286,7 +287,6 @@ const check = (state: State, name: string) =>
   `"private": true` for now.
 - **`@kalfa/program`** holds programs and their running instances, `Program.supervise`, and the
   `Supervisor`, `Journal`, `Errors` and `Machine` services.
-- **No kalfa package imports another.**
 - **libfabrika implements them and joins them:** the ledger on Durable Objects, the Journal on the
   ledger, the `Supervisor` with its records, and the WebSocket and WebRTC Layers. The goal is
   `fabrika.run(checklist)`, with everything provided.
@@ -302,15 +302,14 @@ const check = (state: State, name: string) =>
   `Req`.
 - An Err never stops a program; it goes to `errors`. Only a defect stops one.
 - `make` never runs a confirmed step or `init` again. Boot installs the committed state.
-- No kalfa package imports another. libfabrika joins them.
 - The runner provides Layers and plumbs streams. Deciding stays in the program.
 
 ## Consequences
 
 These are the lead's reading of what follows from the ruling. They are not the owner's words.
 
-- **The build order:** tea from 0.27.0, the installed version, to 0.29.0; `@kalfa/program`'s v0;
-  `@kalfa/ledger`; `@kalfa/transport` with WebSocket and WebRTC; then libfabrika joins them, with
+- **The build order:** tea's logged store, which `pnpm-workspace.yaml`'s catalog entry for
+  `@demlik/tea` already carries; `@kalfa/program`'s v0; `@kalfa/ledger`; `@kalfa/transport` with WebSocket and WebRTC; then libfabrika joins them, with
   the journal on the ledger, the ledger-backed `Supervisor`, and the process protocol moved up.
 - **Each package gets its own plan,** with type tests that settle the exact generics and how `make`
   is given the state's schema.

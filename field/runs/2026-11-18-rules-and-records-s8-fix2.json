@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-fix2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T12:25:00-08:00",
+  "ended": "2026-11-18T12:50:00-08:00",
+  "parent": "2026-11-18-rules-and-records-s8-fix1",
+  "active": null,
+  "role": "hand",
+  "step": "fix",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round 2 of slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records). The still-holds and carried-forward forms fire when the record reference is in the same sentence or the sentence before it, in the same block (Patches.ts). Markdown.ts counts a reference-style link whose definition is a NNNN-slug.md record, with definitions collected before the blocks are read. Laws in Patches.test.ts: L3 draws four link-only cases (inline and reference-style, in the sentence and in the one before) and a record reference two sentences back, which gives no finding; a scenario holds six real patches of main as of 604bbcf0b (0279, 0532, 0549, 0551, 0569, 0600) and 0585's real line, and the 0227, 0281 and 0603 fixtures stay no-finding. The check on this checkout finds 57 patch hits, check3's 51 plus six.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22 and every node, pnpm and vitest command ran on a Node 26.13.0 outside the repo. 0215:49 does not fire under the one-sentence-back rule: its reference is two sentences back, the same shape as the measured false alarm of .decisions/0603 line 38 (the date sentence, with the link to 0599 two sentences before it); two sentences back fires on both, so no window tells them apart. 0585 already had its real hit, at line 65, in check3.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "costUsd": null,
+  "billed": null,
+  "base": "03a3c46b4735f895b10ecf7f0e1f1b756fd1ee8c",
+  "plants": [
+    {
+      "law": "L3 scenario, kalfa/records/src/Patches.test.ts:629",
+      "plant": "kalfa/records/src/Patches.ts, a form fires only when its own sentence holds the reference",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358",
+      "plant": "kalfa/records/src/Patches.ts, a form fires only when its own sentence holds the reference",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358",
+      "plant": "kalfa/records/src/Patches.ts, the link half of the reference rule deleted",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358",
+      "plant": "kalfa/records/src/Markdown.ts, a reference-style link is not counted as a record reference",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358",
+      "plant": "kalfa/records/src/Patches.ts, the reference may be two sentences back",
+      "result": "red"
+    }
+  ]
+}

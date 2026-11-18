@@ -1,0 +1,53 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-cloudflare-review1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1637",
+  "started": "2026-11-18T12:37:19-08:00",
+  "ended": "2026-11-18T12:57:30-08:00",
+  "parent": "2026-11-18-mock-cloudflare-tests2",
+  "active": null,
+  "driver_caused": false,
+  "role": "hand",
+  "step": "review",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "head": "e8e0b178ca003ed3ab70d53c08296d330997470a",
+  "base": "d48ff74dc373218f22abbead5d04e7b587e7a209",
+  "why": "In next/ and the lint tooling, the one review of slices 1 and 2 of docs/plan/quests/mock-cloudflare-PLAN.md (ticket 1067): merge-ready, two finding rows. No law is loosened. M1 and M2 read the actual call's exit through Effect.onExit beside the Recorder, as the plan's 2026-11-17 amendment asks, which is stronger than the first sketch's second run. Dispatcher's error channel is unknown because the moved body's was: its call table answers Effect<unknown, unknown> and it fails with plain { reason } objects, so no typed failure is lost, and M2 still checks LedgerError bad_row with no defect. Every libfabrika file keeps every no-restricted-properties entry at the level it had on main, with the two process entries added for its files but *.test.ts. The L1 dedupe is the harness meeting the copy blocks: L1 alone misses an entry dropped from the next/packages/libfabrika/src/** copy, but L10 and M13 turn red on it. M5 catches a wrong refused tag. Rows: the folder's one-line cast helper is copied a fifth time and joined by two more casts of its kind, and M1's comment still describes the second run the plan ruled out.",
+  "note": "Plants ran in a scratch copy of the tree outside the repo, never in the branch, under Node 26.13.0, nice 19, one worker: an entry dropped from the libfabrika copy of the next/**/* block (L1 green, L10 and M13 red); excludeFiles dropped from the warn copy (M13 red); a reserved answer's span tagged rate_limited (M5 red); control dispatching with its args dropped (all four M2 laws red). Green at the head in the scratch copy: readers.laws 39, connection 16, control.laws 1, reload.laws 11, alarm.laws 2, ObjectService 3, error-cause 12, entry-flows.laws 6, plants M12, M13, L1 and L10. oxlint-plugins/lint.ts on the branch: 0 blocking. loosening.sh with an empty mapping (no law renamed or removed): 20 hits, each read, none a loosening. leakgrep.sh: the net diff is clean; per commit it names a machine path in commit 7cd0b675d, which 219bed631 removed. Main moved to adca49afc (PR 1636) during the review: git merge-tree with it is clean, and the nine plants laws for the Reflect ban, the vi lock, M12 and M13 pass on the merged tree. Not run: door.integration and RunnerAdmission.integration (the steps ran them), pnpm typecheck (the build ran it), jscpd's baseline job (a draft PR runs no CI); jscpd run by hand on the folder at main and at the head finds the same two clones. The fetch moved the local origin/main ref, not the branch.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "plants.test.ts: L1 of the Reflect ban",
+      "plant": "Reflect.get dropped from the next/packages/libfabrika/src/** copy of the next/**/* block",
+      "result": "green"
+    },
+    {
+      "law": "plants.test.ts: L10 of the Reflect ban, and M13",
+      "plant": "Reflect.get dropped from the next/packages/libfabrika/src/** copy of the next/**/* block",
+      "result": "red"
+    },
+    {
+      "law": "plants.test.ts: M13",
+      "plant": "excludeFiles dropped from the warn copy, so libfabrika test files get the process entries",
+      "result": "red"
+    },
+    {
+      "law": "connection.test.ts: t863 L1 (M5)",
+      "plant": "routed tags a reserved answer's span refused as rate_limited",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: the four control laws (M2)",
+      "plant": "control.ts dispatches the request with its args dropped",
+      "result": "red"
+    }
+  ]
+}

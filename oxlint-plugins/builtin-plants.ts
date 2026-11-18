@@ -111,6 +111,59 @@ export const TAGGED_ERROR: Plant = {
   ],
 };
 
+/**
+ * The lines of the `vi` lock (decisions 0555, 0579), each with whether oxlint's `vitest` rule alone
+ * refuses it and whether `eslint/no-restricted-properties` alone does. The vitest rule misses a call
+ * chained onto the `vi` call (oxc#29656), and the properties rule never sees `v` after
+ * `import { vi as v }`; the lock holds a line when either refuses it.
+ */
+const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: boolean])[] = [
+  ["const a = vi.fn();", true, true],
+  ["const b = v.fn();", true, false],
+  ['vi.spyOn(console, "log");', true, true],
+  ['vi.mock("./c.ts");', true, true],
+  ['vi.doMock("./d.ts");', true, true],
+  ['vi.stubEnv("E", "f");', true, true],
+  // A computed key and an optional call are read through by both rules (the app-e2e plan, L4).
+  ['vi["spyOn"](console, "warn");', true, true],
+  ["const r = vi?.fn();", true, true],
+  // Chained: the vitest rule does not see these, the member access is refused by the properties rule.
+  ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', false, true],
+  ["const m = vi.fn().mockReturnValue(1);", false, true],
+  // L17's old spy in next/apps/fabrika/e2e, word for word (the app-e2e plan, L5).
+  ['vi.spyOn(console, "warn").mockImplementation(() => {});', false, true],
+  // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
+  ["const n = vi.hoisted(() => 1);", false, false],
+  ["const o = vi.waitFor(() => 1);", false, false],
+  ["// vi.fn() in a comment", false, false],
+  ['const q = "vi.fn()";', false, false],
+  ["other.fn();", false, false],
+  ['const g: Array<string> = []; g.push("h");', false, false],
+];
+
+const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean): Plant => ({
+  code,
+  file: "planted.test.ts",
+  prelude: [TEST, 'import { vi as v } from "vitest";', "declare const other: { fn: () => void };"],
+  lines: VI_LOCK.map((line) => [line[0], pick(line)]),
+});
+
+/**
+ * M2 of the mock sweep's lock (decisions 0555, 0579): what oxlint's `vitest/no-restricted-vi-methods`
+ * refuses alone, in a test file under `oxlint-plugins/`, and in one of every folder a block of the
+ * lock lists (M1 in plants.test.ts, `next/apps/fabrika/e2e` first). A chained call stays `false`
+ * here: the rule does not see it, and `VI_PROPERTIES` refuses it.
+ * Plant: delete the lock's block from `.oxlintrc.json`, and the refused lines are not refused.
+ */
+export const VI_METHODS: Plant = viPlant("vitest(no-restricted-vi-methods)", ([, vitest]) => vitest);
+
+/**
+ * M2's second half (the lock's amendment of 2026-11-16): what `eslint/no-restricted-properties`
+ * refuses alone, under the code `REFLECT` has. plants.test.ts holds a line when either plant refuses it.
+ * Plant: drop the block's `vi` entries from that rule, and the chained lines are not refused.
+ */
+export const VI_PROPERTIES: Plant = viPlant("eslint(no-restricted-properties)", ([, , properties]) => properties);
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {
@@ -730,6 +783,7 @@ const typescript: readonly Plant[] = [
 ];
 
 const vitest: readonly Plant[] = [
+  VI_METHODS,
   {
     code: "vitest(valid-describe-callback)",
     file: "planted.test.ts",
@@ -1323,3 +1377,58 @@ export const GRANT_NO_CONSOLE = {
   ].join("\n"),
   lines: [3, 4],
 } as const;
+
+/**
+ * M12 (decision 0592): libfabrika's product code writes output through Effect's `Console`, so a raw
+ * `console` call is refused in a libfabrika path that is not a `*.test.ts` file, by oxlint's own
+ * `no-console`, and Effect's `Console` passes. plants.test.ts runs these lines in every folder of
+ * `next/packages/libfabrika/src`, in a product path, a `*.test-support.ts` path and a `*.test.ts`
+ * path, where the last must pass them.
+ * Plant: drop the libfabrika glob from the `no-console` block of `.oxlintrc.json`, and a product path
+ * takes `console.log(secret)`.
+ */
+export const LIBFABRIKA_NO_CONSOLE: Plant = {
+  code: "eslint(no-console)",
+  prelude: ['import {Console} from "effect";', "declare const secret: string;"],
+  lines: [
+    ["console.log(secret);", true],
+    ["console.error(secret);", true],
+    ["console.warn(secret);", true],
+    ["console.info(secret);", true],
+    ["console.debug(secret);", true],
+    ["export const nested = () => console.log(secret);", true],
+    ["export const allowed = Console.log(secret);", false],
+    ["// console.log(secret) in a comment", false],
+    ['export const text = "console.log";', false],
+  ],
+};
+
+/**
+ * M13 (decision 0592, owner ruling 2026-11-15): a raw `process.stdout` or `process.stderr` access is
+ * refused in libfabrika's files but its `*.test.ts`, in each form oxlint's `no-restricted-properties`
+ * resolves, and the rest of `process` passes. plants.test.ts runs these lines in every folder of
+ * `next/packages/libfabrika/src`, in a product path and a `*.test-support.ts` path, which must refuse
+ * them, and in a `*.test.ts` path, which must pass them.
+ * Plant: drop the two `process` entries from one block of `.oxlintrc.json` that reaches libfabrika,
+ * and a product path in that block's folders takes `process.stdout.write(secret)`.
+ */
+export const PROCESS_OUTPUT: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: ["declare const secret: string;"],
+  lines: [
+    ["process.stdout.write(secret);", true],
+    ["process.stderr.write(secret);", true],
+    ['export const out = process["stdout"];', true],
+    ["export const { stderr } = process;", true],
+    ["export const written = () => process?.stdout;", true],
+    // The rest of `process` is not this rule's.
+    ["export const args = process.argv;", false],
+    ["export const env = process.env;", false],
+    ["export const exit = () => process.exit(1);", false],
+    // Not an access: a comment, a string, a type, another object's member.
+    ["// process.stdout.write(secret) in a comment", false],
+    ['export const text = "process.stdout";', false],
+    ["export type Out = typeof process.stdout;", false],
+    ["export const own = { stdout: secret }.stdout;", false],
+  ],
+};

@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-e2e-tests4",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-16T01:44:15-08:00",
+  "ended": "2026-11-16T01:52:24-08:00",
+  "parent": "2026-11-16-mock-app-e2e-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round after the review's first send-back of the mock sweep's app-e2e slice 1, ticket 1067, in next/, branch fabrikalfa/mock-app-e2e-s1 from 58134982218ff14fd6ae30aab5295b0f2deb71b8. Fault 1 (blocking): L1 in next/packages/libfabrika/src/node/build/bundle-warnings.test.ts checked only that a printed line starts with its relative importer and ' ('. The test plugin's onLog now keeps each raw log's message, plugin and loc, and the format block asserts that the line for each unresolved import, and the plugin's own warning, starts with exactly Rolldown's place built from that log's own numbers: '(<plugin> plugin) ' where the log has a plugin, then '<relative file> (<line>:<column>) '. The case gains two generated fields, pad (0 to 3 blank lines above each file) and indent (1 to 6 spaces before each import), and the plugin's warning now carries a position (this.warn(message, position)), so every log has a place whose line (at most 5) and column (at least 8) differ; the law also asserts loudly that line and column differ. Fault 2: the plant comment above L17 in next/apps/fabrika/e2e/reload.visual.test.ts now names L2's real plants (drop the case's Effect.provide(TestConsole.layer), or print log.loc.file without making it relative) and says the log.message plant is L1's; no code changed there. Fault 3: field/findings/2026-11-16-promise-types-epipe-in-full-lint.json now has location.line 323 (snapshot.dispose(); 322 is '} finally {'), ticket kamp-us/tea-fabrika#1067, and says the merge session reported filing a ticket for the box-memory case without its number reaching this step. All six L1 plants were run once against the real bundle.ts and restored by copy (cmp confirmed). Laws run: bundle-warnings.test.ts (L1) and oxlint-plugins/plants.test.ts, 256 passed. Checks: pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint passed, 18 of 18 parts, no EPIPE; the list ratchet exits 0; pnpm exec tsc --noEmit -p next/packages/libfabrika exits 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "print the place as (${log.loc.column}:${log.loc.line}) in bundle.ts: 'the line starts with Rolldown's own place: expected false to be true'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "print log.message before the relative replacement: 'a printed warning holds an absolute path: expected true to be false'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "print warnings through the global console.warn: 'one Console.warn line per kept warning: expected [] to have a length of 3 but got +0'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "keep MODULE_LEVEL_DIRECTIVE logs: 'one Console.warn line per kept warning: expected [ …(4) ] to have a length of 3 but got 4'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "print every level through info: 'one Console.warn line per kept warning: expected [] to have a length of 3 but got +0'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "drop the (<plugin> plugin) prefix: 'a plugin's warning starts with its name, then Rolldown's own place: expected [] to have a length of 1 but got +0'",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "none: the real bundle.ts, restored by copy",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

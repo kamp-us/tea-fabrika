@@ -28,14 +28,19 @@ import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
+import { advises } from "./advice.ts";
 import {
   BUILTIN_PLANTS,
   GRANT_NO_CONSOLE,
+  LIBFABRIKA_NO_CONSOLE,
   NEXT_TSX_PLANTS,
   type Plant,
+  PROCESS_OUTPUT,
   REFLECT,
   REFLECT_NEW_FOLDERS,
   TAGGED_ERROR,
+  VI_METHODS,
+  VI_PROPERTIES,
 } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 import { plant as lintCopies } from "./plant.ts";
@@ -121,6 +126,24 @@ const withoutGrantNoConsole = (text: string): LintConfig => {
       config.overrides.splice(index, 1);
     }
   }
+
+  return config;
+};
+
+/** The config without one rule on the override whose only glob is `glob`: the control a plant is read against. */
+const withoutRuleOn = (text: string, glob: string, rule: string): LintConfig => {
+  const config = readLintConfig(text);
+
+  const matches = config.overrides.filter(
+    (override) =>
+      override.files.length === 1 &&
+      override.files[0] === glob &&
+      override.rules !== undefined &&
+      Object.hasOwn(override.rules, rule),
+  );
+
+  expect(matches).toHaveLength(1);
+  delete matches[0]!.rules![rule];
 
   return config;
 };
@@ -471,6 +494,33 @@ describe("each rule refuses what it is there to refuse", () => {
     expect(firesInPlanted(at.file, p.code)).toEqual(at.want);
   });
 
+  // M2, the `vi` lock is a pair: the vitest rule's plant is the built-in one above, and this is the
+  // properties rule's, planted in the same lines. A line is held when either refuses it, which is
+  // the whole lock; a chained call is held by the properties rule alone, `v.fn()` by the vitest rule alone.
+  // Plant: drop the block's `vi` entries from `eslint/no-restricted-properties`, and the two chained
+  // lines are not refused; delete the block, and the refused lines are not refused.
+  const viProperties = write(VI_PROPERTIES, "vi-properties");
+
+  const viMethods = write(VI_METHODS, "vi-methods");
+
+  it("scenario: built in, on with 0 hits: eslint(no-restricted-properties) refuses the vi member access, chained or not", () => {
+    expect(firesInPlanted(viProperties.file, VI_PROPERTIES.code)).toEqual(viProperties.want);
+  });
+
+  it("scenario: the vi lock holds every banned line, and no other, through the pair of rules", () => {
+    const held = [
+      ...new Set([
+        ...firesInPlanted(viMethods.file, "vitest(no-restricted-vi-methods)"),
+        ...firesInPlanted(viProperties.file, VI_PROPERTIES.code),
+      ]),
+    ].sort((a, b) => a - b);
+
+    // The two plants hold the same lines in the same order, so one line number is one line of each.
+    expect(viMethods.text).toEqual(viProperties.text);
+    // Each plant's `want` is the lines it marks refused; the lock holds the union of the two.
+    expect(held).toEqual([...new Set([...viMethods.want, ...viProperties.want])].sort((a, b) => a - b));
+  });
+
   it("built in, on with 0 hits: import(no-self-import)", () => {
     expect(firesInPlanted(self, "import(no-self-import)")).toEqual([1]);
   });
@@ -749,6 +799,8 @@ type Printed = {
 /** One fire of an oxlint JSON report. */
 type Diagnostics = ReadonlyArray<{
   readonly code?: string;
+  readonly severity?: string;
+  readonly message?: string;
   readonly filename: string;
   readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
 }>;
@@ -903,7 +955,9 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
   it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
     inConfigCopy(({ printed, lint }) => {
-      const globs = globsHolding(printed, isReflectGet);
+      // A glob two blocks list, as `oxlint-plugins/**` in the tooling block and the `vi` lock after it,
+      // is planted once: the last block holds the ban's entries again, and this run reads them.
+      const globs = Arr.dedupeWith(globsHolding(printed, isReflectGet), (a, b) => a.glob === b.glob);
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(Arr.map(globs, ({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
@@ -912,8 +966,8 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       expect(Arr.some(globs, ({ glob, level }) => Str.startsWith("next/")(glob) && level === "warn")).toBe(true);
 
       const { text, want } = textOf(REFLECT);
-      const files = Arr.map(globs, ({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      // A glob a later block copies for another set of files, such as libfabrika's for M13, shares its file.
+      const files = Arr.dedupe(Arr.map(globs, ({ glob }) => plantPath(glob)));
       const diagnostics = lint(text, files);
 
       for (const file of files) {
@@ -923,14 +977,100 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   }, 120_000);
 });
 
+/** The globs of every override that sets `vitest/no-restricted-vi-methods`, each with its level there. */
+const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["vitest/no-restricted-vi-methods"];
+
+    return setting === undefined
+      ? []
+      : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
+  });
+
+/** A test file of one folder glob's own, such as `next/apps/fabrika/e2e/**` or `<folder>/*.ts`. */
+const testPlantPath = (glob: string, file: string): string =>
+  `${glob.replace(/\/\*\*(\/\*)?$|\/\*(\.ts)?$/, "")}/${file}`;
+
+describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the vi mocks", () => {
+  // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
+  // `vitest/no-restricted-vi-methods` block lists today gets VI_METHODS' lines in a test file of its
+  // own, a later slice's folder included (decisions 0555, 0579; the app-e2e plan's L4).
+  // Plant: delete `next/apps/fabrika/e2e/*` from its block's `files`, and that folder's lines are not refused.
+  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: the app's e2e folder, the first to reach zero in this slice, in both of its
+      // blocks, and every block blocks.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/apps/fabrika/e2e/*", "next/apps/fabrika/e2e/node/**"]),
+      );
+
+      for (const { glob, level } of globs) {
+        expect(level, glob).toBe("deny");
+      }
+
+      const { text, want } = textOf(VI_METHODS);
+      const files = globs.map(({ glob }) => testPlantPath(glob, VI_METHODS.file ?? "planted.test.ts"));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      expect(
+        files.filter((file) => file.includes("*")),
+        "each glob names a folder",
+      ).toEqual([]);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_METHODS.code), file).toEqual(want);
+      }
+    });
+  }, 120_000);
+
+  // The lock's other half (the app-e2e plan's amendment of 2026-11-16, lead ruling). scenario: the
+  // same folders, read the same way, get VI_PROPERTIES' lines, under `no-restricted-properties`,
+  // which refuses the calls chained onto a vi call that the vitest rule misses
+  // (https://github.com/oxc-project/oxc/issues/29656). A vi fire blocks even where the rule's level
+  // is "warn" for its JSON.parse entry, since `pnpm lint` lets only a JSON.parse fire advise.
+  // Plant: drop the `vi` entries from a block's `no-restricted-properties`, and the chained lines are
+  // not refused in that folder.
+  it("scenario: VI_PROPERTIES' lines are refused exactly, and every vi fire blocks, in every folder of every vi-methods block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: the chained lines VI_METHODS takes are lines this plant refuses.
+      const call = (line: string) => line.replace(/^(export )?const \w+ = /, "");
+      const chained = VI_METHODS.lines.filter(([line, refused]) => !refused && /^vi\.\w+\(.*\)\./.test(call(line)));
+      const held = VI_PROPERTIES.lines.filter(([, refused]) => refused).map(([line]) => call(line));
+      expect(chained.length).toBeGreaterThan(0);
+
+      for (const [line] of chained) {
+        expect(held, line).toContain(call(line));
+      }
+
+      const { text, want } = textOf(VI_PROPERTIES);
+      const files = globs.map(({ glob }) => testPlantPath(glob, VI_PROPERTIES.file ?? "planted.test.ts"));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_PROPERTIES.code), file).toEqual(want);
+      }
+
+      const fires = diagnostics.filter((d) => d.code === VI_PROPERTIES.code && files.includes(d.filename));
+      // Coverage: a folder where the rule's level is "warn" is reached, and one where it is "error".
+      expect(fires.some((d) => d.severity === "warning")).toBe(true);
+      expect(fires.some((d) => d.severity === "error")).toBe(true);
+      expect(fires.filter(advises), "a vi fire is never advice").toEqual([]);
+    });
+  }, 120_000);
+});
+
 describe("L10 of the Reflect ban: after the fold the base blocks hold it for all of next/, and no list block is left", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, and one oxlint run over
   // REFLECT's lines planted in folders that no block names, at generated names under each shape in
   // REFLECT_NEW_FOLDERS. The prefix keeps a name from being a folder that exists. The second half
   // reads the blocks, in order: of the overrides that name a next/ folder and hold the ban, one is next/
-  // whole, then comes the JSON.parse warn block, the only list there is, and client/ comes last. A file
-  // takes the last block that matches it, so client/ after the warn block means no glob added to the
-  // warn block can strip client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
+  // whole, then comes the JSON.parse warn block, the only list there is, then client/, and last the
+  // mock sweep's two e2e lock blocks, which match no client/ file. A file takes the last block that
+  // matches it, so client/ after the warn block means no glob added to the warn block can strip
+  // client/'s retry entries or turn its JSON.parse into advice (L4 holds the files).
   // Plant: leave the four Reflect entries out of the next/ block, and the folders are not refused
   // and the blocks are two; put one of the three deleted list blocks back, and the blocks are four;
   // move client/'s block back before the warn block, and the order is red.
@@ -968,23 +1108,158 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
       );
 
       // One block names one glob and another names the folders of the JSON.parse warn block, so a
-      // leftover list block, blocking or warning, makes a fourth or a second list. client/ is last.
+      // leftover list block, blocking or warning, makes a fourth or a second list. Each of the three
+      // base blocks has one copy right after it for libfabrika's files but its tests, with the two
+      // `process` entries added (M13), so the order is each block and then its copy, and client/'s
+      // copy comes after the warn block's. The two last are the mock sweep's `vi` lock for the app's
+      // e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
+      // file sets takes: the warn block's for the folder's own files, `next/**/*`'s for `node/`.
       expect(
         Arr.map(blocks, ({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
         "the blocks that hold the ban for next/, in the order oxlint applies them",
-      ).toEqual(["next/**/*", "a list of folders", "next/packages/libfabrika/src/client/**"]);
+      ).toEqual([
+        "next/**/*",
+        "next/packages/libfabrika/src/**",
+        "a list of folders",
+        "a list of folders",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/apps/fabrika/e2e/*",
+        "next/apps/fabrika/e2e/node/**",
+      ]);
 
-      // The list is the JSON.parse warn block: it advises for that entry alone, and the rest of its
-      // fires block (advice.test.ts).
+      // The list is the JSON.parse warn block and its copy: they advise for that entry alone, and the
+      // rest of their fires block (advice.test.ts). The e2e lock keeps the level of the block it
+      // writes out again.
       expect(
         Arr.map(blocks, ({ rules }) => {
           const setting = rules["no-restricted-properties"];
 
           return Arr.isArray(setting) ? setting[0] : setting;
         }),
-      ).toEqual(["deny", "warn", "deny"]);
+      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "warn", "deny"]);
     });
   }, 120_000);
+});
+
+/** libfabrika's source folder, and its top, as the folders a law plants a file in, a new folder included. */
+const LIBFABRIKA_SRC = "next/packages/libfabrika/src";
+
+const libfabrikaFolders: ReadonlyArray<string> = [
+  LIBFABRIKA_SRC,
+  ...Arr.map(
+    Arr.filter(readdirSync(join(ROOT, LIBFABRIKA_SRC), { withFileTypes: true }), (entry) => entry.isDirectory()),
+    (entry) => `${LIBFABRIKA_SRC}/${entry.name}`,
+  ),
+  `${LIBFABRIKA_SRC}/node/client`,
+];
+
+/** The three kinds of file a libfabrika folder holds that the two rules below tell apart. */
+const libfabrikaKinds = [
+  { kind: "product", name: "planted.ts", left: false },
+  { kind: "test-support", name: "planted.test-support.ts", left: false },
+  { kind: "test", name: "planted.test.ts", left: true },
+] as const;
+
+describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's Console", () => {
+  // M12. scenario: the repo's own config, with the lines of LIBFABRIKA_NO_CONSOLE planted in each
+  // libfabrika folder as a product file, a test-support file and a test file, and in a folder outside it.
+  // Plant: drop the libfabrika glob from the `no-console` block of `.oxlintrc.json`, and a product
+  // path takes `console.log(secret)`: the control below, which does it, takes them all.
+  it("scenario: M12 raw console calls are refused in libfabrika's product and test-support files, and taken in its test files and outside it", () => {
+    const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
+    const control = withoutRuleOn(config, `${LIBFABRIKA_SRC}/**`, "eslint/no-console");
+    const { text, want } = textOf(LIBFABRIKA_NO_CONSOLE);
+
+    const planted = Arr.flatMap(libfabrikaFolders, (folder) =>
+      Arr.map(libfabrikaKinds, (kind) => ({ ...kind, file: `${folder}/${kind.name}` })),
+    );
+
+    const outside = ["next/apps/fabrika/src/planted.ts", "next/packages/tuval/src/planted.ts"];
+
+    const sources = Object.fromEntries(
+      [...Arr.map(planted, ({ file }) => file), ...outside].map((file) => [file, text]),
+    );
+
+    // Coverage: libfabrika's top and its folders, each with three kinds of file.
+    expect(libfabrikaFolders.length).toBeGreaterThan(10);
+
+    inConfigCopy(({ lintFiles, lintWithConfig }) => {
+      const current = lintFiles(sources);
+      const dropped = lintWithConfig(control, sources);
+
+      for (const { file, left } of planted) {
+        expect(refusedIn(current, file, LIBFABRIKA_NO_CONSOLE.code), file).toEqual(left ? [] : want);
+        expect(refusedIn(dropped, file, LIBFABRIKA_NO_CONSOLE.code), `${file} with the block dropped`).toEqual([]);
+      }
+
+      for (const file of outside) {
+        expect(refusedIn(current, file, LIBFABRIKA_NO_CONSOLE.code), file).toEqual([]);
+      }
+    });
+  }, 120_000);
+
+  // M13. scenario: the repo's own config, with PROCESS_OUTPUT's lines planted in each libfabrika
+  // folder as a product file, a test-support file and a test file, beside the entries every block
+  // writes out again: REFLECT, TAGGED_ERROR, a JSON.parse line, and in client/ the two retry entries.
+  // None of them may be lost, since an override replaces a rule's options.
+  // Plants: (a) drop the two `process` entries from one block that reaches libfabrika, and a product
+  // path in that block's folders takes the planted write; (b) add a block for libfabrika after the
+  // others that lists only the two `process` entries, and the other entries' lines are taken in its
+  // paths; (c) add `process.stdout.write(cause)` to a product file, and `pnpm lint` is red.
+  it("scenario: M13 process stdout and stderr are refused in libfabrika's product and test-support files, taken in its test files, and no other entry is lost", () => {
+    const retries: Plant = {
+      code: PROCESS_OUTPUT.code,
+      prelude: ['import {Effect, Stream} from "effect";'],
+      lines: [
+        ["export const effectRetry = Effect.retry;", true],
+        ["export const streamRetry = Stream.retry;", true],
+      ],
+    };
+
+    const parse: Plant = {
+      code: PROCESS_OUTPUT.code,
+      prelude: [],
+      lines: [['export const parsed = JSON.parse("{}");', true]],
+    };
+
+    const kept: ReadonlyArray<{
+      readonly plant: Plant;
+      readonly name: string;
+      readonly folders: ReadonlyArray<string>;
+    }> = [
+      { plant: REFLECT, name: "reflect", folders: libfabrikaFolders },
+      { plant: TAGGED_ERROR, name: "tagged", folders: libfabrikaFolders },
+      { plant: parse, name: "parse", folders: libfabrikaFolders },
+      { plant: retries, name: "retries", folders: [`${LIBFABRIKA_SRC}/client`] },
+    ];
+
+    const planted = Arr.flatMap(libfabrikaFolders, (folder) =>
+      Arr.flatMap(libfabrikaKinds, (kind) => [
+        { plant: PROCESS_OUTPUT, name: "process", left: kind.left, file: `${folder}/process-${kind.name}` },
+        ...Arr.flatMap(kept, ({ plant, name, folders }) =>
+          folders.includes(folder) ? [{ plant, name, left: false, file: `${folder}/${name}-${kind.name}` }] : [],
+        ),
+      ]),
+    );
+
+    // Coverage: every folder and kind has the process lines, and client/ has its retry lines.
+    expect(Arr.filter(planted, ({ name }) => name === "process")).toHaveLength(
+      libfabrikaFolders.length * libfabrikaKinds.length,
+    );
+
+    expect(Arr.filter(planted, ({ name }) => name === "retries")).toHaveLength(libfabrikaKinds.length);
+
+    const sources = Object.fromEntries(Arr.map(planted, ({ plant, file }) => [file, textOf(plant).text]));
+
+    inConfigCopy(({ lintFiles }) => {
+      const current = lintFiles(sources);
+
+      for (const { plant, left, file } of planted) {
+        expect(refusedIn(current, file, plant.code), file).toEqual(left ? [] : textOf(plant).want);
+      }
+    });
+  }, 180_000);
 });
 
 describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
@@ -1343,6 +1618,26 @@ describe("rules that apply by path", () => {
       expect(fires(file, "oxc(no-accumulating-spread)")).toEqual([2]);
     },
   );
+
+  const VI_FN = 'import { vi } from "vitest";\nexport const f = vi.fn();\n';
+
+  // M3, scenario: the `vi` lock (0555, 0579) is on only where a folder is at zero, so each row is one
+  // real folder, read by the real oxlint through the repository's own config; both halves of the pair.
+  // Plants, run once: with the pair moved to the root `rules`, the `next/` and `packages/` rows are
+  // red; with `oxlint-plugins/**` dropped from the block's `files`, its row is red.
+  it("scenario: a vi.fn() in a test under oxlint-plugins/ is refused by both halves of the lock", () => {
+    const { at, file } = plantIn("oxlint-plugins", VI_FN, "planted.test.ts");
+    made.push(at);
+    expect(fires(file, "vitest(no-restricted-vi-methods)")).toEqual([2]);
+    expect(fires(file, "eslint(no-restricted-properties)")).toEqual([2]);
+  });
+
+  it.each(["next", "packages"])("scenario: the same vi.fn() under %s/, not yet at zero, is left alone", (folder) => {
+    const { at, file } = plantIn(folder, VI_FN, "planted.test.ts");
+    made.push(at);
+    expect(fires(file, "vitest(no-restricted-vi-methods)")).toEqual([]);
+    expect(fires(file, "eslint(no-restricted-properties)")).toEqual([]);
+  });
 
   it.each(["packages", "programs", "apps"])(
     "scenario: the same line under %s/, today's app, is left alone",

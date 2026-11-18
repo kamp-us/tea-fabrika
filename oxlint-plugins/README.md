@@ -245,6 +245,8 @@ The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times
 
 `oxc/no-accumulating-spread` went on on 2026-11-15 (0559), with its 11 hits rewritten, all in five `next/` test files. It is on by an override, the first in `.oxlintrc.json`'s `overrides`, for `next/`, `.agents/`, `oxlint-plugins/` and `.github/ci/` only: today's app keeps its hits. The Effect team has it on too, through oxlint's `perf` set. Its plant in `builtin-plants.ts` has the two `reduce` lines and four loop lines, and `plants.test.ts` plants it by path in each of the four folders and in `packages/`, `programs/` and `apps/`.
 
+The lock on `vi` went on for `oxlint-plugins/` on its mock-sweep slice (0555, 0579): the folder's one `vi.fn` became a plain list the test owns, and a block in `.oxlintrc.json` whose `files` grows as each folder reaches zero now refuses `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv`. `fn` is banned too, beside 0555's four, since 0579 says the Recorder replaces it. The lock is a pair of oxlint's own rules over the same files. `vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call (`vi.fn().mockReturnValue(1)`, oxc#29656), so the built-in `eslint/no-restricted-properties` holds the member access `vi.fn` itself, with the five entries it took before written out again beside the `vi` ones (an override replaces a rule's options). The probe on oxlint 1.90.0, the lockfile's, found that `vitest/no-restricted-vi-methods` does refuse `v.fn()` after `import { vi as v } from "vitest"`, so a renamed import is held by that half. Two plants in `builtin-plants.ts`, `VI_METHODS` and `VI_PROPERTIES`, hold the same lines, and `plants.test.ts` holds each line as refused when either refuses it, and plants the lock by path under `oxlint-plugins/`, `next/` and `packages/`. Not planted, so not known to be held: `vi["fn"]()` and a `vi` passed through a variable.
+
 ## The new version's exam rules
 
 P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports
@@ -1258,6 +1260,67 @@ Three reviews each found a glob that passed an earlier L4 and changed what `clie
 ended with: one for a whole package, one for an app's whole `e2e`, one for a kind of file. Each is a
 plant that must now be red. The limit is that a sample of the real tree cannot see a glob for a file
 kind no tracked file has.
+
+## No `vi` mocks, spies or env stubs, decisions 0555 and 0579
+
+The mock sweep's lock is a pair of oxlint's own rules over the same files:
+`vitest/no-restricted-vi-methods` and `eslint/no-restricted-properties` with one `object: "vi"`
+entry per banned member. Its blocks near the end of `.oxlintrc.json` ban five members, `vi.fn`,
+`vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv`, each with the same message in both rules,
+saying what to use instead (a service and a test layer, the Recorder, `TestConsole` for `Console`,
+or a `ConfigProvider` layer). A folder joins whole the day its own slice of the sweep brings it to
+zero, and none is ever taken off. The last slice folds the lists into the `next/**/*` block. The
+folders so far are `oxlint-plugins/` and `next/apps/fabrika/e2e` (ticket 1067).
+
+```jsonc
+// The shape of one block of the lock, cut short.
+{
+  "files": ["next/apps/fabrika/e2e/*"],
+  "rules": {
+    "vitest/no-restricted-vi-methods": ["error", { "spyOn": "Put the call behind a service ..." }],
+    "eslint/no-restricted-properties": [
+      "warn", // the level the JSON.parse entry these files already take has here
+      { "object": "JSON", "property": "parse", "message": "..." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service ..." },
+    ],
+  },
+}
+```
+
+Why two rules: the vitest rule misses a call chained onto the `vi` call (below), filed as
+[oxc#29656](https://github.com/oxc-project/oxc/issues/29656). `no-restricted-properties` matches
+the member access `vi.spyOn` itself, so it refuses the chained call, but it does not follow a
+renamed import, which the vitest rule does. The properties half stays until oxc fixes the issue.
+
+An override replaces a rule's options, so a lock block writes out again every
+`no-restricted-properties` entry its files take from the blocks above, at that block's level. That
+is why the e2e folder has two blocks: `e2e/*` takes the `JSON.parse` `warn` block's six entries
+(`Data.TaggedError`, `JSON.parse` and the four Reflect entries), and `e2e/node/**` the same six from
+the `next/**/*` `error` block. A `vi` fire blocks at `warn` too: `pnpm lint` lets only a
+`JSON.parse` fire of this rule advise (`advice.ts`).
+
+What oxlint 1.90.0 sees, from a probe and from `VI_METHODS` in `builtin-plants.ts` (both plants
+take their lines from one list there, `VI_LOCK`):
+
+- It fires on each of the five, through a renamed import (`import { vi as v }`, then `v.spyOn`),
+  a computed key (`vi["spyOn"]`) and an optional call (`vi?.fn()`).
+- It does not fire on `vi.hoisted`, which 0555 leaves open, `vi.waitFor`, a comment, a string or
+  another object's `fn`.
+- It misses a call chained onto the `vi` call: `vi.spyOn(console, "warn").mockImplementation(...)`
+  and `vi.fn().mockReturnValue(...)` pass, though the same call in parentheses is refused. Oxlint
+  1.93.0, the newest release on 2026-11-16, misses it too
+  ([oxc#29656](https://github.com/oxc-project/oxc/issues/29656)). This is the most common shape of
+  a spy, so the lock's other half holds it.
+
+What the `vi` entries of `no-restricted-properties` see, from `VI_PROPERTIES`: each of the five,
+the two chained calls, a computed key and an optional call; not a renamed import, `vi.hoisted`,
+`vi.waitFor`, a comment, a string or another object's `fn`. A line is held when either plant
+refuses it.
+
+`plants.test.ts` reads every block that sets the vitest rule from oxlint's own `--print-config` and
+plants `VI_METHODS` and `VI_PROPERTIES` in a test file of every folder they list, as it does
+`REFLECT`. It also checks that every chained line `VI_METHODS` takes is one `VI_PROPERTIES`
+refuses, and that no `vi` fire is advice where the rule's level is `warn`.
 
 ## Rules that gave way to trusted ones, decision 0573
 

@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-l10-boot-drain-tests1",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "pr": null,
+  "started": "2026-11-18T07:25:00-08:00",
+  "ended": "2026-11-18T08:31:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, wrote the laws of docs/plan/quests/l10-boot-drain-PLAN.md in next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts, on the plan's yes to open question 1. L10 (renamed as the plan says) accounts for every install as the one owed change or an unchanged repeat in its own program's watch.rebuild span, gives each owed change its own 3 s bound, settles on a count of delivered Rolldown ENDs against ended rebuilds, never on quiet, and checks that started rebuilds never outnumber delivered ENDs and that the watchers reporting a change for a saved file number the programs that reach it (L10a to L10c). A new scenario law makes the four repeat orders on purpose (L10d and S1). fixtureValue gains values and saveWalk pins the shared element. The before-repair read matched the plan: change ids are absolute paths under the fixture home, one per reaching watcher per save, and none for shared/unused.ts. The laws are green on the unchanged product; their red is the old L10 assertions, which fail cases 1 to 3 of the scenario with run 2's shape and the old only-they-install line. L10 at full depth takes about 40 s, against 260 s before. No product file was touched.",
+  "note": "Claude subagent (step-tests) started by the lead session. Started time is the first shell timestamp. Agent report: 307877 tokens at its last turn, 111 tool uses, 67.7 minutes. Pinned Node 26.13.0, Linux cloud box, idle, one law file at a time. Two whole-file full-depth runs on an earlier draft died of the worker's 2 GB JavaScript heap limit after 4 laws passed. Live heap per law was then measured with forced GC: origin/main peaks at 1459 MB, the committed file at 1798 MB, and the whole file passed 6 of 6 three times after the wrapper dropped a closed watcher's replay. The root is outside the plan: finding 2026-11-18-watch-laws-closed-builds-stay-reachable. pnpm lint ran once on an earlier draft (18 parts passed, lint:promise-types 0 findings) before the owner's rule change; after it only pnpm format and the leak grep ran. No typecheck by design. Not pushed.",
+  "driver_caused": false,
+  "tokens": 307877,
+  "tools": 111,
+  "minutes": 67.7,
+  "costUsd": null,
+  "billed": null,
+  "base": "9314a8c0",
+  "plants": [
+    {
+      "law": "S1 scenario: L10 repeats at boot and inside saves are accounted for",
+      "plant": "The old L10 assertions (3 s quiet drains, boot pair equality, changed set, only the programs that reach it install) in place of owed and settle, with case 1's repeat inside the boot drain",
+      "result": "red"
+    },
+    {
+      "law": "L10d a repeat never pays an owed change",
+      "plant": "Any install of a pending program pays its owed change",
+      "result": "red"
+    },
+    {
+      "law": "L10a and L10b, in L10",
+      "plant": "P1 watch.ts hashes the entry file only",
+      "result": "red"
+    },
+    {
+      "law": "L10c, in L10",
+      "plant": "P2 watch.ts installs every program on any rebuild",
+      "result": "red"
+    },
+    {
+      "law": "L10c, in L10",
+      "plant": "P3 watch.ts builds each cycle twice",
+      "result": "red"
+    },
+    {
+      "law": "L10b, in L10",
+      "plant": "P4 watch.ts installs the previous rebuild's build",
+      "result": "red"
+    },
+    {
+      "law": "L10c, in L10",
+      "plant": "P5 watch.ts adds shared/unused.ts as a watch file",
+      "result": "red"
+    },
+    {
+      "law": "L10a, in the S1 scenario",
+      "plant": "P6 watch.ts adds a per-rebuild counter to the source and its hash",
+      "result": "red"
+    },
+    {
+      "law": "L17/L18 save-driven rebuilds (saveWalk)",
+      "plant": "1542's stale-build plant: the first good bundle installed for every later build",
+      "result": "red"
+    },
+    {
+      "law": "L17/L18 save-driven rebuilds (saveWalk)",
+      "plant": "watch.ts installs a bundle whose shared element is 7, with a matching hash",
+      "result": "red"
+    }
+  ]
+}

@@ -40,8 +40,8 @@ Effect checker holds it, and where that check is set.
 
 ## Context
 
-- [0565](0565-effects-own-checks-block.md) puts every check of the Effect checker (`@effect/tsgo`,
-  pinned at 0.63.0) on as an error in `next/`. Its clash 5 was `preferBarrelImport` against
+- [0565](0565-effects-own-checks-block.md) puts every check of the Effect checker (`@effect/tsgo`, pinned by
+  `pnpm-workspace.yaml`'s catalog entry) on as an error in `next/`. Its clash 5 was `preferBarrelImport` against
   [0120](0120-effect-code-guidelines.md)'s E7, which asks for namespace imports in libraries. One
   package name cannot be held by both checks in the same file: the checker gives a package named in
   both lists the namespace form (`PackageStyle` in `internal/importstyle/importstyle.go` of
@@ -79,7 +79,7 @@ import * as Option from "effect/Option"; // line 2
 - An `overrides` entry inside a package tsconfig works the same way, with its `include` globs read
   from that tsconfig's folder: `src/a/**/*.ts` flagged `src/a` and not `src/b`. That is how a
   package turns the check on folder by folder before it is at zero.
-- **Effect's sub-barrels.** Effect 4.1.3 ships lowercase entry points such as `effect/testing`,
+- **Effect's sub-barrels.** Effect 4.1.3 shipped lowercase entry points such as `effect/testing`,
   `effect/crypto` and `effect/process`. `preferBarrelImport` does not flag them, so a program keeps
   `import { TestClock } from "effect/testing"`. `preferNamespaceImport` flags that line in a
   library and suggests `effect/testing/TestClock`. That path resolves: effect 4.1.3's `exports`
@@ -148,6 +148,3 @@ form is held as an error by the Effect checker, set in the package's own `tsconf
   on the installed 0.63.0. The merge code was read on the checker's main branch, not at the 0.63.0
   tag, though the runs agree with it. The count is from one commit. The sub-barrel suggestion was
   thought to be a checker bug and was not: see the correction above.
-
-## Amendments
-- 2026-11-15: the sub-barrel library form is the checker's own suggestion (`effect/testing/TestClock`), which resolves through effect's `"./*"` export; the first text called that path unexported, which was wrong.

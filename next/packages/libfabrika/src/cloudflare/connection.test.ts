@@ -20,7 +20,6 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import type * as Tracer from "effect/Tracer";
 
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -33,14 +32,13 @@ import { Publication } from "../runtime/WatcherManager.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
-import * as Trace from "../telemetry/Trace.ts";
 import { Answer, Attached, type Wait, PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
-import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 import { runsFor } from "@kampus/vitest";
 
@@ -258,7 +256,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     answer: (value: typeof Answer.Type) => {
       answer = value;
     },
-    layer: connectionLayer(state, env, config).pipe(Layer.provide(recorded), Layer.provide(Digest.layerWebCrypto)),
+    layer: connectionLayer(state, env, config).pipe(
+      Layer.provide(recorded),
+      Layer.provide(Digest.layerWebCrypto),
+      Layer.provide(WaitsLive.layer),
+    ),
   };
 };
 
@@ -804,26 +806,20 @@ const ordinaryFrame = Effect.fnUntraced(function* (state: typeof Attached.Type, 
   };
 });
 
-const observeRpc = Effect.fnUntraced(function* (spans: Array<Tracer.Span>) {
-  const make = ProjectClient.make;
-  yield* Effect.acquireRelease(
-    Effect.sync(() =>
-      vi.spyOn(ProjectClient, "make").mockImplementation((stub) => {
-        const client = make(stub);
-
-        return {
-          ...client,
-          route: (...args) =>
-            Effect.gen(function* () {
-              spans.push(yield* Effect.currentSpan.pipe(Effect.orDie));
-
-              return yield* client.route(...args);
-            }),
-        };
-      }),
-    ),
-    (spy) => Effect.sync(() => spy.mockRestore()),
-  );
+/**
+ * The ended `runtime.rpc` spans the connection's own recording kept, which is how L1 reads them
+ * (the t864 laws read the sink's records the same way). The sink lands an ended span as a
+ * `measurements` row, and counts a span tagged refused in its hour's `sums` under the tag it
+ * carries, `reserved`, `rate_limited` or `other`, with no row. Every ended span is one or the other.
+ */
+const rpcSpans = (db: DatabaseSync) => ({
+  kept: Number(db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='runtime.rpc'").get()?.n),
+  refused: Rec.fromEntries(
+    db
+      .prepare("SELECT refused, sum(count) AS n FROM sums WHERE piece='runtime.rpc' GROUP BY refused")
+      .all()
+      .map((row) => [String(row.refused), Number(row.n)] as const),
+  ),
 });
 
 const recordingSnapshot = (db: DatabaseSync, w: ReturnType<typeof world>) => ({
@@ -833,6 +829,9 @@ const recordingSnapshot = (db: DatabaseSync, w: ReturnType<typeof world>) => ({
   archives: w.stats.archives,
 });
 
+// M5 (mock sweep slice 1). Plants, each run once: `routed` also tags a `bad_input` answer refused (red:
+// the refused sums grow by `other`); `process.send` routes outside its `runtime.rpc` span (red: one span
+// short per call); `routed` stops tagging `reserved` (red: no refused sum).
 it.effect.prop(
   "t863 L1: only reserved answers tag the ended RPC span as refused",
   { walk: AnswerWalk },
@@ -840,11 +839,10 @@ it.effect.prop(
     Effect.gen(function* () {
       const db = yield* database;
       const w = world(db);
-      const spans: Array<Tracer.Span> = [];
-      yield* observeRpc(spans);
       yield* TestClock.setTime(H + 1000);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
+        let seen = rpcSpans(db);
         const reached = new Set<keyof typeof answerCases | "too_many_waits">();
         // The law's own model of the waits it parked on this connection, never the product's: the
         // world's attachment before any call, and each wait L1 expects kept since.
@@ -896,15 +894,24 @@ it.effect.prop(
                 ];
 
           expect(w.calls.slice(before)).toEqual([{ method: request.method, params: request.params }, ...again]);
-          expect(spans).toHaveLength(w.calls.length);
+          // One ended `runtime.rpc` span per routed call, and only a reserved answer tags the first as
+          // refused, under the tag `reserved`: every other span landed as a row, untagged.
+          const recorded = rpcSpans(db);
 
-          for (const [n, span] of spans.slice(before).entries()) {
-            const refused = n === 0 && category === "reserved";
-            expect(span.name).toBe("runtime.rpc");
-            expect(span.status._tag).toBe("Ended");
-            expect(span.attributes.has(Trace.REFUSED)).toBe(refused);
-            expect(span.attributes.get(Trace.REFUSED)).toBe(refused ? "reserved" : undefined);
-          }
+          const grew = Rec.fromEntries(
+            Rec.toEntries(recorded.refused)
+              .map(([tag, count]) => [tag, count - (seen.refused[tag] ?? 0)] as const)
+              .filter(([, count]) => count > 0),
+          );
+
+          expect(
+            recorded.kept - seen.kept + Rec.reduce(grew, 0, (total, count) => total + count),
+            "one ended runtime.rpc span per routed call",
+          ).toBe(w.calls.length - before);
+          expect(grew, "only a reserved answer tags its span refused, as reserved").toEqual(
+            category === "reserved" ? { reserved: 1 } : {},
+          );
+          seen = recorded;
 
           if (wait !== null && keeps) {
             kept.push(wait);

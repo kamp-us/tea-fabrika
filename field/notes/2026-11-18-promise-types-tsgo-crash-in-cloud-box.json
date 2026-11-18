@@ -1,0 +1,18 @@
+{
+  "id": "2026-11-18-promise-types-tsgo-crash-in-cloud-box",
+  "date": "2026-11-18",
+  "quests": [
+    "kamp-us/tea-fabrika#1067"
+  ],
+  "stage": "harness",
+  "kind": "failure",
+  "person": false,
+  "what": "In the cloud container that ran PR 1636's steps, the lint:promise-types part of pnpm lint died in a full pnpm lint run four times across two steps: three times with a tsgo 'Unexpected EOF' and a kill for lack of memory (the tests step), and once with 'EPIPE: broken pipe' thrown from typescript 7.0.2's sync channel at oxlint-plugins/promise-types.ts:603 (the build step). Each time the part passed alone (pnpm -s lint:promise-types, 0 findings), and full runs before and after passed. This is the second time it was seen, so it owes a root cause and a ticket.",
+  "cause": null,
+  "primitive": "Check",
+  "fix": "lint:promise-types reports a dead tsgo child as its own error with the memory it had, and lint's runner keeps it out of parallel with the other heavy parts when memory is short, so a box run fails with a reason instead of a broken pipe.",
+  "test": "A full pnpm lint in the same cloud container shape passes ten runs in a row, or fails with a message that names the memory limit.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1636"
+  ]
+}

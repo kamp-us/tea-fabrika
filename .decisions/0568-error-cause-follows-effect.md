@@ -46,7 +46,7 @@ between the two that stay.
   cause.
 - [0560](0560-an-order-for-effect-code.md) says the Effect team comes first. For an error's cause,
   the library itself is the clearest answer.
-- **What the installed `effect` 4.1.2 does,** counted in `node_modules/effect/src` on 2026-11-15:
+- **What `effect` does,** counted in `node_modules/effect/src` on 2026-11-15, at version 4.1.2:
 
   | How `cause` is written | Lines |
   |---|---|
@@ -73,7 +73,7 @@ between the two that stay.
   77, 14 and 13.
 - **Our tooling** (`.agents/`, `oxlint-plugins/`, `.github/ci/`) writes 2 required and 3 optional
   causes, and no `optionalKey` one.
-- `exactOptionalPropertyTypes` is on (`tsconfig.base.json:8`), so the two optional forms are not the
+- `exactOptionalPropertyTypes` is on (`tsconfig.base.json`'s `compilerOptions`), so the two optional forms are not the
   same type. `Schema.optional` is `Schema.optionalKey` with `undefined` added
   (`node_modules/effect/src/Schema.ts:2434`), so `new X({ reason, cause })` compiles when `cause`
   may be `undefined`. With `optionalKey` the same call fails the type check.
@@ -127,7 +127,7 @@ cause: Schema.optional(Schema.Defect()),   // some call has none
 - **`.patterns/effect-errors-keep-their-cause.md` says the same,** with real code from `next/`, in
   this pull request.
 - **0119 is amended in part:** its "each reason has `cause: Schema.Defect()`" now reads "required
-  when every caller has one". The rest of 0119 holds.
+  when every caller has one".
 - **Three more of 0566's six were settled our way in the same walk.** The owner kept our own rule
   on where a layer lives ([0095](0095-a-service-file-holds-only-its-contract.md)), on module names
   ([0023](0023-next-follows-effects-code-style.md),
