@@ -55,7 +55,13 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
     Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Finite }),
     Schema.TaggedStruct(`${name}_err`, {
       cmd,
-      error: Schema.Union(Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {}))),
+      error: Schema.Union([
+        ...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})),
+        // tea adds malformed_result to every settled error: a reply whose value fails its own schema.
+        Schema.TaggedStruct("malformed_result", {
+          issues: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
+        }),
+      ]),
       at: Schema.Finite,
     }),
   ]);
@@ -67,21 +73,16 @@ const Msg = Schema.Union([
   Resume,
   Reply,
   answers("start_child", StartChild.StartChildInput, Started, StartChild.startChild.errTags),
-  // Runner.ts echoes only the type of a refused built-in start. Each Cmd is answered and folded
-  // once, as StartChildTest L11 and QueueRunnerTest QR5 check. One start is out while `starting`,
-  // so an unnamed refusal there answers that start.
-  Schema.TaggedStruct("start_child_err", {
-    cmd: Schema.TaggedStruct("start_child", {}),
-    reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
-    at: Schema.Finite,
-  }),
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);
 
 /** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
 const Input = Schema.Union([Enqueue, Drop, Resume, Reply]);
 
-type Message = typeof Msg.Type | Settled<typeof StartChild.startChild | typeof Send.send>;
+type Message = typeof Input.Type | Settled<typeof StartChild.startChild | typeof Send.send>;
+
+/** The whole Msg the program declares, as tea types it: the inputs and each Cmd's settled answers. */
+const Whole: Schema.Codec<Message, typeof Msg.Encoded> = Msg;
 
 const forward = (entry: Entry, reply: typeof Reply.Type): ReadonlyArray<Command> =>
   entry.reply === null ? [] : [Send.send({ to: entry.reply.to, m: { ...reply, ref: entry.reply.ref } })];
@@ -159,7 +160,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
     }
 
     if (m._tag === "start_child_ok" || m._tag === "start_child_err") {
-      if (s._tag !== "starting" || ("name" in m.cmd && m.cmd.name !== s.current.name)) {
+      if (s._tag !== "starting" || m.cmd.name !== s.current.name) {
         return [{ ...s, late: s.late + 1 }, []];
       }
 
@@ -178,7 +179,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
           reason: Stop.cases.start_refused.make({
             change: s.current.change,
             name: s.current.name,
-            refusal: m._tag === "start_child_err" ? ("reason" in m ? m.reason : m.error._tag) : m.value._tag,
+            refusal: m._tag === "start_child_err" ? m.error._tag : m.value._tag,
           }),
         }),
         [],
@@ -257,7 +258,7 @@ export const queue = ({ name, settings }: { readonly name: string; readonly sett
   return Program.make({
     name: "pipeline/queue",
     // The program keeps the whole Msg, tea's answers included: the runner folds them, and the laws decode them.
-    machine: { ...machine, msg: Msg },
+    machine: { ...machine, msg: Whole },
     state: { v: 1, upgrades: [] },
     view: (s) => ({
       state: s._tag,

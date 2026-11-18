@@ -103,6 +103,11 @@ type Command = ReturnType<
 
 type Cell = readonly [Model, ReadonlyArray<Command>];
 
+// tea adds malformed_result to every settled error: a reply whose value fails its own schema.
+const Malformed = Schema.TaggedStruct("malformed_result", {
+  issues: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
+});
+
 // The runner accepts settled letters itself; declaring them here also lets pure clients decode them.
 const answers = <const N extends string, F extends Schema.Struct.Fields, O extends Schema.Top, const T extends string>(
   name: N,
@@ -120,11 +125,13 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
     Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Finite }),
     Schema.TaggedStruct(`${name}_err`, {
       cmd,
-      error: Schema.Union(Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {}))),
+      error: Schema.Union([...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})), Malformed]),
       at: Schema.Finite,
     }),
   ]);
 };
+
+const ExitCmd = Schema.TaggedStruct(StartChild.exit.cmdType, {});
 
 const Msg = Schema.Union([
   Land,
@@ -135,6 +142,9 @@ const Msg = Schema.Union([
   answers(checks.cmdType, Inputs.checks, Ci.Checks, Faults),
   answers(merge.cmdType, Inputs.merge, CodeHost.Merged, Faults),
   answers(Send.send.cmdType, Send.SendInput, Send.Queued, Send.send.errTags),
+  // `exit` declares no error of its own, so its only failure is tea's.
+  Schema.TaggedStruct("exit_ok", { cmd: ExitCmd, value: Schema.Null, at: Schema.Finite }),
+  Schema.TaggedStruct("exit_err", { cmd: ExitCmd, error: Malformed, at: Schema.Finite }),
 ]);
 
 /** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
@@ -186,11 +196,14 @@ export const merger = (settings: Values) => {
   };
 
   type Message =
-    | typeof Msg.Type
-    | Settled<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send>;
+    | typeof Input.Type
+    | Settled<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send | typeof StartChild.exit>;
+
+  /** The whole Msg the program declares, as tea types it: the inputs and each Cmd's settled answers. */
+  const Whole: Schema.Codec<Message, typeof Msg.Encoded> = Msg;
 
   const reduce = (s: Model, m: Message): Cell => {
-    if (m._tag === "send_ok" || m._tag === "send_err") {
+    if (m._tag === "send_ok" || m._tag === "send_err" || m._tag === "exit_ok" || m._tag === "exit_err") {
       return [s, []];
     }
 
@@ -418,7 +431,7 @@ export const merger = (settings: Values) => {
   return Program.make({
     name: "pipeline/merger",
     // The program keeps the whole Msg, tea's answers included: the runner folds them, and the laws decode them.
-    machine: { ...machine, msg: Msg },
+    machine: { ...machine, msg: Whole },
     state: { v: 2, upgrades: [rounds] },
     view: (s) => ({
       state: s._tag,
