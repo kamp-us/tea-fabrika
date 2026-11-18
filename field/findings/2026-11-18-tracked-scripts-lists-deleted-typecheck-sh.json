@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tracked-scripts-lists-deleted-typecheck-sh",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 35
+  },
+  "says": "Main's pnpm lint is red: oxlint-plugins/tracked-scripts.ts lists scripts/typecheck.sh on NOT_YET_PORTED, and main no longer tracks that file, so the tracked-scripts part fails every lint run, on main and on every pull request that merges it.",
+  "proof": "At main 4909b55d, git ls-tree origin/main scripts/typecheck.sh prints nothing, while git show origin/main:oxlint-plugins/tracked-scripts.ts has \"scripts/typecheck.sh\" at line 35. PR 1506 (65edf5c2) deleted the script and PR 1517 (c96e35d0) added the list; the two merged across each other. node oxlint-plugins/tracked-scripts.ts exits 1 with: scripts/typecheck.sh is on NOT_YET_PORTED, and git does not track it.",
+  "cost": "Every pull request that merges main gets a red lint part, so ci-required cannot go green until the line goes; PR 1504 deletes it so its own run can pass.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1504"
+}

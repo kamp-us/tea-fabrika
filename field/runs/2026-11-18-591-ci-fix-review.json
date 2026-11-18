@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-591-ci-fix-review",
+  "ticket": "591",
+  "pr": 1504,
+  "started": "2026-11-18T09:49:00-08:00",
+  "ended": "2026-11-18T09:58:00-08:00",
+  "parent": "2026-11-18-591-main-merge",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "One review of the two judgment commits that fix PR 1504's red tooling leg (run 44358656994, 7 failures), in today's tooling: e25ecb49 points related-selection.test.ts's D1 stand-in integration reader at build.integration.test.ts, since slice F made settings-generated plain and took it off changes.mjs's readers list; 2947d644 gives layer-rules.json's next-email row the imports the .rej of main's PR 1032 names (next-access, next-ledger, next-transport, next-shared) and adds the three email edges to the beside-the-runtime law of oxlint-plugins/layers.test.ts. Verdict done, findings 0: loosening.sh's three hits are no loosening (a constant, a stricter row, longer exact lists); the stand-in is a listed next-integration reader kept out of reach as before; the imports list follows the .rej's prose, is narrower than the row's earlier any-lower-row rule, and needs no owner wait (about 85% sure).",
+  "plants": [
+    {
+      "law": "oxlint-plugins/layers.test.ts: scenario: a module put beside the runtime refuses an import from the runtime",
+      "plant": "drop next-email -> next-access [sideways] from the expected list",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/layers.test.ts: pinned: every library row names the rows it may import",
+      "plant": "drop next-email's imports from layer-rules.json",
+      "result": "red"
+    },
+    {
+      "law": ".github/ci/related-selection.test.ts: the five D1 laws",
+      "plant": "point INTEGRATION_READER back at settings-generated.integration.test.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "A step-review subagent, model opus at effort high, read-only. Ran on Node 26.13.0 under nice -n 15 with --maxWorkers=1: layers.test.ts and related-selection.test.ts, 46 of 46 passed; pnpm -s lint:layers exit 0; the three plants together gave 7 failures, then were restored with git checkout and the tree left clean.",
+  "step": "review"
+}

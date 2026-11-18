@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-review4",
+  "ticket": "591",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T00:26:04-08:00",
+  "parent": "2026-11-16-591-f-review3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Final recheck (0177) of slice F at 235d952, against the third send-back (field/runs/2026-11-16-591-f-review3.json). Merge-ready. oxlint-plugins/one-page-runtime.ts now searches every string literal's value and every template piece, templates with expressions included, with the deleted build.test.ts law's two word patterns (lines 27, 28, 99 to 130). In a scratch RuleTester run every case from all three send-backs is reported: a renamed second runMain import, runMain renamed from another module, Effect[\"runPromise\"], a run name in a variable, Reflect.get(Effect, \"runFork\"), a run name in a template with an expression, and a run name inside a longer string; so are a namespace B.runMain and export { runMain as boot }. What the old law read and the rule does not is comments, regex literals and JSX text, which run nothing, and the old law missed a name joined from pieces too. False alarms: the real entry next/apps/fabrika/src/entry/browser.tsx has 0 fires and pnpm lint exits 0. Plain words (\"running now, run it\", \"/api/runs/rerun\") do not fire; a camelCase run word in a string does (a \".runButton\" selector fired in the scratch run), exactly as the old blocking law's text search did, on a 29-line boot file that holds no such string. Judged right, 85%: the rule fires on no text the old law passed. M8, M5, the deletions and the edits outside the plan's files table hold as in the first review.",
+  "plants": [
+    {
+      "law": "fabrika/one-page-runtime at 235d952 against every case of the three send-backs",
+      "plant": "run in a scratch RuleTester: the seven named cases, plus a namespace runMain read and an export alias",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts",
+      "plant": "by reading: the rule at 4269851 (whole-value match, templates with expressions skipped); the two new breaks expect one report each and get none",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 235d952 under nice -n 19 with --maxWorkers=1: oxlint-plugins/one-page-runtime.test.ts (2 passed). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: exit 0, 17 parts passed in one run. One pnpm typecheck, started after pgrep -x tsgo found none: exit 0. The fix row field/runs/2026-11-16-591-f-fix3.json records the new laws red against the 4269851 rule, each case reported once by the fixed rule and not by the old one, and M7's planned break red. The start time was not read, so it is null. Not run, by the 0178 guard: next/apps/fabrika/src/build.integration.test.ts and next/apps/fabrika/e2e/first-window.visual.test.ts, whose only change is one comment line each.",
+  "step": "review"
+}

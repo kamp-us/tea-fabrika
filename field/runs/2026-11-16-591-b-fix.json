@@ -1,0 +1,138 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-b-fix",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T01:54:52-08:00",
+  "ended": "2026-11-16T02:06:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for slice B of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md, law M4), after the review's first send-back (field/runs/2026-11-16-591-b-review.json), on fabrikalfa/exam-to-lint-b from 84de9c6. Fault 1: the 'reading imports' law in oxlint-plugins/package-deps.test.ts named only relative paths that stay inside the planted package for its type import, re-export and bare import, so fabrika/package-deps fired on none of them whether it read them or not. Each form now names a spec that fires: an unlisted package for the type import (@kampus/wire-types), the re-export (@kampus/fold-out), a new export-all line (@kampus/every-name), a new type import() line (@kampus/typed-only) and a new import-equals line (@kampus/required-one), and a path out of the package for the bare import (../../style.css). The expected list names a fire on each of those lines. Fault 2: the front-or-internal exports law drew 1 to 10 cases per run, 36 generated over 6 runs against the old exam law's 60; it now draws exactly 10 per run (minLength 10), counts the cases it judges and fails when fewer than 60 were judged. At seed 119120 and 6 runs it judges 66 cases (6 runs of 10 generated cases and the pinned one). The comment that said 'the exam's 60 cases' now says what the law draws. The review's three finding rows are committed in field/findings/. No product file changed.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: reading imports (line 3, export ... from)",
+      "plant": "drop the ExportNamedDeclaration visitor in oxlint-plugins/package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: reading imports (line 4, export *)",
+      "plant": "drop the ExportAllDeclaration visitor in oxlint-plugins/package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: reading imports (line 6, a type's import())",
+      "plant": "drop the TSImportType visitor in oxlint-plugins/package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: reading imports (line 7, import = require)",
+      "plant": "drop the TSImportEqualsDeclaration visitor in oxlint-plugins/package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: reading imports (lines 1, 2, 5 and 11: static, type and bare imports)",
+      "plant": "drop the ImportDeclaration visitor in oxlint-plugins/package-deps.ts",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/package-deps.test.ts: each module's front files are reached and its internal/ is refused to other packages (reach of at least 60 cases)",
+      "plant": "minLength 1 in the case generator, as at 84de9c6",
+      "result": "red"
+    }
+  ],
+  "new_names": [
+    {
+      "name": "fabrika/package-deps",
+      "file": "oxlint-plugins/package-deps.ts",
+      "word": "a no-extraneous-dependencies lint rule, with no-relative-packages beside it",
+      "source": "https://github.com/import-js/eslint-plugin-import/blob/main/docs/rules/no-extraneous-dependencies.md (import/no-extraneous-dependencies); https://github.com/import-js/eslint-plugin-import/blob/main/docs/rules/no-relative-packages.md (import/no-relative-packages)",
+      "readers": "the rule is on in .oxlintrc.json for next/**"
+    },
+    {
+      "name": "packageDeps",
+      "file": "oxlint-plugins/package-deps.ts",
+      "word": "a rule object with meta and create, as ESLint's custom rules are written",
+      "source": "https://github.com/eslint/eslint/blob/main/docs/src/extend/custom-rules.md (Rule Structure)",
+      "readers": "oxlint-plugins/index.ts registers it as package-deps"
+    },
+    {
+      "name": "exportAt",
+      "file": "oxlint-plugins/package-deps.ts",
+      "word": "Node's package exports resolution: subpath patterns, null targets, and pattern keys sorted by the part before the *",
+      "source": "https://nodejs.org/api/packages.html#subpath-patterns (Subpath patterns); https://nodejs.org/api/esm.html#resolution-algorithm-specification (Resolution Algorithm Specification: PACKAGE_IMPORTS_EXPORTS_RESOLVE, PATTERN_KEY_COMPARE)",
+      "readers": "used inside its own file; outside it, only its own test, oxlint-plugins/package-deps.test.ts"
+    },
+    {
+      "name": "MESSAGES",
+      "file": "oxlint-plugins/package-deps.ts",
+      "word": "a rule's messages by message id",
+      "source": "https://github.com/eslint/eslint/blob/main/docs/src/extend/custom-rules.md (messageIds)",
+      "readers": "used inside its own file; outside it, only its own test, oxlint-plugins/package-deps.test.ts"
+    },
+    {
+      "name": "lint:node-kinds",
+      "file": "package.json",
+      "word": "an npm script, the lint:* family of this repo",
+      "source": "https://github.com/npm/cli/blob/latest/docs/lib/content/configuring-npm/package-json.md (scripts)",
+      "readers": "pnpm lint runs it"
+    },
+    {
+      "name": "nodeKindProblems",
+      "file": "oxlint-plugins/node-kinds.ts",
+      "word": "no industry word found: it checks code-graph's entryExportConventions, which this round found no public page for",
+      "source": "none found",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/node-kinds.test.ts"
+    },
+    {
+      "name": "lint:manifests",
+      "file": "package.json",
+      "word": "an npm script, the lint:* family of this repo",
+      "source": "https://github.com/npm/cli/blob/latest/docs/lib/content/configuring-npm/package-json.md (scripts)",
+      "readers": "pnpm lint runs it"
+    },
+    {
+      "name": "manifestFaults",
+      "file": "oxlint-plugins/next-manifests.ts",
+      "word": "package.json manifest fields: private, version, dependencies; sideEffects is a bundler field, not on that page",
+      "source": "https://github.com/npm/cli/blob/latest/docs/lib/content/configuring-npm/package-json.md (private, dependencies); no source reached for sideEffects",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/next-manifests.test.ts"
+    },
+    {
+      "name": "checkSecretTypes",
+      "file": "oxlint-plugins/promise-types.ts",
+      "word": "Effect's Redacted, which wraps sensitive values so normal output does not show them",
+      "source": "https://github.com/Effect-TS/effect/blob/main/packages/effect/src/Redacted.ts (module doc comment)",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/promise-types.test.ts"
+    },
+    {
+      "name": "typedProjects",
+      "file": "oxlint-plugins/promise-types.ts",
+      "word": "a TypeScript project, one tsconfig.json and the program it includes",
+      "source": "https://github.com/microsoft/TypeScript-Website/blob/v2/packages/tsconfig-reference/copy/en/options/include.md (Include)",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/promise-types.test.ts"
+    },
+    {
+      "name": "nextPackages",
+      "file": "oxlint-plugins/promise-types.ts",
+      "word": "workspace packages, as pnpm-workspace.yaml's packages globs list them",
+      "source": "no page reached: pnpm.io is outside this box's network, and the guessed GitHub copy returned 404",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/promise-types.test.ts"
+    },
+    {
+      "name": "scopeGaps",
+      "file": "oxlint-plugins/promise-types.ts",
+      "word": "files outside a tsconfig's include, so the program its typecheck checks does not hold them",
+      "source": "https://github.com/microsoft/TypeScript-Website/blob/v2/packages/tsconfig-reference/copy/en/options/include.md (Include)",
+      "readers": "used by its own file's command; outside it, only its own test, oxlint-plugins/promise-types.test.ts"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Each plant was run once on oxlint-plugins/package-deps.ts, saved first to a scratch copy, broken with the Edit tool, run with the one law, and restored with the Edit tool; cmp against the copy showed the file unchanged after the last restore. Each visitor plant failed the law with exactly its own line's expected fire missing (3, 4, 6, 7); the ImportDeclaration plant lost lines 1, 2, 5 and 11. The reach plant (minLength 1) failed with 'expected 42 to be greater than or equal to 60' (36 generated cases and the pinned one in each of 6 runs); with minLength 10 the law judged 66. The case count was read once with a console line that was removed before the commit. Tests at the fix head, one worker (nice -n 19 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/package-deps.test.ts): 7 passed. pnpm format exit 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, run whole since no other code agent ran): 19 of 20 parts passed, lint:dead among them, so lint:dead counts every name above as read; lint:promise-types died with EPIPE, the box's known memory kill, and passed alone with 0 findings. The list ratchet against merge base b510ed2e8 exit 0. One pnpm typecheck, exit 0. Sources: only nodejs.org and github.com were reachable; eslint.org, docs.npmjs.com, www.typescriptlang.org, effect.website and pnpm.io did not resolve in this box, so the GitHub copies of those docs are cited where one was found. No .integration. or .visual. law was reached, so none met the 0178 guard. No product file changed: no build step is needed.",
+  "step": "tests"
+}

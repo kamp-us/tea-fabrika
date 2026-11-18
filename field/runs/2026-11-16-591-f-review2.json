@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-review2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T23:11:17-08:00",
+  "ended": "2026-11-15T23:21:24-08:00",
+  "parent": "2026-11-16-591-f-review",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send tests",
+  "why": "Recheck (0177) of slice F's fix round at a3b9cd6, against the first send-back (field/runs/2026-11-16-591-f-review.json). The three named cases are fixed: in a scratch RuleTester run, oxlint-plugins/one-page-runtime.ts now reports a second, renamed runMain import, runMain renamed from another module, and Effect[\"runPromise\"]. The law oxlint-plugins/one-page-runtime.test.ts plants all three, with its coverage check over every spelling. But the class is not closed. The deleted build.test.ts law refused any run* name in the source text, and two real runs spelled as strings still pass the fixed rule with no report, while the old law's regex refuses both: `const k = \"runPromise\"; Effect[k](page);` and `Reflect.get(Effect, \"runFork\")(page);`. The fix read a string only as a computed member key (MemberExpression visitor, lines 95 to 101), which is what the first send-back asked for; that ask was too narrow, the reviewer's miss. The fix it needs: read every string literal and every template with no expressions, wherever it stands, as the name it spells (a run* name reported, \"runMain\" a second runtime), which also covers the member key, and plant both cases in the law's breaks.",
+  "plants": [
+    {
+      "law": "fabrika/one-page-runtime at a3b9cd6 against the first send-back's three cases",
+      "plant": "run in a scratch RuleTester: an aliased second runMain import, runMain aliased from another module, Effect[\"runPromise\"]",
+      "result": "red"
+    },
+    {
+      "law": "fabrika/one-page-runtime at a3b9cd6 against the old build.test.ts text checks",
+      "plant": "run in a scratch RuleTester: const k = \"runPromise\"; Effect[k](page) and Reflect.get(Effect, \"runFork\")(page)",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10.1,
+  "note": "Ran at a3b9cd6 under nice -n 19 with --maxWorkers=1: oxlint-plugins/one-page-runtime.test.ts (2 passed) and oxlint-plugins/plants.test.ts (236 passed). pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: the first run had lint:dead and lint:promise-types die with EPIPE when the kernel killed a process for lack of memory while another agent's tsgo ran; once pgrep -x tsgo found none, both parts were run again alone and passed (0 findings; unreachable ledger PASS, none new). The other 15 parts passed in the first run. One pnpm typecheck after pgrep -x tsgo found none: exit 0. The fix row field/runs/2026-11-16-591-f-fix.json records the old rule silent and the fixed rule red on the three cases, and M7's planned break red. The worktree's index held the pre-fix files after the fast-forward, and was restored to a3b9cd6 path by path before any read or run.",
+  "step": "review"
+}

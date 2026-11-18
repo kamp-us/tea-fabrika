@@ -11,8 +11,8 @@ import { Array as Arr, pipe, Match, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { jsdocs } from "./jsdocs.ts";
+import { plant } from "./plant.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 

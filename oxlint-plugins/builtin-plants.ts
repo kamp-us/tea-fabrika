@@ -1191,6 +1191,110 @@ const react: readonly Plant[] = [
   },
 ];
 
+/**
+ * A plant at real `next/` paths, for oxlint's rules that `.oxlintrc.json` turns on only in `next/`'s
+ * `.tsx` files, tests left out: React's `refs`, `immutability`, `display-name` and `purity`.
+ * plants.test.ts lints the files whole through `plant.ts`, at these paths. `fires` names, for each
+ * rule's code, the lines it must refuse in each file; a file it does not name must have none.
+ */
+interface PathPlant {
+  readonly files: Readonly<Record<string, string>>;
+  readonly fires: Readonly<Record<string, Readonly<Record<string, readonly number[]>>>>;
+}
+
+const VIEW = "next/packages/tuval/src/window/view.tsx";
+
+/** The view's test copy, which the config leaves out of every React rule. */
+export const CLOCK_VIEW_TEST = "next/packages/tuval/src/window/view.test.tsx";
+
+/**
+ * The clock in a view (C1, owner 2026-11-05), the exam's `clock.integration.test.ts` until 0591:
+ * React's `react/purity` refuses a clock or random read in render and lets an inline handler pass.
+ * It also fires on line 11, a helper made in render that only a handler calls: the false alarm
+ * experiment 194 saw at the slice's `main.tsx:146`; `no-clock-in-view` refuses that line anyway.
+ * `no-clock-in-view.test.ts` plants these same files for our rule. Plant: turn `react/purity` off in
+ * the config's `.tsx` block for `next/`, and lines 2, 3 and 11 pass.
+ */
+const VIEW_TEXT = [
+  "declare const send: (m: {type: string; at?: number}) => void;", // 1
+  "export const When = () => <time>{Date.now()}</time>;", // 2: render
+  "export const Roll = () => <b>{Math.random()}</b>;", // 3: render
+  "export const Press = () => (", // 4
+  '\t<button type="button" onClick={() => send({type: "press", at: performance.now()})} />', // 5: handler
+  ");", // 6
+  // Experiment 195's plant: 0.156.0's Compiler refused it, 0.157.0's compiles it.
+  "const Tile = (props: {readonly focus: () => void}) => (", // 7
+  '\t<button type="button" onClick={props.focus} />', // 8
+  ");", // 9
+  "export const Desk = (props: {readonly tiles: readonly string[]; readonly go: (s: string) => void}) => {", // 10
+  "\tconst said = () => new Date().toISOString();", // 11: a handler's helper
+  "\tconst focus = (tile: string) => props.go(tile + said());", // 12
+  "\treturn <main>{props.tiles.map((t) => <Tile key={t} focus={() => focus(t)} />)}</main>;", // 13
+  "};", // 14
+  "export const Id = () => <b onClick={() => send({type: crypto.randomUUID()})} />;", // 15
+  "export const Old = () => <b onClick={() => send({type: String(Date())})} />;", // 16
+].join("\n");
+
+export const CLOCK_VIEW: PathPlant = {
+  files: {
+    [VIEW]: VIEW_TEXT,
+    [CLOCK_VIEW_TEST]: VIEW_TEXT,
+    "next/packages/tuval/src/window/clean.tsx": [
+      "declare const send: (m: {type: string}) => void;",
+      "export const Shown = (props: {readonly at: number}) => <time>{new Date(props.at).toISOString()}</time>;",
+      'export const Press = () => <button type="button" onClick={() => send({type: "press"})} />;',
+    ].join("\n"),
+    "next/packages/tuval/src/window/model.ts": "export const now = () => Date.now();",
+  },
+  fires: { "react(purity)": { [VIEW]: [2, 3, 11] } },
+};
+
+const FIRES_TSX = "next/packages/tuval/src/window/fires.tsx";
+
+const REACT_FIRES = [
+  'import {memo, useId, useRef} from "react";', // 1
+  "export const Tip = () => {", // 2
+  "\tconst id = useRef(Math.random()).current;", // 3: refs, read in render
+  "\treturn <b id={String(id)} />;", // 4
+  "};", // 5
+  "export const Rows = (props: {readonly rows: readonly string[]}) => {", // 6
+  "\tlet i = 0;", // 7
+  "\treturn <ul>{props.rows.map((r) => { i += 1; return <li key={r}>{i}</li>; })}</ul>;", // 8: immutability
+  "};", // 9
+  "export const Tile = memo(() => <b />);", // 10: display-name
+  "export const kept = useId;", // 11
+].join("\n");
+
+/**
+ * React's own rules (exam item 13, C2, C3 and C6), the exam's `react-rules.integration.test.ts` until
+ * 0591: a ref read in render, a change after render and an unnamed memo fire; the same views written
+ * the Compiler's way pass, and so does a test copy. Plant: turn `react/immutability` off in the
+ * config's `.tsx` block for `next/`, and line 8 passes.
+ */
+const REACT_RULES: PathPlant = {
+  files: {
+    [FIRES_TSX]: REACT_FIRES,
+    "next/packages/tuval/src/window/passes.tsx": [
+      'import {useId} from "react";',
+      "export const Tip = () => {",
+      "\tconst id = useId();",
+      "\treturn <b id={id} />;",
+      "};",
+      "export const Rows = (props: {readonly rows: readonly string[]}) => (",
+      "\t<ul>{props.rows.map((r, i) => <li key={r}>{i + 1}</li>)}</ul>",
+      ");",
+    ].join("\n"),
+    "next/packages/tuval/src/window/fires.test.tsx": REACT_FIRES,
+  },
+  fires: {
+    "react(refs)": { [FIRES_TSX]: [3] },
+    "react(immutability)": { [FIRES_TSX]: [8] },
+    "react(display-name)": { [FIRES_TSX]: [10] },
+  },
+};
+
+export const NEXT_TSX_PLANTS: readonly PathPlant[] = [CLOCK_VIEW, REACT_RULES];
+
 export const BUILTIN_PLANTS: readonly Plant[] = [
   ...eslint,
   ...oxc,
