@@ -40,6 +40,9 @@ const NAME = "control-test";
 // The brain's two settings as these laws start it: 0292's 500 MB mark and OTP's 5 s grace.
 const BRAIN = { memory: 500_000_000, grace: 5000 };
 
+// The bound of a call's wait for a replacement: the grace plus the 30 seconds dev.ts gives a start.
+const WAIT_BOUND = BRAIN.grace + 30_000;
+
 // The driver gives Alchemy its control plugin as a plain config with a `start`. The deploy's context
 // is typed as holding nothing, and Alchemy's contract also allows an Effect that builds a plugin,
 // which the driver never gives, so a missing plugin or start is a defect.
@@ -214,6 +217,13 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
   const platform = { rss: 0 };
   // When the sampler's current 1-second sleep ends: the moment a memory sample is taken.
   const sampler = { due: 0 };
+  // A call that waits while the pending-file write is held meets no event, since the brake or the stop
+  // behind that write is not folded yet, so it ends at its bound. A bound sleep waits on `lapse`, which
+  // the walk ends only while it awaits such a call. The brain's clock is not moved, so no timestamp or
+  // sample moves with it.
+  let lapse = Deferred.makeUnsafe<void>();
+  let lapsing = false;
+
   // Each call's chosen answer, by its name, so a call answered later still gets its own.
   const answers = new Map<string, Move["answer"]>();
   // Calls that met a pending replacement, with their answers still to come.
@@ -253,6 +263,10 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
 
       if (key === "sleep") {
         return (duration: Duration.Duration) => {
+          if (Duration.toMillis(duration) === WAIT_BOUND) {
+            return Effect.suspend(() => (lapsing ? Effect.void : Deferred.await(lapse)));
+          }
+
           if (Duration.toMillis(duration) === 1000) {
             sampler.due = target.currentTimeMillisUnsafe() + 1000;
             Queue.offerUnsafe(sleeps, undefined);
@@ -383,10 +397,29 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
       mode = "walk";
       let ready = false;
 
+      // The answer of a call. While the pending-file write is held it ends at its bound, which lapses here.
+      const answer = Effect.fnUntraced(function* (answered: Promise<Answer>) {
+        if (world.held === null) {
+          return yield* Effect.promise(() => answered);
+        }
+
+        lapsing = true;
+        yield* Deferred.succeed(lapse, undefined);
+
+        return yield* Effect.promise(() => answered).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              lapsing = false;
+              lapse = Deferred.makeUnsafe<void>();
+            }),
+          ),
+        );
+      });
+
       // Every call that waited gets its answer before the walk moves on, so no answer races a move.
       const wake = Effect.fnUntraced(function* (woken: Woken) {
         for (const { index, answered } of waiting.splice(0)) {
-          const got = yield* Effect.promise(() => answered);
+          const got = yield* answer(answered);
           calls[index] = { ...calls[index]!, got, woken };
         }
       });
@@ -515,7 +548,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
             // It waits for the replacement; the move that ends the wait collects its answer.
             waiting.push({ index: calls.length - 1, answered });
           } else {
-            const got = yield* Effect.promise(() => answered);
+            const got = yield* answer(answered);
             calls[calls.length - 1] = { ...calls.at(-1)!, got };
           }
         } else if (kind === "block") {
