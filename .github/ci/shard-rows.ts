@@ -1,4 +1,4 @@
-// Today's CI, about next/'s test files.
+// Today's CI, about next/ and Kalfa test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Record as Rec, Schema } from "effect";
@@ -7,14 +7,14 @@ import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
 
 /**
- * next/ rows whose file is not among `files`, in path order. A file with no row is not listed:
+ * next/ or Kalfa rows whose file is not among `files`, in path order. A file with no row is not listed:
  * `assign` places it by its fallback until CI's `shard-times` step gives it a row.
  */
 export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
   const selected = new Set(files);
 
   return Rec.keys(table)
-    .filter((path) => path.startsWith("next/") && !selected.has(path))
+    .filter((path) => (path.startsWith("next/") || path.startsWith("kalfa/")) && !selected.has(path))
     .toSorted();
 };
 
@@ -69,7 +69,7 @@ export const visualFiles = (root: string) => Effect.runPromise(selected(root, "n
 /** Write the lint diagnostic for each stale row of `table` and return its exit code. */
 export const main = (rows: readonly string[], write: (line: string) => void, table = "vitest.shards.json"): number => {
   for (const path of rows) {
-    write(`stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}`);
+    write(`stale shard row: ${path} is not a next/ or Kalfa test file Vitest selects; delete its row in ${table}`);
   }
 
   return rows.length === 0 ? 0 : 1;

@@ -853,7 +853,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
   const Declarations = await import("@kampus/libfabrika/settings/Declarations");
-  const Snapshot = await import("@kampus/libfabrika/settings/Snapshot");
+  const Snapshot = await import("@kalfa/config/Snapshot");
   const Sources = await import("@kampus/libfabrika/settings/Fabrika");
   const { Digest } = await import("effect/crypto");
   await Effect.runPromise(

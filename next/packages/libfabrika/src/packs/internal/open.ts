@@ -1,8 +1,8 @@
 import { Machine } from "@demlik/tea/effect";
+import { Snapshot } from "@kalfa/config/Snapshot";
 import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import { Branch, Hash, ObjectId } from "../../repositories/Repositories.ts";
-import { Snapshot } from "../../settings/Snapshot.ts";
 import { Event, Receipt, RepositoryId, TrustDecision } from "../RepositoryTrust.ts";
 
 /** @internal */

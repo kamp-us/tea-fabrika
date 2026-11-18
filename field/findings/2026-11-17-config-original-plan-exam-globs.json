@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-config-original-plan-exam-globs",
+  "date": "2026-11-17",
+  "by": "review",
+  "model": "gpt-6.1-sol",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/quests/kalfa-config-PLAN.md",
+    "line": 321
+  },
+  "says": "The original config plan no longer passes its approved-mode path guard after the extraction adds kalfa exam patterns.",
+  "proof": "From the reviewed worktree at 4d767107ba23ae92517022ac29630b38adf50ee7, sh .agents/skills/plan/scripts/plancheck.sh --approved docs/plan/quests/kalfa-config-PLAN.md exits 1 with six 'exam path missing from files table' messages: kalfa/**/*.integration.test.ts, kalfa/**/*.test-support.ts, kalfa/**/*.test.ts, kalfa/**/*Test.ts, kalfa/**/tsconfig.json and kalfa/*/src/**/*.test.ts. Its body digest remains 317fe648c7e865c5e0509870be13c42e01529dfebed255b8976e28c3d7d4c31b.",
+  "cost": "The lead must resolve the historical plan and current guard mismatch before reusing its approval check; the final-head report cannot claim all three guards passed.",
+  "head": "4d767107ba23ae92517022ac29630b38adf50ee7",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": null
+}
