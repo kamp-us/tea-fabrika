@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-plant-record-has-no-time-or-commit",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "kalfa/quality/src/stryker/Report.ts",
+    "line": 160
+  },
+  "says": "A plant's record line holds no time it ran and no commit, so an --out record from a run outside the workflow keeps neither; AGENTS.md's data-shape rule asks for the writer's own time when it is written.",
+  "proof": "Each of runs/plants/*.json from the build holds only the keys plant, target, law, answer, beside, tests, seconds, stryker and node (for example host-pin.json); the Line interface at Report.ts:160-170 has no time or commit field.",
+  "cost": "The time of a local or box plant run survives only if a run row copies it by hand; records from different heads cannot be told apart.",
+  "head": "f1869390036e21f4a1b7046aff9168ac696354c5",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1603"
+}
