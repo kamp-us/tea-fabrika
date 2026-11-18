@@ -958,7 +958,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     );
   });
 
-  it("T390 checks a stale ticket on a commit past GraphQL's 100-commit page", () => {
+  it("T390 scenario: a stale note on commit 408 blocks the lead sign", () => {
     withRepo([["src/owned.ts", "lead"]], (r) => {
       r.openPr("fabrikalfa/quest", "321");
       const base = sha(5000);
@@ -986,7 +986,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     });
   });
 
-  it("T390 accepts a complete compare-page fallback and rereads the PR list", () => {
+  it("T390 scenario: five complete compare pages allow fallback after a PR reread", () => {
     withRepo([["src/owned.ts", "lead"]], (r) => {
       const base = sha(5000);
       const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
@@ -1007,7 +1007,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     });
   });
 
-  it("T390 refuses incomplete or malformed compare pages before staging", () => {
+  it("T390 scenario: an incomplete or malformed compare page blocks before staging", () => {
     each(
       [
         "missing-page",
@@ -1025,17 +1025,31 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
           const pages = comparePages(oids, base);
 
-          if (fault === "missing-page") pages.pop();
-          if (fault === "wrong-count") pages[0]!.total_commits -= 1;
-          if (fault === "wrong-ahead") pages[0]!.ahead_by -= 1;
-          if (fault === "wrong-base") pages[0]!.base_commit.sha = sha(5001);
-          if (fault === "duplicate") pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
-          if (fault === "invalid-sha") pages[0]!.commits[0]!.sha = "not-a-sha";
+          if (fault === "missing-page") {
+            pages.pop();
+          }
+          if (fault === "wrong-count") {
+            pages[0]!.total_commits -= 1;
+          }
+          if (fault === "wrong-ahead") {
+            pages[0]!.ahead_by -= 1;
+          }
+          if (fault === "wrong-base") {
+            pages[0]!.base_commit.sha = sha(5001);
+          }
+          if (fault === "duplicate") {
+            pages[1]!.commits[0]!.sha = pages[0]!.commits[0]!.sha;
+          }
+          if (fault === "invalid-sha") {
+            pages[0]!.commits[0]!.sha = "not-a-sha";
+          }
           if (fault === "wrong-tip") {
             const lastPage = pages[pages.length - 1]!;
             lastPage.commits[lastPage.commits.length - 1]!.sha = sha(6000);
           }
-          if (fault === "replaced-listed") pages[0]!.commits[0]!.sha = sha(10000);
+          if (fault === "replaced-listed") {
+            pages[0]!.commits[0]!.sha = sha(10000);
+          }
 
           put(join(r.dir, "prs.json"), JSON.stringify(truncatedPr("fabrikalfa/quest", base, oids)));
           put(join(r.dir, "compare.json"), JSON.stringify(pages));
@@ -1055,7 +1069,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     );
   });
 
-  it("T390 refuses when the open PR snapshot moves during a compare", () => {
+  it("T390 scenario: a changed head ref during compare blocks the lead sign", () => {
     withRepo([["src/owned.ts", "lead"]], (r) => {
       const base = sha(5000);
       const oids = [...Array.from({ length: 407 }, (_, index) => sha(index + 1)), r.base];
