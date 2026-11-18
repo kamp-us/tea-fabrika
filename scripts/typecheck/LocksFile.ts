@@ -118,13 +118,15 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
           yield* Effect.gen(function* () {
             // Looked at again under `.break`: another breaker may have taken the lock since.
             if (Seen.guards.stale(yield* look(path, withChild))) {
-              yield* fs.remove(path, { force: true }).pipe(Effect.mapError(lockError(path, "does not remove")));
-
+              // The running command's file goes first, so a taker that links the lock once the label
+              // is gone never has the guard it writes removed by this breaker.
               if (withChild) {
                 yield* fs
                   .remove(`${path}.child`, { force: true })
                   .pipe(Effect.mapError(lockError(`${path}.child`, "does not remove")));
               }
+
+              yield* fs.remove(path, { force: true }).pipe(Effect.mapError(lockError(path, "does not remove")));
             }
           }).pipe(Effect.ensuring(removeIfOurs(breaker).pipe(Effect.ignore)));
           return "again" as const;
@@ -188,7 +190,7 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
       }
 
       const child = `${lock}.child`;
-      const running = (pid: Option.Option<number>) =>
+      const mark = (pid: Option.Option<number>) =>
         Option.match(pid, {
           onNone: () => fs.remove(child, { force: true }),
           // Written whole and renamed into place, so a waiter never reads it half written.
@@ -197,6 +199,16 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
             return fs.writeFileString(temp, `${n}\n`).pipe(Effect.andThen(fs.rename(temp, child)));
           },
         }).pipe(Effect.mapError(lockError(child, "the running command's pid does not write")));
+      // Only while the label still names this process: a holder an old script displaced must not
+      // write over or remove the next holder's guard.
+      const running = (pid: Option.Option<number>) =>
+        Effect.gen(function* () {
+          const now = yield* read(lock);
+
+          if (Option.isSome(now) && now.value.text === label) {
+            yield* mark(pid);
+          }
+        });
       return { running } satisfies Held;
     });
 
