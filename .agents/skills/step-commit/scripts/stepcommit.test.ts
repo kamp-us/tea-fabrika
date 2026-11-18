@@ -922,7 +922,7 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
     type Case = {
       location: "other" | "same" | "own-wip" | "none";
       ticket: string;
-      step: Owner;
+      step: Step;
       only: boolean;
     };
 
@@ -933,11 +933,13 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
       ...(["other", "same", "own-wip", "none"] as const).map((location) => ({ ...lead, location })),
       { ...lead, location: "other", ticket: "999" },
       { ...lead, location: "other", step: "build" },
+      { ...lead, location: "other", step: "fix" },
       { ...lead, location: "other", only: true },
     ];
 
     each(cases, ({ location, ticket, step, only }) =>
-      withRepo([["src/owned.ts", step]], (r) => {
+      // A fix round takes build's rows, and no plan row is owned by "fix".
+      withRepo([["src/owned.ts", step === "fix" ? "build" : step]], (r) => {
         const head = {
           other: "fabrikalfa/quest",
           same: "fabrikalfa/one",
@@ -961,7 +963,8 @@ describe("T390 a lead link never lands on another branch's open PR ticket, today
           expect(r.signs()).toEqual([]);
         } else {
           expect(got.code, got.text).toBe(0);
-          expect(r.signs()).toHaveLength(only ? 0 : 1);
+          // A --commit-only or fix commit signs nothing.
+          expect(r.signs()).toHaveLength(only || step === "fix" ? 0 : 1);
         }
 
         expect(r.asked()).toBe(step === "lead" && !only);
@@ -1182,23 +1185,27 @@ describe("T134 a signed commit leaves the laptop the moment it is made (0134), t
 describe("T1610 a fix round's commit (0177): one agent writes the law and the fix, and nothing is signed", () => {
   const fixture = ".agents/skills/lead/scripts/fixture.test.ts";
 
-  // F1. Plants: keep build's exit 3 refusal for fix; sign a fix commit as build; skip the push.
-  it("F1 scenario: one fix commit holds a tests-owned exam path and a build-owned product path, unsigned and pushed", () => {
+  // F1. One fix commit holds all three kinds of path a fix round may take: an exam path the plan
+  // gives to tests, a product path it gives to build, and an exam path it gives to no step.
+  // Plants: keep build's exit 3 refusal for fix; sign a fix commit as build; skip the push; drop fix
+  // from the unlisted-exam exception.
+  it("F1 scenario: one fix commit holds a tests-owned exam path, a build-owned path and an unlisted exam path, unsigned and pushed", () => {
     withRepo(
       [
         [fixture, "tests"],
         ["src/owned.ts", "build"],
       ],
       (r) => {
+        const unlisted = ".oxlintrc.json";
         r.changed(fixture);
         r.changed("src/owned.ts");
-        const got = r.commit("fix", [fixture, "src/owned.ts"]);
+        r.changed(unlisted, "[]\n");
+        const paths = [fixture, "src/owned.ts", unlisted];
+        const got = r.commit("fix", paths);
 
         expect(got.code, got.text).toBe(0);
         expect(r.git("rev-list", "--count", `${r.base}..HEAD`).trim()).toBe("1");
-        expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").sort()).toEqual(
-          [fixture, "src/owned.ts"].sort(),
-        );
+        expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").sort()).toEqual([...paths].sort());
         expect(r.signs()).toEqual([]);
         expect(r.published()).toEqual([["publish", "fabrikalfa/one"]]);
       },
@@ -1244,28 +1251,10 @@ describe("T1610 a fix round's commit (0177): one agent writes the law and the fi
     );
   });
 
-  // F3. The exam is the test writer's, and a fix round is the test writer too: an exam path the plan
-  // gives to no step is taken, the same as a tests commit takes it. Plant: drop fix from the
-  // unlisted-exam exception.
-  it("F3 scenario: a fix commit takes an exam path the plan gives to no step, beside a build-owned path", () => {
-    withRepo([["src/owned.ts", "build"]], (r) => {
-      r.changed(fixture);
-      r.changed("src/owned.ts");
-      const got = r.commit("fix", [fixture, "src/owned.ts"]);
-
-      expect(got.code, got.text).toBe(0);
-      expect(r.git("show", "--format=", "--name-only", "HEAD").trim().split("\n").sort()).toEqual(
-        [fixture, "src/owned.ts"].sort(),
-      );
-      expect(r.signs()).toEqual([]);
-    });
-  });
-
-  // F4. Fix is the only new step. Build keeps its exit 3 on an exam path, even one the plan gives
-  // to it; a step no one defined still exits 2 and commits nothing. The other steps' answers are
-  // pinned in the K4 laws above, which now draw fix too. Plants: let any step name through; drop
-  // build's exam refusal.
-  it("F4 scenario: build still refuses an exam path with exit 3, and an unknown step exits 2", () => {
+  // F4. Fix is the only new step. Build keeps its exit 3 on an exam path, even one the plan gives to
+  // it. The other steps' answers are pinned in the K4 laws above, which now draw fix too.
+  // Plant: drop build's exam refusal.
+  it("F4 scenario: build still refuses an exam path with exit 3", () => {
     withRepo([[fixture, "build"]], (r) => {
       r.changed(fixture);
       const got = r.commit("build", [fixture]);
@@ -1275,24 +1264,40 @@ describe("T1610 a fix round's commit (0177): one agent writes the law and the fi
       expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
       expect(r.signs()).toEqual([]);
     });
+  });
 
-    each(["fixes", "Fix", "review", ""], (step) =>
-      withRepo([["src/owned.ts", "build"]], (r) => {
-        r.changed("src/owned.ts");
-        const got = r.call("sh", [script, step, "321", "T321 fix: fixture", "src/owned.ts"]);
+  // F4. Any step name outside the five exits 2 and commits nothing. Plant: let any step name through.
+  it("F4 an unknown step exits 2 and commits nothing", () => {
+    const valid = new Set(["tests", "build", "mutation", "lead", "fix"]);
 
-        expect(got.code, got.text).toBe(2);
-        expect(got.text).toContain("unknown step");
-        expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
-        expect(r.published()).toEqual([]);
-      }),
+    fc.assert(
+      fc.property(
+        fc.oneof(word, fc.stringMatching(/^[A-Z][a-zA-Z]{0,8}$/)).filter((step) => !valid.has(step)),
+        (step) =>
+          withRepo([["src/owned.ts", "build"]], (r) => {
+            r.changed("src/owned.ts");
+            const got = r.call("sh", [script, step, "321", "T321 fix: fixture", "src/owned.ts"]);
+
+            expect(got.code, got.text).toBe(2);
+            expect(got.text).toContain("unknown step");
+            expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+            expect(r.published()).toEqual([]);
+          }),
+      ),
+      {
+        ...options,
+        seed: 119120,
+        // numRuns covers every pinned example, or fast-check drops the ones past it.
+        numRuns: 8,
+        examples: [["fixes"], ["Fix"], ["review"], [""]],
+      },
     );
   });
 
   // F5. A fix commit is pushed like a signed one, and a refused push is exit 6 with the commit made
   // and nothing claimed as signed. --commit-only and a box's own commit push nothing. Plants: say
   // "signed" for fix; pass when the push fails; push on --commit-only or in a box.
-  it("F5 a fix commit whose push fails exits 6 with the commit made and no claim it was signed", () => {
+  it("F5 scenario: a fix commit whose push fails exits 6 with the commit made and no claim it was signed", () => {
     withRepo([["src/owned.ts", "build"]], (r) => {
       r.env.T134_PUBLISH = "fail";
       r.changed("src/owned.ts");

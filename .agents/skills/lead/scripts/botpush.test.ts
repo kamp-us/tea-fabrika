@@ -9,7 +9,7 @@ const options = { seed: 119120, numRuns: 10 };
 
 const word = fc.stringMatching(/^[a-z]{8,12}$/).map((s) => `private_${s}`);
 
-const ranges = ["tip", "saved", "diverged", "undone"] as const;
+const ranges = ["tip", "saved", "diverged", "undone", "held"] as const;
 
 const input = fc.record({ word, leak: fc.boolean(), range: fc.constantFrom(...ranges), notes: fc.boolean() });
 
@@ -43,8 +43,9 @@ syncBuiltinESMExports();
 
 describe("T325 K6 botpush, today's tooling", () => {
   // Each case runs in a tree with step notes and in one without (decisions 0161 and 0164: plain
-  // commits). Plants: omit the leakgrep call; omit its --commits call; skip both leak greps when the
-  // tree has no step notes. Removed private text and the repo URL must still push.
+  // commits). Plants: omit the leakgrep call (the "held" range, a leak in a commit an origin ref
+  // already holds, is the one only it catches); omit its --commits call; skip both leak greps when
+  // the tree has no step notes. Removed private text and the repo URL must still push.
   it("scans every submitted commit from the merge base at the requested source", () => {
     fc.assert(
       fc.property(input, ({ word, leak, range, notes }) => {
@@ -98,6 +99,12 @@ describe("T325 K6 botpush, today's tooling", () => {
               git("commit", "-qm", "independent upstream change");
               git("update-ref", "refs/remotes/origin/main", "HEAD");
               git("checkout", "--detach", source);
+            }
+
+            // The change commit is one an origin ref already holds, so the per-commit grep (--commits
+            // ... --not --remotes=origin) skips it, and only the net diff from origin/main carries it.
+            if (range === "held") {
+              git("update-ref", "refs/remotes/origin/held", "HEAD");
             }
 
             // Decision 0048: each commit is read on its own, so a later commit changes no answer.
@@ -180,7 +187,7 @@ describe("T325 K6 botpush, today's tooling", () => {
       {
         ...options,
         // numRuns must cover every pinned example, or fast-check drops the ones past it.
-        numRuns: 20,
+        numRuns: 24,
         // pinned: earlier commits, a saved source and diverged main must all be scanned, in a tree with
         // step notes and in one without.
         examples: ranges.flatMap((range) =>
