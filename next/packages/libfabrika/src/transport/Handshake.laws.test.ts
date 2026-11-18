@@ -47,7 +47,9 @@ const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 const SEED = 119120;
 
 type Msg = { readonly _tag: string; readonly [key: string]: unknown };
+
 type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
+
 type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: unknown };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>

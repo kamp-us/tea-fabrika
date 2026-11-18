@@ -117,6 +117,7 @@ export const Msg = Schema.TaggedUnion({
   inspect_ok: { cmd: Schema.TaggedStruct("inspect", Inspect.fields), value: Chaos.Report, at: Count },
   inspect_err: { cmd: Schema.TaggedStruct("inspect", Inspect.fields), ...errorFields },
 });
+
 type Msg = typeof Msg.Type;
 
 const unfinished = (phase: typeof Phase.Type) =>
@@ -185,6 +186,7 @@ export const chaosMachine = Machine.make({
       }
 
       const { _tag: _type, ...start } = msg;
+
       return [{ number: m.number + 1, phase: Phase.cases.starting.make({ start }) }, [now({ id: start.id })]];
     },
     now_ok: (m, msg) => {

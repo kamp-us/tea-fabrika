@@ -28,8 +28,11 @@ import { ProcessManager } from "./ProcessManager.ts";
 
 // Independently encoded and decoded UUIDv7s: 00000000-0000-7000-8000-000000000000 through ...003.
 export const A = "process_0000000000e008000000000000";
+
 export const B = "process_0000000000e008000000000001";
+
 export const W = "process_0000000000e008000000000002";
+
 export const X = "process_0000000000e008000000000003";
 
 /** A, B, W, X, then 36 more: enough for a world that restarts past the brake or a 32-try limit. */
@@ -42,8 +45,10 @@ export const PIDS: ReadonlyArray<string> = [
 ];
 
 export const CODE = { program: "counter", hash: "build-a" };
+
 /** The brain's own writer key: the `by` on every process event, and the only one the fold trusts. */
 export const BRAIN = "SHA256:brain";
+
 /** A client's own key: what it asks with, never an event the fold trusts. */
 export const CLIENT = "SHA256:window-a";
 
@@ -80,7 +85,9 @@ export const watcher = (process: string): Caller => ({
  * An error class keeps the 256-character text bound.
  */
 export const ERROR_CLASS_MAX = 256;
+
 const ErrorClass = Schema.NonEmptyString.check(Schema.isMaxLength(ERROR_CLASS_MAX));
+
 export const PHASES = ["step", "saved_letter", "interrupted"] as const;
 
 export const ExitReason = Schema.TaggedUnion({
@@ -89,16 +96,24 @@ export const ExitReason = Schema.TaggedUnion({
   kill: {},
   crashed: { phase: Schema.Literals(PHASES), error: Schema.optionalKey(ErrorClass) },
 });
+
 export type ExitReason = typeof ExitReason.Type;
+
 /** What a DOWN carries: an exit reason, or `noproc` when the target was never live. */
 const NoProc = Schema.TaggedStruct("noproc", {});
+
 export const DownReason = Schema.Union([ExitReason, NoProc]);
 
 export const NORMAL = ExitReason.cases.normal.make({});
+
 export const SHUTDOWN = ExitReason.cases.shutdown.make({});
+
 export const KILL = ExitReason.cases.kill.make({});
+
 export const CRASHED = ExitReason.cases.crashed.make({ phase: "step", error: "Error" });
+
 export const INTERRUPTED = ExitReason.cases.crashed.make({ phase: "interrupted" });
+
 export const NOPROC = NoProc.make({});
 
 /** An error class as a program could throw it: an identifier, from one character to the bound. */
@@ -171,9 +186,11 @@ export const again = (after: string, id = `restart:${after}`, code = CODE) =>
 // The temp folder is made on the first `storage()` call, never on import, so a plain test that
 // imports this file for its builders and never calls `storage()` touches no disk (0584).
 let folder: string | null = null;
+
 // A storage opens and reopens its file with plain calls, so each connection is acquired into this
 // one scope, which the file's last hook closes before it removes the folder.
 const stores = Scope.makeUnsafe();
+
 let files = 0;
 
 afterAll(() => {
@@ -197,19 +214,23 @@ afterAll(() => {
 export const storage = () => {
   folder ??= mkdtempSync(join(tmpdir(), "p33-"));
   const path = join(folder, `${++files}.db`);
+
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
   // decision 0052).
   const open = () =>
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the suites call storage() and reopen() as plain functions
     Effect.runSync(Scope.provide(stores)(TestDatabase.make(path)));
+
   let db = open();
   let backend = nodeSql(db);
+
   const fault: { after: number | null; writes: number; error: Error | null } = {
     after: null,
     writes: 0,
     error: null,
   };
+
   const sql: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i.test(query)) {
@@ -223,6 +244,7 @@ export const storage = () => {
 
         const answer = backend.exec(query, ...params);
         fault.writes++;
+
         return answer;
       }
 
@@ -231,6 +253,7 @@ export const storage = () => {
     transaction: (step) => backend.transaction(step),
     size: () => backend.size(),
   };
+
   const rows = (): ReadonlyArray<Entry> => {
     if (db.prepare("SELECT name FROM sqlite_master WHERE name='entries'").get() === undefined) {
       return [];
@@ -241,6 +264,7 @@ export const storage = () => {
       .all()
       .map((row) => Schema.decodeUnknownSync(Row)(row));
   };
+
   return {
     sql,
     fault,
@@ -255,6 +279,7 @@ export const storage = () => {
 };
 
 export type Storage = ReturnType<typeof storage>;
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 export const data = (sql: Sql, bell = quiet) =>
@@ -264,6 +289,7 @@ export const data = (sql: Sql, bell = quiet) =>
 
 export const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return {
     next: Effect.sync(() => {
       const value = values[calls++];

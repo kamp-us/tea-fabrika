@@ -31,6 +31,7 @@ const Msg = Schema.TaggedUnion({
 });
 
 const add = (n: number) => Msg.cases.add.make({ n });
+
 /** The error `save` declares, made by its schema (0562). */
 const Disk = Schema.TaggedStruct("disk", {});
 
@@ -101,6 +102,7 @@ describe("P13 A7 split checking and update", () => {
           }),
           refuse: (s, m) => {
             checks++;
+
             return refuseAll || (Msg.guards.add(m) && s.count + m.n > 10)
               ? { reason: "limit", now: s.count, most: 10 }
               : null;
@@ -218,6 +220,7 @@ const policyCheck = (value: unknown, policy: Policy | undefined) => {
 const corruptPolicy = (policy: Policy, field: number, n: number): object => {
   if (field < 18) {
     const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][Math.floor(field / 3)]!;
+
     const value = Match.value(field % 3).pipe(
       Match.when(0, () => 0),
       Match.when(1, () => -n - 1),
@@ -379,6 +382,7 @@ const declarations = fc
   .map(({ name, v, initial, ...data }) => {
     const modelSchema = Schema.Struct(Model.fields);
     const msgSchema = Schema.Union([Msg.cases.add, Msg.cases.throw]);
+
     return {
       ...data,
       initial,
@@ -710,11 +714,14 @@ describe("P11 program contract and p22 refusal", () => {
   // the inner `cmd` is wrong; (c) Program's `settled` reading a key as `type`.
   it("K3 plant, let settled bypass program.msg: only fold accepts tea's own answers, keyed _tag", () => {
     const Other = Schema.TaggedStruct("other", { n: Schema.Int });
+
     /** The same answer with its key renamed to the old `type`, as a raw saved row would hold it. */
     const typed = (reply: { readonly _tag: string }) => {
       const { _tag, ...rest } = reply;
+
       return { ...rest, type: _tag };
     };
+
     fc.assert(
       fc.property(
         fc.record({ n: fc.integer(), value: fc.integer(), at: fc.integer({ min: 0, max: 2 ** 40 }) }),
@@ -903,6 +910,7 @@ describe("P11 program contract and p22 refusal", () => {
                 },
                 view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
               };
+
               expect(() => load(broken).step(value, add(1))).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
               );
@@ -998,6 +1006,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
 
         const own = (u: unknown) =>
           Predicate.hasProperty(u, "maxDeliveries") && Rec.has(u, "maxDeliveries") ? u.maxDeliveries : undefined;
+
         // @ts-expect-error raw is untrusted JavaScript, which the type refuses and this law feeds in on purpose
         const p: unknown = Program.make(raw);
         expect(own(p)).toBe(limit);
@@ -1200,6 +1209,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           oldCode(callables[fns.refuse]()) &&
           oldCode(callables[fns.wake]()) &&
           Arr.every(upgrades, (u) => oldCode(u.run));
+
         const ok = oldIsSteps(m) && codeOk;
         const decoded = Schema.decodeUnknownResult(Program.schema)(raw);
         expect(Result.isSuccess(decoded)).toBe(ok);
@@ -1353,6 +1363,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         },
         get: (t, key, receiver) => {
           trace.push(`get:${String(key)}`);
+
           // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
           return Predicate.isString(key) && key in fields ? next(key) : Reflect.get(t, key, receiver);
         },
@@ -1769,6 +1780,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
 
   const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
     const defs = Arr.map(cmds, named);
+
     const answers = Rec.fromEntries(
       Arr.flatMap(defs, (d) => [
         [d.okType, (s: typeof watchModel.Type) => [s, []]],
@@ -1800,6 +1812,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
     });
 
     const { DOWN, ...rest } = made.inputs;
+
     const inputs = Match.value(port).pipe(
       Match.when("both", () => made.inputs),
       Match.when("DOWN", () => ({ DOWN })),

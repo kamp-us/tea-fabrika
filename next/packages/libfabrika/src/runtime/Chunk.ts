@@ -79,6 +79,7 @@ export const cut = (send: Send, size: number): Result.Result<Arr.NonEmptyReadonl
     items,
     part: { id: send.id, seq, last },
   });
+
   const sizes = Arr.map(send.items, bytes);
   const end = send.items.length;
 
@@ -150,5 +151,6 @@ export const join = (chunks: ReadonlyArray<Chunk>): Option.Option<ReadonlyArray<
       chunks,
       (chunk, n) => chunk.part.id === id && chunk.part.seq === n && chunk.part.last === (n === chunks.length - 1),
     );
+
   return whole ? Option.some(Arr.flatMap(chunks, (chunk) => chunk.items)) : Option.none();
 };

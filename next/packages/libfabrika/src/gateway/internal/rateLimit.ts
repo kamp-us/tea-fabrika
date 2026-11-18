@@ -20,6 +20,7 @@ export const Model = Schema.TaggedUnion({
 
 /** @internal The one Msg: take from the budget at `at` under `policy`. */
 export const Take = Schema.TaggedStruct("take", { at: Integer, policy: Policy });
+
 const report = Cmd.make("report", { input: Schema.Struct({ decision: Decision }), ok: Schema.Null, err: [] });
 
 const times = Schema.decodeUnknownResult(Schema.Struct({ at: Integer, until: Integer, ttl: Positive }));

@@ -287,6 +287,7 @@ describe("p92, every entry has every field: at the referee", () => {
     Effect.gen(function* () {
       const big = Str.repeat(2_000_001)("x");
       const near = Str.repeat(1_900_000)("x");
+
       const { answers, entries } = yield* handIn([
         { ...json(), body: { note: big } },
         { ...json(), body: { note: near } },
@@ -323,8 +324,10 @@ describe("p92, every entry has every field: at the referee", () => {
 
       // A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
       const WIDE = Str.repeat(1_000)("ü");
+
       const sized = (total: number): Line => {
         const rest = total - rowBytes({ ...full, body: { note: WIDE } });
+
         return { ...full, body: { note: WIDE + Str.repeat(rest)("x") } };
       };
 
@@ -395,6 +398,7 @@ describe("p68, an entry keeps its parent", () => {
 
   it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", () => {
     const text = fc.oneof(fc.stringMatching(PARENT), fc.string(), fc.string({ unit: "binary" }));
+
     return fc.assert(
       fc.asyncProperty(fc.array(text, { minLength: 1, maxLength: 8 }), (texts) =>
         Effect.runPromise(

@@ -1,14 +1,39 @@
 {
   "libraryTypes": {
-    "design": { "imports": [], "pure": false },
-    "library": { "imports": ["design"], "pure": false },
-    "app": { "imports": ["library", "design"], "pure": false },
-    "next-vitest": { "imports": [], "pure": false },
-    "next-library": { "imports": ["design", "next-vitest"], "pure": false },
-    "next-tuval": { "imports": ["next-library", "design", "next-vitest"], "pure": false },
-    "next-program": { "imports": ["next-library", "next-tuval", "design", "next-vitest"], "pure": false },
+    "design": {
+      "imports": [],
+      "pure": false
+    },
+    "library": {
+      "imports": ["design"],
+      "pure": false
+    },
+    "app": {
+      "imports": ["library", "design"],
+      "pure": false
+    },
+    "next-vitest": {
+      "imports": [],
+      "pure": false
+    },
+    "next-library": {
+      "imports": ["design", "next-vitest", "kalfa-config"],
+      "pure": false
+    },
+    "next-tuval": {
+      "imports": ["next-library", "design", "next-vitest"],
+      "pure": false
+    },
+    "next-program": {
+      "imports": ["next-library", "next-tuval", "design", "next-vitest"],
+      "pure": false
+    },
     "next-app": {
-      "imports": ["next-library", "next-tuval", "next-program", "design", "next-vitest"],
+      "imports": ["next-library", "next-tuval", "next-program", "design", "next-vitest", "kalfa-config"],
+      "pure": false
+    },
+    "kalfa-config": {
+      "imports": ["next-vitest"],
       "pure": false
     }
   },
@@ -25,8 +50,9 @@
     "next/programs/chaos": "next-program",
     "next/programs/counter": "next-program",
     "next/programs/pipeline": "next-program",
-    "next/programs/tezgah": "next-program"
+    "next/programs/tezgah": "next-program",
+    "kalfa/config": "kalfa-config"
   },
-  "libraryRoots": ["next"],
+  "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]
 }

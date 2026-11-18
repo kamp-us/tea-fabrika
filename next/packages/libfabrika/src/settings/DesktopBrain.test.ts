@@ -1,6 +1,10 @@
 // L14 next/. Only the declarations and lower settings services belong in this law. The memory restart
 // plan (docs/plan/quests/memory-restart-PLAN.md) adds L9: the memory limit and the grace.
 import { expect, it } from "@effect/vitest";
+import * as Files from "@kalfa/config/Files";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Toml } from "@kalfa/config/Toml";
+import * as TomlParser from "@kalfa/config/TomlParser";
 import * as ByteSize from "effect/ByteSize";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
@@ -12,10 +16,6 @@ import * as Str from "effect/String";
 
 import * as Declarations from "./Declarations.ts";
 import * as Sources from "./Fabrika.ts";
-import * as Files from "./Files.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Toml } from "./Toml.ts";
-import * as TomlParser from "./TomlParser.ts";
 
 const paths = [
   "desktop.brain-throttle",

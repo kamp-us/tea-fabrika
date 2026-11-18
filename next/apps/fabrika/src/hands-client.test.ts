@@ -150,6 +150,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
 
   const fingerprint = Effect.fnUntraced(function* (bytes: Uint8Array) {
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", new Uint8Array(bytes)), catch: fail });
+
     return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
 
@@ -317,6 +318,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       Str.split(Str.split(new URL(url).pathname, "/client/")[1] ?? "", "/"),
       decodeURIComponent,
     );
+
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
     const client: { id: ConnectionId | null } = { id: null };
 
@@ -353,6 +355,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       wait: (stream, after, reader) =>
         Effect.gen(function* () {
           const id = yield* connected;
+
           const answer = Str.startsWith("target:")(stream)
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
@@ -527,6 +530,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
             : [task.state.request.process],
         ),
       );
+
       const free = Arr.filter(f.processes, (p) => !busy.has(p));
       const moves = [...(free.length > 0 ? ["request"] : []), "run", "run", "drop", "lose", "restart"];
       const move = moves[cell.move % moves.length] ?? "run";
@@ -613,6 +617,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
     const tables = Arr.map(b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) => String(row.name));
+
     const outputs: Record<string, unknown> = {
       frames: Arr.map(d.sockets, (socket) => socket.sent),
       journal: [...kept.values.entries()],

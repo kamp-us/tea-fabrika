@@ -35,6 +35,7 @@ const machine = Machine.make({
 });
 
 type Handlers = typeof machine.update;
+
 type Answer = Parameters<Extract<Handlers, { readonly store_ok: unknown }>["store_ok"]>[1];
 
 it("type: K1 a TaggedUnion Msg is taken by Machine.make, and its cells and answers are keyed on _tag", () => {
@@ -108,4 +109,5 @@ function dispatchTypeErrors(run: EffectRun<typeof Model.Type, typeof Msg.Type>) 
 }
 
 void authoringTypeErrors;
+
 void dispatchTypeErrors;

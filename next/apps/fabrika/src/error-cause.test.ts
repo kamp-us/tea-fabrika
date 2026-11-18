@@ -76,6 +76,7 @@ describe("T695, the app's wiring keeps what failed", () => {
                   settings: { ...valid.settings, values: { ...valid.settings.values, "instance.port": bad } },
                 }
               : { ...valid, [field]: bad };
+
         const instance = Formatter.formatJson(damaged);
         // SAFETY: settings reads only `INSTANCE` from its Env, the one binding this law damages.
         const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));

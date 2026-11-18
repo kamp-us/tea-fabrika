@@ -369,6 +369,7 @@ const walk = (
     });
 
     const patches = () => Arr.filter(published, (u) => u.type === "patch").length;
+
     const inboxCount = Effect.suspend(() =>
       mailbox === undefined ? Effect.die("no connection") : Stream.runCount(mailbox.read(NAME, 0)).pipe(Effect.orDie),
     );
@@ -396,6 +397,7 @@ const walk = (
     const sorted = (view: unknown) => {
       // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
+
       return { notes: Rec.fromEntries(Rec.toEntries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
 
@@ -473,6 +475,7 @@ const walk = (
       const intact = Arr.filter(answered, (a) => !damaged.has(a.letter.id));
       const stored = Arr.filter(intact, (a) => a.first._tag === "refused");
       const futures = Arr.filter(answered, (a) => a.first._tag === "refused" && a.base > current(a.note));
+
       const moves = Arr.filter(enabled, (move) =>
         move === "older"
           ? Arr.some(NOTES, (note) => current(note) > 0)
@@ -592,9 +595,11 @@ const walk = (
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
         // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+
         const json = yield* Schema.decodeUnknownEffect(
           Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
         )(value);
+
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 

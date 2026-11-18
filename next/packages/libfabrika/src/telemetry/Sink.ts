@@ -67,9 +67,12 @@ export {
 } from "./Trace.ts";
 
 const ERROR = "error.type";
+
 const DROPPED = "fab.sink.dropped";
+
 /** The most characters of a failure's text kept as content: half a Durable Object row. */
 const MOST_CONTENT = 1_000_000;
+
 /** How many spans one record call carries. */
 const BATCH = 100;
 
@@ -87,8 +90,11 @@ const Unsent = Schema.Struct({
 });
 
 const decodeUnsent = Schema.decodeUnknownSync(Unsent);
+
 const encodeChain = Schema.encodeSync(Schema.fromJsonString(Chain));
+
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(SpanRow));
+
 const decodePart = Schema.decodeUnknownSync(Schema.Struct({ part: Schema.Int }));
 
 /** Tags as a row keeps them: strings (cut at 128), finite numbers, booleans, and `Redacted` as
@@ -132,6 +138,7 @@ const largestLag = (tags: Readonly<Record<string, Tag>>): number | null => {
   const lags = Rec.toEntries(tags).flatMap(([key, value]) =>
     Str.endsWith(".lag")(key) && Predicate.isNumber(value) ? [value] : [],
   );
+
   return lags.length === 0 ? null : Math.max(...lags);
 };
 
@@ -173,6 +180,7 @@ const place = (location: string): string => {
   const position = /(?::\d+){1,2}$/.exec(location)?.[0] ?? "";
   const path = Str.slice(0, location.length - position.length)(location);
   const file = /^[a-z][a-z\d+.-]*:\/\//i.test(path) ? Str.split(path, /[?#]/)[0] : path;
+
   return `${Str.slice(Math.max(after(file, "/"), after(file, "\\")))(file)}${position}`;
 };
 
@@ -212,6 +220,7 @@ const located = (location: string): string => {
 
   const head = Str.slice(0, origin.value)(location);
   const open = opens(head);
+
   return open === -1
     ? place(location)
     : `${Str.slice(0, open)(head)}(${located(Str.slice(open + 1)(head))}), ${place(Str.slice(origin.value + 3)(location))}`;
@@ -237,6 +246,7 @@ const portable = (line: string): string => {
   }
 
   const bare = /^(async )?((?:[a-z][a-z\d+.-]*:|[/\\]).*|.*(?::\d+){1,2})$/is.exec(body);
+
   return bare === null ? line : `${at}${bare[1] ?? ""}${place(bare[2] ?? "")}${ending}`;
 };
 
@@ -254,29 +264,36 @@ const cutContent = (text: string): string =>
  *  is the one that ended it, the row's resource. */
 const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>, object: string): Ended => {
   const own = keep(span.attributes);
+
   const kept = span.events.map(([name, time, attributes]) => ({
     name,
     time,
     ...keep(Rec.toEntries(attributes)),
   }));
+
   const links = span.links.map(({ span: linked, attributes }) => ({
     traceId: linked.traceId,
     spanId: linked.spanId,
     ...keep(Rec.toEntries(attributes)),
   }));
+
   const dropped = [...kept, ...links].reduce((n, one) => n + one.dropped, own.dropped);
   const failure = Exit.isFailure(exit) ? Option.some(exit.cause) : Option.none();
+
   const error = Option.map(failure, (cause) => {
     const named = own.tags[ERROR];
 
     return Predicate.isString(named) ? named : causeClass(cause);
   });
+
   const tags: Record<string, Tag> = {
     ...own.tags,
     ...Option.match(error, { onNone: () => ({}), onSome: (type) => ({ [ERROR]: type }) }),
     ...(dropped > 0 ? { [DROPPED]: dropped } : {}),
   };
+
   const startTime = span.status.startTime;
+
   const row = SpanRow.make({
     traceId: span.traceId,
     spanId: span.spanId,
@@ -298,6 +315,7 @@ const ended = (span: Tracer.NativeSpan, endTime: bigint, exit: Exit.Exit<unknown
     resource: { attributes: { [OBJECT]: object } },
     ok: Exit.isSuccess(exit),
   });
+
   return {
     health: {
       piece: span.name,
@@ -389,6 +407,7 @@ export class SpanSink extends Context.Service<
     Layer.unwrap(
       Effect.sync(() => {
         const { tracer, sink } = make(sql, options);
+
         return Layer.merge(Layer.succeed(SpanSink, sink), Layer.succeed(Tracer.Tracer, tracer));
       }),
     );
@@ -427,7 +446,9 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
       return step();
     });
+
     ready = true;
+
     return result;
   };
 
@@ -447,6 +468,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   const commit = (more: ReadonlyArray<Ended>, now: number, sized: boolean): Result.Result<void, unknown> => {
     const hour = hourStart(now);
     const { checked } = state;
+
     const done = Result.try({
       try: () =>
         atomic(() => {
@@ -478,6 +500,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
       state,
       Result.isFailure(done) ? Msg.cases.commit_failed.make({ more }) : Msg.cases.committed.make({ hour, sized }),
     )[0];
+
     return done;
   };
 
@@ -494,6 +517,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     const key = JSON.stringify([span.name, hour, refused]);
     const count = (counts.get(key)?.count ?? 0) + 1;
     counts.set(key, SumPoint.make({ piece: span.name, hour, refused, count }));
+
     return true;
   };
 
@@ -503,6 +527,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
 
     if (countRefusal(span, at)) {
       commit([], at, true);
+
       return;
     }
 
@@ -556,6 +581,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
       ...(running.context === undefined ? {} : { context: running.context }),
       span: (init) => {
         const made = running.span(init);
+
         return made instanceof SinkSpan && made.owner === self ? made : new SinkSpan(init, self, ending(open));
       },
     });
@@ -563,6 +589,7 @@ const make = (sql: Sql, options: { readonly object: string }) => {
   const batch = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.flatMap(Tracer.Tracer, (running) => {
       const open: Open = { sink: self, spans: [], closed: false };
+
       return work.pipe(
         Effect.withTracer(collecting(running, open)),
         Effect.provideService(Batch, open),
@@ -586,12 +613,14 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     rows: ReadonlyArray<{ readonly span: SpanRow; readonly content: string | null }>,
   ) {
     const name = chainName(chain);
+
     let at = yield* attempt(() =>
       Option.match(Option.fromUndefinedOr(sql.exec(`SELECT part FROM parts WHERE chain = ?`, name)[0]), {
         onNone: () => 0,
         onSome: (row) => decodePart(row).part,
       }),
     );
+
     let left = rows;
     let sent = 0;
 
@@ -650,9 +679,11 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     }
 
     const records = yield* RecordManager;
+
     const unsent = yield* attempt(() =>
       sql.exec(`SELECT * FROM unsent ORDER BY rowid`).map((row) => decodeUnsent(row)),
     );
+
     const chains = new Map<string, { chain: Chain; rows: Array<{ span: SpanRow; content: string | null }> }>();
 
     for (const { chain, row, content } of unsent) {
@@ -671,12 +702,14 @@ const make = (sql: Sql, options: { readonly object: string }) => {
     }
 
     yield* archiveDays(sql, options.object, yield* Clock.currentTimeMillis);
+
     return { sent };
   });
 
   const check = Effect.suspend(() => {
     const before = state;
     state = applyCell(machine, state, Msg.cases.flush_checked.make({}))[0];
+
     return before._tag === "clean" && counts.size === 0
       ? Effect.void
       : Effect.fail(new SinkError({ reason: "storage", held: held(before).length + counts.size }));

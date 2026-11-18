@@ -326,6 +326,7 @@ const world = async (
               const program = `p41/${Str.replace(":", "-")(name)}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
+
               const started = await instance.project(PROJECT).start(
                 {
                   _tag: "first",
@@ -427,6 +428,7 @@ const wire = async (
 
       if (Option.isSome(index)) {
         diagnostics?.note("consumed", { id: frames[index.value].id, method: frames[index.value].method });
+
         return frames.splice(index.value, 1)[0];
       }
 
@@ -632,6 +634,7 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
             Arr.some(rows, (r) => r._tag === "down") ||
             Arr.some(rows, (r) => r._tag === "restarted" && r.after === responder),
         );
+
         down = Option.getOrUndefined(Arr.findFirst(rows, (r) => r._tag === "down"));
 
         if (down === undefined) {
@@ -646,6 +649,7 @@ it("scenario: W5, mail respects a target's brake while another pair completes", 
       await client.call("view.open", { pid: other });
       await client.call("process.send", request(other, "healthy"));
       await changed(client, "answered");
+
       const healthy = Arr.filter(
         await answer(instance, "requester:2", "healthy"),
         (r) => r.m?._tag === "answer" && r.m.ref === "healthy",
@@ -728,6 +732,7 @@ const checklistWorld = async (
           start: async (name, program = "fabrika/checklist") => {
             const code = built.programs[program];
             expect(code).toBeDefined();
+
             const started = await instance.project(PROJECT).start(
               {
                 _tag: "first",
@@ -852,7 +857,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
   const Declarations = await import("@kampus/libfabrika/settings/Declarations");
-  const Snapshot = await import("@kampus/libfabrika/settings/Snapshot");
+  const Snapshot = await import("@kalfa/config/Snapshot");
   const Sources = await import("@kampus/libfabrika/settings/Fabrika");
   const { Digest } = await import("effect/crypto");
   await Effect.runPromise(
@@ -927,9 +932,11 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
 
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
+
         const start = async (request: Start) =>
           Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(await project.start(request, from))
             .process;
+
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
 
         const writer = await start({

@@ -1,6 +1,7 @@
 /**
  * Scoped native commands and exclusive home-owned plist publication.
  */
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -27,7 +28,6 @@ import {
 } from "../../desktop/BrainControl.ts";
 import { BrainSpec } from "../../desktop/BrainSpec.ts";
 import * as Declarations from "../../settings/Declarations.ts";
-import type * as Snapshot from "../../settings/Snapshot.ts";
 import * as LaunchdStatus from "./LaunchdStatus.ts";
 
 const Job = Schema.Struct({

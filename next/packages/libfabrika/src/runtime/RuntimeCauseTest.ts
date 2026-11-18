@@ -71,6 +71,7 @@ export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) =>
 /** The same `Sql`, but each query throws `failure` once armed. */
 const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
   let armed = false;
+
   return {
     sql: {
       ...sql,
@@ -93,6 +94,7 @@ const recoveryStore = (sql: Sql) =>
 
 /** The process store's calls a runner makes, by name. */
 type StoreCall = "load" | "readActivity" | "placed" | "save";
+
 const storeCalls = fc.constantFrom<StoreCall>("load", "readActivity", "placed", "save");
 
 const callStore = (call: StoreCall) =>
@@ -114,6 +116,7 @@ const callStore = (call: StoreCall) =>
 
 // `save` is not here: its law needs a whole journal, so it sits in `RecoveryStore.test.ts`.
 type RecoveryCall = "load" | "input" | "receipt";
+
 const recoveryCalls = fc.constantFrom<RecoveryCall>("load", "input", "receipt");
 
 const callRecovery = (call: RecoveryCall) =>
@@ -139,6 +142,7 @@ const sessionFault = <A, R>(call: Effect.Effect<A, SessionFault | SigningRefused
   );
 
 const PARENT = `in-${PROCESS}-1`;
+
 const SESSION_TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One input as the door records it, from a person, for `PROCESS`. */
@@ -157,6 +161,7 @@ const recorded = {
 
 /** The session manager's calls, by name. */
 type SessionCall = "record" | "delivered" | "end" | "signer" | "receipt";
+
 const sessionCalls = fc.constantFrom<SessionCall>("record", "delivered", "end", "signer", "receipt");
 
 const callSession = (call: SessionCall) =>
@@ -182,10 +187,13 @@ const sessionPolicy = { input: () => true, event: () => false };
 
 /** What the stores read from the context: the ledger, named through the process store's layer. */
 type LedgerNeeds = Layer.Services<ReturnType<typeof ProcessStore.layer>>;
+
 /** What a write under the referee's lock reads, named through `appendAdmitted`. */
 type TransactionNeeds = Effect.Services<ReturnType<typeof appendAdmitted>>;
+
 /** A ledger line, as `appendAdmitted` takes one. */
 type WriteLine = Parameters<typeof appendAdmitted>[1]["line"];
+
 /** The error the stores still on the ledger's own fail with, named through the process store's calls.
  *  A save the account refuses fails with the account's own error, which no ledger throw makes. */
 type StoreError = Exclude<Effect.Error<ReturnType<typeof callStore>>, QuotasError>;
@@ -266,12 +274,15 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             tag === "idle"
               ? Activity.cases.idle.make({ process: PROCESS })
               : Activity.cases.stepping.make({ process: PROCESS, letter, build: "b" });
+
           const raw = { ...valid, process: bad };
+
           const layer = processStore(fresh(), {
             put: () => Effect.void,
             sync: () => Effect.void,
             get: () => Effect.succeed(raw),
           });
+
           const error = yield* Effect.flip(Effect.provide(callStore("readActivity"), layer));
           expect(error.reason).toBe("bad_row");
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
@@ -342,6 +353,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
     /** The manager on `sql`. `membership` may fail with any error of the layer below (0043 rule 12). */
     const sessions = <E>(sql: Sql, membership: (key: string) => Effect.Effect<typeof Writer.Type, E>) =>
       SessionManager.layer(sql, membership, sessionPolicy);
+
     const member = () => Effect.succeed(recorded.by);
 
     // Law 8, SessionManager.ts:242. Plant: build the `Storage` reason without the caught value.
@@ -414,6 +426,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
 
   describe("T695, the stores under the runtime keep what failed", () => {
     const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
     const writer = {
       by: "SHA256:founder",
       for: "person-1",
@@ -423,11 +436,13 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       traceId: TRACE,
       build: "b-1",
     };
+
     /** A valid `founded` line, then its body replaced by `body`. */
     const memberLine = (body: WriteLine["body"]): WriteLine => ({
       ...lineFor(writer, MemberEvent.cases.founded.make({ id: "person-1", name: "p", keys: [], window: null })),
       body,
     });
+
     const founder = { name: "p", keys: [], window: null, person: "person-1", by: "SHA256:founder", build: "b-1" };
 
     // C3, Authorization.ts:30 and ClientManagerLedger.ts:40. Plant: `new LedgerError({ reason: "bad_row" })`.
@@ -444,6 +459,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           const members = ledgerOn(sql);
           const body = { id: "person-1", name: "p", keys: [], window: null, [field]: bad };
           yield* Effect.provide(append("gateway/access", "founded", memberLine(body)), members);
+
           const error = yield* Effect.flip<unknown, StoreError | NotGranted, never>(
             reader === "authorization"
               ? Effect.provide(
@@ -455,6 +471,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
                   ClientManagerLedger.layer(founder).pipe(Layer.provide(members)),
                 ),
           );
+
           expect(error).toBeInstanceOf(LedgerError);
           expect(error).toMatchObject({ reason: "bad_row" });
           expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
@@ -470,6 +487,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         Effect.gen(function* () {
           const planted = throwing(fresh(), failure);
           planted.arm();
+
           const error = yield* Effect.flip(
             Effect.provide(
               Connections.use((c) => c.online(key)),
@@ -479,6 +497,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
               }),
             ),
           );
+
           expect(error.reason).toBe("storage");
           expect(error.cause).toBe(failure);
         }),
@@ -494,6 +513,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             tag === "idle"
               ? Activity.cases.idle.make({ process: PROCESS })
               : Activity.cases.stepping.make({ process: PROCESS, letter: "l", build: "b" });
+
           const recovered = recoverActivity({ ...valid, process: bad });
           expect(Result.isFailure(recovered)).toBe(true);
           const error = Result.isFailure(recovered) ? recovered.failure : null;
@@ -512,10 +532,13 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       ({ field, bad }) =>
         Effect.gen(function* () {
           const sql = fresh();
+
           const manager = ProcessManager.layer({ ...brain(), by: BRAIN }, Effect.succeed(PROCESS)).pipe(
             Layer.provide(transactions(sql)),
           );
+
           const dead = { tries: 3, limit: 3, m: "m-1", build: "b-1", errors: ["E", "E", "E"], [field]: bad };
+
           const error = yield* Effect.flip(
             Effect.provide(
               // SAFETY: not a DeadInput on purpose, since one field holds a damaged value; ProcessManager's
@@ -524,6 +547,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
               manager,
             ),
           );
+
           expect(error.reason).toBe("bad_text");
           expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
         }),
@@ -535,6 +559,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
     const owner = Writer.cases.person.make({ key: "SHA256:owner", for: "person-1" });
     const Model = Schema.Struct({ n: Schema.Int });
     const Msg = Schema.TaggedStruct("inc", {});
+
     const program = {
       name: "cause",
       machine: Machine.make({
@@ -553,6 +578,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
       writes: {},
       wake: () => null,
     } as const;
+
     const writer = {
       by: BRAIN,
       for: "brain",
@@ -566,6 +592,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
     /** A real runner on fresh storage, supervised by the real process manager, as in production. */
     const runner = (policy?: RunnerOptions["policy"], declared: unknown = program, sql = fresh()) => {
       const mail = Mailbox.layer.pipe(Layer.provideMerge(ledgerOn(sql)));
+
       const dependencies = Layer.mergeAll(
         ProcessStore.layer(sql, { process: PROCESS }),
         Layer.succeed(Alarm, { set: () => Effect.void }),
@@ -577,6 +604,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           own: () => Effect.die("unused"),
         }),
       ).pipe(Layer.provideMerge(mail));
+
       const manager = Layer.effectDiscard(
         ProcessManager.use((m) =>
           m.start(
@@ -597,6 +625,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         ),
         Layer.provide(transactions(fresh())),
       );
+
       return ProgramRunner.layer(
         { id: PROCESS, name: NAME, program: "cause", build: "test", owner },
         {
@@ -635,6 +664,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
               runner(),
             ),
           );
+
           expect(error).toBeInstanceOf(RunnerError);
           expect(error).toMatchObject({ reason: "bad_input" });
           expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
@@ -654,12 +684,14 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             periodMs: 5000,
             backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
           };
+
           const error = yield* Effect.flip(
             Effect.provide(
               ProgramRunner.use((r) => r.msg(delivery("4bf92f3577b34da6a3ce929d0e0e4736"))),
               runner(policy),
             ),
           );
+
           expect(error).toBeInstanceOf(LedgerError);
           expect(error).toMatchObject({ reason: "bad_row" });
           expect(Schema.isSchemaError(error.cause), "the decoder's own failure").toBe(true);
@@ -681,6 +713,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           // SAFETY: not a Model on purpose: `n` is a string, a boolean or a fraction, which Schema.Int
           // refuses, so the step's model or view fails to encode, the failure this law is about.
           const wrong = { n: bad } as typeof Model.Type;
+
           const broken = {
             ...program,
             machine: Machine.make({
@@ -695,6 +728,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
               select: (s: typeof Model.Type) => (part === "model" || s.n === 0 ? s : wrong),
             },
           };
+
           const sent = yield* Effect.provide(
             Effect.gen(function* () {
               const r = yield* ProgramRunner;
@@ -704,12 +738,15 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
             }),
             runner(undefined, broken, sql),
           );
+
           expect(sent).toBeInstanceOf(ProgramDown);
           const saved = yield* openRecovery(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }).load;
+
           const stored = [
             ...Arr.flatMap(saved?.receipts ?? [], (receipt) => receipt.errors),
             ...Arr.flatMap(saved?.observations ?? [], (o) => ("error" in o && o.error !== undefined ? [o.error] : [])),
           ];
+
           expect(stored.length, "the failed step is stored").toBeGreaterThan(0);
 
           for (const error of stored) {

@@ -263,6 +263,7 @@ function admissionTypeErrors(pure: Stepper, admitted: Admission) {
       data: metadata,
       select: (msg) => {
         expectTypeOf(msg).toEqualTypeOf<typeof Msg.Type>();
+
         return { type: msg._tag, total: msg._tag === "add" ? msg.n : 0 };
       },
     },

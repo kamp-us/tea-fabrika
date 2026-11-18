@@ -312,9 +312,11 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const program = `m13/${Str.split(name, ":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
+
               const started = await instance
                 .project(PROJECT)
                 .start({ _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } }, from);
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
             },
           }),
@@ -389,6 +391,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     // The exit's turn writes each live watch's DOWN in the order the watches were made, so a DOWN
     // for the dropped watch would fold before the kept one's.
     await client.call("process.send", letter(writer, "quit-1", Tag.cases.quit.make({})));
+
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
       Arr.some(rows, (r) => r.type === "DOWN" && r.ref === kept),
     );

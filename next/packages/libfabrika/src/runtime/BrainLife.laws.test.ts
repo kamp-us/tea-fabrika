@@ -42,6 +42,7 @@ const lifecycle = fc.record({
 });
 
 const normalLife = { start, after, build: "build-a", until: 250, reason: "crash" };
+
 const stopInFlight = [events[0], Tag.cases.stop.make({}), events[1], events[2], Tag.cases.stopped.make({})] as const;
 
 const messages = lifecycle.map(

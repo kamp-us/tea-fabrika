@@ -46,6 +46,7 @@ const REMOVED = 4003;
 expectTypeOf<Exclude<LinkMsg, { readonly _tag: "blocked" }>>().toMatchTypeOf<{ readonly dial: number }>();
 
 type Step = readonly [Link, ReadonlyArray<{ readonly _tag: string; readonly dial?: number }>];
+
 const step = (s: Link, m: LinkMsg): Step => applyCell(linkMachine, s, m);
 
 const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
@@ -196,6 +197,7 @@ describe("L1: the link machine", () => {
             (m._tag === "granted" && m.dial === prev.s.dial) ||
             (m._tag === "closed" && m.dial === prev.s.dial) ||
             m._tag === "blocked";
+
           expect(allowed, `${m._tag} took a grant wait to ${next._tag}`).toBe(true);
           expect(m._tag !== "granted" || next._tag === "dialing", "granted signs a fresh hello on the same dial").toBe(
             true,
@@ -231,6 +233,7 @@ describe("L1: the link machine", () => {
             expect(next._tag).toBe("dialing");
             expect(currentDial(next)).toBe(m.dial);
             expect(m.dial).toBeGreaterThan(Math.max(0, ...Arr.map(prev.delivered, (d) => ("dial" in d ? d.dial : 0))));
+
             return;
           }
 

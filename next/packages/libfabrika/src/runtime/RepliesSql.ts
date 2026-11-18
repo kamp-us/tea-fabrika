@@ -14,7 +14,9 @@ const TABLE =
   "CREATE TABLE IF NOT EXISTS process_replies (name TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (name, id))";
 
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(Reply));
+
 const encode = Schema.encodeSync(Schema.fromJsonString(Reply));
+
 const issues = SchemaIssue.makeFormatterStandardSchemaV1();
 
 const bytes = (text: string) => new TextEncoder().encode(text).length;
@@ -37,6 +39,7 @@ const load = (sql: Sql, name: string, id: string): typeof Model.Type => {
       issues(saved.failure.issue).issues,
       (i) => Arr.join(Arr.map(i.path ?? [], String), ".") || "row",
     );
+
     throw badRow(`a stored reply does not decode at ${Arr.join(paths, ", ")}`);
   }
 
@@ -107,6 +110,7 @@ export const layer = (
   Layer.succeed(Replies, {
     reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
       const model = yield* stored(() => load(sql, name, id));
+
       return model._tag === "remembered" ? model.reply : null;
     }),
     rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
@@ -116,6 +120,7 @@ export const layer = (
             sql.transaction(() =>
               remember(sql, limits.capacity, reply, limits.accounting, clock.currentTimeMillisUnsafe()),
             );
+
           return limits.accounting === undefined ? save() : limits.accounting.protect(save);
         }),
       );

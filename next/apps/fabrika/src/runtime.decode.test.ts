@@ -91,6 +91,7 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const name = Predicate.hasProperty(inputs, "name") ? inputs.name : undefined;
   expect(Predicate.isFunction(name)).toBe(true);
   assert(Predicate.isFunction(name));
+
   return (m) => Reflect.apply(name, undefined, [m]);
 };
 
@@ -132,6 +133,7 @@ type Message = typeof Message extends fc.Arbitrary<infer A> ? A : never;
 /** A fresh message from its recipe; a proxy logs each read of `_tag` in `trace`. */
 const message = (r: Message, trace: Array<string>): unknown => {
   const fields: Record<string, unknown> = r.tag === "absent" ? {} : { _tag: r.tag };
+
   const target: unknown = (() => {
     switch (r.container) {
       case "plain":

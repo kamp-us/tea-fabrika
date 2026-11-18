@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-17-config-engine-doc-paths",
+  "date": "2026-11-17",
+  "by": "build",
+  "model": "gpt-6.1-sol",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".patterns/settings.md",
+    "line": 22
+  },
+  "says": "The settings pattern and two glossary entries still point to engine files moved into kalfa/config, used by next/.",
+  "proof": "At 4d767107ba23ae92517022ac29630b38adf50ee7, .patterns/settings.md:22 names next/packages/libfabrika/src/settings/Codec.ts and .glossary/TERMS.md:61,69 name next/packages/libfabrika/src/settings/Load.ts. Those old files are deleted; git records their moves to kalfa/config/src/Codec.ts and kalfa/config/src/Load.ts. The BUILD files table grants only the glossary setting/scope rows and no pattern edit.",
+  "cost": "A later agent following those references reads a missing path or mistakes the fabrika-specific node loader for the generic engine.",
+  "head": "4d767107ba23ae92517022ac29630b38adf50ee7",
+  "ticket": "kamp-us/tea-fabrika#1076",
+  "pr": null
+}

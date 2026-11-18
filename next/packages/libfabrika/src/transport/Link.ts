@@ -88,6 +88,7 @@ export const LinkMsg = Schema.TaggedUnion({
   blocked: { reason: Schema.String },
   ask_again: { ...OnDial },
 });
+
 export type LinkMsg = typeof LinkMsg.Type;
 
 /** Send the text `ping` on the dial's socket; the brain answers `pong`. */

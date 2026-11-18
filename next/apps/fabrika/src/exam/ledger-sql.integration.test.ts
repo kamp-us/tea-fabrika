@@ -19,6 +19,7 @@ describe("ledger SQL stays behind its service", () => {
         fc.boolean(),
         async (table, space, upper) => {
           const word = upper ? Str.toUpperCase(table) : table;
+
           const queries = [
             `SELECT * FROM${space}${word} AS e`,
             `SELECT e.* FROM dev_clients c JOIN${space}"${word}" e ON 1=1`,
@@ -27,11 +28,13 @@ describe("ledger SQL stays behind its service", () => {
             `INSERT INTO${space}${word} VALUES (?)`,
             `UPDATE${space}${word} SET stream=?`,
           ];
+
           const body = `${pipe(
             queries,
             Arr.map((query) => `sql.exec(${JSON.stringify(query)});`),
             Arr.join("\n"),
           )}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
+
           const findings = await plant({
             [FILE]: body,
             "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts": body,

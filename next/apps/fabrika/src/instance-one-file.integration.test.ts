@@ -195,6 +195,7 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
     Str.slice(0, at.start)(source) +
     (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
     Str.slice(at.end)(source);
+
   assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
 
   return changed;
@@ -750,6 +751,7 @@ describe("P16 copied-file real instance, serial", () => {
           );
 
           const alone = path.join(h, "alone");
+
           const bytes = await disk((fs) =>
             Effect.gen(function* () {
               yield* fs.makeDirectory(alone);
@@ -787,6 +789,7 @@ describe("P16 copied-file real instance, serial", () => {
                           port: brainPort,
                         }),
                       );
+
                       const services = yield* Effect.context<never>();
 
                       yield* Effect.tryPromise({
@@ -964,6 +967,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                           const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                             .entries;
+
                           const acknowledged = inbox.filter((r: any) => Str.startsWith("p16-")(String(r.id)));
                           expect(acknowledged).toHaveLength(messages.length);
                           expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
@@ -1063,6 +1067,7 @@ describe("P16 copied-file real instance, serial", () => {
         ci: Config.String("CI").pipe(Config.withDefault(undefined)),
       }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
     );
+
     const barFile = env.bar;
 
     if (barFile === undefined || barFile === "") {

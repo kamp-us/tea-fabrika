@@ -98,6 +98,7 @@ describe("the compile step's check", () => {
       ],
       "\n",
     );
+
     expect(at("next/a.tsx", text)).toEqual([]);
   });
 });

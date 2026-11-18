@@ -34,6 +34,7 @@ export const Msg = Schema.TaggedUnion({
   waited: { wait: Wait },
   answered: { wait: Wait },
 });
+
 /** @internal */
 export type Msg = typeof Msg.Type;
 
@@ -131,6 +132,7 @@ export const connection = Machine.make({
 
       const { id, stream, after } = m.wait;
       const matching = Arr.some(s.waits, (w) => w.id === id && w.stream === stream && w.after === after);
+
       return [matching ? { ...s, waits: Arr.filter(s.waits, (w) => w.id !== id) } : s, []];
     },
   },

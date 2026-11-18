@@ -1284,6 +1284,7 @@ describe("T285, runner tracing keep-laws", () => {
                       : call.op === "refuse"
                         ? { ...Tag.cases.unknown.make({}), value: call.value }
                         : { ...Tag.cases.work.make({}), value: call.value };
+
                   const input = w.input(n, m);
                   // The letter is delivered to the process that will step it: the successor, when this op starts it.
                   const target = starting ? w.upcoming() : pid;
@@ -1340,22 +1341,26 @@ describe("T285, runner tracing keep-laws", () => {
 
                   expect(w.flushes.length, call.op).toBe(flushes + 1);
                   const spans = w.spans.slice(before);
+
                   // The first op after the wait starts the successor under it; its spans are checked
                   // below, the op's own spans stay as before.
                   const recovering = Arr.filter(
                     spans,
                     (s) => s.name === "runner.recover" || s.name === "runner.restart",
                   );
+
                   const expected = [
                     `runner.${op}`,
                     ...(waiting ? [] : writing || handling ? ["runner.cmd"] : []),
                     ...(waiting ? [] : writing ? ["runner.write"] : []),
                     ...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
                   ];
+
                   const selected = Arr.filter(
                     spans,
                     (s) => Str.startsWith("runner.")(s.name) && !recovering.includes(s),
                   );
+
                   expect(
                     Arr.map(selected, (s) => s.name),
                     call.op,
@@ -1364,9 +1369,11 @@ describe("T285, runner tracing keep-laws", () => {
                   const operation = selected[0]!;
                   ended(operation, ok);
                   child(operation, root);
+
                   const live = Option.getOrUndefined(
                     Arr.findFirst(yield* manager.info, (row) => row.name === a.name),
                   )?.process;
+
                   // The op's own span opens on the ID the call reached, before any successor starts.
                   const reached = pid;
 
@@ -1428,12 +1435,14 @@ describe("T285, runner tracing keep-laws", () => {
 
                   if (!waiting && (writing || handling)) {
                     const cmd = selected[1]!;
+
                     const letter = Option.getOrThrow(
                       Arr.findFirst(
                         yield* Stream.runCollect((yield* Ledger).read(`${a.name}/inbox`, 0)),
                         (entry) => entry.id === input.id,
                       ),
                     );
+
                     ended(cmd, !["handler_fail", "handler_die", "write_storage"].includes(call.op));
                     child(cmd, operation);
                     expect(tags(cmd)).toEqual({

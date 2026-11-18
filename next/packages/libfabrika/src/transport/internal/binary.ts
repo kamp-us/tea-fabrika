@@ -20,6 +20,7 @@ export const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
 
     return at + part.length;
   });
+
   return out;
 };
 
@@ -73,6 +74,7 @@ export const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(tru
 export const armor = (blob: Uint8Array): string => {
   const body = Base64.encode(blob);
   const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => Str.slice(i * 70, (i + 1) * 70)(body));
+
   return `-----BEGIN SSH SIGNATURE-----\n${Arr.join(rows, "\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 

@@ -199,6 +199,7 @@ const up = (context: BrowserContext, seen: Seen) =>
     const page = yield* tab(context, seen);
     yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
     expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${Formatter.format(seen)}`).toBe(true);
+
     return page;
   });
 

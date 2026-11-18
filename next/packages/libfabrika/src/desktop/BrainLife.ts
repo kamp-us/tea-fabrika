@@ -3,11 +3,11 @@
  */
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import type * as Types from "effect/Types";
 import * as Id from "../Id.ts";
-import type * as Snapshot from "../settings/Snapshot.ts";
 import { Status } from "./BrainControl.ts";
 import { Children, Readiness } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";

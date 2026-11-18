@@ -137,6 +137,7 @@ const key = Effect.fnUntraced(function* () {
     const bytes = new Uint8Array(value);
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes a generated public key
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", bytes), catch: fail });
+
     return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
 
@@ -168,6 +169,7 @@ const key = Effect.fnUntraced(function* () {
         field("sha512"),
         field(join(field("ssh-ed25519"), field(signed))),
       );
+
       return `-----BEGIN SSH SIGNATURE-----\n${Option.getOrUndefined(
         Option.map(Str.match(/.{1,70}/g)(Base64.encode(packed)), (lines) => Arr.join(lines, "\n")),
       )}\n-----END SSH SIGNATURE-----\n`;
@@ -267,6 +269,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
   ]);
 
   const urls: Array<string> = [URL];
+
   const notices: Array<{ client: string; news: News }> = [],
     delivered: Array<unknown> = [],
     opened: Array<unknown> = [],
@@ -718,6 +721,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
     const take = Effect.fnUntraced(function* (s: Saved, cell: Cell) {
       const before = s.task;
+
       const candidates = Arr.filter(
         saved,
         (other) => other.request.process === s.request.process && phase(other) !== "finished",
@@ -776,6 +780,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       const called = w.calls.length;
       const s = pick(saved, cell.pick);
       const p = phase(s);
+
       const available = Arr.filter(moves[focus], (move) =>
         Match.value(move).pipe(
           Match.when(
@@ -1113,6 +1118,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
 
         const storedRows = () =>
           Arr.map(["entries", "measurements", "unsent"], (table) => w.store.sql.exec(`SELECT * FROM "${table}"`));
+
         const beforeStored = move === "reserved" ? storedRows() : [];
         const answer = yield* w.route(current, method, { ...base, [field]: tape.secret });
 
@@ -1190,6 +1196,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         attachments: w.attachments,
         ledger: [],
       };
+
       const tables = Arr.map(w.store.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) =>
         String(row.name),
       );
@@ -1204,6 +1211,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             const { url } = yield* Schema.decodeUnknownEffect(
               Schema.fromJsonString(Schema.Struct({ url: Schema.String })),
             )(row.body);
+
             outputs.urls = [outputs.urls, url, encodeURIComponent(url), decodeURIComponent(url)];
           }
         } else if (table === "gateway_state") {
@@ -1381,8 +1389,10 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
     const list = Effect.fnUntraced(function* (c: Client) {
       const listed = yield* Schema.decodeUnknownEffect(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
       const wanted = Arr.map(mine(c), (a) => ({ id: a.request.id, process: a.request.process }));
+
       const order = (all: ReadonlyArray<{ readonly id: string }>) =>
         [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
+
       expect(order(listed.tasks), "G1: tasks.list answers exactly the caller's open tasks, as pointers").toEqual(
         order(wanted),
       );
@@ -1404,6 +1414,7 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
     for (const cell of tape.cells) {
       const c = pick(hands, cell.pick);
       const pending = mine(c);
+
       const available = Arr.filter(targetMoves[focus], (move) =>
         move === "repeat" || move === "conflict" ? saved.length > 0 : move === "advance" ? pending.length > 0 : true,
       );
@@ -1489,8 +1500,10 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
 
         if (a.phase === "requested") {
           const answer = accepted(yield* w.door(c, "tasks.take", { process: a.request.process, ...meta }));
+
           const task = (yield* Schema.decodeUnknownEffect(Schema.TaggedStruct("assigned", { task: Task }))(answer))
             .task;
+
           a.phase = "assigned";
           a.execution = assignment({ request: a.request, task }).execution;
         } else {

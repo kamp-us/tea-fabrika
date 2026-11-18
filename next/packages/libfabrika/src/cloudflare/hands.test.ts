@@ -118,6 +118,7 @@ it.effect(
           expect(answer.failure.reason, `${choice.shape}: the Cmd stays dispatched for its retry`).toBe("unavailable");
         }
       });
+
       const property = fc.asyncProperty(Case, (choice) => Effect.runPromiseWith(context)(check(choice)));
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 60 }));
       // An empty run cannot pass: every case was answered at least once.

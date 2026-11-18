@@ -117,6 +117,7 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 
   if (msg._tag === "waited") {
     const next = { ...saved, waits: [...saved.waits, wait] };
+
     return Arr.some(saved.waits, (w) => w.id === wait.id) || next.waits.length > MAX_WAITS || bytes(next) > MAX_BYTES
       ? saved
       : next;
@@ -131,7 +132,9 @@ const reference = (saved: Saved | null, msg: Msg): Saved | null => {
 // fast-check, not a Schema arbitrary: the walk aims text at the encoded limit and draws ids from
 // the folded state, which Wait's and Attached's own arbitraries cannot do.
 const units = ["a", "Z", "7", "é", "ß", "€", "流", "😀", "𝄞"];
+
 const text = fc.array(fc.constantFrom(...units), { maxLength: 6 }).map((s) => Arr.join(s, ""));
+
 const id = fc.oneof(text, fc.integer({ min: -3, max: 80 }));
 
 const streams = ["events", "counter:1/inbox", "ünï/流", "😀"];
@@ -202,6 +205,7 @@ const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
   const head = Str.repeat(count)(unit);
+
   return head + Str.repeat(Math.max(0, size - count * width))("x");
 };
 

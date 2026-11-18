@@ -54,7 +54,9 @@ const holdsSchemaError = (cause: unknown): boolean =>
   Schema.isSchemaError(cause) || (Arr.isArray(cause) && Arr.some(cause, holdsSchemaError));
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.TaggedStruct("inc", {});
+
 const Refusal = { reason: "limit", now: 3, most: 3 };
 
 /** What a generated program does wrong, if anything. */
@@ -171,6 +173,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
           ...(model === undefined ? {} : { model: { count: model } }),
           ...(view === undefined ? {} : { view: { count: view } }),
         };
+
         const error = yield* Effect.flip(nodeExecution(program(faults)).step({ count }, Tag.cases.inc.make({})));
         expect(error.reason, "the reason stays the one the check returned").toBe("step");
         expect(holdsSchemaError(error.cause), "the cause holds the failed results").toBe(true);

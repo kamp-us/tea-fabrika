@@ -17,6 +17,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 20, full: 100 }) };
+
 const TIMER_MS = 10;
 
 const Model = Schema.Struct({
@@ -25,6 +26,7 @@ const Model = Schema.Struct({
   armed: Schema.Boolean,
   ticks: Schema.Int,
 });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.TaggedUnion({
@@ -33,6 +35,7 @@ const Msg = Schema.TaggedUnion({
   arm: {},
   tick: {},
 });
+
 type Msg = typeof Msg.Type;
 
 const Tick = Msg.cases.tick.make({});
@@ -109,6 +112,7 @@ describe("K2 the patched engine routes by _tag", () => {
               const booted = yield* run(machine, {
                 interpret: { store: (cmd) => Effect.succeed(cmd.n) },
               });
+
               const live = yield* booted.ready;
               const seen: Array<string> = [];
               live.observe((m) => {
@@ -150,14 +154,19 @@ const Phase = Schema.TaggedUnion({
   idle: { runs: Schema.Int },
   running: { runs: Schema.Int, ticks: Schema.Int },
 });
+
 type Phase = typeof Phase.Type;
 
 const PhaseMsg = Schema.TaggedUnion({ go: {}, tick: {}, halt: {} });
+
 type PhaseMsg = typeof PhaseMsg.Type;
 
 const go = PhaseMsg.cases.go.make({});
+
 const tick = PhaseMsg.cases.tick.make({});
+
 const halt = PhaseMsg.cases.halt.make({});
+
 const first = Phase.cases.idle.make({ runs: 0 });
 
 const table = Machine.make({
@@ -266,6 +275,7 @@ const totals = {
 };
 
 const Door = Schema.TaggedUnion({ closed: totals, open: totals, locked: totals });
+
 type Door = typeof Door.Type;
 
 const DoorMsg = Schema.TaggedUnion({
@@ -275,10 +285,12 @@ const DoorMsg = Schema.TaggedUnion({
   close: {},
   lock: {},
 });
+
 type DoorMsg = typeof DoorMsg.Type;
 
 /** The errors the two Cmds declare, made by their schemas (0562). */
 const Offline = Schema.TaggedStruct("offline", {});
+
 const Invalid = Schema.TaggedStruct("invalid_ticket", {});
 
 const ring = Cmd.make("ring", {
@@ -295,6 +307,7 @@ const admit = Cmd.make("admit", {
 
 /** The answer each Cmd gets: an even number is let in, an odd one is refused. */
 const even = (n: number) => n % 2 === 0;
+
 const doorClock = () => 0;
 
 /** A door's counts without its key, so a move to another State is made by that State's maker. */
@@ -410,6 +423,7 @@ const engines: Record<"Promise" | "Effect", Drive> = {
         admit: async (cmd, { ok, err }) => (even(cmd.ticket) ? ok(cmd.ticket) : err(Invalid.make({}))),
       },
     });
+
     const boots: Array<Door> = [];
     booting.onBoot((s) => {
       boots.push(s);
@@ -444,6 +458,7 @@ const engines: Record<"Promise" | "Effect", Drive> = {
               admit: (cmd) => (even(cmd.ticket) ? Effect.succeed(cmd.ticket) : Effect.fail(Invalid.make({}))),
             },
           });
+
           const boots: Array<Door> = [];
           booting.onBoot((s) => {
             boots.push(s);
@@ -462,6 +477,7 @@ const engines: Record<"Promise" | "Effect", Drive> = {
 
           const reached = live.getState();
           yield* booting.stop();
+
           return reached;
         }),
       ),

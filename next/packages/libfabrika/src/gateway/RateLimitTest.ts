@@ -113,6 +113,7 @@ export const suite = (rig: Rig): void => {
                 : `key-${pick % 4}`;
 
             const saved = history.get(sender);
+
             const moves = [
               "take",
               "same",
@@ -121,6 +122,7 @@ export const suite = (rig: Rig): void => {
               "change",
               ...(saved !== undefined ? ["back", "expiry"] : []),
             ];
+
             const move = Option.getOrThrow(Option.fromUndefinedOr(moves[pick % moves.length]));
 
             if (move === "reopen") {
@@ -154,6 +156,7 @@ export const suite = (rig: Rig): void => {
             const old = history.get(sender);
             const same = old?.policy === Formatter.formatJson(policy);
             const at = old !== undefined ? Math.max(now, old.at) : now;
+
             const row =
               old !== undefined && same
                 ? old
@@ -192,6 +195,7 @@ export const suite = (rig: Rig): void => {
               const envelope = yield* Schema.decodeUnknownEffect(
                 Schema.fromJsonString(Schema.Struct({ v: Schema.Json, build: Schema.Json })),
               )(String(r.value));
+
               expect(envelope.v).toBe(1);
               expect(envelope.build).toBe("t843-test");
               expect(String(r.value)).not.toContain("request");

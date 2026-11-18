@@ -1,6 +1,7 @@
 import { createRequire } from "node:module"; // edge: Electron exports its executable through Node's require resolution
 // P19 next/. Host-only. The guard is a separate process, so worker SIGKILL cannot skip cleanup.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as Snapshot from "@kalfa/config/Snapshot";
 import { BrainControl } from "@kampus/libfabrika/desktop/BrainControl";
 import {
   BrainProbe,
@@ -18,7 +19,6 @@ import * as LaunchdStatus from "@kampus/libfabrika/node/launchd/LaunchdStatus";
 import * as ProcessGroups from "@kampus/libfabrika/node/launchd/ProcessGroups.test-support";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Sources from "@kampus/libfabrika/settings/Fabrika";
-import * as Snapshot from "@kampus/libfabrika/settings/Snapshot";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
 import {
   Array as Arr,
@@ -99,6 +99,7 @@ const processes = Effect.fn("P19Host.processes")(function* () {
   return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
     Arr.map(Arr.filter(Str.split(Str.trim(out.stdout), "\n"), Boolean), (line) => {
       const [pid, parent, group] = Arr.map(Str.split(Str.trim(line), /\s+/), Number);
+
       return { pid, parent, group };
     }),
   );
@@ -426,6 +427,7 @@ const controller = Effect.fn("P19Host.controller")(function* (specFile: string, 
 export const check = Effect.fn("P19Host.check")(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const optIn = yield* Env.String("FABRIKA_P19_HOST").pipe(Env.withDefault(""));
   yield* checked(process.platform === "darwin" && optIn === "1", "host-opt-in-required");
   const app = path.resolve(import.meta.dirname, "../..");
@@ -477,6 +479,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   );
   yield* bundle(`import ${Formatter.formatJson(helper)};`, controllerFile, root);
   yield* bundle(`import ${Formatter.formatJson(helper)};`, guardFile, root);
+
   const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable,
@@ -485,6 +488,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
     url,
     build: built.build,
   });
+
   yield* fs.writeFileString(`${home}/spec.json`, yield* Schema.encodeEffect(Schema.fromJsonString(BrainSpec))(spec));
   yield* fs.writeFileString(
     `${home}/snapshot.json`,
@@ -514,7 +518,9 @@ export const check = Effect.fn("P19Host.check")(function* () {
     stopTimeout: Number(settings.values["desktop.brain-stop-timeout"]),
     poll: Number(settings.values["desktop.brain-poll"]),
   });
+
   yield* fs.writeFileString(`${home}/guard.json`, Formatter.formatJson(config));
+
   const watcher = yield* ChildProcess.make(process.execPath, [guardFile, "p19:guard", `${home}/guard.json`], {
     cwd: root,
     detached: true,
@@ -576,6 +582,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
         const observed = yield* fs
           .readFileString(`${home}/groups.json`)
           .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(ProcessGroups.Saved))));
+
         return Arr.every(expected, (group) => observed.includes(group));
       }),
       config.stopTimeout,

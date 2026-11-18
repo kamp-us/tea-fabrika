@@ -13,6 +13,7 @@ import * as Wire from "./Wire.ts";
 
 /** Any JSON text, as the wire carries it. */
 const Json = Schema.fromJsonString(Schema.Unknown);
+
 /** Reads a frame the door sent; a frame that is not JSON fails the law. */
 const readJson = Schema.decodeUnknownEffect(Json);
 
@@ -134,6 +135,7 @@ describe("P10 JSON-RPC", () => {
         const reply = yield* answerFrame(frame({ id }), attached, admit, () => Effect.succeed(answer)).pipe(
           Effect.withTracer(tracer),
         );
+
         expect(yield* readJson(reply.send!)).toEqual({
           jsonrpc: "2.0",
           id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
@@ -170,6 +172,7 @@ describe("P10 JSON-RPC", () => {
       const result = yield* answerFrame(frame({ id: 0 }), online(), admit, () =>
         Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
+
       expect(yield* readJson(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
     }),
   );

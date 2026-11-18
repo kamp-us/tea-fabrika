@@ -285,6 +285,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .map(([head, tail]) => new Uint8Array([head, ...tail])),
       fc.uint8Array({ maxLength: 253 }).map((tail) => new Uint8Array([0x30, tail.length + 1, ...tail])),
     );
+
     return fc.assert(
       fc.asyncProperty(invalid, (signature) =>
         Effect.runPromise(
@@ -401,6 +402,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     Effect.gen(function* () {
       const read = (file: string) =>
         readFileSync(new URL(`../../../../../fixtures/next/sshsig/${file}`, import.meta.url), "utf8");
+
       expect(yield* check(read("ecdsa.sig"), Str.trim(read("ecdsa.pub")), read("text.txt"))).toEqual(refused);
     }),
   );
@@ -450,6 +452,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     ["cross origin", { crossOrigin: true }],
     ["wrong challenge", { challenge: utf8("only a hash would be wrong too") }],
   ] as const;
+
   it("p27 policy: refuses invalid assertions even with a valid P-256 signature", () => {
     // Plant: require UP alone, without UV. A signed UP-only assertion must be refused.
     const invalid = fc.oneof(
@@ -464,6 +467,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.constant({ crossOrigin: true }),
       fc.uint8Array({ maxLength: 64 }).map((challenge) => ({ challenge })),
     );
+
     return fc.assert(
       fc.asyncProperty(bodyArb, invalid, (body, options) =>
         Effect.runPromise(
@@ -509,11 +513,13 @@ describe("P10 WebAuthn SSHSIG", () => {
         ],
       },
     ));
+
   const bindingCases = [
     ["text", `${text}!`, {}],
     ["RP", text, { rp: "other.test" }],
     ["origin allowlist", text, { origins: ["https://other.test"] }],
   ] as const;
+
   it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", () => {
     // Plant: ignore policy.rp. The changed-RP example must still be refused.
     const changed: fc.Arbitrary<{
@@ -528,6 +534,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .array(bodyArb.filter((origin) => origin !== policy.origins[0]))
         .map((origins) => ({ body: text, over: { origins } })),
     );
+
     return fc.assert(
       fc.asyncProperty(changed, ({ body, over }) =>
         Effect.runPromise(
@@ -573,6 +580,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       ),
       { ...runs, examples: [[text, "other"]] },
     ));
+
   const corruptions = [
     "version",
     "key length",
@@ -582,6 +590,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     "truncated",
     "trailing",
   ] as const;
+
   it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", () =>
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
     fc.assert(

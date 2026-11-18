@@ -71,6 +71,7 @@ export const Msg = Schema.TaggedUnion({
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
   guard: { body: Schema.String },
 });
+
 type Msg = typeof Msg.Type;
 
 const probe = Cmd.make("probe", { input: Schema.Struct({}), ok: Schema.Null, err: [] });

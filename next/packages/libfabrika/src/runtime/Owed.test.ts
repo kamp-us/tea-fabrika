@@ -119,6 +119,7 @@ const boot = (
 ) =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
+
     const booting = yield* run(machine, {
       store,
       onError: (error) => {
@@ -126,6 +127,7 @@ const boot = (
       },
       interpret: { job: handle },
     }).pipe(Scope.provide(scope));
+
     const live = yield* booting.ready;
     yield* live.idle();
 

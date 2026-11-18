@@ -446,6 +446,7 @@ describe("no-promises", () => {
         "\n",
       ),
     });
+
     expect(
       pipe(
         findings,
@@ -498,6 +499,7 @@ describe("no-promises", () => {
           "next/helper.test-support.ts": "declare const p: Promise<number>; export const f = () => p;",
           "packages/today.ts": "declare const p: Promise<number>; export const f = () => p;",
         });
+
         expect(
           pipe(
             findings,

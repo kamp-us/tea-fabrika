@@ -131,6 +131,7 @@ const key = Effect.fnUntraced(function* () {
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
   const fp = (raw: Uint8Array) => `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -188,12 +189,14 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
 
   const deliveries: Incoming[] = [],
     notices: Array<{ client: string; news: News }> = [];
+
   const controls = {
     letter: "",
     open: (_process: string, _client: string): Effect.Effect<Schema.Json> => Effect.succeed(null),
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
       Effect.void,
   };
+
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen.
   const storage = () => TestDatabase.make(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
@@ -434,6 +437,7 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
+
   it("view.open refuses any bad pid before invoking the program, and opens a valid pid", () =>
     fc.assert(viewOpen(), checks));
   it.live("the view.open law catches a bypassed pid check", () =>
@@ -443,6 +447,7 @@ describe("P12, door laws retained after the library move", () => {
       expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
     }),
   );
+
   const grantTarget = (plant?: "fingerprint" | "code") =>
     fc.asyncProperty(
       fc.string(),
@@ -479,6 +484,7 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
+
   it("a grant target matches both the waiting fingerprint and its code", () => fc.assert(grantTarget(), checks));
 
   for (const field of ["fingerprint", "code"] as const)
@@ -536,12 +542,14 @@ describe("P17a, revoke stops writes at the final door", () => {
               });
               const [saved] = w.first.sql.exec("SELECT id,value FROM gateway_bindings");
               assert(saved?.id !== undefined, "input binding must have a saved id");
+
               const binding = {
                 ...(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
                   String(saved.value),
                 )),
                 [missing]: undefined,
               };
+
               w.first.sql.exec(
                 "UPDATE gateway_bindings SET value=? WHERE id=?",
                 Formatter.formatJson(binding),
@@ -567,7 +575,9 @@ describe("P17a, revoke stops writes at the final door", () => {
           Effect.gen(function* () {
             const w = yield* world(),
               d = yield* setup(w);
+
             const before = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint).length;
+
             const entered = yield* Deferred.make<void>(),
               release = yield* Deferred.make<void>();
 
@@ -592,6 +602,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             const revoke = (yield* rows(w, "gateway/access")).at(-1);
             expect(revoke?._tag).toBe("revoked");
             const hellos = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint);
+
             const answer = Result.isFailure(result)
               ? Schema.is(NotGranted)(result.failure)
                 ? "not_granted"
@@ -643,10 +654,12 @@ describe("P17a, revoke stops writes at the final door", () => {
             expect(w.deliveries).toHaveLength(1);
             const incoming = last(w);
             expect(incoming.envelope.input).toEqual({ _tag: "add", n });
+
             // Mutation regression: safe transformed input must stay in the authenticated log.
             const recorded = Option.getOrUndefined(
               Arr.findFirst(yield* rows(w, "gateway/inputs"), (row) => row.id === incoming.envelope.id),
             );
+
             expect(recorded).toMatchObject({
               _tag: "received",
               body: { input: { _tag: "add", n: String(n) } },
@@ -678,6 +691,7 @@ describe("P17a, revoke stops writes at the final door", () => {
           await Effect.runPromise(
             Effect.gen(function* () {
               const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -696,6 +710,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
+
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
@@ -745,6 +760,7 @@ describe("P17a, revoke stops writes at the final door", () => {
           await Effect.runPromise(
             Effect.gen(function* () {
               const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -777,6 +793,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
+
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),
@@ -850,8 +867,10 @@ describe("P17a, revoke stops writes at the final door", () => {
               expect((yield* hello(original, w.old, "before-upgrade")).result._tag).toBe("online");
               const params = request(target, letter, text);
               const by = Writer.cases.person.make({ key: w.old.fingerprint, for: person });
+
               const traceId = Str.replaceAll("-", "")(letter),
                 spanId = Str.slice(0, 16)(traceId);
+
               const oldProcess = yield* ProcessIdGenerator.use((g) => g.next).pipe(Effect.provide(w.layers().env));
               const id = `in-${oldProcess}-${n}`;
 
@@ -1063,6 +1082,7 @@ describe("P17a, revoke stops writes at the final door", () => {
           await Effect.runPromise(
             Effect.gen(function* () {
               const context = yield* Effect.context<never>();
+
               const w = yield* world(),
                 d = yield* setup(w);
 
@@ -1098,6 +1118,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
                 if (!paused && Str.includes(encodedMarker)(new TextDecoder().decode(bytes))) {
                   paused = true;
+
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
                       Effect.andThen(Deferred.await(release)),

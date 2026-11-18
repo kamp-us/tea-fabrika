@@ -41,6 +41,7 @@ const rejectedRpc = async (): Promise<never> => {
 };
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.TaggedStruct("inc", {});
 
 const work = Cmd.make("work", {
@@ -128,9 +129,11 @@ describe("P13 split execution", () => {
 
               const remote = workerExecution(calls);
               const selected = mode === "retry" ? history[n % history.length]! : model;
+
               const call: Effect.Effect<Admission | Prepared, ProgramDown> = remote[phase](selected, {
                 ...Tag.cases.inc.make({}),
               });
+
               const result = yield* Effect.result(call);
               expect(composed, "new calls cannot fall back to composed step").toBe(0);
 
@@ -304,11 +307,13 @@ describe("P12 Effect execution adapter", () => {
               ] as const) {
                 const result = yield* Effect.flip(action);
                 expect(result).toMatchObject({ _tag: "ProgramDown", reason });
+
                 // The JSON the error writes as it is: Formatter.formatJson would also write the nested
                 // Error's message, which plain JSON leaves out.
                 const written = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown))(result).pipe(
                   Effect.orDie,
                 );
+
                 expect(written).not.toContain("private RPC body");
               }
             }),

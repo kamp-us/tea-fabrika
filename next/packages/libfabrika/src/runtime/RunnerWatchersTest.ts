@@ -28,6 +28,7 @@ const Tag = Schema.TaggedUnion({
 const NAME = "watch-counter:1";
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.TaggedStruct("inc", {});
 
 const program = {

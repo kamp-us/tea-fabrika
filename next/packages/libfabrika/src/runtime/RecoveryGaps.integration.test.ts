@@ -162,6 +162,7 @@ const world = Effect.fnUntraced(function* () {
     writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: false } },
     wake: () => null,
   };
+
   const input = (id: string, m: unknown = Tag.cases.poison.make({})): Incoming => ({
     id,
     envelope: {
@@ -486,6 +487,7 @@ describe("P34 interrupted recovery", () => {
         const answer = yield* Effect.exit(
           ProgramRunner.use((r) => r.msg(w.input("good", { ...Tag.cases.add.make({}), n: 1 }))),
         );
+
         expect(Exit.isFailure(answer)).toBe(true);
         expect(yield* inbox).toEqual([]);
         expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toEqual([]);
@@ -507,6 +509,7 @@ describe("P34 interrupted recovery", () => {
         yield* Fiber.join(pending);
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
+
         const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
           Str.includes('"_tag":"wait_ok"')(JSON.stringify(row.body)),
         );
@@ -606,7 +609,9 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
+
       const modulePath = Option.getOrThrow(instanceDriver);
+
       const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );

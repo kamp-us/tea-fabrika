@@ -36,7 +36,9 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
     ...(options.mail === undefined ? {} : { mail: options.mail }),
     ...(options.starts === undefined ? {} : { starts: options.starts }),
   });
+
   const checked = yield* readSettings({ INSTANCE: Formatter.formatJson(config) });
+
   return yield* start(
     {
       name: config.name,

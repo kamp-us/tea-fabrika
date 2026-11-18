@@ -443,6 +443,7 @@ for (const failed of [false, true]) {
           ]);
           expect(w.calls[0]).toEqual(["read", source]);
           expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
+
           const ledgerRead = Option.getOrThrow(
             Arr.findFirstIndex(
               w.calls,
@@ -548,6 +549,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           window: `-window-${name}`,
           port,
         };
+
         const selected = Arr.filter(
           Rec.toEntries(overrides),
           ([field]) =>
@@ -586,6 +588,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             ...founding,
             build: "pending",
           };
+
           expect(Arr.map(instances, (instance) => instance.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
@@ -594,12 +597,15 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           ]);
           expect(JSON.parse(w.files.get(file)!)).toEqual(expected);
           expect(Arr.filter(w.modes, ([path]) => path === file)).toEqual([[file, 0o600]]);
+
           const savedAt = Option.getOrThrow(
             Arr.findFirstIndex(w.calls, ([call, path]) => call === "write" && path === file),
           );
+
           const buildAt = Option.getOrThrow(
             Arr.findFirstIndex(w.calls, ([call, path]) => call === "read" && path === source),
           );
+
           expect(savedAt).toBeLessThan(buildAt);
           expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {

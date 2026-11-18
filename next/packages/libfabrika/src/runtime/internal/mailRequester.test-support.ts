@@ -60,6 +60,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
         }
 
         const body = Request.make({ ref: m.ref, value: m.value, reply: config.self });
+
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined

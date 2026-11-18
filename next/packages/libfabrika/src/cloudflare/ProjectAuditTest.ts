@@ -51,7 +51,9 @@ const keys = Layer.mergeAll(
 );
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
+
 const StampedMsg = Schema.Struct({ ...Msg.fields, parent: InputId, body: Schema.String });
 
 const Metadata = Schema.Struct({ ...Msg.fields, parent: InputId });
@@ -62,6 +64,7 @@ type Selector = "plain" | "default" | "custom";
 
 /** A raw wire input: any JSON object, so a frame whose tag no program knows can ride through the door. */
 const ProjectInput = Schema.Record(Schema.String, Schema.Json);
+
 const WireAdd = Schema.TaggedStruct("add", { n: Schema.Int, body: Schema.String });
 
 /** Storage, Gateway wiring and platform handles belong to the module running this suite. */
@@ -290,6 +293,7 @@ const projectWalk = Effect.fnUntraced(function* (
         : selector === "plain"
           ? Msg.make({ n: accepted + 1 })
           : WireAdd.make({ n: accepted + 1, body: `BODY-${entropy}-${n}/雪\n` }));
+
     const answer = yield* project.route(client, "process.send", {
       pid: project.boot.process,
       letter,
@@ -300,9 +304,11 @@ const projectWalk = Effect.fnUntraced(function* (
 
     if (usage) {
       const key = `${CODE.hash}/${project.boot.process}`;
+
       const loaded = yield* Schema.decodeUnknownEffect(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(
         loads.get(key),
       );
+
       expect(loaded.tails).toHaveLength(1);
       const props = yield* Schema.decodeUnknownEffect(Props)(bound.get(loaded.tails[0]));
       expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });

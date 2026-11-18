@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-lint-beside-the-tezgah-proof-loop-killed-its-browser",
+  "date": "2026-11-18",
+  "quests": ["tea-fabrika#1166"],
+  "stage": "driver",
+  "kind": "failure",
+  "what": "In next/, while the lead of PR 1612 ran the tezgah focus, fold and frame laws 30 times in a row in a cloud container (the plan's T2 proof for slice A), it started pnpm lint beside the loop. The container's memory limit was reached: the kernel killed the test's two headless Chromium processes and lint's tsc. Run 5's tezgah-focus scenario then failed at its first step, 'the grant line as shown grants' (tezgah-focus.visual.test.ts:115), and lint:promise-types failed with EPIPE. Runs 1 to 4 passed.",
+  "cause": "The lead's slip: two heavy jobs at once in one memory limit. lint runs tsc for lint:promise-types (about 2.4 GB resident here) while each loop run held workerd, two Chromium tabs and vitest. The kernel log names the killed processes (chrome-headless twice, then tsc).",
+  "person": false,
+  "primitive": null,
+  "fix": "Run 5 is not counted. The 30 in a row are counted from run 6, with no other job beside the loop, and lint runs again after it ends. The PR says so.",
+  "test": "Code that would have caught it: the loop and pnpm lint taking the same lock that pnpm typecheck takes, so a second heavy job waits instead of sharing the memory limit.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1612"]
+}

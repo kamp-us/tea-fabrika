@@ -12,7 +12,9 @@ const CODE = "fabrika(edge-comment)";
 const PRELUDE = ['import {Effect} from "effect";', "declare const p: Promise<number>, thing: Effect.Effect<number>;"];
 
 const PROMISE = "export const a = Effect.tryPromise(() => p);";
+
 const RUN = "export const a = Effect.runPromise(thing);";
+
 const BOTH = "export const a = Effect.runPromise(Effect.tryPromise(() => p));";
 
 /** Each planted file: its comment and the line under it, and whether this rule must refuse it. */
@@ -52,6 +54,7 @@ const CASES: Readonly<Record<string, readonly [string, string, boolean]>> = {
 };
 
 const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
+
 const UNUSED = at("unused");
 
 const all = await plant({

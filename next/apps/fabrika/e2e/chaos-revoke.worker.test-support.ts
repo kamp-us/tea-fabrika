@@ -111,6 +111,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
                 const { process } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(
                   params,
                 ).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
+
                 yield* move({ ...Tag.cases.arm.make({}), process });
               } else if (method === "p90.release") {
                 yield* move(Tag.cases.release.make({}));

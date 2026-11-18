@@ -167,6 +167,7 @@ const fresh = (n: number, input: unknown, by: Incoming["envelope"]["by"] = write
 type World = Effect.Success<ReturnType<typeof world>>;
 
 type Runner = typeof ProgramRunner.Service;
+
 const patches = (w: World) => Arr.filter(w.updates, (u) => u.type === "patch");
 
 // p22: a bad fresh shape returns bad_msg, writes no accepted input, changes no view, publishes no patch, runs no Cmd.

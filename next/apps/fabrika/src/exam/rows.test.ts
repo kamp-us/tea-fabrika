@@ -54,6 +54,7 @@ describe("the rule file's rows give a file its row", () => {
     }
 
     const tail = rest.at(-1) ?? "";
+
     return name.length - tail.length >= at && pipe(name, Str.endsWith(tail)) && name.length > 0;
   };
 
@@ -76,6 +77,7 @@ describe("the rule file's rows give a file its row", () => {
   const weight = (pattern: string): number => {
     const segments = Str.split(pattern, "/");
     const count = (keep: (segment: string) => boolean) => Arr.filter(segments, keep).length;
+
     // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
     return (
       count((s) => s !== "**") * 1_000_000 +
@@ -92,7 +94,9 @@ describe("the rule file's rows give a file its row", () => {
         Arr.map((pattern) => ({ name: row.name, weight: weight(pattern) })),
       ),
     );
+
     const top = Math.max(...Arr.map(found, (f) => f.weight));
+
     return [
       ...new Set(
         pipe(
@@ -120,9 +124,11 @@ describe("the rule file's rows give a file its row", () => {
       }),
     )
     .map(([folders, last]) => Arr.join([...folders, ...(last === undefined ? [] : [last])], "/"));
+
   const rows: fc.Arbitrary<ReadonlyArray<Row>> = fc
     .array(fc.array(pattern, { minLength: 1, maxLength: 3 }), { minLength: 1, maxLength: 6 })
     .map((each) => Arr.map(each, (paths, n) => ({ name: `row-${n}`, paths })));
+
   const path = fc
     .tuple(fc.array(folder, { minLength: 1, maxLength: 4 }), file)
     .map(([folders, last]) => Arr.join([...folders, last], "/"));

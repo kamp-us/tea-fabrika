@@ -189,6 +189,7 @@ it("[secrets] source type plants catch plain entropy, Authorization and binding 
           `export const safeHeader = wrap${suffix}(request.headers.get("authorization"));`,
           `export const safeBinding = wrap${suffix}(ctx.props.token);`,
         ];
+
         writeFileSync(path, prelude + Arr.join(lines, "\n"));
         writeFileSync(
           config,

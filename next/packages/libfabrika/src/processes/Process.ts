@@ -422,6 +422,7 @@ const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Ar
 
 const led = (word: string) => {
   const lead = Str.slice(0, -1)(JSON.stringify([word]));
+
   return (id: string): boolean =>
     Str.startsWith(lead)(id) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
 };

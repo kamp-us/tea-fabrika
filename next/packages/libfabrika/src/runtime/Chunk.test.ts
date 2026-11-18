@@ -68,6 +68,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
     fc.assert(
       fc.property(Send, Size, (send, size) => {
         const answer = Chunk.cut(send, size);
+
         // Too big even with the least a part can add: seq 0 and the shorter `last` word.
         const tooBig = Option.getOrElse(
           Arr.findFirstIndex(send.items, (item) => alone(send, item, 0, true) > size),

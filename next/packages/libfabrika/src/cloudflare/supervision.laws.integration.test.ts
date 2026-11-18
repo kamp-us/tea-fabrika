@@ -39,6 +39,7 @@ const BUILD = "build-a";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for });
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 
 type Move = "rpc" | "decode" | "throw";
@@ -358,6 +359,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
               Match.when(1, () => -1),
               Match.orElse(() => 0.5),
             );
+
             r.raw.policy = field < 9 ? { ...p, [key]: value } : { ...p, backoff: { ...p.backoff, [key]: value } };
           } else {
             r.raw.policy = Match.value(field).pipe(

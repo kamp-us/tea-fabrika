@@ -109,6 +109,7 @@ const capture = () => {
 
   const tags = (name: string): ReadonlyArray<Record<string, unknown>> =>
     Arr.map(ended(name), (span) => Rec.fromEntries(span.attributes));
+
   const failed = (name: string): ReadonlyArray<boolean> =>
     Arr.map(ended(name), (span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
 
@@ -368,6 +369,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer)),
       );
     };
+
     return fc.assert(fc.asyncProperty(names, run), {
       seed: SEED,
       numRuns: runsFor({ fast: 3, full: 30 }),
@@ -382,6 +384,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       const { tracer, tags } = capture();
       const id = Str.repeat(1_900_000)("x");
       const kind = Str.repeat(200)("t");
+
       return Effect.gen(function* () {
         const ledger = yield* Ledger;
         expect(yield* ledger.append("notes:1", id, line({ _tag: kind }))).toEqual({
@@ -468,6 +471,7 @@ describe("p95, every call is one span, names and numbers only", () => {
 
       return Effect.runPromise(Effect.andThen(referee, remote));
     };
+
     return fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) });
   });
 
@@ -609,9 +613,11 @@ describe("p95, every call is one span, names and numbers only", () => {
               // the whole transaction back by itself, so a ROLLBACK after it finds none.
               const { page_count: pages } = db.prepare("PRAGMA page_count").get() ?? {};
               db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
+
               const error = yield* Effect.flip(
                 ledger.append("a", "w-2", line({ body: { note: Str.repeat(value)("y") } })),
               );
+
               expect(error).toBeInstanceOf(LedgerError);
               expect(error.reason).toBe("storage");
               expect(failed("ledger.append")).toEqual([false, true]);

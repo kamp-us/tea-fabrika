@@ -337,7 +337,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
   it("T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too", () => {
     fc.assert(
       fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {
-        const text = `${imports(alias)}export const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
+        const text = `import ${alias} from 'fast-check';\nimport {Schema} from 'effect';\n\nconst S = Schema.Struct({x: Schema.String});\n\nexport const data: ${alias}.Arbitrary<typeof S.Type> = ${alias}.record({x: ${alias}.string()});\n`;
 
         const { hits } = lint({
           [`next/unit.test.${ext}`]: text,

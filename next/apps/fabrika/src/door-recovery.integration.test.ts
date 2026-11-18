@@ -75,11 +75,13 @@ const disks = Effect.gen(function* () {
     const path = paths.join(top, `${++file}.db`);
     let db = open(path);
     let inner = nodeSql(db);
+
     const sql: Sql = {
       exec: (q, ...args) => inner.exec(q, ...args),
       transaction: (f) => inner.transaction(f),
       size: () => inner.size(),
     };
+
     return {
       sql,
       reopen: () => {
@@ -159,6 +161,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
 
   // Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
   const TeaMsg = Schema.TaggedStruct("press", { poison: Schema.Boolean });
+
   const tea = Machine.make({
     model: Model,
     msg: TeaMsg,

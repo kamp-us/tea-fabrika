@@ -55,6 +55,7 @@ export const checkPromiseTypes = (
           Arr.some(checker.getSignaturesOfType(type, SignatureKind.Call), (signature) =>
             carries(checker.getReturnTypeOfSignature(signature), seen),
           );
+
     memo.set(type.id, yes);
 
     return yes;
@@ -84,6 +85,7 @@ export const checkPromiseTypes = (
     }
 
     const names = Arr.map(type.getTypes(), keyNames);
+
     return Arr.every(names, (name) => name !== undefined) ? names.flat() : undefined;
   };
 
@@ -251,10 +253,12 @@ export const checkPromiseTypes = (
     const nodes = [...candidates.keys()];
     const types = checker.getTypeAtLocation(nodes);
     const lines = Str.split(source.text, "\n");
+
     const marked = (line: number): boolean => {
       // A marker covers only the next physical line, even inside a wrapped statement.
       const edge = /^\s*\/\/ oxlint-disable-next-line (.+?) -- edge: \S/.exec(lines[line - 1] ?? "");
       const rules = new Set(edge?.[1] === undefined ? [] : Str.split(edge[1], /[,\s]+/));
+
       // Oxlint separately checks that each comment is used.
       return rules.has("fabrika/no-promises") || rules.has("fabrika/no-effect-run-outside-edge");
     };

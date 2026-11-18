@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-dev-watch-rebuild-fix-tests3",
+  "ticket": "1122",
+  "pr": null,
+  "role": "step",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "The next/ watcher laws still fail at the initial module-value predicate in the actual diagnostic CI run. Its scalar facts do not identify the value consumed by the fixture. This second diagnostic parses the exact fixture assignment without executing the bundle. It reports only bounded syntax kinds, counts, numeric values, nulls and grouping or nesting facts. The failing value predicate and every other assertion stay unchanged.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [],
+  "note": "Actual failure: https://github.com/kamp-us/tea-fabrika/actions/runs/44025287363 at 219717776851c16ce03ca9fae9cadbffbf11f1c3. Both save-driven and controlled R1 laws report expected initial value zero, boot, p15/one, no matching own-like numeric declaration and a fixture reference. These facts fit both valid formatting and a wrong fixture value. The existing oxc-parser 0.157.0 visitor now reads the exact globalThis.__p15 assignment and internally matching declarations. Output is capped at four assignments and four binding candidates per assignment. It emits no identifier names, source strings, paths or parser messages. Eight synthetic checks against the actual helper pass, covering direct and grouped declarations, renamed bindings, direct numeric use, wrong values, string exclusion, nesting and the output cap. These are syntax-only diagnostic checks, not actual CI source or runtime proof. Scoped format, scoped lint, field validation and leak checks pass. No compiler, full lint, code-graph API, local bundle, runtime, protected watcher law, signal or plant ran. No dependency was added. Counts, generated inputs, deadlines, hash, bytes, privacy, failures, cleanup and R1 gates remain unchanged. Ambiguous binding candidates are diagnostic facts only. A genuine remote observation is required before any semantic law fix or regression success can be claimed. Unknown usage and cost remain null."
+}

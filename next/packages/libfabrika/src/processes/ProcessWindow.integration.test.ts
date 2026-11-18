@@ -173,8 +173,10 @@ describe("T540, next/ process UUIDv7 refusals", () => {
     ],
     ([{ process, version, variant, first, length, char, position, prefix }]) => {
       const suffix = Str.slice("process_".length)(process);
+
       const replace = (at: number, char: string) =>
         `process_${Str.slice(0, at)(suffix)}${char}${Str.slice(at + 1)(suffix)}`;
+
       expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
 
       for (const [part, invalid] of [

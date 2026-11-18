@@ -128,10 +128,13 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       closes.push(code);
     },
   });
+
   const sockets = [socket];
+
   /** One more online socket on this object, for another client. It keeps what it is sent. */
   const join = (client: string) => {
     const mine = { frames: new Array<string>(), closes: new Array<number>() };
+
     const other = Attached.cases.online.make({
       client,
       identity: { key: `${client}-key`, person: `${client}-person`, as: "window" },
@@ -140,6 +143,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       watching: false,
       busy: false,
     });
+
     sockets.push(
       fake<WebSocket>({
         deserializeAttachment: () => other,
@@ -148,8 +152,10 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         close: (code: number) => mine.closes.push(code),
       }),
     );
+
     return mine;
   };
+
   const state = fake<DurableObjectState>({
     id: { name: "test-connection" },
     storage: {
@@ -189,6 +195,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
         knock: () => Promise.resolve(answer),
         publish: (client: string, update: unknown) => {
           published.push({ client, update });
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve(Publication.cases.sent.make({}));
         },
@@ -1106,6 +1113,7 @@ const EachNews = {
 
 /** A frame's text as the JSON value a client reads. */
 const read = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
 /** A value as it is once it has been a frame: what `JSON.stringify` keeps of it. */
 const wired = (value: unknown) => read(JSON.stringify(value));
 
@@ -1127,6 +1135,7 @@ const told = Effect.fnUntraced(function* (news: unknown) {
   const other = w.join("other-client");
   const before = w.saved.length;
   const exit = yield* Effect.exit(overWire(Context.get(context, ConnectionService), "test-client", news));
+
   return { w, other, exit, spans: w.saved.slice(before).filter((row) => row.name === "connection.notify") };
 });
 
@@ -1198,6 +1207,7 @@ const WRONG = 1n;
  */
 const damaged = (value: object): Array<object> => {
   const fields = Object.entries(value);
+
   return fields.flatMap(([name]) =>
     (["removed", "retyped"] as const).map((mode) =>
       Object.fromEntries(
@@ -1230,6 +1240,7 @@ it.effect.prop(
   ({ close, granted, whole, patch, below, above, fraction, json }) =>
     Effect.gen(function* () {
       const views = [whole, patch].map((update) => News.cases.view.make({ update }));
+
       const made = [
         // A News with each field removed or retyped in turn, its tag included.
         ...[close, granted, ...views].flatMap(damaged),
@@ -1242,6 +1253,7 @@ it.effect.prop(
         { close: close.code },
         { method: "client.granted", params: { nonce: granted.nonce } },
       ];
+
       expect(made, "every broken field, the three codes and the two old shapes are reached").toHaveLength(
         damages(close, granted, ...views, whole, patch) + 5,
       );
@@ -1270,6 +1282,7 @@ it.effect.prop(
  * is not under test, so the Project boots with no program and no door call.
  */
 const PROGRAM = "fabrika/counter";
+
 /** The program as Worker Loader would run it. */
 const SOURCE = "export default {};\n";
 
@@ -1282,6 +1295,7 @@ const declaration = () => {
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },
   });
+
   const program = Program.make({
     name: PROGRAM,
     machine,
@@ -1293,6 +1307,7 @@ const declaration = () => {
     writes: {},
     wake: () => null,
   });
+
   return ProgramLoader.use((loader) => loader.load(PROGRAM)).pipe(
     Effect.provide(ProgramLoader.layer<never>({ [PROGRAM]: program }, {})),
     Effect.map((loaded) => loaded.declaration),
@@ -1303,6 +1318,7 @@ const project = Effect.fnUntraced(function* () {
   const db = yield* database;
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
   const start = yield* StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -1312,8 +1328,10 @@ const project = Effect.fnUntraced(function* () {
     port: 18787,
     build: "brain-build-test",
   });
+
   const notified: Array<{ connection: string; client: string; news: unknown }> = [];
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
+
   const ctx = fake<DurableObjectState>({
     id: { name: "project-test" },
     storage: {
@@ -1328,12 +1346,14 @@ const project = Effect.fnUntraced(function* () {
       get: (key: string) => Promise.resolve(values.get(key)),
       put: (key: string, value: unknown) => {
         values.set(key, value);
+
         // edge: the platform's key-value storage answers through a Promise
         return Promise.resolve();
       },
     },
     exports: { IsolateTail: () => ({ fetch: () => Promise.resolve(new Response()) }) },
   });
+
   const env = fake<Env>({
     INSTANCE: JSON.stringify(start),
     PROJECT: { getByName: () => ({}) },
@@ -1341,11 +1361,13 @@ const project = Effect.fnUntraced(function* () {
       getByName: (key: string) => ({
         configure: (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
           descriptors.set(key, d);
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
         descriptor: (pid?: string) => {
           const d = descriptors.get(key)!;
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve({ ...d, id: pid ?? d.id });
         },
@@ -1355,6 +1377,7 @@ const project = Effect.fnUntraced(function* () {
       getByName: (connection: string) => ({
         notify: (client: string, news: unknown) => {
           notified.push({ connection, client, news });
+
           // edge: the platform RPC returns a Promise
           return Promise.resolve();
         },
@@ -1364,6 +1387,7 @@ const project = Effect.fnUntraced(function* () {
     MEASUREMENTS: {},
     LOADER: { get: () => ({ getEntrypoint: () => ({ describe: () => Effect.runPromise(declaration()) }) }) },
   });
+
   const context = yield* Layer.build(
     Runtime.projectLayer(ctx, env, {
       programs: { [PROGRAM]: { hash: yield* hash(SOURCE), source: SOURCE } },
@@ -1371,6 +1395,7 @@ const project = Effect.fnUntraced(function* () {
       door: () => Effect.succeed(fake<GatewayCalls>({ retire: () => Effect.void })),
     }),
   );
+
   return { service: Context.get(context, Runtime.ProjectService), notified };
 });
 
@@ -1391,6 +1416,7 @@ it.live.prop(
     Effect.gen(function* () {
       const { service, notified } = yield* project();
       yield* service.register("test-client", "test-connection", "test-session");
+
       const made = [
         // An update with each field removed or retyped in turn. Its pid removed is the update a
         // watcher is sent: the Project is handed it with one.
@@ -1401,6 +1427,7 @@ it.live.prop(
         // What the old `publish` passed on by hand.
         { method: "client.granted", params: { nonce: granted.nonce } },
       ];
+
       expect(made, "every broken field and the three other shapes are reached").toHaveLength(damages(whole, patch) + 3);
       // Only the freely drawn JSON is asked whether it happens to be Published: every other value is
       // no Published by construction, so a loosened Schema cannot drop one.

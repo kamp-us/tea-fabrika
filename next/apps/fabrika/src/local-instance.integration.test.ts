@@ -81,10 +81,12 @@ const sandbox = Effect.gen(function* () {
     Effect.provide(NodeServices.layer),
     Effect.orDie,
   );
+
   yield* Effect.acquireRelease(
     Effect.sync(() => vi.stubEnv("FABRIKA_HOME", folder)),
     () => Effect.sync(() => vi.unstubAllEnvs()),
   );
+
   return folder;
 });
 
@@ -125,6 +127,7 @@ const bodyText = (options: RequestInit | undefined): string =>
 
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
+
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
 
 it.live.prop(
@@ -144,6 +147,7 @@ it.live.prop(
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       const folder = yield* sandbox;
       const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
+
       const fixture = yield* RecordWireTest.startupFixture({
         home: folder,
         name: "quota-start",
@@ -153,11 +157,14 @@ it.live.prop(
         port: 18787,
         build: "quota-start",
       });
+
       // The quota values ride in the settings snapshot, each as its declared schema encodes it.
       const values: Record<string, Schema.Json> = { ...fixture.settings.values };
+
       const recovery = yield* Schema.decodeUnknownEffect(Schema.toEncoded(Declarations.recovery.schema))(
         values[Declarations.recovery.path],
       );
+
       const invalid = `invalid:${suffix}`;
       const { project, process } = recovery;
 
@@ -188,6 +195,7 @@ it.live.prop(
       const declaration = field === "storage" ? Declarations.storage : Declarations.recovery;
       expect(Schema.decodeUnknownResult(declaration.schema)(values[declaration.path])._tag).toBe("Failure");
       const config = { ...fixture, settings: { ...fixture.settings, values } };
+
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
@@ -197,6 +205,7 @@ it.live.prop(
         Effect.provide(filesWithoutSync),
         Effect.result,
       );
+
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
       expect(fetched).not.toHaveBeenCalled();
     }),
@@ -214,6 +223,7 @@ it.live.prop(
           const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
           const folder = yield* sandbox;
           const events: Array<typeof BrainEvent.Type> = [];
+
           const fetched = yield* spyOnFetch(async (_url, options) => {
             // SAFETY: dev.ts's dial writes every body as JSON.stringify({ target, project, name, method,
             // args }), and its outbox flush sends method "brain" with args `[event]`, a BrainEvent; only
@@ -229,7 +239,9 @@ it.live.prop(
 
             return Response.json({ value: call.method === "info" ? [] : null });
           });
+
           const kill = yield* spyOnKill;
+
           const config = {
             home: folder,
             name: "life-contract",
@@ -273,6 +285,7 @@ it.live.prop(
       const events: Array<typeof BrainEvent.Type> = [];
       // The fetch stand-in is a plain async callback, so it runs with this law's services.
       const context = yield* Effect.context();
+
       const fetched = yield* spyOnFetch(async (_url, options) => {
         // SAFETY: each control body is the `{ target, project, name, method, args }` JSON dev.ts's dial
         // writes; a "brain" call, the one branch below, carries the flushed BrainEvent as `args[0]`.
@@ -289,6 +302,7 @@ it.live.prop(
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
+
       const kill = yield* spyOnKill;
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       yield* Effect.gen(function* () {
@@ -300,6 +314,7 @@ it.live.prop(
           window: null,
           port: 18787,
         });
+
         const starting = yield* Effect.forkChild(startDev({ build, brain: "unused.mjs", programs: {} }, fixture));
         yield* Deferred.await(reached);
         yield* Effect.yieldNow;

@@ -109,6 +109,7 @@ export const suite = (rig: Rig) =>
     it.effect("U1 names own their rows; replacements and late batches keep the process from the load", () =>
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
+
         const once = (tape: ReadonlyArray<Cell>) =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -217,6 +218,7 @@ export const suite = (rig: Rig) =>
     it.effect("U3 fresh and warm sinks commit batches once, recover failed writes and survive reopen", () =>
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
+
         const once = (tape: ReadonlyArray<Cell>, warm: boolean) =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -252,6 +254,7 @@ export const suite = (rig: Rig) =>
                 },
                 size: () => store.sql.size(),
               };
+
               const service = yield* rig.telemetry(sql, "checklist:1");
 
               if (warm) {
@@ -266,6 +269,7 @@ export const suite = (rig: Rig) =>
                 // A fresh sink first loses its table creation in the failed transaction.
                 const moves =
                   held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
+
                 const move = moves[cell.pick % moves.length];
 
                 if (move === "reopen") {
@@ -323,6 +327,7 @@ export const suite = (rig: Rig) =>
     it.effect("U7 failed, hung and successful usage deliveries leave program answers, receipts and journal alone", () =>
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
+
         const once = (tape: ReadonlyArray<DeliveryCell>) =>
           Effect.scoped(
             Effect.gen(function* () {

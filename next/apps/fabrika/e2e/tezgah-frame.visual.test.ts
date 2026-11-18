@@ -246,9 +246,11 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           const five = yield* drawnAs((n) => n === 5, "a quarter split right");
           const narrow = focused(five);
           expect(narrow.id, "L21: the quarter's new tile takes focus").not.toBe(quarter.id);
+
           const box = Option.getOrUndefined(
             Arr.findFirst((yield* drawn(page)).regions, (x) => pipe(x.name, Str.endsWith(`, t${narrow.n}`))),
           )?.box;
+
           expect(box?.width ?? 0, "the narrow tile is too narrow to split again").toBeLessThan(2 * 220);
           yield* keys(page, "Control+b", "%");
           yield* Effect.sleep(QUIET);
@@ -275,6 +277,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 // Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
 // tab's own tezgah, which exists.
 const NOBODY = `processes/tezgah:${pipe(typeId("person", 77), Str.slice("person_".length))}`;
+
 const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
 
 describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah once it exists", () => {

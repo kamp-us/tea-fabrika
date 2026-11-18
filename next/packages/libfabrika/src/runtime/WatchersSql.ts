@@ -65,6 +65,7 @@ export const layer = (
     Watchers,
     Effect.gen(function* () {
       const manager = yield* WatcherManager;
+
       const step = (msg: typeof Msg.Type) => {
         const before = load(sql, descriptor.name);
         const [next] = applyCell(watchers, before, msg);
@@ -74,6 +75,7 @@ export const layer = (
           encode({ v: 1, build: descriptor.build, name: descriptor.name, state: next }),
         );
         const held = new Set(next._tag === "empty" ? [] : Arr.map(next.clients, (c) => c.client));
+
         return before._tag === "watching"
           ? Arr.map(
               Arr.filter(before.clients, (c) => !held.has(c.client)),

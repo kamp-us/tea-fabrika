@@ -62,6 +62,7 @@ it.prop(
   },
   ({ items, key, process }) => {
     const tasks = Arr.map(items, (item) => taskFor({ ...item, matching: true }));
+
     const subjects = Arr.flatMap(tasks, (j) =>
       j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );

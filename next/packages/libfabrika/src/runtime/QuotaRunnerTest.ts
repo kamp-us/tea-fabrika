@@ -86,7 +86,9 @@ const Msg = Schema.TaggedUnion({
 });
 
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
+
 const Cell = Schema.Struct({ pick: Nat, amount: Nat, reopen: Schema.Boolean });
+
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(25));
 
 const History = Schema.Array(
@@ -97,6 +99,7 @@ const History = Schema.Array(
 ).check(Schema.isMinLength(1), Schema.isMaxLength(3));
 
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
+
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
 const call = Effect.fnUntraced(function* (
@@ -160,11 +163,13 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
             for (const [n, c] of tape.entries()) {
               const name = required(names[c.pick % names.length]);
+
               const m = required(
                 [Msg.cases.inc.make({}), Msg.cases.work.make({}), Msg.cases.schedule.make({ at: 1001 + n })][
                   c.amount % 3
                 ],
               );
+
               expect(yield* w.input(name, `healthy:${n}`, m)).toHaveProperty("_tag", "placed");
               yield* w.drain(name);
               yield* call(w, name, (r) => r.due(1001 + n));
@@ -343,10 +348,12 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             // Project alone, the call's recovery writes there may fit, and then a later one, on a
             // saved alarm, runs out.
             const spare = required(tape[1]).pick % 2;
+
             const tighten = (allowance: Limits["recovery"]["process"]) => ({
               ...allowance,
               ...(resource === "writes" ? { writes: spare } : { bytes: 1 }),
             });
+
             w.limits({
               ...defaults,
               recovery: {
@@ -446,10 +453,12 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
+
                 const m =
                   j === length - 1
                     ? Msg.cases.inc.make({ text: Str.repeat(c.amount % 256)("é😀") })
                     : Msg.cases.inc.make({});
+
                 expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
                 messages.push(id);
               }

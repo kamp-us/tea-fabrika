@@ -29,7 +29,9 @@ import * as RecordWireTest from "../src/record-wire.test-support.ts";
 import { programs as selected } from "../src/table.ts";
 
 export const APP = pipe(new URL("..", import.meta.url).pathname, Str.replace(/\/$/, ""));
+
 export const ROOT = pipe(new URL("../../../..", import.meta.url).pathname, Str.replace(/\/$/, ""));
+
 export const PROGRAM = "fabrika/counter";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -91,6 +93,7 @@ const founderKey = (home: string) =>
     const fs = yield* FileSystem.FileSystem;
     const key = `${home}/person`;
     yield* Effect.sync(() => execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]));
+
     return { key, line: Str.trim(yield* fs.readFileString(`${key}.pub`)) };
   });
 
@@ -234,7 +237,9 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
         }
       }
     }).pipe(Effect.timeoutOrElse({ duration: "60 seconds", orElse: () => Effect.die("dev printed no reload answer") }));
+
   yield* nextLine((line) => pipe(line, Str.startsWith('{"ready":')));
+
   return { home, founder, stdout, stderr, nextLine, url: `http://127.0.0.1:${port.port}` };
 });
 
@@ -258,6 +263,7 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
         Effect.gen(function* () {
           // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
           const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
+
           const tables = new Set(
             Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) => row.name),
           );

@@ -47,27 +47,42 @@ import { projectRuntime, type Env } from "./runtime.ts";
 // SAFETY: the program table starts empty, and world() writes only `built(...)` rows into it, each a
 // `{ hash, source }` pair.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
+
 vi.mock("./table.ts", () => table);
+
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
 vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
+
 type ProcessCalls = (typeof ProcessService)["Service"];
+
 type Limits = QuotaRunnerTest.Limits;
 
 const PROJECT = "quota-laws";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-13T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const URL = "http://127.0.0.1:18787";
+
 const NAMES = ["alpha:1", "alpha:2", "beta:1"] as const;
+
 const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
+
 // Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
 // record, so no account pays for one.
 const ACKS: ReadonlyArray<string> = NAMES.map(acked);
+
 const programFor = (name: string) => (Str.startsWith("alpha:")(name) ? "quota/alpha" : "quota/beta");
+
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
+
 const live = TestClock.withLive;
 
 // One program under two identities. It counts `inc`, throws on `throw`, on `tell` mails an `inc`
@@ -134,9 +149,13 @@ const built = (source: string) =>
   );
 
 const counterCode = await built("counter");
+
 const checklistCode = await built("checklist");
+
 const tezgahCode = await built("tezgah");
+
 const alphaCode = await built("alpha");
+
 const betaCode = await built("beta");
 
 /** A recovery allowance as the recovery setting's value holds it once decoded. */
@@ -187,6 +206,7 @@ const picked = (service: object, method: string): unknown =>
 const storage = (db: DatabaseSync, alarm: (at: number | null) => void) => {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
+
   return {
     values,
     sql: {
@@ -219,10 +239,12 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   const key = yield* SshsigTest.identity;
   // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
   const handsKey = yield* SshsigTest.identity;
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
   );
+
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
 
   // SAFETY: cloudflare/runtime.ts's Project reads `id.name`, the `storage` handles and, for the tail,
@@ -234,8 +256,10 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     storage: storage(db, () => {}),
     exports: loopbacks,
   } as unknown as DurableObjectState;
+
   const stores = new Map<string, Store>();
   const runtimes = new Map<Store, ReturnType<typeof processRuntime>>();
+
   const from = {
     by: key.fingerprint,
     for: PERSON,
@@ -245,20 +269,24 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     traceId: TRACE,
     build: "quota-laws",
   };
+
   const everyone = Rec.fromEntries(NAMES.map((name) => [name, NAMES.filter((other) => other !== name)]));
   // SAFETY: `undefined` is a member of the union, so the cast only widens the declared type, and
   // each read below goes through required(), which refuses the value while boot has not set it.
   let projectHeld = undefined as ReturnType<typeof projectRuntime> | undefined;
+
   // What the Project class hands off: one service call on the object's runtime.
   const project = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
     Effect.flatMap(required(projectHeld).contextEffect, (services) =>
       ProjectService.use(use).pipe(Effect.provideContext(services)),
     );
+
   // What the Process class hands off, with the descriptor calls on its own handles.
   const process = <A, E>(store: Store, use: (p: ProcessCalls) => Effect.Effect<A, E>) =>
     Effect.flatMap(required(runtimes.get(store)).contextEffect, (services) =>
       ProcessService.use(use).pipe(Effect.provideContext(services)),
     );
+
   /** The start's whole input, as `INSTANCE` carries it, with these limits under its own start id. */
   const instance = (values: Limits, start?: string) =>
     RecordWireTest.settingsFixture({
@@ -273,6 +301,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       limits: { recordBytes: 1_000_000_000 },
       values: { ...declared(values), handsTarget: handsKey.fingerprint },
     }).pipe(Effect.map((input) => JSON.stringify(input)));
+
   // The start's input the platform hands the next boot; a widen replaces it, and `env` reads it.
   let instanceInput = yield* instance(limits);
 
@@ -315,10 +344,12 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         const [, storageKey] = Schema.decodeSync(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
           name,
         );
+
         let store = stores.get(storageKey);
 
         if (store === undefined) {
           const processDb = new DatabaseSync(":memory:");
+
           const handles = storage(processDb, (at) => {
             made.alarm = at;
           });
@@ -335,6 +366,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         }
 
         const current = store;
+
         return Stub.make<ProcessBinding>(
           (method) =>
             (...args: ReadonlyArray<unknown>) =>
@@ -355,6 +387,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                   Match.orElse(() =>
                     process(current, (p): Effect.Effect<unknown, unknown> => {
                       const member = picked(p, method);
+
                       return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
                     }),
                   ),
@@ -379,7 +412,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
               worker(alpha ? "quota/alpha" : "quota/beta"),
               alpha ? alphaCode.hash : betaCode.hash,
             );
+
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
+
             return {
               describe: () => box.describe(),
               init: (saved: unknown) => box.init(saved),
@@ -397,11 +432,13 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
           if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
+
             return Reflect.construct(Box, []);
           }
 
           // The app's own bootstrap, `fabrika/counter`, and the founder's tezgah, which no law here drives.
           const execution = nodeExecution(counter);
+
           return {
             describe: async () => ({
               name: counter.name,
@@ -437,6 +474,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       }),
     },
   } as unknown as Env;
+
   const boot = Effect.sync(() => {
     projectHeld = projectRuntime(ctx, env);
 
@@ -444,6 +482,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       runtimes.set(store, processRuntime(store.ctx, env, programs));
     }
   });
+
   const halt = Effect.gen(function* () {
     for (const runtime of runtimes.values()) {
       yield* runtime.disposeEffect;
@@ -451,6 +490,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
     yield* required(projectHeld).disposeEffect;
   });
+
   yield* Effect.acquireRelease(boot, () =>
     Effect.andThen(
       halt,
@@ -462,16 +502,20 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     ),
   );
   yield* project((p) => p.info);
+
   // The law's own lookup of a name's process runs with tracing off, so it writes no span rows
   // itself: a count of the Project's rows then holds only what the instance wrote.
   const pid = Effect.fnUntraced(function* (name: string) {
     const info = yield* project((p) => p.info).pipe(Effect.withTracerEnabled(false));
+
     return required(info.find((row) => row.name === name)).process;
   });
+
   /** The store of a registered name, found by the descriptor its Process saved. */
   const storeFor = Effect.fnUntraced(function* (name: string) {
     const current = yield* pid(name);
     const named = [...stores.values()].filter((store) => saved(store)?.name === name);
+
     return required(named.find((store) => saved(store)?.id === current) ?? named[0]);
   });
 
@@ -513,10 +557,13 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
       ),
     ),
   ).toMatchObject({ _tag: "online" });
+
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
+
     return (yield* Schema.decodeUnknownEffect(View)(yield* process(store, (p) => p.open("audit")))).view;
   });
+
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
   const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {
     for (let n = 0; n < 2_000; n++) {
@@ -546,8 +593,10 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
 
     return yield* Effect.die("the instance did not settle");
   });
+
   const sql = nodeSql(db);
   const quotas = QuotasSql.layer(sql, { brain: `brain:${PROJECT}`, limits });
+
   /** Every account in both stores. A read of an installed account adds no row to either store. */
   const accounts = Effect.gen(function* () {
     const found = yield* Effect.forEach(
@@ -557,7 +606,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         concurrency: 1,
       },
     );
+
     const rows = { project: counts(db), process: found.map(([, store]) => counts(store.db)) };
+
     const program = yield* Effect.forEach(
       PROGRAMS,
       (id) =>
@@ -567,6 +618,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(Effect.provide(quotas), live);
+
     const recovery = yield* Effect.forEach(
       NAMES,
       (name) =>
@@ -576,6 +628,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(Effect.provide(quotas), live);
+
     const local = yield* Effect.forEach(
       found,
       ([name, store]) =>
@@ -585,16 +638,19 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         ),
       { concurrency: 1 },
     ).pipe(live);
+
     expect(
       { project: counts(db), process: found.map(([, store]) => counts(store.db)) },
       "the live assembly installs accounting in both stores; a read never creates it",
     ).toEqual(rows);
+
     return {
       program: Rec.fromEntries(program),
       recovery: Rec.fromEntries(recovery),
       local: Rec.fromEntries(local),
     };
   });
+
   return {
     pid,
     view,
@@ -603,6 +659,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     accounts,
     rows: Effect.gen(function* () {
       const found = yield* Effect.forEach(NAMES, storeFor, { concurrency: 1 });
+
       return { project: counts(db), process: found.map((store) => counts(store.db)) };
     }),
     /**
@@ -630,6 +687,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     /** One input through the door, to the name's live process. */
     input: Effect.fnUntraced(function* (name: string, id: string, m: Schema.Json) {
       const to = yield* pid(name);
+
       // `letter` is the door's own key for the message id (0547 keeps saved and wire names).
       return yield* project((p) => p.route(client, "process.send", { pid: to, letter: id, m, sentAt: SENT, seen: 0 }));
     }),
@@ -655,9 +713,13 @@ const Cell = Schema.Struct({
 });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
+
 const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
+
 const refused = { _tag: "refused", reason: "quota" };
+
 const none = { writes: 0, bytes: 0 };
 
 const cost = (entries: ReadonlyArray<Parameters<typeof encodedBytes>[0]>) => ({
@@ -717,11 +779,13 @@ describe("P34c live wiring, both object stores", () => {
             } else {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
+
               const m = Match.value(move).pipe(
                 Match.when("tell", () => Msg.cases.tell.make({ to: peer })),
                 Match.when("ask", () => Msg.cases.ask.make({})),
                 Match.orElse(() => Msg.cases.inc.make({ text: Str.repeat(c.amount % 64)("é😀") })),
               );
+
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
@@ -735,10 +799,12 @@ describe("P34c live wiring, both object stores", () => {
                 Effect.gen(function* () {
                   const sender = yield* w.view(name);
                   const receiver = yield* w.view(peer);
+
                   // A hands Cmd is done here once its task request points the hands key at it.
                   const requested =
                     move !== "ask" ||
                     (yield* w.entries(head)).some((entry) => entry.stream === targetStream(w.handsKey));
+
                   return (
                     requested &&
                     sender.told === required(told.get(name)) &&
@@ -801,14 +867,17 @@ describe("P34c live wiring, both object stores", () => {
           // An input counts 2 writes, so an odd cap also meets "one write short". A bare input and its
           // step take about 900 bytes in the canonical encoding, so the storage caps hold a few.
           const cap = resource === "writes" ? 2 + (first.amount % 8) : 4_000 + (first.amount % 8) * 2_000;
+
           const limits = {
             ...QuotaRunnerTest.defaults,
             ...(resource === "writes" ? { writes: cap } : { storage: cap }),
           };
+
           const w = yield* world(limits);
           const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
           let refusals = 0;
           let admitted = 0;
+
           const one = Effect.fnUntraced(function* (name: string, id: string, text: string) {
             const program = programFor(name);
             const before = yield* w.accounts;
@@ -864,6 +933,7 @@ describe("P34c live wiring, both object stores", () => {
             // id as long as the first's, so only its text adds bytes to what the first pair cost.
             const pair = (ids: ReadonlyArray<string>) =>
               Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
+
             const bare = yield* pair(["first", "step:first"]);
             const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
             const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
@@ -875,6 +945,7 @@ describe("P34c live wiring, both object stores", () => {
               expect(yield* w.input("alpha:1", "aimed", Msg.cases.inc.make({ text }))).toMatchObject(accepted);
               yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
               expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
+
               return;
             }
           }

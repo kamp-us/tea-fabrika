@@ -72,16 +72,19 @@ describe("person git signatures (p83b)", () => {
         const r = new Repo(PERSON_KEYS);
         const unsigned = r.change("a.ts");
         acceptPgp(r);
+
         const decoys = Arr.map(
           ["xgpgsig", "gpgsig-sha256", `x-${name}`],
           (header) => `${header} -----BEGIN SSH SIGNATURE-----`,
         );
 
         const pgp = ["gpgsig -----BEGIN PGP SIGNATURE-----", " fixture", " -----END PGP SIGNATURE-----"];
+
         const raw = pipe(
           r.git("cat-file", "commit", unsigned),
           Str.replace("\n\n", Arr.join(["", ...(before ? [...decoys, ...pgp] : [...pgp, ...decoys]), "", ""], "\n")),
         );
+
         const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
         expect(verifyCommit(r, c)).toBe(0);
         const out = r.check([], r.base, c);
@@ -109,6 +112,7 @@ describe("person git signatures (p83b)", () => {
             const header = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
             const sig = "-----BEGIN SSH SIGNATURE-----\n";
             const decoy = `x-${name} ${value}${lineBreak}${header} ${Str.trimEnd(sig)}`;
+
             const pgp = Arr.join(
               [`${header} -----BEGIN PGP SIGNATURE-----`, " fixture", " -----END PGP SIGNATURE-----"],
               "\n",
@@ -117,6 +121,7 @@ describe("person git signatures (p83b)", () => {
             const raw = r
               .git("cat-file", "commit", unsigned)
               .replace("\n\n", () => `\n${Arr.join(before ? [decoy, pgp] : [pgp, decoy], "\n")}\n\n`);
+
             const c = Str.trim(sh(r.dir, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], raw));
             expect(verifyCommit(r, c)).toBe(0);
             r.git("update-ref", "refs/heads/pr", c);

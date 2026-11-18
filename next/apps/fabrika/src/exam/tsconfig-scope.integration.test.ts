@@ -73,6 +73,7 @@ const outside = Effect.fnUntraced(function* (
     const config = configs[i];
     const project = config === undefined ? undefined : taken.getProject(config);
     const held = new Set(Arr.map(project?.program.getSourceFileNames() ?? [], (f) => path.relative(root, f)));
+
     return pipe(
       tracked,
       Arr.filter((f) => pipe(f, Str.startsWith(`${p}/`)) && !held.has(f)),
@@ -159,6 +160,7 @@ it.effect(
         Arr.map(packages, (p) => p.dir),
         tracked,
       );
+
       expect(Arr.map(gaps, (g) => `${g.package}: ${g.file}`)).toEqual([]);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
@@ -221,11 +223,13 @@ const plantTypeError = Effect.fnUntraced(function* (planted: Plant) {
 
   const { program } = project;
   const held = program.getSourceFileNames().includes(file);
+
   const diagnostics = pipe(
     [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()],
     Arr.filter((d) => d.fileName === file),
     Arr.map((d) => ({ code: d.code, line: pipe(text, Str.slice(0, d.pos), Str.split("\n")).length })),
   );
+
   return { held, diagnostics };
 }, Effect.scoped);
 

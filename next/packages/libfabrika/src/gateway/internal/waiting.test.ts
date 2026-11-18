@@ -27,7 +27,9 @@ const Tag = Schema.TaggedUnion({
 type Model = typeof Waiting.machine.model.Type;
 
 type Msg = typeof Waiting.machine.msg.Type;
+
 type Knock = Extract<Msg, { readonly _tag: "knock" }>;
+
 type Empty = Extract<Model, { readonly _tag: "empty" }>;
 
 type Busy = Extract<Model, { readonly _tag: "waiting" }>;
@@ -167,6 +169,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   const rows = s.rows;
   const row = at(rows, seed.pick);
   const gone = Arr.filter(memory.keys, (k) => !Arr.some(rows, (r) => r.key === k));
+
   const time = () => {
     const t = row === undefined || seed.when === 2 ? memory.now + 1 + (seed.other % 5) : row.until + seed.when;
     memory.now = Math.max(memory.now, t);
@@ -192,6 +195,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
       Arr.filter(rows, (_, i) => (seed.pick >> i) % 2 === 1),
       (r) => r.key,
     );
+
     return { ...Tag.cases.accepted.make({}), keys: seed.fresh === 0 ? [...keys, absentKey()] : keys };
   }
 
@@ -200,6 +204,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
 
     const client =
       seed.other % 3 === 0 ? "nobody" : (at(row?.clients ?? [], seed.other) ?? at(rows[0]?.clients ?? [], 0) ?? "x");
+
     return { ...Tag.cases.leave.make({}), key: target, client };
   }
 
@@ -209,7 +214,9 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
       : seed.fresh === 1
         ? (at(gone, seed.other) ?? freshKey())
         : row.key;
+
   const own = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.key === key));
+
   const client =
     own !== undefined && seed.other % 3 !== 0
       ? (at(own.clients, seed.other) ?? "x")
@@ -437,6 +444,7 @@ it.prop(
     for (const [n, choice] of choices.entries()) {
       const rows = pending.rows;
       const leaves = Arr.filter([...grants.keys()], (k) => !revoked.has(k));
+
       const moves = [
         "knock",
         "expire",

@@ -32,7 +32,9 @@ import { Dead, Down, Owner, ProcessEvent, Recipient, Start } from "./Process.ts"
 import { ProcessManager } from "./ProcessManager.ts";
 
 const CAP = 256;
+
 const at = (length: number, unit = "a") => Str.repeat(length)(unit);
+
 const over = at(CAP + 1);
 
 const acceptedText = Down.fields.ref;
@@ -483,6 +485,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       Schema.Int.check(Schema.isBetween({ minimum: 200, maximum: 2_100_000 })),
     ]),
   ).pipe(Arbitrary.map(([unit, length]) => Str.repeat(Math.ceil(length / unit.length))(unit)));
+
   const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
     Arbitrary.flatMap((kind) =>
       Match.value(kind).pipe(

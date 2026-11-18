@@ -52,6 +52,7 @@ it.prop(
           pick % 2 === 0 ? Tag.cases.release.make({}) : { ...Tag.cases.arrive.make({}), process: state.process },
         released: (): Msg => ({ ...Tag.cases.arm.make({}), process: `later-${pick}` }),
       });
+
       const previous = model;
       [model] = applyCell(RevokeHold.controller, model, msg);
       msgs.push(msg);

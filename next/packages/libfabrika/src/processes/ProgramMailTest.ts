@@ -621,6 +621,7 @@ const prop = (
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
@@ -1300,6 +1301,7 @@ const capLaw = (
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
         const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
@@ -1376,6 +1378,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
           const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
+
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.

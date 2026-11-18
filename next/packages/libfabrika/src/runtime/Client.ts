@@ -163,6 +163,7 @@ const dated = (
     Arr.findFirstIndex(c.pending, (p) => p.n === n),
     () => -1,
   );
+
   const slot = c.pending[at];
 
   if (slot === undefined || slot._tag !== "dating") {
@@ -179,6 +180,7 @@ const dated = (
     sentAt: stamp.sentAt,
     ...(stamp.traceId === undefined ? {} : { traceId: stamp.traceId }),
   });
+
   return { ...c, pending: Arr.map(c.pending, (p, i) => (i === at ? ready : p)) };
 };
 
@@ -189,6 +191,7 @@ const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag"
   }
 
   const kept = Arr.filter(c.pending, (p) => p._tag !== "ready" || p.letter !== letter);
+
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 

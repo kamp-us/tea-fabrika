@@ -27,6 +27,7 @@ type Reply = {
 };
 
 type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonly reply: Reply };
+
 type Msg = { readonly _tag: "remember"; readonly reply: Reply };
 
 type Subject = {

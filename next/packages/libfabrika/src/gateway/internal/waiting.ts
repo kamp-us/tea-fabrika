@@ -105,6 +105,7 @@ export const Stored = Saved.pipe(
       decode: (saved) => settle(saved, Arr.map(saved.rows, toPending)),
       encode: (s) => {
         const pending: ReadonlyArray<Pending> = s.rows;
+
         return { rows: Arr.map(pending, toRow), most: s.most, ttl: s.ttl };
       },
     }),
@@ -120,6 +121,7 @@ const expire = (s: Model, at: number): Model => {
   }
 
   const kept = Arr.filter(s.rows, (r) => r.until > at);
+
   return settle(s, kept);
 };
 
@@ -146,6 +148,7 @@ export const machine = Machine.make({
         const known = old.clients.includes(m.client);
         const clients: Pending["clients"] = known ? old.clients : [...old.clients, m.client];
         const kept = Arr.map(live.rows, (r) => (r === old ? { ...old, clients } : r));
+
         return [settle(live, kept), []];
       }
 
@@ -178,9 +181,11 @@ export const machine = Machine.make({
 
       const row = found.value;
       const clients = Arr.filter(row.clients, (c) => c !== m.client);
+
       const kept = Arr.isReadonlyArrayNonEmpty(clients)
         ? Arr.map(s.rows, (r) => (r === row ? { ...row, clients } : r))
         : Arr.filter(s.rows, (r) => r !== row);
+
       return [settle(s, kept), []];
     },
     accepted: (s, m) => {
@@ -189,6 +194,7 @@ export const machine = Machine.make({
       }
 
       const kept = Arr.filter(s.rows, (r) => !m.keys.includes(r.key));
+
       return [settle(s, kept), []];
     },
   },

@@ -23,6 +23,7 @@ const HOUR = 3_600_000;
 type Model = typeof machine.model.Type;
 
 type Msg = typeof machine.msg.Type;
+
 type Ended = Extract<Msg, { readonly _tag: "commit_failed" }>["more"][number];
 
 /** The plan's payload, field for field, from the row schemas it keeps. */
@@ -113,6 +114,7 @@ const choose = (model: Model, draw: Draw, pool: ReadonlyArray<Ended>): Msg => {
     { length: draw.size % 4 },
     (_, n) => offered[(draw.pick + n * 7 + draw.size) % offered.length]!,
   );
+
   return { ...Tag.cases.commit_failed.make({}), more };
 };
 

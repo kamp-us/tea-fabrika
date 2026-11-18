@@ -45,6 +45,7 @@ const NAME = "reply:1";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" });
 
 const Model = Schema.Struct({ replies: Schema.Int, reason: Schema.NullOr(Schema.String) });
+
 const Msg = Schema.TaggedStruct("work", { n: Schema.Int });
 
 const work = Cmd.make("work", {
@@ -79,6 +80,7 @@ const program = {
 const input = fc.record({ n: fc.integer(), letter: fc.uuid() });
 
 const AuditInput = Schema.TaggedStruct("save", { base: Schema.Int, body: Schema.String });
+
 const AuditMetadata = Schema.TaggedStruct("save", { base: Schema.Int });
 
 const auditThrow = (body: string): never => {
@@ -337,6 +339,7 @@ const replyCase = (
         const runner = yield* ProgramRunner;
         const store = yield* ProcessStore;
         const ledger = yield* Ledger;
+
         const incoming = yield* Schema.decodeUnknownEffect(Incoming)({
           id: letter,
           envelope: {
