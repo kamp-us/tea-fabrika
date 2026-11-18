@@ -296,7 +296,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
             audit: {
               data: Schema.Struct({ type: Schema.Literal("comment") }),
               select: () => {
-                const m = Schema.decodeUnknownSync(Input)(message);
+                const m = Schema.decodeSync(Input)(message);
 
                 if (controls.audit === "selector") {
                   throw new Error(m.text);
