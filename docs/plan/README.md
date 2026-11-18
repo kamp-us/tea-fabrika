@@ -56,12 +56,15 @@ request goes by hand, by its own agent, and is logged.
 ## Where we are now
 
 *2026-11-18:* [The rules and records build](./quests/rules-and-records-build-PLAN.md), in today's
-tooling and the records both versions read, cleans the records up and then turns on four checks
-in `pnpm lint` (0605 to 0608). Slices 1 to 3 folded decisions 0001 to 0199 into their own text
+tooling and the records both versions read, cleans the records up and then turns on its checks in
+`pnpm lint` (0605 to 0607). Slices 1 to 3 folded decisions 0001 to 0199 into their own text
 ([PR 1628](https://github.com/kamp-us/tea-fabrika/pull/1628),
 [PR 1629](https://github.com/kamp-us/tea-fabrika/pull/1629),
-[PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)); slice 6 cuts `AGENTS.md` and
-`next/AGENTS.md` to fit 32,768 bytes read together (0608). The other slices remain.
+[PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)). Slice 6 could not fit 0608's
+32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with
+[0609](../../.decisions/0609-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
+200 lines, and procedures move to the skill read for that job. Slice 6 makes that cut, and slice
+8's size check counts lines, as advice. The other slices remain.
 
 *2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
 slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
@@ -314,7 +317,8 @@ and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea
 as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
 minutes between the two: each pull request passed alone and they broke together, which is why a
 pull request now lands only when its checks ran on a head that holds main
-([0162](../../.decisions/0162-no-friction-before-a-merge.md)).
+(GitHub's merge queue, [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md);
+[0162](../../.decisions/0162-no-friction-before-a-merge.md)).
 
 *2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
 default-branch commit through P38 before building the shipped programs. Repository selections,

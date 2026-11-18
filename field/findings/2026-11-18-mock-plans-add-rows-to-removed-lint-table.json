@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-mock-plans-add-rows-to-removed-lint-table",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/quests/mock-app-e2e-PLAN.md",
+    "line": 384
+  },
+  "says": "Two approved mock sweep plans not yet built tell their build step to add a row for the vi ban to next/AGENTS.md's 'What lint holds' table, which slice 6 removed under 0129 because lint's own messages hold those rules: mock-app-e2e-PLAN.md:384 and mock-cloudflare-PLAN.md:595.",
+  "proof": "mock-app-e2e-PLAN.md:384 'next/AGENTS.md | build | docs | one row in \"What lint holds\": `vitest/no-restricted-vi-methods`' against next/AGENTS.md:32-38 at this head, which has no table and says each lint message says what to do; `rg no-restricted-vi .oxlintrc.json` finds nothing, so neither plan has built that row yet",
+  "cost": "a builder following its plan puts back prose 0129 removes, growing the map past 0608's limit, or stalls on a table that is gone",
+  "head": "50266396c7c8d538722bf333fef384d6d4e8a19d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}

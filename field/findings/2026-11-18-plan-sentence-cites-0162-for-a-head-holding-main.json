@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-plan-sentence-cites-0162-for-a-head-holding-main",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/README.md",
+    "line": 315
+  },
+  "says": "The 2026-11-12 line says a pull request now lands only when its checks ran on a head that holds main, citing 0162, but 0162 says a clean head lands behind main; the claim is held by the merge queue line in 0014, which a link meant to state a rule should name (0607).",
+  "proof": "docs/plan/README.md:315-317 'lands only when its checks ran on a head that holds main ([0162]...)' against .decisions/0162-no-friction-before-a-merge.md:96-97 'whose head merges cleanly with main, lands behind main' and .decisions/0014-the-lead-merges-when-every-step-passed.md:68-69 'GitHub's merge queue tests the pull request on newest main before it lands'",
+  "cost": "a reader who follows the link finds the opposite of the sentence and may bring back 0146's catch-up loop or doubt the merge queue",
+  "head": "50266396c7c8d538722bf333fef384d6d4e8a19d",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1633"
+}
