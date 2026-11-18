@@ -237,7 +237,7 @@ it.effect("vector: L14 every code point's cell facts and hard-character spot mat
                 Effect.sync(() => ghostty.createTerminal(cols, 20)),
                 (terminal) => Effect.sync(() => terminal.free()),
               );
-              term.write(source + "x");
+              term.write(`${source}x`);
               let expected = -1;
 
               for (let row = 0; row < 20; row += 1) {

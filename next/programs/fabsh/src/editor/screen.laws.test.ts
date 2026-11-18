@@ -5,6 +5,88 @@ import { Match, Schema } from "effect";
 import { roles } from "../roles.ts";
 import { paint, shown } from "./screen.ts";
 
+const sgrMatches = (text: string) => {
+  const matches: Array<{ index: number; end: number; parameters: string }> = [];
+
+  for (let start = 0; start < text.length;) {
+    const index = text.indexOf("\x1b[", start);
+
+    if (index < 0) {
+      break;
+    }
+
+    let end = index + 2;
+
+    while (end < text.length) {
+      const code = text.charCodeAt(end);
+
+      if ((code >= 0x30 && code <= 0x39) || code === 0x3b) {
+        end += 1;
+      } else {
+        break;
+      }
+    }
+
+    if (text.charAt(end) === "m") {
+      matches.push({ index, end: end + 1, parameters: text.slice(index + 2, end) });
+      start = end + 1;
+    } else {
+      start = index + 1;
+    }
+  }
+
+  return matches;
+};
+
+const withoutSgr = (text: string) => {
+  let result = "";
+  let end = 0;
+
+  for (const match of sgrMatches(text)) {
+    result += text.slice(end, match.index);
+    end = match.end;
+  }
+
+  return `${result}${text.slice(end)}`;
+};
+
+const hasTruecolorSgr = (text: string) => {
+  for (let start = 0; start < text.length;) {
+    const index = text.indexOf("\x1b[", start);
+
+    if (index < 0) {
+      return false;
+    }
+
+    const end = text.indexOf("m", index + 2);
+    const stop = end < 0 ? text.length : end;
+
+    for (let at = index + 2; at < stop; at += 1) {
+      if (
+        (at === index + 2 || text.charAt(at - 1) === ";") &&
+        (text.startsWith("38;2;", at) || text.startsWith("48;2;", at))
+      ) {
+        return true;
+      }
+    }
+
+    start = index + 2;
+  }
+
+  return false;
+};
+
+const hasRenderedControl = (text: string) =>
+  [...text].some((char) => {
+    const codepoint = char.codePointAt(0) ?? 0;
+    return (
+      codepoint <= 0x08 ||
+      (codepoint >= 0x0b && codepoint <= 0x0c) ||
+      (codepoint >= 0x0e && codepoint <= 0x1f) ||
+      (codepoint >= 0x7f && codepoint <= 0x9f)
+    );
+  });
+
 // L5 fault: drop SGR 4 while retaining the error's palette color.
 it.prop(
   "L5 the error text is underlined and uses the terminal palette",
@@ -26,9 +108,7 @@ it.prop(
     let color = false;
     let at = 0;
     let painted = "";
-    const sgr = /\x1b\[([0-9;]*)m/g;
-
-    for (const match of bytes.matchAll(sgr)) {
+    for (const match of sgrMatches(bytes)) {
       const plain = bytes.slice(at, match.index);
 
       if (plain.includes(name)) {
@@ -37,7 +117,7 @@ it.prop(
         painted += plain;
       }
 
-      for (const code of (match[1] || "0").split(";").map(Number)) {
+      for (const code of (match.parameters || "0").split(";").map(Number)) {
         if (code === 0) {
           underline = false;
           color = false;
@@ -52,12 +132,12 @@ it.prop(
         }
       }
 
-      at = match.index + match[0].length;
+      at = match.end;
     }
 
     expect(painted).toContain(name);
-    expect(bytes).not.toMatch(/\x1b\[(?:[^m]*;)?(?:38|48);2;/);
-    expect(bytes.replace(sgr, "")).toBe(line);
+    expect(hasTruecolorSgr(bytes)).toBe(false);
+    expect(withoutSgr(bytes)).toBe(line);
   },
   { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } },
 );
@@ -81,7 +161,7 @@ it.prop(
 
     for (const payload of payloads) {
       const safe = shown(payload);
-      expect(safe).not.toMatch(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/);
+      expect(hasRenderedControl(safe)).toBe(false);
       expect(safe.replaceAll("\r\n", "")).not.toContain("\r");
       const printable = [...payload].filter((c) => {
         const cp = c.codePointAt(0) ?? 0;

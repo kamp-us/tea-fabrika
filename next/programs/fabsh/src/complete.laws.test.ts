@@ -15,7 +15,7 @@ it.prop(
   },
   ({ input }) => {
     const names = [...new Set([`only${input.word}`, ...input.names.map((name) => `p${name}`)])];
-    const programs: Map<string, NonNullable<ReturnType<ProgramList["get"]>>> = new Map(
+    const programs = new Map<string, NonNullable<ReturnType<ProgramList["get"]>>>(
       names.map((name) => [
         name,
         {
@@ -93,12 +93,12 @@ it.prop(
     expect(complete(`summon ${harness} as `, programs, jobs, offered).candidates).toEqual([]);
     const first = `process${input.word}a`;
     const second = `process${input.word}b`;
-    const staged = new Map([
+    const withProcesses = new Map([
       [
         n,
         {
           ...jobs.get(n)!,
-          stages: [
+          processes: [
             { process: first, program: head, inputs: programs.get(head)!.inputs },
             { process: second, program: "second", inputs: { other: Schema.Literals(["yes", "no"]) } },
           ],
@@ -107,15 +107,15 @@ it.prop(
     ]);
 
     for (const name of ["tell", "close", "stop", "attach"]) {
-      expect(complete(`${name} `, programs, staged, talk).candidates).toEqual(
+      expect(complete(`${name} `, programs, withProcesses, talk).candidates).toEqual(
         expect.arrayContaining([`%${n}`, first, second]),
       );
     }
 
-    expect(complete(`tell ${first} `, programs, staged, talk).candidates).toContain("value");
-    expect(complete(`tell ${second} `, programs, staged, talk).candidates).toEqual(["other"]);
-    expect(complete(`close ${second} `, programs, staged, talk).candidates).toEqual(["other"]);
-    expect(complete(`tell ${second} other y`, programs, staged, talk).candidates).toEqual(["yes"]);
+    expect(complete(`tell ${first} `, programs, withProcesses, talk).candidates).toContain("value");
+    expect(complete(`tell ${second} `, programs, withProcesses, talk).candidates).toEqual(["other"]);
+    expect(complete(`close ${second} `, programs, withProcesses, talk).candidates).toEqual(["other"]);
+    expect(complete(`tell ${second} other y`, programs, withProcesses, talk).candidates).toEqual(["yes"]);
 
     const piped = complete("source | ", programs, jobs, talk).candidates;
     expect(piped).toEqual(expect.arrayContaining(names));
@@ -125,7 +125,7 @@ it.prop(
     const typed = `only${input.word.slice(0, Math.abs(input.cut) % (input.word.length + 1))}`;
     const one = complete(typed, programs, jobs, talk);
     expect(one.candidates).toEqual([head]);
-    const source = typed.slice(0, typed.length - one.word.length) + one.candidates[0] + " ";
+    const source = `${typed.slice(0, typed.length - one.word.length)}${one.candidates[0]} `;
     expect(
       Match.value(roles(source, programs)[0]!.role).pipe(
         Match.tag("error", () => false),

@@ -162,9 +162,9 @@ describe("fabsh S1 reader", () => {
         ).toBe(fits);
       }
 
-      const stages = Array.from({ length: fields.length }, (_, n) => `stage${n}`);
+      const programNames = Array.from({ length: fields.length }, (_, n) => `chain${n}`);
       const chain: ProgramList = new Map(
-        stages.map((name) => [
+        programNames.map((name) => [
           name,
           {
             name,
@@ -174,9 +174,9 @@ describe("fabsh S1 reader", () => {
           },
         ]),
       );
-      const piped = stages.join(" | ");
+      const piped = programNames.join(" | ");
 
-      for (const line of [piped + " ", `unknown ; ${piped} `, `wrapper value=$(${piped}) `, `${piped} ; ${piped} `]) {
+      for (const line of [`${piped} `, `unknown ; ${piped} `, `wrapper value=$(${piped}) `, `${piped} ; ${piped} `]) {
         const bars = roles(line, chain).filter((span) => line.slice(span.start, span.end) === "|");
         expect(bars).toHaveLength((line.match(/\|/g) ?? []).length);
         expect(bars.every((span) => tag(span.role) === "error")).toBe(true);

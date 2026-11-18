@@ -69,6 +69,61 @@ const bytes = (cmds: ReadonlyArray<Output>) =>
     )
     .join("");
 
+const withoutControlCharacters = (text: string) =>
+  [...text]
+    .filter((char) => {
+      const codepoint = char.codePointAt(0) ?? 0;
+      return codepoint > 0x1f && (codepoint < 0x7f || codepoint > 0x9f);
+    })
+    .join("");
+
+const csiMatches = (text: string) => {
+  const matches: Array<{ index: number; end: number; parameters: string }> = [];
+
+  for (let start = 0; start < text.length;) {
+    const index = text.indexOf("\x1b[", start);
+
+    if (index < 0) {
+      break;
+    }
+
+    let end = index + 2;
+
+    while (end < text.length) {
+      const code = text.charCodeAt(end);
+
+      if ((code >= 0x30 && code <= 0x39) || code === 0x3b) {
+        end += 1;
+      } else {
+        break;
+      }
+    }
+
+    const final = text.charCodeAt(end);
+
+    if ((final >= 0x41 && final <= 0x5a) || (final >= 0x61 && final <= 0x7a)) {
+      matches.push({ index, end: end + 1, parameters: text.slice(index + 2, end) });
+      start = end + 1;
+    } else {
+      start = index + 1;
+    }
+  }
+
+  return matches;
+};
+
+const withoutCsi = (text: string) => {
+  let result = "";
+  let end = 0;
+
+  for (const match of csiMatches(text)) {
+    result += text.slice(end, match.index);
+    end = match.end;
+  }
+
+  return `${result}${text.slice(end)}`;
+};
+
 const options = (runs = 300) => ({ arbitrary: { runs: runsFor({ fast: runs, full: runs }) } });
 
 // The installed @effect/vitest accepts Effect Arbitrary, while tea and fc.commands use fast-check.
@@ -249,7 +304,7 @@ it.effect.prop(
             const start = cursor.y - Math.floor(spot(`fabsh$ ${line.left}`, width) / width);
             const reference = ghostty.createTerminal(width, rows + 1);
             references.push(reference);
-            reference.write(expected + " ");
+            reference.write(`${expected} `);
             const cells = (row: ReturnType<typeof terminal.getLine>) =>
               (row ?? []).map((cell) => ({
                 codepoint: cell.codepoint,
@@ -294,7 +349,7 @@ it.effect.prop(
         const actual = boot(["older", "newer"]);
 
         for (const machine of [expected, actual]) {
-          key(machine, "a" + text.replaceAll(/[\x00-\x1f\x7f-\x9f]/g, ""));
+          key(machine, `a${withoutControlCharacters(text)}`);
           key(machine, "\x01\x06");
         }
 
@@ -308,8 +363,10 @@ it.effect.prop(
       const edited = boot();
       const missing = `absent${Math.abs(seed)}`;
       const underlined = (outputs: ReadonlyArray<Output>) =>
-        [...bytes(outputs).matchAll(/\x1b\[([0-9;]*)m/g)].some((match) => match[1]!.split(";").includes("4"));
-      key(edited, missing + " ");
+        csiMatches(bytes(outputs)).some(
+          (match) => bytes(outputs).charAt(match.end - 1) === "m" && match.parameters.split(";").includes("4"),
+        );
+      key(edited, `${missing} `);
       expect(underlined(edited.cmds)).toBe(true);
       key(edited, "\x01");
       expect(underlined(edited.cmds)).toBe(false);
@@ -517,7 +574,7 @@ it.prop(
               const value = op === "repeat" ? state.lines.at(-1)! : state.text;
 
               if (op === "repeat") {
-                key(machine, "\x05\x15" + value);
+                key(machine, `\x05\x15${value}`);
               }
 
               key(machine, "\r");
@@ -561,7 +618,7 @@ it.prop(
         }),
       );
       const required = ["type", "up", "down", "submit", "repeat", "first", "last"].map((op) =>
-        choices.find((command) => command.toString().startsWith(op + " "))!,
+        choices.find((command) => command.toString().startsWith(`${op} `))!,
       );
       walk(seed, choices, model, real, required);
 
@@ -702,7 +759,7 @@ it.prop(
     // Fault: deciding standalone Esc from an input frame destroys a split arrow or meta key.
 
     for (const ending of ["\x1b", "\x1b[D", "\x1bb", "\x1b[1;5D"]) {
-      const batch = "\x12" + text + ending;
+      const batch = `\x12${text}${ending}`;
       const expected = boot(history);
       key(expected, text);
       key(expected, batch);
@@ -754,28 +811,35 @@ it.prop(
       Match.value(step.prev.mode).pipe(
         Match.tag("busy", () => {
           observedBusy += 1;
+          const nextBusy = (check: (ahead: ReadonlyArray<string>) => void) =>
+            Match.value(step.next.mode).pipe(
+              Match.tag("busy", ({ ahead }) => check(ahead)),
+              Match.tag("asking", () => expect.fail("busy line entered asking mode")),
+              Match.tag("prompt", () => expect.fail("busy line returned to prompt mode")),
+              Match.tag("search", () => expect.fail("busy line entered search mode")),
+              Match.tag("ended", () => expect.fail("busy line ended before it was ready")),
+              Match.exhaustive,
+            );
+
           Match.value(step.msg).pipe(
-            Match.when({ type: "keys" }, ({ data }) => {
-              if (data === "\x03") {
-                expect(step.cmds.some((cmd) => cmd.type === "interrupt")).toBe(true);
-                queued = "";
-                Match.value(step.next.mode).pipe(
-                  Match.tag("busy", ({ ahead }) => expect(ahead).toEqual([])),
-                  Match.orElse(() => {}),
-                );
-              } else {
-                expect(step.cmds.some((cmd) => cmd.type === "submit")).toBe(false);
-
-                if (data !== "\x04") {
+            Match.when({ type: "keys" }, ({ data }) =>
+              Match.value(data).pipe(
+                Match.when("\x03", () => {
+                  expect(step.cmds.some((cmd) => cmd.type === "interrupt")).toBe(true);
+                  queued = "";
+                  nextBusy((ahead) => expect(ahead).toEqual([]));
+                }),
+                Match.when("\x04", () => {
+                  expect(step.cmds.some((cmd) => cmd.type === "submit")).toBe(false);
+                  nextBusy((ahead) => expect(ahead.join("")).toBe(queued));
+                }),
+                Match.orElse(() => {
+                  expect(step.cmds.some((cmd) => cmd.type === "submit")).toBe(false);
                   queued += data;
-                }
-
-                Match.value(step.next.mode).pipe(
-                  Match.tag("busy", ({ ahead }) => expect(ahead.join("")).toBe(queued)),
-                  Match.orElse(() => expect.fail("ordinary type-ahead left busy mode")),
-                );
-              }
-            }),
+                  nextBusy((ahead) => expect(ahead.join("")).toBe(queued));
+                }),
+              ),
+            ),
             Match.when({ type: "ready" }, () => {
               const prefix = queued.split("\r")[0]!;
               const submit = step.cmds.flatMap((cmd) =>
@@ -785,17 +849,21 @@ it.prop(
                 ),
               );
 
-              if (queued.includes("\r")) {
-                expect(submit[0]).toBe(prefix);
-                queued = queued.slice(queued.indexOf("\r") + 1);
-              } else {
-                expect(submit).toEqual([]);
-                Match.value(step.next.mode).pipe(
-                  Match.tag("prompt", ({ line }) => expect(line.left + line.right).toBe(queued)),
-                  Match.orElse(() => expect.fail("ready did not restore the queued prompt")),
-                );
-                queued = "";
-              }
+              Match.value(queued.includes("\r")).pipe(
+                Match.when(true, () => {
+                  expect(submit[0]).toBe(prefix);
+                  queued = queued.slice(queued.indexOf("\r") + 1);
+                }),
+                Match.when(false, () => {
+                  expect(submit).toEqual([]);
+                  Match.value(step.next.mode).pipe(
+                    Match.tag("prompt", ({ line }) => expect(line.left + line.right).toBe(queued)),
+                    Match.orElse(() => expect.fail("ready did not restore the queued prompt")),
+                  );
+                  queued = "";
+                }),
+                Match.exhaustive,
+              );
             }),
             Match.orElse(() => {}),
           );
@@ -841,21 +909,21 @@ it.prop(
     // A standalone-Esc boundary typed ahead must not turn the following text into Meta.
     const separated = boot();
     key(separated, "go\r");
-    key(separated, text + "\x1b");
+    key(separated, `${text}\x1b`);
     key(separated, text);
     send(separated, { type: "ready" });
     const direct = boot();
     key(direct, "go\r");
     send(direct, { type: "ready" });
-    key(direct, text + "\x1b");
+    key(direct, `${text}\x1b`);
     key(direct, text);
     expect(prompt(separated)).toEqual(prompt(direct));
 
     // Fault: asking drops the busy queue, cannot be withdrawn, or never releases on ready.
     const questionSeen = new Set<string>();
     const asking = boot();
-    const state = { phase: "idle", pending: "" };
-    const operations = ["start", "queue", "ask", "yes", "no", "enter", "withdraw", "finish", "interrupt"];
+    const state: { phase: "idle" | "busy" | "asking"; pending: string } = { phase: "idle", pending: "" };
+    const operations = ["start", "queue", "ask", "yes", "no", "enter", "withdraw", "finish", "interrupt"] as const;
     const choices = operations.map((op): fc.Command<typeof state, Real> => ({
       check: (model) =>
         op === "start"
@@ -868,31 +936,8 @@ it.prop(
       run: (model, machine) => {
         questionSeen.add(op);
 
-        if (op === "start") {
-          key(machine, "\x01\x0bstart\r");
-          model.phase = "busy";
-          model.pending = "";
-        } else if (op === "queue") {
-          send(machine, { type: "keys", data: text });
-          model.pending += text;
-        } else if (op === "ask") {
-          send(machine, { type: "asked", job: 1, text: "Allow?" });
-          model.phase = "asking";
-        } else if (op === "withdraw") {
-          send(machine, { type: "asked", job: 1, text: null });
-          model.phase = "busy";
-          expect(machine.cmds.some((cmd) => cmd.type === "answer")).toBe(false);
-        } else if (op === "finish") {
-          send(machine, { type: "ready" });
-          model.phase = "idle";
-          expect(prompt(machine).left + prompt(machine).right).toBe(model.pending);
-        } else if (op === "interrupt") {
-          key(machine, "\x03");
-          model.phase = "busy";
-          model.pending = "";
-          expect(machine.cmds.some((cmd) => cmd.type === "interrupt")).toBe(true);
-        } else {
-          key(machine, op === "yes" ? "y" : op === "no" ? "n" : "\r");
+        const answer = (allow: boolean, input: string) => {
+          key(machine, input);
           model.phase = "busy";
           const answers = machine.cmds.flatMap((cmd) =>
             Match.value(cmd).pipe(
@@ -900,27 +945,76 @@ it.prop(
               Match.orElse(() => []),
             ),
           );
-          expect(answers).toEqual([{ job: 1, allow: op === "yes" }]);
-          expect(
-            bytes(machine.cmds)
-              .replaceAll(/\x1b\[[0-9;]*[A-Za-z]/g, "")
-              .trim(),
-          ).not.toBe("");
-        }
+          expect(answers).toEqual([{ job: 1, allow }]);
+          expect(withoutCsi(bytes(machine.cmds)).trim()).not.toBe("");
+        };
 
-        if (model.phase === "busy" || model.phase === "asking") {
-          Match.value(machine.model.mode).pipe(
-            Match.tag("busy", ({ ahead }) => {
-              expect(model.phase).toBe("busy");
-              expect(ahead.join("")).toBe(model.pending);
-            }),
-            Match.tag("asking", ({ ahead }) => {
-              expect(model.phase).toBe("asking");
-              expect(ahead.join("")).toBe(model.pending);
-            }),
-            Match.orElse(() => expect.fail("a live question or busy line lost its mode")),
-          );
-        }
+        Match.value(op).pipe(
+          Match.when("start", () => {
+            key(machine, "\x01\x0bstart\r");
+            model.phase = "busy";
+            model.pending = "";
+          }),
+          Match.when("queue", () => {
+            send(machine, { type: "keys", data: text });
+            model.pending += text;
+          }),
+          Match.when("ask", () => {
+            send(machine, { type: "asked", job: 1, text: "Allow?" });
+            model.phase = "asking";
+          }),
+          Match.when("withdraw", () => {
+            send(machine, { type: "asked", job: 1, text: null });
+            model.phase = "busy";
+            expect(machine.cmds.some((cmd) => cmd.type === "answer")).toBe(false);
+          }),
+          Match.when("finish", () => {
+            send(machine, { type: "ready" });
+            model.phase = "idle";
+            expect(prompt(machine).left + prompt(machine).right).toBe(model.pending);
+          }),
+          Match.when("interrupt", () => {
+            key(machine, "\x03");
+            model.phase = "busy";
+            model.pending = "";
+            expect(machine.cmds.some((cmd) => cmd.type === "interrupt")).toBe(true);
+          }),
+          Match.when("yes", () => answer(true, "y")),
+          Match.when("no", () => answer(false, "n")),
+          Match.when("enter", () => answer(false, "\r")),
+          Match.exhaustive,
+        );
+
+        Match.value(model.phase).pipe(
+          Match.when("busy", () =>
+            Match.value(machine.model.mode).pipe(
+              Match.tag("busy", ({ ahead }) => {
+                expect(model.phase).toBe("busy");
+                expect(ahead.join("")).toBe(model.pending);
+              }),
+              Match.tag("asking", () => expect.fail("busy line entered asking mode")),
+              Match.tag("prompt", () => expect.fail("busy line returned to prompt mode")),
+              Match.tag("search", () => expect.fail("busy line entered search mode")),
+              Match.tag("ended", () => expect.fail("busy line ended before it was ready")),
+              Match.exhaustive,
+            ),
+          ),
+          Match.when("asking", () =>
+            Match.value(machine.model.mode).pipe(
+              Match.tag("busy", () => expect.fail("question left asking mode")),
+              Match.tag("asking", ({ ahead }) => {
+                expect(model.phase).toBe("asking");
+                expect(ahead.join("")).toBe(model.pending);
+              }),
+              Match.tag("prompt", () => expect.fail("question returned to prompt mode")),
+              Match.tag("search", () => expect.fail("question entered search mode")),
+              Match.tag("ended", () => expect.fail("question ended before it was answered")),
+              Match.exhaustive,
+            ),
+          ),
+          Match.when("idle", () => {}),
+          Match.exhaustive,
+        );
       },
       toString: () => op,
     }));

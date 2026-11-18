@@ -13,8 +13,14 @@ type EditorMsg = typeof editor.msg.Type;
 
 const decode = Schema.decodeUnknownSync(Schema.toType(editor.msg));
 
+const hasPasteControl = (text: string) =>
+  [...text].some((char) => {
+    const codepoint = char.codePointAt(0) ?? 0;
+    return codepoint <= 0x08 || (codepoint >= 0x0b && codepoint <= 0x1f) || (codepoint >= 0x7f && codepoint <= 0x9f);
+  });
+
 const Paste = Arbitrary.schema(Schema.String).pipe(
-  Arbitrary.map((text) => text.replaceAll(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "")),
+  Arbitrary.map((text) => [...text].filter((char) => !hasPasteControl(char)).join("")),
 );
 
 it.prop(
