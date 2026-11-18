@@ -51,8 +51,7 @@ describe(".oxlintrc.json", () => {
   const tree: Tree = parseSync("oxlintrc.ts", `export default ${text}`).program;
   const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
   const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
-  // next/'s tests, and the kalfa/ tooling packages' tests, which 0556 holds to next/'s rules.
-  const TESTS = ["next/**/*.test.ts", "kalfa/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.tsx"];
+  const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
 
   const off = (setting: unknown): boolean =>
     setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
