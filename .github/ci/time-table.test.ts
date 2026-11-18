@@ -442,11 +442,13 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
           () => "{}",
         ),
       );
+
       const expected = {
         created: answer.created_at,
         started: answer.started_at,
         seconds: (Date.parse(answer.started_at) - Date.parse(answer.created_at)) / 1000,
       };
+
       const artifact = JSON.stringify(timings);
 
       expect(readQueueWait(answer)).toEqual(expected);
@@ -463,6 +465,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
 
   for (const status of ["queued", "waiting", "requested", "pending"]) {
     const placeholder = { ...realRunner, status, created_at: created, started_at: null };
+
     const timings = await timingsOf(
       env,
       io(
@@ -494,6 +497,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
     created_at: "2026-11-17T15:14:10Z",
     started_at: "2026-11-17T15:14:10Z",
   };
+
   const skippedTimings = await timingsOf(
     env,
     io(
@@ -501,6 +505,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
       () => "{}",
     ),
   );
+
   expect(readQueueWait(skipped)).toBeUndefined();
   expect(Object.hasOwn(skippedTimings, "queueWait")).toBe(false);
 
@@ -511,8 +516,10 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
     created_at: "2026-11-17T15:14:09Z",
     started_at: "2026-11-17T15:25:54Z",
   };
+
   const noRunner = { ...real, runner_id: null };
   const skippedWithRunner = { ...skipped, ...realRunner };
+
   const realTimings = await timingsOf(
     env,
     io(
@@ -520,6 +527,7 @@ it("TT8: queue wait uses a started job's created and started times, and leaves p
       () => "{}",
     ),
   );
+
   expect(readQueueWait(real)).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
   expect(realTimings.queueWait).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
   expect(readQueueWait(noRunner)).toBeUndefined();
