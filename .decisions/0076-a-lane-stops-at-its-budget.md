@@ -1,16 +1,17 @@
 ---
 id: 0076
-title: A lane stops and the lead answers redo, cut scope or drop when 3 of its last 5 steps were stuck on the work or sent back, when its review is sent back a second time, or at twice the plan's estimate in steps and dollars, while a stuck on a tool files a finding and drains one tool budget shared by all lanes, as a trial
+title: A lane stops and the lead answers go on, redo, cut scope or drop when 3 of its last 5 steps were stuck on the work or sent back, when a second sent-back review leaves a fault that is not named, located and inside the plan, or at twice the plan's estimate in steps and dollars, while a stuck on a tool files a finding and drains one tool budget shared by all lanes, as a trial
 status: accepted
 date: 2026-11-10
 tags: [lead, chain, lane, budget, plan, redo, cost, trial, intensity, tool]
 ---
 
-# 0076: A lane stops and the lead answers redo, cut scope or drop when 3 of its last 5 steps were stuck on the work or sent back, when its review is sent back a second time, or at twice the plan's estimate in steps and dollars, while a stuck on a tool files a finding and drains one tool budget shared by all lanes, as a trial
+# 0076: A lane stops and the lead answers go on, redo, cut scope or drop when 3 of its last 5 steps were stuck on the work or sent back, when a second sent-back review leaves a fault that is not named, located and inside the plan, or at twice the plan's estimate in steps and dollars, while a stuck on a tool files a finding and drains one tool budget shared by all lanes, as a trial
 
 **What this decides:** a lane stops and waits for an answer when its work keeps failing close
-together, when a review sends it back a second time, or when it passes twice its plan's estimate; a
-stuck step caused by a tool is charged to the tool, not the lane.
+together, when a second sent-back review leaves a fault that is not named, located and inside the
+plan, or when it passes twice its plan's estimate; a stuck step caused by a tool is charged to the
+tool, not the lane.
 
 ```mermaid
 flowchart TD
@@ -26,10 +27,13 @@ flowchart TD
   window -- "no" --> backstop
   window -- "yes" --> stop["the chain stops and asks the lead"]
   second -- "no" --> backstop
-  second -- "yes" --> stop
+  second -- "yes" --> faults{"every fault named, located and inside the plan?"}
+  faults -- "yes" --> fix["the lead starts one more fix round itself"]
+  fix --> step
+  faults -- "no" --> stop
   backstop -- "no" --> step
   backstop -- "yes" --> stop
-  stop --> answers["redo, cut scope or drop"]
+  stop --> answers["go on, redo, cut scope or drop"]
 ```
 
 ```ts
@@ -41,7 +45,8 @@ type StepEnd =
 
 // OTP's restart intensity, counted in steps, never seconds (0065).
 const intensity = { count: 3, within: 5 }; // work stucks or sends in the last 5 steps
-// A sent-back review is counted apart from the window (0176): the second one stops the lane.
+// A sent-back review is counted apart from the window (0176): from the second one on, the lead
+// reads the faults (0564). One that is not named, located and inside the plan stops the lane.
 const stop = { sentBackReviews: 2 };
 
 // The plan's own estimate, and the backstop set from it.
@@ -49,7 +54,7 @@ const estimate = { steps: 12, dollars: 15 };
 const backstop = { steps: 24, dollars: 30 }; // twice the estimate
 
 // What a stop asks. The lead picks one; the chain runs it.
-type Answer = "redo" | "cut_scope" | "drop";
+type Answer = "go_on" | "redo" | "cut_scope" | "drop";
 ```
 
 ## Context
@@ -103,30 +108,44 @@ now:
 
 - [0096](0096-the-lead-fixes-forward-while-the-owner-is-away.md) and
   [0162](0162-no-friction-before-a-merge.md): the lead answers the stop itself, at any time, and
-  notes it for the owner. What is the owner's alone is listed in 0096.
+  notes it for the owner. A fourth answer joins the three: go on, which carries the lane on with its
+  window and dollars reset. What is the owner's alone is listed in 0096: a real loosening of a law,
+  a new ledger entry or cron, a new design call no decided note answers, and anything the owner
+  held or rejected.
 - [0176](0176-second-send-back-stops-lane.md): the window could not fire on the usual loop of
   review, tests, build, review, which holds at most 2 send-backs in any 5 steps. So a sent-back
   review is counted apart, and the second one stops the lane. For that stop the lead's default
-  answer is cut scope.
+  answer is to land what works and file the rest as a ticket, which is cut scope. It comes to the
+  owner when what is left breaks the slice's main job.
+- [0564](0564-lead-decides-further-fix-rounds.md) changes 0176's stop: at the second sent-back
+  review, and each later one, the lead reads the faults. When every one is named, located and inside
+  the plan, the lead starts one more fix round itself. The stop stays for any other case. The owner
+  gets the case when the fix needs a new design call, loosens a law, or is the same fault a third
+  time.
 
 ## Decision
 
-**A lane whose work gets stuck or sent back 3 times within its last 5 steps, whose review is sent
-back a second time, or that passes twice its plan's estimate, stops the chain; the lead answers
-redo, cut scope or drop; a stuck step caused by a tool files a finding against the tool and does
-not count against the lane (owner, 2026-11-10, still a trial).**
+**A lane whose work gets stuck or sent back 3 times within its last 5 steps, whose second
+sent-back review leaves a fault that is not named, located and inside the plan, or that passes twice
+its plan's estimate, stops the chain; the lead answers go on, redo, cut scope or drop; a stuck step
+caused by a tool files a finding against the tool and does not count against the lane (owner,
+2026-11-10, still a trial).**
 
 - Every stuck step says its fault: `tool` or `work`.
 - 3 work stucks or send-backs within the last 5 steps stop the chain. A sent-back review is
-  counted by 0176 instead: the second one stops the lane.
+  counted by 0176 instead: the second one stops the lane, unless 0564's reading lets the lead start
+  one more fix round.
 - The plan gives its own estimate of steps and dollars. The budget is twice that. It is the
   backstop, written in steps and dollars in the plan, and no longer the main rule.
 - Reaching either number, steps or dollars, stops the chain.
-- A stop, from the window, a second sent-back review or the backstop, asks the lead one of three
+- A stop, from the window, a second sent-back review or the backstop, asks the lead one of four
   things:
+  - **go on**: the lane carries on at once, with its window and its dollars reset
+    ([0096](0096-the-lead-fixes-forward-while-the-owner-is-away.md)). The note for the owner says
+    what was spent before.
   - **redo**, in 0072's sense: close the lane and start again on a fresh branch from the plan as
     amended. Never "restart", which means a new process here.
-  - **cut scope**: amend the plan to do less, and go on.
+  - **cut scope**: amend the plan to do less, and carry on.
   - **drop**: close the lane without a merge.
 - A tool stuck writes a finding row against the tool
   ([0035](0035-outside-work-becomes-finding-rows.md)) and takes one from a tool budget shared by
@@ -143,7 +162,7 @@ not count against the lane (owner, 2026-11-10, still a trial).**
 - No lane starts without a budget in its plan, in steps and dollars.
 - No stuck step is written without a fault, `tool` or `work`.
 - At a stop, no step of that lane starts until the lead, or the owner for what is the owner's
-  alone, answers.
+  alone (0096, 0176, 0564), answers.
 - With the tool budget spent, no chain starts a step until the tool is fixed.
 - The stop records which rule fired, the window's steps, the sent-back reviews or the budget, what
   was spent and the answer.
@@ -158,7 +177,7 @@ not count against the lane (owner, 2026-11-10, still a trial).**
   status notes for now, and later inside fabrika, from a metrics program with its own ticket. All of
   it is lead tooling, fast-tracked ([0033](0033-agents-code-follows-next-rules.md)).
 - **In `next/`.** The budget is a field of the plan, and the fault a field of a stuck outcome. The
-  window and the stop are states of the lane's machine, with the three answers as transitions
+  window and the stop are states of the lane's machine, with the four answers as transitions
   ([0037](0037-implicit-state-machines-made-explicit.md),
   [0046](0046-one-tea-machine-per-file.md)). When the lane becomes a named flow
   ([0064](0064-the-lead-drives-with-flows.md)), they go with it.

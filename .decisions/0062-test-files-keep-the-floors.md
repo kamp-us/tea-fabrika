@@ -81,8 +81,9 @@ record; ticket 641 builds the first part.
 
 **Where the real-driver run happens.** A suite that needs a real database, run by the module that
 owns the driver, runs on the full run on main, never on a pull request or in the merge queue
-([0536](0536-real-resource-tests-run-only-on-the-schedule.md); the full run starts on a push to main
-and hourly, [0581](0581-main-full-run-starts-on-push-and-hourly.md)).
+([0536](0536-real-resource-tests-run-only-on-the-schedule.md); the full run starts on the `push`
+trigger on main and the `cron` key of `.github/workflows/scheduled.yaml`,
+[0581](0581-main-full-run-starts-on-push-and-hourly.md)).
 
 ## Decision
 

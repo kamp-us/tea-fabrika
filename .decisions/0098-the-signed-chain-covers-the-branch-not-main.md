@@ -79,8 +79,9 @@ make every pull request wait on every other.
 
 **Binding constraints**
 
-- Every commit a branch adds still needs a valid link from its own step's key. This decision
-  removes no signature.
+- Where signing runs, every commit a branch adds still needs a valid link from its own step's key.
+  This decision removes no signature. Today's commits carry no link
+  ([0161](0161-no-step-signing-by-hand.md)).
 - A builder still may not change an exam path.
 - No history rewrite, no force push.
 

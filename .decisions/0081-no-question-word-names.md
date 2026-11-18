@@ -141,8 +141,8 @@ What is stored under `who` and `how` today, and what the rename must do:
 
 ## Consequences
 
-- One sweep is owed, under ticket 682: the widened lint rule and the renames in the tables. Until it
-  lands, the five words stay in the code, and the lint rule's ledger shrinks as they go.
+- The sweep landed, under ticket 682 and pull request 910: the widened lint rule and the renames in
+  the tables. The five words are held by `eslint/id-denylist` in `.oxlintrc.json`.
 - The settings note in PR 831 changes `where` to `scope` in its declaration sketch and its `Where`
   type.
 - `scope` may become a glossary word when the settings note is decided. It is not added here: the

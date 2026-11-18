@@ -89,7 +89,9 @@ How it relates:
 - **[0079](0079-size-counts-governed-paths-name-who.md):** size sets how many people must look,
   never whether a pull request lands.
 - **[0076](0076-a-lane-stops-at-its-budget.md):** the plan already gives an estimate in steps and
-  dollars. Each slice now gives one in lines too, recorded and never checked against a number.
+  dollars. Each slice now gives one in lines too, and it is what
+  [0100](0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md) compares the slice's real
+  lines with.
 - **[0072](0072-a-churning-lane-is-redone.md):** restacking PR 810 keeps its old branch and pull
   request as they are, as a redo does; nothing is rewritten.
 - **[0004](0004-squash-merges-and-native-stacks.md):** the tooling. A stack is a GitHub stack, run
@@ -110,10 +112,11 @@ line count stops, refuses or holds a pull request (owner, 2026-11-10 and, for th
 - **Cut at plan time.** A plan for bigger work lists its slices. Each slice is one pull request
   that lands whole, with its tests, and works on its own (the plan skill's "pull requests that each
   land whole"). The stack runs on 0004's native stacks.
-- **No number caps a slice.** There is no `review.lines` setting and no check of a slice's estimate
-  against a number. The cut is by what works on its own.
+- **No number caps a slice.** There is no `review.lines` setting and no fixed number a slice's
+  size is checked against. The cut is by what works on its own.
 - **Size is recorded.** The plan carries each slice's estimate in product lines, and the merged
-  pull request its real product lines.
+  pull request its real product lines. The estimate is what 0100 compares the slice's real lines
+  with.
 
 **Binding constraints:**
 

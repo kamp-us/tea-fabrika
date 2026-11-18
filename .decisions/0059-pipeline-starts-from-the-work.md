@@ -41,10 +41,10 @@ decision. How it sits with the notes and decisions that touch the pipeline:
 parts: the basic loop in plain words; how the best do it, from fetched sources; what really happens
 here, from `field/`; the translation into fabrika's programs, tea machines and ledger facts; and
 about six principles. Ticket 574 is the running example, and the loop starts at "decide what to work
-on next". The owner read the first draft (draft PR 797, ticket 645) and turned down its lens,
-because it answered from how human teams work. The study's sources are the people and companies at
-the front of agent-run software work today: teams where agents do most of the work and people
-direct and check it. How human teams work is background only, used where one of those teams says it
+on next". Both were the lead's leans, and the owner did not object to them. The owner read the
+first draft (draft PR 797, ticket 645) and turned down its lens, because it answered from how human
+teams work. The study's sources are the people and companies at the front of agent-run software work
+today: teams where agents do most of the work and people direct and check it. How human teams work is background only, used where one of those teams says it
 kept or dropped a practice. The study was redone on those sources, and the owner walked it on
 2026-11-10. On 2026-11-11 the owner approved its seven principles in
 [how we get work done](../docs/direction/how-we-get-work-done.md) as the starting point, recorded as
