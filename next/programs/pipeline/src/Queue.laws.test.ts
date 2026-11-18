@@ -6,7 +6,7 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Schema } from "effect";
+import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -154,7 +154,9 @@ const reasons = [...StartRefusal.literals, "bad_cmd"] as const;
 const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   const reason = reasons[cell.pick % reasons.length]!;
 
-  return Schema.decodeSync(p.msg)({
+  // A refused start as the runner sends it: `cmd` echoes only the Cmd's `_tag`, and `reason` rides
+  // beside `error` (Runner.ts `echo` and `err`). Wire data, so it is decoded as unknown.
+  return Schema.decodeUnknownSync(p.msg)({
     ...Tag.cases.start_child_err.make({}),
     cmd: Tag.cases.start_child.make({}),
     reason,
@@ -294,8 +296,13 @@ const step = (walk: Walk, input: Msg) => {
     } else {
       const current = m.current!;
 
+      // A refused start's own `reason` when the answer carries one, as the runner's does, else its error's tag.
       const tag =
-        input._tag === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
+        input._tag === "start_child_ok"
+          ? input.value._tag
+          : Predicate.hasProperty(input, "reason") && Predicate.isString(input.reason)
+            ? input.reason
+            : input.error._tag;
 
       m.reason = Schema.TaggedStruct("start_refused", {
         change: Schema.Finite,
@@ -451,7 +458,7 @@ const choose = (walk: Walk, cell: Cell): Msg => {
     );
   }
 
-  return Schema.decodeSync(p.msg)(moves[cell.move % moves.length]!());
+  return Schema.decodeUnknownSync(p.msg)(moves[cell.move % moves.length]!());
 };
 
 for (const law of [

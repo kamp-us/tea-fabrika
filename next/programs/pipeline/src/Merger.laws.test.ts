@@ -201,7 +201,8 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
             : drawn
     : drawn;
 
-  return Schema.decodeSync(p.msg)(
+  // The answer as the runner sends it (Runner.ts `ok` and `err`): wire data, so it is decoded as unknown.
+  return Schema.decodeUnknownSync(p.msg)(
     cmd._tag !== "send" && pick % 5 === 0
       ? {
           ...keyed(`${cmd._tag}_err`),
@@ -284,7 +285,8 @@ const guided = (p: Program, w: World) => {
               event.at % 7 === 0 && model._tag === "checking" ? model.until : clock + (event.at % 10_000),
             ),
           );
-          msg = Schema.decodeSync(p.msg)({ ...event, cmd: command, at: clock });
+          // The drawn answer re-pointed at the Cmd really waiting: wire data, decoded as unknown.
+          msg = Schema.decodeUnknownSync(p.msg)({ ...event, cmd: command, at: clock });
         } else if ("cmd" in event && event.cmd._tag === "send") {
           clock = Math.max(clock, event.at);
           msg = Schema.decodeSync(p.msg)({ ...event, at: clock });
@@ -862,7 +864,7 @@ describe("the merger, next/", () => {
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
   const ok = (cmd: Command, value: Schema.Json): Msg =>
-    Schema.decodeSync(p.msg)({ ...keyed(`${cmd._tag}_ok`), cmd, value, at: w.at });
+    Schema.decodeUnknownSync(p.msg)({ ...keyed(`${cmd._tag}_ok`), cmd, value, at: w.at });
 
   return arbGuidedSequence(
     p.machine,
