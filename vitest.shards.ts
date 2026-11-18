@@ -60,13 +60,15 @@ const readTable = (path: string): Record<string, number> => {
 export const measured: Readonly<Record<string, number>> = readTable(join(import.meta.dirname, "vitest.shards.json"));
 
 /**
- * Seconds per next/ test file at full depth, which only the schedule runs (0535): the same file takes
- * longer there, and the rows above cannot say so. At full depth a law runs its full case count and a
- * file of the `next` project runs its real layer beside its memory one (0538), and the integration
- * files run only there (0536). RepositoriesGit.integration.test.ts takes 28 s on a pull request and 160 to 311 s
- * on the schedule, and watch.laws.integration.test.ts, 363 to 395 s, had no row at all. Split by the
- * rows above, one leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where
- * the others had 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
+ * Seconds per test file at full depth, which every CI test leg runs at, on a pull request and on the
+ * schedule alike: the same file takes longer there than at fast depth, and the rows above cannot say
+ * so. At full depth a law runs its full case count and a file of the `next` project runs its real
+ * layer beside its memory one (0538), and the integration files run only there (0536). That was
+ * not always so. In the past, when only the schedule ran full depth (0535),
+ * RepositoriesGit.integration.test.ts took 28 s on a pull request and 160 to 311 s on the schedule,
+ * and watch.laws.integration.test.ts, 363 to 395 s, had no row at all. Split by the rows above, one
+ * leg of scheduled runs 43723335863 and 43771306886 got about 2100 s of files where the others had
+ * 1000 to 1500 s, started watch.laws last, and ran into the job's limit.
  *
  * Each row is the median of the file's seconds in attempt 1 of three runs, or the larger of those in
  * hand when a run did not hold the file, rounded to one decimal. The runs are the pull request check
