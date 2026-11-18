@@ -19,7 +19,6 @@ import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Function from "effect/Function";
-import * as Rec from "effect/Record";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
@@ -168,7 +167,7 @@ const stored = (page: Page) =>
         } else if (typeof v === "string") {
           out.push({ kind: "string", bytes: [...new TextEncoder().encode(v)] });
         } else if (typeof v === "object" && v !== null) {
-          for (const one of Rec.values(v)) {
+          for (const one of Object.values(v)) {
             await walk(one);
           }
         }
