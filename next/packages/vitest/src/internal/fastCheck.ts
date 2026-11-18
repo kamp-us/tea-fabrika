@@ -33,10 +33,13 @@ type Drawn = { readonly [name: string]: unknown };
  *
  * @category errors
  */
-export class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
-  message: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+export class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()(
+  "PropertyFailed",
+  {
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * The first step of each case: once the law's `signal` has aborted, it ends the whole fast-check
@@ -96,7 +99,7 @@ export const check = Effect.fnUntraced(function* <R>(
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped case
   const property = fc.asyncProperty(first, ...rest, (...v) => Effect.runPromiseWith(services)(run(v), { signal }));
   const options = { includeErrorInReport: true, ...parameters };
-  const failed = (cause: unknown) => new PropertyFailed({ message: report(cause), cause });
+  const failed = (cause: unknown) => PropertyFailed.make({ message: report(cause), cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
   yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: failed });
 });
