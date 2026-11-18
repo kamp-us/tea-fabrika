@@ -292,6 +292,7 @@
                 "effect/Path",
                 "effect/PlatformError",
                 "effect/Schema#ByteSize",
+                "effect/Schema#DateTimeUtcFromHttpDate",
                 "effect/Stdio",
                 "effect/cli/Argument",
                 "effect/cli/Command",

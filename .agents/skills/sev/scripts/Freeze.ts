@@ -9,11 +9,13 @@
 // The loop reads the log again before each cancel, so a close, a `next` or an `allow` counts at
 // once, never a beat late. It never asks for a rerun: the service has none.
 //
-// Every agent on the login shares GitHub's rate limit, so the loop spends it with care. A run
-// GitHub refuses to cancel is asked once a sev0: on 2026-11-18 twelve runs stuck in `queued` since
-// 2026-11-11 answered every cancel with a 409, "has not been queued yet", and asking again each
-// beat spent the whole limit. A rate limit ends the beat, and the loop asks nothing until GitHub
-// takes calls again. Both are read from the log, so a loop started again keeps them too.
+// Every agent on the login shares GitHub's rate limit, so the loop spends it with care. A cancel
+// GitHub answers with a 4xx that is not its rate limit is asked once a sev0: on 2026-11-18 twelve
+// runs stuck in `queued` since 2026-11-11 answered every cancel with a 409, "has not been queued
+// yet", and asking again each beat spent the whole limit. A 5xx or no answer at all is asked again
+// next beat: GitHub may answer it then, as it did after a 502 that night. A rate limit ends the
+// beat, and the loop asks nothing until GitHub takes calls again. Both are read from the log, so a
+// loop started again keeps them too, and the next sev0 starts with neither.
 import { Console, DateTime, Duration, Effect, Schema, Array as Arr, Option } from "effect";
 import * as Level from "./Level.ts";
 import type { RateLimited, Run, WorkflowRunsError } from "./WorkflowRuns.ts";
@@ -56,9 +58,15 @@ export const running = (entries: ReadonlyArray<Level.Entry>): number => {
   return Arr.filter(latest, (e) => e._tag === "looping").length - Arr.filter(latest, (e) => e._tag === "ended").length;
 };
 
-/** The runs a sev0's lines say GitHub refused to cancel, for any reason but its rate limit. */
+/**
+ * Whether GitHub gives the same answer to a cancel asked again: a 4xx (RFC 9110, section 15.5). A
+ * rate limit is a 4xx too, but it comes as `RateLimited` and never reaches this.
+ */
+const refuses = (status: number | null): status is number => status !== null && status >= 400 && status < 500;
+
+/** The runs a sev0's lines say GitHub refused to cancel. */
 const refused = (lines: ReadonlyArray<Level.Entry>): ReadonlySet<number> =>
-  new Set(Arr.flatMap(lines, (e) => (e._tag === "failed" && e.call === "cancel" && e.id !== null ? [e.id] : [])));
+  new Set(Arr.flatMap(lines, (e) => (e._tag === "refused" ? [e.id] : [])));
 
 /** When GitHub takes calls again, by a sev0's latest rate limit; `null` when it hit none. */
 const retryAt = (lines: ReadonlyArray<Level.Entry>): DateTime.Utc | null =>
@@ -89,9 +97,9 @@ const runLine = (run: Run) => `${run.id} ${run.workflow} ${run.event} ${run.bran
 const note = (home: string, entry: Level.Entry) => Effect.asVoid(Level.write(home, entry));
 
 /**
- * Logs one failed call, once: the list when `run` is `null`, else that run's cancel. A rate limit is
- * `limited`, so the loop waits it out; anything else is `failed`, so a refused cancel is not asked
- * again.
+ * Logs one failed call: the list when `run` is `null`, else that run's cancel. A rate limit is
+ * `limited`, so the loop waits it out. A cancel GitHub refuses is `refused`, logged once and not
+ * asked again in this sev0. Anything else is `failed`, and asked again next beat.
  */
 const failed = Effect.fnUntraced(function* (home: string, run: Run | null, error: WorkflowRunsError | RateLimited) {
   const at = yield* Level.now;
@@ -107,8 +115,14 @@ const failed = Effect.fnUntraced(function* (home: string, run: Run | null, error
     );
   }
 
+  if (run !== null && refuses(error.status)) {
+    yield* note(home, Level.Entry.cases.refused.make({ at, id: run.id, status: error.status, reason: error.reason }));
+
+    return yield* Console.log(`sev: could not ${tried}: ${error.reason}; not asked again in this sev0`);
+  }
+
   yield* note(home, Level.Entry.cases.failed.make({ at, call, id, reason: error.reason }));
-  yield* Console.log(`sev: could not ${tried}: ${error.reason}${run === null ? "" : "; not asked again in this sev0"}`);
+  yield* Console.log(`sev: could not ${tried}: ${error.reason}`);
 });
 
 /**

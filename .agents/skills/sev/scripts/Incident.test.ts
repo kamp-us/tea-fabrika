@@ -304,18 +304,46 @@ describe("summary", () => {
     ]);
   });
 
-  it("vector: a call GitHub refused for its rate limit counts as a failed call", () => {
-    const entries: ReadonlyArray<Level.Entry> = [
-      Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [], issues: [] }),
-      Level.Entry.cases.limited.make({
-        at: AT,
-        call: "unfinished",
-        id: null,
-        until: DateTime.makeUnsafe(AT),
-        reason: "HTTP 403: API rate limit exceeded",
-      }),
-    ];
+  /** Tonight's three kinds of failed call: the 403 rate limit, the 409 of a stuck run, and a 502 (runs/sev/log.jsonl, 2026-11-18). */
+  const tonight: ReadonlyArray<Level.Entry> = [
+    Level.Entry.cases.limited.make({
+      at: "2026-11-18T10:01:42.000Z",
+      call: "cancel",
+      id: 43096104693,
+      until: DateTime.makeUnsafe("2026-11-18T10:08:55Z"),
+      reason: "gh run cancel exited 1: HTTP 403: API rate limit exceeded.",
+    }),
+    Level.Entry.cases.refused.make({
+      at: "2026-11-18T10:46:01.000Z",
+      id: 43096104693,
+      status: 409,
+      reason: "gh api exited 1: gh: Cannot cancel a workflow run that has not been queued yet. (HTTP 409)",
+    }),
+    Level.Entry.cases.failed.make({
+      at: "2026-11-18T09:39:46.045Z",
+      call: "cancel",
+      id: 43096102409,
+      reason: "gh run cancel exited 1: HTTP 502: Server Error",
+    }),
+  ];
 
-    expect(Incident.summary(entries).at(-1)).toBe("0 runs canceled on 0 branches; 1 GitHub calls failed");
-  });
+  it.prop(
+    "property: the summary counts each failed, refused and rate-limited call as one failed GitHub call",
+    {
+      lines: Schema.Array(
+        Schema.Union([Level.Entry.cases.failed, Level.Entry.cases.refused, Level.Entry.cases.limited]),
+      ),
+    },
+    ({ lines }) => {
+      const entries = [
+        Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [], issues: [] }),
+        ...tonight,
+        ...lines,
+      ];
+
+      expect(Incident.summary(entries).at(-1)).toBe(
+        `0 runs canceled on 0 branches; ${tonight.length + lines.length} GitHub calls failed`,
+      );
+    },
+  );
 });

@@ -41,8 +41,9 @@ export const Entry = Schema.TaggedUnion({
   looping: { at: Schema.String, pid: Schema.Finite },
   canceled: { at: Schema.String, run: Run },
   /**
-   * A call to GitHub that failed; `id` is the run it was for, `null` for a list. A failed cancel is
-   * not asked again in this sev0.
+   * A call to GitHub that failed, and is asked again next beat: no answer came, GitHub answered a
+   * 5xx, or its answer was not one we read. `id` is the run it was for, `null` for a list. Lines
+   * written before `refused` and `limited` existed read the same way, whatever their reason says.
    */
   failed: {
     at: Schema.String,
@@ -50,6 +51,8 @@ export const Entry = Schema.TaggedUnion({
     id: Schema.NullOr(Schema.Finite),
     reason: Schema.String,
   },
+  /** GitHub answered the cancel of run `id` with `status`, a 4xx that is not its rate limit: not asked again in this sev0. */
+  refused: { at: Schema.String, id: Schema.Finite, status: Schema.Int, reason: Schema.String },
   /** GitHub refused a call for its rate limit, so the loop asks it nothing until `until`. */
   limited: {
     at: Schema.String,
@@ -124,6 +127,7 @@ export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev
     case "looping":
     case "canceled":
     case "failed":
+    case "refused":
     case "limited":
     case "ended":
       return Result.succeed(sev0);

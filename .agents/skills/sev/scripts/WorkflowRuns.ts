@@ -8,11 +8,16 @@
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
-/** GitHub could not be asked, refused, or answered in a shape we do not read. */
+/**
+ * GitHub could not be asked, refused, or answered in a shape we do not read. `status` is the HTTP
+ * status GitHub answered with; `null` when no answer came back, as when gh could not start or the
+ * network failed.
+ */
 export class WorkflowRunsError extends Schema.TaggedError<WorkflowRunsError, { readonly brand: unique symbol }>()(
   "WorkflowRunsError",
   {
     reason: Schema.String,
+    status: Schema.NullOr(Schema.Int),
   },
 ) {}
 

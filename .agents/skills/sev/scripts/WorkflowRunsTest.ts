@@ -6,10 +6,17 @@ import { Recorder } from "@kampus/vitest";
 import { Array as Arr, DateTime, Effect, type Layer, Option } from "effect";
 import { RateLimited, type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 
-export type World = { readonly runs: Array<Run> };
+/**
+ * GitHub as the layer sees it: its runs, and the answer it gives to the cancel of each run it
+ * refuses. A refused cancel changes no run; a law may change either while a loop runs.
+ */
+export type World = { readonly runs: Array<Run>; readonly refusing: Map<number, WorkflowRunsError> };
 
-/** A fresh world over these runs; the layer reads and changes it in place. */
-export const world = (runs: ReadonlyArray<Run> = []): World => ({ runs: [...runs] });
+/** A fresh world over these runs and refusals; the layer reads and changes it in place. */
+export const world = (
+  runs: ReadonlyArray<Run> = [],
+  refusing: ReadonlyArray<readonly [number, WorkflowRunsError]> = [],
+): World => ({ runs: [...runs], refusing: new Map(refusing) });
 
 /** The methods that refuse every call, each with the error it refuses with. A refused cancel changes no run. */
 export type Failing = Recorder.Fails<WorkflowRuns["Service"]>;
@@ -49,7 +56,7 @@ export const layer = (
     const found = Option.flatMap(at, (i) => Arr.get(w.runs, i));
 
     if (Option.isNone(at) || Option.isNone(found)) {
-      return Effect.fail(WorkflowRunsError.make({ reason: `no run ${id}` }));
+      return Effect.fail(WorkflowRunsError.make({ reason: `no run ${id}`, status: 404 }));
     }
 
     w.runs[at.value] = { ...found.value, ...to };
@@ -61,7 +68,14 @@ export const layer = (
     WorkflowRuns,
     {
       unfinished: Effect.map(spend, () => Arr.filter(w.runs, (r) => r.status !== "completed")),
-      cancel: (id) => Effect.andThen(spend, () => change(id, { status: "completed", conclusion: "cancelled" })),
+      cancel: (id) =>
+        Effect.andThen(spend, () => {
+          const refusal = w.refusing.get(id);
+
+          return refusal === undefined
+            ? change(id, { status: "completed", conclusion: "cancelled" })
+            : Effect.fail(refusal);
+        }),
     },
     { fails: given.failing ?? {} },
   );
