@@ -79,6 +79,15 @@ assigns the ten existing cases once across the existing integration legs, after 
 source and actual tested merge separately while preserving exact image and dependency checks.
 Actual runtime, fault evidence and final review remain due.
 
+Today's scheduled CI, serving both versions, keeps the last observed test activity when a test
+step is cut off before Vitest writes its final JSON, ticket 1144
+([PR 1567](https://github.com/kamp-us/tea-fabrika/pull/1567)). A progress reporter appends one
+metadata line per lifecycle callback to `RUNNER_TEMP/vitest-progress.ndjson`, and the time table
+shows the unmatched modules, tests and hooks as last observed, never as hung. Each leg's timing
+artifact also records its job queue wait. The P8 kill proof and its buffer-until-end plant ran on
+a cloud box; on real tests the reporter cost about 3% of wall time. A faster append is a
+follow-up. The first full run after merge settles that cost on `next/` legs.
+
 In `next/`, ticket 1153 reuses the Node quota fixture's admission services within one World
 and one limits generation. Every input still sends; each limits setter creates a fresh cache key,
 and failed setup remains retryable. Existing laws, workloads, SQL operations, seeds and timeouts
@@ -120,6 +129,10 @@ found repeated strict line decoding dominated its time. Reusing successful decod
 unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
 CI's CPU cause remains unproved. These measurements supply no
 branch proof or reliability claim.
+In `next/`, [pull request 1616](https://github.com/kamp-us/tea-fabrika/pull/1616) gives each cut of
+the L11 storage law a copy of one booted Project in place of a cold boot of its own, and splits the
+law into 16 parts, one per flow, that together cut exactly the old law's 1,369 cuts. The copy alone
+took the law to 52.1 s on CI, still near its 60 s bound, so the split is what gives each part room.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
 It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.

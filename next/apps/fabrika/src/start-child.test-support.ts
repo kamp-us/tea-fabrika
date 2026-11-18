@@ -163,20 +163,48 @@ export type ChildFailure =
   | "watch_cleanup"
   | "retire";
 
-/** The real Project service on scoped SQLite, with only the platform handles supplied by the test. */
-export const childProject = Effect.fnUntraced(function* () {
+/**
+ * A booted Project kept to copy, as Postgres copies a template database on `CREATE DATABASE ...
+ * TEMPLATE`: its database's bytes, the keys its rows name, and what its platform objects stored.
+ */
+export type ProjectTemplate = {
+  readonly database: Uint8Array;
+  readonly founder: Key;
+  readonly agent: Key;
+  readonly descriptors: ReadonlyMap<string, Descriptor>;
+  readonly configured: ReadonlyArray<{ readonly descriptor: Descriptor; readonly wake: boolean }>;
+  readonly delivered: ReadonlyArray<unknown>;
+  readonly recorded: ReadonlyArray<unknown>;
+};
+
+/**
+ * The real Project service on scoped SQLite, with only the platform handles supplied by the test.
+ * Given a template, it starts from a copy of that Project in place of an empty database: the same
+ * keys, a deserialized copy of its database and copies of its objects' state, so its first runtime
+ * restarts that Project as a reopened object does.
+ */
+export const childProject = Effect.fnUntraced(function* (template?: ProjectTemplate) {
   const db = yield* Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(":memory:")),
+    Effect.sync(() => {
+      const opened = new DatabaseSync(":memory:");
+
+      // Before any statement is prepared: deserialize finalizes this connection's statements.
+      if (template !== undefined) {
+        opened.deserialize(template.database);
+      }
+
+      return opened;
+    }),
     (held) => Effect.sync(() => held.close()),
   );
 
   const sql = nodeSql(db);
-  const key = yield* SshsigTest.identity;
-  const agent = yield* SshsigTest.identity;
-  const delivered: Array<unknown> = [];
-  const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
-  const descriptors = new Map<string, Descriptor>();
-  const recorded: Array<unknown> = [];
+  const key = template === undefined ? yield* SshsigTest.identity : template.founder;
+  const agent = template === undefined ? yield* SshsigTest.identity : template.agent;
+  const delivered: Array<unknown> = [...(template?.delivered ?? [])];
+  const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [...(template?.configured ?? [])];
+  const descriptors = new Map<string, Descriptor>(template?.descriptors ?? []);
+  const recorded: Array<unknown> = [...(template?.recorded ?? [])];
   let failure: { point: ChildFailure; error: Error; process?: string } | undefined;
   let armed = false;
   let observing = false;
@@ -438,5 +466,29 @@ export const childProject = Effect.fnUntraced(function* () {
       armed = true;
     },
     hit: () => hit,
+    /** This Project as it stands, to copy: a serialized copy of its database, its keys, its objects' state. */
+    template: (): ProjectTemplate => ({
+      database: db.serialize(),
+      founder: key,
+      agent,
+      descriptors: new Map(descriptors),
+      configured: [...configured],
+      delivered: [...delivered],
+      recorded: [...recorded],
+    }),
   };
 });
+
+/**
+ * One Project booted once and kept as a template. It is taken the moment the first boot answers,
+ * the point where a cold-booted cut begins: the boot's own starts may still be undelivered, so a
+ * copy's first runtime delivers them again, as a reopened Project does.
+ */
+export const projectTemplate = Effect.fnUntraced(function* () {
+  const fixture = yield* childProject();
+  const runtime = yield* fixture.acquire();
+  // Building the runtime's services boots the Project, as its first call would.
+  yield* runtime.contextEffect;
+
+  return fixture.template();
+}, Effect.scoped);

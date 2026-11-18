@@ -398,10 +398,11 @@ it.prop(
   propertyOptions,
 );
 
-// The tooling laws that start a process, by their real names (0584): the three tooling
+// The tooling laws that start a process, by their real names (0584): the four tooling
 // `.integration.` files today.
 const TOOLING_REAL = [
   ".agents/skills/lead/scripts/records-readonly.integration.test.ts",
+  ".github/ci/progress-reporter.integration.test.ts",
   ".github/ci/workflow-lint/scheduled.integration.test.ts",
   "scripts/typecheck.integration.test.ts",
 ];
