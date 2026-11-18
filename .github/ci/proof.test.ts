@@ -5,11 +5,13 @@ import { Schema } from "effect";
 import * as fc from "fast-check";
 import { parse } from "yaml";
 import { rowsAt } from "../../vitest.shards.ts";
+import { readers } from "./changes.mjs";
 import { E2E_SETUP, room } from "./legs.ts";
 import {
   choose,
   isTrigger,
   legsOf,
+  listings,
   outputs,
   PROJECTS,
   type Proof,
@@ -351,5 +353,46 @@ it("pinned: the changed legs run every project proof.ts lists, and no other, and
   const proof: Proof = choose(seen(["next/a/b.ts"]), [], ["next/a/b.test.ts"], real);
   expect(Object.keys(proof).toSorted()).toEqual(
     ["_tag", "at", "base", "changed", "head", "legs", "seconds", "vitest"].toSorted(),
+  );
+});
+
+/** The `--project` values of one `vitest list` call, in their order. */
+const projectsIn = (args: readonly string[]) =>
+  args.flatMap((arg, i) => (args[i - 1] === "--project" ? [arg] : arg.startsWith("--project=") ? [arg.slice(10)] : []));
+
+// Changed paths in and out of next/, so a run reaches both kinds of change.
+const touched = fc.array(
+  fc.oneof(
+    fc.stringMatching(/^next\/[a-z]{1,8}\/[a-z]{1,8}\.(?:integration\.)?(?:test\.)?ts$/),
+    fc.constantFrom(...PLAIN, ".github/ci/proof.ts", "oxlint-plugins/a.mjs"),
+  ),
+  { maxLength: 12 },
+);
+
+// scenario: the owner's call of 2026-11-18 (0602): a branch's proof run lists no `next-integration`
+// law, even one its change reaches, and main's full run carries them. Plants, each run once on
+// proof.ts and restored: `PROJECTS` keeps next-integration (red: the reached call names it, and the
+// pinned test above with it); the readers call names next-integration again, as it did before
+// (red: the readers call names it).
+it("property: a proof run's vitest list calls name no next-integration project, for any change", () => {
+  fc.assert(
+    fc.property(fc.stringMatching(/^[0-9a-f]{40}$/), touched, (base, changed) => {
+      const { reached, readers: asked } = listings(base, changed);
+
+      expect(PROJECTS).not.toContain("next-integration");
+      expect(projectsIn(reached)).toEqual([...PROJECTS]);
+      expect(reached.at(-1)).toBe(`--changed=${base}`);
+
+      // The reader tests are asked for only on a next/ change, and only their in-memory ones.
+      const reaches = changed.some((path) => path.startsWith("next/"));
+      expect(asked === null).toBe(!reaches);
+      expect(asked === null ? [] : projectsIn(asked)).toEqual(reaches ? ["next"] : []);
+      expect(asked?.slice(2) ?? []).toEqual(reaches ? readers : []);
+
+      for (const call of [reached, asked ?? []]) {
+        expect(call.some((arg) => arg.includes("next-integration"))).toBe(false);
+      }
+    }),
+    options,
   );
 });

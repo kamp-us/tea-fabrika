@@ -1,8 +1,9 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
-// remain on the existing next matrix. A pull request and a queue group pick tooling alone: the
-// `next-integration` laws run on main's full run (scheduled.yaml, on a push to main and hourly,
-// 0581) and a branch's proof run (0590), never on a pull request or a queue group (`projectsOf`).
-// A selector error fails the required check, never means zero.
+// remain on the existing next matrix. A pull request and a queue group pick tooling's plain laws
+// alone: every `.integration.` law, `next-integration`'s and tooling's alike, runs only on main's
+// full run (scheduled.yaml, on a push to main and hourly, 0581), never on a pull request, a queue
+// group or a branch's proof run (0602, 0584; `onMergeLine`). A selector error fails the required
+// check, never means zero.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -35,14 +36,23 @@ export const wantsChecklistLaw = (paths: readonly string[] | null): boolean =>
   );
 
 /**
- * The projects a related run picks from, by the GitHub event that started it. A pull request and a
- * merge queue group pick tooling alone: the owner moved the `next-integration` laws back to main's
- * full run on 2026-11-18, after real-resource laws failed about a dozen of that night's pull
- * request and queue runs on code those changes never touched (0536's rule). Any other event, which
- * in check.yaml is a push to main whose changes job failed, picks both, as before.
+ * Whether the GitHub event that started a related run is the merge line: a pull request or a merge
+ * queue group. The owner moved every `.integration.` law back to main's full run on 2026-11-18
+ * (0602), after real-resource laws failed about a dozen of that night's pull request and queue runs
+ * on code those changes never touched (0536's rule). Any other event, which in check.yaml is a push
+ * to main whose changes job failed, picks as before.
  */
-const projectsOf = (event: string | undefined): readonly Project[] =>
-  event === "pull_request" || event === "merge_group" ? ["tooling"] : PROJECTS;
+const onMergeLine = (event: string | undefined): boolean => event === "pull_request" || event === "merge_group";
+
+/** The projects a related run picks from: tooling alone on the merge line, both otherwise. */
+const projectsOf = (event: string | undefined): readonly Project[] => (onMergeLine(event) ? ["tooling"] : PROJECTS);
+
+/**
+ * A law that reaches a real thing, by its name: `*.integration.test.ts` or `.tsx`, in any project.
+ * A tooling law that starts a process is one too, and stays on the full run (0584), so the merge
+ * line drops it from tooling's files.
+ */
+const reachesReal = (path: string): boolean => /\.integration\.test\.tsx?$/.test(path);
 
 /** Each project's files, asked for only when the run picks that project, so a skipped one is never listed. */
 type Lists = Readonly<Record<Project, () => readonly string[]>>;
@@ -50,13 +60,18 @@ type Lists = Readonly<Record<Project, () => readonly string[]>>;
 /** Separate project legs keep their existing full-depth counts and test-step limits. */
 
 export const select = (event: string | undefined, lists: Lists, sizing: Sizing) => {
-  const picked = projectsOf(event).map((project) => [project, lists[project]()] as const);
+  const listed = projectsOf(event).map((project) => [project, lists[project]()] as const);
 
-  const all = picked.flatMap(([, paths]) => paths);
+  const all = listed.flatMap(([, paths]) => paths);
 
+  // Every listed file is checked, a dropped one too: a broken list fails loudly on every event.
   if (all.some((path) => /\s/.test(path)) || new Set(all).size !== all.length) {
     throw new Error("related: selected files must be distinct paths without whitespace");
   }
+
+  const picked = listed.map(
+    ([project, paths]) => [project, onMergeLine(event) ? paths.filter((path) => !reachesReal(path)) : paths] as const,
+  );
 
   const legs: Record<string, readonly string[]> = {};
 
@@ -86,28 +101,31 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `projects=${JSON.stringify(selection.projects)}`,
 ];
 
-if (import.meta.main) {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
+/** What the select step reads from outside itself: its variables, git, and Vitest's list of files. */
+export type Step = {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  /** git's trimmed output for `args`, run in the checkout; it throws when git fails. */
+  readonly git: (args: readonly string[]) => string;
+  /** `vitest list` over `args`, the files it names, from the repo root. */
+  readonly list: (args: readonly string[]) => string[];
+};
 
-  const git = (args: readonly string[]): string => {
-    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
-
-    if (result.status !== 0) {
-      throw new Error(`related: git ${args.join(" ")} exited ${result.status}`);
-    }
-
-    return result.stdout.trim();
-  };
+/**
+ * The select step, on what `step` gives it: the tested commit and the change from its variables
+ * and git, the run's event from `GITHUB_EVENT_NAME`, which the runner sets on every step
+ * (`pull_request`, `merge_group` or `push` in check.yaml), and each picked project's files. It
+ * gives the record it keeps and the lines it prints, and writes nothing itself.
+ */
+export const run = (step: Step) => {
+  const { env, git } = step;
 
   const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
 
-  const expected = process.env["HEAD"];
-
-  if (!validSha(head) || head !== expected) {
+  if (!validSha(head) || head !== env["HEAD"]) {
     throw new Error("related: checkout HEAD must equal this check's tested commit");
   }
 
-  const from = process.env["BASE"];
+  const from = env["BASE"];
 
   const base = from !== undefined && validSha(from) ? git(["merge-base", from, head]) : null;
 
@@ -124,37 +142,53 @@ if (import.meta.main) {
 
   const narrowed = !full && base !== null ? [`--changed=${base}`] : [];
 
-  // The runner sets it on every step: `pull_request`, `merge_group` or `push` in check.yaml.
-  const event = process.env["GITHUB_EVENT_NAME"];
+  const event = env["GITHUB_EVENT_NAME"];
 
   const lists: Lists = {
     "next-integration": () =>
-      withReaders(list(root, ["--project", "next-integration", ...narrowed]), [
+      withReaders(step.list(["--project", "next-integration", ...narrowed]), [
         ...(!full && changed?.some((path) => path.startsWith("next/"))
-          ? list(root, ["--project", "next-integration", ...readers])
+          ? step.list(["--project", "next-integration", ...readers])
           : []),
         ...(wantsChecklistLaw(changed) ? [checklistFixture] : []),
       ]),
-    tooling: () => list(root, ["--project", "tooling", ...narrowed]),
+    tooling: () => step.list(["--project", "tooling", ...narrowed]),
   };
 
   const sizing: Sizing = {
     "next-integration": {
-      most: whole("MOST_INTEGRATION", process.env["MOST_INTEGRATION"]),
-      limit: room(whole("LIMIT_INTEGRATION", process.env["LIMIT_INTEGRATION"]), E2E_SETUP),
+      most: whole("MOST_INTEGRATION", env["MOST_INTEGRATION"]),
+      limit: room(whole("LIMIT_INTEGRATION", env["LIMIT_INTEGRATION"]), E2E_SETUP),
     },
     tooling: {
-      most: whole("MOST_TOOLING", process.env["MOST_TOOLING"]),
-      limit: room(whole("LIMIT_TOOLING", process.env["LIMIT_TOOLING"]), E2E_SETUP),
+      most: whole("MOST_TOOLING", env["MOST_TOOLING"]),
+      limit: room(whole("LIMIT_TOOLING", env["LIMIT_TOOLING"]), E2E_SETUP),
     },
     table: rowsAt("full"),
   };
 
   const selected = select(event, lists, sizing);
 
-  const lines = outputs(selected);
+  return {
+    record: { event, base, head, at: new Date().toISOString(), changed, triggers, full, ...selected },
+    lines: outputs(selected),
+  };
+};
 
-  const record = { event, base, head, at: new Date().toISOString(), changed, triggers, full, ...selected };
+if (import.meta.main) {
+  const root = fileURLToPath(new URL("../../", import.meta.url));
+
+  const git = (args: readonly string[]): string => {
+    const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+
+    if (result.status !== 0) {
+      throw new Error(`related: git ${args.join(" ")} exited ${result.status}`);
+    }
+
+    return result.stdout.trim();
+  };
+
+  const { record, lines } = run({ env: process.env, git, list: (args) => list(root, args) });
 
   const target = process.env["RECORD"];
 

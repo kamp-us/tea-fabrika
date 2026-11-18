@@ -3,14 +3,16 @@
 // this, after an install, and the `changed` job's legs run what it prints.
 //
 //   the branch's change against origin/main      the run tests
-//   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does
+//   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
+//                                                less the `next-integration` laws (0602)
 //   reaches some tests                           those, on as many `changed` legs as they need
 //   reaches no test                              nothing: the run is green with no test leg
 //
-// The set is Vitest's own (0040): `vitest list --changed <base>` over every project CI runs (the
-// `next`, `next-integration`, `next-visual` and `tooling` projects; today's runs in no CI job, 0533),
-// the import graph `--changed` walks, with the files vitest.config.ts hands it as watched files. A
-// next/ change adds the reader tests too (changes.mjs's `readers`), as the merge line does: they read
+// The set is Vitest's own (0040): `vitest list --changed <base>` over the `next`, `next-visual` and
+// `tooling` projects, the import graph `--changed` walks, with the files vitest.config.ts hands it as
+// watched files. The `next-integration` laws run only on main's full run (0602), so a proof run
+// lists none of them, even one its change reaches; today's run in no CI job (0533). A next/ change
+// adds the in-memory reader tests too (changes.mjs's `readers`), as the merge line does: they read
 // next/'s source as text, so the import graph cannot reach them, and making each file they read a
 // rerun trigger would make every next/ change run everything.
 //
@@ -44,8 +46,24 @@ import { readEnv, stepFiles } from "./step-env.ts";
 
 export { isTrigger };
 
-/** The projects a proof run lists and runs: every one CI runs, today's left out (0533). */
-export const PROJECTS = ["next", "next-integration", "next-visual", "tooling"] as const;
+/**
+ * The projects a proof run lists and runs: every one CI runs but `next-integration`, which only
+ * main's full run runs (0602), and today's left out (0533).
+ */
+export const PROJECTS = ["next", "next-visual", "tooling"] as const;
+
+/** The `--project` flags of `projects`, in their order. */
+const flags = (projects: readonly string[]) => projects.flatMap((project) => ["--project", project]);
+
+/**
+ * The `vitest list` calls a changed set is read from: `reached`, the tests the change reaches
+ * against `base` over PROJECTS, and `readers`, the in-memory reader tests, asked for only when the
+ * change touches next/ (`null` otherwise). Neither names `next-integration` (0602).
+ */
+export const listings = (base: string, changed: readonly string[]) => ({
+  reached: [...flags(PROJECTS), `--changed=${base}`],
+  readers: changed.some((path) => path.startsWith("next/")) ? [...flags(["next"]), ...readers] : null,
+});
 
 /** What the proof run tests, and the facts it was chosen from. */
 export type Proof =
@@ -183,7 +201,7 @@ export const summary = (proof: Proof): string => {
     return [
       head,
       "",
-      "The full set: the change touches a rerun trigger, so it runs every test, as main's full run does.",
+      "The full set: the change touches a rerun trigger, so it runs every test but the `next-integration` laws, which only main's full run runs (decision 0602).",
       "",
       ...proof.triggers.map((path) => `- \`${path}\``),
       "",
@@ -268,17 +286,12 @@ if (import.meta.main) {
     .filter((path) => path !== "");
 
   const triggers = triggered(changed, isTrigger);
-  const projects = PROJECTS.flatMap((project) => ["--project", project]);
+  const asked = listings(base, changed);
 
   const files =
     triggers.length > 0
       ? []
-      : withReaders(
-          list(root, [...projects, `--changed=${base}`]),
-          changed.some((path) => path.startsWith("next/"))
-            ? list(root, ["--project", "next", "--project", "next-integration", ...readers])
-            : [],
-        );
+      : withReaders(list(root, asked.reached), asked.readers === null ? [] : list(root, asked.readers));
 
   const sizing: Sizing = {
     most,
