@@ -10,7 +10,16 @@ import { Schema } from "effect";
 import { projects } from "../../vitest.config.ts";
 import { classify } from "./changes.mjs";
 import { checklistCases, fixture, wanted } from "./plant-related.ts";
-import { checkDelivery, checkFault, confirmed, delivered, outputs, select, type Sizing } from "./related.ts";
+import {
+  checkDelivery,
+  checkFault,
+  confirmed,
+  consumerArgs,
+  delivered,
+  outputs,
+  select,
+  type Sizing,
+} from "./related.ts";
 
 const options = { arbitrary: { seed: 119120, runs: 100, size: 100 } };
 
@@ -1233,6 +1242,26 @@ it.prop(
       expect(decided._tag, name).toBe("refused");
       expect(allowed, name).toContain(decided._tag === "refused" ? decided.reason : undefined);
     }
+  },
+  options,
+);
+
+// D5, the runner's side. The tooling step has just run P1 in the tree, which fills Vitest 5.0.5's file-system
+// module cache; a faulted run that read it would reuse the cached resolution of `@kalfa/config/App`, pass,
+// and be refused as not_red though the fault was real (CI run 44228243314). So both P1 runs of the fault mode
+// turn the cache off, spelled as the installed CLI lists it (cac chunk, `fsModuleCache`). Plant: drop the flag.
+it.prop(
+  "D5 each P1 run of the fault mode is the one consumer file in the tooling project, with the module cache off and its report written where asked",
+  { out: word, run: Schema.Literals(["faulted", "rerun"]) },
+  ({ out, run }) => {
+    const args = consumerArgs(`/scratch/${out}/${run}.json`);
+
+    expect(args.slice(0, 6)).toEqual(["exec", "vitest", "run", "--project", "tooling", CONSUMER]);
+    expect(args).toContain("--fsModuleCache=false");
+    expect(args.filter((arg) => arg.startsWith("--fsModuleCache"))).toHaveLength(1);
+    expect(args).toContain("--reporter=json");
+    expect(args).toContain(`--outputFile.json=/scratch/${out}/${run}.json`);
+    expect(args.filter((arg) => !arg.startsWith("--")).filter((arg) => arg.endsWith(".test.ts"))).toEqual([CONSUMER]);
   },
   options,
 );

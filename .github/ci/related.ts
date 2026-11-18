@@ -397,6 +397,24 @@ class FaultError extends Schema.TaggedError<FaultError, { readonly brand: unique
   reason: Schema.String,
 }) {}
 
+/**
+ * The arguments of one P1 run of the `--fault` mode, after `pnpm`. The module cache is off: the tooling
+ * step has just run P1 in this tree, and Vitest 5.0.5's file-system module cache (`fsModuleCache`, on by
+ * default, under node_modules/.vitest-cache) would hand the faulted run that step's cached resolution of
+ * `@kalfa/config/App`, so the broken export would never be read and the fault would never show.
+ */
+export const consumerArgs = (out: string): readonly string[] => [
+  "exec",
+  "vitest",
+  "run",
+  "--project",
+  "tooling",
+  CONSUMER,
+  "--fsModuleCache=false",
+  "--reporter=json",
+  `--outputFile.json=${out}`,
+];
+
 /** What stopped the fault run, in words that hold no path and no value: the reason, or the error's tag. */
 const why = (cause: Cause.Cause<unknown>): string => {
   const error = Cause.findErrorOption(cause);
@@ -453,11 +471,7 @@ const fault = Effect.fn("related.fault")(function* (env: Readonly<Record<string,
     const out = path.join(scratch, `${name}.json`);
 
     const child = yield* spawner.spawn(
-      ChildProcess.make(
-        "pnpm",
-        ["exec", "vitest", "run", "--project", "tooling", CONSUMER, "--reporter=json", `--outputFile.json=${out}`],
-        { cwd: root, stdin: "ignore", extendEnv: true },
-      ),
+      ChildProcess.make("pnpm", consumerArgs(out), { cwd: root, stdin: "ignore", extendEnv: true }),
     );
 
     const [status, output] = yield* Effect.all([child.exitCode, child.all.pipe(Stream.decodeText(), Stream.mkString)], {
