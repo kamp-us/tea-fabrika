@@ -1,13 +1,13 @@
 {
   "date": "2026-11-18",
   "run": "2026-11-18-l15-gateway-wake-build1",
-  "ticket": "1163",
-  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1620",
+  "ticket": "kamp-us/tea-fabrika#1163",
+  "pr": "kamp-us/tea-fabrika#1620",
   "started": "2026-11-18T12:02:26+00:00",
   "ended": "2026-11-18T12:35:56+00:00",
   "parent": "2026-11-18-l15-gateway-wake-tests1",
   "active": null,
-  "role": "build",
+  "role": "hand",
   "model": "claude-sonnet-5-5",
   "effort": "high",
   "outcome": "pass",
@@ -25,5 +25,6 @@
   "billing": "subscription",
   "step": "build",
   "branch": "fabrikalfa/l15-gateway-wake",
-  "head": "86f1e6814c0ebfa147e69700714da808ea55259d"
+  "head": "86f1e6814c0ebfa147e69700714da808ea55259d",
+  "driver_caused": false
 }
