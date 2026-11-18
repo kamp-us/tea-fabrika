@@ -457,8 +457,10 @@ describe("keepruns.sh, today's tooling", () => {
             }
 
             const before = JSON.stringify([...disk.entries()]);
+
             const refuse =
               kind === "makeDirectory-refused" ? "makeDirectory" : kind === "rename-refused" ? "rename" : undefined;
+
             const got = run(disk, main, folder, refuse);
             expect(got.code, kind).toBe(1);
             expect(JSON.stringify([...disk.entries()]), kind).toBe(before);

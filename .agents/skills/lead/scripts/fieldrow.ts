@@ -29,6 +29,7 @@ import {
   FileSystem,
   Layer,
   Option,
+  Predicate,
   Record as R,
   Result,
   Schema,
@@ -66,7 +67,7 @@ const RequestedProfile = Schema.Struct({
 
 const decodeRequestedProfile = Schema.decodeUnknownResult(Schema.fromJsonString(RequestedProfile));
 
-const profileValue = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+const profileValue = (value: unknown): string | null => (Predicate.isString(value) && value.length > 0 ? value : null);
 
 interface Profile {
   readonly model: string | null;
@@ -231,15 +232,18 @@ const row = Effect.fn("fieldrow.row")(function* (ask: Ask) {
   const effortValue = ask.effort.flag ?? (profile === null ? ask.effort.env : profile.effort);
   const model = modelValue || "unknown";
   const effort = effortValue || null;
+
   const requested =
     profile !== null ||
     ask.model.flag !== null ||
     ask.effort.flag !== null ||
     modelValue !== null ||
     effortValue !== null;
+
   const profileNote = requested
     ? ` Requested profile: model ${model}, effort ${effort ?? "unknown"}; effective API context unknown.`
     : "";
+
   const usage = Option.getOrNull(Option.flatMap(text, (events) => summed(events)));
   const rate = Option.getOrUndefined(R.get(LIST, model));
 

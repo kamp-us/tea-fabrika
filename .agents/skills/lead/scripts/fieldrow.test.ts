@@ -21,7 +21,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, DateTime, Effect, Exit, FileSystem, Layer, Option, PlatformError } from "effect";
+import { ByteSize, DateTime, Effect, Exit, FileSystem, Layer, Option, PlatformError, Predicate } from "effect";
 import { TestClock, TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { run as runFieldrow } from "./fieldrow.ts";
@@ -60,7 +60,7 @@ type ProfileLine = Extract<Line, { readonly _tag: "profile" }>;
 
 const isProfile = (line: Line): line is ProfileLine => line._tag === "profile";
 
-const profileValue = (value: unknown): string | null => (typeof value === "string" && value.length > 0 ? value : null);
+const profileValue = (value: unknown): string | null => (Predicate.isString(value) && value.length > 0 ? value : null);
 
 interface Case {
   readonly zone: string;
@@ -145,6 +145,7 @@ const expected = (c: Case): Record<string, unknown> => {
   const effortValue = c.effort.flag ?? (profile === undefined ? c.effort.env || null : profileValue(profile.effort));
   const model = modelValue || "unknown";
   const effort = effortValue || null;
+
   const requested =
     profile !== undefined ||
     c.model.flag !== null ||
@@ -164,9 +165,11 @@ const expected = (c: Case): Record<string, unknown> => {
 
   const u = summed(c.lines);
   const rate = LIST.get(model);
+
   const profileNote = requested
     ? ` Requested profile: model ${model}, effort ${effort ?? "unknown"}; effective API context unknown.`
     : "";
+
   const priceNote =
     rate === undefined
       ? ""
@@ -464,6 +467,8 @@ const check = (c: Case) =>
     expect(Exit.isSuccess(got.exit), String(got.exit)).toBe(true);
     expect(got.stdout).toHaveLength(1);
     const want = expected(c);
+    // SAFETY: fieldrow prints one JSON object per row; a line that is not an object fails the
+    // toEqual against the oracle's row below.
     const row = JSON.parse(got.stdout[0] ?? "") as Record<string, unknown>;
     const { reason: expectedReason, ...wanted } = want;
     const fields = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "why"));
@@ -546,13 +551,13 @@ const reaches = (c: Case): ReadonlyArray<string> => {
           profileModel === null &&
           profile.model !== null &&
           profile.model !== undefined &&
-          typeof profile.model !== "string" &&
+          !Predicate.isString(profile.model) &&
           profileValue(later.model) !== null) ||
           (c.effort.flag === null &&
             profileEffort === null &&
             profile.effort !== null &&
             profile.effort !== undefined &&
-            typeof profile.effort !== "string" &&
+            !Predicate.isString(profile.effort) &&
             profileValue(later.effort) !== null)),
     ],
     ["step bounds", c.step !== null && c.status !== null],

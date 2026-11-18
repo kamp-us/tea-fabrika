@@ -367,7 +367,9 @@ describe("governance.ts", () => {
       ".decisions/0001-unrelated-record.md":
         "---\r\ntitle: Unrelated record\r\ntags:\r\n  [script]\r\n---\r\n\r\n# Unrelated\r\n",
     };
+
     const head = { ...base, "src/change.ts": "new script\n" };
+
     const model: GitTest.Model = {
       top: TOP,
       commits: {
