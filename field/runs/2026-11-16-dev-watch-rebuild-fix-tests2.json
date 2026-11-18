@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-dev-watch-rebuild-fix-tests2",
+  "ticket": "1122",
+  "pr": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "fail",
+  "why": "The first remote watcher proof fails in next/ at the initial module-value assertion, before any save or controlled duplicate. The received source in its log is truncated before the fixture. This diagnostic-only change preserves the exact value predicate and reports bounded scalar facts instead of letting the matcher dump the full bundle. The emitted fixture value is still unproved.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [],
+  "note": "Baseline failure: https://github.com/kamp-us/tea-fabrika/actions/runs/44019963213 at f552733b626d70510d293364fb4c9c22c2b2fd25. Both the save-driven property and controlled R1 scenario fail at expected initial value zero. The source hash check before that assertion passes. The exact RegExp is retained through test(source) asserted true. Diagnostics contain only the expected number, fixed program and origin, up to eight own-like declaration names with numeric initializers, and a fixture-reference boolean. No raw source, string initializers or paths are added. Six synthetic scalar checks pass; they prove diagnostic bounds and predicate equivalence only, not actual CI bundle semantics. No local guarded watcher law, compiler, runtime or plant ran. Counts, inputs, deadlines, hash, bytes, privacy and cleanup checks stay unchanged. A genuine remote diagnostic run is required before a semantic fix, regression success or plant result can be claimed. Unknown usage and cost stay null."
+}

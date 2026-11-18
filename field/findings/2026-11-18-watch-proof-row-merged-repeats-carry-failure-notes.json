@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-watch-proof-row-merged-repeats-carry-failure-notes",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": null,
+  "rule": "doc_drift",
+  "location": {
+    "path": "field/runs/2026-11-18-dev-watch-rebuild-fix-cloud-proof.json",
+    "line": 504
+  },
+  "says": "The next/ watcher proof row's merged-head entries m-repeat-2 and m-repeat-3 carry notes copied from the pre-merge repeats saying L10 failed and the worker was killed, while those entries record exit 0, about 430 s and L10 passing, and the row's why calls those runs green on an idle box.",
+  "proof": "Line 478 labels m-repeat-2: exit 0, 432 s, L10 pass at 261358 ms; its note at line 504 reads 'overlapped a concurrent pnpm lint on the same box; L10 boot drain saw repeated watch installs'. Line 507 labels m-repeat-3: exit 0, 428 s, L10 pass at 260108 ms; its note at line 533 reads 'L10 failed, then the kernel memory limit killed the vitest worker'. The same notes sit at lines 251 and 276 on the pre-merge repeat-2 and repeat-3, which do record exit 1 and L10 fail.",
+  "cost": "A reader counting L10 failures from this row counts four where two happened, and the 0036 record for the L10 flake reads this row.",
+  "head": "742954e3d938850d2837d3de25db7a2e2613c75c",
+  "ticket": "kamp-us/tea-fabrika#1122",
+  "pr": "kamp-us/tea-fabrika#1542"
+}

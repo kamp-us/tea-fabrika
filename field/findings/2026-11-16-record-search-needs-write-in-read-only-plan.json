@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-record-search-needs-write-in-read-only-plan",
+  "date": "2026-11-16",
+  "by": "plan",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/records.ts",
+    "line": 697
+  },
+  "says": "The required record-search CLI cannot run in a read-only plan checkout because it unconditionally fetches before searching.",
+  "proof": "The plan skill requires record searches during its read-only step. records.ts:697 calls git fetch -q origin main before listing records. Running records.ts find for dev watch save rebuild reply failed because Git could not open .git/FETCH_HEAD: Operation not permitted. Calling the exported ranking functions over locally tracked records completed without fetching.",
+  "cost": "A read-only planner loses the required settled-record search unless it assembles a separate read-only call.",
+  "head": "e6d8f36d4702825c1ffe152141a616e4e90cec3c",
+  "ticket": null,
+  "pr": null
+}
