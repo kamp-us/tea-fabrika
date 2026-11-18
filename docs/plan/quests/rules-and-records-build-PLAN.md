@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0604, 0605, 0606, 0607 and 0608, amended by the lead's answers on slice 3's records; body 80cd58e5cd91
 Plancheck-Version: 3
 
 # Plan: the rules and records checks, and the cleanup of today's records they would fail, in our tooling
