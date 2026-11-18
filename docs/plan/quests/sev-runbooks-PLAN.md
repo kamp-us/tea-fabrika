@@ -1,7 +1,7 @@
 
 Plancheck-Version: 3
 
-# Sev runbooks, sev fixes admin-merged in both levels, and a runner reserve while a sev is open, in today's lead tooling and CI (slice 2, priority classes, goes to next/)
+# Sev runbooks, sev fixes admin-merged in both levels, and a runner reserve while a sev is open, in today's lead tooling and CI (slice 2, priority classes and preemption, is a @kalfa/ci plan)
 
 ```text
 the owner calls a sev0, or a ci-scheduled issue opens (sev1)
@@ -11,12 +11,14 @@ the owner calls a sev0, or a ci-scheduled issue opens (sev1)
   -> each fix: current main merged in, review passed, ci-required green, leak grep clean
      -> land.ts merge <pr> --admin, one fix at a time, in both levels
   -> close (sev0) or the issue closing (sev1): sev.ts clears SEV_PR_SLOTS; normal days have no cap
-later, in next/: our own Ci service gives each run a priority class and preempts lower ones
+later, in @kalfa/ci: the one CI protocol gives each run a priority class and preempts lower ones;
+  GitHub Actions is its Layer at @kalfa/ci/github, and sev.ts, land.ts and next/'s Ci.ts are clients
 ```
 
 Version: today's lead tooling (`.agents/skills/sev/`, `.agents/skills/lead/scripts/`), today's CI
-(check.yaml and its scripts), and `.runbooks/`. Slice 2 is `next/` (`next/packages/libfabrika/src/ci/`) and gets
-its own plan and ticket. Lead tooling takes the fast track
+(check.yaml and its scripts), and `.runbooks/`. Slice 2 is a new package, `@kalfa/ci`, and gets
+its own plan and ticket (the owner's ruling of 2026-11-18; its ADR comes in a separate pull request,
+number to come). Lead tooling takes the fast track
 ([lead skill](../../../.agents/skills/lead/SKILL.md#lead-tooling-is-fast-tracked)); the lead asked
 for a plan because the change moves rules.
 
@@ -38,7 +40,7 @@ for a plan because the change moves rules.
 
 ## Records
 
-What was read, on `origin/main` at d524d4e69, so a reader can check each claim.
+What was read, on `origin/main` at d524d4e69 (`kalfa/` at d2968b0e2), so a reader can check each claim.
 
 - Decisions: [0532](../../../.decisions/0532-a-sev0-freezes-ci.md),
   [0542](../../../.decisions/0542-two-sev-levels-one-skill.md),
@@ -95,7 +97,8 @@ What was read, on `origin/main` at d524d4e69, so a reader can check each claim.
 
 Slice 1 takes the cheap known step: capacity held back for a class while a sev is open, the
 GitHub-native way (slot groups, as 0598 already uses). Slice 2 takes the full known way, Kubernetes'
-classes and preemption, behind our own `Ci` service, the way `CodeHost` puts GitHub behind a service
+classes and preemption, as pure domain code in `@kalfa/ci`, the one CI protocol, with GitHub Actions
+as one Layer behind it, the way `CodeHost` puts GitHub behind a service
 ([0231](../../../.decisions/0231-ledger-and-codehost-are-separate.md)), so GitHub's lack of priority
 stops shaping the design.
 
@@ -245,13 +248,15 @@ export const wanted = (level: Level, slots: number): Reserve =>
     ? Reserve.cases.on.make({ slots })
     : Reserve.cases.off.make({});
 
-// .agents/skills/sev/scripts/Variables.ts, the contract (0095), like WorkflowRuns.ts.
+// .agents/skills/sev/scripts/Variables.ts, the contract (0095), like WorkflowRuns.ts. No GitHub word
+// or type in it: names and string values only, so it moves into @kalfa/ci whole.
 export class Variables extends Context.Service<Variables, {
   readonly read: (name: string) => Effect.Effect<Option.Option<string>, VariablesError | RateLimited>;
   readonly set: (name: string, value: string) => Effect.Effect<void, VariablesError | RateLimited>;
   readonly clear: (name: string) => Effect.Effect<void, VariablesError | RateLimited>;
 }>()("sev/Variables") {}
 // VariablesGh.layer: GitHub's repository variables API through `gh api`, as WorkflowRunsGh does.
+// The only file that knows GitHub; it moves to @kalfa/ci/github unchanged but for its imports.
 // VariablesTest.layer: a Map in memory.
 ```
 
@@ -261,6 +266,14 @@ export class Variables extends Context.Service<Variables, {
   the sev0 opens or when the lead names a sev1 fix, and turns off at `close` (unless a sev1 fix
   remains) and at the first `sev.ts` call after the issue closes. The runbooks name the step
   ("`sev.ts fix <branch>` turns on the reserve"); they hold no command for the variable.
+- **Where `Variables` sits, so it moves cleanly.** `@kalfa/ci` does not exist on main (`kalfa/`
+  holds `config`, `quality` and `records`), so slice 1 does not start it: a package with one
+  service and no runs protocol would be a guess at slice 2's shape. `Variables.ts` (contract),
+  `VariablesGh.ts` (the GitHub Layer) and `VariablesTest.ts` stay a three-file set beside
+  `WorkflowRuns.ts`, which is the same kind of set and moves with it. Neither contract imports
+  anything from `.agents/` but Effect. When slice 2 builds `@kalfa/ci`, the two contracts become
+  part of its `Runs` protocol and the two Gh layers move to `@kalfa/ci/github`; `sev.ts` and
+  `land.ts` change only their imports. 85%.
 - **Why a sev1 turns it on at `fix`, not when the issue opens:** the issue is opened by
   `scheduled.yaml`'s report job, whose `GITHUB_TOKEN` cannot write variables, and a new token is
   ruled out (0595). Until a fix exists there is nothing to reserve for.
@@ -278,7 +291,7 @@ export class Variables extends Context.Service<Variables, {
   20-second beat, which is already a preemption. In a sev1, about 70%: a fix usually spends more
   than ten minutes in its steps before its ready run (the 2026-11-15 sev1: about 30 minutes from
   seen to merged), so the legs ahead of it have drained. When it is not enough, the fix waits in
-  GitHub's FIFO queue for at most one leg's time. Slice 2's preemption is the full answer.
+  GitHub's FIFO queue for at most one leg's time. Slice 2's preemption, in `@kalfa/ci`, is the full answer.
 
 **`SEV_PR_SLOTS = 3`, a setting (0069)** declared once as a repository Actions variable's value in
 `.agents/skills/sev/scripts/sev.ts`'s settings (beside `SEV_SECONDS`), not in a workflow, since
@@ -327,7 +340,7 @@ verdict({ workflow: "scheduled", event: "push", branch: "main" }, allow); // can
 | "Start the full run by hand after close" | `close` dispatches `scheduled.yaml` on main through `WorkflowRuns` (a new `dispatch`) | test |
 | "After close, rerun nothing" | already: WorkflowRuns has no rerun; a lint rule `no-run-rerun` in our oxlint plugin folder fails a `rerun` call or `/rerun` API path under `.agents/skills/` | lint |
 | check.yaml's three test jobs take only the no-wait or `sev-pr-slot-` groups | workflow-lint `merge-line.ts`, replacing 0598's "no `scheduled-` group" rule with a stricter one | lint |
-| Each runbook has the five parts, `summary` and `follows` that resolve to live records, and the skill lists every runbook | a runbooks check, `.agents/skills/lead/scripts/runbooks.ts`, in `pnpm lint` | lint |
+| Each runbook has the five parts, `summary` and `follows` that resolve to live records, and the skill lists every runbook | a runbook check in `@kalfa/records`, `records check runbook`, which `pnpm lint` runs (runbooks are a record folder, moving to `.kalfa/runbooks/` by 0571) | lint |
 
 Judgment stays: when unsure which level, the order of fixes, a narrowed proof bar, the many-agents
 lines, the write-up's fields, telling the owner.
@@ -349,34 +362,47 @@ The homes of those rules change in this quest's pull requests: the sev skill, th
 is edited in place in the same pull request, as 0605 allows; the lead checks each with
 `records.ts resolve` and the records check. Its title, a draft: "Sev handling is a set of runbooks,
 a sev fix is admin-merged one at a time on current main in both levels, normal pull requests share
-SEV_PR_SLOTS runners while a sev is open, and run priority moves into our own Ci service".
+SEV_PR_SLOTS runners while a sev is open, and run priority moves into @kalfa/ci".
 
-### Slice 2, in next/: priority classes and preemption in our Ci service (a sketch, its own plan)
+### Slice 2, @kalfa/ci: the one CI protocol, with priority classes and preemption (a sketch, its own plan)
+
+The owner's ruling of 2026-11-18: the CI protocol lives once, in `@kalfa/ci`, as Effect services.
+GitHub Actions is the Layer at `@kalfa/ci/github`. next/'s libfabrika `Ci.ts` becomes a client of
+it, and so do today's `sev.ts` and `land.ts`. A separate ADR pull request records it.
 
 ```ts
-// next/packages/libfabrika/src/ci/Priority.ts, a sketch for slice 2's own plan. libfabrika, since
-// any client that runs fabrika's pipeline needs CI admission (next/AGENTS.md's libfabrika test).
+// kalfa/ci/src/Runs.ts, a sketch for slice 2's own plan: the protocol, no GitHub in it.
+export class Runs extends Context.Service<Runs, {
+  readonly dispatch: (ask: { ref: string; workflow: string; class: Class }) => Effect.Effect<RunId, CiError>;
+  readonly cancel: (id: RunId) => Effect.Effect<void, CiError>;
+  readonly states: Stream.Stream<RunState, CiError>; // queued, running, done with a conclusion
+}>()("@kalfa/ci/Runs") {}
+// The repository variables of slice 1 (Variables.ts) join this protocol as its settings.
+
+// kalfa/ci/src/Priority.ts, pure domain code, Kubernetes' names.
 export const Class = Schema.Literals(["sev-fix", "main-full", "normal"]);
-export const Policy = { // Kubernetes' names
+export const Policy = {
   "sev-fix":   { value: 1000, preemption: "PreemptLowerPriority" },
   "main-full": { value: 500,  preemption: "Never", victim: false }, // never preempted
   "normal":    { value: 0,    preemption: "Never", victim: true },
 } as const;
 
 // Admission: what starts, given runners free. Pure, so laws generate it.
-export const admit = (waiting: ReadonlyArray<Run>, running: ReadonlyArray<Run>, capacity: number)
-  : { start: ReadonlyArray<Run>; preempt: ReadonlyArray<Run> } => { /* by class, then FIFO */ };
+export const admit = (waiting: ReadonlyArray<RunState>, running: ReadonlyArray<RunState>, capacity: number)
+  : { start: ReadonlyArray<RunState>; preempt: ReadonlyArray<RunState> } => { /* by class, then FIFO */ };
 // preempt: when a sev-fix run waits and no runner is free, the newest `normal` runs, as few as
-// free its need. Each preempted run is started again later as a fresh run on its branch merged
-// with current main (Ci.start), never a rerun (0542).
+// free its need. Each preempted run is dispatched again later as a fresh run on its branch merged
+// with current main, never a rerun (0542).
 
-// Ci grows: start(commit, class), cancel(run), and a runner count. GitHub Actions is one layer.
+// kalfa/ci/src/github/ (the `@kalfa/ci/github` export): Runs and Variables over GitHub Actions,
+// grown from today's WorkflowRunsGh.ts and VariablesGh.ts.
 ```
 
 What slice 2's plan must settle, each a design call for that plan: where admission runs (a gate job
-that waits for our admit, or runs started by `workflow_dispatch` from the service); how many runners
-we have, given the measured 34; and how a preempted run's branch is caught up. It is `next/` work
-(new design, AGENTS.md), so it does not change today's CI until `next/` takes CI over.
+that waits for our admit, or runs started only by `dispatch`); how many runners we have, given the
+measured 34; how a preempted run's branch is caught up; and the order in which `sev.ts`, `land.ts`
+and next/'s `Ci.ts` move onto it. It is tooling any repo could use, so it is a `kalfa/` package
+(0585), not `next/` product code.
 
 ## One value traced through
 
@@ -455,11 +481,12 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
 | `.agents/skills/lead/scripts/pr/Merge.ts` | `adminFor`'s `fix` case and the ancestor check | build | 50 |
 | `.agents/skills/lead/scripts/pr/Merge.test.ts` | R6 | tests | tests |
 | `.agents/skills/lead/scripts/land.ts` | reads the sev1 fix for the route; its header comment | build | 20 |
-| `.agents/skills/lead/scripts/runbooks.ts` | new: the runbooks check | build | 90 |
-| `.agents/skills/lead/scripts/runbooks.test.ts` | R11 | tests | tests |
+| `kalfa/records/src/Runbooks.ts` | new: the runbook check | build | 90 |
+| `kalfa/records/src/Runbooks.test.ts` | R11 | tests | tests |
+| `kalfa/records/src/cli.ts` | `records check runbook` | build | 10 |
 | `oxlint-plugins/no-run-rerun.ts` | new: R10's rule | tests | 40 |
 | `oxlint-plugins/no-run-rerun.test.ts` | R10 | tests | tests |
-| `package.json` | `pnpm lint` runs the runbooks check | tests | 1 |
+| `package.json` | `pnpm lint` runs `records check runbook` | tests | 1 |
 | `.github/ci/slots.ts` | new: proof.ts's private `slots` moves here and gains the label and unset cases | tests | 40 |
 | `.github/ci/proof.ts` | imports `slots` from slots.ts | tests | 5 |
 | `.github/ci/slots.test.ts` | R3, R4 | tests | tests |
@@ -483,15 +510,17 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
   derived from the level; none. Small pure module beside `Level.ts`.
 - `.github/ci/slots.ts`: searched the CI scripts folder for a slot rotation and found proof.ts's private
   `slots(run, count)` (0598); it moves here and is reused, not rewritten.
-- `.agents/skills/lead/scripts/runbooks.ts`: searched `pnpm lint`'s parts and `records.ts` for a
-  check that reads `.runbooks/`; none (0571 left it open). `records.ts`'s record reader resolves
-  the `follows` ids, so the check reuses it.
+- `kalfa/records/src/Runbooks.ts`: searched `pnpm lint`'s parts, `records.ts` and `@kalfa/records`
+  for a check that reads `.runbooks/`; none (0571 left it open). `@kalfa/records` already decodes
+  frontmatter (`Frontmatter.ts`) and statuses (`Status.ts`) and has the `records check` command, so
+  the check is a fifth check there, run alone by its name.
 - `oxlint-plugins/no-run-rerun.ts`: searched oxlint's built-in rules; `no-restricted-syntax` is not
   in oxlint, and our plugin folder already holds string-literal rules, so the rule goes there.
 - The `sev` label and the ancestor read: today's `PullRequests` service
   (`.agents/skills/lead/scripts/pr/PullRequests.ts`) and `Branches` service (`pr/BranchesGit.ts`,
   which already runs `git merge-base`), no new helper.
-- Slice 2's `Priority.ts`: not built here.
+- Slice 2's `@kalfa/ci`: searched `kalfa/` on main (config, quality, records); it does not exist, and
+  is not built here.
 
 ## Who lands first
 
@@ -503,8 +532,9 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
    that edits `check.yaml`, and merges main before its ready run. The runbooks from B1 name
    `sev.ts fix` as the step that turns on the reserve; B2 makes it true, and B1's runbook says
    "from B2" until then, in no visible stub: the line is added in B2.
-4. **C, slice 2**: a tracker ticket now, "Priority classes and preemption in next/'s Ci service",
-   with this plan's sketch; its own `next/` plan later.
+4. **C, slice 2**: after the owner's ADR for `@kalfa/ci` lands, a tracker ticket, "`@kalfa/ci`: the CI
+   protocol, priority classes and preemption, with GitHub Actions as `@kalfa/ci/github`", with this
+   plan's sketch, and its own plan.
 
 ## Size
 
@@ -512,11 +542,11 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
 2. B1: about 335 lines of code (Level 30, Incident 70, Freeze 10, Merge 50, land.ts 20, WorkflowRuns
    35, runbooks check 90, rerun rule 40), about 400 lines of tests, and about 550 lines of runbooks
    and skill (eight runbooks at about 60, the skill shrinks by about 100). 335 lines.
-3. B2: about 315 lines of code (Variables 125, Reserve 25, reconcile and sev.ts 30, slots.ts 45,
+3. B2: about 315 lines of code (Variables 125, placed to move into `@kalfa/ci`, Reserve 25, reconcile and sev.ts 30, slots.ts 45,
    check.yaml 30, workflow-lint 40, plus 20 of wiring), about 300 lines of tests. 315 lines.
 4. C: a ticket, 0 lines here.
 
-How sure of the size: 70%. The doubt is the runbooks check's reuse of `records.ts` and the
+How sure of the size: 70%. The doubt is the runbook check's fit in `@kalfa/records` and the
 workflow-lint rule, which 0598's build found harder than planned.
 
 Steps: B1 tests, build, review, plus one likely send-back; B2 the same. About $4 a step, priced
@@ -538,7 +568,7 @@ Estimate: 8 steps, $32
   runs the freeze canceled before any job; the second pass reached 627 runs. A run with no jobs
   adds nothing to the counts, so the peaks can only be low, not high.
 - Whether slice 2's admission can run in front of GitHub at all without a self-hosted runner or a
-  dispatch-only workflow. That is slice 2's plan's to find.
+  dispatch-only workflow. That is the `@kalfa/ci` plan's to find.
 
 ## Calls taken
 
