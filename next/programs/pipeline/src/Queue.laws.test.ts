@@ -5,8 +5,8 @@ import { Status } from "@kampus/libfabrika/ci/Ci";
 import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
-import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
-import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Predicate, Schema } from "effect";
+import { StartRefusal, startChild } from "@kampus/libfabrika/runtime/StartChild";
+import { Array as Arr, String as Str, ConfigProvider, Effect, Match, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -165,23 +165,36 @@ const startRefusalAnswer = (p: Program, cell: Cell): Msg => {
   });
 };
 
+/** The three started values a start's `ok` answer draws from, by `which` (0, 1, or 2 and above). */
+const startedValue = (cmd: Start, which: number) =>
+  Match.value(which).pipe(
+    Match.when(0, () => Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })),
+    Match.when(1, () => Started.cases.already_started.make({ process: pid, name: cmd.name })),
+    Match.orElse(() => Started.cases.already_present.make({ process: pid, name: cmd.name })),
+  );
+
 const startAnswer = (p: Program, cmd: Start, cell: Cell, allowRefusal = true): Msg => {
   const which = cell.pick % (allowRefusal ? reasons.length + 3 : 3);
 
   return Schema.decodeSync(p.msg)(
     which < 3
-      ? {
-          ...Tag.cases.start_child_ok.make({}),
-          cmd,
-          at: cell.at,
-          value: Match.value(which).pipe(
-            Match.when(0, () => Started.cases.started.make({ process: pid, name: cmd.name, rev: 1 })),
-            Match.when(1, () => Started.cases.already_started.make({ process: pid, name: cmd.name })),
-            Match.orElse(() => Started.cases.already_present.make({ process: pid, name: cmd.name })),
-          ),
-        }
+      ? { ...Tag.cases.start_child_ok.make({}), cmd, at: cell.at, value: startedValue(cmd, which) }
       : startRefusalAnswer(p, { ...cell, pick: which - 3 }),
   );
+};
+
+/**
+ * A start's answer as tea mints it, for tea's guided walk, whose answers are the machine's own Msgs:
+ * one of the same three started values, or a refusal as tea's own `start_child_err`, named. The
+ * runner's refusal, with no name and a `reason`, comes in the walk after it, through `choose`; Q5
+ * sees `bad_cmd`, which only the runner's refusal carries, so it cannot pass without one.
+ */
+const settledStart = (cmd: Start, cell: Cell) => {
+  const which = cell.pick % (StartRefusal.literals.length + 3);
+
+  return which < 3
+    ? startChild.ok(cmd, startedValue(cmd, which), cell.at)
+    : startChild.err(cmd, Schema.TaggedStruct(StartRefusal.literals[which - 3]!, {}).make({}), cell.at);
 };
 
 const refusal = (m: Oracle, w: World, msg: Msg) => {
@@ -298,11 +311,7 @@ const step = (walk: Walk, input: Msg) => {
 
       // A refused start's own `reason` when the answer carries one, as the runner's does, else its error's tag.
       const tag =
-        input._tag === "start_child_ok"
-          ? input.value._tag
-          : Predicate.hasProperty(input, "reason") && Predicate.isString(input.reason)
-            ? input.reason
-            : input.error._tag;
+        input._tag === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
 
       m.reason = Schema.TaggedStruct("start_refused", {
         change: Schema.Finite,
@@ -542,7 +551,7 @@ for (const [law, reached] of [
                 resume: fc.constant(Mail.Resume.make({})),
                 drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ change })),
               },
-              answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => startAnswer(p, cmd, cell) } },
+              answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => settledStart(cmd, cell) } },
             },
             { maxLength: 100, size: "max" },
           );
