@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 627047193799
+Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 62704719379b
 Plancheck-Version: 3
 
 # L10 accounts for every install, and waits on counts, never on quiet
