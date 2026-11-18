@@ -504,6 +504,7 @@ const findingOf = (root: string, entry: unknown) => {
   const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
   const path = filename === null ? null : relative(root, resolve(root, filename));
   const leaf = path?.split(sep).at(-1);
+
   const safePath =
     path === null ||
     path === "" ||
@@ -543,6 +544,7 @@ it("property: L5 child failures expose only bounded recognized error and stderr 
   const generatedPath = join(root, "next", ".probe.ts");
   const message = `${"x".repeat(5000)} ${generatedPath} ENOENT`;
   const stderr = `EACCES Permission denied ${generatedPath}`;
+
   const failure = lintFailure({
     pid: 0,
     output: [null, "", stderr],
@@ -575,9 +577,11 @@ it("property: L5 child diagnostics redact hidden leaf names and retain ordinary 
         const folder = join(area, ...folders.map((n) => `module${n}`));
         const ordinary = join(root, folder, `${name}.${extension}`);
         const hidden = join(root, folder, `.${name}.${extension}`);
+
         const findings = [hidden, ordinary].map((filename) =>
           findingOf(root, { code: CODE, filename, labels: [{ span: { line: 7, column: 3 } }] }),
         );
+
         const output = JSON.stringify(findings);
 
         expect(output).not.toContain(hidden);
