@@ -39,21 +39,15 @@ import {
 import { Quotas } from "./Quotas.ts";
 
 const tag = (word: string): string => `fab.process.${word}`;
-
 const id = (...parts: ReadonlyArray<Schema.Json>): string => JSON.stringify(parts);
-
 const Send = Schema.TaggedStruct("send", { m: Down });
-
 type Policy = { readonly reason: string; readonly crashes: number; readonly until: number };
-
 type Failure = ProcessError | LedgerError;
-
 /**
  * Trusted wiring, never decoded from public params: who calls, and `by`, the brain's own writer
  * key. Every event this manager writes carries that `by`, and its fold trusts no other.
  */
 type Wiring = Caller & { readonly by: string };
-
 /** A folded process table and the log rev it was folded through. */
 type Folded = { readonly table: ProcessTable; readonly rev: Rev };
 
@@ -198,13 +192,10 @@ export class ProcessManager extends Context.Service<
         // only INSERTs. So the saved table stays true below its rev, and a fold past that rev gives
         // every answer a fold from rev 0 gives.
         let folded: Folded | undefined;
-
         const fromZero = (turn: LedgerTurn): Folded => {
           const entries = ProcessTable.entries(turn.read, caller.by);
-
           return { table: new ProcessTable(entries, caller.by), rev: entries.at(-1)?.rev ?? 0 };
         };
-
         const forward = (turn: LedgerTurn): Folded => {
           if (folded === undefined) {
             return fromZero(turn);
@@ -212,25 +203,19 @@ export class ProcessManager extends Context.Service<
 
           const fresh = folded.table.after(turn.read, folded.rev);
           const last = fresh.at(-1);
-
           return last === undefined ? folded : { table: folded.table.fold(fresh), rev: last.rev };
         };
-
         // The table inside a turn that may already have appended: folded forward, never saved.
         const fold = (turn: LedgerTurn) => forward(turn).table;
-
         // The table at the start of a turn, before it appends: folded forward and saved.
         const committed = (turn: LedgerTurn) => {
           folded = forward(turn);
-
           return folded.table;
         };
-
         // The brain writes every line here; `from` keeps the call's person, parent and trace, and
         // `asked` keeps the caller's own key. The fold trusts `by` alone and never reads `asked`.
         const line = (from: From, event: Parameters<typeof lineFor>[1]) =>
           lineFor({ ...from, by: caller.by }, { ...event, asked: from.by });
-
         // Every write here is charged: a recovery write to the process it recovers, a process's own
         // call to its program, and the brain's own housekeeping to no program (0147).
         const accounted = <A>(run: () => A, recovery?: string): A => {
@@ -246,7 +231,6 @@ export class ProcessManager extends Context.Service<
             ? quotas.ordinary(caller.recipient.process, run)
             : quotas.infrastructure(run);
         };
-
         const checked = Effect.fnUntraced(function* <A>(
           step: (table: ProcessTable, turn: LedgerTurn) => Result.Result<A, ProcessError>,
           recovery?: string,
@@ -255,7 +239,6 @@ export class ProcessManager extends Context.Service<
             yield* tx.transact((turn) => accounted(() => step(committed(turn), turn), recovery)),
           );
         });
-
         const signal = (
           table: ProcessTable,
           turn: LedgerTurn,
@@ -266,10 +249,8 @@ export class ProcessManager extends Context.Service<
           from: From,
         ) => {
           const { ref, round, name } = watch;
-
           const inbox =
             to._tag === "client" ? clientInbox(to.client) : `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
-
           const letter = signalId(to, ref, round);
 
           // A retried call may find this signal already written. Only the brain's own row counts;
@@ -281,7 +262,6 @@ export class ProcessManager extends Context.Service<
           const down = Down.make({ ref, process, ...(name === undefined ? {} : { name }), reason, to });
           turn.append(inbox, letter, line(from, Send.make({ m: down })));
         };
-
         // A watcher that ends takes its watches with it, as OTP's monitors go with a dead process.
         const watcherExited = (turn: LedgerTurn, watches: ReturnType<ProcessTable["held"]>, from: From) => {
           for (const watch of watches) {
@@ -295,7 +275,6 @@ export class ProcessManager extends Context.Service<
             );
           }
         };
-
         const start = Effect.fn("process.start")(function* (
           request: Start,
           from: From,
@@ -310,12 +289,10 @@ export class ProcessManager extends Context.Service<
             }),
           );
           const saved = yield* checked((table) => table.start(request, caller, from));
-
           const answer = Option.isSome(saved)
             ? saved.value
             : yield* Effect.gen(function* () {
                 const process = yield* nextId;
-
                 return yield* checked(
                   (table, turn) => {
                     const current = table.start(request, caller, from);
@@ -397,24 +374,19 @@ export class ProcessManager extends Context.Service<
                   request._tag === "again" ? request.after : undefined,
                 );
               });
-
           yield* Effect.annotateCurrentSpan({
             "fab.process": answer.process,
             [tag("answer")]: "placed",
             [tag("rev")]: answer.rev,
           });
-
           return answer;
         }, Effect.tapError(failed));
-
         const exit = Effect.fn("process.exit")(function* (process: string, input: ExitReason, from: From) {
           yield* Effect.annotateCurrentSpan({ "fab.process": process });
-
           // The reason is decoded before the turn opens: text, an unknown tag or noproc writes nothing.
           const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
             Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
           );
-
           yield* checked((table, turn) => {
             const life = table.exit(process, reason, caller.owner);
 
@@ -437,16 +409,13 @@ export class ProcessManager extends Context.Service<
             }
 
             watcherExited(turn, table.outbound(process), from);
-
             return Result.succeed(undefined);
           }, process);
         }, Effect.tapError(failed));
-
         const leave = Effect.fn("process.leave")(function* (session: string, from: From) {
           yield* Effect.annotateCurrentSpan({ [tag("session")]: session });
           yield* tx.transact((turn) => accounted(() => watcherExited(turn, committed(turn).held(session), from)));
         }, Effect.tapError(failed));
-
         const monitor = Effect.fn("process.monitor")(function* (
           ref: string,
           process: string,
@@ -498,7 +467,6 @@ export class ProcessManager extends Context.Service<
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
-
         const demonitor = Effect.fn("process.demonitor")(function* (ref: string, from: From, as?: Pick<Watcher, "to">) {
           yield* Effect.annotateCurrentSpan(short({ [tag("ref")]: ref }));
           const to = as?.to ?? caller.recipient;
@@ -516,7 +484,6 @@ export class ProcessManager extends Context.Service<
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
-
         const down = Effect.fn("process.down")(function* (process: string, policy: Policy, from: From) {
           yield* Effect.annotateCurrentSpan({ "fab.process": process });
           yield* checked((table, turn) => {
@@ -531,19 +498,15 @@ export class ProcessManager extends Context.Service<
               id("down", process, policy),
               line(from, ProcessEvent.cases.down.make({ process, ...policy })),
             );
-
             return Result.succeed(undefined);
           }, process);
         }, Effect.tapError(failed));
-
         const ack = Effect.fn("process.ack")(
           function* (process: string, input: Rev, from: From) {
             yield* Effect.annotateCurrentSpan({ "fab.process": process });
-
             const pos = yield* Schema.decodeUnknownEffect(Rev)(input).pipe(
               Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
             );
-
             yield* Effect.annotateCurrentSpan({ [tag("pos")]: pos });
             yield* checked((table, turn) => {
               const life = table.life(process);
@@ -553,7 +516,6 @@ export class ProcessManager extends Context.Service<
               }
 
               turn.append(acked(life.value.name), `${process}/acked/${pos}`, line(from, Acked.make({ process, pos })));
-
               return Result.succeed(undefined);
             });
           },
@@ -562,12 +524,10 @@ export class ProcessManager extends Context.Service<
           (effect, process) => Effect.annotateSpans(effect, { "fab.process": process }),
           Effect.tapError(failed),
         );
-
         const receive = (process: string, after: Rev): Stream.Stream<Letter, Failure> =>
           Stream.unwrap(
             Effect.gen(function* () {
               yield* Effect.annotateCurrentSpan({ "fab.process": process, [tag("after")]: after });
-
               const mail = yield* checked((table, turn) => {
                 const life = table.life(process);
 
@@ -577,7 +537,6 @@ export class ProcessManager extends Context.Service<
 
                 return Result.succeed(processMail(table, process, turn.read(`${life.value.name}/inbox`, after)));
               });
-
               const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
               yield* Effect.annotateCurrentSpan({
                 [tag("letters")]: mail.length,
@@ -585,33 +544,27 @@ export class ProcessManager extends Context.Service<
                   ? {}
                   : { [tag("lag")]: Math.max(...mail.map(({ arrivedAt }) => now - arrivedAt)) }),
               });
-
               return Stream.fromIterable(mail.map(({ letter }) => letter));
             }).pipe(Effect.tapError(failed)),
           ).pipe(Stream.withSpan("process.receive"));
-
         const info = Effect.fn("process.info")(function* () {
           return yield* tx.transact((turn) => committed(turn).info);
         });
-
         return {
           resolve: Effect.fn("process.resolve")(function* (process: string) {
             return yield* checked((table) => {
               const old = table.parent(process, caller.owner);
-
               return Result.isFailure(old) ? Result.fail(old.failure) : table.status(old.success.name, caller.owner);
             });
           }),
           status: Effect.fn("process.status")(function* (name: string) {
             const status = yield* checked((table) => table.status(name, caller.owner));
-
             return { ...status, at: yield* Effect.clockWith((clock) => clock.currentTimeMillis) };
           }),
           dead: Effect.fn("process.dead")(function* (process: string, dead: typeof DeadInput.Type, from: From) {
             const input = yield* Schema.decodeUnknownEffect(DeadInput)(dead).pipe(
               Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
             );
-
             yield* checked((table, turn) => {
               const life = table.parent(process, caller.owner);
 
@@ -625,7 +578,6 @@ export class ProcessManager extends Context.Service<
                 program: life.success.state.code.program,
                 name: life.success.name,
               });
-
               const stream = `${process}/dead`;
               const key = id("dead", process, value.m);
               const prior = [...turn.read(stream, 0)].find((entry) => entry.id === key && entry.by === caller.by);

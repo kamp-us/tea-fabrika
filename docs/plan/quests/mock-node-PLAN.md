@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0557, 0579, 0554, 0573, 0523; body 882bc2bf5d8c
+Approved by the lead agent, builds 0042, 0095, 0523, 0554, 0555, 0557, 0579, 0587, 0589, 0594; body 4d51f98fcc44
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node`, the `RunnerAdmission` law, in next/ (ticket 1067)
@@ -489,6 +489,13 @@ idFromName` still for a binding member the stubs left out. The steps as first wr
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | M1. In every folder a `vitest/no-restricted-vi-methods` block lists, `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused, and `vi.waitFor`, a comment, a string and another object's `fn` pass | lint | scenario: the plant lines of `VI_METHODS`, run in a file of each listed folder, as `REFLECT` is | delete `fn` from the new block of `.oxlintrc.json`: M1 red for `node/*.ts`. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
@@ -540,22 +547,24 @@ Amendment 2026-11-16 (merge session ruling on node-s1). Searched: libfabrika's `
 `telemetry/` folders on main for a service that calls a Durable Object by name, `@kampus/vitest`,
 and Effect 4.1.3's `Layer`.
 
-- `next/packages/libfabrika/src/cloudflare/ObjectCalls.ts` (`ByName`, `ProcessObjects`,
-  `RecordObjects`; amendment 2026-11-16, merge session ruling on node-s1's tests round 2; wrong,
-  kept as the record: `Objects.ts`): `ProcessClient` (`platform.ts`) is a service of one stub, built inline by its
-  caller, so no law can provide it per name; `RecordManager.remote` takes a per-name function but
-  of the raw `RecordShape`, not a service. Neither is in the Project's requirements, so none fits.
-  Both are reused inside the new layers.
-- `next/packages/libfabrika/src/cloudflare/ProcessObjectsRpc.ts`, `layer`: it is `ProcessClient.make`
+- `next/packages/libfabrika/src/cloudflare/ObjectCalls.ts`: searched `cloudflare/platform.ts`, `cloudflare/runtime.ts` and `telemetry/Records.ts` for named-object calls.
+  This is the planned home of `ByName`, `ProcessObjects` and `RecordObjects`. Amendment 2026-11-16,
+  merge session ruling on node-s1's tests round 2: the earlier name `Objects.ts` was wrong and is
+  kept as the record. `ProcessClient` in `platform.ts` is a service of one stub, built inline by
+  its caller, so no law can provide it per name. `RecordManager.remote` takes a per-name function
+  of the raw `RecordShape`, not a service. Neither is in the Project's requirements, so neither
+  fits. Both are reused inside the new layers.
+- `next/packages/libfabrika/src/cloudflare/ProcessObjectsRpc.ts`, `layer`: searched `cloudflare/platform.ts` and the Project's call sites in `runtime.ts`; reuse `ProcessClient.make`
   by name; nothing on main maps a name to a client as a layer.
-- `next/packages/libfabrika/src/cloudflare/RecordObjectsRpc.ts`, `layer`: the same over
+- `next/packages/libfabrika/src/cloudflare/RecordObjectsRpc.ts`, `layer`: searched `telemetry/Records.ts`'s `RecordManager.remote` and `runtime.ts`'s `recordLayer`; reuse the same calls over
   `recordStub`, which stays as it is.
 - `projectLayerWithoutObjects` in `runtime.ts`: today's `projectLayer` body under a new name, so the
   existing callers keep `projectLayer`; no layer on main leaves these services open.
 - The test side writes nothing new: `Recorder.layer` (`next/packages/vitest/src/Recorder.ts`) and
   `Stub.make` as they are.
-- Every path above is an exam path, so all are the tests step's. No path is in pull request 1366's
-  diff (read with `get_files`, 57 files, 2026-11-15).
+- The Files table owns the paths: test and lint files belong to tests; ObjectCalls, the Rpc layers
+  and product wiring belong to build. The old all-exam statement predates that product amendment.
+  Re-read current changed paths before construction; the old 1366 inventory is a dated source read.
 
 ## Calls taken
 
@@ -573,15 +582,20 @@ and Effect 4.1.3's `Layer`.
 
 ## Validation
 
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step: `pnpm format`, then `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144` in
-  a cloud box), then `nice -n 15 pnpm exec vitest run --maxWorkers=3 oxlint-plugins/plants.test.ts`
+  a cloud box), then `nice -n 19 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/plants.test.ts`
   and the same on `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts`. One
   `pnpm exec effect-tsgo diagnostics --format json --project next/packages/libfabrika/tsconfig.json`
   for M4. Each plant is run once and recorded in the run row.
 - The review reads the whole diff against this plan and runs the loosening check on M3.
 - Amendment 2026-11-16 (merge session ruling on node-s1): M4 is read from libfabrika's own
   `tsc --noEmit -p .`, run alone. The build also runs the narrow laws of the files it changes
-  (`nice -n 15 pnpm exec vitest run --maxWorkers=3` on `next/packages/libfabrika/src/cloudflare`'s
+  (`nice -n 19 pnpm exec vitest run --maxWorkers=1` on `next/packages/libfabrika/src/cloudflare`'s
   `leave.laws.test.ts`, `mail.test.ts`, `reload.laws.test.ts`, `connection.test.ts`,
   `reach.laws.test.ts` and `platform.test.ts`), then `--changed origin/main` once.
 
@@ -663,8 +677,9 @@ Estimate: 5 steps, $25
 - **Whether `vitest/no-restricted-vi-methods` matches `vi.fn` through an import alias** (`import
   { vi as v }`). M1's plant lines try it and record what oxlint does; a miss is listed, not hidden,
   as `REFLECT` lists its alias miss.
-- **The rest of the file's test style.** `register` runs a raw `fc.assert`, which 0579 retires; that
-  is the property-law sweep's work, not this slice's.
+- **The source file's test style.** The source read found a raw `fc.assert` in `register`.
+  Untouched laws wait for the separate sweep; a property rewritten here follows 0579 with
+  Schema inputs and the package setup seed, preserving its coverage and first failing case.
 
 ## Open questions
 
@@ -675,3 +690,17 @@ None.
 ```json
 {"_tag": "finding", "id": "2026-11-15-node-build-mocks-have-no-slice", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "rule_break", "location": {"path": "next/packages/libfabrika/src/node/build/build-assets.integration.test.ts", "line": 275}, "says": "In next/, node/build's laws call vi.doMock 7 times and vi.stubEnv 4 times (build-assets.integration.test.ts and build-one-file.integration.test.ts), which 0555 bans, and the recorder plan's slice table counts only vi.fn, toHaveBeenCalled and vi.spyOn, so no mock-sweep slice owns them.", "proof": "rg -c 'vi\\.doMock\\(|vi\\.stubEnv\\(' next/packages/libfabrika/src/node/build on main at f7169af: build-assets 5 and 1, build-one-file 2 and 3. docs/plan/quests/recorder-PLAN.md, Size, the folder table, has no row for node/build.", "cost": "The vi ban cannot reach node/** while these stay, and no plan is set to remove them.", "head": "f7169af", "ticket": null, "pr": null}
 ```
+
+## Current dependency and execution rule, 2026-11-17
+
+Stub.make is present on current main from PR 1481, with the typed rest signature this plan's
+amendment records. The original wait for an unbuilt PR 1433 is historical, not a current blocker.
+Read and reuse that implementation; do not relax Stub.make or copy a second platform fake.
+
+Read every exact selected law, helper and cleanup before local execution (0594). An integration
+filename or the earlier no-host claim gives no clearance. Any selection reaching real process
+signals, launchd or real Electron runs on eligible disposable CI before review. Keep isolation
+for other real resources where needed. Narrow the local changed selection to verified-safe
+paths and obtain the other results remotely. Coordinate every compiler, including M4's narrow
+project compiler, under the one global slot. Bring branches forward with an ordinary merge
+preserving both sides, never a history rewrite.

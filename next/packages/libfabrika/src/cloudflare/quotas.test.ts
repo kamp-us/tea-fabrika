@@ -30,7 +30,6 @@ const defaults = Effect.fnUntraced(function* (writes = 13_760, bytes = 1_000_000
     repo: Sources.file("repo.toml", empty),
     person: Sources.file("person.toml", { value: { limits: { writes, storage: `${bytes} B` } }, spans: [] }),
   });
-
   return yield* Snapshot.make(Declarations.all, resolved);
 });
 

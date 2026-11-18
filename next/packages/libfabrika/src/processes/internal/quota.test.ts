@@ -9,11 +9,8 @@ import { expectTypeOf } from "vitest";
 import * as Quota from "./quota.ts";
 
 const limits = { writes: 5, bytes: 31, message: { writes: 3, bytes: 23 } };
-
 const cell = fc.record({ move: fc.nat(), pick: fc.nat(), amount: fc.nat() });
-
 const tape = fc.array(cell, { minLength: 12, maxLength: 60, size: "max" });
-
 const options = { seed: 119120, numRuns: 100 };
 
 describe("P34c quota machine", () => {
@@ -43,7 +40,6 @@ describe("P34c quota machine", () => {
 
           const arrival = Math.max(at, previous);
           const window = history.filter((h) => h.at > arrival - 60_000).reduce((s, h) => s + h.writes, 0);
-
           const delta =
             move === "release"
               ? -Math.min(bytes, 1 + (c.amount % bytes))
@@ -52,10 +48,8 @@ describe("P34c quota machine", () => {
                   ? 0
                   : 1 + (c.amount % (limits.bytes - bytes + 2))
                 : 1 + (c.amount % (limits.bytes - bytes + 2));
-
           const writes = move === "replace" && delta === 0 ? 0 : 1;
           const admitted = window + writes <= limits.writes && bytes + delta <= limits.bytes;
-
           const msg = {
             type: "propose",
             at,
@@ -64,7 +58,6 @@ describe("P34c quota machine", () => {
             bytes: delta,
             ahead: { writes: 0, bytes: 0 },
           } as const;
-
           msgs.push(msg);
           const next = applyCell(machine, model, msg)[0];
           expect(next.decision._tag).toBe(admitted ? "admitted" : "refused");
@@ -92,7 +85,6 @@ describe("P34c quota machine", () => {
           fc.constant(msgs),
           (_steps, final) => {
             expect(final).toEqual(model);
-
             return true;
           },
           { ...options, numRuns: 1 },
@@ -109,7 +101,6 @@ describe("P34c quota machine", () => {
           account: Quota.Account.cases.recovery.make({ name: "alpha:1", location: "project" }),
           limits,
         });
-
         let model = machine.init(null, {})[0];
         let at = 1;
         let totalBytes = 0;
@@ -135,7 +126,6 @@ describe("P34c quota machine", () => {
           const byteFault = cells[0]!.pick % 2 === 0;
           const growth = fail && byteFault ? limits.bytes + 1 : limits.bytes;
           const writes = fail && !byteFault ? limits.writes + 1 : 1;
-
           const proposed = applyCell<Quota.Model, Quota.Msg, never>(machine, model, {
             type: "propose",
             at,
@@ -185,7 +175,6 @@ describe("P34c quota machine", () => {
           account: Quota.Account.cases.recovery.make({ name: "alpha:1", location: "process" }),
           limits,
         });
-
         let model = machine.init(null, {})[0];
         const accepted: string[] = [];
         let bytes = 0;
@@ -194,7 +183,6 @@ describe("P34c quota machine", () => {
         for (const [n, c] of cells.entries()) {
           const message = `accepted:${n}:${c.amount}`;
           accepted.push(message);
-
           const next = applyCell(machine, model, {
             type: "propose",
             at: 1,
@@ -204,7 +192,6 @@ describe("P34c quota machine", () => {
             ahead: { writes: 0, bytes: 0 },
             replay: { message, recovery: "restart:1" },
           })[0];
-
           expect(next.decision._tag).toBe("admitted");
           writes += limits.message.writes;
           bytes += limits.message.bytes;
@@ -226,7 +213,6 @@ describe("P34c quota machine", () => {
         })[0];
         expect(model.decision._tag).toBe("admitted");
         const message = accepted[cells[0]!.pick % accepted.length]!;
-
         const twice = applyCell(machine, model, {
           type: "propose",
           at: 1,
@@ -236,7 +222,6 @@ describe("P34c quota machine", () => {
           ahead: { writes: 0, bytes: 0 },
           replay: { message, recovery: "restart:1" },
         })[0];
-
         expect(twice._tag).toBe("reserve_fault");
 
         if (twice._tag !== "reserve_fault") {
@@ -261,7 +246,6 @@ describe("P34c quota machine", () => {
         for (const [n, c] of cells.entries()) {
           const delta = bytes > 0 && c.pick % 3 === 0 ? -Math.min(bytes, c.amount % (bytes + 1)) : c.amount % 1000;
           const unchanged = delta === 0;
-
           const next = applyCell(machine, model, {
             type: "propose",
             at: 1,
@@ -270,7 +254,6 @@ describe("P34c quota machine", () => {
             bytes: delta,
             ahead: { writes: 0, bytes: 0 },
           })[0];
-
           bytes += delta;
 
           if (!unchanged) {

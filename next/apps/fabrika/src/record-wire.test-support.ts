@@ -13,7 +13,6 @@ const Failure = Schema.Struct({ reason: Schema.String });
 
 export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
   const { port: _port, person: _person, founder: _founder, window: _window, values: _values, ...rest } = config;
-
   return {
     ...rest,
     ...StartsTest.fixture(config, (algorithm, data) =>
@@ -25,7 +24,6 @@ export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
 // Startup allocates its own identity; direct Worker fixtures still need a complete envelope.
 export const startupFixture = <A extends StartsTest.Fixture & { readonly home: string }>(config: A) => {
   const { start: _start, ...input } = settingsFixture(config);
-
   return { ...input, ...(config.start === undefined ? {} : { start: config.start }) };
 };
 
@@ -60,10 +58,8 @@ export const recordWire = Effect.fnUntraced(
     const field = (body: Buffer) => {
       const length = Buffer.alloc(4);
       length.writeUInt32BE(body.length);
-
       return Buffer.concat([length, body]);
     };
-
     const blob = Buffer.concat([field(Buffer.from("ssh-ed25519")), field(Buffer.from(raw, "base64url"))]);
     const built = yield* build({ out: path.join(home, "dist") });
     const old = process.env.ALCHEMY_HOME;
@@ -76,7 +72,6 @@ export const recordWire = Effect.fnUntraced(
         }
       }),
     );
-
     return yield* localInstance(
       built,
       startupFixture({

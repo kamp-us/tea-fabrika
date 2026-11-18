@@ -7,7 +7,7 @@
         // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
         // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" },
+        "diagnosticSeverity": { "preferBarrelImport": "error" },
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
@@ -31,5 +31,5 @@
     "allowJs": true,
     "checkJs": true
   },
-  "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
+  "include": ["*.ts", "*.mjs", "workflow-lint/*.ts", "../../scripts/vitest.setup.ts"]
 }

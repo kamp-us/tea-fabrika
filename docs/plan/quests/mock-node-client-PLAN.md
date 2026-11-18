@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body 8a302524517a
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 603450a7d3a1
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node/client`, in next/ (ticket 1067)
@@ -219,9 +219,16 @@ yield* Effect.acquireRelease(
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
-| S2 (rewritten). The private half is in no frame, span, log line, `Console` call, tea warning, error, journal row or state, over the same generated flows, with the console spies gone and `TestConsole`'s five readers read beside the Logger (amended 2026-11-15); every output the old law scanned is still scanned, and the `done` coverage list is unchanged | test | fc.record: the file's `Flow`, as today, 100 runs | the three plants the file names (the hello carries `d`; a span attribute holds the JWK; an error message holds the JWK text) stay red, and more: `HandsStart.ts` writes the key's JWK with `Console.log`, then with `Console.warn`, then with `Console.debug`, each caught only by its own reader; and (amended 2026-11-15) a tea run listener that throws with the JWK in its message, caught only through the tea hook | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts |
+| S2 (rewritten). [secrets] The private half is in no frame, span, log line, `Console` call, tea warning, error, journal row or state, over the same generated flows, with the console spies gone and `TestConsole`'s five readers read beside the Logger (amended 2026-11-15); every output the old law scanned is still scanned, and the `done` coverage list is unchanged | test | fc.record: the file's `Flow`, as today, 100 runs | the three plants the file names (the hello carries `d`; a span attribute holds the JWK; an error message holds the JWK text) stay red, and more: `HandsStart.ts` writes the key's JWK with `Console.log`, then with `Console.warn`, then with `Console.debug`, each caught only by its own reader; and (amended 2026-11-15) a tea run listener that throws with the JWK in its message, caught only through the tea hook | next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts |
 | H1. A tea failure with no caller on a hands start becomes one Effect log line, at error (warning for a discard notice), annotated with its `phase`, and nothing reaches `Console` | test | scenario: one tea failure per phase this start can reach, at most three, which no generator draws (see the doubt) | drop `onError` from `run`: no log line, and tea's rethrow fails the run as an unhandled error | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
 | H2. After that failure, the run's `done()` fails with it (`SubFailed` for a Sub), which is what `hands.ts` races | test | scenario: the same trigger as H1 | the `socket` Sub ends its stream quietly on any failure (`Stream.catchCause(() => Stream.empty)`): `done()` keeps waiting, H2 red at its timeout | next/packages/libfabrika/src/client/HandsStart.laws.test.ts |
 | N1. Node's M1 for this folder (amendment 2026-11-15, ruling 2): a `vi.fn`, `vi.spyOn`, `vi.mock`, `vi.doMock` or `vi.stubEnv` in a test under `next/packages/libfabrika/src/node/client/` fails lint with node's message, and `vi.hoisted` there does not | lint | lint | delete the folder from the rule's `files` block: N1's planted lines pass; delete `fn` from the block: the planted `vi.fn()` passes. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, `.oxlintrc.json` |
@@ -258,8 +265,8 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
 - The rule is on at zero for the folder, at `error`, never `warn`, with no list of leftovers
   ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
 - Open pull request [1373](https://github.com/kamp-us/tea-fabrika/pull/1373) also edits
-  `.oxlintrc.json`, for the anti-slop plugin. Whichever lands second takes a rebase of a different
-  block. 0555 says the hold may move to anti-slop's `no-module-mocking` later; that does not change
+  `.oxlintrc.json`, for the anti-slop plugin. Whichever lands second merges the latest main and preserves both
+  blocks. 0555 says the hold may move to anti-slop's `no-module-mocking` later; that does not change
   this slice.
 
 **Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
@@ -369,8 +376,15 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Validation
 
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step: `pnpm format`, `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144` in a
-  cloud box), then `nice -n 15 pnpm exec vitest run --maxWorkers=3` on
+  cloud box), then `nice -n 19 pnpm exec vitest run --maxWorkers=1` on
   `next/packages/libfabrika/src/node/client/HandsSecrets.laws.test.ts`,
   `next/packages/libfabrika/src/client/HandsStart.laws.test.ts` and `oxlint-plugins/plants.test.ts`.
   H1, H2 and S2's new plant are red until the build; each plant is run once and recorded.

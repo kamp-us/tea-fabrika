@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body abe1a196f7b4
+Approved by the lead agent, builds 0042, 0054, 0524, 0538, 0555, 0579, 0589, 0594; body 1e463bb3bec1
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in five slices on the sweep's one pull request
@@ -168,11 +168,11 @@ with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 25 `vi.mock` in 12 f
 | `@effect/platform-node` | 2 | `grant-readers`, `file-services` | yes, slice 5: each entry (`grant.ts`, `dev.ts`) exports its program as an Effect, and the law runs it with the layers it needs, so nothing stands in for `NodeRuntime.runMain` |
 | `rolldown` | 1 | `exam/bytes.integration` | yes, slice 5: the bundler service above; this law is not the wrapper's own, so 0555's exception does not apply |
 | `vi.stubEnv` of `FABRIKA_HOME` 8, `FABRIKA_INSTANCE_PORT` 2, `TYPESAFE_API_KEY` 1, `DO_NOT_TRACK` 1, and 1 by a name that is not a plain string | 13 | `file-services`, `instance-one-file`, `local-instance` laws | yes, slice 5: the readers move to `Config` (`dev.ts:94`, `hands.ts:62` read `process.env.FABRIKA_HOME` today), and each law provides `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))`; `TYPESAFE_API_KEY` stays unset in every law, as the root map's money rule asks |
-| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy is that work's to say, and it has no plan yet |
+| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy belongs to the approved Alchemy mocks plan (PR 1511) |
 | `cloudflare:workers` | 3 | `runtime-recovery`, `door.integration`, `checklist-instance` laws | **no**: 0042's Alchemy work, as in the cloudflare plan |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The seven Alchemy and
-`cloudflare:workers` hits wait on 0042's Alchemy work, which has no plan; the cloudflare plan's
+`cloudflare:workers` hits wait on 0042's Alchemy work, whose plan landed in [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511); the cloudflare plan's
 finding row `2026-11-15-cloudflare-workers-mocks-have-no-slice` names it. The override in "The
 lock" is not landed by any slice; it lands, whole and with all five methods, for
 `next/apps/fabrika/src/**` on the day the folder is at zero. A6 and A8 wait with it. Slice 5 still
@@ -365,6 +365,12 @@ export class InputNames extends Context.Service<
 // caller that names inputs today keeps its function and wraps it once.
 ```
 
+**Current callback behavior, read 2026-11-17.** `Gateway.Options.inputs.name` accepts the decoded
+input and may return `undefined`; Gateway then falls back to the input's raw tag. The service
+adapter must keep that optional result and fallback. The sketch's `Effect<string>` is not
+permission to require a name or discard that path. Wrap the existing mapping as an Effect, retain
+its typed input, and prove both named and undefined cases without a cast or a second decoder.
+
 - **Why a service for `inputs.name`** (amendment 2026-11-15, open question 2's answer): 0555 says
   "a call the law wants to watch goes through a service", and the transport row reads that as the
   rule for every callback of ours. The cost the first lean named stays: each gateway caller
@@ -379,8 +385,9 @@ const macs = Recorder.layer(Mac.Mac, real, { fails: { sign: crypto(thrown) } });
 ```
 
 `Mac.key` makes a key from bytes and calls no WebCrypto, so the `importKey` edge no longer exists
-in our code. Its law becomes the `sign` edge's twin on the first nonce. The reviewer reads that as a
-changed law, and the lead sends it to the owner with open question 1.
+in our code. Its law becomes the `sign` edge's twin on the first nonce. The reviewer compares the old and
+replacement crypto-edge coverage. Open question 1 is answered below; do not reopen it. Any actual
+loosening still follows the owner-read rule.
 
 **The startup span, lean 65%.** `SettingsRuntime.make`'s cache builds the layer with the services
 it took at construction (`requireServicesAt: "construction"`), so the first caller's span never
@@ -564,6 +571,13 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 Every law here exists and is rewritten, never deleted. Each keeps every value it compared. The
 plant is what the review runs once to see it red.
 
@@ -598,8 +612,12 @@ plant is what the review runs once to see it red.
 - Real resources: B3 and D1 run a real workerd or a real child, and are `*.integration.test.ts`
   files already, run on the schedule (0536). A stand-in cannot replace the real child there, since
   what they check is a real port and a real process. They are not new, so 0581's "why no stand-in"
-  is already answered. B1 runs Alchemy's real code on fake children, so it stays a plain test. No
-  law needs the owner's Mac or a launchd entry, so none is host-only and none waits on 0178's yes.
+  is already answered. B1 runs Alchemy's real code on fake children, so it stays a plain test.
+  Amendment 2026-11-16: B3's shutdown law sends a real process signal. Under
+  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), that law and any selected check
+  whose body or cleanup sends real signals run on eligible disposable Linux or macOS CI, never
+  the owner's laptop, with proof before the first review (0178). A law need not be Mac-specific
+  to need that route. The selected runner must support its dependencies, isolation and cleanup.
 - No law reads a secret, so no `[secrets]` flow is needed.
 - Lint, type or test? A8 and the lock are lint. A6 and A7 test that the config does what it says.
   The rest are tests. No type law: the Recorder's own type laws (R1 to R18) already hold the typed
@@ -683,6 +701,13 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
   `Gateway.ts` digests. Slice 3's product change serves both. Whichever plan's slice lands first
   makes it, and the other reads it.
 
+## Existing tools
+
+Amendment 2026-11-16: these searches confirm the helpers already chosen above; they add no API or behavior.
+
+- `next/packages/libfabrika/src/gateway/InputNames.ts`: searched `gateway/Gateway.ts` and the gateway module for an input-naming service; found `Options.inputs.name`, a plain callback invoked while accepting an input. Reuse that program mapping as the service's implementation, so the already-planned Recorder can watch it. `Recorder.layer` records Effect service members, not this plain callback.
+- `next/packages/libfabrika/src/node/build/Bundler.ts`: searched `node/build/build.ts`, `node/build/bundle.ts` and the installed Rolldown 1.2.13 wrapper path; found the existing `bundle` function and its callers, with no provided bundler service. Reuse that function as the planned Reference's live default. Effect's `Context.Reference` and `Layer.mock` supply the replacement mechanism; no bundling code is reimplemented.
+
 ## Calls taken
 
 - **Five slices, ordered by what can land now** (amended 2026-11-15: slice 5 added by the laptop
@@ -711,13 +736,21 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 
 ## Validation
 
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - Tests step, each slice: `pnpm format`, `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`,
-  then `nice -n 15 pnpm exec vitest run --maxWorkers=3` on that slice's files only. The
-  `.integration.` files it changes are run once, since they are this slice's laws. Each plant is
-  run once and recorded in the step's report.
+  then the slice's verified-safe narrow test paths under the repo's machine caps. Read the
+  selected tests and their cleanup first; an `.integration.` filename alone gives no clearance.
+  B3's real-signal shutdown check and any other selected real-signal law run on eligible
+  disposable Linux or macOS CI, never the owner's laptop, with proof before the first review
+  (0594). Each plant is run once on an eligible runner and recorded in the step's report.
 - Build: the same narrow paths after its change. Slice 2 also reruns
   `next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts` after `pnpm install --frozen-lockfile`.
-- The lead runs the changed-files test run and the one type check per slice.
+- The lead's changed-files pass runs explicit verified-safe paths locally and obtains remote
+  proof for selected real-signal laws separately, then runs the one type check per slice (0594).
 
 ## Size
 
@@ -819,3 +852,11 @@ were wrong. They are kept as they were asked.
 ## Findings
 
 None.
+
+## Current execution and history rule, 2026-11-17
+
+Read every selected law, helper and cleanup before a local run (0594), including a selected
+plain law that imports a real process implementation. Static no-signal statements are not
+clearance. All real process-signal, launchd and real Electron checks run on eligible disposable
+CI before review. Bring branches forward with an ordinary merge preserving both sides, never a
+history rewrite. Regenerating an upstream patch preserves every existing patch hunk.

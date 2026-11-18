@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0043, 0573, 0574; body 801b351273ba
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body cb3200faff08
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/transport`, in next/ (ticket 1067)
@@ -257,9 +257,10 @@ counter sees also change with the signatures: they are listed too.
 | `ErrorCause.test.ts:47` (`vi.spyOn(crypto.subtle, method)`) | a rejection injected into one WebCrypto call | `WebCrypto.layer(Rejecting.crypto(method, failure))` |
 | `node/client/KeyFile.laws.test.ts:296` (plain `consume`, `admit`) | nothing | a `Layer.mock(Admissions, ...)` (slice 2) |
 
-The `fc.assert` laws here (d2 in both files, p82 agreement, T737 D1, C5, C3) keep their runner in
-this sweep, 80%: moving them to `it.effect.prop` is 0579's other sweep, and doing both in one diff
-makes the loosening read harder. Each is only changed where it reads a mock.
+The source read found `fc.assert` in d2 in both files, p82 agreement, T737 D1, C5 and C3.
+When those laws are rewritten here, move them to `it.prop` or `it.effect.prop` with Schema
+inputs and the package setup seed (0579). Keep their input bounds, run counts, checks and first
+failing case; replacing a mock does not exempt a rewritten law from that rule.
 
 ## One value traced: a refused signed hello (law d2)
 
@@ -276,6 +277,13 @@ makes the loosening read harder. Each is only changed where it reads a mock.
    and `not.toHaveBeenCalled`); one equality now holds both, and the order.
 
 ## Laws
+
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -443,6 +451,13 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
   so its chained lines stay `false` under its own code. They are no longer a miss of the lock: the
   pair refuses them, through `VI_PROPERTIES`.
 
+## Existing tools
+
+Amendment 2026-11-16: these searches confirm the two contracts already chosen above; the existing callbacks remain their implementations.
+
+- `next/packages/libfabrika/src/transport/Admissions.ts`: searched `transport/Hello.ts`, `gateway/Gateway.ts` and the transport service definitions; found `checkHello`'s `admit` and `consume` callbacks and the gateway's per-attempt implementations. There is no provided service for those two calls. Reuse the callbacks through the planned contract, with Effect's `Layer.mock` and the existing Recorder supplying the test layer.
+- `next/packages/libfabrika/src/transport/Routes.ts`: searched `transport/Answer.ts`, the transport service definitions and `Recorder.ts`; found `answerFrame`'s route callback and its tuple types, not a service the Recorder can wrap. Reuse the same route behavior behind the planned contract. Effect's `Context.Service` and `Layer.mock` provide the service mechanism; no second frame router is added.
+
 ## Calls taken
 
 - **Two slices, `Answer` and WebCrypto first, `Hello` after 1366,** 90%: the step rules forbid a
@@ -458,15 +473,23 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 - **`answerFrame` drops `_admit`,** 85%, see "The shape".
 - **Effect's `WebCrypto` reference, not a service of ours,** 95%: Effect ships it for exactly this
   (`WebCrypto.ts:37`, `:68`).
-- **The `fc.assert` laws keep their runner,** 80%, see "Every site".
+- **Rewritten property laws follow 0579,** as required under "Every site". Their behavior and
+  generated coverage stay the same.
 - **Is this a setting?** No, for each choice. The services and the lock are code and lint config,
   nothing a person running fabrika picks (0069).
 - **What fact is lost if not recorded now?** None. A call record lives inside one test run.
 
 ## Validation
 
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step: `pnpm format`, then `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`,
-  then `nice -n 15 pnpm exec vitest run --maxWorkers=3` on the slice's test files. Slice 1:
+  then `nice -n 19 pnpm exec vitest run --maxWorkers=1` on the slice's test files. Slice 1:
   `next/packages/libfabrika/src/transport/Answer.test.ts` and
   `next/packages/libfabrika/src/transport/ErrorCause.test.ts`. Slice 2:
   `next/packages/libfabrika/src/transport/Hello.test.ts`, `next/packages/libfabrika/src/node/ErrorCause.test.ts` (which runs `GatewayCauseTest`'s suite),

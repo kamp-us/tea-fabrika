@@ -285,8 +285,8 @@ it("T1 (0536): the tooling project, the schedule's tooling job's one project, ho
   expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
 });
 
-// T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its
-// one vitest call runs inside next/ with no `--project`, which only `working-directory` makes safe.
+// T1 (0539) holds every PR-reachable job, including L13 in host.yaml. The fixed box job is
+// dispatch-only; its tooling laws run on no pull request or merge group.
 const hostPath = ".github/workflows/host.yaml";
 
 const hostYaml = () => parse(readFileSync(new URL("../../workflows/host.yaml", import.meta.url), "utf8"));
@@ -298,6 +298,31 @@ const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
 it("scenario: the checked-in host.yaml runs no tooling test", () => {
   expect(lintNoTooling(hostPath, JSON.stringify(hostYaml()))).toEqual([]);
 });
+
+for (const [condition, dispatch] of [
+  ["github.event_name == 'workflow_dispatch'", true],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == 'box'", true],
+  [`\${{ github.event_name == 'workflow_dispatch' }}`, true],
+  [`\${{ github.event_name == 'workflow_dispatch' && inputs.suite == 'box' }}`, true],
+  ["github.event_name == 'pull_request'", false],
+  ["github.event_name == 'merge_group'", false],
+  ["github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'", false],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == 'box' || github.event_name == 'merge_group'", false],
+  [`\${{ github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' }}`, false],
+  ['contains(fromJSON(\'["workflow_dispatch","pull_request"]\'), github.event_name)', false],
+  ["inputs.suite == 'box'", false],
+  ["github.event_name != 'pull_request'", false],
+  ["github.event_name == 'workflow_dispatch' && inputs.suite == github.event.inputs.suite", false],
+  [undefined, false],
+] as const) {
+  it(`scenario: host tooling condition ${condition ?? "missing"} is ${dispatch ? "proved dispatch-only" : "rejected"}`, () => {
+    const workflow: Parsed = hostYaml();
+    Object.assign(workflow.jobs["box"]!, { if: condition });
+    expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual(
+      dispatch ? [] : [`${hostPath}: T1: box runs no tooling test (0539)`],
+    );
+  });
+}
 
 for (const [name, plant] of [
   [

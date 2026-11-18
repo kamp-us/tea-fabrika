@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body 3844fec894d5
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589 and 0594; body 3593abf66fa8
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node/dev`, in next/: 15 spies and 2 call matchers go, `process.kill` moves behind a `Signals` service, and lint holds the folder at zero (ticket 1067)
@@ -349,6 +349,13 @@ another law can see, which the `mockRestore` lines guarded by hand. Those `try/f
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind | Generator | What it holds | Plant |
 |---|---|---|---|---|
 | M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3; answered 2026-11-15 by the laptop lead: M1 does not land in this sweep, since the folder keeps a `cloudflare:workers` mock, and no interim block is allowed (0524) | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red |
@@ -358,8 +365,8 @@ another law can see, which the `mockRestore` lines guarded by hand. Those `try/f
 | L6b | test | Effect Arbitrary: Thrown | `make` over a call that throws answers `missing` only for `{ code: "ESRCH" }` and keeps the thrown value as `cause` | classify by `message` in place of `code`, or answer `missing` for any error |
 | L6c | test, `SignalsNode.integration.test.ts` | vector: one real ESRCH from Node, a child this law spawned and waited for | `SignalsNode.layer`'s `send` to a child this law spawned and waited for fails as `missing`: the shape `{ code: "ESRCH" }` that L6b assumes comes from a real Node, as a `vector:` | drop the `catch` in `make`, and the ESRCH dies as a defect |
 | The rewritten laws | test | scenario: each law's own generators, unchanged | each keeps its title and its claim, watched through `Fetch`, `Recorder.calls(Signals)` or `TestConsole` | each keeps its named plant (`dev.laws:529` L7, `:627` L8, `:778` L13, `dev-control:575`, `dev-secrets:497`). The two unnamed ones: dev-errors' offline law, "dial in offline mode", red on the count; its RSS law, "signal when the sample fails", red on `Recorder.calls(Signals)` |
-| The secrets law, new plant | test | scenario: the law's generated flows, unchanged | a `Console.log` of the bearer on the path is caught | add `yield* Console.log(bearer)` in the control call, and `logLines` holds it |
-| The secrets law, more plants (amendment 2026-11-15, ruling 4) | test | scenario: the law's generated flows, unchanged | a bearer written through `Console.warn`, `Console.info` or `Console.debug`, or in a tea warning, is caught | add each write on the path in turn: red only through `warnLines`, `infoLines`, `debugLines` and the tea hook's list, one plant each |
+| The secrets law, new plant [secrets] | test | fc.record: the existing generated word, pass and moves, unchanged, 3 runs fast and 15 runs full | a `Console.log` of the bearer on the path is caught | add `yield* Console.log(bearer)` in the control call, and `logLines` holds it |
+| The secrets law, more plants [secrets] (amendment 2026-11-15, ruling 4) | test | fc.record: the existing generated word, pass and moves, unchanged, 3 runs fast and 15 runs full | a bearer written through `Console.warn`, `Console.info` or `Console.debug`, or in a tea warning, is caught | add each write on the path in turn: red only through `warnLines`, `infoLines`, `debugLines` and the tea hook's list, one plant each |
 | The watch law (amendment 2026-11-15, ruling 4) | test | scenario: the law's own generators, unchanged | a Rolldown warning on the watch path reaches `TestConsole.warnLines` once, relative to the root, with no absolute path, and the default handler is never called | print the absolute importer: red; call Rolldown's default handler: red through the wrapper |
 
 ```ts
@@ -377,10 +384,12 @@ const Thrown = Schema.Union([
 ]);
 ```
 
-- **L6c is host-only:** it sends a real signal on the real machine. It runs before the first
-  review, in a cloud box; on the owner's Mac it waits for the lead's read of its signal line and
-  the owner's yes (0178). It signals only its own child, already waited for. Why no stand-in will
-  do: it is the one law that checks what Node really throws, which L6b's inputs copy.
+- **L6c sends a real process signal.** Amendment 2026-11-16: under
+  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), it runs on eligible disposable
+  Linux or macOS CI, with proof before the first review (0178). It never runs on the owner's
+  laptop. The selected runner must support its dependencies, isolation and cleanup. It signals
+  only its own child, already waited for. Why no stand-in will do: it checks what Node really
+  throws, which L6b's inputs copy.
 - No law is loosened and none is deleted. A law that passed only because of a spy is rewritten to
   watch the real call, as listed above.
 - `vi.fn` has no call in the folder today; M1 refuses it so none comes back, as 0579 says the
@@ -501,7 +510,7 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
   `:279`, `:470`; this slice's spies at `:286`, `:318`), `dev-secrets.laws` (`:380`, `:428` against
   `:163`, `:229`) and `watch.laws` (slice 9 makes the `Proxy` at `:69` a plain object, inside the
   same `vi.mock("rolldown")` wrapper this slice adds an `onLog` wrap to). Slice 9's plan already
-  says its counts are taken again when it starts; it rebases on this one.
+  says its counts are taken again when it starts; it merges this slice and preserves both changes.
 - **With the Effect-check sweep:** open pull requests
   [#1430](https://github.com/kamp-us/tea-fabrika/pull/1430) (E2, every test file here),
   [#1426](https://github.com/kamp-us/tea-fabrika/pull/1426),
@@ -510,7 +519,7 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
   [#1450](https://github.com/kamp-us/tea-fabrika/pull/1450),
   [#1440](https://github.com/kamp-us/tea-fabrika/pull/1440) and
   [#1435](https://github.com/kamp-us/tea-fabrika/pull/1435) edit files of this folder, mostly import
-  lines. Whichever lands second rebases; each clash is a few lines.
+  lines. Whichever lands second merges the latest main and preserves both changes.
 - **With other folders of the mock sweep:** the first to land adds the `no-restricted-vi-methods`
   block to `.oxlintrc.json`; each later one adds its folder to the block's `files`, a one-line
   clash. `vi.mock` and `vi.stubEnv` join the block's list when the folder's last ones go.
@@ -519,8 +528,17 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
   laptop lead's ruling). This
   slice lands after the app-e2e slice, which adds `warnLines` and the `onLog` handler `watch.ts`
   reuses, and after the pipeline plan's tea patch, whose hook the secrets law sets.
-- **0579's `fc.assert` sweep** is not here: the rewritten laws keep their runner and move with that
-  sweep.
+- **Rewritten properties follow 0579 here:** use `it.prop` or `it.effect.prop` with Schema
+  inputs and the package setup seed. Only untouched laws wait for the separate sweep; every
+  rewritten law keeps its input bounds, run counts, first failing case and checks.
+
+## Existing tools
+
+Amendment 2026-11-16: these searches confirm the signal contract and adapters already chosen above.
+
+- `next/packages/libfabrika/src/node/dev/Signals.ts`: searched `node/dev/local-dev.ts`, the node service definitions and Effect 4.1.3's process modules; found the existing `signal` function and private `SignalError`. Effect's `ChildProcessHandle.kill` acts on its own child handle, not an arbitrary pid supplied by Alchemy. Move the existing error into the planned service contract so the law can provide and record `send`.
+- `next/packages/libfabrika/src/node/dev/SignalsNode.ts`: searched `node/dev/local-dev.ts` and Effect's `ChildProcessSpawner`; reuse the current `process.kill(pid, signal)` call in the planned Node layer. The spawner's handle-based kill cannot replace that pid-based call. The layer uses the existing `make` below; it adds no new signal policy.
+- `next/packages/libfabrika/src/node/dev/internal/signals.ts`: searched `node/dev/local-dev.ts` for its ESRCH check and error translation; extract the existing `Schema.is` classification and `Effect.try` body into the already-planned `make(kill)`. No installed Effect helper supplies this code's `missing`/`refused` error shape, and the existing classification is reused unchanged.
 
 ## Calls taken
 
@@ -538,10 +556,20 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 
 ## Validation
 
-The tests and build steps run, under `nice -n 15 pnpm exec vitest run --maxWorkers=3`, the narrow
-paths of every test file in the table, the `.integration.` laws among them, and `pnpm lint` (M1, M2
-and the plants). The lead runs the wider vitest pass and the one type check. L6c runs in the box
-before the first review.
+Every local test selection first needs the lead to read its actual code, helpers and cleanup under 0594. A listed filename or an old no-host-only statement is not local clearance. Protected resource laws run only on an eligible disposable CI runner; preserve the guard and obtain their actual proof before the first review.
+
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
+The tests and build steps run the verified-safe narrow paths under the repo's machine caps,
+plus `pnpm lint` (M1, M2 and the plants). Read the selected tests and their cleanup first; an
+`.integration.` filename alone gives no clearance. L6c and any selected law that sends real
+process signals run on eligible disposable Linux or macOS CI, never the owner's laptop, with
+proof before the first review (0594). The lead's changed-files pass uses explicit verified-safe
+local paths and obtains remote proof for the signal laws separately, then runs the one type
+check.
 
 ## Size
 

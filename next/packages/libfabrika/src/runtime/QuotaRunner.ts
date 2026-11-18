@@ -36,7 +36,6 @@ export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefin
 
   // An error with a reason keeps the fault from below under that reason, as the recovery store does.
   const below = "cause" in error ? reserveFault(error.cause) : undefined;
-
   return below ?? ("reason" in error ? reserveFault(error.reason) : undefined);
 };
 
@@ -57,7 +56,6 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
     Effect.andThen(accounting.check, work).pipe(
       Effect.catch((error): Effect.Effect<never, E | QuotasError> => {
         const fault = reserveFault(error);
-
         return fault === undefined
           ? Effect.fail(error)
           : Effect.andThen(
@@ -66,10 +64,8 @@ export const guard = (runner: ProgramRunner["Service"], accounting: Accounting):
             );
       }),
     );
-
   const automatic = (work: ReturnType<ProgramRunner["Service"]["due"]>) =>
     checked(work).pipe(Effect.catchReason("QuotasError", "RecoveryReserveExhausted", () => Effect.void));
-
   return {
     open: (client) => checked(runner.open(client)),
     msg: (input) => checked(runner.msg(input)),
@@ -94,7 +90,6 @@ export const personRestart = Effect.fn("quota_runner.restart")(function* (
   request: { readonly id: string; readonly build: string },
 ) {
   yield* accounting.resume;
-
   return yield* runner.restart({ id: request.id, build: request.build });
 });
 

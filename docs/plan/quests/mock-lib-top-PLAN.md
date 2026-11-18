@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body 22ecb90e2078
+Approved by the lead agent, builds 0043, 0054, 0555, 0557, 0579, 0587, 0589, 0594; body 4b96ac49a338
 Plancheck-Version: 3
 
 # Plan: the mock sweep in libfabrika's top `src/` files (`Id`, `Id.cause`, `check`), in next/
@@ -173,8 +173,9 @@ export class Generator extends Context.Service<Generator, { /* unchanged */ }>()
 - One behavior moves, on purpose: today the draw happens inside the synchronous step only when the
   millisecond is fresh there. Now two fibers that both see a fresh millisecond both draw, and the
   second one's bytes are not used. If the second draw fails, that fiber fails with `entropy` where
-  today it would have counted up. A random source that fails once fails for both, so no law or
-  caller sees the difference; it is written here so the review does not have to find it.
+  today it would have counted up. That earlier equivalence claim is wrong for a stateful source that fails on one call. The
+  current amendment below requires one owned allocation turn and preserves the original
+  fresh-draw behavior; the extra unused draw is not accepted.
 - The header comment of `Id.ts` ("No platform or other libfabrika layer is needed") becomes "It
   draws random bits from Effect's SecureRandom; `Generator.layer` provides the WebCrypto one."
 
@@ -226,9 +227,9 @@ Counted again on main at `f7169af` with `rg -n 'vi\.|toHaveBeenCalled' *.test.ts
 Every `try`/`finally` with `mockRestore` goes with its spy: the layer is scoped to the law's own
 provide, so nothing is left to restore (0061). `vi` leaves both files' imports.
 
-The C1 law keeps its own shape (`fc.assert` over `Effect.runPromise`). Moving it to
-`it.effect.prop` is 0579's sweep, not this one; the tests step may do it in the same edit only if
-the first failing case stays the same, as 0579 asks.
+The source C1 law used `fc.assert` over `Effect.runPromise`. Its rewrite uses `it.effect.prop`
+with Schema inputs and the package setup seed (0579). Keep its input bounds, run count,
+pinned cases, first failing case and all failure checks.
 
 ### The allocation-order law, rewritten
 
@@ -276,9 +277,16 @@ generator does: with `at` rolled back, the counter keeps counting.
 
 ## Laws
 
-Property laws stay as they are written (`it.effect.prop` with Schemas, or `fc.assert` where the
-file already has it), with the shared seed 119120. No law is deleted or loosened: each keeps its
-assertions, and only where its bytes come from changes.
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
+No law is deleted or loosened: each keeps its assertions and generated coverage while its
+bytes come from the planned layer. New or rewritten properties use the current rule below;
+the source runner does not grant an exception.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -435,7 +443,12 @@ No file of pull request 1366's diff is in this table (its 57 files were read wit
 
 ## Validation
 
-- The tests step: `nice -n 15 pnpm exec vitest run --maxWorkers=3
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
+- The tests step: `nice -n 19 pnpm exec vitest run --maxWorkers=1
   next/packages/libfabrika/src/Id.test.ts next/packages/libfabrika/src/Id.cause.test.ts
   next/packages/libfabrika/src/Id.types.test.ts oxlint-plugins/plants.test.ts`, red where the build
   is owed (T5, and every law that imports `generatorWith` before `makeGenerator` exists), then each
@@ -506,3 +519,69 @@ question is kept as it was asked.
    other way: this slice moves the ~47 free edges, and a slice after 1366 moves the last 3 and drops
    the bundled layer. 75% sure of the lean; the doubt is whether the pattern rule is meant to bind
    a layer every caller uses.
+
+## Current allocation and ordering amendment, 2026-11-17
+
+The earlier sketches are not permission to change entropy consumption or drop actual allocation
+order. Two source-level counterexamples show why the implementation needs the following repair.
+
+- If two fibers both see a fresh millisecond before an Effectful draw, the second may draw bytes
+  it never uses and fail when a stateful source throws on that second draw. The old synchronous
+  allocation would count up without drawing. Preserve the old result and error priority.
+- Swapping only the first two encoded IDs in a batch keeps the sorted set exactly equal to the
+  model, but makes the actual allocation order decrease. Each batch has at least three IDs.
+  The old observed-format-check law catches that mutant; the sorted model comparison alone does
+  not. T4 must keep the original actual-order assertion as well as its independent model.
+
+Use one existing Effect Semaphore permit per generator for the whole fresh-clock decision,
+entropy draw, state write and validation. Read the installed Semaphore.make and withPermit
+implementation first; it releases its permit on every exit. Keep bad-clock refusal before any
+draw, draw only when that owned turn needs fresh entropy, preserve rollback/overflow behavior,
+and retain the same typed IdError and cause. No second hand-written lock or retry is introduced.
+The earlier unsynchronized draw sketch and its choice bullet are superseded on this point.
+
+The actual format-validation call becomes a typed Effect member with a live default, read
+through a Context.Reference in the Id module. This follows 0555's rule for a watched callback,
+rather than changing a Schema filter behind its back. Its member takes the actual schema and
+encoded ID and returns that schema's decoded branded value or the existing IdError. Its live
+default reuses the current Result-form Schema decode and error mapping; it is the real validation
+path, not a notification hook. Keep the original validation/state-write behavior and errors.
+A default Reference adds no requirement to makeGenerator, so T5 stays unchanged.
+
+T4 provides that member through Recorder around its real implementation and reads its actual
+encoded-value arguments in run order. The permit remains held through that call, so this order
+is allocation order even if validation's Effect yields. Keep the old increasing-order assertion,
+recorded/returned multiplicity equality and all four-fiber/schedule checks, and also retain the
+independent predicted-ID model. The adjacent-ID swap above must turn the ordering assertion red.
+Removing the owned turn with a yielding source that throws on the otherwise-unused draw must
+turn the existing entropy/concurrency proof red. Add those controls to T2/T4's existing domains,
+without dropping their current inputs or changing counts, timeouts, seeds or pinned cases.
+
+New names are checked against Effect's Context.Reference, Schema decode and Recorder APIs before
+construction. The test writer confirms the generic member preserves the caller's branded ID
+type without a cast, and the build names the narrow validation member accordingly. If that type
+or the actual-order proof cannot be represented, return send plan with the concrete failed type
+or mutant. Never substitute a sorted-set-only assertion or a global/method spy. No owner design
+choice is introduced: this preserves the existing generator properties under 0555 and 0579.
+
+## Existing tools
+
+- Id.ts makeGenerator and its allocation turn: searched and read current Id.Generator's
+  synchronous allocate, installed SecureRandom.make/randomBytes and Semaphore.make/withPermit.
+  Reuse the existing semaphore for ownership and the existing bit layout/state transitions.
+  SecureRandom.uuidV7 has a different layout and cannot replace this generator in this sweep.
+- Id.ts validation Reference/member: searched and read the existing Schema Result decode,
+  Recorder's typed method and calls APIs, and current Context.Reference patterns in the mock
+  plans. The existing Schema filter is not a provided Effect service. The Reference delegates
+  that actual decode and lets the existing Recorder observe it without swapping a method.
+- Id.test-support.ts generatorWith, bytes and throws: searched the current Id test-support file
+  and SecureRandom.make. Append to the existing helpers; preserve processClocks, processIds,
+  inputParents and their callers. Effect supplies the byte source, not this generator's layer.
+
+## Current execution rule, 2026-11-17
+
+Read every selected law, helper and cleanup before local execution (0594). The earlier all-in-memory
+claim is not blanket clearance for the changed selection. Checks that reach real process signals,
+launchd or real Electron run only on eligible disposable CI before review; preserve isolation for
+other real resources where needed. Coordinate the one global compiler. Bring a branch forward
+with an ordinary merge preserving both sides, never a history rewrite.

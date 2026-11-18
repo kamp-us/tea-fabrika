@@ -1087,7 +1087,6 @@ export const suite = (rig: Rig): void => {
               const { input } = press(w, "inc");
               const turn = yield* Effect.forkChild(s.runner.msg(input));
               yield* Deferred.await(held);
-
               const spec = g(() =>
                 fcFitting(
                   updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
@@ -1096,7 +1095,6 @@ export const suite = (rig: Rig): void => {
                   a.v,
                 ),
               );
-
               const hash = yield* learn(w.code, spec);
               const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
 

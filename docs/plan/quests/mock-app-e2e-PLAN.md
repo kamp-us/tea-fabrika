@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0573; body 1b1199d7b9ea
+Approved by the lead agent, builds 0054, 0555, 0579, 0584, 0589, 0592, 0594; body c2e1f99b28dc
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/apps/fabrika/e2e`: the build prints Rolldown's warnings through Effect's `Console`, law L17 reads them with `TestConsole`, and lint refuses `vi` mocks in the folder (ticket 1067)
@@ -49,7 +49,8 @@ const printed = (yield* TestConsole.warnLines).map(String).join("\n");
   `warnLines`. `errorLines` is already in effect 4.1.3, so the patch adds only `warnLines`.
 - **The edited patch file may meet another pull request that edits `patches/effect@4.1.3.patch`
   (70% that none does).** No open pull request's title names it today. If one lands first, the tests step
-  rebases the hunk onto it with `pnpm patch` again; nothing here depends on the other hunk.
+  regenerates the patch with `pnpm patch`, preserving every existing hunk; this changes no Git
+  history and nothing here depends on the other hunk.
 
 ## What changes, in one paragraph
 
@@ -194,8 +195,9 @@ scoped(
 );
 ```
 
-- Only the spy and its two reads change. The `fc.assert` runner, its seed and run count stay: moving
-  this file's laws to `it.prop` is the property sweep's job (0579), not this one's.
+- The source law used `fc.assert`. Rewriting L17 also moves it to `it.effect.prop` with Schema
+  inputs and the package setup seed (0579). Keep its input bounds, run count, pinned cases,
+  first failing case and all checks; the spy's two reads become `TestConsole` reads.
 - Each generated case provides its own `TestConsole.layer`, so a case reads only its own lines, as
   the spy, made per case, did.
 - The spy's `mockImplementation(() => {})` kept the lines out of the test output; `TestConsole` does
@@ -322,6 +324,13 @@ the same line as Rolldown printed it before.
 
 ## Laws
 
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | L1. `bundle` prints each Rolldown warning once through `Console.warn`, in Rolldown's format, with every file name relative to `cwd` and no form of an absolute path; a `MODULE_LEVEL_DIRECTIVE` log prints nothing; nothing goes to `log` or `error`. 20 runs fast, 100 full, through `runsFor` | test | Effect Arbitrary: WarningCase | print `log.message` before the relative replacement: L1 red; print through the global `console.warn`: L1 red, no line seen | next/packages/libfabrika/src/node/build/bundle-warnings.integration.test.ts |
@@ -414,19 +423,29 @@ request" in step 2 is that one.
   not a choice anyone makes today, and the config sets none (0069).
 - **L1 is new and `.integration.`,** 90%, for the reasons under "Laws".
 - **The lock's block is the rule's first, scoped to this folder,** 90%, the Reflect ban's shape.
-- **Not the property sweep:** L17 keeps `fc.assert` and its seed, 95%. Mixing the two sweeps in one
-  diff makes each harder to review, and 0579 orders its own sweep.
+- **L17 follows 0579 when rewritten.** Other untouched laws do not move merely because they
+  share its file; no rewritten law keeps a raw runner or a seed of its own.
 
 ## Validation
 
-- Tests step: `nice -n 15 pnpm exec vitest run --maxWorkers=3` on L1's, L3's and the plants' files;
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
+- Tests step: `nice -n 19 pnpm exec vitest run --maxWorkers=1` on L1's, L3's and the plants' files;
   `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`.
 - Tests step, too: `scripts/effect-arbitrary.test.ts`,
   `next/packages/libfabrika/src/settings/Snapshot.test.ts` and
   `next/packages/libfabrika/src/node/settings/Command.test.ts`, the readers of the patched
   package, since the lockfile makes a changed-files run the full suite.
 - Build: L1's file.
-- The lead: L2 on the laptop, and the one whole typecheck.
+- The lead: the one whole typecheck and L2's required proof before review. Read the exact
+  selected L2 body, every build/helper it reaches and their cleanup before a local run (0594).
+  A file name or this plan's earlier no-signal claim is not clearance. The complete visual file
+  also starts workerd, a port, Chromium and a watcher; any selection reaching real signals runs
+  only on eligible disposable CI, with isolation for other real resources where needed.
+  Never run the complete visual file on the laptop on the strength of the L2-only claim.
 
 ## Size
 

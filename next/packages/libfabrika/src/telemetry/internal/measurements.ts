@@ -340,7 +340,6 @@ export const archiveDays = Effect.fn(
       try: () => sql.transaction(() => due(sql, object, now)),
       catch: sinkError,
     });
-
     yield* Effect.forEach(parts, (part) => archivePart(sql, archive, part).pipe(Effect.ignore), {
       concurrency: 1,
       discard: true,

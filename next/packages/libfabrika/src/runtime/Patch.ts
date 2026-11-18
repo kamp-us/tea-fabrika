@@ -5,14 +5,22 @@
 import { Result, Schema } from "effect";
 
 /**
- * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
+ * Schema for one RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs, and
+ * a value is JSON.
+ *
+ * @category schemas
+ */
+export const Patch = Schema.Union([
+  Schema.Struct({ op: Schema.Literal("add"), path: Schema.String, value: Schema.Json }),
+  Schema.Struct({ op: Schema.Literal("replace"), path: Schema.String, value: Schema.Json }),
+  Schema.Struct({ op: Schema.Literal("remove"), path: Schema.String }),
+]);
+/**
+ * One RFC 6902 operation, as `Patch` decodes it.
  *
  * @category models
  */
-export type Patch =
-  | { readonly op: "add"; readonly path: string; readonly value: unknown }
-  | { readonly op: "remove"; readonly path: string }
-  | { readonly op: "replace"; readonly path: string; readonly value: unknown };
+export type Patch = typeof Patch.Type;
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
 const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
@@ -21,22 +29,31 @@ type Plain = { [key: string]: unknown };
 
 const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
 
+/** The value an object holds under `key` as its own, never one from its prototype. */
+const own = (object: Schema.JsonObject, key: string): Schema.Json | undefined =>
+  Object.hasOwn(object, key) ? object[key] : undefined;
+
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
-const same = (a: unknown, b: unknown): boolean => {
+const same = (a: Schema.Json, b: Schema.Json): boolean => {
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((one, i) => same(one, b[i]));
   }
 
   if (isPlain(a) && isPlain(b)) {
-    const keys = Object.keys(a);
-
-    return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
+    const entries = Object.entries(a);
+    return (
+      entries.length === Object.keys(b).length &&
+      entries.every(([key, one]) => {
+        const other = own(b, key);
+        return other !== undefined && same(one, other);
+      })
+    );
   }
 
   return Object.is(a, b);
 };
 
-const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>): void => {
+const walk = (path: string, before: Schema.Json, after: Schema.Json, out: Array<Patch>): void => {
   if (same(before, after)) {
     return;
   }
@@ -68,11 +85,12 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
 
     for (const [key, value] of Object.entries(after)) {
       const at = `${path}/${token(key)}`;
+      const held = own(before, key);
 
-      if (Object.hasOwn(before, key)) {
-        walk(at, before[key], value, out);
-      } else {
+      if (held === undefined) {
         out.push({ op: "add", path: at, value: structuredClone(value) });
+      } else {
+        walk(at, held, value, out);
       }
     }
 
@@ -87,21 +105,14 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
  *
  * @category combinators
  */
-export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
+export const diff = (before: Schema.Json, after: Schema.Json): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
 
   return out;
 };
 
-const Operation = Schema.Union([
-  Schema.Struct({ op: Schema.Literal("add"), path: Schema.String, value: Schema.Json }),
-  Schema.Struct({ op: Schema.Literal("replace"), path: Schema.String, value: Schema.Json }),
-  Schema.Struct({ op: Schema.Literal("remove"), path: Schema.String }),
-]);
-
-const decodeOps = Schema.decodeUnknownResult(Schema.Array(Operation));
-
+const decodeOps = Schema.decodeUnknownResult(Schema.Array(Patch));
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);

@@ -16,6 +16,7 @@ import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
+import { News } from "../runtime/News.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
@@ -432,7 +433,7 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
               close: () => gateway.close(w.socket),
               ring: () => gateway.ring("stream", 1),
               probe: () => gateway.probe("session"),
-              notify: () => gateway.notify("client", {}),
+              notify: () => gateway.notify("client", News.cases.granted.make({ nonce: "nonce-1" })),
             })[method]();
 
           typed(await runtime.runPromiseExit(Effect.suspend(work)));
@@ -451,12 +452,10 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
-
       // The real waits, watched: each run is recorded, and its exit is kept to read its error.
       const waits = Layer.unwrap(
         Effect.gen(function* () {
           const real = yield* GatewayWaits;
-
           return Recorder.layer(GatewayWaits, {
             wait: (...args) =>
               real.wait(...args).pipe(
@@ -469,7 +468,6 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           });
         }),
       ).pipe(Layer.provide(GatewayWaits.layer));
-
       const runtime = SettingsRuntime.runtime(
         gatewayLayer(w.ctx, w.env).pipe(
           Layer.provideMerge(waits),

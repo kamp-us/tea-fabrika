@@ -61,7 +61,6 @@ export const inboxLine = Effect.fnUntraced(function* (input: Incoming, build: st
   const m = yield* Schema.decodeUnknownEffect(Schema.Json)(input.envelope.input).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
-
   return lineFor(
     {
       by: input.envelope.by.key,
@@ -118,7 +117,6 @@ export const runtimeAppend = <A, E, R>(
   Effect.gen(function* () {
     const quotas = yield* Effect.serviceOption(Quotas);
     const known = Option.isSome(quotas) && Option.isSome(yield* Effect.option(life));
-
     return yield* Option.isSome(quotas) && known ? quotas.value.runtime(stream, work) : work;
   });
 

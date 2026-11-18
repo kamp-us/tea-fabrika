@@ -25,9 +25,7 @@ const Cell = Schema.Struct({
 });
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(10), Schema.isMaxLength(30));
-
 const options = { arbitrary: { seed: 119120, runs: 40 } };
-
 const body = Schema.TaggedStruct("saved", { text: Schema.String });
 
 const line = (text: string): Line =>
@@ -79,7 +77,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           sql.exec("CREATE TABLE test_charge (id TEXT PRIMARY KEY, bytes INTEGER NOT NULL)");
           let full = false;
           let calls = 0;
-
           const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerTransactionSql.layer(sql)).pipe(
             Layer.provide(
               Layer.mergeAll(
@@ -93,14 +90,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     }
 
                     sql.exec("INSERT INTO test_charge VALUES (?, ?)", entry.id, size(entry));
-
                     return Result.succeed(undefined);
                   },
                 }),
               ),
             ),
           );
-
           const call = <A, E>(work: Effect.Effect<A, E, Referee>) => work.pipe(Effect.provide(layer));
           const history: Array<{ id: string; line: Line; answer: unknown }> = [];
 
@@ -148,7 +143,6 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           let cut = -1;
           let refuse = true;
           const rings: Array<unknown> = [];
-
           const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerTransactionSql.layer(sql)).pipe(
             Layer.provide(
               Layer.mergeAll(
@@ -170,14 +164,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     }
 
                     sql.exec("INSERT INTO test_charge VALUES (?, ?)", entry.id, size(entry));
-
                     return Result.succeed(undefined);
                   },
                 }),
               ),
             ),
           );
-
           const run = <A, E, R extends Referee | LedgerTransaction>(work: Effect.Effect<A, E, R>) =>
             work.pipe(Effect.provide(layer));
 

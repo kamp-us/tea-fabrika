@@ -34,7 +34,8 @@ export class Branches extends Context.Service<
     readonly behind: (tip: string) => Effect.Effect<number, BranchesError>;
     /**
      * Whether merging `tip` into origin/main would change nothing: its work is on main already,
-     * by any road (a squash merge, a cherry-pick, the same edit made twice). A conflict is `false`.
+     * by any road (a squash merge, a cherry-pick, the same edit made twice). A conflict or no common
+     * ancestor is `false`.
      */
     readonly landsEmpty: (tip: string) => Effect.Effect<boolean, BranchesError>;
   }

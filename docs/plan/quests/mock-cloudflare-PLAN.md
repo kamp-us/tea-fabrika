@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0554, 0557, 0573, 0095; body 207bffb79863
+Approved by the lead agent, builds 0042, 0095, 0524, 0554, 0555, 0557, 0579, 0589, 0592, 0594; body c8f39e9a43c6
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `cloudflare`, in next/ (ticket 1067)
@@ -166,7 +166,7 @@ which [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) forbids.
 |---|---|---|---|
 | `effect` | 1 | `readers.laws.test.ts` | yes, slice 2: it was there only so `Effect.result` could be spied on, and those spies go |
 | `./objects.ts` | 4 | `readers.laws.test.ts`, `entry-flows.laws.test.ts`, `alarm.laws.test.ts`, `ObjectService.test.ts` | yes, slice 2: the object implementations are exported from `objects.ts`, so each law imports the one it needs (0555, "Consequences"), about 8 product lines |
-| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and has no plan yet |
+| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and is covered by the approved Alchemy mocks plan, [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511) |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The block in "The lock"
 is the shape it lands with on the day the folder's last `cloudflare:workers` mock goes, whole, for
@@ -478,8 +478,16 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 
 ## Laws
 
-No law is loosened, deleted or renamed. Each row is a law that exists today. Its generator stays as
-it is, and only how it watches changes. The reviewer runs the loosening check.
+Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
+not a future runner choice. Keep every input range, size, run count, pinned case and failure
+check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
+or an edge case. Set the shared seed 119120 once in package setup, never on a law, and verify
+that moving a runner keeps the same first failing case.
+
+No law is loosened, deleted or renamed. Each row is a law that exists today. Its generated
+coverage stays the same while rewritten properties follow the rule above and watch through the
+planned layers. The reviewer runs the loosening check.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -488,7 +496,7 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 | M3. `processDescriptor` checks the saved value before returning it. 5 runs fast, 20 runs full | test | fc.jsonValue: malformed descriptors, 5 runs fast and 20 runs full | return `storage.get`'s value without its decode: M3 red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
 | M4. Every other law of `readers.laws.test.ts` that builds the world keeps its checks on the `Stub.make` world, and any platform call the world does not give fails the law | test | scenario: the world's laws, each on its own generator, unchanged | make the fake socket's `send` drop its frame: M1 red; call `ctx.storage.list()` in `connectionRuntime`: `unexpected` throws, red | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts |
 | M5. t863 L1: only reserved answers tag the ended RPC span as refused, and there is one ended `runtime.rpc` span per routed call | test | Effect Arbitrary: AnswerWalk | tag `REFUSED` on a `rate_limited` answer too: M5 red; route one call outside its span: the span count is short, red | next/packages/libfabrika/src/cloudflare/connection.test.ts |
-| M6. The settings entry flows keep the secret and error text out of every output: transport, RPC failures, span rows, Record calls, archives, HTTP replies, and every line Effect's `Console` gets | test | scenario: SettingsTest.suite, its recipes and secret | in `SettingsStartsLedger.ts`, `Effect.logError(cause)` on a refused start: M6 red through `TestConsole.errorLines`; set the secret as a span attribute: M6 red through the span rows | next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts |
+| M6. [secrets] The settings entry flows keep the secret and error text out of every output: transport, RPC failures, span rows, Record calls, archives, HTTP replies, and every line Effect's `Console` gets | test | fc.tuple: SettingsTest.suite draws StartsTest.recipe, StartsTest.sentinel and move choices from fc.array(fc.nat()), as its L10 flow does today, 100 runs | in `SettingsStartsLedger.ts`, `Effect.logError(cause)` on a refused start: M6 red through `TestConsole.errorLines`; set the secret as a span attribute: M6 red through the span rows | next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts |
 | M7. The audit layer fails on any platform call its driver did not wire | test | scenario: the RunnerAdmission integration law, unchanged | read `ctx.storage.get` in the audit path: the `Stub.make` guard throws, red | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts |
 | M8. A1 and A2: supported alarm operations keep the logical wake and set or clear the platform alarm; a failing alarm dies, one that is done ran its saved wake once | test | fc.gen: the alarm moves, and fc.array: Delivery, default runs | make `processLogic` name `ProgramRunner.withLoader` again, past `RunnerLayer`: the law gets no `Alarm`, red at its timeout | next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts |
 | M9. Law 3 on the Process shell and the request slot keep their checks with the two References handed in | test | fc.record: the bad settings and requests, default runs | make `recordingLayer` name `SpanSink.layer` again, past `SinkLayer`: the fake SQL refuses the sink's tables, red | next/packages/libfabrika/src/cloudflare/ObjectService.test.ts |
@@ -545,8 +553,9 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 - No law needs the real machine, so none is host-only. The one `.integration.` law the files reach,
   `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts`, reads
   `ProjectAuditTest.ts`. Each step runs it once after the change.
-- No law reads a secret of the person's, so no `[secrets]` flow is needed. M6's secret is the
-  suite's own generated one.
+- M6 is a `[secrets]` property over the suite's generated recipe, secret and move choices. Its
+  L10 flow checks every named output after each move. The generated secret is test data; that
+  does not exempt the law from the marker or the generated-flow requirement.
 
 ## Files
 
@@ -612,8 +621,17 @@ folder. It waits for the quotas slice (1366) and reflect slice 8, and it edits `
    out of the tests slice 10 left, and turns the lock on. Going after slice 10 means `control.ts`
    is edited once by each and no guard is rewritten twice (80%).
 
-If reflect slice 10 is not ready when 1366 lands, mock slice 2 may go first. Slice 10 then rebases
-over the moved `dispatch` and the removed spies. The lead picks the order on the day.
+If reflect slice 10 is not ready when 1366 lands, mock slice 2 may go first. Slice 10 then merges the updated fold branch normally and preserves both the moved `dispatch`
+and its own changes, including the removed spies. The lead picks the order on the day.
+
+## Existing tools
+
+Amendment 2026-11-16: these searches confirm the services and sibling layers already chosen above (0095).
+
+- `next/packages/libfabrika/src/cloudflare/Dispatcher.ts`: searched `cloudflare/control.ts`, the cloudflare service definitions and Effect 4.1.3's `Layer.mock`; found the private `dispatch` function, not a service a law can provide. The planned contract exposes that same call to `Recorder.layer`; it adds no second dispatch implementation.
+- `next/packages/libfabrika/src/cloudflare/DispatcherLive.ts`: searched `cloudflare/control.ts` for the dispatch implementation; reuse its existing body in this sibling layer, keeping the contract file free of code that runs (0095). Effect's Layer builds the provider; no replacement dispatcher is written.
+- `next/packages/libfabrika/src/cloudflare/Waits.ts`: searched `cloudflare/connection.ts` and its `GatewayWaits` service; found `waitOn`'s ready-answer decode inside the larger RPC wait. `GatewayWaits.wait` also calls the Project, so it does not provide the decode-only member the planned law records. Reuse that decode behind the already-planned `Waits.ready` contract.
+- `next/packages/libfabrika/src/cloudflare/WaitsLive.ts`: searched `cloudflare/connection.ts` for the ready-answer decode and its typed `LedgerError` mapping; move that existing body into this sibling layer, as the plan already requires. Effect's `Layer.succeed` provides it; the decode and its failure stay the same.
 
 ## Calls taken
 
@@ -641,9 +659,14 @@ over the moved `dispatch` and the removed spies. The lead picks the order on the
 
 ## Validation
 
+With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
+--maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
+comments carry no `@stability` before the first release (0574); citations of Effect's own source
+tags are historical source facts.
+
 - The tests step, each slice: `pnpm format`, then `pnpm lint` with
   `NODE_OPTIONS=--max-old-space-size=6144`, then
-  `nice -n 15 pnpm exec vitest run --maxWorkers=3` on each test file in that slice's files table,
+  `nice -n 19 pnpm exec vitest run --maxWorkers=1` on each test file in that slice's files table,
   plus `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts` in slice 1 and
   `oxlint-plugins/plants.test.ts` in slice 2 and (amendment 2026-11-16, for M12) in slice 1. Each plant above is run once and named in the report.
 - The build, slice 2: the same narrow paths.
@@ -767,3 +790,29 @@ as it was asked.
 {"_tag": "finding", "id": "2026-11-15-control-reason-ternary-repeats-its-test", "date": "2026-11-15", "by": "plan", "model": null, "rule": "duplicate", "location": {"path": "next/packages/libfabrika/src/cloudflare/control.ts", "line": 169}, "says": "In next/, control.ts picks the HTTP error's reason with a ternary whose second branch repeats the first branch's test word for word, so the second branch never runs and the chain reads as if it checks two things.", "proof": "At f7169af, control.ts lines 169 and 171 are the same test, `typeof answer.failure === \"object\" && answer.failure !== null && \"reason\" in answer.failure`, in one chain that ends in `unreachable`.", "cost": "A reader looks for a second case that is not there; any later fix to one copy misses the other.", "head": "f7169afeed0c2f56b7ba6a6d0dce8eac669de149", "ticket": null, "pr": null}
 {"_tag": "finding", "id": "2026-11-15-cloudflare-workers-mocks-have-no-slice", "date": "2026-11-15", "by": "lead", "model": null, "rule": "rule_break", "location": {"path": "next/packages/libfabrika/src/cloudflare/connection.test.ts", "line": 1}, "says": "In next/, seven test files of libfabrika's cloudflare folder call vi.mock(\"cloudflare:workers\"), which 0555 bans, and the move 0042 names for them, reaching the platform module through Alchemy, has no plan, so the folder cannot reach zero and its vi lock cannot land.", "proof": "rg -n 'vi\\.mock\\(\"cloudflare:workers\"' next/packages/libfabrika/src/cloudflare on main at 0683861: connection.test.ts, error-cause.test.ts, leave.laws.test.ts, reload.laws.test.ts, runner-reply.laws.test.ts, supervision.laws.integration.test.ts and ProjectAuditTest.ts, one each.", "cost": "The cloudflare folder keeps no vi lock after the mock sweep, so a new vi.fn or vi.spyOn can land there until the Alchemy work is planned and built.", "head": "0683861", "ticket": null, "pr": null}
 ```
+
+## Current source and execution amendment, 2026-11-17
+
+The current main M1 law in readers.laws.test.ts already wraps the real GatewayWaits service
+with Recorder and Effect.onExit. It keeps the actual first call's Exit in the law's scoped
+attempt list. Preserve that observer and its assertions while removing the remaining mocks.
+If the planned decode-only Waits member is introduced to record the exact raw argument, its
+Recorder check remains additional; it does not replace the actual-call Exit observation.
+
+For M2, wrap the real Dispatcher member with the same Effect.onExit pattern in its provided
+test layer. Record the actual invocation's Exit while Recorder records its method and args.
+Assert the one actual attempt, its typed LedgerError bad_row without a defect, and the existing
+HTTP reply. Running live.ready or live.dispatch a second time on recorded inputs is not proof
+of the first call's outcome. The earlier second-call sketches and row wording are superseded
+only on how the same Exit is observed; no assertion, input, count or failure edge is dropped.
+The moved dispatch contract must retain its full existing error channel, including its other
+refusals; the sketch's LedgerError-only annotation does not authorize changing those values.
+
+Read every selected law, helper and cleanup before local execution (0594). The earlier blanket
+statement that none needs a real machine is not clearance. Any selected law reaching real
+process signals, launchd or real Electron runs on eligible disposable CI, before first review.
+Keep other real-resource isolation where needed. A changed selection that reaches such a law
+is narrowed to verified-safe local paths, with the remaining proof obtained remotely.
+
+The Alchemy mock work now has the approved plan from PR 1511. Its old finding row remains a
+dated record. This sweep still does not claim those mocks are removed or the folder is at zero.

@@ -112,7 +112,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const module = path.join(home, "beat.ts");
       const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");
       // Build beside the app's dependencies; the fixture directory has no package links.
-      // The app builder selects `program`; the pack's public export is `beat`.
+      // The app builder selects `program`, so the copy exports the fixture's `beat` under that name.
       yield* fs.writeFileString(module, `${yield* fs.readFileString(fixture)}\nexport { beat as program };\n`);
       const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: module } });
       const code = built.programs[PROGRAM];

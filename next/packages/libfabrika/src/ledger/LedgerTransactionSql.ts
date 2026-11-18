@@ -25,7 +25,6 @@ export const layer = (sql: Sql): Layer.Layer<LedgerTransaction, never, Doorbell>
       const bell = yield* Doorbell;
       const policy = Option.getOrUndefined(yield* Effect.serviceOption(WritePolicy));
       const store = ledgerStore(sql, bell, policy);
-
       return {
         // A turn is admitted for the writer trusted code named around it, as a single append is.
         transact: <A>(step: (turn: LedgerTurn) => A) =>

@@ -30,7 +30,7 @@ export type Ask = {
   /** The checkout the commit is in. */
   readonly dir: string;
   readonly branch: string;
-  /** The commit to push, a sha or a ref the checkout reads. */
+  /** The exact commit SHA to push and use when opening a draft. */
   readonly head: string;
   /** What a new draft says. A pull request already open keeps its own words. */
   readonly text: Text;
@@ -55,7 +55,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
     return { pr: open.value.number, opened: false, draft: open.value.draft } satisfies Published;
   }
 
-  const pr = yield* prs.draft(branch, a.text);
+  const pr = yield* prs.draft(branch, a.text, a.head);
 
   return { pr, opened: true, draft: true } satisfies Published;
 });

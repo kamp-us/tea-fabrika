@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-17",
+  "stage": "harness",
+  "kind": "success",
+  "person": false,
+  "primitive": null,
+  "id": "2026-11-17-host-remaining-fault-exercises",
+  "quests": [
+    "tea-fabrika#1132",
+    "tea-fabrika#1133"
+  ],
+  "what": "Today's lead-tooling host scenario caught three more deliberate faults. Each clean baseline passed, the deliberate fault failed at its intended assertion, and exact restoration passed.",
+  "cause": "Ignoring the requested Node pin failed at host.test.ts:195:62. Removing the native pnpm directory from PATH failed the versions equality at 194:70. Letting the parent environment overwrite the prepared host environment failed its context equality at 197:24. Each failure was an assertion, with no timeout or startup failure.",
+  "fix": "The runner restored the original target bytes and mode and verified head, index and complete file inventory. Together with the earlier preparation and discovery exercises, all five requested host faults now have actual baseline, broken and restored observations. The same independent source reader accepted all three exact-source receipts. The whole-product review for ticket 1132 remains separate.",
+  "test": "Requested-pin run 44069628106 passed, failed as intended, then passed in 69.758189, 74.180619 and 113.070107 ms. Pnpm-path run 44069978260 took 81.243534, 94.757714 and 81.369055 ms. Environment-order run 44070303617 took 54.872748, 62.067315 and 57.547457 ms. Each phase selected one active scenario and filtered 17 siblings. These runs add no whole-file pass claim.",
+  "limits": "The scenario uses controlled pnpm and Volta stand-ins. It does not prove real older Node installation or the installed Volta and pnpm programs. These three runs do not exercise discovery cleanup or TERM-resistant escalation. They supply no branch proof or whole-product review.",
+  "source": "a1a3297d13b75ec5c755a4c8af5a8887f3285f97",
+  "runner": "73ee28e71d9d4e283e8ab2c295bd0917409b9eb3",
+  "index": "fc7e1c94e8fc009ea74d60178cede872aee28173",
+  "cases": [
+    {
+      "case": "host-requested-pin",
+      "run": "44069628106",
+      "originalHash": "284ba986a485b2a10c846b6691b6a46899ba950157e13d8ee472cce7ad1cc19b",
+      "editedHash": "1d1d8e91b26fe860d856b5e02fe83074bd62b89e8945062dff051adca714c1e2",
+      "diffHash": "cc4de6586c423a54697e903ffedf8bbcd9a840b875320209da32f24b3385954c",
+      "assertion": {
+        "line": 195,
+        "column": 62
+      },
+      "durationsMs": {
+        "baseline": 69.758189,
+        "broken": 74.180619,
+        "restored": 113.070107
+      },
+      "restored": true
+    },
+    {
+      "case": "host-pnpm-path",
+      "run": "44069978260",
+      "originalHash": "284ba986a485b2a10c846b6691b6a46899ba950157e13d8ee472cce7ad1cc19b",
+      "editedHash": "0fb47e394eac898a8c104c5d11c6344f9c0fac9f6a8ffe812c8012cb96b008be",
+      "diffHash": "075498aa406f828a7ea50c3d18c6d6849f88583b572eb5a50d8192c1c5569971",
+      "assertion": {
+        "line": 194,
+        "column": 70
+      },
+      "durationsMs": {
+        "baseline": 81.243534,
+        "broken": 94.757714,
+        "restored": 81.369055
+      },
+      "restored": true
+    },
+    {
+      "case": "host-env-order",
+      "run": "44070303617",
+      "originalHash": "a4558e8324155ac65d40830418da6a410883386161b8d3068aec3a39a4bb32e8",
+      "editedHash": "a990b90315f4f0781582ee527249cf0b2f5d5f807a4a8271713d55f440db9a28",
+      "diffHash": "38c2b7fe1c10c1d2868305c200717fca2c5d7ec3ac64674230038183ffa54c38",
+      "assertion": {
+        "line": 197,
+        "column": 24
+      },
+      "durationsMs": {
+        "baseline": 54.872748,
+        "broken": 62.067315,
+        "restored": 57.547457
+      },
+      "restored": true
+    }
+  ],
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44069628106",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44069978260",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44070303617",
+    "https://github.com/kamp-us/tea-fabrika/pull/1545",
+    "https://github.com/kamp-us/tea-fabrika/pull/1559"
+  ]
+}

@@ -55,7 +55,6 @@ export const make = (schema: Schema.Top) => {
   }
 
   const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" });
-
   return { $schema: DIALECT, ...document.schema, $defs: document.definitions };
 };
 
@@ -86,7 +85,6 @@ const printed = (value: unknown, indent: string, taken: number): string => {
     }
 
     const items = value.map((item, n) => `${inner}${printed(item, inner, n < value.length - 1 ? 1 : 0)}`);
-
     return `[\n${items.join(",\n")}\n${indent}]`;
   }
 
@@ -98,10 +96,8 @@ const printed = (value: unknown, indent: string, taken: number): string => {
 
   const fields = entries.map(([key, item], n) => {
     const name = `${JSON.stringify(key)}: `;
-
     return `${inner}${name}${printed(item, inner, name.length + (n < entries.length - 1 ? 1 : 0))}`;
   });
-
   return `{\n${fields.join(",\n")}\n${indent}}`;
 };
 

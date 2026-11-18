@@ -54,12 +54,10 @@ const URL = "https://fabrika.test/entry/project-socket";
 // removes the folder (0061).
 const disks = Effect.gen(function* () {
   const scope = yield* Effect.scope;
-
   const top = yield* Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p34-door-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
-
   let file = 0;
 
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
@@ -71,13 +69,11 @@ const disks = Effect.gen(function* () {
     const path = join(top, `${++file}.db`);
     let db = open(path);
     let inner = nodeSql(db);
-
     const sql: Sql = {
       exec: (q, ...args) => inner.exec(q, ...args),
       transaction: (f) => inner.transaction(f),
       size: () => inner.size(),
     };
-
     return {
       sql,
       reopen: () => {

@@ -69,7 +69,6 @@ export const make = (options: { readonly name: string; readonly list: string }):
   }
 
   const prefix = name.toUpperCase();
-
   const app: App = {
     name,
     list,
@@ -87,7 +86,6 @@ export const make = (options: { readonly name: string; readonly list: string }):
     },
     Sources: { env: (record) => Sources.env(app, record) },
   };
-
   const version = Setting.make(app, `${name}-version`, {
     schema: Version,
     default: "0.0.0",
@@ -96,6 +94,5 @@ export const make = (options: { readonly name: string; readonly list: string }):
     reload: "restart",
     since: "0.0.0",
   });
-
   return app;
 };

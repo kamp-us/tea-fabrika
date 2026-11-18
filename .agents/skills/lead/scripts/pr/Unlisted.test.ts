@@ -220,7 +220,7 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
     commit("a.txt", "one, changed on main\n");
     git("update-ref", "refs/remotes/origin/main", "main");
 
-    return { squashed, fresh, clash };
+    return { squashed, fresh, clash, git };
   };
 
   // scenario: the three roads the check must tell apart, on a real repo with origin/main.
@@ -242,6 +242,76 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
       }).pipe(Effect.provide(BranchesGit.layer(dir)));
 
       expect(got).toEqual([true, false, false, 2]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // scenario: retained roots may share main's files without sharing its history.
+  it.effect("scenario: unrelated retained histories stay unlisted while other branches are still reported", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fs.makeTempDirectoryScoped();
+      const { git } = fixture(dir);
+
+      for (const [name, source] of [
+        ["retained-same", "main"],
+        ["retained-new", "fresh"],
+      ]) {
+        const tip = git("commit-tree", git("rev-parse", `${source}^{tree}`), "-m", name);
+        git("update-ref", `refs/heads/${name}`, tip);
+      }
+
+      git("remote", "add", "origin", dir);
+      git("fetch", "-q", "origin");
+      writeFileSync(join(dir, "a.txt"), "staged work\n");
+      git("add", "a.txt");
+      writeFileSync(join(dir, "a.txt"), "unstaged work\n");
+      writeFileSync(join(dir, "keep.txt"), "untracked work\n");
+      const refs = git("show-ref");
+      const head = git("rev-parse", "HEAD");
+      const index = git("write-tree");
+      const status = git("status", "--porcelain");
+
+      const report = yield* Unlisted.check().pipe(
+        Effect.provide(Layer.mergeAll(BranchesGit.layer(dir), PullRequestsTest.layer(PullRequestsTest.world([])))),
+      );
+
+      for (const location of ["local", "origin"] as const) {
+        expect(report.unlisted.filter((u) => u.branch.location === location).map((u) => u.branch.name)).toEqual([
+          "clash",
+          "fresh",
+          "retained-new",
+          "retained-same",
+        ]);
+        expect(report.landed.filter((l) => l.branch.location === location).map((l) => l.branch.name)).toEqual([
+          "squashed",
+        ]);
+      }
+
+      expect(Unlisted.lines(report).at(-1)).toBe("unlisted: 8 with no pull request, 2 safe to delete");
+      expect(git("show-ref")).toBe(refs);
+      expect(git("rev-parse", "HEAD")).toBe(head);
+      expect(git("write-tree")).toBe(index);
+      expect(git("status", "--porcelain")).toBe(status);
+      expect(yield* fs.readFileString(join(dir, "a.txt"))).toBe("unstaged work\n");
+      expect(yield* fs.readFileString(join(dir, "keep.txt"))).toBe("untracked work\n");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // scenario: an unreadable tip is a real Git error, not an unrelated history.
+  it.effect("scenario: an unknown tip still fails the Git read", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fs.makeTempDirectoryScoped();
+      fixture(dir);
+
+      const error = yield* Effect.gen(function* () {
+        const branches = yield* Branches;
+
+        return yield* Effect.flip(branches.landsEmpty("missing-retained-tip"));
+      }).pipe(Effect.provide(BranchesGit.layer(dir)));
+
+      expect(error._tag).toBe("BranchesError");
+      expect(error.reason).toContain("exited 128");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

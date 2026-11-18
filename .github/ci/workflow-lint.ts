@@ -11,11 +11,15 @@ import { ciRequired } from "./workflow-lint/ci-required.ts";
 import { lintCiSpeed } from "./workflow-lint/ci-speed.ts";
 import { classifyStep } from "./workflow-lint/classify.ts";
 import { failFast } from "./workflow-lint/fail-fast.ts";
+import { lintHost } from "./workflow-lint/host.ts";
 import { lintIssues } from "./workflow-lint/issues.ts";
 import { jobLaws } from "./workflow-lint/jobs.ts";
+import { lintL11 } from "./workflow-lint/l11.ts";
 import { lintNoTooling, mergeLine } from "./workflow-lint/merge-line.ts";
 import { nextLaws } from "./workflow-lint/next-job.ts";
+import { lintPlant } from "./workflow-lint/plant.ts";
 import { record } from "./workflow-lint/record.ts";
+import { relatedChecks } from "./workflow-lint/related.ts";
 import { lintScheduled } from "./workflow-lint/scheduled.ts";
 import { ends, legs, map, nextJob, numbered, type Require, type Rule } from "./workflow-lint/shared.ts";
 import { timeTables } from "./workflow-lint/time-tables.ts";
@@ -46,6 +50,7 @@ const CHECK_RULES: readonly Rule[] = [
   classifyStep,
   mergeLine,
   nextLaws,
+  relatedChecks,
   timeTables,
 ];
 
@@ -90,6 +95,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       ...lintIssues(files.workflows),
       ...lintCaches(files),
       ...lintCiSpeed(read(".github/workflows/ci-speed.yaml")),
+      ...lintHost(read(".github/workflows/host.yaml")),
+      ...lintPlant(read(".github/workflows/plant.yaml")),
+      ...lintL11(read(".github/workflows/l11-exercise.yaml")),
     ];
 
     const manifest: unknown = JSON.parse(read("package.json"));

@@ -362,16 +362,13 @@ const flow = Effect.fnUntraced(
         const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
           Effect.orDie,
         );
-
         const tables = db
           .prepare("SELECT name FROM sqlite_master WHERE type='table'")
           .all()
           .map((row) => String(row["name"]));
-
         return Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
       }),
     );
-
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
 
     return {

@@ -73,12 +73,10 @@ const sandbox = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
-
   yield* Effect.acquireRelease(
     Effect.sync(() => vi.stubEnv("FABRIKA_HOME", folder)),
     () => Effect.sync(() => vi.unstubAllEnvs()),
   );
-
   return folder;
 });
 
@@ -111,7 +109,6 @@ const bodyText = (options: RequestInit | undefined): string =>
 
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
-
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
 
 it.live.prop(
@@ -131,7 +128,6 @@ it.live.prop(
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       const folder = yield* sandbox;
       const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
-
       const fixture = RecordWireTest.startupFixture({
         home: folder,
         name: "quota-start",
@@ -141,14 +137,11 @@ it.live.prop(
         port: 18787,
         build: "quota-start",
       });
-
       // The quota values ride in the settings snapshot, each as its declared schema encodes it.
       const values: Record<string, Schema.Json> = { ...fixture.settings.values };
-
       const recovery = Schema.decodeUnknownSync(Schema.toEncoded(Declarations.recovery.schema))(
         values[Declarations.recovery.path],
       );
-
       const invalid = `invalid:${suffix}`;
       const { project, process } = recovery;
 
@@ -175,7 +168,6 @@ it.live.prop(
       const declaration = field === "storage" ? Declarations.storage : Declarations.recovery;
       expect(Schema.decodeUnknownResult(declaration.schema)(values[declaration.path])._tag).toBe("Failure");
       const config = { ...fixture, settings: { ...fixture.settings, values } };
-
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
@@ -185,7 +177,6 @@ it.live.prop(
         Effect.provide(filesWithoutSync),
         Effect.result,
       );
-
       expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
       expect(fetched).not.toHaveBeenCalled();
     }),
@@ -216,7 +207,6 @@ it.live.prop(
             return Response.json({ value: call.method === "info" ? [] : null });
           });
           const kill = yield* spyOnKill;
-
           const config = {
             home: folder,
             name: "life-contract",
@@ -288,7 +278,6 @@ it.live.prop(
             }),
           ),
         );
-
         yield* Deferred.await(reached);
         yield* Effect.yieldNow;
         expect(starting.pollUnsafe()).toBeUndefined();

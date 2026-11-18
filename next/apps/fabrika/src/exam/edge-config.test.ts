@@ -52,7 +52,6 @@ describe(".oxlintrc.json", () => {
   const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
   const RULES = ["fabrika/no-promises", "fabrika/no-effect-run-outside-edge", "fabrika/edge-comment"];
   const TESTS = ["next/**/*.test.ts", "next/**/*.test.tsx"];
-
   const off = (setting: unknown): boolean =>
     setting === "off" || setting === 0 || (Array.isArray(setting) && off(setting[0]));
 
@@ -85,7 +84,6 @@ describe(".oxlintrc.json", () => {
   const test = (path: string): boolean => /\.test\.|Test\.|\.test-support\./.test(path);
   const mirror = (o: (typeof config.overrides)[number]): boolean => o.files.every(agents) && !o.files.some(test);
   const LEVELS: Readonly<Record<string, string>> = { 0: "off", 1: "warn", 2: "error" };
-
   const level = (setting: unknown): string =>
     Array.isArray(setting) ? level(setting[0]) : (LEVELS[String(setting)] ?? String(setting));
 
@@ -108,7 +106,6 @@ describe(".oxlintrc.json", () => {
       .filter((o) => o.files.some(agents) && !mirror(o))
       .flatMap((o) => {
         const tests = o.files.filter(agents).every(test);
-
         return Object.entries(o.rules)
           .filter(
             ([rule, setting]) =>

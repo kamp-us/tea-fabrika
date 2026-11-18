@@ -17,7 +17,6 @@ describe("shared Worker settings reader, next/", () => {
     (port) =>
       Effect.gen(function* () {
         const valid = Number.isInteger(port) && port >= 1 && port <= 65535;
-
         const input = yield* StartsTest.input({
           port: valid ? port : 18787,
           start: "port-boundary",
@@ -25,15 +24,12 @@ describe("shared Worker settings reader, next/", () => {
           revision: null,
           origin: "flag",
         });
-
         const raw = valid
           ? input
           : { ...input, settings: { ...input.settings, values: { ...input.settings.values, "instance.port": port } } };
-
         const exit = yield* Effect.exit(
           SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: JSON.stringify(raw) })),
         );
-
         expect(Exit.isSuccess(exit)).toBe(valid);
 
         if (Exit.isSuccess(exit)) {
@@ -41,7 +37,7 @@ describe("shared Worker settings reader, next/", () => {
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     // vector: the port protocol's inclusive endpoints and their immediate neighbours.
-    [[1], [65535], [0], [65536]],
+    { examples: [[1], [65535], [0], [65536]] },
   );
 
   StartsTest.law(
@@ -66,7 +62,6 @@ describe("shared Worker settings reader, next/", () => {
 
           const raw =
             move === "corrupt" ? StartsTest.corrupt(current, Math.floor(choice / moves.length), secret) : current;
-
           const exit = yield* Effect.exit(
             SettingsInput.read.pipe(
               Effect.provideService(WorkerEnvironment, {
@@ -75,7 +70,6 @@ describe("shared Worker settings reader, next/", () => {
               }),
             ),
           );
-
           expect(Exit.isSuccess(exit)).toBe(move !== "corrupt");
 
           if (Exit.isSuccess(exit)) {
