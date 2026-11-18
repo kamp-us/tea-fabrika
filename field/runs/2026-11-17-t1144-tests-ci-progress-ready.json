@@ -1,0 +1,34 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress-ready",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-17T06:24:30-08:00",
+  "ended": "2026-11-17T06:29:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "Today's CI tooling, tracker 1144. Bounded fixture repair authorized after actual disposable scheduled run 44100183103 failed P8 at the active-test-start assertion before explicit SIGKILL. Installed Vitest batches worker task updates, so the body stdout marker can precede the main reporter callback. The integration fixture now watches its own scratch directory, confirms watcher readiness, reads actual collected journal records, and waits on file-change notifications until both the real active test start and beforeEach end are present. The entire acknowledgement is raced against actual acquired-child completion under the existing timeout. All original assertions, normal/timeout/unwritable probes and exact-handle SIGKILL remain. No production reporter or other source changed.",
+  "note": "Scoped formatting and lint pass. Five unchanged pure progress laws pass in 871 ms; this is not protected fixture proof. No real child, signal, compiler, whole lint or CI action ran for this repair. Lead must read and obtain applicable checks and actual disposable proof on the repaired head. The old failed run and artifacts remain archived. P9 actually passed there with all three pairs retained: 808/1652, 728/1651 and 718/1755 ms baseline/reporter, 20419 bytes per 20-case enabled sample. Those samples conflate startup and callback cost and are not called speed-neutral. A separate bounded same-input measurement packet is prepared, not implemented or executed. The temporary P8 buffering fault remains unrun because the existing fixed plant catalog has no matching case; no plant-owned path or workflow was edited.",
+  "base": "a7ecb87929a7be62ee54f2331e9062cca0e8d88f",
+  "sourceHashes": {
+    ".github/ci/progress-reporter.integration.test.ts": "5181a5ab56ee9776c0f70072b588aa405431c02ab47aad2e3535f4bc1fe86c59"
+  },
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44100183103/job/134098612897"
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.68,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

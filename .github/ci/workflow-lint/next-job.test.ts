@@ -18,6 +18,7 @@ import {
   setLegs,
   sizedLegs,
   step,
+  visualLabel,
   visualRoute,
   vitestShard,
   wiring,
@@ -151,33 +152,31 @@ const plants: Plant[] = [
       w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(nextLegs(2))}') }}`;
     },
   ],
-  [
-    "E10: the full fallback omits queue and main",
+  // E10, the owner's ruling of 2026-11-18: the full fallback starts the visual legs on a push to main
+  // and on a pull request with the `visual` label, and on no other route.
+  ...(
+    [
+      [
+        "PR 1581's route back, so every pull request and group starts the visual legs",
+        "(github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'push')",
+      ],
+      [
+        "the merge queue beside the label, so a group starts the visual legs",
+        `(github.event_name == 'push' || github.event_name == 'merge_group' || ${visualLabel})`,
+      ],
+      [
+        "any pull request beside the label, so one without it starts the visual legs",
+        `(github.event_name == 'push' || github.event_name == 'pull_request' || ${visualLabel})`,
+      ],
+      ["the label dropped, so no pull request can ask for the visual legs", "github.event_name == 'push'"],
+      ["the push dropped, so main's check runs no visual file its change reaches", visualLabel],
+    ] as const
+  ).map(([fault, when]): [string, (w: Workflow) => void] => [
+    `E10: ${fault}`,
     (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualRoute,
-        "github.event_name == 'pull_request'",
-      );
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(visualRoute, when);
     },
-  ],
-  [
-    "E10: the full fallback omits PR and queue",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualRoute,
-        "github.event_name == 'push'",
-      );
-    },
-  ],
-  [
-    "E10: the full fallback omits PR and main",
-    (w) => {
-      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
-        visualRoute,
-        "github.event_name == 'merge_group'",
-      );
-    },
-  ],
+  ]),
   [
     "E10: the plain fallback holds a visual leg",
     (w) => {
@@ -686,6 +685,16 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
       setLegs(w, legsOf(w).slice(0, -1));
     },
     "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries",
+  ],
+  [
+    "the merge queue beside the visual label",
+    (w) => {
+      w.jobs.next.strategy.matrix.shard = w.jobs.next.strategy.matrix.shard.replace(
+        visualRoute,
+        `(github.event_name == 'push' || github.event_name == 'merge_group' || ${visualLabel})`,
+      );
+    },
+    "E10: next's full fallback runs only on a push to main or with the visual label, else the vitest legs 1 to 5 alone",
   ],
   [
     "the end-to-end step back on leg 1",
