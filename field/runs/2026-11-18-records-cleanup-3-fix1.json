@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-records-cleanup-3-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627",
+  "started": "2026-11-18T09:58:00-08:00",
+  "ended": "2026-11-18T10:09:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "fix",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In today's tooling records (.decisions/0100 to 0199, slice 3 of docs/plan/quests/rules-and-records-build-PLAN.md), fixed the six faults the first review named: dropped the still-holds clauses in 0118, 0164 and 0163; replaced 0116's copy of 0162's landing rule with a pointer; left the tracker's and ticket page's place to the Tier 2 plan in 0159; and took the hourly interval out of 0123's sketch and consequences. The records exit exam reads zero over 0100-0199, and the field check passed.",
+  "note": "Started and ended times are approximate; usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. No test or typecheck applies: only .decisions records and a field row changed.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "costUsd": null,
+  "billed": null
+}
