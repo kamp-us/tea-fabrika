@@ -1,7 +1,7 @@
 ---
 id: 0166
 title: A pull request that only carries out what an accepted decision already owes merges without the owner's read, exam paths included, and the lead shows it to the owner after
-status: amended-in-part by [0530](0530-lead-turns-on-merge-when-ready.md)
+status: accepted
 date: 2026-11-13
 tags: [approval, owner, exam, lead, merge, fast-track, friction, loosening]
 ---
@@ -72,7 +72,8 @@ before it merges. The lead merges it and shows it to the owner after (owner, 202
 - The pull request does only the owed thing. A second change riding along is judged by its own
   rule.
 - The decision it carries out is linked in the description.
-- No force push, no `--admin`, no auto-merge.
+- No force push and no `--admin`. No auto-merge, except the lead's own turn-on of merge when ready
+  ([0530](0530-lead-turns-on-merge-when-ready.md)).
 
 ## Consequences
 

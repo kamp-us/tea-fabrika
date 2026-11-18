@@ -74,9 +74,7 @@ What is already settled, and how this fits:
   [jidoka and andon](../docs/direction/jidoka-and-andon.md#a-person-speaks-unasked) (decided
   2026-11-01, today's version): a person steers a running lane by a plain comment on its ticket,
   read by the running step at its next turn, never cutting a turn off; "the ticket is the one way
-  in". **This record amends that in part, for `next/`:** a lane's room is a second way in. The
-  rest holds: a ticket comment is still read at the next turn, and a ticket comment still answers
-  no ask.
+  in". **This record amends that in part, for `next/`:** a lane's room is a second way in.
 - [0026](0026-fabrika-never-owns-the-agent-loop.md): steering happens at the edges the harness
   gives us, not between model steps. A room line taken at a turn's edge fits it.
 - [0071](0071-risk-tier-decides-who-looks.md): an agent's approval never counts as a person's look.

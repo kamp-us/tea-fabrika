@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0525-changes-still-gates-todays-build",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "sonnet",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/ci/changes.mjs",
+    "line": 109
+  },
+  "says": "Today's tooling: decision 0525 says no CI job runs on today's version, but changes.mjs still has a `todays` path rule that starts today's build.",
+  "proof": ".github/ci/changes.mjs:109-115 defines `todays` and says only these paths start today's build (0175), `pnpm build`; classify at :234 reads `paths.some(todays)` and :218 says `build` is true only when a path is one of today's files. 0525 (accepted) says no job, step or shard runs only for frozen code.",
+  "cost": "A change to a frozen path still starts a build job that the decision says should not exist, so the code and the decisions give two answers.",
+  "head": "e56d23e9907946de8a392e15984554502586247c",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627"
+}

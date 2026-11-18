@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0133-push-still-names-a-sign",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0133-no-push-waits-on-a-local-typecheck.md",
+    "line": 35
+  },
+  "says": "Today's tooling records: 0133 still lists the sign among the steps a lead's push goes out after, and its sketch at lines 13 and 15 reads `commit && sign`, but 0161 says the hand-run tooling signs no commit with a step key.",
+  "proof": ".decisions/0133-no-push-waits-on-a-local-typecheck.md:35 reads 'format, lint, the narrow tests, the sign and the leak grep'; .decisions/0161-no-step-signing-by-hand.md:71 reads 'Today's hand-run tooling signs no commit with a step key and writes no step note.' Neither record names the other, so slice 3's fold of 0161's amenders did not reach 0133.",
+  "cost": "An agent that reads 0133 for how a push goes out looks for a sign step that no longer exists, or adds one back.",
+  "head": "9c3d79cf2823cdf1325c4b311698dc9d639feed8",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627"
+}

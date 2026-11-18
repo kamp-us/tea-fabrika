@@ -1,16 +1,16 @@
 ---
 id: 0047
-title: To the leak check, an added line that only respaces a line its file's diff removes is old text, and no other added line is
+title: To the leak check, an added line that only respaces a line the same diff removes is old text, and no other added line is
 status: accepted
 date: 2026-11-09
 tags: [leak-check, leakgrep, respaced, format-sweep, fails-closed, added-text]
 ---
 
-# 0047: To the leak check, an added line that only respaces a line its file's diff removes is old text, and no other added line is
+# 0047: To the leak check, an added line that only respaces a line the same diff removes is old text, and no other added line is
 
 ```mermaid
 flowchart TD
-  added["an added line with a hit"] --> same{"does the same file's diff remove a line with the same text?"}
+  added["an added line with a hit"] --> same{"does the same diff remove, from any of its files, a line with the same text?"}
   same -->|"no"| hit["a hit: the push or merge stops"]
   same -->|"yes, and that removed line is not used yet"| kinds{"did the removed line have this kind of hit?"}
   kinds -->|"yes"| old["old text: no hit"]
@@ -30,8 +30,8 @@ def same_text(line):
 ```
 
 **What this decides:** the leak check reads an added line as old text only when the same diff
-removes, from the same file, a line that differs from it in spacing or one last `;` or `,` alone;
-every other added line is new text, and any wider rule is the owner's call.
+removes, from any of its files, a line that differs from it in spacing or one last `;` or `,`
+alone; every other added line is new text, and any wider rule is the owner's call.
 
 ## Context
 
@@ -43,6 +43,12 @@ as a new hit. On ticket 466's sweep the check gave 72 hits on text that was alre
 The owner said yes to one change on 2026-11-09. Pull request
 [709](https://github.com/usirin/tea-fabrika/pull/709) built it under tracker ticket 500, with its
 laws in `leakgrep.respaced.test.ts`. This file records the rules as that pull request built them.
+
+The owner widened one rule on 2026-11-14, during the CI sev0 ([0532](0532-a-sev0-freezes-ci.md)):
+a removed line clears an added line from any file of the same diff, not only its own file. It came
+up when the integration move ([0536](0536-real-resource-tests-run-only-on-the-schedule.md)) split a
+test file in two and the check held a line that had been on main since pull request 824. The
+Decision below holds the rules as they stand.
 
 It sits beside two other decisions and contradicts neither:
 
@@ -56,7 +62,7 @@ It sits beside two other decisions and contradicts neither:
 
 ## Decision
 
-**An added line is old text when the same diff removes, from the same file, a line with the same
+**An added line is old text when the same diff removes, from any of its files, a line with the same
 text, and only then.**
 
 What "the same text" means:
@@ -75,11 +81,15 @@ What a removed line clears:
   copies against one removed copy leave one hit.
 - **A removed line clears only the kinds of hit it had itself.** An old line with no hit clears
   nothing. An old line with a private word does not clear a new key on the same line.
-- **Only its own file.** A removed line clears lines in its own file's section of the diff, the
-  part under one `diff --git` header. Two diffs printed one after the other never clear each other.
+- **Any file of the same diff.** A removed line clears an added line in any section of the diff,
+  each section being the part under one `diff --git` header. A line moved between files was already
+  in the tree the diff starts from, so it adds nothing new. Two diffs printed one after the other
+  never clear each other, and a merge's combined diff clears nothing.
 - **A rename follows git.** When git pairs two paths as a rename they are one file. When git shows
-  a delete and a new file, the new path is all new text.
-- A flagged line that only moves inside its file is old text: the diff removes it and adds it back.
+  a delete and a new file, a line of the new path is old text only when a removed line of the same
+  diff has the same text, as for any other file.
+- A flagged line that only moves, inside its file or to another file of the same diff, is old text:
+  the diff removes it and adds it back.
 - **Only in a diff git wrote.** A removal counts only in a hunk (`@@`) under a `diff --git` header.
   A diff written by hand, one with no header, a merge's combined diff and a whole draft (`--text`)
   clear nothing.
@@ -98,7 +108,7 @@ What does not change:
 **Binding constraints**
 
 - Any further widening is the owner's call, one yes or no each: another character treated as
-  spacing, brace spacing, wrapped lines, clearing across files or across diffs, or an override.
+  spacing, brace spacing, wrapped lines, clearing across diffs, or an override.
 
 ## Consequences
 
@@ -113,11 +123,3 @@ What does not change:
   cleared. The count it prints is how a reader sees it happened.
 - Not decided here: whether ignoring brace spacing is safe, and whether an existing tool replaces
   the check ([0040](0040-existing-tools-before-hand-written.md)).
-
-## Amendments
-
-- 2026-11-14 (owner, during the CI sev0, 0532): a removed line clears an added line from any file of
-  the same diff, not only its own file. A line moved between files was already in the tree the diff
-  starts from, so it adds nothing new. One removed line still clears one added line, and a merge
-  still clears nothing. It came up when the integration move (0536) split a test file in two and the
-  check held a line that had been on main since pull request 824.

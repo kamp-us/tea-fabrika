@@ -1,7 +1,7 @@
 ---
 id: 0083
 title: Every program in next/ belongs to a pack, a repo's own included, and a pack declares one settings schema that all its programs read, never a settings table per program
-status: amended-in-part by [0084](0084-own-pack-listed-by-path.md)
+status: accepted
 date: 2026-11-10
 tags: [packs, programs, settings, fabrika-toml, core-pack, libfabrika, next]
 ---
@@ -95,22 +95,19 @@ The known ways, each page read on 2026-11-10:
   Here libfabrika is the syntax and the core pack is the standard library.
 
 This walks back two spellings in direction notes, A4's `./programs/deploy` and the `programs/deploy/`
-folder, and gives each a dated pointer. It amends and supersedes no decision file: 0068, 0069,
-0075 and [0020](0020-programs-get-hard-walls.md) all still hold, and this record cites them.
+folder, and gives each a dated pointer. It amends and supersedes no decision file, and builds on
+0068, 0069, 0075 and [0020](0020-programs-get-hard-walls.md).
 
 ## Decision
 
 **Every program belongs to a pack, and a pack declares one schema for its settings that every
 program in it reads; a program has no settings of its own.**
 
-- **No loose program.** A program is always in a pack. A repo's own program lives in a pack in the
-  repo's own `.fabrika/packs/<name>/`, the folder decided on 2026-10-31 for packs a repo offers.
-  So a repo's own pack and a pack it offers to others are one thing in one folder.
-
-  *Changed 2026-11-10 by [0084](0084-own-pack-listed-by-path.md):* a repo's own pack is listed in
-  `fabrika.toml` with `from` a path that starts with a dot, and that path is what counts;
-  `.fabrika/packs/<name>/` is the usual place, not a forced one. This also answers the first "not
-  decided" item below. The rest of this record holds.
+- **No loose program.** A program is always in a pack. A repo's own program lives in a pack the
+  repo lists in `fabrika.toml` like any pack, with a `from` that starts with a dot, a path from
+  that file's folder ([0084](0084-own-pack-listed-by-path.md)). `.fabrika/packs/<name>/`, the
+  folder decided on 2026-10-31 for packs a repo offers, is the usual place for it, not a forced
+  one. So a repo's own pack and a pack it offers to others are one thing in the usual folder.
 - **One spelling.** A program is named `<pack>/<program>`, a repo's own included. A4's third
   spelling, a path such as `./programs/deploy`, goes.
 - **libfabrika is the syntax, and the core pack is the standard library.** What ships with
@@ -123,6 +120,9 @@ program in it reads; a program has no settings of its own.**
 - **Settings are per pack, never per program.** A pack declares one settings schema, and every
   program in the pack reads it, as a Worker's code reads its `env`. The line "one pack's own
   settings; the pack checks them" is kept, and is now the only place a program's settings live.
+- **A pack names the module that holds its settings.** The optional `settings` entry in its
+  `pack.toml` is a path to a module that exports the pack's one settings group; no entry means the
+  pack has no settings ([0148](0148-pack-toml-names-its-settings-module.md)).
 - **A program sees only its own pack's settings.** fabrika hands each program a `ConfigProvider`
   scoped to its pack at load, so another pack's values are not there to read. This follows
   0020's constraint that no program's isolation rests on code alone where a wall can hold it.
@@ -138,8 +138,8 @@ program in it reads; a program has no settings of its own.**
 ## Consequences
 
 - **What this changes in the plan.** Tier 5's "repo programs (`.fabrika/programs`)" now means a
-  repo's own pack in `.fabrika/packs/<name>/`. The tier each lands in does not move: repo programs
-  stay in Tier 5, packs from elsewhere in Tier 7, and 0068's thin slice comes before both.
+  repo's own pack, usually in `.fabrika/packs/<name>/`. The tier each lands in does not move: repo
+  programs stay in Tier 5, packs from elsewhere in Tier 7, and 0068's thin slice comes before both.
   [The tiers](../docs/plan/tiers.md) and [Tier 1's detail](../docs/plan/tier-1-detail.md) get a dated
   line ([0013](0013-plan-docs-change-with-the-work.md)).
 - **What it costs.** A one-file program now needs a `pack.toml` beside it. 0075's cold-author
@@ -149,14 +149,11 @@ program in it reads; a program has no settings of its own.**
   [packs are programs](../docs/direction/packs-are-programs.md), the tiers and Tier 1's detail
   each get one dated line. Nothing else in them changes.
 - **Not decided here:**
-  - How a repo lists a pack from its own folder: a `[pack.<name>]` table with no `from`, or loaded
-    by being in the folder.
   - The name of the settings sub-table. `settings` is the sketch's word. A sub-table exists so a
     pack's key cannot clash with `from` or `ref`. The 2026-10-31 sketch put `region` beside `from`
     and `ref` in the pack's own table.
   - Which programs the core pack holds beyond the tracker and notes, and whether the pipeline's
     steps are in it or in a pack of their own.
-  - How a pack's settings schema is found at load. A lean: `pack.toml` names the file.
   - Whether `ref` may name a branch, open since 2026-10-31, stays open.
   - Whether a keybinding's command name, such as `desk.split`, takes the pack's name too.
 - **Follows from 0020, not new:** a pack never reads a value another pack declares, unless that

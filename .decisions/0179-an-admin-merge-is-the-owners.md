@@ -1,12 +1,12 @@
 ---
 id: 0179
-title: An admin merge is started only by the owner, on the pull requests the owner names, and the lead says so when one qualifies
-status: amended-in-part by [0183](0183-the-lead-admin-merges-docs-only.md), [0530](0530-lead-turns-on-merge-when-ready.md), [0532](0532-a-sev0-freezes-ci.md)
+title: An admin merge is started only by the owner, on the pull requests the owner names, except the lead's own for a docs-only pull request, and the lead says so when another qualifies
+status: accepted
 date: 2026-11-13
 tags: [merge, admin, queue, lead, owner, main]
 ---
 
-# 0179: An admin merge is started only by the owner, on the pull requests the owner names, and the lead says so when one qualifies
+# 0179: An admin merge is started only by the owner, on the pull requests the owner names, except the lead's own for a docs-only pull request, and the lead says so when another qualifies
 
 **What this decides:** who may land a pull request past the merge queue, and what the lead does about it.
 
@@ -18,7 +18,7 @@ behind it. The owner gave the repository admin role a bypass on main's rules and
 requests by admin merge that afternoon (1147, 1139, 1148 and 1128). The owner keeps the bypass
 open: this is a research project, and landing speed matters more than a queue run on every merge.
 
-This amends 0162's "no `--admin`" for the owner only. The rest of 0162 holds. The same line stands
+This amends 0162's "no `--admin`" for the owner only. The same line stands
 in [0056](0056-lead-runs-a-refused-step-itself.md),
 [0097](0097-a-green-pull-request-lands-without-catching-up.md),
 [0164](0164-the-bot-stays-without-signing.md) and
@@ -27,17 +27,24 @@ own; only the owner's word opens it.
 
 ## Decision
 
-**An admin merge is started only by the owner.**
+**An admin merge is started only by the owner, apart from the lead's own for a docs-only pull
+request.**
 
 - The owner runs it, or names the pull request and tells the lead to run it
   ([0163](0163-the-lead-acts-on-the-owners-word.md)). The lead then runs
   `gh pr merge <n> --squash --admin --match-head-commit <sha>` on that pull request and no other.
-- No agent starts one on its own judgment, the lead included. A yes for one pull request does not
-  cover the next.
+- No agent starts one on its own judgment, the lead included, except for a docs-only pull request
+  (below). A yes for one pull request does not cover the next, except that an owner's sev0 call
+  covers each fix pull request in turn ([0532](0532-a-sev0-freezes-ci.md)).
 - The lead tells the owner, unasked, when a pull request qualifies, with its full URL, why it is
   safe and what the risk is. The owner then says yes or no.
 - The leak check still runs before every merge, an admin merge included.
-- Still never: a force push, auto-merge, or a change to the bypass list by an agent.
+- **The lead admin-merges a docs-only pull request on its own,** with no owner yes for each one.
+  [0183](0183-the-lead-admin-merges-docs-only.md) says what docs only means and what the lead
+  checks first. One changed file that is not docs puts the whole pull request back under the
+  owner's word.
+- Still never: a force push, auto-merge other than the lead's own turn-on of merge when ready
+  ([0530](0530-lead-turns-on-merge-when-ready.md)), or a change to the bypass list by an agent.
 
 **The lead's test for "qualifies"** (a working test, not a ruling): the pull request's own checks
 are already green on its head, or it holds only text and tooling and its local checks are green.

@@ -1,12 +1,12 @@
 ---
 id: 0056
-title: When the permission check refuses a step agent's lead sign, its normal push or its merge of a passing test-only or rows-only PR, the lead session runs that same step itself, and every other refusal goes to the owner
-status: amended-in-part by [0161](0161-no-step-signing-by-hand.md)
+title: When the permission check refuses a step agent's normal push or its merge of a passing test-only or rows-only PR, the lead session runs that same step itself, and every other refusal goes to the owner
+status: accepted
 date: 2026-11-10
-tags: [lead, permissions, refusal, sign, push, botpush, merge, catchup, field-rows, keys]
+tags: [lead, permissions, refusal, push, botpush, merge, field-rows, keys]
 ---
 
-# 0056: When the permission check refuses a step agent's lead sign, its normal push or its merge of a passing test-only or rows-only PR, the lead session runs that same step itself, and every other refusal goes to the owner
+# 0056: When the permission check refuses a step agent's normal push or its merge of a passing test-only or rows-only PR, the lead session runs that same step itself, and every other refusal goes to the owner
 
 **What this decides:** which refused actions the lead session may run itself without asking the
 owner again, and that every other refused action is reported, never routed around.
@@ -14,17 +14,15 @@ owner again, and that every other refused action is reported, never routed aroun
 ```mermaid
 flowchart TD
   refused["the session's permission check refuses a step agent's action"] --> which{"which action?"}
-  which -- "lead sign, through the repo's script" --> lead["the lead session runs the same command"]
-  which -- "normal push of its own branch" --> lead
+  which -- "normal push of its own branch" --> lead["the lead session runs the same command"]
   which -- "merge of a passing test-only or rows-only PR" --> lead
   which -- "anything else" --> owner["report it to the owner: the exact command and worktree"]
 ```
 
 ```sh
-# the three the lead runs itself, the same commands the step agent ran
-pnpm commits sign --step lead            # through the repo's scripts, which read the key themselves
+# the push the lead runs itself, the same command the step agent ran
 node .agents/skills/lead/scripts/botpush.mjs <tree> fabrikalfa/<branch>   # or a plain non-force git push of its own branch
-sh .agents/skills/lead/scripts/catchup.sh <pr> <ticket>
+# the merge is run the way the lead skill says the lead merges
 ```
 
 ## Context
@@ -33,6 +31,16 @@ Step agents run under the session's permission check. On 2026-11-10 it refused s
 lead sign and the push of their own branch, steps the lead skill gives them, and the work sat until
 the owner was asked again. The owner ruled that these few steps are already allowed: the lead
 session runs them itself. Tracker ticket 584 records this decision.
+
+**What changed after that.** The lead sign no longer comes up, so this rule covers two actions, not
+three:
+
+- Tracker ticket 652, the same day, took the lead-only step away from a lane agent: its last act is
+  to record "ready to land", and the lead session lands it. The lead skill's check fails a brief
+  template that names a lead sign, a step key, `botpush` or a landing command. This record covers
+  any other step agent the check refuses.
+- [0161](0161-no-step-signing-by-hand.md) ended signing by hand, so there is no lead sign to
+  refuse.
 
 **How this fits older texts.**
 
@@ -45,14 +53,14 @@ session runs them itself. Tracker ticket 584 records this decision.
 
 ## Decision
 
-**When the session's permission check refuses one of these three actions to a step agent, the
+**When the session's permission check refuses one of these two actions to a step agent, the
 lead session runs that same action itself, without asking the owner again (owner, 2026-11-10).**
 
-- The lead sign: `pnpm commits sign --step lead`, run through the repo's own scripts.
 - The normal push: `botpush.mjs`, or a plain `git push` of the agent's own branch that is not a
   force push.
-- The merge, with `catchup.sh`, of a passing test-only fix, or of a PR that only adds
-  `field/*.jsonl` rows. A rows-only PR merges on green CI with a clean leak grep.
+- The merge, the way the lead merges ([0014](0014-the-lead-merges-when-every-step-passed.md),
+  [0162](0162-no-friction-before-a-merge.md)), of a passing test-only fix, or of a PR that only
+  adds `field/*.jsonl` rows. A rows-only PR merges on green CI with a clean leak grep.
 
 **Binding constraints:**
 
@@ -64,18 +72,7 @@ lead session runs that same action itself, without asking the owner again (owner
 
 ## Consequences
 
-- A refused sign or push no longer stops a lane until the owner answers.
+- A refused push or merge no longer stops a lane until the owner answers.
 - The cost: the lead session holds more of the work. A mistake there is fixed forward.
 - Not decided here: changing the permission check so step agents are not refused these steps in
   the first place.
-
-## Amendments
-
-- 2026-11-10: **the permanent fix landed** (tracker ticket 652). A lane agent is no longer handed
-  a lead-only step: its last act is `land.ts ready`, which records "ready to land" in the lane's
-  state file with the PR body and the loosening output (no mutation comparison: since
-  [0066](0066-mutation-runs-on-a-schedule.md) a PR has none), and it stops there. The lead session runs `land.ts run <lane> <ticket>`, which merges main in, signs as lead
-  through main's own signer, leak-greps, pushes with `botpush.mjs`, opens or updates the PR and
-  runs `catchup.sh`. `skillscheck.sh` fails a brief template in the lead skill that names a lead
-  sign, a step key, `botpush`, `catchup.sh` or `land.ts run`. This decision still covers any other
-  step agent the check refuses. The permission check itself is unchanged.

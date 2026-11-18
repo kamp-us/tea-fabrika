@@ -1,7 +1,7 @@
 ---
 id: 0174
 title: A merge queue's run starts only the checks its changed files need, never every check for a small change
-status: amended-in-part by [0175](0175-every-run-follows-its-paths.md)
+status: accepted
 date: 2026-11-13
 tags: [ci, merge-queue, merge-group, changes, checks, main]
 ---
@@ -25,7 +25,7 @@ flowchart LR
   entry["a pull request enters the queue"] --> group["merge_group run"]
   group --> paths["changes.mjs: the jobs its changed paths need"]
   paths --> lands["it lands on main"]
-  lands --> push["push run on main: every job"]
+  lands --> push["push run on main: the jobs its changed paths need"]
 ```
 
 ```js
@@ -37,7 +37,8 @@ const scoped = (event) => event === "pull_request" || event === "merge_group";
 if (!scoped(event) || paths === null || paths.length === 0) return { ...all };
 ```
 
-What moves: the queue's run. A pull request's run and main's run stay as they were.
+What moves: the queue's run. A pull request's run stays as it was, and main's push run follows its
+changed paths too ([0175](0175-every-run-follows-its-paths.md)).
 
 **What this decides:** which jobs of `check.yaml` a merge queue's run starts.
 
@@ -57,7 +58,8 @@ What moves: the queue's run. A pull request's run and main's run stay as they we
 - The group's changed paths are the diff from `merge_group.base_sha`, the commit the group was built
   on, to the group's head.
 - A group is never a draft. The draft rule stays for `pull_request` alone.
-- Every push to main still runs every job, so a break shows up right after the merge.
+- A push to main picks its jobs from its changed paths too, so a break the queue's run skipped
+  shows up right after the merge in the jobs that push reaches (0175).
 - A faster queue is worth an occasional red main: fabrika is still a research project and is not in
   production.
 
@@ -71,7 +73,3 @@ What moves: the queue's run. A pull request's run and main's run stay as they we
   narrowing is the owner's call, made with this decision.
 - `ci-required` needs no change: it passes a skipped job when `changes` said "false" for it, on any
   event.
-
-## Not decided
-
-- Nothing else in 0162 changes.

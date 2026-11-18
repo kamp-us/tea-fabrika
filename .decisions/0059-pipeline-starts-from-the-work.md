@@ -37,6 +37,19 @@ decision. How it sits with the notes and decisions that touch the pipeline:
 - [0007](0007-drive-is-the-pipeline-lab.md) keeps `drive.ts` as the lab whose lessons go into
   `next/`. Those lessons feed steps 2 and 3. No conflict.
 
+**How the study went (ticket 616).** The owner approved the study's plan on 2026-11-10, in five
+parts: the basic loop in plain words; how the best do it, from fetched sources; what really happens
+here, from `field/`; the translation into fabrika's programs, tea machines and ledger facts; and
+about six principles. Ticket 574 is the running example, and the loop starts at "decide what to work
+on next". Both were the lead's leans, and the owner did not object to them. The owner read the
+first draft (draft PR 797, ticket 645) and turned down its lens, because it answered from how human
+teams work. The study's sources are the people and companies at the front of agent-run software work
+today: teams where agents do most of the work and people direct and check it. How human teams work is background only, used where one of those teams says it
+kept or dropped a practice. The study was redone on those sources, and the owner walked it on
+2026-11-10. On 2026-11-11 the owner approved its seven principles in
+[how we get work done](../docs/direction/how-we-get-work-done.md) as the starting point, recorded as
+[0127](0127-how-we-get-work-done-seven-principles.md). Steps 1 to 3 are answered.
+
 The known way, each checked against the source named:
 
 - **Map the work before you change it.** Lean's value-stream mapping is "diagraming every step
@@ -71,27 +84,6 @@ one (owner, 2026-11-10).**
 
 ## Consequences
 
-- The pipeline in `next/` waits for the study. Today's hand-run steps, `drive.ts` and `chain.ts`
-  keep running as they are.
-- The cost: the pipeline's design starts later, and the study has to be run first.
-- Not decided here: the study's plan, which is not approved yet, and anything the study will
-  conclude.
-
-## Amendments
-
-- 2026-11-10 (ticket 616): the owner approved the study's plan, in five parts: the basic loop in
-  plain words; how the best do it, from fetched sources; what really happens here, from `field/`;
-  the translation into fabrika's programs, tea machines and ledger facts; and about six
-  principles. Ticket 574 is the running example, and the loop starts at "decide what to work on
-  next". Those two were the lead's leans, and the owner did not object to them.
-- 2026-11-10 (ticket 645): the owner read the study's first draft (draft PR 797) and turned down
-  its lens, because it answered from how human teams work. The study's sources are the people and
-  companies at the front of agent-run software work today: teams where agents do most of the work
-  and people direct and check it. How human teams work is background only, used where one of those
-  teams says it kept or dropped a practice. The draft's principles are not decided. The study is
-  redone on these sources before any walk, and PR 797 stays a draft until then.
-- 2026-11-11 (ticket 616): steps 1 to 3 are answered. The study was redone on the teams where
-  agents do most of the work, the owner walked it on 2026-11-10, and on 2026-11-11 approved its
-  seven principles in [how we get work done](../docs/direction/how-we-get-work-done.md) as the
-  starting point, recorded as [0127](0127-how-we-get-work-done-seven-principles.md). Step 4, the
-  pipeline, may now build on them. No rule above changes.
+- The pipeline in `next/` waited for the study. Steps 1 to 3 are answered, so step 4 may build on
+  the seven principles. Today's hand-run steps, `drive.ts` and `chain.ts` keep running as they are.
+- The cost: the pipeline's design started later, and the study had to be run first.

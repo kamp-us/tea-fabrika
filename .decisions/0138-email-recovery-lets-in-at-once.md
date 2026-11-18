@@ -58,5 +58,4 @@ like any other.**
   taken has lost far more than fabrika.
 - P36's tests on its branch were written for the wait and the cancel. They change with this, in
   an exam pull request.
-- 0338's status says amended in part: its wait, its Cancel and its `requested` and `canceled`
-  events are replaced; the rest holds.
+- This replaces 0338's wait, its Cancel and its `requested` and `canceled` events.
