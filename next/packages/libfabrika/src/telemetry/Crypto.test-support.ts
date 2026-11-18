@@ -6,6 +6,7 @@ import { Stub } from "@kampus/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Str from "effect/String";
 
 type Crypto = typeof globalThis.crypto;
 
@@ -42,7 +43,7 @@ export const paused = Effect.fnUntraced(function* (marker: string) {
     Effect.tryPromise({ try: () => globalThis.crypto.subtle.digest(algorithm, data), catch: fail });
 
   const digest: Digest = (algorithm, data) => {
-    const gate = !reached && new TextDecoder().decode(copied(data)).includes(marker);
+    const gate = !reached && Str.includes(marker)(new TextDecoder().decode(copied(data)));
     reached ||= gate;
 
     const work = gate

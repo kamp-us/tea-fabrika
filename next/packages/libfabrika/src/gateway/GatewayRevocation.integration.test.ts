@@ -1069,7 +1069,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
       const marker = `p17-queued-${text}`;
       // The event is hashed as JSON, so the pause looks for the marker as JSON writes it.
-      const pause = yield* paused(JSON.stringify(marker));
+      const pause = yield* paused(Formatter.formatJson(marker));
 
       const pending = yield* Effect.forkChild(
         Effect.result(

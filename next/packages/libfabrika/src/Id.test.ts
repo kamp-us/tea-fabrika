@@ -956,7 +956,7 @@ describe("T518 Id order and generation", () => {
         const suffixes: Array<string> = [];
         let highest = 0;
 
-        for (const now of [start, start, start + rollback, start, start - 1, ...deltas.map((n) => start + n)]) {
+        for (const now of [start, start, start + rollback, start, start - 1, ...Arr.map(deltas, (n) => start + n)]) {
           yield* TestClock.setTime(Math.max(0, now));
           highest = Math.max(highest, Math.max(0, now));
 
@@ -964,8 +964,8 @@ describe("T518 Id order and generation", () => {
             chaos = yield* generator.next(Chaos);
 
           if (suffixes.length === 0) {
-            const expected = raw.reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & ((1n << 74n) - 1n);
-            const uuid = [...referenceDecode(split(input)[1])].reduce((n, byte) => (n << 8n) | BigInt(byte), 0n);
+            const expected = Arr.reduce(raw, 0n, (n, byte) => (n << 8n) | BigInt(byte)) & ((1n << 74n) - 1n);
+            const uuid = Arr.reduce([...referenceDecode(split(input)[1])], 0n, (n, byte) => (n << 8n) | BigInt(byte));
             const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
             expect(actual, "a fresh id uses the supplied entropy, not a count").toBe(expected);
           }
