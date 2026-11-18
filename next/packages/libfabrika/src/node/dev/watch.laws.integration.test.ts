@@ -19,7 +19,6 @@ import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
-import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -70,13 +69,18 @@ const ROOT = new URL("../../../../../../", import.meta.url).pathname;
  * Every real Rolldown watcher and result the laws saw, and which were closed. Per watcher, `ends`
  * counts the `END` notifications that reached the product's listener, real and replayed, and
  * `changes` holds the ids of Rolldown's own `change` events, absolute temp paths kept in memory only.
- * `notify` runs after each `change`, so a law can wait on a report without polling.
+ * `notify` runs after each `change` with that watcher's record, so a law can wait on a report
+ * without polling and know which watcher made it.
  */
-const opened = vi.hoisted(() => ({
-  watchers: Array.of<{ closed: boolean; repeat: Effect.Effect<void>; ends: number; changes: Array<string> }>(),
-  results: Array.of<{ code: string; closed: boolean }>(),
-  notify: () => {},
-}));
+const opened = vi.hoisted(() => {
+  type Watcher = { closed: boolean; repeat: Effect.Effect<void>; ends: number; changes: Array<string> };
+
+  return {
+    watchers: Array.of<Watcher>(),
+    results: Array.of<{ code: string; closed: boolean }>(),
+    notify: (_changed: Watcher) => {},
+  };
+});
 
 vi.mock("rolldown", async (original) => {
   const actual = await original<typeof import("rolldown")>();
@@ -101,7 +105,7 @@ vi.mock("rolldown", async (original) => {
       // Rolldown's own report of a modified file, read through the real watcher unchanged.
       on("change", (id) => {
         seen.changes.push(id);
-        opened.notify();
+        opened.notify(seen);
       });
       // SAFETY: the wrapper has only the `event` overload of Rolldown's `on`, the one watch.ts calls (`watcher.on("event", ...)`).
       watcher.on = ((
@@ -1022,8 +1026,8 @@ describe("P15 slice 1: the watcher", () => {
     readonly repeats: (program: string) => number;
   };
 
-  // L10a-L10d. Every install is a change or a repeat; no wait is a quiet window. An owed change has
-  // its own 3 s bound, which a repeat never renews; `settle` waits on a count, never on quiet.
+  // L10a-L10d. Every install is a change or a repeat, and no wait in L10 has a clock: an owed change
+  // is due by the end of a counted rebuild, and `settle` waits on a count of delivered cycles.
   const accountedWalk = Effect.fnUntraced(function* (walk: (world: World) => Effect.Effect<void, never, Scope.Scope>) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -1039,6 +1043,12 @@ describe("P15 slice 1: the watcher", () => {
     // a span or a bundle's source, which is several MB.
     let started = 0;
     let ended = 0;
+    // Each rebuild's start position, its program once it ends, and how many installs it made.
+    const position = new WeakMap<Tracer.Span, number>();
+    const made = new WeakMap<Tracer.Span, number>();
+    const rebuilds: Array<{ readonly at: number; readonly program: unknown; readonly installs: number }> = [];
+    // Per case watcher, the number of rebuilds started when each of its `change` reports came.
+    const reportedAt: Array<Array<number>> = [];
     const running = new Map<string, string>();
     const last = new Map<string, string>();
     const tied = new WeakSet<Tracer.Span>();
@@ -1060,7 +1070,7 @@ describe("P15 slice 1: the watcher", () => {
         const span = new Tracer.NativeSpan(settings);
 
         if (span.name === "watch.rebuild") {
-          started++;
+          position.set(span, started++);
         }
 
         const end = span.end.bind(span);
@@ -1069,6 +1079,11 @@ describe("P15 slice 1: the watcher", () => {
 
           if (span.name === "watch.rebuild") {
             ended++;
+            rebuilds.push({
+              at: position.get(span) ?? -1,
+              program: span.attributes.get("program"),
+              installs: made.get(span) ?? 0,
+            });
             Queue.offerUnsafe(ticks, undefined);
           }
         };
@@ -1077,13 +1092,14 @@ describe("P15 slice 1: the watcher", () => {
       },
     });
 
-    /** Waits until `done` holds, rechecked on each wake-up. A condition with a bound, never a sleep. */
-    const until = (done: () => boolean, bound: Duration.Input, message: string) =>
+    // Waits until `done` holds, rechecked on each wake-up: events and counts, never a clock. Only the
+    // law's own `it` timeout backs a watcher that never answers (amendment 1 of the plan).
+    const until = (done: () => boolean) =>
       Effect.gen(function* () {
         while (!done()) {
           yield* Queue.take(ticks);
         }
-      }).pipe(Effect.timeoutOrElse({ duration: bound, orElse: () => Effect.die(new Error(message)) }));
+      });
 
     const relative = (id: string) => {
       const inside = path.relative(home, id);
@@ -1106,7 +1122,9 @@ describe("P15 slice 1: the watcher", () => {
     const install = (code: Install) =>
       Effect.gen(function* () {
         const span = yield* Effect.orDie(Effect.currentSpan);
+        made.set(span, (made.get(span) ?? 0) + 1);
         yield* Queue.offer(installs, { code, span });
+        Queue.offerUnsafe(ticks, undefined);
         const gate = gates.get(code.program);
 
         if (gate !== undefined) {
@@ -1132,7 +1150,7 @@ describe("P15 slice 1: the watcher", () => {
       const exit = () =>
         Match.valueTags(seen.span.status, { Started: () => undefined, Ended: (status) => ({ exit: status.exit }) });
 
-      yield* until(() => exit() !== undefined, "10 seconds", "a started rebuild never ended");
+      yield* until(() => exit() !== undefined);
       const finished = exit();
       assert(finished !== undefined, "the install's rebuild ended");
 
@@ -1179,23 +1197,45 @@ describe("P15 slice 1: the watcher", () => {
       pending.delete(code.program);
     });
 
-    // L10d: each owed change has its own 3 s bound. A repeat is accounted inside it and pays nothing.
-    const owed = (owing: ReadonlyArray<string>) =>
+    // L10d: a repeat never pays an owed change, and the owed change is the install of the program's
+    // first rebuild after the save's `change` report (at boot, its first rebuild): a count, no clock.
+    // `from` gives that report's start position, or undefined while Rolldown has not reported it. An
+    // earlier rebuild already reading the saved bytes may pay first; once the first rebuild after the
+    // report has ended unpaid, the law fails at once.
+    const owed = (owing: ReadonlyArray<string>, from: (program: string) => number | undefined) =>
       Effect.gen(function* () {
         const pending = new Set(owing);
 
-        while (pending.size > 0) {
-          const size = pending.size;
-          yield* Effect.gen(function* () {
-            while (pending.size === size) {
-              yield* account(yield* Queue.take(installs), pending);
+        while (true) {
+          // A rebuild ends after its install, so every install of the rebuilds read here is accounted.
+          const known = rebuilds.length;
+
+          for (const seen of yield* Queue.clear(installs)) {
+            yield* account(seen, pending);
+          }
+
+          for (const program of pending) {
+            const after = from(program);
+
+            const first = Arr.findFirst(
+              rebuilds.slice(0, known),
+              (rebuild) => after !== undefined && rebuild.program === program && rebuild.at >= after,
+            );
+
+            if (Option.isSome(first)) {
+              assert.fail(
+                first.value.installs > 0
+                  ? `${program}'s first rebuild after the save's change report installed a repeat, not the owed change`
+                  : `${program}'s first rebuild after the save's change report installed nothing`,
+              );
             }
-          }).pipe(
-            Effect.timeoutOrElse({
-              duration: "3 seconds",
-              orElse: () => Effect.die(new Error("an owed install never came")),
-            }),
-          );
+          }
+
+          if (pending.size === 0) {
+            return;
+          }
+
+          yield* Queue.take(ticks);
         }
       });
 
@@ -1213,7 +1253,7 @@ describe("P15 slice 1: the watcher", () => {
     const settle = Effect.gen(function* () {
       outnumbered();
       const cycles = delivered();
-      yield* until(() => ended >= cycles, "10 seconds", "a delivered Rolldown cycle never ended its rebuild");
+      yield* until(() => ended >= cycles);
 
       for (const seen of yield* Queue.clear(installs)) {
         yield* account(seen, new Set());
@@ -1240,12 +1280,23 @@ describe("P15 slice 1: the watcher", () => {
     const owe = (file: string) =>
       Effect.gen(function* () {
         const reach = reaches[file] ?? [];
-        yield* owed(reach);
-        yield* until(
-          () => reported(file, marks.get(file)) >= reach.length,
-          "3 seconds",
-          "a watcher whose program reaches the saved file never reported its change",
-        );
+        const mark = marks.get(file) ?? [];
+        yield* owed(reach, (program) => {
+          // watchPrograms opens one watcher per program, in the order of `programs`.
+          const n = Arr.findFirstIndex(programs, (selected) => selected.name === program);
+
+          if (Option.isNone(n)) {
+            return undefined;
+          }
+
+          const report = Arr.findFirstIndex(
+            watchers()[n.value]?.changes ?? [],
+            (id, k) => k >= (mark[n.value] ?? 0) && relative(id) === file,
+          );
+
+          return Option.isSome(report) ? reportedAt[n.value]?.[report.value] : undefined;
+        });
+        yield* until(() => reported(file, mark) >= reach.length);
         yield* settle;
       });
 
@@ -1266,12 +1317,7 @@ describe("P15 slice 1: the watcher", () => {
           gates.set(program, gate);
 
           return {
-            held: Deferred.await(gate.held).pipe(
-              Effect.timeoutOrElse({
-                duration: "3 seconds",
-                orElse: () => Effect.die(new Error("the gate never held an install")),
-              }),
-            ),
+            held: Deferred.await(gate.held),
             release: Effect.asVoid(Deferred.succeed(gate.release, undefined)),
           };
         }),
@@ -1285,7 +1331,13 @@ describe("P15 slice 1: the watcher", () => {
       Effect.gen(function* () {
         yield* Effect.acquireRelease(
           Effect.sync(() => {
-            opened.notify = () => {
+            opened.notify = (changed) => {
+              const n = watchers().indexOf(changed);
+
+              if (n >= 0) {
+                (reportedAt[n] ??= []).push(started);
+              }
+
               Queue.offerUnsafe(ticks, undefined);
             };
           }),
@@ -1309,7 +1361,10 @@ describe("P15 slice 1: the watcher", () => {
           ).pipe(Effect.withTracer(tracer)),
         );
         // The boot: each program owes one change, with values [0, 0].
-        yield* owed(Arr.map(programs, (program) => program.name));
+        yield* owed(
+          Arr.map(programs, (program) => program.name),
+          () => 0,
+        );
         yield* settle;
         yield* walk(world);
         yield* settle;
@@ -1326,9 +1381,15 @@ describe("P15 slice 1: the watcher", () => {
     outnumbered();
 
     for (const file of marks.keys()) {
-      expect(reported(file), `the watchers that report a change for ${file} number the programs that reach it`).toBe(
-        reaches[file]?.length,
-      );
+      expect(
+        new Set(
+          Arr.filter(
+            Arr.map(programs, (program) => program.name),
+            (_, n) => Arr.some(watchers()[n]?.changes ?? [], (id) => relative(id) === file),
+          ),
+        ),
+        `the watchers that report a change for ${file} are those of the programs that reach it`,
+      ).toEqual(new Set(reaches[file]));
     }
 
     expect(failures, "no build in the walk failed").toEqual([]);
