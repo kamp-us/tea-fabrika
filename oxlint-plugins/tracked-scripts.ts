@@ -32,7 +32,6 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/plan/scripts/plancheck.sh",
   ".agents/skills/step-commit/scripts/exam.py",
   ".agents/skills/step-commit/scripts/stepcommit.sh",
-  "scripts/typecheck.sh",
   // today's version, deleted with it (0525)
   "bin/tsh",
   "packages/fabrika/bin/tsh-small",
