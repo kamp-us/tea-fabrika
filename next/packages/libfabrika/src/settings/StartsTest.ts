@@ -1,5 +1,7 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
+import * as Snapshot from "@kalfa/config/Snapshot";
+import { Origin } from "@kalfa/config/Sources";
 import * as Arr from "effect/Array";
 import type * as Config from "effect/Config";
 import * as Digest from "effect/crypto/Digest";
@@ -17,8 +19,6 @@ import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../Testing.test-support.ts";
 import * as Declarations from "./Declarations.ts";
-import * as Snapshot from "./Snapshot.ts";
-import { Origin } from "./Sources.ts";
 
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 

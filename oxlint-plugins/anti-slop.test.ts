@@ -15,11 +15,12 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { Array as Arr, pipe, Option, Order, Predicate, Record as Rec, Schema } from "effect";
+import { it as effectIt } from "@effect/vitest";
+import { Array as Arr, Effect, pipe, Option, Order, Predicate, Record as Rec, Schema } from "effect";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
+import { countFile, folders, lock, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -189,7 +190,7 @@ const unlisted = (rule: string): Option.Option<string> => {
 
   const covered = (folder: string) =>
     on.includes(folder) ||
-    Arr.some(on, (glob) => WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+    Arr.some(on, (glob) => glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
   return Arr.findFirst(["oxlint-plugins/**", ...folders(ROOT)], (folder) => tree(folder) && !covered(folder));
 };
@@ -427,3 +428,53 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
     expect(printout).toContain("anti-slop-effect");
   });
 });
+
+const KalfaScope = Schema.Struct({
+  name: Schema.String.check(Schema.isPattern(/^[a-z]{1,6}$/)),
+  hits: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3 })),
+});
+
+effectIt.effect.prop(
+  "T1076 Kalfa package and source folders retain the same zero lock as next folders",
+  { input: KalfaScope },
+  ({ input }) =>
+    Effect.sync(() => {
+      // Plants unrun locally: omit Kalfa from WHOLE/folders, or ignore its zero-hit folders.
+      expect(WHOLE).toContain("kalfa/**");
+      const actual = folders(ROOT);
+      expect(actual).toContain("kalfa/config/**");
+      expect(actual).toContain("kalfa/config/src/**");
+      const scope = [`kalfa/${input.name}/**`, `kalfa/${input.name}/src/**`, `next/programs/${input.name}/**`];
+      expect(lock(scope, [], new Map()).add).toEqual(scope);
+      expect(lock(scope, [], new Map(scope.map((folder) => [folder, input.hits]))).add).toEqual([]);
+      expect(lock(scope, ["kalfa/**"], new Map()).add).toEqual([scope[2]]);
+      expect(lock(scope, ["kalfa/**"], new Map()).refused).toEqual([]);
+      const gone = `kalfa/${input.name}/absent/**`;
+      expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
+      // The actual fold used by count must account for every overlapping scope.
+
+      for (const mode of ["source", "package", "mixed"]) {
+        const hits = new Map<string, number>();
+        const source = mode !== "package" ? input.hits : 0;
+        const other = mode !== "source" ? input.hits : 0;
+        const containing = [scope[1]!, scope[0]!, scope[2]!];
+
+        for (let hit = 0; hit < source; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/src/value.ts`);
+        }
+
+        for (let hit = 0; hit < other; hit++) {
+          countFile(containing, hits, `kalfa/${input.name}/Pnpm.ts`);
+        }
+
+        expect(hits.get(scope[0]!)).toBe(source + other);
+        expect(hits.get(scope[1]!) ?? 0).toBe(source);
+        expect(hits.has(scope[2]!)).toBe(false);
+        expect(lock(scope, [], hits).add).toEqual(source === 0 ? [scope[1], scope[2]] : [scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).add).toEqual([scope[2]]);
+        expect(lock(scope, [scope[0]!], hits).refused).toEqual([]);
+        expect(lock(scope, [scope[1]!], hits).add).toEqual([scope[2]]);
+      }
+    }),
+  { arbitrary: { seed: 119120, runs: 100, size: 100 } },
+);

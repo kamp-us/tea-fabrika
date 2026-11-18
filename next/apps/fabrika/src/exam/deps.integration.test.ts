@@ -266,6 +266,13 @@ const DESIGN = "@kampus/fabrika-design";
 
 const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
 
+/** The config engine moved out of `next/` to `kalfa/config` (0585). The approved plan names its two
+ *  consumers: the library (kalfa-config-PLAN.md:310) and the app (kalfa-config-package-amendment-PLAN.md:224).
+ *  No other `next/` package may name it. */
+const CONFIG = "@kalfa/config";
+
+const CONFIG_TAKERS: ReadonlySet<string> = new Set(["@kampus/libfabrika", "@kampus/fabrika"]);
+
 /** Each package's `package.json`: private at 0.0.0, no side effects, a typecheck, nothing of today's. */
 const manifestFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
@@ -284,7 +291,8 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
         ...(pipe(name, Str.endsWith("-old")) ? [`${location}: depends on ${name}, today's version`] : []),
         ...(pipe(range, Str.startsWith("workspace:")) &&
         !ours.has(name) &&
-        !(name === DESIGN && DESIGN_TAKERS.has(m.name))
+        !(name === DESIGN && DESIGN_TAKERS.has(m.name)) &&
+        !(name === CONFIG && CONFIG_TAKERS.has(m.name))
           ? [`${location}: depends on ${name}, a workspace package outside next/`]
           : []),
       ]),
