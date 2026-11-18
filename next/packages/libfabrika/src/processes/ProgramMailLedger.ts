@@ -6,8 +6,6 @@
  * stale sender, a name outside the host's grant or a missing name writes nothing at all, and a send
  * never registers or starts a name. Besides the host's grant, a child and the program that started
  * it reach each other, and nobody else does.
- *
- * @stability unstable
  */
 import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -134,7 +132,6 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
  * saved letter answers its first receipt before the cap is looked at, so a full inbox never hides
  * a receipt.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {

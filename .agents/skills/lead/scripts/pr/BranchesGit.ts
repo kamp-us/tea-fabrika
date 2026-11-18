@@ -1,8 +1,10 @@
 // BranchesGit.layer: the Branches service on real git, in one checkout. The trial merge is
 // `git merge-tree --write-tree` (git 2.38 and later): it merges in the object store and touches no
 // work tree, index or ref, so the check changes nothing but origin's remote-tracking refs.
-import { Effect, Layer } from "effect";
+
+import { String as Str, pipe, Option, Array as Arr, Effect, Layer } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+
 import { type Branch, Branches, BranchesError } from "./Branches.ts";
 import { lastLine, run } from "./command.ts";
 
@@ -12,12 +14,12 @@ const ORIGIN = "refs/remotes/origin/";
 
 /** One `for-each-ref` line, `<ref> <oid>`, as a branch; `null` for main, origin's HEAD or another ref. */
 export const fromRefLine = (line: string): Branch | null => {
-  const [ref = "", tip = ""] = line.split(" ");
+  const [ref = "", tip = ""] = pipe(line, Str.split(" "));
 
-  const [location, name] = ref.startsWith(LOCAL)
-    ? (["local", ref.slice(LOCAL.length)] as const)
-    : ref.startsWith(ORIGIN)
-      ? (["origin", ref.slice(ORIGIN.length)] as const)
+  const [location, name] = pipe(ref, Str.startsWith(LOCAL))
+    ? (["local", pipe(ref, Str.slice(LOCAL.length))] as const)
+    : pipe(ref, Str.startsWith(ORIGIN))
+      ? (["origin", pipe(ref, Str.slice(ORIGIN.length))] as const)
       : [null, ""];
 
   return location === null || name === "" || name === "main" || name === "HEAD" || tip === ""
@@ -55,14 +57,14 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
       const git = (args: ReadonlyArray<string>, ok: ReadonlyArray<number> = [0]) => call(args, ok);
 
       const list = Effect.map(git(["for-each-ref", "--format=%(refname) %(objectname)", LOCAL, ORIGIN]), (ran) =>
-        ran.out.split("\n").flatMap((line) => fromRefLine(line) ?? []),
+        Arr.flatMap(pipe(ran.out, Str.split("\n")), (line) => Option.toArray(Option.fromNullishOr(fromRefLine(line)))),
       );
 
       const ahead = (tip: string) =>
-        Effect.map(git(["rev-list", "--count", `origin/main..${tip}`]), (ran) => Number(ran.out.trim()));
+        Effect.map(git(["rev-list", "--count", `origin/main..${tip}`]), (ran) => Number(Str.trim(ran.out)));
 
       const behind = (tip: string) =>
-        Effect.map(git(["rev-list", "--count", `${tip}..origin/main`]), (ran) => Number(ran.out.trim()));
+        Effect.map(git(["rev-list", "--count", `${tip}..origin/main`]), (ran) => Number(Str.trim(ran.out)));
 
       // No common ancestor means retained work, even when the trees happen to match.
       const landsEmpty = Effect.fn("BranchesGit.landsEmpty")(function* (tip: string) {
@@ -75,7 +77,15 @@ export const layer = (dir: string): Layer.Layer<Branches, never, ChildProcessSpa
         const merged = yield* git(["merge-tree", "--write-tree", "origin/main", tip], [0, 1]);
         const main = yield* git(["rev-parse", "origin/main^{tree}"]);
 
-        return merged.code === 0 && merged.out.split("\n")[0]?.trim() === main.out.trim();
+        return (
+          merged.code === 0 &&
+          pipe(
+            pipe(merged.out, Str.split("\n"))[0],
+            Option.fromNullishOr,
+            Option.map(Str.trim),
+            Option.getOrUndefined,
+          ) === Str.trim(main.out)
+        );
       });
 
       return Branches.of({

@@ -5,6 +5,7 @@
  * stub back and never hangs.
  */
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 
 /**
  * A stub of `A`. A name in `own` answers as `own` has it, `then` and symbol keys answer undefined,
@@ -25,7 +26,7 @@ export const make = <A extends object>(rest: (method: string) => A[keyof A], own
         return undefined;
       }
 
-      return Object.hasOwn(members, key) ? members[key] : rest(key);
+      return Rec.has(members, key) ? members[key] : rest(key);
     },
   });
 };

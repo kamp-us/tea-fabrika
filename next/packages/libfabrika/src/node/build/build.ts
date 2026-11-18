@@ -7,14 +7,20 @@
  * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -103,7 +109,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
 
-  if (selected.startsWith(".") || path.isAbsolute(selected)) {
+  if (Function.pipe(selected, Str.startsWith(".")) || path.isAbsolute(selected)) {
     return Option.none<string>();
   }
 
@@ -120,7 +126,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 
       const exports = manifest.exports;
 
-      return Predicate.isObjectOrArray(exports) && Object.hasOwn(exports, "./window")
+      return Predicate.isObjectOrArray(exports) && Rec.has(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
     }
@@ -132,9 +138,9 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
 });
 
 const contentType = (file: string): AssetType | undefined =>
-  file.endsWith(".js")
+  Function.pipe(file, Str.endsWith(".js"))
     ? "text/javascript; charset=utf-8"
-    : file.endsWith(".css")
+    : Function.pipe(file, Str.endsWith(".css"))
       ? "text/css; charset=utf-8"
       : undefined;
 
@@ -146,7 +152,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
     const route = `/${item.fileName}`,
       type = contentType(item.fileName);
 
-    if (type === undefined || Object.hasOwn(assets, route)) {
+    if (type === undefined || Rec.has(assets, route)) {
       return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
     }
 
@@ -173,7 +179,7 @@ const stylesheets = (
 ): Plugin => ({
   name: "fabrika-css",
   load(id) {
-    if (!id.endsWith(".css")) {
+    if (!Function.pipe(id, Str.endsWith(".css"))) {
       return;
     }
 
@@ -195,22 +201,27 @@ const embed = (tables: Tables): Plugin => {
   const texts: Array<string> = [];
   const text = (body: string) => `t${texts.push(body) - 1}`;
 
-  const programs = Object.entries(tables.programs).map(
+  const programs = Arr.map(
+    Rec.toEntries(tables.programs),
     ([name, p]) => `${JSON.stringify(name)}: {hash: ${JSON.stringify(p.hash)}, source: ${text(p.source)}}`,
   );
 
-  const assets = Object.entries(tables.assets).map(
+  const assets = Arr.map(
+    Rec.toEntries(tables.assets),
     ([route, a]) =>
       `${JSON.stringify(route)}: {hash: ${JSON.stringify(a.hash)}, type: ${JSON.stringify(a.type)}, body: ${text(a.body)}}`,
   );
 
-  const imports = texts.map((_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
+  const imports = Arr.map(texts, (_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
 
-  const code = [
-    ...imports,
-    `export const programs = {${programs.join(", ")}};`,
-    `export const assets = {${assets.join(", ")}};`,
-  ].join("\n");
+  const code = Arr.join(
+    [
+      ...imports,
+      `export const programs = {${Arr.join(programs, ", ")}};`,
+      `export const assets = {${Arr.join(assets, ", ")}};`,
+    ],
+    "\n",
+  );
 
   return {
     name: "fabrika-built",
@@ -219,7 +230,7 @@ const embed = (tables: Tables): Plugin => {
         return `\0${BUILT_MODULE}`;
       }
 
-      if (id.startsWith(TEXT)) {
+      if (Function.pipe(id, Str.startsWith(TEXT))) {
         return id;
       }
     },
@@ -228,8 +239,8 @@ const embed = (tables: Tables): Plugin => {
         return code;
       }
 
-      if (id.startsWith(TEXT)) {
-        return { code: texts[Number(id.slice(TEXT.length))] ?? "", moduleType: "text" };
+      if (Function.pipe(id, Str.startsWith(TEXT))) {
+        return { code: texts[Number(Function.pipe(id, Str.slice(TEXT.length)))] ?? "", moduleType: "text" };
       }
     },
   };
@@ -250,40 +261,43 @@ const browserOnly: Plugin = {
     }
   },
   transform(code, id) {
-    if (id.includes("/effect/dist/") && code.includes(NODE_PROBE)) {
-      return { code: code.replace(NODE_PROBE, "undefined") };
+    if (Function.pipe(id, Str.includes("/effect/dist/")) && Function.pipe(code, Str.includes(NODE_PROBE))) {
+      return { code: Function.pipe(code, Str.replace(NODE_PROBE, "undefined")) };
     }
   },
 };
 
 /** Text that cannot end the element it sits in. */
-const inert = (text: string): string => text.replaceAll("</", "<\\/");
+const inert = (text: string): string => Function.pipe(text, Str.replaceAll("</", "<\\/"));
 
 /** Text that cannot leave the attribute it sits in. */
 const attribute = (text: string): string =>
-  text.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+  Function.pipe(text, Str.replaceAll("&", "&amp;"), Str.replaceAll('"', "&quot;"), Str.replaceAll("<", "&lt;"));
 
 /** The tab's page: every stylesheet embedded in order, and the script at `/window.js`, which `build`
  *  names for the rows the tab records. No other request: the icon is empty. */
 const page = (styles: ReadonlyArray<string>, build: string): string =>
-  [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<meta name="color-scheme" content="light dark">',
-    `<meta name="fabrika-build" content="${attribute(build)}">`,
-    "<title>fabrika</title>",
-    '<link rel="icon" href="data:,">',
-    ...styles.map((css) => `<style>${inert(css)}</style>`),
-    "</head>",
-    "<body>",
-    '<div id="root"></div>',
-    '<script type="module" src="/window.js"></script>',
-    "</body>",
-    "</html>",
-  ].join("\n");
+  Arr.join(
+    [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      '<meta name="color-scheme" content="light dark">',
+      `<meta name="fabrika-build" content="${attribute(build)}">`,
+      "<title>fabrika</title>",
+      '<link rel="icon" href="data:,">',
+      ...Arr.map(styles, (css) => `<style>${inert(css)}</style>`),
+      "</head>",
+      "<body>",
+      '<div id="root"></div>',
+      '<script type="module" src="/window.js"></script>',
+      "</body>",
+      "</html>",
+    ],
+    "\n",
+  );
 
 const asset = (type: AssetType, body: string) =>
   hash(body).pipe(
@@ -294,16 +308,19 @@ const asset = (type: AssetType, body: string) =>
 const PAGE = "index.html";
 
 const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
-  output
-    .filter((o) => o.type === "chunk")
-    .map((o) => o.code)
-    .join("\n");
+  Arr.join(
+    Arr.map(
+      Arr.filter(output, (o) => o.type === "chunk"),
+      (o) => o.code,
+    ),
+    "\n",
+  );
 
 // The tab's page is an asset of the tab's own call, so the call that made the script made the page.
 const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
   name: "fabrika-tab-page",
   generateBundle(_options, output) {
-    const emit = hash(tabScript(Object.values(output))).pipe(
+    const emit = hash(tabScript(Rec.values(output))).pipe(
       Effect.flatMap((build) =>
         Effect.sync(() => {
           this.emitFile({ type: "asset", fileName: PAGE, source: page(styles, build) });
@@ -335,19 +352,19 @@ const tabAssets = Effect.fn("build.tab")(function* (
   const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",
     cwd,
-    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
     minify: true,
   });
 
-  const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
+  const html = Arr.findFirst(output.output, (o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
-  if (html === undefined || !Predicate.isString(html.source)) {
+  if (Option.isNone(html) || !Predicate.isString(html.value.source)) {
     return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 
   return {
     "/window.js": yield* asset("text/javascript; charset=utf-8", tabScript(output.output)),
-    "/index.html": yield* asset("text/html; charset=utf-8", html.source),
+    "/index.html": yield* asset("text/html; charset=utf-8", html.value.source),
   };
 });
 
@@ -459,7 +476,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     transform(code, id) {
       inputs?.set(id, code);
 
-      if (!id.endsWith(".tsx")) {
+      if (!Function.pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -486,18 +503,18 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     root: path.dirname(entry),
     cwd: root,
     plugins: [compiler],
-    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
+    programs: Rec.fromEntries(Arr.map(options.programs, (p) => [p.name, { module: p.package, name: p.export }])),
   });
 
   const findings = check(
     files,
-    ledger.filter((row) => files.has(row.file)),
+    Arr.filter(ledger, (row) => files.has(row.file)),
   );
 
   if (findings.length > 0) {
     return yield* BuildError.make({
       reason: "compiler",
-      cause: findings.map(({ file, line }) => ({ path: file, line })),
+      cause: Arr.map(findings, ({ file, line }) => ({ path: file, line })),
     });
   }
 
@@ -535,11 +552,11 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   yield* Effect.annotateCurrentSpan({ chaos: options.chaos, programs: options.programs.length });
-  const names = options.programs.map((p) => p.name);
+  const names = Arr.map(options.programs, (p) => p.name);
 
   if (
     new Set(names).size !== names.length ||
-    !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
+    !Arr.every(options.programs, (p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
     return yield* BuildError.make({ reason: "table" });
   }
@@ -571,7 +588,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   const compiler: Plugin = {
     name: "fabrika-compiler",
     transform(code, id) {
-      if (!id.endsWith(".tsx")) {
+      if (!Function.pipe(id, Str.endsWith(".tsx"))) {
         return;
       }
 
@@ -598,17 +615,18 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
-  const generated = (name: string) => path.join(from, `window.${name.replace("/", ".")}.generated.ts`);
+  const generated = (name: string) =>
+    path.join(from, `window.${Function.pipe(name, Str.replace("/", "."))}.generated.ts`);
 
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
-      if (id.startsWith(WINDOW)) {
-        return generated(id.slice(WINDOW.length));
+      if (Function.pipe(id, Str.startsWith(WINDOW))) {
+        return generated(Function.pipe(id, Str.slice(WINDOW.length)));
       }
     },
     load(id) {
-      for (const [name, module] of Object.entries(windows)) {
+      for (const [name, module] of Rec.toEntries(windows)) {
         if (id === generated(name)) {
           return `export * from ${JSON.stringify(module)};`;
         }
@@ -616,22 +634,23 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     },
   };
 
-  const assets: Record<string, Asset> = Object.keys(windows).length
-    ? yield* bundle(
-        Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
-        [entries, compiler, stylesheets(context, path)],
-        {
-          phase: "window",
-          cwd: root,
-          split: true,
-          define: { "process.env.NODE_ENV": JSON.stringify("production") },
-        },
-      ).pipe(Effect.flatMap((o) => collect(o.output)))
-    : {};
+  const assets: Record<string, Asset> =
+    Rec.keys(windows).length > 0
+      ? yield* bundle(
+          Rec.fromEntries(Arr.map(Rec.keys(windows), (name) => [name, `${WINDOW}${name}`])),
+          [entries, compiler, stylesheets(context, path)],
+          {
+            phase: "window",
+            cwd: root,
+            split: true,
+            define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
+          },
+        ).pipe(Effect.flatMap((o) => collect(o.output)))
+      : {};
 
   if (options.tab !== undefined) {
-    for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
-      if (Object.hasOwn(assets, route)) {
+    for (const [route, file] of Rec.toEntries(yield* tabAssets(options.tab, [compiler], root))) {
+      if (Rec.has(assets, route)) {
         return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
       }
 
@@ -647,21 +666,24 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
 
-  const brain = output.output
-    .filter((o) => o.type === "chunk")
-    .map((o) => o.code)
-    .join("\n");
+  const brain = Arr.join(
+    Arr.map(
+      Arr.filter(output.output, (o) => o.type === "chunk"),
+      (o) => o.code,
+    ),
+    "\n",
+  );
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
-  if (check(files, ledger).length) {
+  if (check(files, ledger).length > 0) {
     return yield* BuildError.make({ reason: "compiler" });
   }
 
-  const size = (bodies: ReadonlyArray<string>) => bodies.reduce((total, body) => total + bytes(body), 0);
+  const size = (bodies: ReadonlyArray<string>) => Arr.reduce(bodies, 0, (total, body) => total + bytes(body));
 
   const digest = yield* publish(options.out, brain, {
-    programs: size(Object.values(programs).map((p) => p.source)),
-    window: size(Object.values(assets).map((a) => a.body)),
+    programs: size(Arr.map(Rec.values(programs), (p) => p.source)),
+    window: size(Arr.map(Rec.values(assets), (a) => a.body)),
   });
 
   return {

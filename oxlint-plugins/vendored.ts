@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Exit, Schema } from "effect";
+import { Array as Arr, Exit, Schema } from "effect";
 
 const FOLDER = "vendor/anti-slop";
 
@@ -34,7 +34,7 @@ export const verify = (root: string): ReadonlyArray<string> => {
   const head = git(root, ["rev-parse", "--verify", "--quiet", `HEAD:${FOLDER}/src`]);
   const found = head.status === 0 ? head.stdout.trim() : "missing";
   const status = git(root, ["status", "--porcelain", "--", FOLDER]);
-  const changed = status.stdout.split("\n").filter((line) => line.trim() !== "");
+  const changed = Arr.filter(status.stdout.split("\n"), (line) => line.trim() !== "");
   const lines: Array<string> = [];
 
   if (found !== tree) {
@@ -48,7 +48,7 @@ export const verify = (root: string): ReadonlyArray<string> => {
   }
 
   if (changed.length > 0) {
-    lines.push(`${FOLDER}: changed and not committed, and it is never edited (0563): ${changed.join(", ")}`);
+    lines.push(`${FOLDER}: changed and not committed, and it is never edited (0563): ${Arr.join(changed, ", ")}`);
   }
 
   return lines;

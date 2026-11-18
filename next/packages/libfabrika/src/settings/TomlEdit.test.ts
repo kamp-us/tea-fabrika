@@ -3,7 +3,17 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Match, Predicate, Schema } from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -101,7 +111,7 @@ const throwingRecord = (cause: Error) =>
   });
 
 const get = (v: Tree, path: Path): unknown =>
-  path.reduce<unknown>((parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined), v);
+  path.reduce<unknown>((parent, key) => (record(parent) && Rec.has(parent, key) ? parent[key] : undefined), v);
 
 const put = (tree: Tree, path: Path, value: unknown): Tree => {
   const [key, ...rest] = path;
@@ -112,8 +122,8 @@ const put = (tree: Tree, path: Path, value: unknown): Tree => {
 
   const parent = get(tree, [key]);
 
-  return Object.fromEntries([
-    ...Object.entries(tree).filter(([name]) => name !== key),
+  return Rec.fromEntries([
+    ...Rec.toEntries(tree).filter(([name]) => name !== key),
     [key, rest.length === 0 ? value : put(record(parent) ? parent : {}, rest, value)],
   ]);
 };
@@ -123,22 +133,22 @@ const drop = (tree: Tree, path: Path): Tree => {
   const parent = key === undefined ? undefined : get(tree, [key]);
 
   return rest.length === 0
-    ? Object.fromEntries(Object.entries(tree).filter(([name]) => name !== key))
+    ? Rec.fromEntries(Rec.toEntries(tree).filter(([name]) => name !== key))
     : key !== undefined && record(parent)
       ? put(tree, [key], drop(parent, rest))
       : tree;
 };
 
 const leaves = (tree: Tree, path: Path = []): Array<Path> =>
-  Object.entries(tree).flatMap(([key, value]) => {
+  Rec.toEntries(tree).flatMap(([key, value]) => {
     const at = [...path, key];
 
-    return record(value) && Object.keys(value).length > 0 ? leaves(value, at) : [at];
+    return record(value) && Rec.keys(value).length > 0 ? leaves(value, at) : [at];
   });
 
 const parents = (tree: Tree, path: Path = []): Array<Path> => [
   path,
-  ...Object.entries(tree).flatMap(([key, value]) => (record(value) ? parents(value, [...path, key]) : [])),
+  ...Rec.toEntries(tree).flatMap(([key, value]) => (record(value) ? parents(value, [...path, key]) : [])),
 ];
 
 const keyText = (key: string, quote: Layout["quote"]): string => {
@@ -156,7 +166,7 @@ const literal = (value: unknown): string => {
   }
 
   if (record(value)) {
-    return `{ ${Object.entries(value)
+    return `{ ${Rec.toEntries(value)
       .map(([key, child]) => `${JSON.stringify(key)} = ${literal(child)}`)
       .join(", ")} }`;
   }
@@ -167,7 +177,7 @@ const literal = (value: unknown): string => {
 
 const fixture = (l: Layout, n: number, trailingComma = false) => {
   const key = (s: string) => keyText(s, l.quote);
-  const values = Object.fromEntries(segments.map((s) => [s, n]));
+  const values = Rec.fromEntries(segments.map((s) => [s, n]));
   const members = segments.map((s) => `${key(s)}${l.space}${n}`);
   const lines = ["# note-0-雪", `untouched  = 'text # = [ ]' # note-1-雪`, `"box.a.b"${l.space}${n} # note-2-雪`];
   let box: Tree = values;
@@ -184,7 +194,7 @@ const fixture = (l: Layout, n: number, trailingComma = false) => {
   }
 
   const text = lines
-    .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 ? "\n" : l.eol))
+    .map((line, i) => line + (i === lines.length - 1 && !l.final ? "" : l.mixed && i % 2 !== 0 ? "\n" : l.eol))
     .join("");
 
   return { text, value: { untouched: "text # = [ ]", "box.a.b": n, box } };
@@ -196,9 +206,9 @@ const retained = (text: string, pieces: ReadonlyArray<string>) => {
   let cursor = -1;
 
   for (const piece of pieces) {
-    const at = text.indexOf(piece);
+    const at = Option.getOrElse(Str.indexOf(piece)(text), () => -1);
     expect(at, piece).toBeGreaterThan(cursor);
-    expect(text.indexOf(piece, at + piece.length), piece).toBe(-1);
+    expect(Str.includes(piece, at + piece.length)(text), piece).toBe(false);
     cursor = at;
   }
 };
@@ -250,7 +260,7 @@ const inherited = [Object.prototype, Object, Object.prototype.toString];
 
 const members = () =>
   inherited.flatMap((owner) =>
-    Object.entries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
+    Rec.toEntries(Object.getOwnPropertyDescriptors(owner)).map(([name, d]) => [owner, name, d.value, d.get, d.set]),
   );
 
 const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof members>) =>
@@ -266,7 +276,7 @@ const writable = (value: unknown): boolean =>
     : Array.isArray(value)
       ? value.every(writable)
       : record(value)
-        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
+        ? Rec.toEntries(value).every(([key, child]) => !lone(key) && writable(child))
         : Predicate.isString(value)
           ? !lone(value)
           : !Predicate.isNumber(value) || !Number.isInteger(value) || Number.isSafeInteger(value);
@@ -340,7 +350,7 @@ describe("T877 public TOML edits, next/", () => {
         ];
 
         const paths = [["a.b"], ["second"], ["third"], ["fourth"]];
-        const endings = slots.map((_, i) => (l.mixed && i % 2 ? "\n" : l.eol));
+        const endings = slots.map((_, i) => (l.mixed && i % 2 !== 0 ? "\n" : l.eol));
         const prefix = `# first-雪${l.eol}date = 1979-05-27T07:32:00Z${l.eol}large = 9_223_372_036_854_775_807${l.eol}`;
         const suffix = `${l.eol}# last-雪${l.final ? l.eol : ""}`;
         const write = () => prefix + slots.map((s, i) => s.prefix + s.token + s.suffix + endings[i]).join("") + suffix;
@@ -358,13 +368,13 @@ describe("T877 public TOML edits, next/", () => {
               .reduce((n, s, j) => n + s.prefix.length + s.token.length + s.suffix.length + endings[j]!.length, 0) +
             current.prefix.length;
 
-          const head = text.slice(0, at);
-          const tail = text.slice(at + current.token.length);
+          const head = Str.slice(0, at)(text);
+          const tail = Str.slice(at + current.token.length)(text);
           const value = frozen(values[i % values.length]!);
           const edited = yield* toml.set(text, paths[slot]!, value);
-          expect(edited.startsWith(head)).toBe(true);
-          expect(edited.endsWith(tail)).toBe(true);
-          current.token = edited.slice(head.length, edited.length - tail.length);
+          expect(Str.startsWith(head)(edited)).toBe(true);
+          expect(Str.endsWith(tail)(edited)).toBe(true);
+          current.token = Str.slice(head.length, edited.length - tail.length)(edited);
           expect(edited).toBe(write());
           model = put(model, paths[slot]!, value);
           expect((yield* toml.parse(edited)).value).toEqual(model);
@@ -389,13 +399,13 @@ describe("T877 public TOML edits, next/", () => {
         for (const operation of [toml.set(source, ["target"], value), toml.remove(source, ["target"])]) {
           const edited = yield* operation;
           retained(edited, ["# before-雪", "# inner-0-雪", "# inner-1-雪", "# attached-雪"]);
-          expect(edited.startsWith(before)).toBe(true);
-          expect(edited.endsWith(after)).toBe(true);
+          expect(Str.startsWith(before)(edited)).toBe(true);
+          expect(Str.endsWith(after)(edited)).toBe(true);
           expect((yield* toml.parse(edited)).value.next).toEqual({ peer: "unchanged # text" });
 
           // Rehomed comments must be standalone, never embedded in the new value.
           for (const comment of ["# inner-0-雪", "# inner-1-雪"]) {
-            expect(edited.split(/\r?\n/).some((line) => line.trim() === comment)).toBe(true);
+            expect(Str.split(edited, /\r?\n/).some((line) => Str.trim(line) === comment)).toBe(true);
           }
         }
       }).pipe(Effect.provide(TomlParser.layer)),
@@ -423,7 +433,7 @@ describe("T877 public TOML edits, next/", () => {
             .map((value, i) => `${keyText(keys[i]!, l.quote)}${l.space}${array(value, markers[i]!)}`)
             .join(", ")} }`;
 
-          let model: Tree = Object.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
+          let model: Tree = Rec.fromEntries(members.map((value, i) => [keys[i]!, [value, "# string text"]]));
           let paths: Array<Path> = keys.map((key) => [key]);
           const siblings: Array<string> = [];
 
@@ -467,8 +477,8 @@ describe("T877 public TOML edits, next/", () => {
             model = operation === "set" ? put(model, path, value) : drop(model, path);
             expect((yield* toml.parse(text)).value).toEqual(model);
             retained(text, comments);
-            expect(text.startsWith(prefix)).toBe(true);
-            expect(text.endsWith(suffix)).toBe(true);
+            expect(Str.startsWith(prefix)(text)).toBe(true);
+            expect(Str.endsWith(suffix)(text)).toBe(true);
 
             for (const sibling of siblings) {
               expect(text).toContain(sibling);
@@ -502,23 +512,34 @@ describe("T877 public TOML edits, next/", () => {
           yield* document(toml, next, model);
 
           // All old lines are kept verbatim except an inline member's punctuation.
-          const oldLines = (text.match(/[^\n]*\n|[^\n]+$/g) ?? []).filter(
-            (line) => line.trim().length > 0 && !line.includes("{") && !line.includes("}"),
+          const oldLines = Option.getOrElse(Str.match(/[^\n]*\n|[^\n]+$/g)(text), () => []).filter(
+            (line) => Str.trim(line).length > 0 && !Str.includes("{")(line) && !Str.includes("}")(line),
           );
 
           let end = -1;
 
           for (const line of oldLines) {
-            const at = next.indexOf(line, end + 1);
-            expect(at, line).toBeGreaterThan(end);
-            end = at;
+            const at = Option.map(Str.indexOf(line)(Str.slice(end + 1)(next)), (i) => end + 1 + i);
+            expect(
+              Option.getOrElse(at, () => -1),
+              line,
+            ).toBeGreaterThan(end);
+            end = Option.getOrElse(at, () => -1);
           }
 
-          expect(next.endsWith("\n")).toBe(text.endsWith("\n"));
+          expect(Str.endsWith("\n")(next)).toBe(Str.endsWith("\n")(text));
 
           if (path.length === 1 && (l.style === "explicit" || l.style === "implicit")) {
             const inserted = (yield* toml.parse(next)).spans.find((s) => same(s.path, path))!;
-            const commentLine = next.slice(0, next.indexOf("# note-3-雪")).split(/\r?\n/).length;
+
+            const commentLine = Str.split(
+              Str.slice(
+                0,
+                Option.getOrElse(Str.indexOf("# note-3-雪")(next), () => -1),
+              )(next),
+              /\r?\n/,
+            ).length;
+
             expect(inserted.line).toBeLessThan(commentLine);
           }
 
@@ -535,10 +556,10 @@ describe("T877 public TOML edits, next/", () => {
             tail++;
           }
 
-          const changed = next.slice(head, next.length - tail);
-          expect(l.eol === "\r\n" ? changed.replaceAll("\r\n", "").includes("\n") : changed.includes("\r\n")).toBe(
-            false,
-          );
+          const changed = Str.slice(head, next.length - tail)(next);
+          expect(
+            l.eol === "\r\n" ? Str.includes("\n")(Str.replaceAll("\r\n", "")(changed)) : Str.includes("\r\n")(changed),
+          ).toBe(false);
 
           text = next;
         }
@@ -555,8 +576,8 @@ describe("T877 public TOML edits, next/", () => {
         const path = [pick(segments, Math.abs(seed))];
         const next = yield* toml.set("", path, value);
         expect((yield* toml.parse(next)).value).toEqual(put({}, path, value));
-        expect(next.includes("\r")).toBe(false);
-        expect(next.endsWith("\n")).toBe(false);
+        expect(Str.includes("\r")(next)).toBe(false);
+        expect(Str.endsWith("\n")(next)).toBe(false);
       }).pipe(Effect.provide(TomlParser.layer)),
     check,
   );
@@ -572,7 +593,7 @@ describe("T877 public TOML edits, next/", () => {
         let text = start.text;
         let model: Tree = start.value;
         const removed: Array<Path> = [];
-        const headers = text.split(/\r?\n/).filter((line) => line.startsWith("["));
+        const headers = Str.split(text, /\r?\n/).filter((line) => Str.startsWith("[")(line));
 
         // Drain the current leaves, so inline first/middle/last/only positions all occur.
         for (let i = 0; leaves(model).length > 0; i++) {
@@ -600,7 +621,7 @@ describe("T877 public TOML edits, next/", () => {
           // A dotted parent has no header left to declare it after its last key goes.
           const box = get(model, ["box"]);
 
-          if (l.style === "dotted" && record(box) && Object.keys(box).length === 0) {
+          if (l.style === "dotted" && record(box) && Rec.keys(box).length === 0) {
             model = drop(model, ["box"]);
           }
 
@@ -609,10 +630,10 @@ describe("T877 public TOML edits, next/", () => {
           expect(yield* toml.remove(edited, pick(removed, hint.key))).toBe(edited);
 
           for (const header of headers) {
-            expect(edited.includes(header)).toBe(true);
+            expect(Str.includes(header)(edited)).toBe(true);
           }
 
-          expect(edited.endsWith("\n")).toBe(text.endsWith("\n"));
+          expect(Str.endsWith("\n")(edited)).toBe(Str.endsWith("\n")(text));
           text = edited;
         }
       }).pipe(Effect.provide(TomlParser.layer)),
@@ -649,7 +670,7 @@ describe("T877 public TOML edits, next/", () => {
         type Piece = { readonly text: string; readonly member?: string; readonly comma?: number };
 
         let pieces: Array<Piece> = [{ text: `# before${l.eol}box${l.space}{  ` }];
-        const initial = Object.fromEntries(values.map((v, i) => [`k${i}`, v]));
+        const initial = Rec.fromEntries(values.map((v, i) => [`k${i}`, v]));
         let model: Tree = initial;
         values.forEach((value, i) => {
           pieces.push({ text: `k${i}${l.space}${literal(value)}`, member: `k${i}` });
@@ -662,13 +683,13 @@ describe("T877 public TOML edits, next/", () => {
         const write = (parts: ReadonlyArray<Piece>) => parts.map((part) => part.text).join("");
         let text = write(pieces);
 
-        for (let i = 0; Object.keys(model).length > 0; i++) {
+        for (let i = 0; Rec.keys(model).length > 0; i++) {
           const parsed = yield* toml.parse(text);
           expect(parsed.value).toEqual({ box: model, other: "unchanged # text" });
           const hint = l.hints[i % l.hints.length]!;
 
           const key = pick(
-            Object.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
+            Rec.keys(model).filter((key) => get(parsed.value, ["box", key]) !== undefined),
             hint.pick,
           );
 
@@ -745,7 +766,7 @@ describe("T877 public TOML edits, next/", () => {
         const table = `[${key("table")}]${l.eol}x = ${initial}${l.eol}`;
         const beforeTable = prefix + (parentAfterChild ? child : "");
         const source = beforeTable + table + (parentAfterChild ? "" : child);
-        const text = l.final ? source : source.slice(0, -l.eol.length);
+        const text = l.final ? source : Str.slice(0, -l.eol.length)(source);
         const parsed = yield* toml.parse(text);
         const hint = l.hints[0]!;
         const parent = pick(["scalar", "array", "rows", "table"], hint.pick);
@@ -753,7 +774,7 @@ describe("T877 public TOML edits, next/", () => {
 
         // The explicit parent's own header is the location, even after a child header.
         const line = Match.value(parent).pipe(
-          Match.when("table", () => beforeTable.split(l.eol).length),
+          Match.when("table", () => Str.split(beforeTable, l.eol).length),
           Match.when("rows", () => 4),
           Match.when("array", () => 3),
           Match.orElse(() => 2),
@@ -783,6 +804,18 @@ describe("T877 public TOML edits, next/", () => {
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);
+        // A hole whose index the prototype holds is still a hole: the guard reads own elements only,
+        // as Object.hasOwn did before the Effect-check sweep turned it into the in operator.
+        const shadowed: Array<unknown> = Array.from({ length: 2 }, () => 1);
+        Reflect.deleteProperty(shadowed, 0);
+        Object.setPrototypeOf(shadowed, Object.assign(Object.create(Array.prototype), { 0: "inherited" }));
+
+        for (const holed of [sparse, shadowed]) {
+          for (const value of [holed, { nested: [holed] }]) {
+            const error = yield* refusal(toml.set(start.text, path, value), "Value");
+            expect(error.message).toBe("A TOML array cannot contain a missing element.");
+          }
+        }
 
         const bad: ReadonlyArray<unknown> = [
           null,
@@ -795,7 +828,7 @@ describe("T877 public TOML edits, next/", () => {
           -Infinity,
           Number.MAX_SAFE_INTEGER + 1,
           1n,
-          new Date(0),
+          DateTime.toDateUtc(DateTime.makeUnsafe(0)),
           new Map(),
           sparse,
         ];
@@ -862,7 +895,7 @@ describe("T877 public TOML edits, next/", () => {
 
         const parsed = yield* toml.parse(text);
 
-        for (const path of Object.keys(parsed.value).map((key) => [key])) {
+        for (const path of Rec.keys(parsed.value).map((key) => [key])) {
           expect(yield* toml.set(text, path, get(parsed.value, path))).toBe(text);
         }
       }).pipe(Effect.provide(TomlParser.layer)),
@@ -922,7 +955,7 @@ describe("T877 public TOML edits, next/", () => {
           expect(decoded).toEqual({ instance: { port }, limits: { record: ByteSize.bytes(count) } });
           expect(get(parsed.value, bytes.segments)).toBe(Schema.encodeSync(Codec.file(bytes))(ByteSize.bytes(count)));
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, port, "repo")))).toBe(true);
-          const invalid = i % 2 ? 0 : 65536;
+          const invalid = i % 2 !== 0 ? 0 : 65536;
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, invalid, "person")))).toBe(true);
           // Raw TOML editing does not know a declaration's range or file scope.
           const raw = yield* toml.set(text, Declarations.port.segments, invalid);

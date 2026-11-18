@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e38-tests",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T21:00:58-08:00",
+  "ended": "2026-11-15T21:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E38 of the Effect-checker sweep (ticket 1075, plan row E38 in docs/plan/quests/effect-sweep-PLAN.md), in next/ and our tooling, on branch fabrikalfa/effect-e38. This session finished the step an earlier tests session started: that session fixed 341 preferSchemaOverJson hits in the exam paths of the row's folders (commit ee56fee) and was stopped while the dependent tests ran. This session re-ran them at ee56fee and recounted. Check preferSchemaOverJson: met 379 (the plan's count); fixed 341 in exam paths by hand edits, all in commit ee56fee; left 38, all in product files of the row's folders, for the build; 0 hits of the row's folders sit in pull request 1366's files. Product hits left: .agents/skills/lead/scripts/agents.ts:256, box/BoxTest.ts:278, chain.ts:1407, chain.ts:1692, chain.ts:1784, drive.ts:1487, drive.ts:2401, drive.ts:2408, flow/host.test.ts:98, flow/host.test.ts:254, flow/host.test.ts:260, flow/host.test.ts:292, flow/host.test.ts:299, flow/host.ts:455, flow/run.ts:86; next/apps/fabrika/alchemy.run.ts:32, dev.ts:148, dev.ts:188, dev.ts:229, grant.ts:101, src/instance.ts:38; next/packages/libfabrika/src/client/WindowStart.ts:154, 191, 198; node/build/build.ts:319, 589; node/build/bundle.ts:192 (two hits); node/dev/dev.ts:214, 302; node/dev/local-dev.ts:314, 328 (two hits); node/dev/watch.ts:208; node/launchd/BrainControlLaunchd.ts:183; node/repositories/RepositoriesGit.ts:192; settings/Snapshot.ts:52; transport/Answer.ts:81. Two of them parse input from outside the code: chain.ts:1692 reads the quest state file from disk, and flow/host.test.ts:260 and 299 read a state file back. The two .agents files under box/ and flow/ are not exam paths (exam-paths.json lists only .agents/skills/*/scripts/*.test.ts), so they are the build's.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 40,
+  "note": "Tests ran at ee56fee: every touched test file and every test that imports a touched support file, 131 files in six narrow vitest runs under nice -n 15 --maxWorkers=3, integration laws included, 1568 tests. All passed but five files that first failed only because the box had no ssh-keygen (spawn ssh-keygen ENOENT): box.test.ts, the three commits-git integration laws and instance-wire.integration.test.ts. After openssh-client was installed in the box, those five files passed (127 of 127). Two tests are skipped by design: the 0535 memory git contract in Git.test.ts runs only on the full run (it.runIf), and the T502 law 5 home writer in port-home.laws.integration.test.ts runs only when a person sets T502_PORT_HOME=write. The ten touched .visual. tests were not run; the step rules forbid them here. No failure came from the change, so no law was edited. Recount: effect-tsgo diagnostics on the 13 tsconfigs of the plan's scope with an --lspconfig that sets only preferSchemaOverJson at error, joined by file and offset: 179 hits, 0 in the exam paths of E38's folders. The rest is outside the row: 100 in exam paths of lib:cloudflare, lib:runtime and lib:gateway (row E84), 40 in pull request 1366's files (row E84), and 1 new hit at next/packages/vitest/src/Recorder.test.ts:168, a file added by pull request 1401 after the plan's count, in no row's folders for this check, left for the lead. A second run with --list-files showed every JSON-using file the checker misses is outside every tsconfig (22 .agents test and script files that .agents/tsconfig.json does not include), so no typecheck sees them either. No plants: this slice adds no law and changes none.",
+  "plants": [],
+  "step": "tests"
+}

@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -12,6 +9,7 @@ import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Match, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
+
 import { vi } from "vitest";
 import type { Built } from "./build.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -79,9 +77,9 @@ const filesWithoutSync = Layer.effect(
 
 // A test's folder, its stubbed home and its fetch spy all go back through the test's scope (0061).
 const sandbox = Effect.gen(function* () {
-  const folder = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  const folder = yield* FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p12-m-" })).pipe(
+    Effect.provide(NodeServices.layer),
+    Effect.orDie,
   );
 
   yield* Effect.acquireRelease(
@@ -92,10 +90,17 @@ const sandbox = Effect.gen(function* () {
   return folder;
 });
 
+// One stand-in takes every request: the entry's own client is handed it (`fetchClient`), and the
+// global `fetch` is the same stand-in for the scope, so a request on any other path is seen too.
 const spyOnFetch = (impl: typeof fetch) =>
   Effect.acquireRelease(
-    Effect.sync(() => vi.spyOn(globalThis, "fetch").mockImplementation(impl)),
-    () => Effect.sync(() => vi.restoreAllMocks()),
+    Effect.sync(() => {
+      const fetched = vi.fn(impl);
+      vi.stubGlobal("fetch", fetched);
+
+      return fetched;
+    }),
+    () => Effect.sync(() => vi.unstubAllGlobals()),
   );
 
 // No real signal leaves these laws: every `process.kill` reaches this spy, and each law checks that
@@ -109,11 +114,10 @@ const spyOnKill = Effect.acquireRelease(
 // real `ps` and never replaces it. Every other command runs for real.
 const quietMemory = rssStandIn(() => 0).pipe(Layer.provide(NodeServices.layer));
 
-// The entry's own client, whose `fetch` is the global one at the moment of each request: a real
-// process reads the global once, and a law stubs it anew on every run.
-const fetchClient = FetchHttpClient.layer.pipe(
-  Layer.provide(Layer.succeed(FetchHttpClient.Fetch, (input, init) => globalThis.fetch(input, init))),
-);
+// The entry's own client, sending through this run's stand-in: a real process hands it the global
+// `fetch` once, and a law hands it a new stand-in on every run.
+const fetchClient = (fetched: typeof fetch) =>
+  FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fetched)));
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 // SAFETY: dev.ts sends each control call with HttpClientRequest.bodyText, an HttpBody Uint8Array,
@@ -144,7 +148,7 @@ it.live.prop(
       const folder = yield* sandbox;
       const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
 
-      const fixture = RecordWireTest.startupFixture({
+      const fixture = yield* RecordWireTest.startupFixture({
         home: folder,
         name: "quota-start",
         person: "person-test",
@@ -157,7 +161,7 @@ it.live.prop(
       // The quota values ride in the settings snapshot, each as its declared schema encodes it.
       const values: Record<string, Schema.Json> = { ...fixture.settings.values };
 
-      const recovery = Schema.decodeUnknownSync(Schema.toEncoded(Declarations.recovery.schema))(
+      const recovery = yield* Schema.decodeUnknownEffect(Schema.toEncoded(Declarations.recovery.schema))(
         values[Declarations.recovery.path],
       );
 
@@ -195,7 +199,7 @@ it.live.prop(
       const result = yield* Effect.scoped(
         startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
       ).pipe(
-        Effect.provide(fetchClient),
+        Effect.provide(fetchClient(fetched)),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(filesWithoutSync),
@@ -219,7 +223,8 @@ it.live.prop(
           const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
           const folder = yield* sandbox;
           const events: Array<typeof BrainEvent.Type> = [];
-          yield* spyOnFetch(async (_url, options) => {
+
+          const fetched = yield* spyOnFetch(async (_url, options) => {
             // SAFETY: dev.ts's dial writes every body as JSON.stringify({ target, project, name, method,
             // args }), and its outbox flush sends method "brain" with args `[event]`, a BrainEvent; only
             // that method's args are read below.
@@ -234,6 +239,7 @@ it.live.prop(
 
             return Response.json({ value: call.method === "info" ? [] : null });
           });
+
           const kill = yield* spyOnKill;
 
           const config = {
@@ -246,10 +252,10 @@ it.live.prop(
           };
 
           for (const build of builds) {
-            yield* Effect.scoped(
-              startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
-            ).pipe(
-              Effect.provide(fetchClient),
+            const fixture = yield* RecordWireTest.startupFixture(config);
+
+            yield* Effect.scoped(startDev({ build, brain: "unused.mjs", programs: {} }, fixture)).pipe(
+              Effect.provide(fetchClient(fetched)),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
               Effect.provide(quietMemory),
@@ -277,7 +283,10 @@ it.live.prop(
       const reached = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
-      yield* spyOnFetch(async (_url, options) => {
+      // The fetch stand-in is a plain async callback, so it runs with this law's services.
+      const context = yield* Effect.context();
+
+      const fetched = yield* spyOnFetch(async (_url, options) => {
         // SAFETY: each control body is the `{ target, project, name, method, args }` JSON dev.ts's dial
         // writes; a "brain" call, the one branch below, carries the flushed BrainEvent as `args[0]`.
         const call = JSON.parse(bodyText(options)) as {
@@ -287,29 +296,26 @@ it.live.prop(
 
         if (call.method === "brain") {
           events.push(call.args[0]!);
-          Effect.runSync(Deferred.succeed(reached, undefined));
-          await Effect.runPromise(Deferred.await(release));
+          Effect.runSyncWith(context)(Deferred.succeed(reached, undefined));
+          await Effect.runPromiseWith(context)(Deferred.await(release));
         }
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
       });
+
       const kill = yield* spyOnKill;
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       yield* Effect.gen(function* () {
-        const starting = yield* Effect.forkChild(
-          startDev(
-            { build, brain: "unused.mjs", programs: {} },
-            RecordWireTest.startupFixture({
-              home: folder,
-              name: "life-contract",
-              person: "person-test",
-              founder: "public-test",
-              window: null,
-              port: 18787,
-            }),
-          ),
-        );
+        const fixture = yield* RecordWireTest.startupFixture({
+          home: folder,
+          name: "life-contract",
+          person: "person-test",
+          founder: "public-test",
+          window: null,
+          port: 18787,
+        });
 
+        const starting = yield* Effect.forkChild(startDev({ build, brain: "unused.mjs", programs: {} }, fixture));
         yield* Deferred.await(reached);
         yield* Effect.yieldNow;
         expect(starting.pollUnsafe()).toBeUndefined();
@@ -319,7 +325,7 @@ it.live.prop(
       }).pipe(
         Effect.ensuring(Deferred.succeed(release, undefined)),
         Effect.scoped,
-        Effect.provide(fetchClient),
+        Effect.provide(fetchClient(fetched)),
         Effect.provide(ProcessIdGenerator.layer),
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(quietMemory),

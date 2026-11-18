@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./caches.ts";
@@ -14,7 +15,7 @@ const realFiles = (): Files => {
   const files = cacheFiles(read);
 
   return {
-    workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, text]) => [path, parse(text)])),
+    workflows: Rec.fromEntries(Rec.toEntries(files.workflows).map(([path, text]) => [path, parse(text)])),
     action: parse(files.action),
     workspace: parse(files.workspace),
     typecheck: files.typecheck,
@@ -22,7 +23,7 @@ const realFiles = (): Files => {
 };
 
 const text = (files: Files) => ({
-  workflows: Object.fromEntries(Object.entries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
+  workflows: Rec.fromEntries(Rec.toEntries(files.workflows).map(([path, w]) => [path, JSON.stringify(w)])),
   action: JSON.stringify(files.action),
   workspace: JSON.stringify(files.workspace),
   typecheck: files.typecheck,
@@ -67,7 +68,7 @@ for (const [name, plant, error] of [
   [
     "C1b: setup-node's own cache in a workflow that runs on main only",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         // SAFETY: mutation.yaml's `jobs` key is a map of jobs, each with a `steps` list; the YAML parse leaves it untyped.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
@@ -86,7 +87,7 @@ for (const [name, plant, error] of [
   [
     "C1b: pnpm/action-setup's own cache in a workflow that runs on main only",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         // SAFETY: the same mutation.yaml `jobs` map as in the plant above, each job holding its `steps` list.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
@@ -98,7 +99,7 @@ for (const [name, plant, error] of [
   [
     "C1b: a main-only save of the pnpm store",
     (f: Files) => {
-      const jobs = Object.values(
+      const jobs = Rec.values(
         // SAFETY: mutation.yaml's parsed `jobs` is a map of jobs with steps, as the two plants above also read it.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );

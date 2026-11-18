@@ -8,6 +8,7 @@ import { Result, Schema, Match } from "effect";
 import * as Id from "../Id.ts";
 import { type Task, Request, Executor, Result as TaskResult, State } from "../tasks/Task.ts";
 
+import * as Arr from "effect/Array";
 import * as TaskAccess from "./TaskAccess.ts";
 
 const Item = Schema.Struct({
@@ -60,15 +61,16 @@ it.prop(
     process: Schema.String,
   },
   ({ items, key, process }) => {
-    const tasks = items.map((item) => taskFor({ ...item, matching: true }));
+    const tasks = Arr.map(items, (item) => taskFor({ ...item, matching: true }));
 
-    const subjects = tasks.flatMap((j) =>
+    const subjects = Arr.flatMap(tasks, (j) =>
       j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );
 
     for (const subject of [{ key, process }, ...subjects]) {
       for (const values of [tasks, [...tasks, ...tasks]]) {
-        const wanted = values.filter(
+        const wanted = Arr.filter(
+          values,
           (j) =>
             j.state._tag !== "absent" &&
             OPEN.includes(j.state._tag) &&

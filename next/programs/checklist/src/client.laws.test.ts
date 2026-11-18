@@ -16,7 +16,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
-import { Exit, Schema } from "effect";
+import { Array as Arr, String as Str, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";
 import { checklistWindow } from "./window.tsx";
@@ -49,7 +49,7 @@ const client = clientMachineFor({ decode: () => decode });
 
 type ClientModel = ReturnType<typeof client.init>[0];
 
-const POOL = ["milk", "bread", "eggs", "tea", "a".repeat(80)] as const;
+const POOL = ["milk", "bread", "eggs", "tea", Str.repeat(80)("a")] as const;
 
 const choice = fc.record({
   move: fc.nat(),
@@ -63,7 +63,7 @@ type Choice = typeof choice extends fc.Arbitrary<infer C> ? C : never;
 
 /** The Msgs the folded model allows now, each with the item it names read off the model. */
 const moves = (m: Model, now: number, c: Choice): ReadonlyArray<Msg> => {
-  const names = m.items.map((i) => i.name);
+  const names = Arr.map(m.items, (i) => i.name);
   const held = names.length === 0 ? null : names[c.pick % names.length]!;
 
   const out: Array<Msg> = [
@@ -141,7 +141,7 @@ describe("L23: the checklist through the real client", () => {
           seen.refused += s.refused ? 1 : 0;
           seen.patched += s.refused ? 0 : 1;
           seen.removed += !s.refused && s.msg.type === "remove" ? 1 : 0;
-          seen.late += s.view.items.some((i) => i.state === "late") ? 1 : 0;
+          seen.late += Arr.some(s.view.items, (i) => i.state === "late") ? 1 : 0;
           expect(s.shown?.view, `after ${JSON.stringify(s.msg)}`).toEqual(s.view);
         });
       }),

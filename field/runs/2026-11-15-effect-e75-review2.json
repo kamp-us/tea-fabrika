@@ -1,0 +1,54 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e75-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:52:10-08:00",
+  "ended": "2026-11-16T00:22:51-08:00",
+  "parent": "2026-11-15-effect-e75-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The recheck of slice E75 (preferEffectArray in libfabrika's src/runtime, in next/) after PR 1366 merged, at 423156990, the review of record: merge-ready with two new findings. The new work is the tests commit 9165aa9ca (64 exam hits in Runner.integration.test.ts, QuotaRunnerTest.ts and RuntimeCauseTest.ts) and the build commits a57308007 and 423156990 (46 product hits in Runner.ts, RecoveryStore.ts, RepliesSql.ts and ProcessStore.ts); the main merge ad52eae65 changes nothing in src/runtime and holds no conflict resolution. Recount with effect-tsgo diagnostics, preferEffectArray only: 0 hits in src/runtime at this head. Every new line was read: each find became Option.getOrUndefined(Arr.findFirst(...)) beside its undefined check; RecoveryStore's snapshot()?.receipts.find(..) ?? null became saved === null ? null : Option.getOrNull(...), and snapshot answers its value or null; both findIndex calls became getOrElse(..., () => -1); the live?., supervision?. and saved?. chains became === null checks, which the types hold to X | null, and the Map.get(..)?.map calls became an undefined check; ProcessStore's join of part.checkpoint, a NOT NULL TEXT column, keeps \"\" as its separator and String(x ?? \"\") gives what join gave for null and undefined; RepliesSql keeps \".\" and \", \". In the seven changed files the expect, matcher, comment and disable line counts are the same as before the round. No tsconfig, lock line, LOCKED row or script is in the diff. The earlier rule_break finding: the new imports are namespace imports (Arr everywhere, Option in RecoveryStore), and Runner.ts and ProcessStore.ts reuse the Option they already took from the barrel, so this round adds no barrel name; the three lines that finding named (HandsTasksLive.ts:6, State.ts:8, internal/supervisor.ts:5) are unchanged, so its row stands for E61. The missing_test finding on Client.ts dated stands as written.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30.7,
+  "note": "Ran at 423156990: pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed); pnpm typecheck (exit 0); 12 test files one at a time with --maxWorkers=1, all passed: runtime Runner.integration 117, ProcessStore.integration 7, RecoveryStore.integration 8, RunnerRecovery.laws 4, RunnerSupervision.integration 60, EffectFunctions 11, node QuotaRunner 7, node ErrorCause 29, node Replies.integration 15, node dev/supervision-spans.integration 9, cloudflare supervision.laws.integration 6, app runtime-quotas.laws 2. loosening.sh over 9165aa9ca^..HEAD: 34 hits in the slice's files, 3 at added imports and 31 at rewritten expect calls, none a loosening; 6 more are main's .github/ci files from the merge. The branch is 4 commits behind main and merges with no conflict. Plants in a scratch copy at this head, never the branch (see plants). Two plants stayed green on old read paths this round rewrote without changing; each is a missing_test finding.",
+  "plants": [
+    {
+      "law": "Runner.integration.test.ts, a send to an ended process is refused",
+      "plant": "Runner.ts: Arr.some(state.cmds, (job) => exits(state, job)) became Arr.every",
+      "result": "red"
+    },
+    {
+      "law": "ProgramMailRuntime.integration.test.ts and RunnerHands.integration.test.ts, owed host Cmds keep the retry alarm",
+      "plant": "Runner.ts owesHostCmd: Arr.some became Arr.every",
+      "result": "red"
+    },
+    {
+      "law": "the split checkpoint read: ProcessStore.integration, StartChild, StartChildBoundary, StartChildExit, RunnerSupervision, Runner and cloudflare supervision laws",
+      "plant": "ProcessStore.ts:310 the parts join separator \"\" became \",\"",
+      "result": "green"
+    },
+    {
+      "law": "the old single-row recovery snapshot read: RecoveryStore.integration and RecoveryStoreReads.integration",
+      "plant": "RecoveryStore.ts:236 Option.getOrNull(Arr.findFirst(saved.receipts, ..)) became null",
+      "result": "green"
+    },
+    {
+      "law": "Runner.integration.test.ts alone, owed host Cmds",
+      "plant": "Runner.ts owesHostCmd: Arr.some became Arr.every",
+      "result": "green"
+    }
+  ],
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "billing": "subscription",
+  "step": "review"
+}

@@ -1,13 +1,20 @@
 /**
  * One Rolldown bundle as an Effect, and the program bundles built on it.
  */
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Match from "effect/Match";
-import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Str from "effect/String";
+
+import effectPackage from "effect/package.json" with { type: "json" };
+
 import {
   rolldown,
   VERSION,
@@ -59,7 +66,9 @@ const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /** The bytes a bundle emitted, chunks and assets alike. */
 const emitted = (output: RolldownOutput) =>
-  output.output.reduce(
+  Arr.reduce(
+    output.output,
+    0,
     (total, item) =>
       total +
       (item.type === "chunk"
@@ -67,7 +76,6 @@ const emitted = (output: RolldownOutput) =>
         : Predicate.isString(item.source)
           ? bytes(item.source)
           : item.source.byteLength),
-    0,
   );
 
 /**
@@ -89,6 +97,8 @@ export const bundle = Effect.fn("build.bundle")(function* (
   options: Options = {},
 ) {
   const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  // The services Rolldown's synchronous onLog callback runs on.
+  const context = yield* Effect.context<never>();
   const root = options.cwd ?? path.resolve();
 
   const relative = (file: string) => {
@@ -97,7 +107,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 
     if (url?.protocol === "file:") {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
-      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
+      local = Effect.runSyncWith(context)(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
     }
 
     return path.isAbsolute(local) ? path.relative(root, local) : local;
@@ -122,7 +132,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
         // Rolldown has already embedded file names in the message before calling onLog.
         for (const file of [log.id, log.loc?.file, log.exporter, log.reexporter, ...(log.ids ?? [])]) {
           if (file !== undefined) {
-            message = message.replaceAll(file, relative(file));
+            message = Function.pipe(message, Str.replaceAll(file, relative(file)));
           }
         }
 
@@ -191,8 +201,8 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const generated = path.join(options.root, "program.generated.ts");
   const programs: Record<string, ProgramSource> = {};
 
-  for (const [name, entry] of Object.entries(options.programs)) {
-    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
+  for (const [name, entry] of Rec.toEntries(options.programs)) {
+    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
 
     const output = yield* bundle(
       "fabrika:program",
@@ -215,10 +225,13 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
 
-    const source = output.output
-      .filter((o) => o.type === "chunk")
-      .map((o) => o.code)
-      .join("\n");
+    const source = Arr.join(
+      Arr.map(
+        Arr.filter(output.output, (o) => o.type === "chunk"),
+        (o) => o.code,
+      ),
+      "\n",
+    );
 
     programs[name] = { hash: yield* hash(source), source };
   }

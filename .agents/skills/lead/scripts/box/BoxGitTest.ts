@@ -1,6 +1,6 @@
 // BoxGitTest.layer: the BoxGit service in memory, answering from one model of MAIN and the box.
 // Any call the model marks as failing fails, as real git does on an exit or stderr.
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Array as Arr } from "effect";
 import { BoxGit, BoxGitError, type Ref } from "./BoxGit.ts";
 
 export type Model = {
@@ -35,7 +35,7 @@ export const layer = (model: Model): Layer.Layer<BoxGit> => {
       },
       retained: answer("for-each-ref", model.retained),
       reachable: (tips) =>
-        answer("rev-list", new Set(tips.some((tip) => model.retained.includes(tip)) ? model.reachable : [])),
+        answer("rev-list", new Set(Arr.some(tips, (tip) => model.retained.includes(tip)) ? model.reachable : [])),
     }),
   );
 };

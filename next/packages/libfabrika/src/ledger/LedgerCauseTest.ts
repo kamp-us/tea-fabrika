@@ -160,17 +160,18 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       fc.record({ methodsRun: fc.array(methods, { minLength: 1, maxLength: 4 }), failure: failures }),
       ({ methodsRun, failure }) =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const planted = throwing(fresh(), failure);
           const referee = yield* Effect.provide(Referee, RefereeSql.layer(planted.sql).pipe(Layer.provide(ring)));
 
           // The stub bridges to the real referee, as a Durable Object stub does: through a Promise.
           const calls: LedgerCalls = {
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            append: (stream, id, raw) => Effect.runPromise(referee.append(stream, id, raw)),
+            append: (stream, id, raw) => Effect.runPromiseWith(context)(referee.append(stream, id, raw)),
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            read: (stream, after, reader) => Effect.runPromise(referee.read(stream, after, reader)),
+            read: (stream, after, reader) => Effect.runPromiseWith(context)(referee.read(stream, after, reader)),
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Durable Object stub answers with a Promise
-            wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
+            wait: (stream, after, reader) => Effect.runPromiseWith(context)(referee.wait(stream, after, reader)),
           };
 
           const remote = LedgerRemote.layer(calls, { reader: READER });

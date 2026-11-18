@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Stub } from "@kampus/vitest";
 import { Effect } from "effect";
+import * as Digest from "effect/crypto/Digest";
+
 import * as fc from "fast-check";
 import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -32,7 +33,13 @@ it("an unknown program is refused before the Worker Loader is called", async () 
 
 // P16. Builder contract: `workers/index.ts` exports `serveAsset(assets, request)`, and `fetch`
 // takes the embedded asset table as its fourth argument. Nothing is read from disk.
-const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+/** A text's SHA-256 in hex, through Effect's Digest on the platform's WebCrypto. */
+const sha = (s: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(s))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
 const assets = fc.record({
   id: fc.nat(),
@@ -44,7 +51,7 @@ it("embedded assets keep their headers on GET and HEAD, refuse writes and ignore
   await fc.assert(
     fc.asyncProperty(assets, async ({ id, body, type }) => {
       const route = `/asset${id}.js`;
-      const asset = { hash: sha(body), type, body };
+      const asset = { hash: await sha(body), type, body };
       const table = { [route]: asset };
 
       for (const method of ["GET", "HEAD"]) {
@@ -91,16 +98,19 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
       fc.stringMatching(/^[a-z][a-z0-9-]{0,12}$/),
       async ({ id, body, type }, port, missing) => {
         const route = `/window${id}.js`;
-        const table = { [route]: { hash: sha(body), type, body } };
+        const hash = await sha(body);
+        const table = { [route]: { hash, type, body } };
 
-        const config = instanceFixture({
-          name: "project-test",
-          port,
-          person: "person-test",
-          founder: "public-test",
-          window: null,
-          build: "build-test",
-        });
+        const config = await Effect.runPromise(
+          StartsTest.fixture({
+            name: "project-test",
+            port,
+            person: "person-test",
+            founder: "public-test",
+            window: null,
+            build: "build-test",
+          }),
+        );
 
         // An asset request calls no binding: each double fails the law if one is called.
         const refuse = () => {
@@ -134,7 +144,7 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
         const head = await Effect.runPromise(fetch(request(route, host, "HEAD"), env, config, table));
         expect(head.status).toBe(200);
         expect(head.headers.get("content-type")).toBe(type);
-        expect(head.headers.get("etag")).toBe(`"${sha(body)}"`);
+        expect(head.headers.get("etag")).toBe(`"${hash}"`);
         expect(head.body).toBeNull();
 
         const wrongHost = await Effect.runPromise(
@@ -155,9 +165,3 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
     { seed: 119120, numRuns: 30 },
   );
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

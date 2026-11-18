@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e75-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:14:01-08:00",
+  "ended": "2026-11-15T23:29:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second tests step for judgment slice E75 of the Effect-checker sweep (preferEffectArray in libfabrika's src/runtime), in next/, after PR 1366 merged. No pull request and no lock line, by the owner's ruling. Recount at 77961cb50 (the branch with origin/main merged in): 110 hits left in the folder, up from the 99 listed as waiting on 1366, because 1366 changed its files: 64 in exam paths (Runner.integration.test.ts 54, QuotaRunnerTest.ts 8, a file 1366 added, RuntimeCauseTest.ts 2) and 46 in product files (Runner.ts 33, RecoveryStore.ts 5, RepliesSql.ts 4, ProcessStore.ts 4). All 64 exam hits are fixed. The checker has no quick fix for this check, so a scratchpad codemod (the TypeScript parser bundled with ts-morph, driven by the checker's own line and column spans, never committed) rewrote 60 calls (filter, map, some, every, flatMap) as Arr.<name>(receiver, ...), and 4 were hand edits in Runner.integration.test.ts: two optional w.published.get(..)?.map(..) calls now read const updates = w.published.get(..) and updates === undefined ? undefined : Arr.map(updates, ..), so each expect sees the same value; rows.find(..)?.attributes became Option.getOrUndefined(Arr.findFirst(..))?.attributes; content.findIndex(..) became Option.getOrElse(Arr.findFirstIndex(..), () => -1). A fifth call the codemod rewrote, saved?.cmds.filter(..), was then fixed by hand to saved === null ? undefined : Arr.filter(saved.cmds, ..), as the first tests step did. Imports added as import * as Arr from \"effect/Array\". Recount after the fix: 0 hits in exam paths of the folder; 46 left, all in product files, for the build.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Count: effect-tsgo diagnostics --format json on next/packages/libfabrika/tsconfig.json with an --lspconfig setting only preferEffectArray to error; nothing written to a tsconfig. Left for the build, 46 hits in 4 product files (lines at 77961cb50): runtime/Runner.ts 33, RecoveryStore.ts 5, RepliesSql.ts 4, ProcessStore.ts 4. Whole diff read: no comment line lost, no oxlint-disable touched, no assertion changed. Ran at 77961cb50 plus this change, before the commit: libfabrika's tsc --noEmit -p . (0 errors), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed), the list ratchet (exit 0), and nice -n 15 vitest --maxWorkers=3 one file at a time: runtime/Runner.integration.test.ts 117 passed (the 0178 guard allowed it, CLAUDE_CODE_REMOTE=true on Linux), node/ErrorCause.test.ts 29 passed (reads RuntimeCauseTest.ts), node/QuotaRunner.test.ts 7 passed (reads QuotaRunnerTest.ts). Not run: pnpm typecheck, --changed origin/main, the full suite.",
+  "plants": [
+    {
+      "law": "preferEffectArray in src/runtime's exam paths (the check, counted as the slice counts it; no lock yet)",
+      "plant": "export const planted = [1, 2].map((n) => n + 1) appended to runtime/QuotaRunnerTest.ts, counted (one hit at 525:31), file restored by copy",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

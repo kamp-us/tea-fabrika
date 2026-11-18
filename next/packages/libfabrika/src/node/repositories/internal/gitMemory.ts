@@ -1,14 +1,19 @@
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Rec from "effect/Record";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 
 type Format = "sha1" | "sha256";
 
@@ -78,7 +83,7 @@ const NOT_A_REPOSITORY = "not a git repository (or any of the parent directories
 const SAFE_GLOBALS = new Set(["--no-replace-objects", "--literal-pathspecs", "--no-pager"]);
 
 const concat = (parts: ReadonlyArray<Uint8Array>) => {
-  const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, part) => n + part.length));
   let offset = 0;
 
   for (const part of parts) {
@@ -89,7 +94,11 @@ const concat = (parts: ReadonlyArray<Uint8Array>) => {
   return out;
 };
 
-const hexBytes = (hex: string) => Uint8Array.from(hex.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));
+const hexBytes = (hex: string) =>
+  Uint8Array.from(
+    Option.getOrElse(Function.pipe(hex, Str.match(/../g)), (): Array<string> => []),
+    (pair) => Number.parseInt(pair, 16),
+  );
 
 const isUrl = (remote: string) => /^[a-z][a-z0-9+.-]*:\/\//i.test(remote) || /^[^/]+:/.test(remote);
 
@@ -153,23 +162,24 @@ export const make = Effect.fnUntraced(function* () {
         blob: (object) => object.bytes,
         tree: (object) =>
           concat(
-            [...object.entries]
-              .sort(treeOrder)
-              .flatMap(([name, entry]) => [
-                encoder.encode(`${entry.mode === "040000" ? "40000" : entry.mode} ${name}\0`),
-                hexBytes(entry.id),
-              ]),
+            Arr.flatMap([...object.entries].sort(treeOrder), ([name, entry]) => [
+              encoder.encode(`${entry.mode === "040000" ? "40000" : entry.mode} ${name}\0`),
+              hexBytes(entry.id),
+            ]),
           ),
         commit: (object) =>
           encoder.encode(
-            [
-              `tree ${object.tree}`,
-              ...object.parents.map((parent) => `parent ${parent}`),
-              `author ${object.author}`,
-              `committer ${object.committer}`,
-              "",
-              object.message,
-            ].join("\n"),
+            Arr.join(
+              [
+                `tree ${object.tree}`,
+                ...Arr.map(object.parents, (parent) => `parent ${parent}`),
+                `author ${object.author}`,
+                `committer ${object.committer}`,
+                "",
+                object.message,
+              ],
+              "\n",
+            ),
           ),
       }),
       Match.exhaustive,
@@ -211,14 +221,15 @@ export const make = Effect.fnUntraced(function* () {
       const folders = new Map<string, Map<string, Entry>>();
 
       for (const [file, entry] of index) {
-        const slash = file.indexOf("/");
+        const slash = Function.pipe(file, Str.indexOf("/"));
 
-        if (slash === -1) {
+        if (Option.isNone(slash)) {
           entries.set(file, entry);
         } else {
-          const folder = folders.get(file.slice(0, slash)) ?? new Map<string, Entry>();
-          folder.set(file.slice(slash + 1), entry);
-          folders.set(file.slice(0, slash), folder);
+          const name = Function.pipe(file, Str.slice(0, slash.value));
+          const folder = folders.get(name) ?? new Map<string, Entry>();
+          folder.set(Function.pipe(file, Str.slice(slash.value + 1)), entry);
+          folders.set(name, folder);
         }
       }
 
@@ -231,7 +242,7 @@ export const make = Effect.fnUntraced(function* () {
   );
 
   const lookup = (store: Store, tree: string, file: string): Entry | null => {
-    const parts = file.split("/");
+    const parts = Str.split(file, "/");
     let entries = readTree(store, tree);
 
     for (const [n, part] of parts.entries()) {
@@ -271,7 +282,12 @@ export const make = Effect.fnUntraced(function* () {
       if (object.type === "commit") {
         pending.push(object.tree, ...object.parents);
       } else if (object.type === "tree") {
-        pending.push(...[...object.entries.values()].filter((e) => e.mode !== "160000").map((e) => e.id));
+        pending.push(
+          ...Arr.map(
+            Arr.filter([...object.entries.values()], (e) => e.mode !== "160000"),
+            (e) => e.id,
+          ),
+        );
       }
     }
   };
@@ -313,19 +329,21 @@ export const make = Effect.fnUntraced(function* () {
           place.refs.get(`refs/heads/${base}`) ??
           (place.store.objects.has(base) && base.length === (place.store.format === "sha1" ? 40 : 64) ? base : null));
 
-    for (const step of (match?.[2] ?? "").match(/\^\{commit\}|\^[0-9]*|~[0-9]*/g) ?? []) {
+    const steps = Function.pipe(match?.[2] ?? "", Str.match(/\^\{commit\}|\^[0-9]*|~[0-9]*/g));
+
+    for (const step of Option.getOrElse(steps, (): Array<string> => [])) {
       if (id === null) {
         return null;
       }
 
       if (step === "^{commit}") {
         id = readCommit(place.store, id) === null ? null : id;
-      } else if (step.startsWith("~")) {
-        for (let n = Number(step.slice(1) || "1"); n > 0 && id !== null; n--) {
+      } else if (Function.pipe(step, Str.startsWith("~"))) {
+        for (let n = Number(Function.pipe(step, Str.slice(1)) || "1"); n > 0 && id !== null; n--) {
           id = readCommit(place.store, id)?.parents[0] ?? null;
         }
       } else {
-        const n = Number(step.slice(1) || "1");
+        const n = Number(Function.pipe(step, Str.slice(1)) || "1");
         id = n === 0 ? id : (readCommit(place.store, id)?.parents[n - 1] ?? null);
       }
     }
@@ -394,7 +412,7 @@ export const make = Effect.fnUntraced(function* () {
     let folder = path.dirname(path.join(root, file));
 
     // Git drops the folders a removal empties, up to the worktree's root.
-    while (folder !== root && folder.startsWith(root)) {
+    while (folder !== root && Function.pipe(folder, Str.startsWith(root))) {
       const left = yield* fs.readDirectory(folder).pipe(Effect.orElseSucceed(() => ["?"]));
 
       if (left.length > 0) {
@@ -453,7 +471,9 @@ export const make = Effect.fnUntraced(function* () {
     const objects = env.GIT_OBJECT_DIRECTORY;
 
     if (objects !== undefined) {
-      const store = [...stores.values()].find((s) => path.join(s.directory, "objects") === objects);
+      const store = Option.getOrUndefined(
+        Arr.findFirst([...stores.values()], (s) => path.join(s.directory, "objects") === objects),
+      );
 
       // A borrowed object store in a throwaway bare folder: no refs, no config of its own.
       return store === undefined
@@ -501,7 +521,12 @@ export const make = Effect.fnUntraced(function* () {
   });
 
   const remoteHead = (store: Store) =>
-    store.bare ? store.head : ([...worktrees.values()].find((w) => w.store === store)?.head ?? store.head);
+    store.bare
+      ? store.head
+      : Option.match(
+          Arr.findFirst([...worktrees.values()], (w) => w.store === store),
+          { onNone: () => store.head, onSome: (w) => w.head },
+        );
 
   /** A remote's configured address; a name with none is read as a path, as git reads it. */
   const resolveRemote = (place: Place | null, remote: string) => place?.config.get(`remote.${remote}.url`) ?? remote;
@@ -530,7 +555,7 @@ export const make = Effect.fnUntraced(function* () {
   };
 
   const unsupported = (args: ReadonlyArray<string>) =>
-    Effect.die(new Error(`git memory: unsupported command: git ${args.join(" ")}`));
+    Effect.die(new Error(`git memory: unsupported command: git ${Arr.join(args, " ")}`));
 
   const signature = (env: Record<string, string | undefined>, role: "AUTHOR" | "COMMITTER") =>
     `${env[`GIT_${role}_NAME`] ?? "fixture"} <${env[`GIT_${role}_EMAIL`] ?? "fixture@example.invalid"}> ${clock} +0000`;
@@ -565,9 +590,20 @@ export const make = Effect.fnUntraced(function* () {
   const commands: Record<string, Run> = {
     init: Effect.fnUntraced(function* (args, cwd) {
       const { set, rest } = flags(args, ["--bare", "-q", "--quiet"]);
-      const format = rest.find((a) => a.startsWith("--object-format="))?.slice(16) ?? "sha1";
-      const branch = rest.find((a) => a.startsWith("--initial-branch="))?.slice(17) ?? "master";
-      const target = rest.filter((a) => !a.startsWith("--"));
+
+      const format = Function.pipe(
+        Arr.findFirst(rest, (a) => Function.pipe(a, Str.startsWith("--object-format="))),
+        Option.map(Str.slice(16)),
+        Option.getOrElse(() => "sha1"),
+      );
+
+      const branch = Function.pipe(
+        Arr.findFirst(rest, (a) => Function.pipe(a, Str.startsWith("--initial-branch="))),
+        Option.map(Str.slice(17)),
+        Option.getOrElse(() => "master"),
+      );
+
+      const target = Arr.filter(rest, (a) => !Function.pipe(a, Str.startsWith("--")));
 
       if (!set.has("--bare") || target.length !== 1 || (format !== "sha1" && format !== "sha256")) {
         return yield* unsupported(["init", ...args]);
@@ -590,7 +626,7 @@ export const make = Effect.fnUntraced(function* () {
     clone: Effect.fnUntraced(function* (args, cwd) {
       const { rest } = flags(args, ["-q", "--quiet"]);
 
-      if (rest.length !== 2 || rest.some((a) => a.startsWith("-"))) {
+      if (rest.length !== 2 || Arr.some(rest, (a) => Function.pipe(a, Str.startsWith("-")))) {
         return yield* unsupported(["clone", ...args]);
       }
 
@@ -625,8 +661,8 @@ export const make = Effect.fnUntraced(function* () {
       for (const [ref, id] of origin.refs) {
         copy(origin, store, id);
 
-        if (ref.startsWith("refs/heads/")) {
-          store.refs.set(`refs/remotes/origin/${ref.slice(11)}`, id);
+        if (Function.pipe(ref, Str.startsWith("refs/heads/"))) {
+          store.refs.set(`refs/remotes/origin/${Function.pipe(ref, Str.slice(11))}`, id);
         }
       }
 
@@ -655,19 +691,17 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      const under = path
-        .relative(worktree.root, yield* canonical(cwd))
-        .split(path.sep)
-        .join("/");
+      const under = Arr.join(Str.split(path.relative(worktree.root, yield* canonical(cwd)), path.sep), "/");
 
-      const inside = (file: string) => under === "" || file === under || file.startsWith(`${under}/`);
+      const inside = (file: string) =>
+        under === "" || file === under || Function.pipe(file, Str.startsWith(`${under}/`));
 
       if (rest.length > 1 || (rest.length === 1 && rest[0] !== ".") || (rest.length === 0 && set.size === 0)) {
         return yield* unsupported(["add", ...args]);
       }
 
       if (set.has("-u") || set.has("--update")) {
-        for (const file of [...worktree.index.keys()].filter(inside)) {
+        for (const file of Arr.filter([...worktree.index.keys()], inside)) {
           const found = yield* onDisk(worktree, file);
 
           if (found === null) {
@@ -691,7 +725,7 @@ export const make = Effect.fnUntraced(function* () {
       const scanned = new Map<string, Entry>();
       yield* scan(worktree.root, under, scanned, worktree.store);
 
-      for (const file of [...worktree.index.keys()].filter(inside)) {
+      for (const file of Arr.filter([...worktree.index.keys()], inside)) {
         worktree.index.delete(file);
       }
 
@@ -709,16 +743,12 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      const under = path
-        .relative(worktree.root, yield* canonical(cwd))
-        .split(path.sep)
-        .join("/");
+      const under = Arr.join(Str.split(path.relative(worktree.root, yield* canonical(cwd)), path.sep), "/");
+      const files = Arr.map(rest, (file) => (under === "" ? file : `${under}/${file}`));
+      const missing = Arr.findFirst(files, (file) => !worktree.index.has(file));
 
-      const files = rest.map((file) => (under === "" ? file : `${under}/${file}`));
-      const missing = files.find((file) => !worktree.index.has(file));
-
-      if (missing !== undefined) {
-        return fatal(`pathspec '${missing}' did not match any files`);
+      if (Option.isSome(missing)) {
+        return fatal(`pathspec '${missing.value}' did not match any files`);
       }
 
       const committed = flatten(worktree.store, readCommit(worktree.store, checkedOut(worktree))?.tree ?? "");
@@ -743,7 +773,15 @@ export const make = Effect.fnUntraced(function* () {
         }
       }
 
-      return answer(0, set.has("-q") ? "" : files.map((file) => `rm '${file}'\n`).join(""));
+      return answer(
+        0,
+        set.has("-q")
+          ? ""
+          : Arr.join(
+              Arr.map(files, (file) => `rm '${file}'\n`),
+              "",
+            ),
+      );
     }),
     commit: Effect.fnUntraced(function* (args, _cwd, env, here) {
       const worktree = here?.worktree;
@@ -767,9 +805,11 @@ export const make = Effect.fnUntraced(function* () {
 
       const id = yield* commitNow(worktree.store, tree, parent === null ? [] : [parent], rest[1] ?? "", env);
       advance(worktree, id);
-      const name = "ref" in worktree.head ? worktree.head.ref.replace(/^refs\/heads\//, "") : "detached HEAD";
 
-      return answer(0, set.has("-q") ? "" : `[${name} ${id.slice(0, 7)}] ${rest[1] ?? ""}\n`);
+      const name =
+        "ref" in worktree.head ? Function.pipe(worktree.head.ref, Str.replace(/^refs\/heads\//, "")) : "detached HEAD";
+
+      return answer(0, set.has("-q") ? "" : `[${name} ${Function.pipe(id, Str.slice(0, 7))}] ${rest[1] ?? ""}\n`);
     }),
     revert: Effect.fnUntraced(function* (args, _cwd, env, here) {
       const worktree = here?.worktree;
@@ -796,7 +836,7 @@ export const make = Effect.fnUntraced(function* () {
       }
 
       const tree = readCommit(worktree.store, commit.parents[0])?.tree ?? (yield* build(worktree.store, new Map()));
-      const subject = commit.message.split("\n")[0] ?? "";
+      const subject = Str.split(commit.message, "\n")[0];
       const current = flatten(worktree.store, commit.tree);
       const next = flatten(worktree.store, tree);
 
@@ -835,7 +875,7 @@ export const make = Effect.fnUntraced(function* () {
 
       advance(worktree, id);
 
-      return answer(0, `[${id.slice(0, 7)}] Revert "${subject}"\n`);
+      return answer(0, `[${Function.pipe(id, Str.slice(0, 7))}] Revert "${subject}"\n`);
     }),
     checkout: Effect.fnUntraced(function* (args, _cwd, _env, here) {
       const worktree = here?.worktree;
@@ -936,7 +976,7 @@ export const make = Effect.fnUntraced(function* () {
       worktrees.set(root, linked);
       yield* switchTree(linked, flatten(worktree.store, readCommit(worktree.store, target)?.tree ?? ""), true);
 
-      return answer(0, "", `Preparing worktree (detached HEAD ${target.slice(0, 7)})\n`);
+      return answer(0, "", `Preparing worktree (detached HEAD ${Function.pipe(target, Str.slice(0, 7))})\n`);
     }),
     push: Effect.fnUntraced(function* (args, cwd, _env, here) {
       const { set, rest } = flags(args, ["-q", "--quiet", "--force", "-f"]);
@@ -945,12 +985,15 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      if (rest.length !== 2 || rest.some((a) => a.startsWith("-") || a.includes(":"))) {
+      if (
+        rest.length !== 2 ||
+        Arr.some(rest, (a) => Function.pipe(a, Str.startsWith("-")) || Function.pipe(a, Str.includes(":")))
+      ) {
         return yield* unsupported(["push", ...args]);
       }
 
       const [remote = "", branch = ""] = rest;
-      const ref = branch.startsWith("refs/") ? branch : `refs/heads/${branch}`;
+      const ref = Function.pipe(branch, Str.startsWith("refs/")) ? branch : `refs/heads/${branch}`;
       const id = here.refs.get(ref);
 
       // Git reads the local refspec before it reaches the remote.
@@ -980,7 +1023,7 @@ export const make = Effect.fnUntraced(function* () {
       target.refs.set(ref, id);
 
       if (url !== remote) {
-        here.refs.set(`refs/remotes/${remote}/${ref.slice(11)}`, id);
+        here.refs.set(`refs/remotes/${remote}/${Function.pipe(ref, Str.slice(11))}`, id);
       }
 
       return answer(0, "", `To ${url}\n`);
@@ -999,7 +1042,7 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(NOT_A_REPOSITORY);
       }
 
-      if (rest.length !== 2 || !(rest[1] ?? "").startsWith("refs/")) {
+      if (rest.length !== 2 || !Function.pipe(rest[1] ?? "", Str.startsWith("refs/"))) {
         return yield* unsupported(["fetch", ...args]);
       }
 
@@ -1063,7 +1106,7 @@ export const make = Effect.fnUntraced(function* () {
           lines.push(here.store.directory);
         } else if (arg === "--show-object-format") {
           lines.push(here.store.format);
-        } else if (arg.startsWith("-")) {
+        } else if (Function.pipe(arg, Str.startsWith("-"))) {
           return yield* unsupported(["rev-parse", ...args]);
         } else {
           const id = revision(here, arg);
@@ -1082,7 +1125,13 @@ export const make = Effect.fnUntraced(function* () {
         }
       }
 
-      return answer(0, lines.map((line) => `${line}\n`).join(""));
+      return answer(
+        0,
+        Arr.join(
+          Arr.map(lines, (line) => `${line}\n`),
+          "",
+        ),
+      );
     }),
     config: Effect.fnUntraced(function* (args, _cwd, _env, here) {
       const { set, rest } = flags(args, ["--local", "--no-includes", "--get"]);
@@ -1118,11 +1167,15 @@ export const make = Effect.fnUntraced(function* () {
       }
 
       if (verb === "remove" && args.length === 2) {
-        for (const known of [...here.config.keys()].filter((k) => k.startsWith(`remote.${name}.`))) {
+        for (const known of Arr.filter([...here.config.keys()], (k) =>
+          Function.pipe(k, Str.startsWith(`remote.${name}.`)),
+        )) {
           here.config.delete(known);
         }
 
-        for (const ref of [...here.refs.keys()].filter((r) => r.startsWith(`refs/remotes/${name}/`))) {
+        for (const ref of Arr.filter([...here.refs.keys()], (r) =>
+          Function.pipe(r, Str.startsWith(`refs/remotes/${name}/`)),
+        )) {
           here.refs.delete(ref);
         }
 
@@ -1157,7 +1210,7 @@ export const make = Effect.fnUntraced(function* () {
         return fatal(`Not a valid object name ${spelled}`);
       }
 
-      if (files.length > 1 || files.some((file) => file.endsWith("/") || file === "")) {
+      if (files.length > 1 || Arr.some(files, (file) => Function.pipe(file, Str.endsWith("/")) || file === "")) {
         return yield* unsupported(["ls-tree", ...args]);
       }
 
@@ -1174,7 +1227,10 @@ export const make = Effect.fnUntraced(function* () {
 
       return answer(
         0,
-        listed.map(([file, entry]) => `${entry.mode} ${objectType(entry.mode)} ${entry.id}\t${file}${end}`).join(""),
+        Arr.join(
+          Arr.map(listed, ([file, entry]) => `${entry.mode} ${objectType(entry.mode)} ${entry.id}\t${file}${end}`),
+          "",
+        ),
       );
     }),
     "cat-file": Effect.fnUntraced(function* (args, _cwd, _env, here) {
@@ -1193,20 +1249,18 @@ export const make = Effect.fnUntraced(function* () {
   };
 
   const run = Effect.fnUntraced(function* (command: ChildProcess.StandardCommand) {
-    const words = command.args.filter(Predicate.isString);
+    const words = Arr.filter(command.args, Predicate.isString);
 
-    const env = Object.fromEntries(
-      Object.entries(command.options.env ?? {}).filter(
+    const env = Rec.fromEntries(
+      Arr.filter(
+        Rec.toEntries(command.options.env ?? {}),
         (pair): pair is [string, string | undefined] => Predicate.isString(pair[1]) || pair[1] === undefined,
       ),
     );
 
     // Memory git reads no secret: a redacted word or variable stays unread, and the law that sent
     // one belongs on real git.
-    if (
-      words.length !== command.args.length ||
-      Object.keys(env).length !== Object.keys(command.options.env ?? {}).length
-    ) {
+    if (words.length !== command.args.length || Rec.keys(env).length !== Rec.keys(command.options.env ?? {}).length) {
       return yield* Effect.die(new Error("git memory: unsupported command: a redacted argument or variable"));
     }
 
@@ -1218,7 +1272,7 @@ export const make = Effect.fnUntraced(function* () {
     while (start < words.length) {
       if (SAFE_GLOBALS.has(words[start] ?? "")) {
         start++;
-      } else if (words[start] === "-c" && (words[start + 1] ?? "").includes("=")) {
+      } else if (words[start] === "-c" && Function.pipe(words[start + 1] ?? "", Str.includes("="))) {
         start += 2;
       } else {
         break;

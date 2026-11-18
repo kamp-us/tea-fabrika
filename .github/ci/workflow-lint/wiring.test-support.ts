@@ -4,6 +4,7 @@
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
 import { readFileSync } from "node:fs";
+import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -255,7 +256,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       // SAFETY: every value below is a string, and the wider map type lets a plant add or remove an output.
       outputs: {
-        ...Object.fromEntries(
+        ...Rec.fromEntries(
           ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
@@ -335,7 +336,7 @@ const valid = (label: string, extra: string) => ({
           env: {
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
-            ...Object.fromEntries(
+            ...Rec.fromEntries(
               ["check", "typecheck", "field", "build"].map((key) => [
                 key.toUpperCase(),
                 `\${{ steps.diff.outputs.${key} }}`,

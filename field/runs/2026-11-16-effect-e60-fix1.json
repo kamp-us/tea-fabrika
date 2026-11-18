@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e60-fix1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:11:55-08:00",
+  "ended": "2026-11-16T01:20:00-08:00",
+  "parent": "2026-11-16-effect-e60-review",
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round for slice E60 (unstableApiUsage, 0574) in next/ and tooling, after the review's send_back. Law 2 of oxlint-plugins/no-stability-tag.test.ts now gives both fc.assert calls an examples list, so each of its 23 paths (and each of the 3 outside paths) runs once whatever the seed draws; the assertions are the same. The review's second point, that no in-scope path sits under oxlint-plugins/, could not be met with a planted file: the plant helper links the real oxlint-plugins/ folder into its temp home, so a planted file there is written into the repo (seen once, removed). A scenario law reads the config's error block and asserts it lists oxlint-plugins/**, and that block does. Three stale comments (no-stability-tag.ts, README.md, jsdocs.test.ts) now say what is true: the 16 files are covered, and jsdocs still accepts the tag. The review's second finding is saved as field/findings/2026-11-16-e60-plan-parts-left-undone.json.",
+  "laws": [
+    {
+      "law": "oxlint-plugins/no-stability-tag.test.ts: law 2 fires on the tag line in each folder it covers, tests, internal/ and the 16 files of pull request 1366 included",
+      "red": "green on the fixed product; red under the plant: Counterexample [next/packages/libfabrika/src/ledger/Log.ts]: expected [] to deeply equal [ 4 ]"
+    },
+    {
+      "law": "oxlint-plugins/no-stability-tag.test.ts: scenario: the config's error block lists the oxlint-plugins/ folder",
+      "red": "green on the fixed product; red under the plant (see plants)"
+    }
+  ],
+  "plants": [
+    {
+      "law": "oxlint-plugins/no-stability-tag.test.ts: law 2 fires on the tag line in each folder it covers, tests, internal/ and the 16 files of pull request 1366 included",
+      "plant": ".oxlintrc.json: an \"off\" override for fabrika/no-stability-tag on next/packages/libfabrika/src/ledger/Log.ts alone",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/no-stability-tag.test.ts: scenario: the config's error block lists the oxlint-plugins/ folder",
+      "plant": ".oxlintrc.json: oxlint-plugins/** removed from the no-stability-tag error block's files",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Each plant ran once on a saved copy of .oxlintrc.json and was restored by copy. Ran at the branch head 12d312b1 plus this change: oxlint-plugins/no-stability-tag.test.ts and oxlint-plugins/jsdocs.test.ts, 23 passed; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed. No pnpm typecheck: only tests and comments changed. Comment-only edits to oxlint-plugins/no-stability-tag.ts, README.md and jsdocs.test.ts.",
+  "step": "tests"
+}

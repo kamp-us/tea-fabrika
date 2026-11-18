@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e38-tests-1366",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-15T23:14:05-08:00",
+  "ended": "2026-11-15T23:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests step for judgment slice E38 of the Effect-checker sweep (ticket 1075, plan row E38 in docs/plan/quests/effect-sweep-PLAN.md), in next/, on branch fabrikalfa/effect-e38 after origin/main was merged in (head c7eb72f, which holds pull request 1366). Pull request 1366's files are no longer off limits, so its preferSchemaOverJson hits joined this slice. Recount at c7eb72f, effect-tsgo diagnostics on the 13 tsconfigs of the plan's scope with an --lspconfig that sets only preferSchemaOverJson at error, joined by file and offset: 143 hits, 42 of them in the 70 files of the 1366 merge's diff (e3f72bf^1..e3f72bf), where the earlier tests row counted 40; the two new ones are next/apps/fabrika/src/worker-quotas.integration.test.ts:145 and next/packages/libfabrika/src/settings/QuotaSettings.test.ts:141. Of the 42, 20 sit in exam paths and were fixed here by hand edits (a scratchpad script that swapped JSON.stringify for Formatter.formatJson on the exact hit lines, then a Formatter import; every hit is a write, none reads JSON from outside): worker-quotas.integration.test.ts:145; libfabrika cloudflare/ObjectService.test.ts:215, 339, 376; cloudflare/SettingsInput.test.ts:31, 68; cloudflare/alarm.laws.test.ts:176, 178, 392, 398; runtime/ProcessStore.integration.test.ts:187; runtime/Runner.integration.test.ts:627, 1894, 1895, 3385, 3392, 3408, 3418; runtime/RuntimeCauseTest.ts:297; settings/QuotaSettings.test.ts:141. Left for the build, 22 hits in 1366's product files, all writes: libfabrika cloudflare/connection.ts:245, 288; cloudflare/runtime.ts:952, 1151, 1178, 1384, 1416, 1449, 1498; gateway/Gateway.ts:936, 937, 1344, 1345, 1783, 1859, 1952 (two), 1953 (two), 1960; runtime/Runner.ts:395, 2530. Several of them feed a hash or a string compare (Gateway.ts 936, 937, 1344, 1345, 1783, 1859, 1952, 1953, 1960; Runner.ts 395, 2530; runtime.ts 952), so the build must keep both sides of each compare on the same encoder. Left untouched by the brief: 100 hits in exam paths of lib:cloudflare, lib:runtime and lib:gateway outside 1366's files (row E84) and next/packages/vitest/src/Recorder.test.ts:169 (pull request 1401, in no row). 0 product hits remain outside 1366's files.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Tests ran at c7eb72f plus this change: the 8 touched files' own runs (RuntimeCauseTest.ts through its one reader, next/packages/libfabrika/src/node/ErrorCause.test.ts), integration laws included, in one vitest run under nice -n 15 --maxWorkers=3: 8 files, 166 tests, all passed, none skipped, none refused by the 0178 guard. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the exam ratchet passed. Recount after the change: 123 hits, 0 in exam paths of 1366's files, 22 in its product files, 101 left as above. Formatter.formatJson writes what JSON.stringify writes for these plain values; it differs only for bigint, Error and circular values (where JSON.stringify throws or writes less), and a secret search over its output can only find more. No law was changed in what it asserts, and no plants: this step adds no law.",
+  "plants": [],
+  "step": "tests"
+}

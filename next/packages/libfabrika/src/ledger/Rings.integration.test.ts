@@ -17,6 +17,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -86,7 +88,7 @@ const T1 = "connection:t1";
 const T2 = "connection:t2";
 
 const byWaiter = (rungs: ReadonlyArray<Rung>) =>
-  [...rungs].sort((x, y) => `${x.to} ${x.stream}`.localeCompare(`${y.to} ${y.stream}`));
+  [...rungs].sort((x, y) => Str.localeCompare(`${y.to} ${y.stream}`)(`${x.to} ${x.stream}`));
 
 describe("p94, a parked wait is a row, rung once", () => {
   it.effect("a wait with news is ready with its stream's newest rev, not the log's, and leaves no ring", () => {
@@ -138,7 +140,7 @@ describe("p94, a parked wait is a row, rung once", () => {
         yield* referee.append("a", "w-4", line({ parent: "not an input id" })),
       ];
 
-      expect(refusals.map((answer) => answer._tag)).toEqual(["refused", "refused", "refused", "refused"]);
+      expect(Arr.map(refusals, (answer) => answer._tag)).toEqual(["refused", "refused", "refused", "refused"]);
       expect(rang).toEqual([]);
       expect(yield* referee.append("a", "w-5", line())).toEqual(placed(2, 2));
       expect(rang).toEqual([{ to: T1, stream: "a", rev: 2 }]);

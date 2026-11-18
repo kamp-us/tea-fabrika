@@ -9,8 +9,12 @@
 //   hold its value, its origin (a file's name and line, a flag's or environment variable's name),
 //   its default and its doc. `all` changes which rows show, never what a shown row says.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as Setting from "./Fabrika.ts";
 import * as Sources from "./Fabrika.ts";
@@ -56,7 +60,7 @@ const declared = port.chain((shared) =>
       default: fc.oneof(fc.constant(shared), port),
       scope: fc.constantFrom<Setting.Scope>(["person"], ["repo", "person"]),
       supplied: fc.record(
-        Object.fromEntries(
+        Rec.fromEntries(
           SOURCES.map((s) => [s, fc.oneof(fc.constant("default" as const), fc.constant(shared), port)]),
         ) as Record<Slot, fc.Arbitrary<number | "default">>,
         { requiredKeys: [] },
@@ -83,7 +87,7 @@ const fileText = (entries: ReadonlyArray<readonly [string, string, number]>) => 
 const loadRows = (ds: Declared) =>
   Effect.gen(function* () {
     const group = Setting.group(
-      Object.fromEntries(
+      Rec.fromEntries(
         ds.map((d, n) => [
           `s${n}`,
           Setting.make(`${d.table}.${d.key}`, {
@@ -144,16 +148,16 @@ const loadRows = (ds: Declared) =>
 
 /** Whether `line` starts the row of `path`: the path first, then no further key character. */
 const starts = (line: string, path: string) => {
-  const rest = line.trimStart();
+  const rest = Str.trimStart(line);
 
-  return rest.startsWith(path) && !/^[a-z0-9.-]/.test(rest.slice(path.length));
+  return Str.startsWith(path)(rest) && !/^[a-z0-9.-]/.test(Str.slice(path.length)(rest));
 };
 
 /** Each shown row's lines, by path, in the order the report prints them. */
 const blocks = (report: string, paths: ReadonlyArray<string>) => {
   const out: Array<{ path: string; text: string }> = [];
 
-  for (const line of report.split("\n")) {
+  for (const line of Str.split(report, "\n")) {
     const path = paths.find((p) => starts(line, p));
 
     if (path !== undefined) {
@@ -166,11 +170,11 @@ const blocks = (report: string, paths: ReadonlyArray<string>) => {
   return out;
 };
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+const collapse = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
 
 describe("L5, the printed report says what the snapshot holds, and --all adds only default rows", () => {
-  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", async () => {
-    await fc.assert(
+  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", () =>
+    fc.assert(
       fc.asyncProperty(declared, async (ds) => {
         const { snapshot, rows } = await loadRows(ds);
         const paths = rows.map((r) => r.path);
@@ -216,11 +220,10 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         const [a, b] = [explicit(all), explicit(plain)];
         expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));
         a.forEach((x, n) => {
-          const [long, short] = [x.text.trimEnd(), b[n]!.text.trimEnd()].sort((p, q) => q.length - p.length);
-          expect(long!.startsWith(short!), `${long}\n---\n${short}`).toBe(true);
+          const [long, short] = [Str.trimEnd(x.text), Str.trimEnd(b[n]!.text)].sort((p, q) => q.length - p.length);
+          expect(Str.startsWith(short!)(long!), `${long}\n---\n${short}`).toBe(true);
         });
       }),
       check,
-    );
-  });
+    ));
 });

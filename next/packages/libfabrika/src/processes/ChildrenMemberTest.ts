@@ -17,7 +17,21 @@
 // The test plays the gateway: its `Senders` answers from the inputs the test delivered, as the
 // gateway's one signing service does (0262). The rows the oracle reads are the store's own.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -52,7 +66,7 @@ const OTHER = "person_01jcother000000000000000000";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00900${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00900${Str.padStart(10, "0")(String(n))}`,
 );
 
 const QUEUE = "queue";
@@ -189,7 +203,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
 
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const ids = (values: ReadonlyArray<string>) => {
@@ -429,7 +443,7 @@ const senderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, c.input);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `${c.as} for ${c.holder}, requester's member ${c.recorded}, roles ${JSON.stringify(c.roles)}, ${requester.program} -> ${c.program}`;
+    const label = `${c.as} for ${c.holder}, requester's member ${c.recorded}, roles ${Formatter.format(c.roles)}, ${requester.program} -> ${c.program}`;
 
     if (holds(c.roles, c.holder)) {
       startedFresh(answer, `L10: ${label} starts, whatever StartGrant says`);
@@ -472,7 +486,7 @@ const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `L11: ${c.cause} cause, ${requester.program} -> ${c.program}, grants ${JSON.stringify(c.grants)}`;
+    const label = `L11: ${c.cause} cause, ${requester.program} -> ${c.program}, grants ${Formatter.format(c.grants)}`;
 
     if (granted(c.grants, requester.program, c.program)) {
       startedFresh(answer, label);
@@ -589,7 +603,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `L20: member ${c.member}${c.removed ? " (removed)" : ""}, ${requester.program} -> ${c.program}, grants ${JSON.stringify(c.grants)}`;
+    const label = `L20: member ${c.member}${c.removed ? " (removed)" : ""}, ${requester.program} -> ${c.program}, grants ${Formatter.format(c.grants)}`;
     const allowed = c.member === "none" ? granted(c.grants, requester.program, c.program) : !c.removed;
 
     if (allowed) {
@@ -623,8 +637,9 @@ const prop = <A>(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromise(Effect.scoped(law(c))));
+        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromiseWith(context)(Effect.scoped(law(c))));
         const checks = { seed: SEED, numRuns, endOnFailure: true, examples: [...examples] };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));

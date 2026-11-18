@@ -27,8 +27,18 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { describe, expect } from "@effect/vitest";
 import { Stub } from "@kampus/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
-import { HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as Struct from "effect/Struct";
+
 import * as fc from "fast-check";
 import { assert, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -126,11 +136,11 @@ const damaged = (
     // A proper prefix of a JSON object is never JSON: its closing brace is gone.
     const text = JSON.stringify(good);
 
-    return text.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)));
+    return Str.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)))(text);
   }
 
   if (recipe._tag === "missing") {
-    const keys = Object.keys(good);
+    const keys = Rec.keys(good);
     const { [keys[recipe.pick % keys.length]!]: _dropped, ...rest } = good;
 
     return JSON.stringify(rest);
@@ -226,7 +236,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         }
 
         // The same shell on the good setting: one build, kept, and the setting's own value.
-        const kept = yield* Effect.sync(() => shell(bindings(JSON.stringify(good), good), route));
+        const kept = yield* Effect.sync(() => shell(bindings(Formatter.formatJson(good), good), route));
         const first = yield* kept.service;
         expect(first.port).toBe(port);
 
@@ -361,7 +371,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
 
         const state = fromDurableObjectState(
           fake<Parameters<typeof fromDurableObjectState>[0]>({
-            id: { name: JSON.stringify([good.name, descriptor.name]) },
+            id: { name: Formatter.formatJson([good.name, descriptor.name]) },
             storage,
             abort: unexpected,
           }),
@@ -402,7 +412,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
 
         // The read turns good. The next call reads it, builds and reaches the service; later calls
         // reuse that build and read nothing more.
-        text = JSON.stringify(good);
+        text = Formatter.formatJson(good);
 
         for (const _call of calls) {
           expect(yield* object.open("law-3")).toStrictEqual({ rev: 0, view: {} });

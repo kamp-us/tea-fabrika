@@ -21,7 +21,12 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Str from "effect/String";
+import * as Tuple from "effect/Tuple";
 import type { ReactElement } from "react";
 
 /**
@@ -30,7 +35,10 @@ import type { ReactElement } from "react";
  * uses (the tile guidelines' "Program name" and "Tile id").
  */
 export const tileWords = (tile: Pick<Tile, "program" | "n">) => ({
-  program: tile.program.slice(tile.program.lastIndexOf("/") + 1),
+  program: Option.match(Str.lastIndexOf("/")(tile.program), {
+    onNone: () => tile.program,
+    onSome: (slash) => Str.slice(slash + 1)(tile.program),
+  }),
   handle: `t${tile.n}`,
 });
 
@@ -81,10 +89,12 @@ const FOCUSABLE =
 export const landing = (region: HTMLElement, cursor: string | null): HTMLElement => {
   const row =
     cursor === null
-      ? undefined
-      : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
+      ? Option.none()
+      : Arr.findFirst([...region.querySelectorAll("[data-cursor]")], (e) => e.getAttribute("data-cursor") === cursor);
 
-  return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
+  return (
+    Option.getOrElse(row, () => region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region
+  );
 };
 
 const LIVE: State = { word: "", live: true };
@@ -116,7 +126,11 @@ const TileRegion = ({
   readonly children: ReactElement;
 }) => (
   <section
-    className={["tile", focused ? "focused" : "", state.live ? "" : "disconnected"].filter((c) => c !== "").join(" ")}
+    className={Function.pipe(
+      ["tile", focused ? "focused" : "", state.live ? "" : "disconnected"],
+      Arr.filter((c) => c !== ""),
+      Arr.join(" "),
+    )}
     aria-label={tileName(tile)}
     aria-current={focused ? "true" : undefined}
     data-tile={tile.id}
@@ -136,7 +150,7 @@ const TileRegion = ({
       <span className="tile-mark" aria-hidden="true">
         ·
       </span>
-      <span className="tile-name">{tile.program.slice(tile.program.lastIndexOf("/") + 1)}</span>
+      <span className="tile-name">{tileWords(tile).program}</span>
       {asking ? (
         <span className="tile-state question">{question(tile)}</span>
       ) : state.word === "" ? null : (
@@ -186,7 +200,7 @@ export const Layout = ({
   strips = NONE,
   open,
 }: Props) => {
-  const byId = new Map(tiles.map((t) => [t.id, t]));
+  const byId = new Map(Arr.map(tiles, (t) => Tuple.make(t.id, t)));
 
   const divider = (i: number) => (
     <div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />
@@ -229,7 +243,7 @@ export const Layout = ({
     const row = node.dir === "row";
     const shares = box === null ? null : lengths(node, row ? box.width : box.height, strips, workspace.focus);
 
-    return node.parts.flatMap((part, i) => {
+    return Arr.flatMap(node.parts, (part, i) => {
       const share = shares?.[i];
 
       const inner =
@@ -251,7 +265,7 @@ export const Layout = ({
       // A band: every tile of a folded container lies along it, one strip each, sharing its length.
       const body =
         folded && !Predicate.isString(part.inner)
-          ? order(part.inner).flatMap((t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
+          ? Arr.flatMap(order(part.inner), (t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
           : draw(part.inner, node.dir, inner);
 
       const flows =

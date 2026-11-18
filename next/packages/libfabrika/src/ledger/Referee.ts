@@ -1,8 +1,6 @@
 /**
  * The referee's logic as a service: the one place that numbers the log. This file is the contract
  * only (0095).
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -14,7 +12,6 @@ import type { Appended, Entry, Waited } from "./Log.ts";
  * Schema for which committed entries a reader below the service asks for: `all` past a revision,
  * one `stream`'s past a revision, or the one `entry` at a stream's position, as an ack names it.
  *
- * @stability unstable
  * @category schemas
  */
 export const Selection = Schema.TaggedUnion({
@@ -26,7 +23,6 @@ export const Selection = Schema.TaggedUnion({
 /**
  * Which committed entries a reader below the service asks for.
  *
- * @stability unstable
  * @category models
  */
 export type Selection = typeof Selection.Type;
@@ -42,7 +38,6 @@ export type Selection = typeof Selection.Type;
  * `read` answers one page, and `read` and `wait` name the reader, so one referee serves many
  * readers.
  *
- * @stability unstable
  * @category services
  */
 export class Referee extends Context.Service<

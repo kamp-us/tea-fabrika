@@ -1,17 +1,19 @@
 // next/, Q13. Lead host/container run: real workerd and object RPC are required.
 // This scenario is intentionally not replaced by a Node-only runner.
-// edge: create only an ephemeral signing identity for this private test instance
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// It signs in with a fresh test identity from Effect's Signature (person-key.test-support.ts).
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
+import { String as Str, ByteSize, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+
 import { expect } from "vitest";
 import { build } from "./build.ts";
+import { noTracking, scopedEnv } from "./env.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -41,59 +43,6 @@ const declaredRecovery = {
   process: { writes: 290, bytes: ByteSize.bytes(207_410), message: { writes: 50, bytes: ByteSize.bytes(18_790) } },
 };
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("no public identity");
-  }
-
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
@@ -118,13 +67,16 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof identity>) {
+const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity) {
   const tab = "quotas";
   const frames: Array<typeof Frame.Type> = [];
 
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -156,7 +108,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
 
   const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
 
     return yield* next((frame) => frame.id === id);
   });
@@ -174,7 +126,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     platform: "headless",
     os: "linux",
     sentAt: FROM.sentAt,
-    signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
@@ -218,29 +170,9 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "q13-" });
-  yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const previous = { home: process.env.FABRIKA_HOME, alchemy: process.env.ALCHEMY_HOME };
-      process.env.FABRIKA_HOME = home;
-      process.env.DO_NOT_TRACK = "1";
-
-      return previous;
-    }),
-    (previous) =>
-      Effect.sync(() => {
-        if (previous.home === undefined) {
-          delete process.env.FABRIKA_HOME;
-        } else {
-          process.env.FABRIKA_HOME = previous.home;
-        }
-
-        if (previous.alchemy === undefined) {
-          delete process.env.ALCHEMY_HOME;
-        } else {
-          process.env.ALCHEMY_HOME = previous.alchemy;
-        }
-      }),
-  );
+  // localInstance sets ALCHEMY_HOME, so it goes back as it was too.
+  yield* scopedEnv({ FABRIKA_HOME: home }, ["ALCHEMY_HOME"]);
+  yield* Effect.sync(noTracking);
   yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
   const files: Record<string, string> = {};
 
@@ -250,7 +182,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   }
 
   const built = yield* build({ out: path.join(home, "dist"), programs: files });
-  const key = identity();
+  const key = yield* SshsigTest.identity;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
   // The quota settings ride in the start's settings snapshot; the fixture names the ones it tightens.
@@ -268,7 +200,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.startupFixture({
+    yield* RecordWireTest.startupFixture({
       home,
       name: PROJECT,
       person: PERSON,
@@ -287,15 +219,15 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   const start = Effect.fnUntraced(function* (name: string, program: string) {
     const code = built.programs[program]!;
 
-    return Schema.decodeUnknownSync(started)(
+    return (yield* Schema.decodeUnknownEffect(started)(
       yield* rpc(() =>
         project.start({ _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } }, from),
       ),
-    ).process;
+    )).process;
   });
 
   const facts = Effect.fnUntraced(function* (stream: string) {
-    return Schema.decodeUnknownSync(Rows)(yield* rpc(() => project.read(stream, 0, "audit")));
+    return yield* Schema.decodeUnknownEffect(Rows)(yield* rpc(() => project.read(stream, 0, "audit")));
   });
 
   // A restart names the build of the program it reloads: that program's code hash, never the brain file's.
@@ -392,7 +324,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           expect(before.process).toHaveProperty("recovery.total", { writes: 0, bytes: 0 });
 
           if (mode === "storage") {
-            expect(yield* w.send(alpha, "too-large", { type: "inc", text: "😀".repeat(6000) })).toMatchObject({
+            expect(yield* w.send(alpha, "too-large", { type: "inc", text: Str.repeat(6000)("😀") })).toMatchObject({
               error: { data: { reason: "quota" } },
             });
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);
@@ -427,7 +359,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             expect(yield* w.facts(`${alpha}/dead`)).toHaveLength(1);
 
             if (mode === "writes") {
-              const info = Schema.decodeUnknownSync(
+              const info = yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(() => w.project.info()));
 
@@ -450,9 +382,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
 
               expect(restarted.filter((r) => r._tag === "restarted")).toHaveLength(2);
 
-              const current = Schema.decodeUnknownSync(
+              const current = (yield* Schema.decodeUnknownEffect(
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
-              )(yield* rpc(() => w.project.info())).find((r) => r.name === "alpha:1")!.process;
+              )(yield* rpc(() => w.project.info()))).find((r) => r.name === "alpha:1")!.process;
 
               // Plant: a restart that loses the program's quota state answers this input accepted.
               expect(yield* w.send(current, "excess", { type: "inc", text: "" })).toMatchObject({
