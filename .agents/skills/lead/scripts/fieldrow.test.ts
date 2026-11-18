@@ -294,8 +294,11 @@ const profilePair: fc.Arbitrary<ReadonlyArray<Line>> = fc
     ),
   ]);
 
+// Some events files carry no requested profile, so the flags and the older CODEX_MODEL and
+// CODEX_EFFORT values decide the model and effort (fieldrow.py reads them only then).
 const events: fc.Arbitrary<ReadonlyArray<Line>> = fc.oneof(
   fc.array(fc.oneof(turn, skipped, profile), { maxLength: 8 }),
+  fc.array(fc.oneof(turn, skipped), { maxLength: 8 }),
   profilePair,
 );
 
