@@ -1,7 +1,7 @@
 ---
 id: 0014
 title: The lead merges any pull request, product code included, once every step passed, never waiting on the owner except for real loosening or a new design call
-status: amended-in-part by [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md), [0066](0066-mutation-runs-on-a-schedule.md), [0162](0162-no-friction-before-a-merge.md)
+status: accepted
 date: 2026-11-09
 tags: [merge, lead, owner, exam, loosening, pipeline]
 ---
@@ -13,11 +13,11 @@ owner.
 
 ```mermaid
 flowchart TD
-  steps["plan, tests, build, mutation, review: each passed"] --> ci["CI green on the head"]
+  steps["plan, tests, build, review: each passed"] --> ci["CI green on the head"]
   ci --> leak["leak grep clean"]
-  leak --> loose["loosening.sh and the mutation narrowing list"]
+  leak --> loose["loosening.sh"]
   loose --> hits{"any hit?"}
-  hits -- "no" --> merge["lead merges with catchup.sh"]
+  hits -- "no" --> merge["lead merges, pinned to the checked head"]
   hits -- "yes" --> hand["lead's hand check of each hit"]
   hand -- "not real loosening" --> merge
   hand -- "real loosening" --> owner["ask owner exam_read"]
@@ -25,7 +25,7 @@ flowchart TD
 ```
 
 ```text
-merge-ready review + green CI + clean leak grep + no real loosening  ->  catchup.sh <pr> <ticket>
+merge-ready review + green CI + clean leak grep + no real loosening  ->  the lead merges, head pinned
 ```
 
 ## Context
@@ -38,6 +38,12 @@ and each edge comment a build adds. Since 2026-11-08 the lead's checks (law labe
 and the lead fast-track (2026-11-09) covered skills and scripts. Product code still read as the
 owner's to merge. Tracker ticket 401 records this decision.
 
+Three later records changed parts of it. [0066](0066-mutation-runs-on-a-schedule.md) took mutation
+out of a pull request's steps and out of the merge-time checks. [0162](0162-no-friction-before-a-merge.md)
+took `catchup.sh` out of the merge and let a head behind main land as it is.
+[0166](0166-owed-work-needs-no-owner-read.md) stopped holding a loosening that an accepted decision
+asked for.
+
 This amends, in part: [the steps](../docs/direction/next-is-a-pipeline-pre-run.md) (its "How a
 change lands"), [a unit of work is a commit](../docs/direction/a-unit-of-work-is-a-commit.md) (the
 owner's read of exam paths) and [no Promises](../docs/direction/no-promises.md) (the owner's read of
@@ -45,32 +51,39 @@ each new edge). No file in `.decisions/` said otherwise.
 
 ## Decision
 
-**The lead merges any pull request, product code included, with `catchup.sh`, once every step has
-passed, CI is green, the leak grep is clean and `loosening.sh` shows no real loosening after the
-lead's hand check (owner, 2026-11-09).**
+**The lead merges any pull request, product code included, once every step has passed, CI is
+green, the leak grep is clean and `loosening.sh` shows no real loosening after the lead's hand
+check (owner, 2026-11-09).**
 
-- "Every step" is plan, tests, build, mutation and one review saying merge-ready, each by its own
-  agent. No step is skipped. Lead tooling and docs-only decision PRs keep their shorter path.
-- A hit from `loosening.sh` or the mutation narrowing list goes to the lead's hand check. The PR
-  lists every hit and what the lead found. A hit that is not real loosening (a rename the mapping
-  missed, a parser false alarm) does not hold the merge.
+- "Every step" is plan, tests, build and one review saying merge-ready, each by its own agent. No
+  step is skipped. Mutation is no step of a pull request: it runs hourly against main, and a law
+  that got narrower is found there and filed as a ticket marked as loosening
+  ([0066](0066-mutation-runs-on-a-schedule.md)). Lead tooling and docs-only decision PRs keep their
+  shorter path.
+- A hit from `loosening.sh` goes to the lead's hand check. The PR lists every hit and what the lead
+  found. A hit that is not real loosening (a rename the mapping missed, a parser false alarm) does
+  not hold the merge. `loosening.sh` with zero real loosening means no owner read is needed.
+- The merge is the lead's `gh pr merge --squash`, pinned to the head that was checked
+  ([0162](0162-no-friction-before-a-merge.md), as [0530](0530-lead-turns-on-merge-when-ready.md)
+  changed when the lead turns it on).
 - An exam pull request, or a pull request that touches an exam path, merges like any other when
   it passes those checks. The owner's read is not needed.
 - A new edge comment (`fabrika/no-promises -- edge: <why>`) is read by the lead at merge and
   added to [no Promises](../docs/direction/no-promises.md)' edge table. A new kind of edge, one
   that is not a one-line call the platform demands, is a new design call.
 - **Only two things wait on the owner:** real loosening or removal of a law (`ask owner
-  exam_read`), and a new design call (one yes or no).
+  exam_read`), and a new design call (one yes or no). A loosening that an accepted decision asked
+  for does not wait: the lead merges it and shows it to the owner after
+  ([0166](0166-owed-work-needs-no-owner-read.md)).
 - The lead never writes "owner read" unless the owner did.
 
 **Binding constraints**
 
 - No step's check is dropped to reach a merge. A check that cannot run is `stuck`, never a pass.
 - The leak check still fails closed.
-
-"CI green on the head" holds for a head behind main once `pnpm lint` passed on its merge with
-current main ([0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md)); the rest of this
-file still holds.
+- "CI green on the head" is `ci-required` green on the exact head that merges. A head that merges
+  cleanly with main lands behind main as it is, with no lint on the true merge
+  ([0162](0162-no-friction-before-a-merge.md)).
 
 ## Consequences
 

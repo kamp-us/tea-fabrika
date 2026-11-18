@@ -23,7 +23,9 @@ at the bot push. Tracker ticket 396 carries the change.
 
 **A plain path under `/tmp` passes the leak check; every other machine path still fails it.**
 
-- Still flagged: any path under `/Users`, `/home`, `/private/tmp`, `/private/var/folders`,
+- Still flagged: any path under `/Users` or `/home`, matched in its real case only, so a lowercase
+  API path such as GitHub's `/users/<name>/keys` passes (ticket 464).
+- Still flagged, in any case: any path under `/private/tmp`, `/private/var/folders`,
   `/var/folders` or a Windows `C:\Users`.
 - Still flagged: a path under `/tmp` whose first part ends in a dash and a number, such as
   `claude-501` or `x-<uid>`, since that number can be a user id.
@@ -38,9 +40,3 @@ at the bot push. Tracker ticket 396 carries the change.
   list. A name missing from that list gets through.
 - `leakgrep.test.ts` carries laws for both sides of the line, in the same pull request as the
   script change.
-
-## Amendments
-
-- 2026-11-09 (ticket 464): `/Users` and `/home` match in their real case only, so a lowercase API
-  path such as GitHub's `/users/<name>/keys` passes. The temp folders and `C:\Users` still match in
-  any case.
