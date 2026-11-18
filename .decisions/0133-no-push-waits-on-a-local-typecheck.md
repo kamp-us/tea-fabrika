@@ -36,6 +36,10 @@ request merges only when that job is green.**
 - A red typecheck in CI is read and fixed forward on the same branch.
 - Running `pnpm typecheck` locally stays allowed when someone wants the answer sooner. It is never a
   step a push must pass.
+- The lane's own typecheck goes too. The lane script ran one on the laptop after the review and
+  before it opened the pull request. Now the lane opens the pull request and reads CI's `check`
+  job: red sends the work back to tests or to the build with the error lines, as the laptop run
+  did. No step between build and review runs a typecheck.
 - Nothing else about a merge changes: CI green, the leak grep clean, and `loosening.sh` read
   ([0014](0014-the-lead-merges-when-every-step-passed.md)).
 
@@ -44,10 +48,3 @@ request merges only when that job is green.**
 - The one-at-a-time wait on `tsgo` leaves the lead's landing path.
 - The cost: a type error is found a few minutes later, in CI, and costs one more push.
 - AGENTS.md's Checks section says so in the same pull request.
-
-## Amendments
-
-- 2026-11-11, the same day: the lane's own typecheck goes too. The lane script ran one on the laptop
-  after the review and before it opened the pull request. Now the lane opens the pull request and
-  reads CI's `check` job: red sends the work back to tests or to the build with the error lines, as
-  the laptop run did. No step between build and review ran a typecheck before, and none does now.

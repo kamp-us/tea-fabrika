@@ -1,7 +1,7 @@
 ---
 id: 0130
 title: Every piece of knowledge has one home by its kind, no new direction note is written, and docs/direction is emptied and removed
-status: amended-in-part by [0136](0136-guidelines-live-in-their-own-pages.md)
+status: accepted
 date: 2026-11-11
 tags: [docs, direction, notes, decisions, patterns, experiments, how-to, examples, archive]
 ---
@@ -12,6 +12,7 @@ tags: [docs, direction, notes, decisions, patterns, experiments, how-to, example
 flowchart TD
   piece["one piece of knowledge"] --> kind{"what kind is it?"}
   kind -- "a rule the owner decided" --> decision[".decisions/, one short file"]
+  kind -- "a design area's principles, read as one piece" --> guide["docs/guidelines/, one page"]
   kind -- "a measurement or a reading" --> experiment["experiments/, a write-up"]
   kind -- "how the code is shaped now" --> pattern[".patterns/, a diagram first"]
   kind -- "how to do something" --> docs["docs/how-to, docs/tutorials, or a worked example"]
@@ -48,6 +49,9 @@ them.**
 
 - A rule the owner decided is a decision file. Its teaching example, a small code block or a
   diagram, opens the file ([0005](0005-patterns-and-decisions-are-visual.md)).
+- A design area's guidelines, its principles read and changed as one piece, are one page under
+  `docs/guidelines/` ([0136](0136-guidelines-live-in-their-own-pages.md)). A guideline note under
+  `docs/direction/` moves there whole instead of being split and removed.
 - A measurement, a reading or a study is an experiment write-up.
 - How the code is shaped now is a pattern doc, with a Mermaid diagram first wherever one fits
   (0005).
@@ -78,8 +82,7 @@ them.**
 
 ## Consequences
 
-- This changes 0115 in one place: a note no longer stays as the reasoning and the history. The
-  rest of 0115 holds.
+- This changes 0115 in one place: a note no longer stays as the reasoning and the history.
 - AGENTS.md's table of where to read and write loses its direction rows when the folder goes, in
   the cut [0129](0129-agents-md-becomes-a-short-map.md) describes. Until then its rows hold for
   the notes still there, and the adr and guidelines skills change with them.

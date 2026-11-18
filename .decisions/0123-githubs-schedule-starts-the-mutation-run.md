@@ -1,12 +1,12 @@
 ---
 id: 0123
-title: GitHub's schedule starts the hourly mutation run and its heartbeat, code picks the range, and an agent only judges the survivors
-status: amended-in-part by [0535](0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md)
+title: GitHub's schedule starts the mutation run every 3 hours and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
+status: accepted
 date: 2026-11-11
 tags: [mutation, schedule, cron, ci, github-actions, heartbeat, trial]
 ---
 
-# 0123: GitHub's schedule starts the hourly mutation run and its heartbeat, code picks the range, and an agent only judges the survivors
+# 0123: GitHub's schedule starts the mutation run every 3 hours and its heartbeat, code picks the range, and an agent judges the survivors from one GitHub issue
 
 **Before:**
 
@@ -22,24 +22,25 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  schedule["GitHub's schedule, each hour"] --> run["mutation.yaml"]
+  schedule["GitHub's schedule, every 3 hours"] --> run["mutation.yaml"]
   run -->|"code: last passing run's head to main's head, skip when equal"| files["run artifacts"]
-  files --> agent["an agent, whenever one is awake"]
+  files --> issue["survivors open or update one GitHub issue"]
+  issue --> agent["an agent, whenever one is awake"]
   agent --> tickets["judges survivors, files tickets"]
   schedule --> heartbeat["mutation-heartbeat.yaml: red when a merge waits over two hours"]
 ```
 
 ```yaml
-# after, a sketch
+# after, a sketch of the decision, not the workflow file's own text
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 ```
 
 The run no longer needs a session to be alive. The session's judgment moves to after the run.
 
-**What this decides:** what starts the hourly mutation run, and what tells us when it stops.
+**What this decides:** what starts the scheduled mutation run, and what tells us when it stops.
 
 ## Context
 
@@ -53,6 +54,9 @@ written for that, and its workflow waited on this call. The session's own timer 
 The known way is a scheduled workflow with a dead man's switch beside it. GitHub's docs say a
 schedule can fire late under load and is paused after 60 days with no activity in a public repo.
 The owner walked both ways on 2026-11-11 and picked the schedule.
+[0535](0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md) then made it every 3 hours
+with the rest of the slow checks, and sent a run's survivors to one GitHub issue before any agent
+files a ticket.
 
 ## Decision
 
@@ -62,9 +66,10 @@ it.**
 - A scheduled run picks its own range in code: `base` is the head of the last passing run, `head`
   is main's head. When they are equal it ends as a skip.
 - `workflow_dispatch` stays, with its two inputs, for a run by hand.
-- Judging the survivors and filing tickets stays an agent's job, as
-  [0066](0066-mutation-runs-on-a-schedule.md) says. It reads the artifacts of every run since the
-  last one it judged, so a run made while no agent was awake is not lost.
+- A run's survivors open or update one GitHub issue. Judging them and filing tickets stays an
+  agent's job, as [0066](0066-mutation-runs-on-a-schedule.md) says, done later from that issue. It
+  reads the artifacts of every run since the last one it judged, so a run made while no agent was
+  awake is not lost.
 - The heartbeat goes red when a merge on main has waited more than two hours for a passing run.
   The status page a person reads shows that as late.
 
@@ -76,8 +81,7 @@ it.**
 
 ## Consequences
 
-- This amends 0067 in part: its "never a cron trigger" and "started by hand each hour". Where the
-  run happens, and the rest, hold.
+- This amends 0067 in part: its "never a cron trigger" and "started by hand each hour".
 - A run can start 10 to 60 minutes late when GitHub is busy. For an hourly check on main that is
   accepted.
 - The scheduler session is no longer needed to start runs. An agent still has to judge.
