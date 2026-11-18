@@ -558,7 +558,7 @@ type StorageCut = { path: StoragePath; operation: number; statement: string };
 
 const storageCall = Effect.fnUntraced(function* (
   path: StoragePath,
-  template: ProjectTemplate,
+  template: ProjectTemplate | undefined,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
     call: Effect.Effect<unknown, Rejected>,
@@ -705,12 +705,87 @@ const storageCall = Effect.fnUntraced(function* (
   return printed;
 });
 
-const storageSecrets = Effect.fnUntraced(function* () {
-  // Every cut, the inventory's included, restarts its own copy of one booted Project. A cold boot
-  // of its own per cut was about half of this law's time: 16.5 ms and 264 statements, against
-  // about 10 ms and 99 statements for a restart (profiled on 2026-11-17).
-  const template = yield* projectTemplate();
+// DIAGNOSTIC ONLY (throwaway branch, never merged): one walk, cold or from a template, with prints.
+const diag = (label: string, what: string, value: unknown) =>
+  Effect.sync(() => {
+    console.log(`L11DIAG ${label} ${what} ${JSON.stringify(value)}`);
+  });
+
+const inventoryOf = Effect.fnUntraced(function* (template: ProjectTemplate | undefined) {
+  const found: Record<string, Array<string>> = {};
+
+  for (const path of StoragePath) {
+    yield* Effect.scoped(
+      storageCall(path, template, (fixture, call) =>
+        Effect.gen(function* () {
+          fixture.observe();
+          yield* call;
+          found[path] = fixture.observed();
+        }),
+      ),
+    );
+  }
+
+  return found;
+});
+
+const settledTemplate = Effect.scoped(
+  Effect.gen(function* () {
+    const fixture = yield* childProject();
+    const runtime = yield* fixture.acquire();
+    yield* runtime.contextEffect;
+    let tries = 0;
+
+    for (; fixture.undelivered() > 0 && tries < 1000; tries++) {
+      yield* realPause;
+    }
+
+    yield* diag("settled", "pauses", tries);
+
+    return fixture.template();
+  }),
+);
+
+const compare = (label: string, a: Record<string, Array<string>>, b: Record<string, Array<string>>) =>
+  Effect.gen(function* () {
+    const rows = StoragePath.map((path) => {
+      const left = a[path] ?? [];
+      const right = b[path] ?? [];
+      const first = left.findIndex((statement, at) => statement !== right[at]);
+      const at = first === -1 && left.length !== right.length ? Math.min(left.length, right.length) : first;
+      return {
+        path,
+        a: left.length,
+        b: right.length,
+        same: at === -1,
+        at,
+        left: at === -1 ? null : (left[at] ?? null),
+        right: at === -1 ? null : (right[at] ?? null),
+      };
+    });
+    yield* diag(label, "compare", rows);
+    yield* diag(label, "allSame", rows.every((row) => row.same));
+  });
+
+const inventories = Effect.fnUntraced(function* () {
+  const cold1 = yield* inventoryOf(undefined);
+  const cold2 = yield* inventoryOf(undefined);
+  const boot1 = yield* inventoryOf(yield* projectTemplate());
+  const boot2 = yield* inventoryOf(yield* projectTemplate());
+  const settled = yield* inventoryOf(yield* settledTemplate);
+  yield* compare("cold-vs-cold", cold1, cold2);
+  yield* compare("cold-vs-template", cold1, boot1);
+  yield* compare("template-vs-template", boot1, boot2);
+  yield* compare("cold-vs-settled", cold1, settled);
+  yield* diag("cold", "inventory", cold1);
+  yield* diag("template", "inventory", boot1);
+});
+
+const storageWalk = Effect.fnUntraced(function* (label: string, start: Effect.Effect<ProjectTemplate | undefined, unknown>) {
+  const began = performance.now();
+  const template = yield* start;
   const remaining: Array<StorageCut> = [];
+  const drift: Array<string> = [];
 
   for (const path of StoragePath) {
     yield* Effect.scoped(
@@ -729,8 +804,15 @@ const storageSecrets = Effect.fnUntraced(function* () {
   }
 
   const inventory = [...remaining];
+  yield* diag(label, "inventorySize", inventory.length);
+  yield* diag(
+    label,
+    "perPath",
+    Object.fromEntries(StoragePath.map((path) => [path, inventory.filter((cut) => cut.path === path).length])),
+  );
   const reached = new Set<string>();
   const leaks = new Set<string>();
+  let cuts = 0;
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
   // fast-check calls back with plain Promises, so each walk and each move runs with this law's services.
   const context = yield* Effect.context();
@@ -776,7 +858,12 @@ const storageSecrets = Effect.fnUntraced(function* () {
           Effect.gen(function* () {
             fixture.observe(cut.operation, fault);
             const outcome = yield* call.pipe(Effect.result);
-            fixture.observed();
+            const seen = fixture.observed();
+            cuts++;
+
+            if (seen[cut.operation] !== cut.statement) {
+              drift.push(`${cut.path}/${cut.operation} want ${cut.statement} got ${seen[cut.operation] ?? "none"} of ${seen.length}`);
+            }
             expect(fixture.hit(), `L11: ${cut.path}/${cut.operation} ${cut.statement}`).toBe(true);
 
             if (Result.isFailure(outcome)) {
@@ -828,6 +915,20 @@ const storageSecrets = Effect.fnUntraced(function* () {
       // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
       { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
     ),
+  ).pipe(
+    Effect.ensuring(
+      Effect.gen(function* () {
+        yield* diag(label, "ms", Math.round(performance.now() - began));
+        yield* diag(label, "cuts", cuts);
+        yield* diag(label, "reached", reached.size);
+        yield* diag(label, "remaining", remaining.length);
+        yield* diag(label, "driftCount", drift.length);
+        yield* diag(label, "drift", drift.slice(0, 40));
+        yield* diag(label, "leakCount", leaks.size);
+        yield* diag(label, "leakOutputs", Object.fromEntries(["reply", "span", "row", "log"].map((output) => [output, [...leaks].filter((leak) => leak.endsWith(`-> ${output}`)).length])));
+        yield* diag(label, "leaks", [...leaks].sort());
+      }),
+    ),
   );
   expect(remaining, "L11: every storage operation in every flow was cut").toEqual([]);
   expect(reached.size).toBe(inventory.length);
@@ -838,10 +939,14 @@ const storageSecrets = Effect.fnUntraced(function* () {
 });
 
 describe("P42 slice 1: a code start on the real Worker path", () => {
+  effectIt.effect("diag: L11 inventories, cold against template", inventories, 300_000);
+
   effectIt.effect(
     "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
-    storageSecrets,
+    () => storageWalk("template", projectTemplate()),
   );
+
+  effectIt.effect("diag: L11 cold walk, as main has it", () => storageWalk("cold", Effect.succeed(undefined)), 300_000);
 
   for (const path of ["descriptor", "recovery", "configuration", "exit"] as const) {
     for (const output of ["reply", "span", "row", "log"] as const) {
