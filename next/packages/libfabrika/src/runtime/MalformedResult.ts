@@ -9,6 +9,6 @@ import * as Schema from "effect/Schema";
  *
  * @category schemas
  */
-export const Malformed = Schema.TaggedStruct("malformed_result", {
+export const MalformedResult = Schema.TaggedStruct("malformed_result", {
   issues: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
 });

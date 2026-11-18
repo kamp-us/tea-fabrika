@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import type * as Types from "effect/Types";
 import * as Chaos from "./Chaos.ts";
 import * as ChaosSchedule from "./ChaosSchedule.ts";
-import { Malformed } from "./Malformed.ts";
+import { MalformedResult } from "./MalformedResult.ts";
 
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }));
 
@@ -21,7 +21,7 @@ const Error = Schema.Union([
   Schema.TaggedStruct("NemesisError", {}),
   Schema.TaggedStruct("handler_failed", {}),
   Schema.TaggedStruct("bad_cmd", {}),
-  Malformed,
+  MalformedResult,
 ]);
 
 const Request = Schema.Struct({ id: Chaos.ExperimentId });

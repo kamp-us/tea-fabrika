@@ -1,6 +1,6 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Ci, CodeHost, Malformed, Program, Send, StartChild } from "@kampus/libfabrika";
+import { Ci, CodeHost, MalformedResult, Program, Send, StartChild } from "@kampus/libfabrika";
 import { Array as Arr, Match, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
@@ -120,7 +120,7 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
     Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Finite }),
     Schema.TaggedStruct(`${name}_err`, {
       cmd,
-      error: Schema.Union([...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})), Malformed]),
+      error: Schema.Union([...Arr.map(tags, (tag) => Schema.TaggedStruct(tag, {})), MalformedResult]),
       at: Schema.Finite,
     }),
   ]);
@@ -139,7 +139,7 @@ const Msg = Schema.Union([
   answers(Send.send.cmdType, Send.SendInput, Send.Queued, Send.send.errTags),
   // `exit` declares no error of its own, so its only failure is tea's.
   Schema.TaggedStruct("exit_ok", { cmd: ExitCmd, value: Schema.Null, at: Schema.Finite }),
-  Schema.TaggedStruct("exit_err", { cmd: ExitCmd, error: Malformed, at: Schema.Finite }),
+  Schema.TaggedStruct("exit_err", { cmd: ExitCmd, error: MalformedResult, at: Schema.Finite }),
 ]);
 
 /** What the machine decodes: the inputs alone, since tea mints each answer from the Cmd list. */
