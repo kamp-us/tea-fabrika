@@ -22,7 +22,7 @@ const Mutant = Schema.Struct({
   status: Schema.String,
   killedBy: Schema.optional(Schema.Array(Schema.String)),
   coveredBy: Schema.optional(Schema.Array(Schema.String)),
-  testsCompleted: Schema.optional(Schema.Number),
+  testsCompleted: Schema.optional(Schema.Finite),
   location: Schema.Struct({ start: Position, end: Position }),
 });
 
@@ -74,7 +74,7 @@ export const Answer = Schema.TaggedUnion({
 export type Answer = typeof Answer.Type;
 
 /** What fails before Stryker starts, or when it cannot, each naming what it looked at and no text of the file. */
-export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
   reason: Schema.Literals([
     "unknown_plant",
     "not_found",

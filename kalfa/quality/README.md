@@ -59,7 +59,9 @@ environment values.
 
 A plant whose target and law sit in different packages (the law reaches the target through a
 workspace link) is refused as `needs_in_place` unless the `inPlace` setting is on, since Stryker's
-sandbox would link back to the unmutated file.
+sandbox would link back to the unmutated file. In place, Stryker backs the checkout up and restores it
+when it ends; on one run here a restored file (`fixtures/pipeline-lane/codex.mjs`) came back without its
+executable bit, so after an in-place run on a checkout you keep, look at `git status`.
 
 ## Run one
 

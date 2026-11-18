@@ -16,7 +16,7 @@ import * as Run from "./stryker/Run.ts";
 import * as Settings from "./stryker/Settings.ts";
 
 /** The catalog module could not be loaded, or did not default-export a catalog. */
-class NoCatalog extends Schema.TaggedError<NoCatalog>()("NoCatalog", {
+class NoCatalog extends Schema.TaggedError<NoCatalog, { readonly brand: unique symbol }>()("NoCatalog", {
   catalog: Schema.String,
 }) {
   override get message(): string {
@@ -25,7 +25,7 @@ class NoCatalog extends Schema.TaggedError<NoCatalog>()("NoCatalog", {
 }
 
 /** A plant ran and its law was not among the tests that killed it. The record line is already printed. */
-class Unproven extends Schema.TaggedError<Unproven>()("Unproven", {
+class Unproven extends Schema.TaggedError<Unproven, { readonly brand: unique symbol }>()("Unproven", {
   plant: Schema.String,
   answer: Schema.String,
 }) {

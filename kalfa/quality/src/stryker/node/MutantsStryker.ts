@@ -64,9 +64,8 @@ export const layer = (where: { readonly root: string; readonly nice: number }) =
 
       const command = (config: string) =>
         ChildProcess.make(
-          ...(where.nice === 0
-            ? (["node", [bin, "run", config]] as const)
-            : (["nice", ["-n", String(where.nice), "node", bin, "run", config]] as const)),
+          where.nice === 0 ? "node" : "nice",
+          where.nice === 0 ? [bin, "run", config] : ["-n", String(where.nice), "node", bin, "run", config],
           { cwd: where.root, extendEnv: true, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
         );
 
