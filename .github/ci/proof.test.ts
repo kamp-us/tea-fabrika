@@ -402,8 +402,8 @@ const LAWS = [".github/ci/proof.test.ts", ".github/ci/gate.test.ts", ".github/ci
 const lawOptions = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } };
 
 const HandInputs = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("changed") }),
-  Schema.Struct({ _tag: Schema.Literal("full"), law: Schema.Literals(LAWS) }),
+  Schema.TaggedStruct("changed", {}),
+  Schema.TaggedStruct("full", { law: Schema.Literals(LAWS) }),
 ]);
 
 // Changed files: at most two rerun triggers, so a change with none is common, and any plain files.
