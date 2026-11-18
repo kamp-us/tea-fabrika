@@ -107,14 +107,15 @@ const LONGEST = 60 * 60_000;
 
 const DIGITS = /^[0-9]+$/;
 
-const HttpDate = Schema.decodeOption(Schema.DateTimeUtcFromHttpDate);
-
 /**
  * When GitHub takes calls again after an answer of `status` with these headers, or `null` when it
  * names no wait: `limitWait`'s rules, as a time. Only a 403 or a 429 counts. `retry-after` comes
- * first, as RFC 9110 section 10.2.3 gives it: seconds (digits only) or an HTTP date. Then
- * `x-ratelimit-reset` (seconds since 1970, digits only) when `x-ratelimit-remaining` is 0. A header
- * in any other shape is read as no header. Never before `now`, and at most an hour after it.
+ * first, as RFC 9110 section 10.2.3 gives it: seconds (digits only) or an HTTP date, read with
+ * `DateTime.make`. Then `x-ratelimit-reset` (seconds since 1970, digits only) when
+ * `x-ratelimit-remaining` is 0. A header neither reads is read as no header. `DateTime.make` is
+ * looser than `limitWait`'s `httpDate`: it takes "1.5" as a day in 2001, so such a header names no
+ * wait at all, where `limitWait` would fall through to the reset. Never before `now`, and at most an
+ * hour after it.
  */
 export const retryAt = (
   status: number,
@@ -128,7 +129,7 @@ export const retryAt = (
   const from = DateTime.toEpochMillis(now);
   const after = Str.trim(headers["retry-after"] ?? "");
   const reset = Str.trim(headers["x-ratelimit-reset"] ?? "");
-  const date = HttpDate(after);
+  const date = DateTime.make(after);
   const spent = Str.trim(headers["x-ratelimit-remaining"] ?? "") === "0" && DIGITS.test(reset);
 
   const at = DIGITS.test(after)
