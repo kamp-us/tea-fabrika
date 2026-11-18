@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body 99b6b4930280
+Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body c5e918655a56
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -1222,6 +1222,74 @@ stays 38 steps and $163: the growth sits inside slice 14's one tests step, price
   lines than it lists. Nothing was compiled; slice 10's and slice 14's typecheck tells.
 - Whether the mock sweep's cloudflare slice 2 clashes with slice 10 by more than lines. Its branch
   is not on origin, so it was not read.
+
+#### 8. Slice 13 starts, and slice 15's fold keeps main's new entry, 2026-11-18 (lead)
+
+**The answer first.** Slice 13 starts now and no longer waits for pull request 1312. Its count is
+unchanged: 15 fires in 5 files. Slice 15 runs after it, in the same pull request. One fact is new
+since point 7: main now puts a `Data.TaggedError` entry first in every block that sets
+`eslint/no-restricted-properties` (0573), so the fold keeps that entry in each block it writes.
+This point records the order, the counts and that entry. It makes no new design call.
+
+Read on `fabrikalfa/reflect-rest` at `70dddec3e`, which merged `origin/main` at `a6761bce1`.
+
+- **Pull request 1099 merged on 2026-11-17,** and it is in that merge.
+- **Pull request 1312 is a draft that waits for the owner's look,** stacked on
+  https://github.com/kamp-us/tea-fabrika/pull/1232, with no date. Of slice 13's files it edits only
+  `next/apps/fabrika/e2e/tezgah-focus.visual.test.ts` (24 lines), where slice 13 has 2 kind 7
+  fires. Waiting on it held the whole sweep for two days for 2 fires. So slice 13 takes the rule
+  slice 10 took for its neighbor: whichever lands later carries the other's lines in its merge.
+  Once this lands, the ban holds in `e2e/`, so a `Reflect.get` in 1312's merge is red in 1312's
+  own pull request, as the ban means it to be. 1312 already owes a one-line edit in
+  `WindowMachine.laws.test.ts` (this pull request's description).
+
+**Slice 13's count at `70dddec3e`.** Counted by reading every hit, as point 7 did.
+
+- `next/apps/fabrika/e2e/client-protocol.test-support.ts`: 5 fires of kind 1, at :128 (2), :228 (2) and :269.
+- `next/apps/fabrika/e2e/first-window.visual.test.ts`: 3 fires, kind 7 at :136 and :241, kind 2 at :333.
+- `next/apps/fabrika/e2e/p14.test-support.ts`: 2 fires of kind 1, at :768 and :772.
+- `next/apps/fabrika/e2e/page-runtime.laws.visual.test.ts`: 3 fires of kind 7, at :222, :224 and :307.
+- `next/apps/fabrika/e2e/tezgah-focus.visual.test.ts`: 2 fires of kind 7, at :59 and :70.
+
+- 11 `get` and 4 `set`, and no `has`. Kind 7 follows
+  `next/apps/fabrika/e2e/one-file.visual.test.ts`, which already declares its `globalThis` values.
+- `e2e/*` joins the warn-level Reflect block in `.oxlintrc.json`, as `src/*` did in slice 14.
+  `e2e/node/**` is already in the blocking block.
+- No other folder of `next/` or our tooling has a fire. The text matches left are the six allowed
+  disable lines, the plants and their tests, the README, `next/AGENTS.md`'s row, and the kind 11
+  text in `exam/twin.integration.test.ts`.
+
+**Slice 15's fold at `70dddec3e`.** The base blocks it folds into, as `.oxlintrc.json` has them:
+
+```jsonc
+// A sketch of the fold, not run. Each block keeps its entries in this order, then adds the four.
+{ "files": ["next/**/*"],
+  "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, the four */] } },
+{ "files": ["next/packages/libfabrika/src/client/**"],
+  "rules": { "eslint/no-restricted-properties": ["error", /* Data.TaggedError, JSON.parse, Effect.retry, Stream.retry, the four */] } },
+{ "files": [/* the JSON.parse warn block's folders, unchanged */],
+  "rules": { "eslint/no-restricted-properties": ["warn", /* Data.TaggedError, JSON.parse, the four */] } }
+```
+
+- The three `next/` Reflect list blocks go: the blocking one, the warn one and the `client/` one.
+- The block for the three tooling folders stays as it is. No base
+  block covers only our tooling: the top-level rule reaches today's code too, which 0554 does not
+  cover. It is the ban's scope, not a list of folders at zero.
+- L10's plant goes in a folder of `next/` that no block names. L4 still holds, so each block keeps
+  `JSON.parse` at its level and `client/` keeps both retry entries. L1 and L2 still hold for
+  `Data.TaggedError`.
+
+**The split this pull request lands under.** Under 0589's amendments, a mechanical part gets no
+review agent. The main merge's tool-output hunks are mechanical. Its hand-resolved hunks (the merge
+commit's body names them), slice 13 and slice 15 are judgment, and get the one review.
+
+**Size.** Slices 13 and 15 are priced at $8 and $5 already, so the budget stays as signed.
+
+#### What point 8 cannot tell us
+
+- Whether the owner's look at 1312 changes `tezgah-focus.visual.test.ts` more than lines. Its
+  later merge tells.
+- Whether the visual files' laws pass in a cloud box with no `ssh-keygen`. CI's visual job tells.
 
 ## Open questions
 
