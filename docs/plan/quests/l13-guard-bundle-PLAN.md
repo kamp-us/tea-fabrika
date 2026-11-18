@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds slice B of the two-flakes plan (0036), as the lead (fabrikaa-merger) approved it on 2026-11-18, amended by fabrikaa's ruling on mail 0004; body 3e1433e0c577
 Plancheck-Version: 3
 
 # Slice B of the two-flakes plan: the L13 guard gets a bundle of its own with no compiler in it, and records `guardMs`, in next/ (ticket 1167, decision 0036)
