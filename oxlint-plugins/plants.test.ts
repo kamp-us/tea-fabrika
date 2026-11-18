@@ -458,6 +458,7 @@ describe("each rule refuses what it is there to refuse", () => {
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
     const control = withoutGrantNoConsole(config);
     const neighbor = "next/apps/fabrika/grant-neighbor.ts";
+
     const sources = {
       [GRANT_NO_CONSOLE.file]: GRANT_NO_CONSOLE.text,
       [neighbor]: 'export const log = () => console.log("outside");',
