@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1144-tests-ci-progress-measure",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-17T07:20:22-08:00",
+  "ended": "2026-11-17T07:30:28-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "driver_caused": false,
+  "billed": null,
+  "why": "Today's CI tooling, tracker 1144. Built the lead-approved bounded P9 measurement in the existing integration fixture. It keeps three serial one-file twenty-case pairs and adds three serial ten-file two-hundred-case pairs. The same generated observer runs in both treatments, records only closed callback counters and coordinator CPU/wall snapshots at module evaluation, initialization, run start, first queued module and run end, and writes one record at run end. Strict decoding rejects extra or malformed fields. Recorded journal counters are compared with independent callback counts. Fixture/config/observer input hashes must agree between paired treatments. Every completed pair emits its measured data immediately; the original three-sample summary remains separate. No clock threshold, callback cap, timeout change, event filter or production change was added.",
+  "note": "Only static checks ran. Scoped format and lint pass. Node syntax checks pass for the integration source and the exact generated observer without executing it. Static evaluation of fixture strings proves the P8 scenario, cutoff barrier/assertions, default config and normal/blocked test-body bytes match the previously passing source. All other source and index hashes matched before adding this row, including the original P1/P9 pure law. No real child, signal, compiler, full lint, CI action or publication ran for this construction. Both treatments now include the common observer; historical uninstrumented measurements remain separate. Phase CPU is coordinator-only, in microseconds, and wall is milliseconds; the end snapshot is this observer callback, not process exit. All nine previous actual cost pairs and all three earlier actual runs remain archived. No new cost attribution, passing measurement or buffer-fault proof is claimed. Root must read the exact diff before new checks or publication.",
+  "base": "36701d67d8e63096672abe33bb44ccc6a906de26",
+  "sourceHashes": {
+    ".github/ci/progress-reporter.integration.test.ts": "81b29bdd53fd07f48698138cda784885c28df9cf9b491c85581bc66ed1f1dab1"
+  },
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44100183103",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44105502584",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44108835179"
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10.1,
+  "costUsd": null,
+  "listUsd": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}
