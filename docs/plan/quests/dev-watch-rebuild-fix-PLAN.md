@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0036, 0045, 0178, 0291, 0292, 0536, 0581, 0590; body adbb966cf5cc
+Approved by the lead agent, builds 0036, 0045, 0178, 0291, 0292, 0536, 0581, 0587, 0590; body 635286ec4652
 Plancheck-Version: 3
 
 # Save-driven dev rebuilds receive the current reply
@@ -170,8 +170,11 @@ These laws remain integration tests. A stand-in cannot establish real file notif
 - The completion recorder in that same file: searched the existing tracer and `Tracer.NativeSpan`. Reuse the tracer's actual `end` method and span identity, with a queue notification after completion.
 - The controlled delay in that same file: searched the existing `repeat` wrapper and neighboring `Deferred` use. Reuse both. No timer helper or new mock API is needed.
 - `Recorder` records service calls. It does not replace the watcher stream or tracer completion callback, so no service or shared test-package helper is added.
+- `fixtureValue`, a test-local helper in that same file, added by amendment 1: searched every `oxc-parser` user (`next/apps/fabrika/src/build.test.ts`, `next/apps/fabrika/src/instance-one-file.integration.test.ts`, `next/apps/fabrika/src/exam/`, `oxlint-plugins/`) and every `__p15` user (`next/apps/fabrika/e2e/reload.visual.test.ts`). Each parses for its own syntax check or plants a fixture; none reads a value out of a built bundle, and libfabrika's tests may not import the app's files. Reuse the installed `oxc-parser` `parseSync` and `Visitor` as they ship. The bundle is parsed, never run: running it would execute program code and its imports inside the law, and the law checks what the watcher installed, not what the program does.
 
 No new exported name or code file is planned.
+
+**Amendment 1 (2026-11-18, the lead, after review 1):** the remote proof showed the first value assertion failed on valid bundle formatting, so the tests step replaced it with `fixtureValue`, a bounded syntax reader of the fixture assignment (`field/runs/2026-11-17-dev-watch-rebuild-fix-tests4.json`). Its `## Existing tools` line is above. No law, generator, deadline or file owner changes.
 
 ## Settings
 
@@ -198,6 +201,11 @@ Read-only rows make ownership explicit. They authorize no edits.
 | `pnpm-workspace.yaml` | tests | 0 | Read-only dependency catalog |
 | `pnpm-lock.yaml` | tests | 0 | Read-only installed versions |
 | `.agents/skills/lead/scripts/loosening.sh` | tests | 0 | Read-only law comparison |
+| `next/apps/fabrika/src/build.test.ts` | tests | 0 | Read-only, searched for an existing bundle reader (amendment 1) |
+| `next/apps/fabrika/src/instance-one-file.integration.test.ts` | tests | 0 | Read-only, searched for an existing bundle reader (amendment 1) |
+| `next/apps/fabrika/src/exam/` | tests | 0 | Read-only, searched for an existing bundle reader (amendment 1) |
+| `next/apps/fabrika/e2e/reload.visual.test.ts` | tests | 0 | Read-only, searched for an existing bundle reader (amendment 1) |
+| `oxlint-plugins/` | tests | 0 | Read-only, searched for an existing bundle reader (amendment 1) |
 | `docs/plan/quests/dev-watch-rebuild-fix-PLAN.md` | lead | docs | Save, check and sign this plan |
 | `docs/plan/README.md` | lead | docs | Record the quest's result |
 | `field/runs/` | lead | records | Step results and plant evidence |

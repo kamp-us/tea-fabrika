@@ -55,6 +55,15 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-18:* [The watcher save-law repair](https://github.com/kamp-us/tea-fabrika/pull/1542), ticket
+1122, in `next/`, fixes the L17/L18 flake. The save-driven law now checks every reply in order,
+accepts a `same` only for a hash that was already loaded, and finishes a save only on its own
+changed reply. No product code changed. Its proof ran on a Linux cloud box at full depth, because
+integration laws no longer run on pull requests: 10 of 10 repeats were green, and planted breaks in
+the law and in `watch.ts` turned it red. L10 shows the same "one install per event" assumption at
+boot, under load. That flake is a [finding](../../field/findings/2026-11-18-watch-l10-boot-drain-saw-repeated-installs.json)
+and needs its own ticket and fix.
+
 *2026-11-17:* [Settings slice 1](https://github.com/kamp-us/tea-fabrika/pull/1427), ticket 1076,
 generalizes the engine in `next/`. One `App` value supplies the settings file names, environment
 prefix, home variable, version key and list command. Fabrika keeps its existing names through its
