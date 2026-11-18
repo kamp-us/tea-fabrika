@@ -1,10 +1,11 @@
-import { Array as Arr, String as Str, DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Array as Arr, String as Str, DateTime, Effect, FileSystem, Option, Path, Result, Schema } from "effect";
 // Level: the level CI is in, as data (decision 0532 for sev0, 0542 for the two levels and sev1).
 // Today's lead tooling, run on our own laptop; it is not product.
 //
 //   sev0   the owner called it; the log below holds it, from `opened` to `closed`
 //   sev1   no sev0 is open, and at least one `ci-scheduled` issue is open: the full run is red,
-//          or a CI speed number is over its goal. Nobody calls it, and nothing here stores it
+//          or a CI speed number is over its goal. Nobody calls it. The issues are its record, and
+//          the log holds only the one fact land.ts needs: which branch is the fix now landing (0611)
 //   none   neither
 //
 // The log is `runs/sev/log.jsonl` in the checkout (git ignores `runs/`): one line per fact, never
@@ -37,6 +38,11 @@ export const Entry = Schema.TaggedUnion({
   allowed: { at: Schema.String, branch: Schema.String },
   /** The allow list became `branch` alone; `before` is the list it replaced. */
   next: { at: Schema.String, branch: Schema.String, before: Branches },
+  /**
+   * The lead named `branch` as the one fix of a sev1 now landing, or dropped it (`branch` is `null`).
+   * `issues` are the open `ci-scheduled` issues it answers.
+   */
+  fix: { at: Schema.String, branch: Schema.NullOr(Schema.String), issues: Schema.Array(Schema.Finite) },
   /** A cancel loop started, in process `pid`. */
   looping: { at: Schema.String, pid: Schema.Finite },
   canceled: { at: Schema.String, run: Run },
@@ -85,22 +91,44 @@ export const Alert = Schema.Struct({ number: Schema.Finite, title: Schema.String
 
 export type Alert = typeof Alert.Type;
 
-/** The level CI is in now. */
+/** The level CI is in now. A sev1's `fix` is the branch named as its fix now landing, or `null`. */
 export const Level = Schema.TaggedUnion({
   none: {},
-  sev1: { issues: Schema.Array(Alert) },
+  sev1: { issues: Schema.Array(Alert), fix: Schema.NullOr(Schema.String) },
   sev0: { since: Schema.String, reason: Schema.String, allow: Branches },
 });
 
 export type Level = typeof Level.Type;
 
 /** The level from the sev0 and the open issues: an open sev0 wins, then any open issue. */
-export const level = (sev0: Sev0, issues: ReadonlyArray<Alert>): Level =>
+export const level = (sev0: Sev0, issues: ReadonlyArray<Alert>, fix: string | null = null): Level =>
   sev0._tag === "open"
     ? Level.cases.sev0.make({ since: sev0.since, reason: sev0.reason, allow: sev0.allow })
     : issues.length > 0
-      ? Level.cases.sev1.make({ issues })
+      ? Level.cases.sev1.make({ issues, fix })
       : Level.cases.none.make({});
+
+/**
+ * The branch named as the sev1's fix: the newest `fix` line, unless it is a drop, or none of the
+ * issues it answered is open any more. A fix named for an issue that has closed is not the fix of
+ * one that opened after it, and the clock plays no part.
+ */
+export const sev1Fix = (entries: ReadonlyArray<Entry>, issues: ReadonlyArray<Alert>): string | null => {
+  const named = Arr.findLast(entries, Entry.guards.fix);
+
+  return Option.isSome(named) && Arr.some(issues, (i) => named.value.issues.includes(i.number))
+    ? named.value.branch
+    : null;
+};
+
+/**
+ * The branches an open sev0 holds as fixes: those `open --allow` and `next` named, which `allow`
+ * (a ready pull request, 0603) did not. `lines` are the log from the sev0's `opened` on.
+ */
+export const sev0Fixes = (lines: ReadonlyArray<Entry>): ReadonlyArray<string> =>
+  Arr.reduce<ReadonlyArray<string>, Entry>(lines, [], (named, e) =>
+    e._tag === "opened" ? e.allow : e._tag === "next" ? [e.branch] : named,
+  );
 
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
 export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
@@ -123,7 +151,8 @@ export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev
         : Result.succeed(Sev0.cases.open.make({ ...sev0, allow: [entry.branch] }));
     case "closed":
       return sev0._tag === "closed" ? Result.fail("no sev0 is open") : Result.succeed(Sev0.cases.closed.make({}));
-    // What the loop writes changes no level; a late cancel may follow a close.
+    // What the loop writes and the sev1's fix change no sev0; a late cancel may follow a close.
+    case "fix":
     case "looping":
     case "canceled":
     case "failed":

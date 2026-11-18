@@ -4,13 +4,17 @@
 //   open     a sev0 begins, on the owner's call (from none or from a sev1); sev.ts then runs the loop
 //   next     one branch becomes the whole allow list: the next fix, landed one at a time
 //   allow    one more branch on the list
-//   close    the sev0 ends: the loop stops, then it prints what the lead does next and the level now
+//   fix      a sev1's one fix now landing is named (0611); a second is refused until the first merged
+//   drop     the named fix is let go, so another can be named
+//   close    the sev0 ends: the loop stops, main's full run starts, then it prints what the lead does
+//            next and the level now
 //   status   the level now, since when and why
 //
 // Leaving a sev0 reruns nothing. A run the freeze canceled and a red run that stopped itself both
-// end `cancelled`, and a rerun tests the old merge of main. So `close` lists each open pull request
-// the freeze canceled a run of, with whether its branch holds main's head, and the lead merges main
-// into each and pushes, which starts a fresh run on today's main.
+// end `cancelled`, and a rerun tests the old merge of main. So `close` starts a fresh full run on
+// main itself, and lists each open pull request the freeze canceled a run of, with whether its
+// branch holds main's head: the lead merges main into each and pushes, which starts a fresh run on
+// today's main.
 import type { Duration } from "effect";
 import { Console, Effect, Schema, Array as Arr, pipe, Option, Order } from "effect";
 import { Branches } from "../../lead/scripts/pr/Branches.ts";
@@ -18,9 +22,10 @@ import { type PullRequest, PullRequests } from "../../lead/scripts/pr/PullReques
 import { Alerts } from "./Alerts.ts";
 import * as Freeze from "./Freeze.ts";
 import * as Level from "./Level.ts";
+import { WorkflowRuns } from "./WorkflowRuns.ts";
 
-/** What the lead starts by hand once a sev0 ends: the freeze canceled it, and nothing starts it again. */
-export const FULL_RUN = "gh workflow run scheduled.yaml --ref main";
+/** Main's full run: the freeze canceled it, and nothing starts it again but `close` (0611). */
+const FULL_RUN = { workflow: "scheduled.yaml", ref: "main" } as const;
 
 // ---------------------------------------------------------------- the deciding part
 
@@ -73,13 +78,12 @@ const walkLine = (w: Walk): string => {
   }
 };
 
-/** What `close` prints after the loop stopped: the walk, then the full run to start. */
+/** What `close` prints after the loop stopped and the full run started: the walk. */
 export const nextLines = (walk: ReadonlyArray<Walk>): ReadonlyArray<string> => [
   walk.length === 0
     ? "sev: the freeze canceled no run of an open pull request"
     : `sev: ${walk.length} open pull requests had runs canceled; walk them in this order, on the merge line:`,
   ...Arr.map(ordered(walk), (w) => `  ${walkLine(w)}`),
-  `sev: start the full run by hand, since the freeze canceled it: ${FULL_RUN}`,
 ];
 
 /** The latest sev0's log, as lines for the write-up. */
@@ -104,6 +108,9 @@ export const summary = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<stri
         break;
       case "next":
         lines.push(`${e.at} next fix ${e.branch}`);
+        break;
+      case "fix":
+        lines.push(e.branch === null ? `${e.at} dropped the fix` : `${e.at} fix ${e.branch}`);
         break;
       case "canceled":
         cancels += 1;
@@ -135,6 +142,7 @@ export const levelLines = (level: Level.Level): ReadonlyArray<string> => {
       return [
         `sev1 since ${level.issues[0]?.since ?? "now"}: ${level.issues.length} ci-scheduled issues open`,
         ...Arr.map(level.issues, (i) => `  issue ${i.number} since ${i.since}: ${i.title}`),
+        `  fix: ${level.fix ?? "none"}`,
       ];
     case "none":
       return ["none: no sev0 is open, and no ci-scheduled issue is open"];
@@ -183,6 +191,63 @@ export const allow = Effect.fn("Incident.allow")(function* (home: string, branch
   yield* Console.log(`sev: allowed ${branch}`);
 });
 
+/** Names `branch` as the sev1's one fix now landing; refused in a sev0, with no issue open, or while another fix is not merged. */
+export const fix = Effect.fn("Incident.fix")(function* (home: string, branch: string) {
+  const { entries, sev0 } = yield* Level.read(home);
+
+  if (sev0._tag === "open") {
+    return yield* Level.Refused.make({
+      reason: `a sev0 is open since ${sev0.since}: name the next fix with next, not fix`,
+    });
+  }
+
+  const issues = yield* (yield* Alerts).open;
+
+  if (issues.length === 0) {
+    return yield* Level.Refused.make({ reason: "no ci-scheduled issue is open, so there is no sev1 fix to name" });
+  }
+
+  const named = Level.sev1Fix(entries, issues);
+
+  if (named === branch) {
+    return yield* Console.log(`sev: ${branch} is the fix already`);
+  }
+
+  if (named !== null) {
+    const prs = yield* (yield* PullRequests).all;
+
+    if (!Arr.some(prs, (pr) => pr.head === named && pr.state === "MERGED")) {
+      return yield* Level.Refused.make({
+        reason: `${named} is the fix now landing and has not merged: one fix at a time; wait for it, or run fix --drop`,
+      });
+    }
+  }
+
+  yield* Level.write(
+    home,
+    Level.Entry.cases.fix.make({ at: yield* Level.now, branch, issues: Arr.map(issues, (i) => i.number) }),
+  );
+  yield* Console.log(`sev: the fix now landing is ${branch}`);
+});
+
+/** Lets go of the named sev1 fix, so another can be named; says so when none is named. */
+export const drop = Effect.fn("Incident.drop")(function* (home: string) {
+  const { entries } = yield* Level.read(home);
+  const issues = yield* Effect.result((yield* Alerts).open);
+  const open = issues._tag === "Success" ? issues.success : [];
+  const named = Level.sev1Fix(entries, open);
+
+  if (named === null) {
+    return yield* Console.log("sev: no fix is named");
+  }
+
+  yield* Level.write(
+    home,
+    Level.Entry.cases.fix.make({ at: yield* Level.now, branch: null, issues: Arr.map(open, (i) => i.number) }),
+  );
+  yield* Console.log(`sev: ${named} is not the fix now landing any more`);
+});
+
 /** How a pull request's branch stands to main, read from the checkout after a fetch. */
 const stand = Effect.fn("Incident.stand")(function* (pr: PullRequest) {
   const behind = yield* Effect.result((yield* Branches).behind(pr.oid));
@@ -200,8 +265,9 @@ const stand = Effect.fn("Incident.stand")(function* (pr: PullRequest) {
 export type Closed = { readonly loop: Freeze.Ended; readonly walk: ReadonlyArray<Walk>; readonly level: Level.Level };
 
 /**
- * Ends the sev0: writes the close, waits for the loop to stop, then prints the walk, the full run
- * to start, the summary and the level now. It asks GitHub for no rerun and writes nothing there.
+ * Ends the sev0: writes the close, waits for the loop to stop, starts main's full run once (the
+ * freeze canceled it), then prints the walk, the summary and the level now. It asks GitHub for no
+ * rerun and no cancel.
  */
 export const close = Effect.fn("Incident.close")(function* (
   home: string,
@@ -214,6 +280,14 @@ export const close = Effect.fn("Incident.close")(function* (
     loop === "answered" ? "sev: sev0 closed; the cancel loop ended" : "sev: sev0 closed; no cancel loop answered",
   );
 
+  // The loop has ended, so no cancel can follow: the one run `close` starts is main's full run.
+  const started = yield* Effect.result((yield* WorkflowRuns).dispatch(FULL_RUN.workflow, FULL_RUN.ref));
+  yield* Console.log(
+    started._tag === "Success"
+      ? `sev: started the full run: ${FULL_RUN.workflow} on ${FULL_RUN.ref}`
+      : `sev: could not start the full run (${started.failure.reason}): gh workflow run ${FULL_RUN.workflow} --ref ${FULL_RUN.ref}`,
+  );
+
   const entries = yield* Level.log(home);
   const branches = yield* Branches;
   yield* Effect.result(branches.refresh);
@@ -221,7 +295,8 @@ export const close = Effect.fn("Incident.close")(function* (
   const walk = yield* Effect.forEach(owed(entries, prs), stand, { concurrency: 4 });
 
   const issues = yield* Effect.result((yield* Alerts).open);
-  const level = Level.level(Level.Sev0.cases.closed.make({}), issues._tag === "Success" ? issues.success : []);
+  const open = issues._tag === "Success" ? issues.success : [];
+  const level = Level.level(Level.Sev0.cases.closed.make({}), open, Level.sev1Fix(entries, open));
 
   for (const line of [
     ...nextLines(walk),
@@ -239,8 +314,9 @@ export const close = Effect.fn("Incident.close")(function* (
 
 /** The level now: the sev0 from the log when one is open, else the open ci-scheduled issues. */
 export const status = Effect.fn("Incident.status")(function* (home: string) {
-  const { sev0 } = yield* Level.read(home);
-  const level = Level.level(sev0, sev0._tag === "open" ? [] : yield* (yield* Alerts).open);
+  const { entries, sev0 } = yield* Level.read(home);
+  const issues = sev0._tag === "open" ? [] : yield* (yield* Alerts).open;
+  const level = Level.level(sev0, issues, Level.sev1Fix(entries, issues));
 
   for (const line of levelLines(level)) {
     yield* Console.log(line);
