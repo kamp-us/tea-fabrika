@@ -32,6 +32,15 @@ const fixtureIdentity = {
   leg: "tooling-1",
 } as const;
 
+const identities = {
+  ci: {
+    run: process.env["GITHUB_RUN_ID"] ?? null,
+    attempt: process.env["GITHUB_RUN_ATTEMPT"] ?? null,
+    sha: process.env["GITHUB_SHA"] ?? null,
+  },
+  fixture: fixtureIdentity,
+};
+
 const metricsPrefix = "CI_PROGRESS_COORDINATOR ";
 
 const Counter = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -445,13 +454,13 @@ it.live(
       for (const mode of ["cutoff", "normal", "timeout"] as const) {
         const result = yield* probe(mode);
         expect(result.progress).toBe(mode === "cutoff" ? "partial" : "read");
-        yield* Console.log(`CI_PROGRESS_PROOF ${JSON.stringify(result)}`);
+        yield* Console.log(`CI_PROGRESS_PROOF ${JSON.stringify({ ...identities, ...result })}`);
       }
 
       const unavailable = yield* probe("normal", "unwritable");
       expect(unavailable.code).toBe(0);
       expect(unavailable.progress).toBe("unavailable");
-      yield* Console.log(`CI_PROGRESS_PROOF ${JSON.stringify(unavailable)}`);
+      yield* Console.log(`CI_PROGRESS_PROOF ${JSON.stringify({ ...identities, ...unavailable })}`);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
@@ -497,6 +506,8 @@ it.live("scenario: P9 finite identical fixtures record every overhead sample wit
 
         const summary = {
           sample,
+          ci: identities.ci,
+          fixture: identities.fixture,
           baseline: baseline.elapsed,
           observed: observed.elapsed,
           difference: observed.elapsed - baseline.elapsed,
@@ -510,8 +521,6 @@ it.live("scenario: P9 finite identical fixtures record every overhead sample wit
 
         const measured = {
           ...summary,
-          run: observed.timings.run,
-          sha: observed.timings.sha,
           order: "baseline_then_reporter",
           units: { wall: "ms", cpu: "us", journal: "bytes" },
           files,
@@ -527,7 +536,7 @@ it.live("scenario: P9 finite identical fixtures record every overhead sample wit
       }
 
       if (files === 1) {
-        yield* Console.log(`CI_PROGRESS_OVERHEAD ${JSON.stringify(samples)}`);
+        yield* Console.log(`CI_PROGRESS_OVERHEAD ${JSON.stringify({ ...identities, samples })}`);
       }
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
