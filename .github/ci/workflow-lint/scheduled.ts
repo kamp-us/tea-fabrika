@@ -202,7 +202,7 @@ const REPORT_ENV = {
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
 
-const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts ${RESULTS}`;
 
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
@@ -631,7 +631,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     Object.keys(map(map(changed["strategy"])["matrix"])).length === 1 &&
     changedRuns.length === 1 &&
     JSON.stringify(map(changedRuns[0]?.["env"])) ===
-      JSON.stringify({ FILES: `\${{ ${LEG_FILES} }}`, FABRIKA_TEST_DEPTH: DEPTH }) &&
+      JSON.stringify({ FILES: `\${{ ${LEG_FILES} }}`, LEG: `\${{ matrix.shard }}`, FABRIKA_TEST_DEPTH: DEPTH }) &&
     !("if" in (changedRuns[0] ?? {})) &&
     Predicate.isNumber(nextLimitHere) &&
     changedRuns[0]?.["timeout-minutes"] === nextLimitHere &&

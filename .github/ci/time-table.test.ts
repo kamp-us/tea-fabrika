@@ -1,5 +1,6 @@
 import { relative, resolve } from "node:path";
 import { it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { DateTime, Effect, Record as Rec, Schema } from "effect";
 import type { Duration } from "effect";
 import * as fc from "fast-check";
@@ -11,6 +12,7 @@ import {
   type Io,
   markdown,
   readFiles,
+  readQueueWait,
   readSteps,
   SLOWEST,
   STEP,
@@ -41,6 +43,10 @@ const root = resolve("time-table-fixture");
 const job = {
   id: 131255816934,
   status: "in_progress",
+  conclusion: null,
+  runner_id: 131255816934,
+  created_at: "2026-11-14T09:59:56Z",
+  started_at: "2026-11-14T10:00:00Z",
   steps: [
     {
       name: "Set up job",
@@ -259,6 +265,7 @@ it.live(
         sha: "a".repeat(40),
         job: "next",
         leg: "3",
+        queueWait: { created: "2026-11-14T09:59:56Z", started: "2026-11-14T10:00:00Z", seconds: 4 },
         steps: readSteps(job),
         files: {
           _tag: "read",
@@ -304,9 +311,14 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
       expect(timings.steps._tag).toBe("unavailable");
       expect(timings.files._tag).toBe("unavailable");
       const text = markdown(timings);
-      expect(text.match(/^Unavailable: /gm)).toHaveLength(2);
-      expect(markdown({ ...timings, steps: read })).toContain("| Set up job | success | 2 |");
-      expect(markdown({ ...timings, steps: read }).match(/^Unavailable: /gm)).toHaveLength(1);
+      expect(text).toContain("### Steps\n\nUnavailable: the jobs API answer is not a job");
+      expect(text).toContain("### Slowest test files\n\nUnavailable: the report is not Vitest's JSON");
+      expect(text).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
+
+      const stepsRead = markdown({ ...timings, steps: read });
+      expect(stepsRead).toContain("| Set up job | success | 2 |");
+      expect(stepsRead).toContain("### Slowest test files\n\nUnavailable: the report is not Vitest's JSON");
+      expect(stepsRead).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
     }),
     options,
   );
@@ -427,3 +439,425 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
     options,
   );
 });
+
+it.effect.prop(
+  "TT8: queue wait uses a started job's created and started times, and leaves pending placeholders out",
+  {
+    status: Schema.Literals(["in_progress", "completed"]),
+    created: Schema.Int.check(Schema.isBetween({ minimum: 1_790_000_000, maximum: 1_800_000_000 })),
+    wait: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3_600 })),
+  },
+  ({ status, created, wait }) => {
+    const answer = {
+      ...job,
+      status,
+      created_at: iso(created),
+      started_at: iso(created + wait),
+    };
+
+    const expected = {
+      created: answer.created_at,
+      started: answer.started_at,
+      seconds: (Date.parse(answer.started_at) - Date.parse(answer.created_at)) / 1000,
+    };
+
+    return Effect.gen(function* () {
+      const timings = yield* collect(
+        env,
+        root,
+        io(
+          () => answer,
+          () => "{}",
+        ),
+        0,
+      );
+
+      const artifact = JSON.stringify(timings);
+
+      expect(readQueueWait(answer)).toEqual(expected);
+      expect(timings.queueWait).toEqual(expected);
+      expect(artifact).toContain(`"queueWait":${JSON.stringify(expected)}`);
+      expect(markdown(timings)).toContain(`### Queue wait\n\n${expected.seconds.toFixed(3)} s`);
+    });
+  },
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);
+
+// A job's queue wait exists exactly when GitHub started a real job with a valid, ordered pair of
+// times. Every field is drawn from a weighted table (a pick is an index into it), so the good
+// choice is common and each bad one is still reached. The oracle below reads the draw, never the
+// product's helpers. Plants, each run once on time-table.ts and restored, each turned this red:
+// the status gate narrowed to `status === "pending"`; the `runner_id == null` check dropped; the
+// calendar check in `timestamp` dropped; the zone part of `timestamp`'s regex dropped.
+const statuses = [
+  "in_progress",
+  "in_progress",
+  "in_progress",
+  "in_progress",
+  "completed",
+  "completed",
+  "completed",
+  "completed",
+  "queued",
+  "waiting",
+  "requested",
+  "pending",
+  undefined,
+] as const;
+
+const conclusions = [null, null, "success", "success", "failure", "cancelled", "skipped", undefined] as const;
+
+// Runner pick: below 6 a real runner (its id from the draw), then null, then absent.
+const runnerPicks = 8;
+
+const timeKinds = [
+  "z",
+  "z",
+  "z",
+  "z",
+  "z",
+  "fraction",
+  "fraction",
+  "offset",
+  "offset",
+  "impossible",
+  "zoneless",
+  "garbage",
+  "null",
+  "absent",
+] as const;
+
+const impossibleDays = [
+  "2026-02-30T09:59:56Z",
+  "2026-02-31T10:00:00Z",
+  "2026-04-31T10:00:00Z",
+  "2026-06-31T10:00:00Z",
+  "2026-11-31T10:00:00Z",
+  "2027-02-29T10:00:00Z",
+  "2100-02-29T10:00:00Z",
+];
+
+const zoneless = ["2026-11-14T09:59:56", "2026-11-14T10:00:00.250", "2026-11-14T10:00:00"];
+
+const garbage = ["bad", "", "yesterday", "2026-11-14", "2026-11-14 10:00:00Z", "2026-13-01T00:00:00Z", "10:00:00Z"];
+
+/** A time field from its kind: the text GitHub would send (or absent) and its instant in ms, if valid. */
+const timeField = (kind: (typeof timeKinds)[number], seconds: number, alt: number) => {
+  switch (kind) {
+    case "z":
+      return { text: iso(seconds), ms: seconds * 1000 };
+    case "fraction":
+      return { text: iso(seconds).replace("Z", ".250Z"), ms: seconds * 1000 + 250 };
+    case "offset":
+      return {
+        text: DateTime.formatIso(DateTime.makeUnsafe((seconds + 3 * 3600) * 1000)).replace(".000Z", "+03:00"),
+        ms: seconds * 1000,
+      };
+    case "impossible":
+      return { text: impossibleDays[alt % impossibleDays.length]!, ms: undefined };
+    case "zoneless":
+      return { text: zoneless[alt % zoneless.length]!, ms: undefined };
+    case "garbage":
+      return { text: garbage[alt % garbage.length]!, ms: undefined };
+    case "null":
+      return { text: null, ms: undefined };
+    case "absent":
+      return { text: undefined, ms: undefined };
+  }
+};
+
+// Which cases the draws reached, and the case count so far, to fail loudly if a required case was
+// never drawn.
+const reached = new Set<string>();
+
+let drawn = 0;
+
+const queueRuns = runsFor({ fast: 100, full: 100 });
+
+const required = [
+  "some",
+  "none",
+  "status:in_progress",
+  "status:completed",
+  "status:queued",
+  "status:waiting",
+  "status:requested",
+  "status:pending",
+  "status:absent",
+  "conclusion:skipped",
+  "runner:null",
+  "runner:absent",
+  "created:impossible",
+  "created:zoneless",
+  "created:garbage",
+  "created:null",
+  "created:absent",
+  "started:impossible",
+  "started:zoneless",
+  "started:garbage",
+  "started:null",
+  "started:absent",
+  "order:reversed",
+  "order:equal",
+  "started-job-with-times",
+];
+
+it.effect.prop(
+  "TT8: a queue wait exists exactly for a started, non-skipped job with a runner and valid ordered times",
+  {
+    status: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: statuses.length - 1 })),
+    conclusion: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: conclusions.length - 1 })),
+    runner: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: runnerPicks - 1 })),
+    runnerId: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2_000_000_000 })),
+    createdKind: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: timeKinds.length - 1 })),
+    startedKind: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: timeKinds.length - 1 })),
+    created: Schema.Int.check(Schema.isBetween({ minimum: 1_790_000_000, maximum: 1_800_000_000 })),
+    wait: Schema.Int.check(Schema.isBetween({ minimum: -4, maximum: 4 })),
+    alt: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000 })),
+  },
+  (draw) => {
+    const status = statuses[draw.status];
+    const conclusion = conclusions[draw.conclusion];
+    const runner = draw.runner < 6 ? draw.runnerId : draw.runner === 6 ? null : undefined;
+    const created = timeField(timeKinds[draw.createdKind]!, draw.created, draw.alt);
+    const started = timeField(timeKinds[draw.startedKind]!, draw.created + draw.wait, draw.alt + 1);
+
+    // The jobs API answer: a key is absent when its value is undefined.
+    const fields = {
+      status,
+      conclusion,
+      runner_id: runner,
+      created_at: created.text,
+      started_at: started.text,
+    };
+
+    const answer = {
+      steps: job.steps,
+      ...Rec.filter(fields, (value) => value !== undefined),
+    };
+
+    // The oracle, from the draw alone.
+    const real = (status === "in_progress" || status === "completed") && conclusion !== "skipped" && runner != null;
+    const ordered = created.ms !== undefined && started.ms !== undefined && started.ms >= created.ms;
+
+    const expected =
+      real && ordered
+        ? {
+            created: created.text!,
+            started: started.text!,
+            seconds: (started.ms! - created.ms!) / 1000,
+          }
+        : undefined;
+
+    drawn += 1;
+    reached.add(expected ? "some" : "none");
+    reached.add(`status:${status ?? "absent"}`);
+    reached.add(`created:${timeKinds[draw.createdKind]}`);
+    reached.add(`started:${timeKinds[draw.startedKind]}`);
+
+    if (conclusion === "skipped") {
+      reached.add("conclusion:skipped");
+    }
+
+    if (runner === null) {
+      reached.add("runner:null");
+    }
+
+    if (runner === undefined) {
+      reached.add("runner:absent");
+    }
+
+    if (real && created.ms !== undefined && started.ms !== undefined) {
+      reached.add(started.ms < created.ms ? "order:reversed" : started.ms === created.ms ? "order:equal" : "order:ok");
+    }
+
+    if (real && created.text != null && started.text != null) {
+      reached.add("started-job-with-times");
+    }
+
+    return Effect.gen(function* () {
+      const timings = yield* collect(
+        env,
+        root,
+        io(
+          () => answer,
+          () => "{}",
+        ),
+        0,
+      );
+
+      expect(readQueueWait(answer)).toEqual(expected);
+      expect(timings.queueWait).toEqual(expected);
+      expect(Object.hasOwn(timings, "queueWait")).toBe(expected !== undefined);
+      expect(JSON.stringify(timings).includes('"queueWait"')).toBe(expected !== undefined);
+
+      const text = markdown(timings);
+
+      if (expected) {
+        expect(text).toContain(`### Queue wait\n\n${expected.seconds.toFixed(3)} s`);
+        expect(text).not.toContain("Unavailable: no valid job queue timing");
+      } else {
+        expect(text).toContain("### Queue wait\n\nUnavailable: no valid job queue timing");
+      }
+
+      if (drawn === queueRuns) {
+        expect(required.filter((name) => !reached.has(name))).toEqual([]);
+      }
+    });
+  },
+  { arbitrary: { runs: queueRuns, size: 30, concurrency: 1, seed: options.seed } },
+);
+
+// vector: real jobs and placeholders as GitHub wrote them (a job still queued, waiting, requested
+// or pending with no start; a skipped job that never got a runner; a real completed job, 705 s in
+// the queue), kept beside the property above.
+it("vector: ignores pending placeholders and rejects jobs without valid queue timing", async () => {
+  const created = "2026-11-14T09:59:56Z";
+  const started = "2026-11-14T10:00:00Z";
+  const realRunner = { runner_id: 1_000_332_569 };
+
+  for (const status of ["queued", "waiting", "requested", "pending"]) {
+    const placeholder = { ...realRunner, status, created_at: created, started_at: null };
+
+    const timings = await timingsOf(
+      env,
+      io(
+        () => ({ ...job, ...placeholder }),
+        () => "{}",
+      ),
+    );
+
+    expect(readQueueWait(placeholder)).toBeUndefined();
+    expect(Object.hasOwn(timings, "queueWait")).toBe(false);
+    expect(markdown(timings)).toContain("Unavailable: no valid job queue timing");
+  }
+
+  expect(readQueueWait({ ...realRunner, status: "pending", created_at: created, started_at: started })).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: created, started_at: null }),
+  ).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: "bad", started_at: started }),
+  ).toBeUndefined();
+  expect(
+    readQueueWait({ ...realRunner, status: "in_progress", created_at: started, started_at: created }),
+  ).toBeUndefined();
+
+  const skipped = {
+    status: "completed",
+    conclusion: "skipped",
+    runner_id: null,
+    created_at: "2026-11-17T15:14:10Z",
+    started_at: "2026-11-17T15:14:10Z",
+  };
+
+  const skippedTimings = await timingsOf(
+    env,
+    io(
+      () => ({ ...job, ...skipped }),
+      () => "{}",
+    ),
+  );
+
+  expect(readQueueWait(skipped)).toBeUndefined();
+  expect(Object.hasOwn(skippedTimings, "queueWait")).toBe(false);
+
+  const real = {
+    status: "completed",
+    conclusion: "success",
+    ...realRunner,
+    created_at: "2026-11-17T15:14:09Z",
+    started_at: "2026-11-17T15:25:54Z",
+  };
+
+  const noRunner = { ...real, runner_id: null };
+  const skippedWithRunner = { ...skipped, ...realRunner };
+
+  const realTimings = await timingsOf(
+    env,
+    io(
+      () => ({ ...job, ...real }),
+      () => "{}",
+    ),
+  );
+
+  expect(readQueueWait(real)).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
+  expect(realTimings.queueWait).toEqual({ created: real.created_at, started: real.started_at, seconds: 705 });
+  expect(readQueueWait(noRunner)).toBeUndefined();
+  expect(readQueueWait(skippedWithRunner)).toBeUndefined();
+
+  for (const [field, value] of [
+    ["created_at", "2026-02-30T09:59:56Z"],
+    ["started_at", "2026-02-30T10:00:00Z"],
+    ["created_at", "2026-11-14T09:59:56"],
+    ["started_at", "2026-11-14T10:00:00"],
+  ] as const) {
+    expect(readQueueWait({ ...job, ...realRunner, [field]: value })).toBeUndefined();
+  }
+});
+
+// The existing timing properties above keep their generators, assertions and run counts.
+it.effect.prop(
+  "P3 missing or broken final results preserve independent progress and never invent file timings",
+  { count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30 })), broken: Schema.Boolean },
+  ({ count, broken }) =>
+    Effect.gen(function* () {
+      // Plant: require the final JSON before reading the progress journal.
+      const identity = {
+        run: env.GITHUB_RUN_ID,
+        attempt: env.GITHUB_RUN_ATTEMPT,
+        workflow: env.GITHUB_WORKFLOW,
+        event: env.GITHUB_EVENT_NAME,
+        sha: env.HEAD,
+        job: env.GITHUB_JOB,
+        leg: env.LEG,
+      };
+
+      const events = Array.from({ length: count }, (_, i) => ({
+        _tag: "test",
+        phase: "started",
+        project: "next",
+        file: `next/sample-${i}.test.ts`,
+        id: `123_${i}`,
+        seq: i + 1,
+        at: i + 1,
+        line: i + 1,
+        column: 0,
+      }));
+
+      const text = [{ _tag: "run", phase: "started", version: 1, leg: identity, seq: 0, at: 0 }, ...events]
+        .map((line) => `${JSON.stringify(line)}\n`)
+        .join("");
+
+      const given: Io = {
+        job: () => Effect.succeed(job),
+        read: (path) =>
+          path.endsWith("vitest-progress.ndjson")
+            ? Effect.succeed(text)
+            : broken
+              ? Effect.succeed("{broken")
+              : Effect.fail(Unread.make({ cause: new Error("missing report") })),
+      };
+
+      const actual = yield* collect({ ...env, RUNNER_TEMP: "/runner/temp" }, root, given, 0);
+      expect(actual.steps._tag).toBe("read");
+      expect(actual.files._tag).toBe("unavailable");
+      expect(actual.progress?._tag).toBe("partial");
+
+      if (actual.progress && actual.progress._tag !== "unavailable") {
+        expect(actual.progress.events).toEqual(events);
+        expect(actual.progress.active).toEqual(events);
+      }
+
+      const summary = markdown(actual);
+
+      for (const event of events) {
+        expect(summary).toContain(`| next | ${event.file} | ${event.id} | ${event.line}:0 |`);
+      }
+
+      expect(summary).toContain("Last observed activity");
+      expect(summary).not.toContain("hung");
+      expect(summary).not.toContain("current test");
+    }),
+  { arbitrary: { runs: runsFor({ fast: 100, full: 100 }), size: 30, concurrency: 1 } },
+);
