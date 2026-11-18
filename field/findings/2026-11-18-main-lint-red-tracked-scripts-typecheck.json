@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-main-lint-red-tracked-scripts-typecheck",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/tracked-scripts.ts",
+    "line": 35
+  },
+  "says": "In today's tooling, pnpm lint fails on main: oxlint-plugins/tracked-scripts.ts still lists scripts/typecheck.sh on NOT_YET_PORTED, and pull request 1506 deleted that file, so the list's shrink rule fails every lint run.",
+  "proof": "pnpm lint at 65edf5c (and the list is unchanged at 4909b55): 'tracked-scripts: scripts/typecheck.sh is on NOT_YET_PORTED, and git does not track it: delete its line in oxlint-plugins/tracked-scripts.ts, since the list only shrinks.' git log names 65edf5c (pull request 1506) as the last commit to touch scripts/typecheck.sh.",
+  "cost": "Every pull request's lint job is red until the line goes, so no pull request reaches a green ci-required.",
+  "head": "4909b55df880ce09d9667a0e1cd3d782e5bb354d",
+  "ticket": null,
+  "pr": null
+}

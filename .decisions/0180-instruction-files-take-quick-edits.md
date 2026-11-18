@@ -41,8 +41,7 @@ Markdown together is 2,858 lines. The `AGENTS.md` of the repo this one follows f
 lines. The owner withdrew the test the same day and asked for an audit of every source that puts
 text into an agent's context.
 
-This amends 0129: its order is withdrawn. Its short map, its three moves and its rule that no rule
-is dropped or changed still hold.
+This amends 0129: its order is withdrawn.
 
 ## Decision
 

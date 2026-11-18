@@ -64,7 +64,7 @@ nothing.
 ## Consequences
 
 - 0140's consequence "the refused request still ends its span, so its measurement row is written and
-  kept forever" no longer holds. The rest of 0140 stands.
+  kept forever" no longer holds.
 - 0202's "every span and every raw measurement is kept forever" has one exception: a call the
   gateway refuses under the closed list. 0124 already made one of the same kind, a poll with no news.
 - Lost for good: the timing of each single refusal, and which sender was refused. The count per

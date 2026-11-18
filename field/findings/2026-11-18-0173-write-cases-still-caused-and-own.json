@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0173-write-cases-still-caused-and-own",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "sonnet",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Program.ts",
+    "line": 570
+  },
+  "says": "In next/, decision 0173 decides that a program's Write cases are child and root and a brain-written line's caller key is requester, but the code still says caused and own.",
+  "proof": "next/packages/libfabrika/src/runtime/Program.ts:570-571 reads `caused: { parent: ParentText, event: Event }, own: { event: Event }`; .decisions/0173-child-root-and-requester.md:5 is accepted and its Decision says the cases are `child` and `root`. 0173 itself says the rename is a ticket and that main still says `caused` and `own` until it lands.",
+  "cost": "A reader who trusts the decision (or 0140, which now says root) looks for a `root` case that the code does not have.",
+  "head": "6930d20d2a590edbf073d6b103e1a57ed323c8c6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627"
+}

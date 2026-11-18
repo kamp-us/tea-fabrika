@@ -1,7 +1,7 @@
 ---
 id: 0172
 title: In next/, a start with no member's input behind it is the brain's own when it is a restart or a start at boot and the process owner's when a timer fires it, a process keeps the member whose input started it, and that member's timers stop when the member is removed
-status: amended-in-part by [0531](0531-a-start-carries-its-member-down.md)
+status: accepted
 date: 2026-11-13
 tags: [start, timer, restart, boot, own, process-owner, member, brain, access, next]
 ---
@@ -86,7 +86,11 @@ owner was deleted.
 - A start a timer fires is the process owner's. This is 0140 applied to starts: a write with no cause
   is the process's own.
 - A process keeps the member who owns it: the member whose input started it. That is the member a
-  timer's start is checked against, with 0170's check.
+  timer's start is checked against, with 0170's check. The member is carried down the whole chain
+  of starts: a timer, or a child started by a child, still acts as the person who set it up, and
+  each child's `started` line records that member. It does not carry through mail
+  ([0531](0531-a-start-carries-its-member-down.md)).
+- A restarted process keeps the member of the life it replaces (0531).
 - When that member is removed from the instance, their timers stop.
 - A removed member's processes keep running, and their saved state stays. They only lose the
   writes made under the process owner, so a timer's write is refused. A write another member's
@@ -112,11 +116,8 @@ owner was deleted.
 
 - Who may take those processes over.
 - Who owns a process the brain starts at boot.
-- Whether a restarted process, which is a new process, keeps the owner of the one it replaces.
 - The names of the `Write` union's cases. A naming decision is coming separately. This file says
   `caused` and `own` only because the code does today.
-
-*Amended in part by [0531](0531-a-start-carries-its-member-down.md): the process owner carries down the whole chain of starts, through a child's child, and not through mail. The rest here still holds.*
 
 ## Records
 

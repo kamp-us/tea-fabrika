@@ -48,8 +48,10 @@ write-up a scratch folder holds that the repo does not.**
 - A write-up is anything someone would read again: a study, a reading, a measurement, an
   experiment's write-up, a plan, notes or changes from a walk, an inventory, an audit's result.
 - It starts as a file in its home (`experiments/`, `docs/direction/`, `docs/plan/`, `.decisions/`,
-  `field/`), on its own branch, as a draft. A lane's plan keeps its home beside the lane's state.
-  Raw results still go to `runs/` or the private archive
+  `field/`), on its own branch, as a draft. The branch is pushed and a draft pull request is opened
+  in the same turn the file is started, so the write-up also lives on the code host, and a lost
+  laptop or a lost session loses nothing. A draft never enters the merge line. A lane's plan keeps
+  its home beside the lane's state. Raw results still go to `runs/` or the private archive
   ([0027](0027-experiment-results-live-in-a-private-archive.md)).
 - A scratch folder holds only what is thrown away: scripts for one use, logs, command output, an
   agent's brief.
@@ -72,7 +74,8 @@ write-up a scratch folder holds that the repo does not.**
 
 ## Consequences
 
-- More draft branches exist at any time. The lead's round closes or lands them.
+- More draft branches and draft pull requests are open at any time. The lead's round closes or
+  lands them.
 - The check needs a rule for "looks like a write-up". Its edge cases are listed with a test each
   before the code ([0040](0040-existing-tools-before-hand-written.md)): a copy of a repo file, an
   agent's brief, a file already in an open pull request, a file whose content landed under another
@@ -81,10 +84,3 @@ write-up a scratch folder holds that the repo does not.**
   loss first.
 - Not decided here: whether the check ever blocks anything. It advises until its false alarms are
   measured.
-
-## Amendments
-
-- 2026-11-11: the branch is pushed and a draft pull request is opened in the same turn the file is
-  started, so the write-up also lives on the code host, and a lost laptop or a lost session loses
-  nothing. More draft pull requests are open at any time; the lead's round lands or closes them,
-  and a draft never enters the merge line.

@@ -1,7 +1,7 @@
 ---
 id: 0147
 title: The brain keeps reserved room for its own recovery writes, counted apart from program writes
-status: amended-in-part by [0152](0152-the-recovery-byte-allowance-is-a-rate.md)
+status: accepted
 date: 2026-11-12
 tags: [quotas, recovery, runtime, brain, p34]
 ---
@@ -21,7 +21,7 @@ flowchart LR
 ```
 
 ```ts
-// Sketch. The two counts never share a number.
+// Sketch. The two counts never share a number. Recovery bytes are a rate, not a total (0152).
 { _tag: "program", process, used: 4_812, limit: 5_000 }
 { _tag: "recovery", process, used: 3, reserved: 64 }
 ```
@@ -48,7 +48,8 @@ that program's quota (owner, 2026-11-12).**
 - The two are counted apart and recorded apart, so a reading of a program's use never includes the
   brain's writes.
 - The size of the reserved room is a setting with a default
-  ([0069](0069-choices-are-settings.md)), taken from slice 3's measured numbers.
+  ([0069](0069-choices-are-settings.md)), taken from slice 3's measured numbers. For bytes it is a
+  rate per rolling minute, not a total ([0152](0152-the-recovery-byte-allowance-is-a-rate.md)).
 - A program can never write into the reserved room, by any path.
 
 **Binding constraints**
