@@ -445,6 +445,152 @@ it("scenario: L5 each real file copy refuses one added second export", async () 
   }
 });
 
+const childTextFacts = (value: string) => {
+  const sample = value.length > 4096 ? `${value.slice(0, 2048)}\n[omitted]\n${value.slice(-2048)}` : value;
+
+  return {
+    length: value.length,
+    truncated: value.length > 4096,
+    codes: [
+      "ENOENT",
+      "EACCES",
+      "ENOTDIR",
+      "EISDIR",
+      "ENOBUFS",
+      "ETIMEDOUT",
+      "ERR_MODULE_NOT_FOUND",
+      "ERR_PACKAGE_PATH_NOT_EXPORTED",
+      "ERR_UNKNOWN_FILE_EXTENSION",
+      "ERR_INVALID_MODULE_SPECIFIER",
+    ].filter((code) => new RegExp(`\\b${code}\\b`).test(sample)),
+    reasons: [
+      "Failed to parse oxlint configuration file",
+      "Failed to load JS plugin",
+      "Cannot find package",
+      "Cannot find module",
+      "No such file or directory",
+      "Permission denied",
+      "Failed to open file",
+      "Failed to read file",
+      "Unexpected token",
+      "Expected",
+      "at most one tea machine",
+      "must be defined in this file",
+      "no input or output imports",
+    ].filter((reason) => sample.includes(reason)),
+    redacted: value.length > 0,
+  };
+};
+
+const lintFailure = (out: ReturnType<typeof spawnSync>): string => {
+  const errorCode =
+    out.error !== undefined && "code" in out.error && typeof out.error.code === "string" ? out.error.code : "";
+
+  return JSON.stringify({
+    status: out.status,
+    signal: out.signal,
+    error: out.error === undefined ? null : childTextFacts(`${out.error.name} ${out.error.message} ${errorCode}`),
+    stdout: childTextFacts(out.stdout?.toString() ?? ""),
+    stderr: childTextFacts(out.stderr?.toString() ?? ""),
+  });
+};
+
+const findingOf = (root: string, entry: unknown) => {
+  if (typeof entry !== "object" || entry === null) {
+    return { kind: "malformed_diagnostic", path: null, position: null };
+  }
+
+  const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
+  const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
+  const path = filename === null ? null : relative(root, resolve(root, filename));
+  const leaf = path?.split(sep).at(-1);
+  const safePath =
+    path === null ||
+    path === "" ||
+    path === ".." ||
+    path.startsWith(`..${sep}`) ||
+    isAbsolute(path) ||
+    leaf?.startsWith(".") === true
+      ? null
+      : path;
+
+  const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
+  const label: unknown = labels[0];
+  const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
+
+  const line =
+    typeof span === "object" && span !== null && "line" in span && typeof span.line === "number" ? span.line : null;
+
+  const column =
+    typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
+      ? span.column
+      : null;
+
+  const position =
+    line !== null && Number.isInteger(line) && line > 0 && column !== null && Number.isInteger(column) && column >= 0
+      ? { line, column }
+      : null;
+
+  return {
+    kind: code === CODE ? "target_rule" : code === null ? "unknown_diagnostic" : "other_diagnostic",
+    path: safePath,
+    position,
+  };
+};
+
+it("property: L5 child failures expose only bounded recognized error and stderr facts", () => {
+  const root = join(tmpdir(), "t1136-lint-root");
+  const generatedPath = join(root, "next", ".probe.ts");
+  const message = `${"x".repeat(5000)} ${generatedPath} ENOENT`;
+  const stderr = `EACCES Permission denied ${generatedPath}`;
+  const failure = lintFailure({
+    pid: 0,
+    output: [null, "", stderr],
+    stdout: "",
+    stderr,
+    status: 1,
+    signal: null,
+    error: Object.assign(new Error(message), { code: "ENOENT" }),
+  });
+
+  expect(failure).not.toContain(generatedPath);
+  expect(JSON.parse(failure)).toMatchObject({
+    error: { truncated: true, codes: ["ENOENT"], redacted: true },
+    stderr: { codes: ["EACCES"], reasons: ["Permission denied"], redacted: true },
+  });
+});
+
+it("property: L5 child diagnostics redact hidden leaf names and retain ordinary source locations", () => {
+  const root = join(tmpdir(), "t1136-lint-root");
+
+  fc.assert(
+    fc.property(
+      fc.record({
+        root: fc.constantFrom("next", ".agents"),
+        folders: fc.array(fc.nat({ max: 999 }), { maxLength: 3 }),
+        name: fc.nat({ max: 999 }).map((n) => `probe${n}`),
+        extension: fc.constantFrom("ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"),
+      }),
+      ({ root: area, folders, name, extension }) => {
+        const folder = join(area, ...folders.map((n) => `module${n}`));
+        const ordinary = join(root, folder, `${name}.${extension}`);
+        const hidden = join(root, folder, `.${name}.${extension}`);
+        const findings = [hidden, ordinary].map((filename) =>
+          findingOf(root, { code: CODE, filename, labels: [{ span: { line: 7, column: 3 } }] }),
+        );
+        const output = JSON.stringify(findings);
+
+        expect(output).not.toContain(hidden);
+        expect(findings).toEqual([
+          { kind: "target_rule", path: null, position: { line: 7, column: 3 } },
+          { kind: "target_rule", path: join(folder, `${name}.${extension}`), position: { line: 7, column: 3 } },
+        ]);
+      },
+    ),
+    { ...RUNS, examples: [[{ root: "next", folders: [], name: "probe", extension: "ts" }]] },
+  );
+});
+
 it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
   // L4 checks the real config's scope. This count runs only this rule, with the same fixture exemptions.
   const root = join(import.meta.dirname, "..");
@@ -500,51 +646,7 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         ? parsed.diagnostics
         : null;
 
-    const findings =
-      diagnostics?.map((entry: unknown) => {
-        if (typeof entry !== "object" || entry === null) {
-          return { kind: "malformed_diagnostic", path: null, position: null };
-        }
-
-        const code = "code" in entry && typeof entry.code === "string" ? entry.code : null;
-        const filename = "filename" in entry && typeof entry.filename === "string" ? entry.filename : null;
-        const path = filename === null ? null : relative(root, resolve(root, filename));
-
-        const safePath =
-          path === null || path === "" || path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)
-            ? null
-            : path;
-
-        const labels = "labels" in entry && Array.isArray(entry.labels) ? entry.labels : [];
-        const label: unknown = labels[0];
-        const span = typeof label === "object" && label !== null && "span" in label ? label.span : null;
-
-        const line =
-          typeof span === "object" && span !== null && "line" in span && typeof span.line === "number"
-            ? span.line
-            : null;
-
-        const column =
-          typeof span === "object" && span !== null && "column" in span && typeof span.column === "number"
-            ? span.column
-            : null;
-
-        const position =
-          line !== null &&
-          Number.isInteger(line) &&
-          line > 0 &&
-          column !== null &&
-          Number.isInteger(column) &&
-          column >= 0
-            ? { line, column }
-            : null;
-
-        return {
-          kind: code === CODE ? "target_rule" : code === null ? "unknown_diagnostic" : "other_diagnostic",
-          path: safePath,
-          position,
-        };
-      }) ?? null;
+    const findings = diagnostics?.map((entry: unknown) => findingOf(root, entry)) ?? null;
 
     const files =
       typeof parsed === "object" &&
@@ -555,6 +657,8 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
       parsed.number_of_files >= 0
         ? parsed.number_of_files
         : null;
+
+    const failure = out.error !== undefined || out.status !== 0 ? lintFailure(out) : undefined;
 
     console.log(
       JSON.stringify({
@@ -569,10 +673,11 @@ it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", ()
         diagnosticCount: diagnostics?.length ?? null,
         diagnostics: findings?.slice(0, 50) ?? null,
         truncated: diagnostics !== null && diagnostics.length > 50,
+        childFailure: failure === undefined ? null : JSON.parse(failure),
       }),
     );
 
-    expect(out.error).toBeUndefined();
+    expect(out.error === undefined, failure).toBe(true);
     expect(out.status).toBe(0);
 
     const report: { number_of_files: number; diagnostics: Array<{ code?: string; filename: string }> } = JSON.parse(
