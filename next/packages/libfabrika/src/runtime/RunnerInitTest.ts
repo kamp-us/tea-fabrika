@@ -38,8 +38,7 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for 
 const Model = Schema.Struct({ wake: Schema.NullOr(Schema.Number) });
 
 type Model = typeof Model.Type;
-
-const Msg = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Msg = Schema.TaggedStruct("timer", { at: Schema.Number });
 
 /** Up to 10^12 ms, about 31 years of epoch time, or no wake at all. */
 const wake = fc.option(fc.nat({ max: 1_000_000_000_000 }), { nil: null });

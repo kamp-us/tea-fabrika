@@ -57,6 +57,12 @@ import { connection } from "../transport/Connection.ts";
 import { Answer, Attached } from "../transport/Wire.ts";
 import { Gateway, type ConnectionId } from "./Gateway.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  input: {},
+});
+
 /** The gateway over one real store. It needs the `MailWakeups` the suite gives it, which records each
  *  wake. `rings` is every ring the store's ledger asked its doorbell for, in order (G2). */
 export type Store = {
@@ -1068,7 +1074,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             stream: "gateway/access",
             after: 0,
             letter: `letter-${sequence++}`,
-            m: { type: "input" },
+            m: Tag.cases.input.make({}),
             sentAt: SENT,
             seen: 0,
             key: w.other.key.raw,

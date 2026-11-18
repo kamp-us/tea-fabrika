@@ -48,6 +48,12 @@ import { Input, ProgramDown } from "./Program.ts";
 import { RecoveryStore, recoveryStore as openRecovery } from "./RecoveryStore.ts";
 import { ProgramRunner, RunnerError, type RunnerOptions } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+});
+
 const PROCESS = "process_0000000000e008000000000000";
 
 /** A failure as a platform gives one: an Error, a subclass with its own cause, or a plain object. */
@@ -528,7 +534,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
     const NAME = "cause:1";
     const owner = Writer.cases.person.make({ key: "SHA256:owner", for: "person-1" });
     const Model = Schema.Struct({ n: Schema.Int });
-    const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+    const Msg = Schema.TaggedStruct("inc", {});
     const program = {
       name: "cause",
       machine: Machine.make({
@@ -610,7 +616,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         id: "in-process_0000000000e008000000000000-1",
         by: owner,
         arrivedAt: 1794099600000,
-        input: { type: "inc" },
+        input: Tag.cases.inc.make({}),
       },
       sentAt: "2026-11-08T00:00:00Z",
       seen: 0,

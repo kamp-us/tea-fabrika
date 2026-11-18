@@ -18,11 +18,17 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 const SEED = 119120;
 
 const Model = Schema.Struct({ count: Schema.Int, carry: Schema.Int });
 
-const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 
 const report = Cmd.make("report", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -49,9 +55,9 @@ const encode = Schema.encodeSync(Model);
 const decode = Schema.decodeUnknownSync(Model);
 
 const msgs = [
-  { type: "add", n: 1 },
-  { type: "add", n: 2 },
-  { type: "add", n: -3 },
+  { ...Tag.cases.add.make({}), n: 1 },
+  { ...Tag.cases.add.make({}), n: 2 },
+  { ...Tag.cases.add.make({}), n: -3 },
 ] as const;
 
 describe("S2 syncTest catches its plants", () => {
@@ -64,7 +70,7 @@ describe("S2 syncTest catches its plants", () => {
             syncTest(
               machine,
               {},
-              { msgs: Arr.map(ns, (n) => ({ type: "add", n })), encode, decode, equals, seed: SEED },
+              { msgs: Arr.map(ns, (n) => ({ ...Tag.cases.add.make({}), n })), encode, decode, equals, seed: SEED },
             ),
           ).not.toThrow();
         }),

@@ -108,18 +108,17 @@ const ReaderModel = Schema.Struct({ log: Schema.Array(Schema.Json) });
 
 type ReaderModel = typeof ReaderModel.Type;
 
-const ReaderMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("watch"), name: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("forget"), ref: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("rows"), life: Schema.String, n: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("DOWN"),
+const ReaderMsg = Schema.TaggedUnion({
+  watch: { name: Schema.String },
+  forget: { ref: Schema.String },
+  rows: { life: Schema.String, n: Schema.Int },
+  DOWN: {
     ref: Schema.String,
     process: Schema.String,
     name: Schema.optionalKey(Schema.String),
     reason: Schema.Json,
-  }),
-]);
+  },
+});
 
 const logged = (s: ReaderModel, entry: Schema.Json): ReaderModel => ({ log: [...s.log, entry] });
 
@@ -751,7 +750,7 @@ const walk = (
           }
 
           const before = new Set(world.asked.keys());
-          yield* say(reader, { type: "watch", name });
+          yield* say(reader, ReaderMsg.cases.watch.make({ name }));
           world.fault.race = undefined;
           world.fault.overtake = undefined;
 
@@ -790,7 +789,7 @@ const walk = (
               command: `${from}/${n}/0`,
               source: { name, process: from },
               to: reader,
-              m: { type: "rows", life: from, n },
+              m: ReaderMsg.cases.rows.make({ life: from, n }),
               from: writerFrom(),
             }),
           ).pipe(Effect.provide(life.context), Effect.result);
@@ -863,7 +862,7 @@ const walk = (
               : "unknown";
 
           world.forgets.push({ watcher, ref, kind: actual });
-          yield* say(reader, { type: "forget", ref });
+          yield* say(reader, ReaderMsg.cases.forget.make({ ref }));
           done.add(`forget:${actual}`);
           break;
         }
@@ -875,7 +874,7 @@ const walk = (
           const gate = { entered: yield* Deferred.make<void>(), release: yield* Deferred.make<void>() };
           world.fault.gate = gate;
           world.forgets.push({ watcher: watch.watcher, ref: watch.ref, kind: "own" });
-          const fiber = yield* Effect.forkChild(say(watch.reader, { type: "forget", ref: watch.ref }));
+          const fiber = yield* Effect.forkChild(say(watch.reader, ReaderMsg.cases.forget.make({ ref: watch.ref })));
           const entered = yield* Deferred.await(gate.entered).pipe(Effect.timeoutOption(LIMIT));
           expect(Option.isSome(entered), "the demonitor reached the brain").toBe(true);
           yield* end(watch.target, cell.reason);

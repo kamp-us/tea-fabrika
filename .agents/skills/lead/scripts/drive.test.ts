@@ -74,6 +74,10 @@ import {
 import { boxTree } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
+/** The answers these laws hand drive's cells, keyed by their schema's maker (0569, 0562). Each law
+ *  sets only the fields the cell reads, so a case holds the key alone. */
+const Reply = Schema.TaggedUnion({ step_read_ok: {}, backup_push_ok: {}, box_new_ok: {} });
+
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
@@ -141,7 +145,7 @@ const recorded = (
   // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read (drive.ts); no
   // cell in drive.ts reads the `cmd` a real answer also carries.
   const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
-    type: "step_read_ok",
+    ...Reply.cases.step_read_ok.make({}),
     value,
   } as never);
 
@@ -154,7 +158,7 @@ const recorded = (
   // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
   // no cell in drive.ts reads the `cmd` a real answer also carries.
   const [state, after] = machine.update.backup_push_ok(read, {
-    type: "backup_push_ok",
+    ...Reply.cases.backup_push_ok.make({}),
     value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
 
@@ -231,7 +235,7 @@ describe("drive takes a skip answer, today's tooling", () => {
   // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
     machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
-      type: "step_read_ok",
+      ...Reply.cases.step_read_ok.make({}),
       value: {
         head: ask.base,
         commits: 0,
@@ -379,7 +383,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
       // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read with no commits;
       // no cell in drive.ts reads the `cmd` a real answer also carries.
       {
-        type: "step_read_ok",
+        ...Reply.cases.step_read_ok.make({}),
         value: {
           head: ask.base,
           commits: 0,
@@ -593,7 +597,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   // started answers; no cell in drive.ts reads the `cmd` a real answer also carries.
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
-      type: "box_new_ok",
+      ...Reply.cases.box_new_ok.make({}),
       value,
     } as never);
 
@@ -928,7 +932,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
   // no cell in drive.ts reads the `cmd` a real answer also carries.
   const read = (report: string, manifests: readonly string[]) =>
     machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
-      type: "step_read_ok",
+      ...Reply.cases.step_read_ok.make({}),
       value: {
         head: pipe("c", Str.repeat(40)),
         commits: 1,
@@ -1542,7 +1546,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
         // SAFETY: `step_read_ok` reads only `m.value`, here a whole Read; no cell
         // in drive.ts reads the `cmd` a real answer also carries.
         const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
-          type: "step_read_ok",
+          ...Reply.cases.step_read_ok.make({}),
           value,
         } as never);
 
@@ -1556,7 +1560,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
         // SAFETY: `backup_push_ok` reads only `m.value`, here the push's ok and detail;
         // no cell in drive.ts reads the `cmd` a real answer also carries.
         const [state, cmds] = machine.update.backup_push_ok(read, {
-          type: "backup_push_ok",
+          ...Reply.cases.backup_push_ok.make({}),
           value: { ok: landed, detail: landed ? "pushed" : "botpush: push refused" },
         } as never);
 

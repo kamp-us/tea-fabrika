@@ -38,6 +38,15 @@ import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  dec: {},
+  inc: {},
+  unknown: {},
+});
+
 /** One step on the real disk, through Effect's FileSystem and Path. */
 const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
   Effect.runPromise(
@@ -111,7 +120,7 @@ it(
             yield* first.call("process.send", {
               pid,
               letter: `progress_${n}`,
-              m: { type: "add", name: item },
+              m: { ...Tag.cases.add.make({}), name: item },
               sentAt: SENT,
               seen: 0,
             }),
@@ -485,7 +494,7 @@ const counter = async (c: Client) => {
   return (started!.body as { process: string }).process;
 };
 
-const send = (c: Client, pid: string, letter: string, m: Schema.Json = { type: "inc" }, seen = 0) =>
+const send = (c: Client, pid: string, letter: string, m: Schema.Json = Tag.cases.inc.make({}), seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
 const ratePolicy = { limit: 4, window: 1000 };
@@ -811,7 +820,7 @@ describe("P12 real dev.ts wire", () => {
 
     const first = placing(await send(c, pid, "once"));
     expect(placing(await send(c, pid, "once"))).toEqual(first);
-    const changed = await send(c, pid, "once", { type: "dec" });
+    const changed = await send(c, pid, "once", Tag.cases.dec.make({}));
     expect(changed.error?.data?.reason ?? changed.result?.reason).toBe("id_reused");
     const rows = await read(c, "counter:1/inbox");
     expect(rows).toHaveLength(1);
@@ -901,7 +910,7 @@ describe("P12 real dev.ts wire", () => {
     const first = placing(await send(c, pid, "before-wait"));
     const waiting = c.call("ledger.wait", { stream: "counter:1/inbox", after: first.rev });
     await other.call("ledger.read", { stream: "counter:1/inbox", after: 0 });
-    expect(await send(other, pid, "bad-wait", { type: "unknown" })).toMatchObject({
+    expect(await send(other, pid, "bad-wait", Tag.cases.unknown.make({}))).toMatchObject({
       result: { _tag: "refused" },
     });
     expect(placing(await send(other, pid, "before-wait"))).toEqual(first);
@@ -1006,7 +1015,7 @@ describe("P12 real dev.ts wire", () => {
 
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
-    const accepted = placing(await send(c, pid, "metadata", { type: "inc" }, seen));
+    const accepted = placing(await send(c, pid, "metadata", Tag.cases.inc.make({}), seen));
     const original = Option.getOrUndefined(
       Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),
     );
@@ -1020,8 +1029,8 @@ describe("P12 real dev.ts wire", () => {
       sentAt: SENT,
       state: { _tag: "settled", result: accepted },
     });
-    await send(c, pid, "later", { type: "dec" });
-    expect(placing(await send(c, pid, "metadata", { type: "inc" }, seen))).toEqual(accepted);
+    await send(c, pid, "later", Tag.cases.dec.make({}));
+    expect(placing(await send(c, pid, "metadata", Tag.cases.inc.make({}), seen))).toEqual(accepted);
     expect(
       Option.getOrUndefined(
         Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),

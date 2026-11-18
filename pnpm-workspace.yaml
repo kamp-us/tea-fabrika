@@ -30,8 +30,9 @@ catalog:
   ajv: 8.20.0
   '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.4.1
-  # next/ and the root (tooling). 0.26.0 shipped demlik#897, so no patch is needed for it.
-  '@demlik/tea': 0.27.0
+  # next/ and the root (tooling). 0.28.0 keys a Msg on `_tag` (demlik#966, decision 0569); 0.29.0
+  # adds eventSourcedStore. Its patch, under patchedDependencies, carries what demlik merged after it.
+  '@demlik/tea': 0.29.0
   '@effect/opentelemetry': 4.1.3
   # Held at effect's own version: the browser runner for the page (next/apps/fabrika/src/entry/browser.tsx).
   '@effect/platform-browser': 4.1.3
@@ -193,7 +194,12 @@ patchedDependencies:
   # https://github.com/Effect-TS/effect/pull/10566, closing
   # https://github.com/Effect-TS/effect/issues/10560. Drop this at the release that carries it.
   '@effect/platform-node@4.1.3': patches/@effect__platform-node@4.1.3.patch
+  # A Cmd handler answers `owed()`, and `dispatch(msg, { answerTo })` answers that work later
+  # (https://github.com/kamp-us/demlik/pull/982 and https://github.com/kamp-us/demlik/pull/983),
+  # built from 0.29.0's release commit with those two pulls only. demlik merged both after 0.29.0.
+  # Drop this at the release that carries them (decision 0569).
+  '@demlik/tea@0.29.0': patches/@demlik__tea@0.29.0.patch
 
 minimumReleaseAgeExclude:
-  - '@demlik/tea@0.25.0 || 0.27.0'
+  - '@demlik/tea@0.25.0'
   - '@demlik/code-graph@0.15.0'

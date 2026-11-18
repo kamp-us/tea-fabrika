@@ -1,7 +1,8 @@
 // `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks
 // (docs/direction/pin-exact-versions.md). It lists what passes (an exact version, `workspace:*`, and
 // `catalog:` or `catalog:<name>`, whose catalog entry is checked exact), so a range, a tag, a `git:`
-// or a `file:` all fail without being named here.
+// or a `file:` all fail without being named here. A `patchedDependencies` row is keyed on one exact
+// version, and on a version the catalog pins when the catalog names its package.
 //
 //   node oxlint-plugins/exact-versions.ts            # this repo
 //   node oxlint-plugins/exact-versions.ts <folder>   # another git tree, as the test does
@@ -57,6 +58,43 @@ const inPackage = (file: string, text: string): readonly string[] => {
   ];
 };
 
+/** A patch row's key: a package name, scoped or not, then `@` and what follows it. */
+const PATCH_KEY = /^((?:@[^@/\s]+\/)?[^@/\s]+)@(.*)$/;
+
+/** Each version a catalog, default or named, pins for a package name. */
+const pins = (catalog: unknown, catalogs: unknown): ReadonlyMap<string, readonly string[]> => {
+  const all = [catalog, ...(isMap(catalogs) ? Rec.values(catalogs) : [])];
+  const found = new Map<string, string[]>();
+
+  for (const [name, version] of Arr.flatMap(all, (map) => (isMap(map) ? Rec.toEntries(map) : []))) {
+    if (Predicate.isString(version)) {
+      found.set(name, [...(found.get(name) ?? []), version]);
+    }
+  }
+
+  return found;
+};
+
+/** A patch row names one exact version (`name@1.2.3`), never a bare name or a range, and a package a
+ * catalog pins is patched only at a version the catalog pins. So the bump that takes a release finds
+ * its old patch row refused here, and deletes it (decision 0569). */
+const refusedPatches = (file: string, patched: unknown, pinned: ReadonlyMap<string, readonly string[]>) =>
+  isMap(patched)
+    ? Arr.flatMap(Rec.keys(patched), (key): readonly string[] => {
+        const parts = PATCH_KEY.exec(key);
+
+        if (parts === null || !EXACT.test(parts[2] ?? "")) {
+          return [`${file}: patchedDependencies: ${key}: not one exact version`];
+        }
+
+        const named = pinned.get(parts[1] ?? "");
+
+        return named === undefined || named.includes(parts[2] ?? "")
+          ? []
+          : [`${file}: patchedDependencies: ${key}: the catalog pins ${Arr.join(named, ", ")}`];
+      })
+    : [];
+
 const inWorkspace = (file: string, text: string): readonly string[] => {
   const workspace: unknown = parse(text);
 
@@ -64,7 +102,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
     return [];
   }
 
-  const { catalog, catalogs, overrides } = workspace;
+  const { catalog, catalogs, overrides, patchedDependencies } = workspace;
 
   return [
     ...refused(file, "catalog", catalog),
@@ -72,6 +110,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
       ? Arr.flatMap(Rec.toEntries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
+    ...refusedPatches(file, patchedDependencies, pins(catalog, catalogs)),
   ];
 };
 

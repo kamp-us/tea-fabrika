@@ -1,0 +1,1757 @@
+diff --git a/dist/agent/index.js b/dist/agent/index.js
+index 13566e26e3871405fb7e5aec7d435c2b35e43727..2787aedafa6d6bad3e4a093f7b2eb99de9bf715a 100644
+--- a/dist/agent/index.js
++++ b/dist/agent/index.js
+@@ -11,6 +11,7 @@ import '../chunk-TMA4VOTM.js';
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-MXYW7N7R.js';
+ import '../chunk-EYYLIM3D.js';
+diff --git a/dist/chunk-6FYKUEYW.js b/dist/chunk-6FYKUEYW.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..1cc067e386727ed8c4058b52aacbb87c2d447658
+--- /dev/null
++++ b/dist/chunk-6FYKUEYW.js
+@@ -0,0 +1,477 @@
++import { pendingEffectsLedger } from './chunk-EYYLIM3D.js';
++
++// src/internal/persistence/durable-log/refusals.ts
++var messages = {
++  unknown_answer: "Answer id is not owed",
++  invalid_object: "Invalid durable log object",
++  invalid_integer: "Invalid durable log integer",
++  invalid_time: "Invalid durable log time",
++  invalid_identity: "Invalid durable log identity",
++  invalid_array: "Invalid durable log array",
++  payload_rejected: "Durable log payload rejected by schema",
++  invalid_timer_status: "Invalid durable timer status",
++  invalid_owed_event: "Invalid owed event",
++  invalid_disposition: "Invalid disposition",
++  receipt_carries_work: "A source receipt cannot carry State or work",
++  invalid_failure: "Invalid log failure",
++  invalid_confirmation: "Invalid confirmation",
++  unknown_record: "Unknown durable log record",
++  invalid_checkpoint_boundary: "Invalid checkpoint boundary",
++  invalid_source_receipt: "Invalid source receipt",
++  invalid_ordering: "Invalid durable log ordering",
++  duplicate_birth_record: "Duplicate birth",
++  duplicate_source: "Duplicate log source",
++  invalid_delivery_receipt: "Invalid delivery receipt",
++  invalid_delivery_ordering: "Invalid delivery ordering",
++  unsupported_log_protocol: "Unsupported durable log protocol",
++  invalid_committed_record: "Invalid committed record",
++  not_first_pending_source: "Commit requires the first pending source",
++  unsupported_checkpoint_protocol: "Unsupported checkpoint protocol",
++  admission_before_birth: "A log requires birth before admission",
++  birth_on_nonempty_log: "Duplicate birth"
++};
++function ok(value2) {
++  return { _tag: "ok", value: value2 };
++}
++function isRefusal(value2) {
++  return typeof value2 === "object" && value2 !== null && "_tag" in value2 && typeof value2._tag === "string" && Object.hasOwn(messages, value2._tag);
++}
++function refusalMessage(refusal) {
++  const table = messages;
++  return table[refusal._tag];
++}
++
++// src/internal/persistence/durable-log/codec.ts
++function object(raw) {
++  return typeof raw !== "object" || raw === null || Array.isArray(raw) ? { _tag: "invalid_object" } : ok(raw);
++}
++function integer(raw, min = 0) {
++  return typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < min ? { _tag: "invalid_integer" } : { _tag: "ok", value: raw };
++}
++function time(raw) {
++  return typeof raw !== "number" || !Number.isFinite(raw) ? { _tag: "invalid_time" } : ok(raw);
++}
++function identity(raw) {
++  return typeof raw !== "string" ? { _tag: "invalid_identity" } : ok(raw);
++}
++function array(raw, parse) {
++  if (!Array.isArray(raw)) return { _tag: "invalid_array" };
++  const values = [];
++  for (const entry of raw) {
++    const parsed = parse(entry);
++    if (parsed._tag !== "ok") return parsed;
++    values.push(parsed.value);
++  }
++  return ok(values);
++}
++function value(schema, raw) {
++  const parsed = schema.safeParse(structuredClone(raw));
++  return parsed.success ? ok(parsed.data) : { _tag: "payload_rejected" };
++}
++function timer(raw, schema) {
++  const parsed = object(raw);
++  if (parsed._tag !== "ok") return parsed;
++  const r = parsed.value;
++  if (typeof r.fired !== "boolean") return { _tag: "invalid_timer_status" };
++  const id = identity(r.id);
++  if (id._tag !== "ok") return id;
++  const subId = identity(r.subId);
++  if (subId._tag !== "ok") return subId;
++  const at = time(r.at);
++  if (at._tag !== "ok") return at;
++  const msg = value(schema, r.msg);
++  if (msg._tag !== "ok") return msg;
++  return ok({
++    id: id.value,
++    subId: subId.value,
++    at: at.value,
++    msg: msg.value,
++    fired: r.fired
++  });
++}
++var protocols = {
++  2: () => ok(void 0),
++  3: (record2) => record2._tag === "message" ? integer(record2.answerTo, 1) : { _tag: "unsupported_log_protocol" }
++};
++function message(r, schema, answerTo) {
++  const id = identity(r.id);
++  if (id._tag !== "ok") return id;
++  const at = time(r.at);
++  if (at._tag !== "ok") return at;
++  const msg = value(schema, r.msg);
++  if (msg._tag !== "ok") return msg;
++  return ok({
++    _tag: "message",
++    id: id.value,
++    at: at.value,
++    msg: msg.value,
++    ...answerTo === void 0 ? {} : { answerTo }
++  });
++}
++function record(raw, options, protocol) {
++  const parsed = object(raw);
++  if (parsed._tag !== "ok") return parsed;
++  const r = parsed.value;
++  const answerTo = protocols[protocol](r);
++  if (answerTo._tag !== "ok") return answerTo;
++  const work = () => {
++    const state = value(options.state, r.state);
++    if (state._tag !== "ok") return state;
++    const owed = array(r.owed, (raw2) => {
++      const parsed2 = object(raw2);
++      if (parsed2._tag !== "ok") return parsed2;
++      const e = parsed2.value;
++      if (e._tag !== "effect_owed") return { _tag: "invalid_owed_event" };
++      const id = integer(e.id, 1);
++      if (id._tag !== "ok") return id;
++      const effect = value(options.command, e.effect);
++      if (effect._tag !== "ok") return effect;
++      return ok({ _tag: "effect_owed", id: id.value, effect: effect.value });
++    });
++    if (owed._tag !== "ok") return owed;
++    const timers = array(r.timers, (raw2) => timer(raw2, options.message));
++    if (timers._tag !== "ok") return timers;
++    return ok({ state: state.value, owed: owed.value, timers: timers.value });
++  };
++  const parsers = {
++    birth: () => {
++      const at = time(r.at);
++      if (at._tag !== "ok") return at;
++      const decoded = work();
++      if (decoded._tag !== "ok") return decoded;
++      return ok({ _tag: "birth", at: at.value, ...decoded.value });
++    },
++    message: () => message(r, options.message, answerTo.value),
++    applied: () => {
++      const sourceId = identity(r.sourceId);
++      if (sourceId._tag !== "ok") return sourceId;
++      const decoded = work();
++      if (decoded._tag !== "ok") return decoded;
++      return ok({
++        _tag: "applied",
++        sourceId: sourceId.value,
++        ...decoded.value
++      });
++    },
++    receipt: () => {
++      const disposition = r.disposition;
++      if (disposition !== "ignored" && disposition !== "rejected")
++        return { _tag: "invalid_disposition" };
++      if (["state", "owed", "timers", "cmds"].some((key) => Object.hasOwn(r, key)))
++        return { _tag: "receipt_carries_work" };
++      const failure = r.failure === void 0 ? ok(void 0) : object(r.failure);
++      if (failure._tag !== "ok") return failure;
++      const kind = failure.value?.kind;
++      if (failure.value && kind !== "reduce" && kind !== "no_cell")
++        return { _tag: "invalid_failure" };
++      const sourceId = identity(r.sourceId);
++      if (sourceId._tag !== "ok") return sourceId;
++      if (!failure.value)
++        return ok({ _tag: "receipt", sourceId: sourceId.value, disposition });
++      const description = identity(failure.value.message);
++      if (description._tag !== "ok") return description;
++      return ok({
++        _tag: "receipt",
++        sourceId: sourceId.value,
++        disposition,
++        failure: {
++          kind,
++          message: description.value
++        }
++      });
++    },
++    confirmed: () => {
++      const event = object(r.event);
++      if (event._tag !== "ok") return event;
++      if (event.value._tag !== "effect_confirmed")
++        return { _tag: "invalid_confirmation" };
++      const id = integer(event.value.id, 1);
++      if (id._tag !== "ok") return id;
++      return ok({
++        _tag: "confirmed",
++        event: { _tag: "effect_confirmed", id: id.value }
++      });
++    }
++  };
++  const tag = identity(r._tag);
++  if (tag._tag !== "ok") return tag;
++  if (!Object.hasOwn(parsers, tag.value)) return { _tag: "unknown_record" };
++  return parsers[tag.value]();
++}
++function decodeFrame(bytes, options) {
++  const raw = object(JSON.parse(bytes));
++  if (raw._tag !== "ok") return raw;
++  if (typeof raw.value.protocol !== "number" || !Object.hasOwn(protocols, raw.value.protocol))
++    return { _tag: "unsupported_log_protocol" };
++  const seq = integer(raw.value.seq, 1);
++  if (seq._tag !== "ok") return seq;
++  const decoded = record(
++    raw.value.record,
++    options,
++    raw.value.protocol
++  );
++  if (decoded._tag !== "ok") return decoded;
++  const stored = object(raw.value.record);
++  if (stored._tag !== "ok") return stored;
++  const snapshot = checkpointMetadata(raw.value.snapshot ?? null);
++  return ok({
++    row: { seq: seq.value, record: decoded.value },
++    storedState: stored.value.state,
++    snapshot
++  });
++}
++function encodeFrame(entry, seq, checkpointThrough, options) {
++  const protocol = entry._tag === "message" && entry.answerTo !== void 0 ? 3 : 2;
++  let bytes = JSON.stringify({
++    protocol,
++    seq,
++    record: entry,
++    snapshot: null
++  });
++  const raw = JSON.parse(bytes);
++  const stored = object(raw.record);
++  if (stored._tag !== "ok") return stored;
++  if (checkpointThrough !== null) {
++    raw.snapshot = { through: checkpointThrough, state: stored.value.state };
++    bytes = JSON.stringify(raw);
++  }
++  const decoded = record(stored.value, options, protocol);
++  if (decoded._tag !== "ok") return decoded;
++  const snapshot = checkpointMetadata(raw.snapshot);
++  return ok({
++    bytes,
++    row: { seq, record: decoded.value },
++    storedState: stored.value.state,
++    snapshot
++  });
++}
++function decodeCheckpoint(bytes) {
++  const raw = object(JSON.parse(bytes));
++  if (raw._tag !== "ok") return raw;
++  return raw.value.protocol === 2 ? checkpointMetadata(raw.value.snapshot) : { _tag: "unsupported_checkpoint_protocol" };
++}
++function checkpointMetadata(raw) {
++  if (raw === null) return ok(null);
++  const r = object(raw);
++  if (r._tag !== "ok") return r;
++  const through = integer(r.value.through, 1);
++  if (through._tag !== "ok") return through;
++  return ok({ through: through.value, rawState: r.value.state });
++}
++function checkpointState(raw, schema) {
++  const parsed = schema.safeParse(structuredClone(raw));
++  return parsed.success ? { _tag: "decoded", state: parsed.data } : { _tag: "state_rejected" };
++}
++function encodeCheckpoint(through, storedState) {
++  return JSON.stringify({
++    protocol: 2,
++    snapshot: { through, state: storedState }
++  });
++}
++
++// src/internal/persistence/durable-log/operations.ts
++function decideAnswer(owed, id, admitted) {
++  const delivery = owed.find((entry) => entry.id === id);
++  const cases2 = {
++    missing: () => delivery === void 0 ? { _tag: "refused", refusal: { _tag: "unknown_answer" } } : { _tag: "owed", delivery },
++    atomic: () => ({ _tag: "repeat" }),
++    ordinary: () => delivery === void 0 ? { _tag: "repeat" } : { _tag: "confirm", id: delivery.id }
++  };
++  return cases2[admitted === null ? "missing" : admitted.answerTo === void 0 ? "ordinary" : "atomic"]();
++}
++var invalidCommitment = () => ({
++  _tag: "invalid_committed_record"
++});
++function committed(record2, p, version) {
++  if (record2 === null) return invalidCommitment();
++  const withState = (r) => ({
++    version,
++    state: r.state,
++    owed: r.owed.map(({ id, effect }) => ({ id, effect }))
++  });
++  const readers = {
++    birth: withState,
++    applied: withState,
++    receipt: () => ({
++      version,
++      state: p.state,
++      owed: []
++    }),
++    message: invalidCommitment,
++    confirmed: invalidCommitment
++  };
++  return readers[record2._tag](record2);
++}
++function appended(stored) {
++  if (stored === null) return invalidCommitment();
++  const readers = {
++    birth: invalidCommitment,
++    message: (record2) => ({
++      version: stored.seq,
++      appended: true,
++      entry: { seq: stored.seq, record: record2 }
++    }),
++    applied: invalidCommitment,
++    receipt: invalidCommitment,
++    confirmed: invalidCommitment
++  };
++  return readers[stored.record._tag](stored.record);
++}
++function cases() {
++  const confirmation = (id) => ({
++    _tag: "append_record",
++    record: { _tag: "confirmed", event: { _tag: "effect_confirmed", id } },
++    checkpointThrough: null
++  });
++  const owe = (p, cmds) => {
++    const recorder = pendingEffectsLedger({ lastId: p.high });
++    return cmds.map((cmd) => recorder.owe(cmd).event);
++  };
++  const source = (p, sourceId) => p.pending[0]?.record.id === sourceId ? p.pending[0] : null;
++  const commitment = (p, op, stored) => committed(
++    op.committed ?? stored?.record ?? null,
++    p,
++    stored?.seq ?? p.version
++  );
++  const operationCases = {
++    append_message: {
++      decide: (p, op) => {
++        if (!p.birth) return { _tag: "admission_before_birth" };
++        const append = () => [
++          p,
++          op.stored === null ? [
++            {
++              _tag: "append_record",
++              record: op.message,
++              checkpointThrough: null
++            }
++          ] : []
++        ];
++        if (op.message.answerTo === void 0) return append();
++        const answer = decideAnswer(
++          p.owed,
++          op.message.answerTo,
++          op.stored?.record ?? null
++        );
++        const outcomes = {
++          owed: append,
++          repeat: () => [p, []],
++          confirm: (result) => [p, [confirmation(result.id)]],
++          refused: (result) => result.refusal
++        };
++        return outcomes[answer._tag](answer);
++      },
++      response: (p, op, stored) => {
++        if (op.stored !== null)
++          return {
++            version: stored?.seq ?? p.version,
++            appended: false,
++            entry: op.stored
++          };
++        return appended(stored);
++      }
++    },
++    birth: {
++      decide: (p, op) => {
++        if (op.committed !== null) return [p, []];
++        if (p.version !== 0) return { _tag: "birth_on_nonempty_log" };
++        return [
++          p,
++          [
++            {
++              _tag: "append_record",
++              record: {
++                _tag: "birth",
++                at: op.step.at,
++                state: op.step.state,
++                owed: owe(p, op.step.cmds),
++                timers: op.step.timers
++              },
++              checkpointThrough: null
++            }
++          ]
++        ];
++      },
++      response: commitment
++    },
++    applied: {
++      decide: (p, op, policy) => {
++        if (op.committed !== null) return [p, []];
++        const admission = source(p, op.step.sourceId);
++        if (admission === null) return { _tag: "not_first_pending_source" };
++        return [
++          p,
++          [
++            {
++              _tag: "append_record",
++              record: {
++                _tag: "applied",
++                sourceId: op.step.sourceId,
++                state: op.step.state,
++                owed: owe(p, op.step.cmds),
++                timers: op.step.timers
++              },
++              checkpointThrough: p.applied + 1 - p.baseline >= policy.snapshotEvery ? admission.seq : null
++            }
++          ]
++        ];
++      },
++      response: commitment
++    },
++    receipt: {
++      decide: (p, op) => {
++        if (op.committed !== null) return [p, []];
++        if (source(p, op.step.sourceId) === null)
++          return { _tag: "not_first_pending_source" };
++        return [
++          p,
++          [
++            {
++              _tag: "append_record",
++              record: {
++                _tag: "receipt",
++                sourceId: op.step.sourceId,
++                disposition: op.step.disposition,
++                ...op.step.failure ? { failure: op.step.failure } : {}
++              },
++              checkpointThrough: null
++            }
++          ]
++        ];
++      },
++      response: commitment
++    },
++    confirm_effect: {
++      decide: (p, op) => [
++        p,
++        p.owed.some(({ id }) => id === op.id) ? [confirmation(op.id)] : []
++      ],
++      response: (p, _op, stored) => ({
++        version: stored?.seq ?? p.version,
++        confirmed: stored !== null
++      })
++    },
++    checkpoint: {
++      decide: (p) => [
++        p,
++        p.applied === p.baseline || !p.birth ? [] : [
++          {
++            _tag: "write_checkpoint",
++            through: p.through,
++            storedState: p.storedState
++          }
++        ]
++      ],
++      response: (_p, _op, _stored, writes) => writes.length !== 0
++    }
++  };
++  return operationCases;
++}
++function decide(p, op, policy) {
++  return cases()[op._tag].decide(p, op, policy);
++}
++function response(p, op, stored, writes) {
++  return cases()[op._tag].response(p, op, stored, writes);
++}
++
++export { checkpointState, decide, decideAnswer, decodeCheckpoint, decodeFrame, encodeCheckpoint, encodeFrame, integer, isRefusal, ok, refusalMessage, response };
+diff --git a/dist/chunk-BGEVMZVA.js b/dist/chunk-BGEVMZVA.js
+index a8fdab085e6ef16029f1ed6597eae4b5607859b1..98717ec892d0d186f1be34c5d6340dbce33a6be3 100644
+--- a/dist/chunk-BGEVMZVA.js
++++ b/dist/chunk-BGEVMZVA.js
+@@ -1,6 +1,7 @@
++import { integer, decideAnswer, refusalMessage } from './chunk-6FYKUEYW.js';
+ import { restore } from './chunk-4BBXEUIF.js';
+-import { consumedSources, committedState, pendingMessages, logLedger, messageId } from './chunk-EYYLIM3D.js';
+-import { RuntimeDiscardNotice, detachWork, DispatchDiscardedError, QuiescenceTimeoutError, isLoggedStore, StoreRefusedError, RuntimeDiscardedError, desiredSub, followUps, DrainTimeoutNotice, DisposeTimeoutNotice, deliveryId } from './chunk-MTKYWRTQ.js';
++import { consumedSources, committedState, pendingMessages, logLedger, deliveryIsOwed, messageId } from './chunk-EYYLIM3D.js';
++import { RuntimeDiscardNotice, detachWork, DispatchDiscardedError, owed, QuiescenceTimeoutError, isLoggedStore, StoreRefusedError, RuntimeDiscardedError, desiredSub, followUps, DrainTimeoutNotice, DisposeTimeoutNotice, deliveryId } from './chunk-MTKYWRTQ.js';
+ 
+ // src/internal/engine/installed-state.ts
+ var installedState = /* @__PURE__ */ Symbol(
+@@ -23,6 +24,15 @@ function storeSession(store, open) {
+   let tail = Promise.resolve();
+   let failed;
+   return {
++    async owes(id) {
++      try {
++        return await deliveryIsOwed(logged, id);
++      } catch (cause) {
++        throw new StoreRefusedError("durable ledger could not be read", {
++          cause
++        });
++      }
++    },
+     async read() {
+       try {
+         return await logged.readLog();
+@@ -151,6 +161,7 @@ function startLoop(config) {
+   });
+   admissionReady.catch(() => {
+   });
++  let lastAdmission;
+   const services = {
+     report,
+     fanout,
+@@ -353,6 +364,18 @@ function startLoop(config) {
+     }).catch(() => {
+     });
+   }
++  function returnedHandler(returned, own) {
++    const rows = {
++      Returned: () => returned,
++      Owed: () => {
++        if (own === void 0)
++          throw new Error("Owed requires a logged invocation");
++        own.owed = true;
++        return void 0;
++      }
++    };
++    return rows[returned === owed() ? "Owed" : "Returned"]();
++  }
+   function callHandler(cmd, dispatch) {
+     const { _tag: type } = cmd;
+     const handler = config.handlerFor(type);
+@@ -361,7 +384,10 @@ function startLoop(config) {
+       return Promise.resolve(void 0);
+     }
+     if (!session || !invocation)
+-      return trackInFlight(handler(cmd, handlerCtx, dispatch), type);
++      return trackInFlight(
++        handler(cmd, handlerCtx, dispatch),
++        type
++      ).then((returned) => returnedHandler(returned));
+     const own = invocation;
+     const ctx = Object.assign({}, handlerCtx, {
+       [deliveryId]: own.id,
+@@ -377,7 +403,9 @@ function startLoop(config) {
+         detachInFlight(tracked);
+       }
+     });
+-    return trackInFlight(handler(cmd, ctx, dispatch), type);
++    return trackInFlight(handler(cmd, ctx, dispatch), type).then(
++      (returned) => returnedHandler(returned, own)
++    );
+   }
+   async function runCmds(cmds) {
+     for (const cmd of cmds) {
+@@ -389,12 +417,15 @@ function startLoop(config) {
+   function canCompleteDelivery() {
+     return gate !== "abandoned" && !storeClosed && !session?.poisoned();
+   }
+-  async function runDeliveries(owed) {
+-    for (const { id, effect } of owed) {
++  async function runDeliveries(owed2) {
++    for (const { id, effect } of owed2) {
+       if (gate === "abandoned" || session?.poisoned() || storeClosed) return;
++      if (!session || !await session.owes(id)) continue;
++      if (!canCompleteDelivery()) return;
+       const own = {
+         id,
+         failed: false,
++        owed: false,
+         closed: false,
+         ordinal: 0,
+         detached: [],
+@@ -435,14 +466,14 @@ function startLoop(config) {
+           await Promise.all(own.detached);
+           own.closed = true;
+           await Promise.all(own.admissions);
+-          if (!own.failed && canCompleteDelivery())
++          if (!own.failed && !own.owed && canCompleteDelivery())
+             await session?.write((store2) => store2.confirmEffect(id));
+         })();
+         detachInFlight(completion);
+       }
+     }
+   }
+-  async function publishLogged(next, msg, cmds, owed) {
++  async function publishLogged(next, msg, cmds, owed2) {
+     state = next;
+     saveStatus = { _tag: "saved" };
+     if (gate === "abandoned" || storeClosed) return;
+@@ -450,7 +481,7 @@ function startLoop(config) {
+     installed = next;
+     for (const callback of installedCallbacks) callback();
+     try {
+-      await runDeliveries(owed);
++      await runDeliveries(owed2);
+     } finally {
+       for (const callback of commitCallbacks) callback(msg, next, cmds);
+     }
+@@ -516,17 +547,64 @@ function startLoop(config) {
+         committed.owed
+       );
+   }
+-  function admitLogged(msg, origin, inputId) {
++  function admitLogged(msg, origin, inputId, answerTo) {
+     const existing = turns.get(inputId);
+-    if (existing) return existing;
++    if (existing && answerTo === void 0) return existing;
+     if (session === void 0)
+       throw new Error("Durable admission requires a logged store");
+     const at = Date.now();
++    const append = () => session.write(
++      (store2) => store2.appendMessage({
++        _tag: "message",
++        id: inputId,
++        at,
++        msg,
++        ...answerTo === void 0 ? {} : { answerTo }
++      })
++    );
++    const prepareAnswer = async (id) => {
++      const parsed = integer(id, 1);
++      const parsers = {
++        ok: () => {
++        },
++        invalid_integer: () => {
++          throw new Error("Invalid answer delivery id");
++        }
++      };
++      parsers[parsed._tag]();
++      const log = await session.read();
++      const old = log.records.find(
++        (entry) => entry.record._tag === "message" && entry.record.id === inputId
++      );
++      const answer = decideAnswer(
++        logLedger(log).surviving(),
++        id,
++        old?.record ?? null
++      );
++      const results = {
++        owed: (result) => {
++          const prepare2 = extensions.find((ext) => ext.answer)?.answer;
++          if (!prepare2) throw new Error("Answer Cmd boundary missing");
++          msg = prepare2(result.delivery.effect, msg);
++        },
++        repeat: () => {
++        },
++        confirm: () => {
++        },
++        refused: (result) => {
++          throw new Error(refusalMessage(result.refusal), {
++            cause: result.refusal
++          });
++        }
++      };
++      results[answer._tag](answer);
++    };
++    const prepare = () => answerTo === void 0 ? append() : prepareAnswer(answerTo).then(append);
++    const previous = lastAdmission;
+     const appended = admissionReady.then(
+-      () => session.write(
+-        (store2) => store2.appendMessage({ _tag: "message", id: inputId, at, msg })
+-      )
++      () => previous === void 0 ? prepare() : previous.then(prepare, prepare)
+     );
++    lastAdmission = appended;
+     const admitted = appended.then(() => {
+     });
+     const folded = enqueueStep(
+@@ -537,6 +615,7 @@ function startLoop(config) {
+     const turn = { admitted, folded };
+     turns.set(inputId, turn);
+     admitted.catch(() => {
++      if (turns.get(inputId) === turn) turns.delete(inputId);
+     });
+     return turn;
+   }
+@@ -613,14 +692,19 @@ function startLoop(config) {
+         gate === "draining" || gate === "abandoned" && origin === "loop" ? new DispatchDiscardedError(msg._tag) : new RuntimeStoppedError(msg._tag)
+       );
+     }
++    if (opts?.answerTo !== void 0 && opts.id !== void 0)
++      return Promise.reject(new Error("An answer cannot also set id"));
+     if (session) {
+       if (session.poisoned()) return Promise.reject(session.poisoned());
+       return admitLogged(
+         msg,
+         origin,
+-        opts?.id === void 0 ? messageId("generated", crypto.randomUUID()) : messageId("caller", opts.id)
++        opts?.answerTo !== void 0 ? messageId("answer", opts.answerTo, 0) : opts?.id === void 0 ? messageId("generated", crypto.randomUUID()) : messageId("caller", opts.id),
++        opts?.answerTo
+       ).folded;
+     }
++    if (opts?.answerTo !== void 0)
++      return Promise.reject(new Error("An answer needs a logged store"));
+     return enqueueStep(msg, origin, stepDispatch);
+   }
+   function enqueueStep(msg, origin, step) {
+diff --git a/dist/chunk-EYYLIM3D.js b/dist/chunk-EYYLIM3D.js
+index 09e0f557c48dc94d6debfa2913316cc19b123374..68ab35332691c7418377f28e29b7a3ddaa9cca78 100644
+--- a/dist/chunk-EYYLIM3D.js
++++ b/dist/chunk-EYYLIM3D.js
+@@ -62,6 +62,14 @@ function pendingEffectsLedger(restore) {
+ }
+ 
+ // src/internal/persistence/durable-log/format.ts
++var readDeliveryLedger = /* @__PURE__ */ Symbol(
++  "tea.readDeliveryLedger"
++);
++async function deliveryIsOwed(store, id) {
++  const read = store[readDeliveryLedger];
++  const ledger = read === void 0 ? logLedger(await store.readLog()).ledger() : await read.call(store);
++  return isOwed(ledger, id);
++}
+ function visit(record, cases) {
+   return cases[record._tag](record);
+ }
+@@ -95,7 +103,9 @@ function logLedger(log) {
+   const readers = {
+     birth: owed,
+     applied: owed,
+-    message: () => {
++    message: (record) => {
++      if (record.answerTo !== void 0)
++        events.push({ _tag: "effect_confirmed", id: record.answerTo });
+     },
+     receipt: () => {
+     },
+@@ -163,6 +173,6 @@ function logUpdates(log, range) {
+   return rows;
+ }
+ 
+-export { applyEffectEvent, committedState, consumedSources, emptyLedger, foldLedger, isOwed, logLedger, logUpdates, messageId, pendingEffectsLedger, pendingMessages, survivingEffects };
++export { applyEffectEvent, committedState, consumedSources, deliveryIsOwed, emptyLedger, foldLedger, isOwed, logLedger, logUpdates, messageId, pendingEffectsLedger, pendingMessages, readDeliveryLedger, survivingEffects };
+ //# sourceMappingURL=chunk-EYYLIM3D.js.map
+ //# sourceMappingURL=chunk-EYYLIM3D.js.map
+\ No newline at end of file
+diff --git a/dist/chunk-FGV2SI4B.js b/dist/chunk-FGV2SI4B.js
+index e67545f73dc4af86152e06ebbb63faceed85270b..2077b7ff05858385605b8a050ba0031a080ee3df 100644
+--- a/dist/chunk-FGV2SI4B.js
++++ b/dist/chunk-FGV2SI4B.js
+@@ -1,7 +1,7 @@
+ import { tellRun, refuseFencedRunWithoutSink, builtinExtensions } from './chunk-JEXGQ74S.js';
+ import { subGateOf } from './chunk-JRUNOW4S.js';
+ import { defaultOnError, startLoop, installedState, post, liveWork, LogWriteFailure, failHandler, RuntimeStoppedError } from './chunk-BGEVMZVA.js';
+-import { Outcome, subEntriesOf, applyCell, StoreRefusedError, DispatchDiscardedError, SubFailedError } from './chunk-MTKYWRTQ.js';
++import { owed, Outcome, subEntriesOf, applyCell, StoreRefusedError, DispatchDiscardedError, SubFailedError } from './chunk-MTKYWRTQ.js';
+ import { Data, Effect, Scope, Exit, Stream, Cause, Result, Context, Fiber } from 'effect';
+ 
+ var tell = (machine, runtime, msg) => Effect.sync(() => tellRun(machine, runtime, msg));
+@@ -154,7 +154,7 @@ function settleCellExit(exit, defined) {
+   }
+   const result = exit.value;
+   if (defined) {
+-    return Result.isSuccess(result) ? Outcome.ok(result.success) : Outcome.err(result.failure);
++    return Result.isSuccess(result) ? result.success === owed() ? result.success : Outcome.ok(result.success) : Outcome.err(result.failure);
+   }
+   if (Result.isFailure(result)) throw new CellFailure(result.failure);
+   return result.success;
+diff --git a/dist/chunk-JEXGQ74S.js b/dist/chunk-JEXGQ74S.js
+index fcea5db952bb60f48b693f7d3215f0dae66b7e37..c0778954a550adb79e248c5c124df1a16022e716 100644
+--- a/dist/chunk-JEXGQ74S.js
++++ b/dist/chunk-JEXGQ74S.js
+@@ -49,9 +49,14 @@ function devChecks() {
+ }
+ function cmdDefinitions(defs, clock) {
+   return (loop) => {
+-    const { settle, checkDispatch: check } = cmdContractOver(defs, clock);
++    const {
++      settle,
++      checkDispatch: check,
++      answer
++    } = cmdContractOver(defs, clock);
+     const defined = new Set(defs.map((d) => d.cmdType));
+     return {
++      answer: (cmd, msg) => answer(cmd, msg),
+       interpret: (next) => async (cmd, dispatch, failed) => {
+         const type = cmd._tag;
+         const checked = defined.has(type) ? (msg) => {
+diff --git a/dist/chunk-MTKYWRTQ.js b/dist/chunk-MTKYWRTQ.js
+index 7ff81d9878f696ea81406eb79e6275c1d9845ac5..e43f420ca1aafbe7f7bd861600d6510f8c532c3b 100644
+--- a/dist/chunk-MTKYWRTQ.js
++++ b/dist/chunk-MTKYWRTQ.js
+@@ -58,6 +58,14 @@ function without(rec, key) {
+   const { [key]: _dropped, ...rest } = rec;
+   return rest;
+ }
++var owedBrand = /* @__PURE__ */ Symbol("tea.owed");
++var owedReturn = Object.freeze({
++  _tag: "Owed",
++  [owedBrand]: true
++});
++function owed() {
++  return owedReturn;
++}
+ var Outcome = {
+   ok: (value) => ({ _tag: "Ok", value }),
+   err: (error) => ({ _tag: "Err", error })
+@@ -153,6 +161,30 @@ function cmdContractOver(defs, clock) {
+   const byType = new Map(list.map((def) => [def.cmdType, def]));
+   const minted = /* @__PURE__ */ new WeakSet();
+   return {
++    answer: (cmd, raw) => {
++      if (typeof raw !== "object" || raw === null)
++        throw new Error("Invalid answer");
++      const msg = raw;
++      const def = byType.get(cmd._tag);
++      if (def === void 0) throw new Error("Answer Cmd must be defined");
++      if (structuralHash(msg.cmd) !== structuralHash(cmd))
++        throw new Error("Answer Cmd mismatch");
++      if (typeof msg.at !== "number" || !Number.isFinite(msg.at))
++        throw new Error("Answer timestamp rejected");
++      const kinds = /* @__PURE__ */ new Map([
++        [def.okType, "Ok"],
++        [def.errType, "Err"]
++      ]);
++      const tag = typeof msg._tag === "string" ? kinds.get(msg._tag) : void 0;
++      if (tag === void 0) throw new Error("Answer tag mismatch");
++      const outcomes = {
++        Ok: () => Outcome.ok(msg.value),
++        Err: () => Outcome.err(msg.error)
++      };
++      const answer = mint(def, cmd, outcomes[tag](), msg.at);
++      if (answer._tag !== msg._tag) throw new Error("Answer value rejected");
++      return answer;
++    },
+     settle: (cmd, returned) => {
+       const def = byType.get(cmd._tag);
+       if (def === void 0) return returned;
+@@ -814,6 +846,6 @@ function tryInterpret(work, onOk, onErr) {
+   };
+ }
+ 
+-export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, assertDistinctCmdNames, checkedStep, cmdContractOver, cmdEdge, cmdEdgeOf, defineMachine, definePort, deliveryId, deliveryIdOf, describeError, describeMachine, desiredSub, detachWork, detachWorkOf, detectUpdateForm, foldMsgs, foldUpdates, followUps, formOf, isFencedStore, isLoggedStore, lookupCell, malformedResult, matchesIdentity, msgKeysOf, noop, refuse, replay, schemaMigrate, structuralHash, subEntriesOf, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, validateSync, without, wrapDetached };
++export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, assertDistinctCmdNames, checkedStep, cmdContractOver, cmdEdge, cmdEdgeOf, defineMachine, definePort, deliveryId, deliveryIdOf, describeError, describeMachine, desiredSub, detachWork, detachWorkOf, detectUpdateForm, foldMsgs, foldUpdates, followUps, formOf, isFencedStore, isLoggedStore, lookupCell, malformedResult, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subEntriesOf, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, validateSync, without, wrapDetached };
+ //# sourceMappingURL=chunk-MTKYWRTQ.js.map
+ //# sourceMappingURL=chunk-MTKYWRTQ.js.map
+\ No newline at end of file
+diff --git a/dist/core-PxoTxrNB.d.ts b/dist/core-PxoTxrNB.d.ts
+index 0d2e4ad3bac88e38de2382d6a1b3bddd6558574c..fd4885a5a941d0e78665cdbbb89c30c5e94ce7ef 100644
+--- a/dist/core-PxoTxrNB.d.ts
++++ b/dist/core-PxoTxrNB.d.ts
+@@ -26,6 +26,14 @@ import { StandardSchemaV1 } from '@standard-schema/spec';
+ type ErrorsOf<C> = C extends {
+     readonly __e?: infer E;
+ } ? E : unknown;
++declare const owedBrand: unique symbol;
++/** A logged Cmd handed to an external owner without completing its delivery. */
++type Owed = {
++    readonly _tag: "Owed";
++    readonly [owedBrand]: true;
++};
++/** End this logged invocation without a Msg or automatic delivery confirmation. */
++declare function owed(): Owed;
+ /**
+  * The two builders the Promise engine hands a `Cmd.define`d handler on its
+  * ctx: `ok(value)` and `err({ _tag })`, with `err` typed to the def's declared
+@@ -112,7 +120,8 @@ declare class UndeclaredFailureError extends Error {
+ /**
+  * A `Cmd.define`d handler returned something the engine cannot settle: any Msg
+  * (the engine mints the Cmd's `<name>_ok` / `<name>_err`, never the handler —
+- * ADR 0021), or any other value that is neither an {@link Outcome} nor nothing.
++ * ADR 0021), or any other value that is neither an {@link Outcome}, the
++ * {@link owed} marker, nor nothing.
+  * Also thrown when such a handler dispatches its own `_ok` / `_err` Msg.
+  */
+ declare class OutcomeContractError extends Error {
+@@ -173,8 +182,8 @@ type SettledErr<Name extends string, C, E extends Tagged> = {
+  * the minted Msg builders and the declaration hung on it. `E` here is the
+  * DECLARED tag union; the settled `_err` arm widens it by `MalformedResult`.
+  *
+- * `ok` / `err` mint a settled Msg OUTSIDE the runtime (a `replay` log, a unit
+- * test) and take an optional `at`. A handler never calls them: it returns an
++ * `ok` / `err` build a settled Msg for a later `dispatch` with `answerTo`, a
++ * `replay` log, or a unit test, and take an optional `at`. A handler returns an
+  * {@link Outcome}, and inside `run` the interpret edge mints and stamps.
+  */
+ interface CmdDef<Name extends string, Input extends CmdInput, Ok, E extends Tagged> {
+@@ -642,7 +651,7 @@ type Interpret<M extends {
+  */
+ type InterpretCell<M extends {
+     _tag: string;
+-}, C extends Cmd, Ctx> = unknown extends ErrorsOf<C> ? (cmd: C, ctx: HandlerCtx<Ctx>, dispatch?: (msg: M) => void) => Promise<M | readonly M[] | void> : (cmd: C, ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>, dispatch?: (msg: M) => void) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | void>;
++}, C extends Cmd, Ctx> = unknown extends ErrorsOf<C> ? (cmd: C, ctx: HandlerCtx<Ctx>, dispatch?: (msg: M) => void) => Promise<M | readonly M[] | void> : (cmd: C, ctx: HandlerCtx<Ctx> & OutcomeHelpers<OkOfCmd<C>, DeclaredErrorsOf<C>>, dispatch?: (msg: M) => void) => Promise<Outcome<OkOfCmd<C>, DeclaredErrorsOf<C>> | Owed | void>;
+ /** The value a Cmd settles with; `unknown` for a hand-written Cmd. */
+ type OkOfCmd<C> = C extends {
+     readonly __ok?: infer Ok;
+@@ -832,4 +841,4 @@ declare function foldMsgs<S, M extends {
+     _tag: string;
+ }, C extends Cmd, U extends Sub, Ctx>(machine: Machine<S, M, C, U, Ctx>, base: S, msgs: readonly M[]): S;
+ 
+-export { acceptedTypes as $, type AnyCmdDef as A, type BuiltinSub as B, type CmdOf as C, type Dispose as D, type ErrorsOf as E, type Identity as F, type InterpretArg as G, type HandlerCtx as H, type Interpret as I, type InterpretCell as J, type MachineShape as K, type NoCtx as L, type Machine as M, NoCellError as N, Outcome as O, type Port as P, OutcomeContractError as Q, type RunHandlers as R, type Subscribe as S, type TimerDeps as T, type UpdateForm as U, type OutcomeHelpers as V, type Wired as W, type PortEmitter as X, type SubscribeArg as Y, type SyncReturn as Z, UndeclaredFailureError as _, type CmdDef as a, acceptsOf as a0, applyCell as a1, applyCellChecked as a2, deliveryIdOf as a3, describeMachine as a4, detectUpdateForm as a5, foldMsgs as a6, foldUpdates as a7, formOf as a8, matchesIdentity as a9, msgKeysOf as aa, structuralHash as ab, subId as ac, subIdOf as ad, Cmd as b, type Sub as c, type SettledOk as d, type SettledErr as e, type TaggedError as f, type SubId as g, type DepKeyedSub as h, type DeliveryId as i, type Reducer as j, type Settled as k, type Transitions as l, type InterpretDetached as m, type TimerSub as n, type MalformedResult as o, type OkOfCmd as p, type DeclaredErrorsOf as q, type BuiltinSubType as r, type CmdInput as s, type Tagged as t, type OkOf as u, type ErrOf as v, type CmdValue as w, AsyncSchemaError as x, CmdNameCollisionError as y, type ExhaustiveTransitions as z };
++export { UndeclaredFailureError as $, type AnyCmdDef as A, type BuiltinSub as B, type CmdOf as C, type Dispose as D, type ErrorsOf as E, type ExhaustiveTransitions as F, type Identity as G, type HandlerCtx as H, type Interpret as I, type InterpretArg as J, type InterpretCell as K, type MachineShape as L, type Machine as M, NoCellError as N, Outcome as O, type Port as P, type NoCtx as Q, type RunHandlers as R, type Subscribe as S, type TimerDeps as T, type UpdateForm as U, OutcomeContractError as V, type Wired as W, type OutcomeHelpers as X, type PortEmitter as Y, type SubscribeArg as Z, type SyncReturn as _, type CmdDef as a, acceptedTypes as a0, acceptsOf as a1, applyCell as a2, applyCellChecked as a3, deliveryIdOf as a4, describeMachine as a5, detectUpdateForm as a6, foldMsgs as a7, foldUpdates as a8, formOf as a9, matchesIdentity as aa, msgKeysOf as ab, owed as ac, structuralHash as ad, subId as ae, subIdOf as af, Cmd as b, type Sub as c, type SettledOk as d, type SettledErr as e, type TaggedError as f, type SubId as g, type DepKeyedSub as h, type DeliveryId as i, type Reducer as j, type Settled as k, type Transitions as l, type InterpretDetached as m, type TimerSub as n, type MalformedResult as o, type OkOfCmd as p, type Owed as q, type DeclaredErrorsOf as r, type BuiltinSubType as s, type CmdInput as t, type Tagged as u, type OkOf as v, type ErrOf as w, type CmdValue as x, AsyncSchemaError as y, CmdNameCollisionError as z };
+diff --git a/dist/do/index.d.ts b/dist/do/index.d.ts
+index aa53886d20e6862548f7370c7d90a6c4795f173e..5517244599ee0b24c9fe8ae87799d39f58c16a8b 100644
+--- a/dist/do/index.d.ts
++++ b/dist/do/index.d.ts
+@@ -1,8 +1,8 @@
+ import { S as Store, m as BootedRunHandle, E as EngineRun, a as StoreAndOnError, n as PendingEffectsRecorder, k as EffectOwed, j as EffectConfirmed, h as RunHandle, M as Migrated, F as FencedStore, D as DeletableStore } from '../runtime-types-Bf4UUCQQ.js';
+ export { i as EffectLedgerEvent, o as OwedEffect, p as PendingEffectsLedger, q as applyEffectEvent, l as emptyLedger, r as foldLedger, s as isOwed, t as pendingEffectsLedger, u as survivingEffects } from '../runtime-types-Bf4UUCQQ.js';
+-export { A as AppliedEffects, a as AppliedEffectsEvent, b as AppliedEffectsGuard, E as EffectApplied, c as EffectForgotten, d as EffectKey, I as IdempotentEffect, e as IdempotentOutcome, f as appliedEffects, g as applyAppliedEvent, h as emptyApplied, i as foldApplied, j as idempotentEffect, k as isApplied } from '../idempotent-effect-BuGbIDwt.js';
+ import { b as Cmd, c as Sub, M as Machine, W as Wired } from '../core-PxoTxrNB.js';
+ export { i as DeliveryId } from '../core-PxoTxrNB.js';
++export { A as AppliedEffects, a as AppliedEffectsEvent, b as AppliedEffectsGuard, E as EffectApplied, c as EffectForgotten, d as EffectKey, I as IdempotentEffect, e as IdempotentOutcome, f as appliedEffects, g as applyAppliedEvent, h as emptyApplied, i as foldApplied, j as idempotentEffect, k as isApplied } from '../idempotent-effect-BuGbIDwt.js';
+ import { RetryPolicy, Rng } from '../retry-backoff/index.js';
+ import { A as AgentEvent, f as AgentTurn, e as AgentState, i as AgentMachineMsg, K as AgentStatus } from '../machine-DIBNhQ3z.js';
+ import '@standard-schema/spec';
+diff --git a/dist/do/index.js b/dist/do/index.js
+index 829059f9ca01af19a1c7f6fc216dc86fc06319e8..0c6f7de81e21933fab51a4f3abf314f2cdc65a21 100644
+--- a/dist/do/index.js
++++ b/dist/do/index.js
+@@ -13,6 +13,7 @@ import '../chunk-TMA4VOTM.js';
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ export { appliedEffects, applyAppliedEvent, emptyApplied, foldApplied, idempotentEffect, isApplied } from '../chunk-MXYW7N7R.js';
+ export { applyEffectEvent, emptyLedger, foldLedger, isOwed, pendingEffectsLedger, survivingEffects } from '../chunk-EYYLIM3D.js';
+diff --git a/dist/effect/index.d.ts b/dist/effect/index.d.ts
+index 7c347ef4a5e0ed46af8e48a473074d1114457a9e..fca458e924c1e3922f0c285d1c080a44eb87a903 100644
+--- a/dist/effect/index.d.ts
++++ b/dist/effect/index.d.ts
+@@ -1,6 +1,6 @@
+ import { T as TellAnswer } from '../loop-DReKGV1X.js';
+ import { Scope, Effect, Schema, ManagedRuntime } from 'effect';
+-import { b as Cmd$1, c as Sub, M as Machine$1, s as CmdInput, a as CmdDef, f as TaggedError, A as AnyCmdDef, k as Settled, C as CmdOf } from '../core-PxoTxrNB.js';
++import { b as Cmd$1, c as Sub, M as Machine$1, t as CmdInput, a as CmdDef, f as TaggedError, A as AnyCmdDef, k as Settled, C as CmdOf } from '../core-PxoTxrNB.js';
+ import { c as EffectRun, d as InterpretOption, E as EffectInterpret, S as SubscribeOption, a as EffectSubscribe } from '../run-D9cS9PW5.js';
+ export { C as CellErrors, e as EffectBootingRun, f as EffectBootingRuntime, g as EffectInterpretCell, h as EffectRunOptions, i as EffectRunner, j as EffectRuntime, I as InterpretServices, k as Stopped, l as StoreFailed, m as SubFailed, b as SubscribeServices, r as run } from '../run-D9cS9PW5.js';
+ import { f as MachineTypes, g as RunOptions, H as HandlerFamily, h as RunHandle } from '../runtime-types-Bf4UUCQQ.js';
+diff --git a/dist/effect/index.js b/dist/effect/index.js
+index c321d7e626a09ee2bf6094f6b75c3674a4a45ba3..cc6a9fd3209fa737b78bc69f14849bd623976bc6 100644
+--- a/dist/effect/index.js
++++ b/dist/effect/index.js
+@@ -3,6 +3,7 @@ export { Stopped, StoreFailed, SubFailed, run, spawn, stop, tell } from '../chun
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import { defaultOnError, sinkOrDefault, post, installedState, readInstalledState } from '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-EYYLIM3D.js';
+ import { Cmd, defineMachine, DispatchDiscardedError } from '../chunk-MTKYWRTQ.js';
+diff --git a/dist/extension/index.js b/dist/extension/index.js
+index 3dd87e2c5c7c56e83f8c23be7e4be4461355c85e..34e45f7f35fec527c40647301312056b4922441e 100644
+--- a/dist/extension/index.js
++++ b/dist/extension/index.js
+@@ -1,5 +1,6 @@
+ import { senderOf } from '../chunk-W2XRVHFM.js';
+ import { sinkOrDefault, defaultOnError } from '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import { historyTracker, dispatchIfPresent } from '../chunk-MXYW7N7R.js';
+ import '../chunk-EYYLIM3D.js';
+diff --git a/dist/flow/index.js b/dist/flow/index.js
+index 160cf4a8e33a10b02bc5fccec836755cd78c6889..ef32f21eb15175c313f8dd1b42481413a885dae6 100644
+--- a/dist/flow/index.js
++++ b/dist/flow/index.js
+@@ -14,6 +14,7 @@ import { run } from '../chunk-TMA4VOTM.js';
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-MXYW7N7R.js';
+ import { pendingEffectsLedger, foldLedger, survivingEffects } from '../chunk-EYYLIM3D.js';
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 4df6b072702dae880dd30d65fa440fe616b395f0..a45ee18d7837427ec4beb94295a603b04c180bc1 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,8 +1,8 @@
+-import { v as LogRead, B as BootingRuntime, R as Runtime } from './runtime-types-Bf4UUCQQ.js';
+-export { m as BootedRunHandle, w as Branded, C as CtxArg, D as DeletableStore, x as DispatchDiscardedError, e as DispatchOptions, y as DispatchSettle, z as DisposeTimeoutNotice, A as DrainTimeoutNotice, G as DriveFailedError, I as DriveStalledError, j as EffectConfirmed, i as EffectLedgerEvent, k as EffectOwed, E as EngineRun, d as EventSourcedOptions, J as FencedRead, F as FencedStore, K as FoldRefusal, H as HandlerFamily, c as HandlersFor, N as IdentityDropNotice, Q as LogAppend, V as LogCommit, W as LogConfirmation, X as LogDisposition, Y as LogFailure, Z as LogMessage, _ as LogRecord, $ as LogStep, L as LoggedStore, a0 as LoggedTimer, f as MachineTypes, M as Migrated, O as OnError, o as OwedEffect, p as PendingEffectsLedger, n as PendingEffectsRecorder, a1 as PersistedLogRecord, a2 as PortNameCollisionError, P as PromiseHandlers, a3 as QuiescenceTimeoutError, a4 as Refusal, h as RunHandle, g as RunOptions, a5 as RuntimeDiscardNotice, a6 as RuntimeDiscardedError, a7 as RuntimeErrorContext, a8 as RuntimeErrorPhase, a9 as RuntimeRef, aa as Schema, S as Store, a as StoreAndOnError, ab as StoreConflictError, ac as StoreRefusedError, ad as SubFailedError, b as Supervision, ae as SupervisionStrategy, af as TelemetryEvent, T as TelemetrySink, U as UnfencedStore, ag as __resetPortRegistry, ah as absurd, q as applyEffectEvent, ai as asReducer, aj as defineMachine, ak as definePort, l as emptyLedger, r as foldLedger, al as isFencedStore, am as isLoggedStore, s as isOwed, an as noop, t as pendingEffectsLedger, ao as refuse, ap as replay, aq as schemaMigrate, u as survivingEffects, ar as tryApplyCell, as as tryFoldMsgs, at as tryInterpret, au as wrapDetached } from './runtime-types-Bf4UUCQQ.js';
++import { v as LogRead, n as PendingEffectsRecorder, B as BootingRuntime, R as Runtime } from './runtime-types-Bf4UUCQQ.js';
++export { m as BootedRunHandle, w as Branded, C as CtxArg, D as DeletableStore, x as DispatchDiscardedError, e as DispatchOptions, y as DispatchSettle, z as DisposeTimeoutNotice, A as DrainTimeoutNotice, G as DriveFailedError, I as DriveStalledError, j as EffectConfirmed, i as EffectLedgerEvent, k as EffectOwed, E as EngineRun, d as EventSourcedOptions, J as FencedRead, F as FencedStore, K as FoldRefusal, H as HandlerFamily, c as HandlersFor, N as IdentityDropNotice, Q as LogAppend, V as LogCommit, W as LogConfirmation, X as LogDisposition, Y as LogFailure, Z as LogMessage, _ as LogRecord, $ as LogStep, L as LoggedStore, a0 as LoggedTimer, f as MachineTypes, M as Migrated, O as OnError, o as OwedEffect, p as PendingEffectsLedger, a1 as PersistedLogRecord, a2 as PortNameCollisionError, P as PromiseHandlers, a3 as QuiescenceTimeoutError, a4 as Refusal, h as RunHandle, g as RunOptions, a5 as RuntimeDiscardNotice, a6 as RuntimeDiscardedError, a7 as RuntimeErrorContext, a8 as RuntimeErrorPhase, a9 as RuntimeRef, aa as Schema, S as Store, a as StoreAndOnError, ab as StoreConflictError, ac as StoreRefusedError, ad as SubFailedError, b as Supervision, ae as SupervisionStrategy, af as TelemetryEvent, T as TelemetrySink, U as UnfencedStore, ag as __resetPortRegistry, ah as absurd, q as applyEffectEvent, ai as asReducer, aj as defineMachine, ak as definePort, l as emptyLedger, r as foldLedger, al as isFencedStore, am as isLoggedStore, s as isOwed, an as noop, t as pendingEffectsLedger, ao as refuse, ap as replay, aq as schemaMigrate, u as survivingEffects, ar as tryApplyCell, as as tryFoldMsgs, at as tryInterpret, au as wrapDetached } from './runtime-types-Bf4UUCQQ.js';
+ export { A as AppliedEffects, a as AppliedEffectsEvent, b as AppliedEffectsGuard, E as EffectApplied, c as EffectForgotten, d as EffectKey, I as IdempotentEffect, e as IdempotentOutcome, f as appliedEffects, g as applyAppliedEvent, h as emptyApplied, i as foldApplied, j as idempotentEffect, k as isApplied } from './idempotent-effect-BuGbIDwt.js';
+ import { b as Cmd, c as Sub, M as Machine, P as Port, h as DepKeyedSub, D as Dispose } from './core-PxoTxrNB.js';
+-export { A as AnyCmdDef, x as AsyncSchemaError, B as BuiltinSub, r as BuiltinSubType, a as CmdDef, s as CmdInput, y as CmdNameCollisionError, C as CmdOf, w as CmdValue, q as DeclaredErrorsOf, i as DeliveryId, v as ErrOf, E as ErrorsOf, z as ExhaustiveTransitions, F as Identity, I as Interpret, G as InterpretArg, J as InterpretCell, m as InterpretDetached, K as MachineShape, o as MalformedResult, N as NoCellError, L as NoCtx, u as OkOf, p as OkOfCmd, O as Outcome, Q as OutcomeContractError, V as OutcomeHelpers, X as PortEmitter, j as Reducer, R as RunHandlers, k as Settled, e as SettledErr, d as SettledOk, g as SubId, S as Subscribe, Y as SubscribeArg, Z as SyncReturn, t as Tagged, f as TaggedError, T as TimerDeps, n as TimerSub, l as Transitions, _ as UndeclaredFailureError, U as UpdateForm, W as Wired, $ as acceptedTypes, a0 as acceptsOf, a1 as applyCell, a2 as applyCellChecked, a3 as deliveryIdOf, a4 as describeMachine, a5 as detectUpdateForm, a6 as foldMsgs, a7 as foldUpdates, a8 as formOf, a9 as matchesIdentity, aa as msgKeysOf, ab as structuralHash, ac as subId, ad as subIdOf } from './core-PxoTxrNB.js';
++export { A as AnyCmdDef, y as AsyncSchemaError, B as BuiltinSub, s as BuiltinSubType, a as CmdDef, t as CmdInput, z as CmdNameCollisionError, C as CmdOf, x as CmdValue, r as DeclaredErrorsOf, i as DeliveryId, w as ErrOf, E as ErrorsOf, F as ExhaustiveTransitions, G as Identity, I as Interpret, J as InterpretArg, K as InterpretCell, m as InterpretDetached, L as MachineShape, o as MalformedResult, N as NoCellError, Q as NoCtx, v as OkOf, p as OkOfCmd, O as Outcome, V as OutcomeContractError, X as OutcomeHelpers, q as Owed, Y as PortEmitter, j as Reducer, R as RunHandlers, k as Settled, e as SettledErr, d as SettledOk, g as SubId, S as Subscribe, Z as SubscribeArg, _ as SyncReturn, u as Tagged, f as TaggedError, T as TimerDeps, n as TimerSub, l as Transitions, $ as UndeclaredFailureError, U as UpdateForm, W as Wired, a0 as acceptedTypes, a1 as acceptsOf, a2 as applyCell, a3 as applyCellChecked, a4 as deliveryIdOf, a5 as describeMachine, a6 as detectUpdateForm, a7 as foldMsgs, a8 as foldUpdates, a9 as formOf, aa as matchesIdentity, ab as msgKeysOf, ac as owed, ad as structuralHash, ae as subId, af as subIdOf } from './core-PxoTxrNB.js';
+ import { S as SubscribeHandler } from './types-DW--UQQr.js';
+ import '@standard-schema/spec';
+ 
+@@ -70,6 +70,8 @@ interface ReadStep<In, Out> {
+  */
+ declare function readInOrder<In, Out>(input: In, order: readonly ReadStep<In, Out>[], absent: Out): Out;
+ 
++/** Restore the single delivery ledger, including its consumed high-water mark. */
++declare function logLedger<S, M, C>(log: LogRead<S, M, C>): PendingEffectsRecorder<C>;
+ /** Query applied sources in commit order with inclusive, gap-free query positions. */
+ declare function logUpdates<S, M, C>(log: LogRead<S, M, C>, range?: {
+     readonly fromSeq?: number;
+@@ -758,4 +760,4 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+  */
+ declare function fromTransport<N extends string, TKey, Inbound, Outbound, M, Ctx>(opts: FromTransportOpts<N, TKey, Inbound, Outbound, M, Ctx>): TransportBattery<N, TKey, Outbound, M, Ctx>;
+ 
+-export { type Ack, type AckPartition, BootingRuntime, type CancelTimer, Cmd, type DefineManagedResourceOpts, DepKeyedSub, Dispose, type EventSourceFactoryOpts, type FromTransportOpts, type HistoryTracker, type ListenerTarget, LogRead, Machine, type ManagedResourceBattery, type ManagedResourceSub, NO_ACK, Port, type ReadStep, type ReconnectingWebSocketFactoryOpts, Runtime, type Seq, type SeqTagged, Sub, SubscribeHandler, type Transport, type TransportBattery, type TransportFactory, type TransportSub, type WebSocketFactoryOpts, type WebSocketSubData, ack, defineListener, defineManagedResource, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, initAck, liftSlice, logUpdates, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq };
++export { type Ack, type AckPartition, BootingRuntime, type CancelTimer, Cmd, type DefineManagedResourceOpts, DepKeyedSub, Dispose, type EventSourceFactoryOpts, type FromTransportOpts, type HistoryTracker, type ListenerTarget, LogRead, Machine, type ManagedResourceBattery, type ManagedResourceSub, NO_ACK, PendingEffectsRecorder, Port, type ReadStep, type ReconnectingWebSocketFactoryOpts, Runtime, type Seq, type SeqTagged, Sub, SubscribeHandler, type Transport, type TransportBattery, type TransportFactory, type TransportSub, type WebSocketFactoryOpts, type WebSocketSubData, ack, defineListener, defineManagedResource, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, initAck, liftSlice, logLedger, logUpdates, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq };
+diff --git a/dist/index.js b/dist/index.js
+index 950705f8bbcf5f59c026b738cbfed30d610b265a..2a8b28fe4e1d5286fccb8631b4302a048cb7f650 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,5 +1,5 @@
+ export { NO_ACK, ack, appliedEffects, applyAppliedEvent, defineListener, defineManagedResource, emptyApplied, foldApplied, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, idempotentEffect, initAck, isApplied, liftSlice, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq } from './chunk-MXYW7N7R.js';
+-export { applyEffectEvent, emptyLedger, foldLedger, isOwed, logUpdates, pendingEffectsLedger, survivingEffects } from './chunk-EYYLIM3D.js';
+-export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, defineMachine, definePort, deliveryIdOf, describeMachine, detectUpdateForm, foldMsgs, foldUpdates, formOf, isFencedStore, isLoggedStore, matchesIdentity, msgKeysOf, noop, refuse, replay, schemaMigrate, structuralHash, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, wrapDetached } from './chunk-MTKYWRTQ.js';
++export { applyEffectEvent, emptyLedger, foldLedger, isOwed, logLedger, logUpdates, pendingEffectsLedger, survivingEffects } from './chunk-EYYLIM3D.js';
++export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, defineMachine, definePort, deliveryIdOf, describeMachine, detectUpdateForm, foldMsgs, foldUpdates, formOf, isFencedStore, isLoggedStore, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, wrapDetached } from './chunk-MTKYWRTQ.js';
+ //# sourceMappingURL=index.js.map
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/loop-DReKGV1X.d.ts b/dist/loop-DReKGV1X.d.ts
+index 3783f6d46efab129345e33b96f0947627481cec7..fac44a11061ba838766b29f45bac71d7867689e2 100644
+--- a/dist/loop-DReKGV1X.d.ts
++++ b/dist/loop-DReKGV1X.d.ts
+@@ -13,7 +13,7 @@
+  * Sharing the loop is also what makes the two engines' traces identical: the
+  * fold, the save order and the built-ins are the same code.
+  *
+- * Everything else `run` offers is an {@link Extension} built on ten points:
++ * Everything else `run` offers is an {@link Extension} built on eleven points:
+  *
+  *   1. `update`    — middleware over the fold. Returning `null` means "no
+  *                    transition": no save, no effects, no commit.
+@@ -37,6 +37,8 @@
+  *  10. `ctx`       — keys added to the ctx every Cmd handler receives, so a
+  *                    handler that runs another handler inside its own can reach
+  *                    the same machinery the loop applies to it.
++ *  11. `answer`    — parse a later answer against its persisted Cmd, before
++ *                    durable admission; the Cmd boundary owns this rule.
+  *
+  * An extension may also add methods to the run handle (`handle`). Array order
+  * is nesting order: the first extension's middleware is the outermost, and
+diff --git a/dist/machine-DIBNhQ3z.d.ts b/dist/machine-DIBNhQ3z.d.ts
+index 72a1a5f798f519723bf9268113855e16877a71a3..6a8f0e200d370e01a047eeda96a014f263a502b1 100644
+--- a/dist/machine-DIBNhQ3z.d.ts
++++ b/dist/machine-DIBNhQ3z.d.ts
+@@ -1,4 +1,4 @@
+-import { b as Cmd, t as Tagged, I as Interpret, A as AnyCmdDef, C as CmdOf, a as CmdDef, k as Settled, u as OkOf, v as ErrOf, o as MalformedResult, O as Outcome, w as CmdValue, H as HandlerCtx, f as TaggedError, M as Machine, S as Subscribe } from './core-PxoTxrNB.js';
++import { b as Cmd, u as Tagged, I as Interpret, A as AnyCmdDef, C as CmdOf, a as CmdDef, k as Settled, v as OkOf, w as ErrOf, o as MalformedResult, O as Outcome, x as CmdValue, H as HandlerCtx, f as TaggedError, M as Machine, S as Subscribe } from './core-PxoTxrNB.js';
+ import { b as MonitoredRunState, R as RunFailure, M as MonitoredRunCmd } from './index-uA2e6aPJ.js';
+ import { R as RunCmd, S as SucceedMsg, F as FailMsg, b as ResilientState, r as RunCmdDef } from './index-DwebuPst.js';
+ import { D as DeadlineExceeded, a as DeadlineSub, b as DeadlinesSub } from './index-CF182JOt.js';
+diff --git a/dist/otel/index.js b/dist/otel/index.js
+index 6c53eda34ff7b9df4e97e27447ee07eac0f190ff..141de04d569aa4c27c8dd5454dfc6d006ca91241 100644
+--- a/dist/otel/index.js
++++ b/dist/otel/index.js
+@@ -11,6 +11,7 @@ import '../chunk-TMA4VOTM.js';
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-MXYW7N7R.js';
+ import '../chunk-EYYLIM3D.js';
+diff --git a/dist/persistence/index.js b/dist/persistence/index.js
+index 8e3786b975a28c61f4a78dc0577a1baa01fc11c3..13371eefd2be703e223b778420ed71e7c59955d5 100644
+--- a/dist/persistence/index.js
++++ b/dist/persistence/index.js
+@@ -2,443 +2,11 @@ export { breadcrumbsFromTrace, deepEqual, parseJSONL, recorder, replayTrace, tra
+ import '../chunk-HWVW4AXC.js';
+ export { createSnapshot, snapshotLoadDef, snapshotWriteDef } from '../chunk-WYMKT2L3.js';
+ import '../chunk-4LPY67E4.js';
++import { decodeCheckpoint, decodeFrame, refusalMessage, isRefusal, ok, checkpointState, decide, encodeCheckpoint, encodeFrame, response, integer } from '../chunk-6FYKUEYW.js';
+ import '../chunk-MXYW7N7R.js';
+-import { foldLedger, emptyLedger, applyEffectEvent, pendingEffectsLedger } from '../chunk-EYYLIM3D.js';
++import { readDeliveryLedger, foldLedger, emptyLedger, applyEffectEvent } from '../chunk-EYYLIM3D.js';
+ import { schemaMigrate, StoreConflictError } from '../chunk-MTKYWRTQ.js';
+ 
+-// src/internal/persistence/durable-log/refusals.ts
+-var messages = {
+-  invalid_object: "Invalid durable log object",
+-  invalid_integer: "Invalid durable log integer",
+-  invalid_time: "Invalid durable log time",
+-  invalid_identity: "Invalid durable log identity",
+-  invalid_array: "Invalid durable log array",
+-  payload_rejected: "Durable log payload rejected by schema",
+-  invalid_timer_status: "Invalid durable timer status",
+-  invalid_owed_event: "Invalid owed event",
+-  invalid_disposition: "Invalid disposition",
+-  receipt_carries_work: "A source receipt cannot carry State or work",
+-  invalid_failure: "Invalid log failure",
+-  invalid_confirmation: "Invalid confirmation",
+-  unknown_record: "Unknown durable log record",
+-  invalid_checkpoint_boundary: "Invalid checkpoint boundary",
+-  invalid_source_receipt: "Invalid source receipt",
+-  invalid_ordering: "Invalid durable log ordering",
+-  duplicate_birth_record: "Duplicate birth",
+-  duplicate_source: "Duplicate log source",
+-  invalid_delivery_receipt: "Invalid delivery receipt",
+-  invalid_delivery_ordering: "Invalid delivery ordering",
+-  unsupported_log_protocol: "Unsupported durable log protocol",
+-  invalid_committed_record: "Invalid committed record",
+-  not_first_pending_source: "Commit requires the first pending source",
+-  unsupported_checkpoint_protocol: "Unsupported checkpoint protocol",
+-  admission_before_birth: "A log requires birth before admission",
+-  birth_on_nonempty_log: "Duplicate birth"
+-};
+-function ok(value2) {
+-  return { _tag: "ok", value: value2 };
+-}
+-function isRefusal(value2) {
+-  return typeof value2 === "object" && value2 !== null && "_tag" in value2 && typeof value2._tag === "string" && Object.hasOwn(messages, value2._tag);
+-}
+-function refusalMessage(refusal) {
+-  const table = messages;
+-  return table[refusal._tag];
+-}
+-
+-// src/internal/persistence/durable-log/codec.ts
+-function object(raw) {
+-  return typeof raw !== "object" || raw === null || Array.isArray(raw) ? { _tag: "invalid_object" } : ok(raw);
+-}
+-function integer(raw, min = 0) {
+-  return typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < min ? { _tag: "invalid_integer" } : ok(raw);
+-}
+-function time(raw) {
+-  return typeof raw !== "number" || !Number.isFinite(raw) ? { _tag: "invalid_time" } : ok(raw);
+-}
+-function identity(raw) {
+-  return typeof raw !== "string" ? { _tag: "invalid_identity" } : ok(raw);
+-}
+-function array(raw, parse) {
+-  if (!Array.isArray(raw)) return { _tag: "invalid_array" };
+-  const values = [];
+-  for (const entry of raw) {
+-    const parsed = parse(entry);
+-    if (parsed._tag !== "ok") return parsed;
+-    values.push(parsed.value);
+-  }
+-  return ok(values);
+-}
+-function value(schema, raw) {
+-  const parsed = schema.safeParse(structuredClone(raw));
+-  return parsed.success ? ok(parsed.data) : { _tag: "payload_rejected" };
+-}
+-function timer(raw, schema) {
+-  const parsed = object(raw);
+-  if (parsed._tag !== "ok") return parsed;
+-  const r = parsed.value;
+-  if (typeof r.fired !== "boolean") return { _tag: "invalid_timer_status" };
+-  const id = identity(r.id);
+-  if (id._tag !== "ok") return id;
+-  const subId = identity(r.subId);
+-  if (subId._tag !== "ok") return subId;
+-  const at = time(r.at);
+-  if (at._tag !== "ok") return at;
+-  const msg = value(schema, r.msg);
+-  if (msg._tag !== "ok") return msg;
+-  return ok({
+-    id: id.value,
+-    subId: subId.value,
+-    at: at.value,
+-    msg: msg.value,
+-    fired: r.fired
+-  });
+-}
+-function message(r, schema) {
+-  const id = identity(r.id);
+-  if (id._tag !== "ok") return id;
+-  const at = time(r.at);
+-  if (at._tag !== "ok") return at;
+-  const msg = value(schema, r.msg);
+-  if (msg._tag !== "ok") return msg;
+-  return ok({ _tag: "message", id: id.value, at: at.value, msg: msg.value });
+-}
+-function record(raw, options) {
+-  const parsed = object(raw);
+-  if (parsed._tag !== "ok") return parsed;
+-  const r = parsed.value;
+-  const work = () => {
+-    const state = value(options.state, r.state);
+-    if (state._tag !== "ok") return state;
+-    const owed = array(r.owed, (raw2) => {
+-      const parsed2 = object(raw2);
+-      if (parsed2._tag !== "ok") return parsed2;
+-      const e = parsed2.value;
+-      if (e._tag !== "effect_owed") return { _tag: "invalid_owed_event" };
+-      const id = integer(e.id, 1);
+-      if (id._tag !== "ok") return id;
+-      const effect = value(options.command, e.effect);
+-      if (effect._tag !== "ok") return effect;
+-      return ok({ _tag: "effect_owed", id: id.value, effect: effect.value });
+-    });
+-    if (owed._tag !== "ok") return owed;
+-    const timers = array(r.timers, (raw2) => timer(raw2, options.message));
+-    if (timers._tag !== "ok") return timers;
+-    return ok({ state: state.value, owed: owed.value, timers: timers.value });
+-  };
+-  const parsers = {
+-    birth: () => {
+-      const at = time(r.at);
+-      if (at._tag !== "ok") return at;
+-      const decoded = work();
+-      if (decoded._tag !== "ok") return decoded;
+-      return ok({ _tag: "birth", at: at.value, ...decoded.value });
+-    },
+-    message: () => message(r, options.message),
+-    applied: () => {
+-      const sourceId = identity(r.sourceId);
+-      if (sourceId._tag !== "ok") return sourceId;
+-      const decoded = work();
+-      if (decoded._tag !== "ok") return decoded;
+-      return ok({
+-        _tag: "applied",
+-        sourceId: sourceId.value,
+-        ...decoded.value
+-      });
+-    },
+-    receipt: () => {
+-      const disposition = r.disposition;
+-      if (disposition !== "ignored" && disposition !== "rejected")
+-        return { _tag: "invalid_disposition" };
+-      if (["state", "owed", "timers", "cmds"].some((key) => Object.hasOwn(r, key)))
+-        return { _tag: "receipt_carries_work" };
+-      const failure = r.failure === void 0 ? ok(void 0) : object(r.failure);
+-      if (failure._tag !== "ok") return failure;
+-      const kind = failure.value?.kind;
+-      if (failure.value && kind !== "reduce" && kind !== "no_cell")
+-        return { _tag: "invalid_failure" };
+-      const sourceId = identity(r.sourceId);
+-      if (sourceId._tag !== "ok") return sourceId;
+-      if (!failure.value)
+-        return ok({ _tag: "receipt", sourceId: sourceId.value, disposition });
+-      const description = identity(failure.value.message);
+-      if (description._tag !== "ok") return description;
+-      return ok({
+-        _tag: "receipt",
+-        sourceId: sourceId.value,
+-        disposition,
+-        failure: {
+-          kind,
+-          message: description.value
+-        }
+-      });
+-    },
+-    confirmed: () => {
+-      const event = object(r.event);
+-      if (event._tag !== "ok") return event;
+-      if (event.value._tag !== "effect_confirmed")
+-        return { _tag: "invalid_confirmation" };
+-      const id = integer(event.value.id, 1);
+-      if (id._tag !== "ok") return id;
+-      return ok({
+-        _tag: "confirmed",
+-        event: { _tag: "effect_confirmed", id: id.value }
+-      });
+-    }
+-  };
+-  const tag = identity(r._tag);
+-  if (tag._tag !== "ok") return tag;
+-  if (!Object.hasOwn(parsers, tag.value)) return { _tag: "unknown_record" };
+-  return parsers[tag.value]();
+-}
+-function decodeFrame(bytes, options) {
+-  const raw = object(JSON.parse(bytes));
+-  if (raw._tag !== "ok") return raw;
+-  if (raw.value.protocol !== 2) return { _tag: "unsupported_log_protocol" };
+-  const seq = integer(raw.value.seq, 1);
+-  if (seq._tag !== "ok") return seq;
+-  const decoded = record(raw.value.record, options);
+-  if (decoded._tag !== "ok") return decoded;
+-  const stored = object(raw.value.record);
+-  if (stored._tag !== "ok") return stored;
+-  const snapshot = checkpointMetadata(raw.value.snapshot ?? null);
+-  return ok({
+-    row: { seq: seq.value, record: decoded.value },
+-    storedState: stored.value.state,
+-    snapshot
+-  });
+-}
+-function encodeFrame(entry, seq, checkpointThrough, options) {
+-  let bytes = JSON.stringify({
+-    protocol: 2,
+-    seq,
+-    record: entry,
+-    snapshot: null
+-  });
+-  const raw = JSON.parse(bytes);
+-  const stored = object(raw.record);
+-  if (stored._tag !== "ok") return stored;
+-  if (checkpointThrough !== null) {
+-    raw.snapshot = { through: checkpointThrough, state: stored.value.state };
+-    bytes = JSON.stringify(raw);
+-  }
+-  const decoded = record(stored.value, options);
+-  if (decoded._tag !== "ok") return decoded;
+-  const snapshot = checkpointMetadata(raw.snapshot);
+-  return ok({
+-    bytes,
+-    row: { seq, record: decoded.value },
+-    storedState: stored.value.state,
+-    snapshot
+-  });
+-}
+-function decodeCheckpoint(bytes) {
+-  const raw = object(JSON.parse(bytes));
+-  if (raw._tag !== "ok") return raw;
+-  return raw.value.protocol === 2 ? checkpointMetadata(raw.value.snapshot) : { _tag: "unsupported_checkpoint_protocol" };
+-}
+-function checkpointMetadata(raw) {
+-  if (raw === null) return ok(null);
+-  const r = object(raw);
+-  if (r._tag !== "ok") return r;
+-  const through = integer(r.value.through, 1);
+-  if (through._tag !== "ok") return through;
+-  return ok({ through: through.value, rawState: r.value.state });
+-}
+-function checkpointState(raw, schema) {
+-  const parsed = schema.safeParse(structuredClone(raw));
+-  return parsed.success ? { _tag: "decoded", state: parsed.data } : { _tag: "state_rejected" };
+-}
+-function encodeCheckpoint(through, storedState) {
+-  return JSON.stringify({
+-    protocol: 2,
+-    snapshot: { through, state: storedState }
+-  });
+-}
+-
+-// src/internal/persistence/durable-log/operations.ts
+-var invalidCommitment = () => ({
+-  _tag: "invalid_committed_record"
+-});
+-function committed(record2, p, version) {
+-  if (record2 === null) return invalidCommitment();
+-  const withState = (r) => ({
+-    version,
+-    state: r.state,
+-    owed: r.owed.map(({ id, effect }) => ({ id, effect }))
+-  });
+-  const readers = {
+-    birth: withState,
+-    applied: withState,
+-    receipt: () => ({
+-      version,
+-      state: p.state,
+-      owed: []
+-    }),
+-    message: invalidCommitment,
+-    confirmed: invalidCommitment
+-  };
+-  return readers[record2._tag](record2);
+-}
+-function appended(stored) {
+-  if (stored === null) return invalidCommitment();
+-  const readers = {
+-    birth: invalidCommitment,
+-    message: (record2) => ({
+-      version: stored.seq,
+-      appended: true,
+-      entry: { seq: stored.seq, record: record2 }
+-    }),
+-    applied: invalidCommitment,
+-    receipt: invalidCommitment,
+-    confirmed: invalidCommitment
+-  };
+-  return readers[stored.record._tag](stored.record);
+-}
+-function cases() {
+-  const owe = (p, cmds) => {
+-    const recorder2 = pendingEffectsLedger({ lastId: p.high });
+-    return cmds.map((cmd) => recorder2.owe(cmd).event);
+-  };
+-  const source = (p, sourceId) => p.pending[0]?.record.id === sourceId ? p.pending[0] : null;
+-  const commitment = (p, op, stored) => committed(
+-    op.committed ?? stored?.record ?? null,
+-    p,
+-    stored?.seq ?? p.version
+-  );
+-  const operationCases = {
+-    append_message: {
+-      decide: (p, op) => {
+-        if (!p.birth) return { _tag: "admission_before_birth" };
+-        return [
+-          p,
+-          op.stored === null ? [
+-            {
+-              _tag: "append_record",
+-              record: op.message,
+-              checkpointThrough: null
+-            }
+-          ] : []
+-        ];
+-      },
+-      response: (p, op, stored) => {
+-        if (op.stored !== null)
+-          return { version: p.version, appended: false, entry: op.stored };
+-        return appended(stored);
+-      }
+-    },
+-    birth: {
+-      decide: (p, op) => {
+-        if (op.committed !== null) return [p, []];
+-        if (p.version !== 0) return { _tag: "birth_on_nonempty_log" };
+-        return [
+-          p,
+-          [
+-            {
+-              _tag: "append_record",
+-              record: {
+-                _tag: "birth",
+-                at: op.step.at,
+-                state: op.step.state,
+-                owed: owe(p, op.step.cmds),
+-                timers: op.step.timers
+-              },
+-              checkpointThrough: null
+-            }
+-          ]
+-        ];
+-      },
+-      response: commitment
+-    },
+-    applied: {
+-      decide: (p, op, policy) => {
+-        if (op.committed !== null) return [p, []];
+-        const admission = source(p, op.step.sourceId);
+-        if (admission === null) return { _tag: "not_first_pending_source" };
+-        return [
+-          p,
+-          [
+-            {
+-              _tag: "append_record",
+-              record: {
+-                _tag: "applied",
+-                sourceId: op.step.sourceId,
+-                state: op.step.state,
+-                owed: owe(p, op.step.cmds),
+-                timers: op.step.timers
+-              },
+-              checkpointThrough: p.applied + 1 - p.baseline >= policy.snapshotEvery ? admission.seq : null
+-            }
+-          ]
+-        ];
+-      },
+-      response: commitment
+-    },
+-    receipt: {
+-      decide: (p, op) => {
+-        if (op.committed !== null) return [p, []];
+-        if (source(p, op.step.sourceId) === null)
+-          return { _tag: "not_first_pending_source" };
+-        return [
+-          p,
+-          [
+-            {
+-              _tag: "append_record",
+-              record: {
+-                _tag: "receipt",
+-                sourceId: op.step.sourceId,
+-                disposition: op.step.disposition,
+-                ...op.step.failure ? { failure: op.step.failure } : {}
+-              },
+-              checkpointThrough: null
+-            }
+-          ]
+-        ];
+-      },
+-      response: commitment
+-    },
+-    confirm_effect: {
+-      decide: (p, op) => [
+-        p,
+-        p.owed.some(({ id }) => id === op.id) ? [
+-          {
+-            _tag: "append_record",
+-            record: {
+-              _tag: "confirmed",
+-              event: { _tag: "effect_confirmed", id: op.id }
+-            },
+-            checkpointThrough: null
+-          }
+-        ] : []
+-      ],
+-      response: (p, _op, stored) => ({
+-        version: stored?.seq ?? p.version,
+-        confirmed: stored !== null
+-      })
+-    },
+-    checkpoint: {
+-      decide: (p) => [
+-        p,
+-        p.applied === p.baseline || !p.birth ? [] : [
+-          {
+-            _tag: "write_checkpoint",
+-            through: p.through,
+-            storedState: p.storedState
+-          }
+-        ]
+-      ],
+-      response: (_p, _op, _stored, writes) => writes.length !== 0
+-    }
+-  };
+-  return operationCases;
+-}
+-function decide(p, op, policy) {
+-  return cases()[op._tag].decide(p, op, policy);
+-}
+-function response(p, op, stored, writes) {
+-  return cases()[op._tag].response(p, op, stored, writes);
+-}
+-
+ // src/internal/persistence/durable-log/projection.ts
+ function emptyProjection() {
+   return {
+@@ -504,9 +72,9 @@ function fold(p, inputs, boundary) {
+     cursor: 0,
+     owed: new Map(p.owed.map(({ id, effect }) => [id, effect]))
+   };
+-  const consume = (record2) => {
++  const consume = (record) => {
+     const source = draft.pending[draft.cursor];
+-    if (source?.record.id !== record2.sourceId)
++    if (source?.record.id !== record.sourceId)
+       return { _tag: "invalid_source_receipt" };
+     draft.through = source.seq;
+     draft.cursor += 1;
+@@ -523,15 +91,19 @@ function fold(p, inputs, boundary) {
+     if (after.has(event.id)) draft.owed.set(event.id, after.get(event.id));
+     else draft.owed.delete(event.id);
+   };
+-  const install = (record2, storedState) => {
+-    for (const event of record2.owed) {
++  const confirm = (event) => {
++    if (!draft.owed.has(event.id)) return { _tag: "invalid_delivery_receipt" };
++    ledger(event);
++  };
++  const install = (record, storedState) => {
++    for (const event of record.owed) {
+       if (event.id <= draft.high) return { _tag: "invalid_delivery_ordering" };
+       draft.high = event.id;
+       ledger(event);
+     }
+-    draft.state = record2.state;
++    draft.state = record.state;
+     draft.storedState = storedState;
+-    draft.timers = record2.timers;
++    draft.timers = record.timers;
+   };
+   const foldCases = {
+     birth: {
+@@ -546,6 +118,11 @@ function fold(p, inputs, boundary) {
+       first: false,
+       fold: (input) => {
+         if (input.stored !== null) return { _tag: "duplicate_source" };
++        const answerTo = input.row.record.answerTo;
++        if (answerTo !== void 0) {
++          const refusal = confirm({ _tag: "effect_confirmed", id: answerTo });
++          if (refusal) return refusal;
++        }
+         draft.pending.push(input.row);
+       }
+     },
+@@ -564,17 +141,13 @@ function fold(p, inputs, boundary) {
+     },
+     confirmed: {
+       first: false,
+-      fold: (input) => {
+-        if (!draft.owed.has(input.row.record.event.id))
+-          return { _tag: "invalid_delivery_receipt" };
+-        ledger(input.row.record.event);
+-      }
++      fold: (input) => confirm(input.row.record.event)
+     }
+   };
+   for (const input of inputs) {
+     if ("_tag" in input) return input;
+-    const { seq, record: record2 } = input.row;
+-    const row = foldCases[record2._tag];
++    const { seq, record } = input.row;
++    const row = foldCases[record._tag];
+     if (seq !== draft.version + 1 || seq === 1 && !row.first)
+       return { _tag: "invalid_ordering" };
+     const refusal = row.fold(input);
+@@ -642,8 +215,8 @@ function createLogStore(journal, options) {
+     return row?.record._tag === "message" ? { seq: row.seq, record: row.record } : null;
+   };
+   const sourceCommitAt = (seq) => {
+-    const record2 = seq === null ? void 0 : readModel.records[seq - 1]?.record;
+-    return record2?._tag === "applied" || record2?._tag === "receipt" ? record2 : null;
++    const record = seq === null ? void 0 : readModel.records[seq - 1]?.record;
++    return record?._tag === "applied" || record?._tag === "receipt" ? record : null;
+   };
+   const checkpointSource = (through) => {
+     const admission = admissionAt(through);
+@@ -660,10 +233,10 @@ function createLogStore(journal, options) {
+   };
+   const checkpointInput = (metadata) => metadata === null ? null : { ...metadata, source: checkpointSource(metadata.through) };
+   const indexRecord = (row) => {
+-    const commitment = (record2) => {
+-      const place = readModel.places.get(record2.sourceId);
++    const commitment = (record) => {
++      const place = readModel.places.get(record.sourceId);
+       if (place !== void 0)
+-        readModel.places.set(record2.sourceId, {
++        readModel.places.set(record.sourceId, {
+           ...place,
+           commit: row.seq,
+           appliedCount: readModel.appliedCount
+@@ -672,18 +245,18 @@ function createLogStore(journal, options) {
+     };
+     const index = {
+       birth: () => null,
+-      message: (record2) => {
+-        const previous2 = readModel.places.get(record2.id);
+-        readModel.places.set(record2.id, {
++      message: (record) => {
++        const previous2 = readModel.places.get(record.id);
++        readModel.places.set(record.id, {
+           admission: row.seq,
+           commit: null,
+           appliedCount: null
+         });
+         return previous2 === void 0 ? null : admissionAt(previous2.admission);
+       },
+-      applied: (record2) => {
++      applied: (record) => {
+         readModel.appliedCount += 1;
+-        return commitment(record2);
++        return commitment(record);
+       },
+       receipt: commitment,
+       confirmed: () => null
+@@ -781,9 +354,9 @@ function createLogStore(journal, options) {
+         };
+       },
+       birth: (step) => {
+-        const record2 = readModel.records[0]?.record;
+-        const committed2 = record2?._tag === "birth" ? record2 : null;
+-        return { _tag: "birth", step, committed: committed2 };
++        const record = readModel.records[0]?.record;
++        const committed = record?._tag === "birth" ? record : null;
++        return { _tag: "birth", step, committed };
+       },
+       applied: (step) => ({
+         _tag: "applied",
+@@ -882,6 +455,12 @@ function createLogStore(journal, options) {
+     }
+   };
+   const store = {
++    [readDeliveryLedger]() {
++      return serial(async () => {
++        await read();
++        return new Map(projection.owed.map(({ id, effect }) => [id, effect]));
++      });
++    },
+     logged: true,
+     load() {
+       return serial(async () => {
+@@ -904,8 +483,8 @@ function createLogStore(journal, options) {
+         });
+       });
+     },
+-    async appendMessage(message2) {
+-      return serial(() => mutate({ _tag: "append_message", message: message2 }));
++    async appendMessage(message) {
++      return serial(() => mutate({ _tag: "append_message", message }));
+     },
+     async commitStep(step) {
+       return serial(() => mutate(step));
+diff --git a/dist/promise/index.js b/dist/promise/index.js
+index dffb56b9f5247529a485ec8bb56e3350b4e7bd24..aec25d14267d8f132557593bf882db28c42acc1b 100644
+--- a/dist/promise/index.js
++++ b/dist/promise/index.js
+@@ -2,6 +2,7 @@ export { driveToDone, run, tell } from '../chunk-TMA4VOTM.js';
+ import '../chunk-JEXGQ74S.js';
+ import '../chunk-JRUNOW4S.js';
+ import '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-EYYLIM3D.js';
+ import '../chunk-MTKYWRTQ.js';
+diff --git a/dist/react/index.js b/dist/react/index.js
+index a7e4d0129323c32db71d5480aa55a18574f556d0..01c867e0b48c45eb87d34d00f8963c88a873db17 100644
+--- a/dist/react/index.js
++++ b/dist/react/index.js
+@@ -1,6 +1,7 @@
+ import { senderOf } from '../chunk-W2XRVHFM.js';
+ import { subGate } from '../chunk-JRUNOW4S.js';
+ import { sinkOrDefault, defaultOnError, readInstalledState } from '../chunk-BGEVMZVA.js';
++import '../chunk-6FYKUEYW.js';
+ import '../chunk-4BBXEUIF.js';
+ import '../chunk-EYYLIM3D.js';
+ import { DispatchDiscardedError } from '../chunk-MTKYWRTQ.js';
+diff --git a/dist/run-D9cS9PW5.d.ts b/dist/run-D9cS9PW5.d.ts
+index b42ce2f5ed57629bea3cd1cab2920e954bd8a2d6..60b873389de6bb4093175b0f46672ab9e94ce106 100644
+--- a/dist/run-D9cS9PW5.d.ts
++++ b/dist/run-D9cS9PW5.d.ts
+@@ -1,5 +1,5 @@
+ import { Effect, Stream, Scope } from 'effect';
+-import { b as Cmd, P as Port, E as ErrorsOf, p as OkOfCmd, q as DeclaredErrorsOf, c as Sub, r as BuiltinSubType, B as BuiltinSub, M as Machine } from './core-PxoTxrNB.js';
++import { b as Cmd, P as Port, E as ErrorsOf, p as OkOfCmd, q as Owed, r as DeclaredErrorsOf, c as Sub, s as BuiltinSubType, B as BuiltinSub, M as Machine } from './core-PxoTxrNB.js';
+ import { e as DispatchOptions, C as CtxArg, a as StoreAndOnError, b as Supervision, T as TelemetrySink } from './runtime-types-Bf4UUCQQ.js';
+ import { P as Postable } from './loop-DReKGV1X.js';
+ import * as effect_Cause from 'effect/Cause';
+@@ -211,7 +211,7 @@ interface EffectRun<S, M extends {
+  */
+ type EffectInterpretCell<M extends {
+     _tag: string;
+-}, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C, ctx?: unknown) => Effect.Effect<OkOfCmd<C>, DeclaredErrorsOf<C>, R>;
++}, C extends Cmd, R = unknown> = unknown extends ErrorsOf<C> ? (cmd: C, ctx?: unknown) => Effect.Effect<M | readonly M[] | void, unknown, R> : (cmd: C, ctx?: unknown) => Effect.Effect<OkOfCmd<C> | Owed, DeclaredErrorsOf<C>, R>;
+ /**
+  * The Effect engine's `interpret` map: one cell per Cmd variant, each reading
+  * services within `R`.
+diff --git a/dist/runtime-types-Bf4UUCQQ.d.ts b/dist/runtime-types-Bf4UUCQQ.d.ts
+index 0b369d727c03e71ff83a59a7cab69a79ebd6e175..07443913e5f535a88321075b9522b2c665cf1382 100644
+--- a/dist/runtime-types-Bf4UUCQQ.d.ts
++++ b/dist/runtime-types-Bf4UUCQQ.d.ts
+@@ -679,6 +679,8 @@ interface LogMessage<M> {
+     readonly id: string;
+     readonly at: number;
+     readonly msg: M;
++    /** This admitted answer also confirms the named delivery, in the same write. */
++    readonly answerTo?: DeliveryId;
+ }
+ /** The durable result of consuming a message. */
+ type LogDisposition = "applied" | "ignored" | "rejected";
+@@ -877,6 +879,8 @@ type DispatchSettle = "quiescent" | "once";
+ interface DispatchOptions {
+     readonly settle?: DispatchSettle;
+     readonly id?: string;
++    /** Answer a logged Cmd with its own builder; cannot be combined with `id`. */
++    readonly answerTo?: DeliveryId;
+ }
+ /**
+  * The dispatch-only view of a runtime. Use it as the type of a handle one
+diff --git a/dist/testing/effect/index.js b/dist/testing/effect/index.js
+index 36a39c2877d66a22508c1048e77ab0cd4fad6e09..76b6c58a4dc0e084c917cf06762691cd2fed4bf2 100644
+--- a/dist/testing/effect/index.js
++++ b/dist/testing/effect/index.js
+@@ -7,6 +7,7 @@ import '../../chunk-C7TIYIYD.js';
+ import '../../chunk-JEXGQ74S.js';
+ import '../../chunk-JRUNOW4S.js';
+ import '../../chunk-BGEVMZVA.js';
++import '../../chunk-6FYKUEYW.js';
+ import '../../chunk-4BBXEUIF.js';
+ import '../../chunk-MXYW7N7R.js';
+ import '../../chunk-EYYLIM3D.js';

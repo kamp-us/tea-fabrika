@@ -35,6 +35,15 @@ import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  poison: {},
+  queue: {},
+  wait: {},
+});
+
 const NAME = "counter:1";
 
 const policy = {
@@ -54,12 +63,7 @@ const Model = Schema.Struct({
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("poison") }),
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("wait") }),
-  Schema.Struct({ type: Schema.Literal("queue"), parent: Schema.String }),
-]);
+const Msg = Schema.TaggedUnion({ poison: {}, add: { n: Schema.Int }, wait: {}, queue: { parent: Schema.String } });
 
 const wait = Cmd.make("wait", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
 
@@ -158,8 +162,7 @@ const world = Effect.fnUntraced(function* () {
     writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: false } },
     wake: () => null,
   };
-
-  const input = (id: string, m: unknown = { type: "poison" }): Incoming => ({
+  const input = (id: string, m: unknown = Tag.cases.poison.make({})): Incoming => ({
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
@@ -338,7 +341,9 @@ describe("P34 interrupted recovery", () => {
                 w.controls.saved = true;
                 // Accepted before the saved model, as P11 marks one: sent and indexed as placed.
                 yield* Effect.gen(function* () {
-                  const sent = yield* Mailbox.use((m) => m.send(NAME, "saved", { type: "add", n: value }, from()));
+                  const sent = yield* Mailbox.use((m) =>
+                    m.send(NAME, "saved", { ...Tag.cases.add.make({}), n: value }, from()),
+                  );
 
                   if (sent._tag === "placed") {
                     yield* ProcessStore.use((s) =>
@@ -375,7 +380,7 @@ describe("P34 interrupted recovery", () => {
               } else if (cut === "after_checkpoint") {
                 yield* Effect.gen(function* () {
                   const r = yield* ProgramRunner;
-                  yield* r.msg(w.input("good", { type: "add", n: value }));
+                  yield* r.msg(w.input("good", { ...Tag.cases.add.make({}), n: value }));
                   yield* Effect.exit(restart(r, "handoff", "build-b"));
                 }).pipe(Effect.provide(w.layer()));
               } else {
@@ -478,7 +483,9 @@ describe("P34 interrupted recovery", () => {
       w.state.sql.exec("UPDATE process_activity SET activity=?", '{"_tag":"stepping","process":"bad"}');
       w.reopen();
       yield* Effect.gen(function* () {
-        const answer = yield* Effect.exit(ProgramRunner.use((r) => r.msg(w.input("good", { type: "add", n: 1 }))));
+        const answer = yield* Effect.exit(
+          ProgramRunner.use((r) => r.msg(w.input("good", { ...Tag.cases.add.make({}), n: 1 }))),
+        );
         expect(Exit.isFailure(answer)).toBe(true);
         expect(yield* inbox).toEqual([]);
         expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toEqual([]);
@@ -492,7 +499,7 @@ describe("P34 interrupted recovery", () => {
       yield* w.boot;
       yield* Effect.gen(function* () {
         const r = yield* ProgramRunner;
-        const pending = yield* r.msg(w.input("wait", { type: "wait" })).pipe(Effect.forkChild);
+        const pending = yield* r.msg(w.input("wait", Tag.cases.wait.make({}))).pipe(Effect.forkChild);
         yield* Deferred.await(w.entered);
         expect(r.restart, "P34 replacement operation is missing").toBeTypeOf("function");
         yield* r.restart({ id: "replace-wait", build: "build-b" });
@@ -501,7 +508,7 @@ describe("P34 interrupted recovery", () => {
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
         const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
-          Str.includes('"type":"wait_ok"')(JSON.stringify(row.body)),
+          Str.includes('"_tag":"wait_ok"')(JSON.stringify(row.body)),
         );
 
         expect(answers).toHaveLength(1);
@@ -523,7 +530,7 @@ describe("P34 interrupted recovery", () => {
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
               const sessions = yield* SessionManager;
-              const input = w.input("queued", { type: "queue" });
+              const input = w.input("queued", Tag.cases.queue.make({}));
               yield* sessions.record({
                 id: input.envelope.id,
                 by: owner,
@@ -539,14 +546,14 @@ describe("P34 interrupted recovery", () => {
               yield* sessions.delivered(input.envelope.id, A);
               yield* r.msg(input);
               yield* restart(r, "queued-replacement", "build-b");
-              expect(yield* r.msg(w.input("release", { type: "add", n: value }))).toMatchObject({
+              expect(yield* r.msg(w.input("release", { ...Tag.cases.add.make({}), n: value }))).toMatchObject({
                 _tag: "accepted",
               });
               expect(yield* read("facts")).toEqual([]);
               expect(w.controls.owns).toBe(0);
               expect(w.controls.commits).toBe(0);
               expect(
-                Arr.filter(yield* inbox, (row) => Str.includes('"type":"write_err"')(JSON.stringify(row.body))),
+                Arr.filter(yield* inbox, (row) => Str.includes('"_tag":"write_err"')(JSON.stringify(row.body))),
               ).toMatchObject([{ body: { m: { reason: "not_delivered" } } }]);
             }).pipe(Effect.provide(w.layer()));
           }),
@@ -566,7 +573,7 @@ describe("P34 interrupted recovery", () => {
           const answer = yield* Effect.exit(r.msg(w.input("poison")));
           expect(Exit.isFailure(answer)).toBe(true);
           const steps = w.controls.steps;
-          yield* Effect.exit(r.msg(w.input("another", { type: "add", n: 1 })));
+          yield* Effect.exit(r.msg(w.input("another", { ...Tag.cases.add.make({}), n: 1 })));
           expect(yield* inbox).toEqual([]);
           expect(w.controls.commands).toBe(0);
           expect(w.controls.steps).toBe(steps);
@@ -609,7 +616,7 @@ describe("P34 interrupted recovery", () => {
           driver.open(["TypeError", "RangeError", "TypeError"]),
           (s) =>
             Effect.gen(function* () {
-              const original = { type: "poison" };
+              const original = Tag.cases.poison.make({});
 
               for (let n = 1; n <= 3; n++) {
                 const answer = yield* Effect.exit(s.send("poison", original));
@@ -640,7 +647,7 @@ describe("P34 interrupted recovery", () => {
                 { tries: 3, limit: 3, m: "poison", errors: ["TypeError", "RangeError", "TypeError"] },
               ]);
               expect(yield* s.input("poison")).toMatchObject({ envelope: { input: original } });
-              expect(yield* s.send("good", { type: "add", n: 1 })).toMatchObject({ _tag: "accepted" });
+              expect(yield* s.send("good", { ...Tag.cases.add.make({}), n: 1 })).toMatchObject({ _tag: "accepted" });
             }),
           (s) => s.close,
         ),

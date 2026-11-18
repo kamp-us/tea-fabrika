@@ -8,6 +8,14 @@ import { Arbitrary, Schema } from "effect";
 import { Chain, Measurements, SpanRow } from "../Trace.ts";
 import { machine } from "./sink.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  commit_failed: {},
+  committed: {},
+  flush_checked: {},
+});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const HOUR = 3_600_000;
@@ -15,8 +23,7 @@ const HOUR = 3_600_000;
 type Model = typeof machine.model.Type;
 
 type Msg = typeof machine.msg.Type;
-
-type Ended = Extract<Msg, { readonly type: "commit_failed" }>["more"][number];
+type Ended = Extract<Msg, { readonly _tag: "commit_failed" }>["more"][number];
 
 /** The plan's payload, field for field, from the row schemas it keeps. */
 const Payload = Schema.Struct({
@@ -93,11 +100,11 @@ const choose = (model: Model, draw: Draw, pool: ReadonlyArray<Ended>): Msg => {
   const move = moves[draw.pick % moves.length] ?? "flush_checked";
 
   if (move === "committed") {
-    return { type: "committed", hour: hourFrom(model, draw), sized: draw.sized };
+    return { ...Tag.cases.committed.make({}), hour: hourFrom(model, draw), sized: draw.sized };
   }
 
   if (move === "flush_checked") {
-    return { type: "flush_checked" };
+    return Tag.cases.flush_checked.make({});
   }
 
   const offered = [...spansIn(model), ...pool];
@@ -106,8 +113,7 @@ const choose = (model: Model, draw: Draw, pool: ReadonlyArray<Ended>): Msg => {
     { length: draw.size % 4 },
     (_, n) => offered[(draw.pick + n * 7 + draw.size) % offered.length]!,
   );
-
-  return { type: "commit_failed", more };
+  return { ...Tag.cases.commit_failed.make({}), more };
 };
 
 /** What happened, kept apart from the machine: what failed since the last commit, whether a
@@ -119,11 +125,11 @@ type History = {
 };
 
 const remember = (history: History, msg: Msg): History => {
-  if (msg.type === "commit_failed") {
+  if (msg._tag === "commit_failed") {
     return { ...history, held: [...history.held, ...msg.more], unreported: true };
   }
 
-  if (msg.type === "committed") {
+  if (msg._tag === "committed") {
     const newer = msg.sized && msg.hour > history.checked;
 
     return { ...history, held: [], checked: newer ? msg.hour : history.checked };
@@ -172,7 +178,7 @@ describe("T705, the span sink's machine", () => {
       expect(contracts(pool[0]!, 0)).toHaveLength(9);
 
       for (const { msg, after, now } of walk(pool, draws)) {
-        expect(spansIn(after), `held after ${msg.type}`).toEqual(now.held);
+        expect(spansIn(after), `held after ${msg._tag}`).toEqual(now.held);
       }
     },
     props,
@@ -183,16 +189,16 @@ describe("T705, the span sink's machine", () => {
     { walk: Walk },
     ({ walk: { pool, draws } }) => {
       for (const { before, msg, after, was, now } of walk(pool, draws)) {
-        if (msg.type === "flush_checked") {
+        if (msg._tag === "flush_checked") {
           const fails = was.held.length > 0 || was.unreported;
           expect(before._tag !== "clean", "the flush fails from the case it captured").toBe(fails);
           expect(spansIn(before).length, "the flush reports the held count").toBe(was.held.length);
         }
 
         const pending = now.held.length > 0 || now.unreported;
-        expect(after._tag === "clean", `clean after ${msg.type}`).toBe(!pending);
-        expect(after._tag === "failed", `failed after ${msg.type}`).toBe(now.held.length === 0 && now.unreported);
-        expect(after._tag === "reported", `reported after ${msg.type}`).toBe(now.held.length > 0 && !now.unreported);
+        expect(after._tag === "clean", `clean after ${msg._tag}`).toBe(!pending);
+        expect(after._tag === "failed", `failed after ${msg._tag}`).toBe(now.held.length === 0 && now.unreported);
+        expect(after._tag === "reported", `reported after ${msg._tag}`).toBe(now.held.length > 0 && !now.unreported);
       }
     },
     props,

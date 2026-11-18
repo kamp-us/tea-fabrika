@@ -34,6 +34,20 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  rename: {},
+  timer: {},
+  uncheck: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
 
 const RUNS = 100;
@@ -54,12 +68,12 @@ type Item = { readonly name: string; readonly state: State };
 type Model = { readonly items: ReadonlyArray<Item> };
 
 type Msg =
-  | { readonly type: "add"; readonly name: string }
-  | { readonly type: "rename"; readonly name: string; readonly to: string }
-  | { readonly type: "remove"; readonly name: string }
-  | { readonly type: "check"; readonly name: string; readonly note?: string }
-  | { readonly type: "uncheck"; readonly name: string }
-  | { readonly type: "timer"; readonly at: number; readonly arrivedAt: number };
+  | { readonly _tag: "add"; readonly name: string }
+  | { readonly _tag: "rename"; readonly name: string; readonly to: string }
+  | { readonly _tag: "remove"; readonly name: string }
+  | { readonly _tag: "check"; readonly name: string; readonly note?: string }
+  | { readonly _tag: "uncheck"; readonly name: string }
+  | { readonly _tag: "timer"; readonly at: number; readonly arrivedAt: number };
 
 expectTypeOf<Model>().toEqualTypeOf<ChecklistMachine["model"]["Type"]>();
 
@@ -69,7 +83,7 @@ expectTypeOf<State>().toEqualTypeOf<ChecklistMachine["model"]["Type"]["items"][n
 
 expectTypeOf<Msg>().toEqualTypeOf<ChecklistMachine["msg"]["Type"]>();
 
-type Fresh = Exclude<Msg, { readonly type: "timer" }>;
+type Fresh = Exclude<Msg, { readonly _tag: "timer" }>;
 
 /** The plan's one day, written out here so the law does not read it from the code it checks. */
 const DAY = 86_400_000;
@@ -136,7 +150,7 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
   const wake = Arr.some(m.items, (i) => i.state._tag === "new") ? 0 : wakes.length > 0 ? Math.min(...wakes) : clock;
 
   const timer: Msg = {
-    type: "timer",
+    ...Tag.cases.timer.make({}),
     at: wake,
     arrivedAt: move.onTime ? Math.max(wake, clock + move.gap) : clock + move.gap,
   };
@@ -148,18 +162,18 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
     one === undefined
       ? timer
       : move.note === undefined
-        ? { type: "check", name: one }
-        : { type: "check", name: one, note: move.note };
+        ? { ...Tag.cases.check.make({}), name: one }
+        : { ...Tag.cases.check.make({}), name: one, note: move.note };
 
   switch (move.kind) {
     case 0:
     case 1:
     case 2:
-      return fresh === undefined ? timer : { type: "add", name: fresh };
+      return fresh === undefined ? timer : { ...Tag.cases.add.make({}), name: fresh };
     case 3:
-      return name === undefined || fresh === undefined ? timer : { type: "rename", name, to: fresh };
+      return name === undefined || fresh === undefined ? timer : { ...Tag.cases.rename.make({}), name, to: fresh };
     case 4:
-      return name === undefined ? timer : { type: "remove", name };
+      return name === undefined ? timer : { ...Tag.cases.remove.make({}), name };
     case 5:
       return check(at(unchecked, move.pick));
     // A second `check` on a checked item, with a note of its own (847, gap 1).
@@ -168,7 +182,7 @@ const choose = (m: Model, names: ReadonlyArray<string>, move: Move, clock: numbe
     case 6: {
       const one = at(checked, move.pick);
 
-      return one === undefined ? timer : { type: "uncheck", name: one };
+      return one === undefined ? timer : { ...Tag.cases.uncheck.make({}), name: one };
     }
 
     default:
@@ -192,7 +206,7 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 
       for (const move of moves) {
         const msg = choose(model, names, move, clock);
-        clock = msg.type === "timer" ? msg.arrivedAt : clock;
+        clock = msg._tag === "timer" ? msg.arrivedAt : clock;
         msgs.push(msg);
         [model] = applyCell(machine, model, msg);
       }
@@ -202,7 +216,7 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 
 /** The plan's table for slice 1 (A1), as an independent record: the expected next items. */
 const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "add":
       return [...prev.items, { name: msg.name, state: { _tag: "new" } }];
     case "rename":
@@ -238,11 +252,11 @@ const byName = (items: ReadonlyArray<Item>) =>
 const reason = (m: Model, msg: Fresh): string | null => {
   const has = (name: string) => Arr.some(m.items, (i) => i.name === name);
 
-  if (msg.type === "add") {
+  if (msg._tag === "add") {
     return has(msg.name) ? "taken" : null;
   }
 
-  if (msg.type === "rename") {
+  if (msg._tag === "rename") {
     return !has(msg.name) ? "missing" : has(msg.to) ? "taken" : null;
   }
 
@@ -262,13 +276,13 @@ const reached = (machine: ChecklistMachine) =>
         : fc.oneof({ arbitrary: fc.constantFrom(...here), weight: 3 }, { arbitrary: any, weight: 1 });
 
     return fc
-      .record({ type: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
-      .map(({ type, name, to }): { model: Model; msg: Fresh } => ({
+      .record({ kind: fc.constantFrom("add", "rename", "remove", "check", "uncheck"), name, to: any })
+      .map(({ kind, name, to }): { model: Model; msg: Fresh } => ({
         model,
-        msg: Match.value(type).pipe(
-          Match.when("rename", (type) => ({ type, name, to })),
-          Match.when("add", (type) => ({ type, name: to })),
-          Match.orElse((type) => ({ type, name })),
+        msg: Match.value(kind).pipe(
+          Match.when("rename", () => ({ ...Tag.cases.rename.make({}), name, to })),
+          Match.when("add", () => ({ ...Tag.cases.add.make({}), name: to })),
+          Match.orElse((rest) => ({ ...Tag.cases[rest].make({}), name })),
         ),
       }));
   });
@@ -312,16 +326,16 @@ const Broken = fc.constantFrom(
 
 /** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */
 const Bad = fc.oneof(
-  fc.constantFrom("", Str.repeat(81)("x")).map((name) => ({ type: "check", name })),
-  fc.constantFrom("", Str.repeat(81)("x")).map((to) => ({ type: "rename", name: "a", to })),
-  fc.constantFrom("", Str.repeat(MOST + 1)("x")).map((note) => ({ type: "check", name: "a", note })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((name) => ({ ...Tag.cases.check.make({}), name })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((to) => ({ ...Tag.cases.rename.make({}), name: "a", to })),
+  fc.constantFrom("", Str.repeat(MOST + 1)("x")).map((note) => ({ ...Tag.cases.check.make({}), name: "a", note })),
   fc
     .oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string(), { maxLength: 2 }), fc.object())
-    .map((note) => ({ type: "check", name: "a", note })),
+    .map((note) => ({ ...Tag.cases.check.make({}), name: "a", note })),
   fc
     .string({ minLength: 1, maxLength: 12 })
     .filter((t) => !["add", "rename", "remove", "check", "uncheck", "timer"].includes(t))
-    .map((type) => ({ type, name: "a" })),
+    .map((key) => ({ ...keyed(key), name: "a" })),
 );
 
 describe("ticket 806 the checklist's laws", () => {
@@ -336,10 +350,10 @@ describe("ticket 806 the checklist's laws", () => {
           walked(checklistMachine).map((w) => w.msgs),
           ({ prev, msg, next, cmds }) =>
             cmds.length !== 0
-              ? `${msg.type} returned ${cmds.length} Cmds`
+              ? `${msg._tag} returned ${cmds.length} Cmds`
               : byName(next.items) === byName(expected(prev, msg))
                 ? true
-                : `${msg.type} broke the table`,
+                : `${msg._tag} broke the table`,
           { seed: SEED, numRuns: RUNS },
         );
       }),
@@ -458,7 +472,11 @@ describe("ticket 806 the checklist's laws", () => {
 
         fc.assert(
           fc.property(Timed, ({ model, arrivedAt: time, asked }) => {
-            const [next] = applyCell(checklistMachine, model, { type: "timer", at: asked, arrivedAt: time });
+            const [next] = applyCell(checklistMachine, model, {
+              ...Tag.cases.timer.make({}),
+              at: asked,
+              arrivedAt: time,
+            });
 
             for (const [n, item] of model.items.entries()) {
               const now = Option.getOrUndefined(Arr.findFirst(next.items, (i) => i.name === item.name))?.state;
@@ -610,9 +628,9 @@ describe("ticket 806 the checklist's laws", () => {
             // The control: the good Msg it was made from decodes, so the refusal is the one field's.
             expect(
               decodes(
-                bad.type === "rename"
-                  ? { type: "rename", name: "a", to: "b" }
-                  : { type: "check", name: "a", note: "n" },
+                bad._tag === "rename"
+                  ? { ...Tag.cases.rename.make({}), name: "a", to: "b" }
+                  : { ...Tag.cases.check.make({}), name: "a", note: "n" },
               ),
             ).toBe(true);
           }),
@@ -658,11 +676,11 @@ describe("ticket 806 the checklist's laws", () => {
         expectTypeOf(checklist.inputs).not.toHaveProperty("timer");
         expectTypeOf(checklist.inputs).toHaveProperty("items");
 
-        type Check = Extract<typeof checklist.msg.Type, { readonly type: "check" }>;
+        type Check = Extract<typeof checklist.msg.Type, { readonly _tag: "check" }>;
 
         expectTypeOf<Check["note"]>().toEqualTypeOf<string | undefined>();
         // @ts-expect-error A check's note is a string or absent, never a number.
-        const numbered: Check = { type: "check", name: "x", note: 1 };
+        const numbered: Check = { ...Tag.cases.check.make({}), name: "x", note: 1 };
         expect(numbered.name).toBe("x");
       }),
   );

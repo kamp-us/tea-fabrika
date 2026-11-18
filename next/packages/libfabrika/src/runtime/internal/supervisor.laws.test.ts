@@ -6,7 +6,7 @@
 // `defaultPolicy`. Ctx stays `{policy, process, name, build, at}`. The model's only control field is
 // `journal`, one of `idle`, `stepping`, `writing_dead`, `writing_exit`, `writing_down`,
 // `waiting_recovery`, `waiting_start` and `checkpointing`, with the payloads the plan's sketch gives.
-// Completed person restarts are `requests`. Msgs, each with tea's `type`:
+// Completed person restarts are `requests`. Msgs, each with tea's `_tag`:
 //   received {receipt}, compacted {letter, digest}, limited {maxDeliveries: n | null}
 //   begin {process, letter, build, phase, at}, finished {seq}
 //   threw {seq, error, reason, from}, interrupted {process, letter, build, reason, from, at}
@@ -39,6 +39,36 @@ import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-
 import { syncTest } from "../../Testing.ts";
 import { Policy, Supervision, supervisor } from "./supervisor.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  abandoned: {},
+  refused: {},
+  admitted: {},
+  adopted: {},
+  attempt_cleared: {},
+  begin: {},
+  check_threw: {},
+  checkpointed: {},
+  compacted: {},
+  dead_written: {},
+  down_written: {},
+  due: {},
+  exit_written: {},
+  finished: {},
+  healthy: {},
+  interrupted: {},
+  limited: {},
+  poison: {},
+  received: {},
+  reply_written: {},
+  restart_requested: {},
+  started: {},
+  swap_completed: {},
+  swapped: {},
+  threw: {},
+});
+
 const SEED = 119120;
 
 const RUNS = 100;
@@ -52,8 +82,7 @@ const BUILD = "build-a";
 type Model = Supervision;
 
 type Journal = Model["journal"];
-
-type Msg = { readonly type: string; readonly [key: string]: unknown };
+type Msg = { readonly _tag: string; readonly [key: string]: unknown };
 
 const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 /** A process no fold creates. */
@@ -183,7 +212,7 @@ const reasonFor = (phase: "fresh" | "saved", error: string) =>
 
 const receiptFor = (letter: string, process: string) => ({
   letter,
-  input: { id: letter, m: { type: "poison", key: letter } },
+  input: { id: letter, m: { ...Tag.cases.poison.make({}), key: letter } },
   digest: `sha256:${letter}`,
   errors: [],
   tries: 0,
@@ -233,17 +262,21 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   return [
     ...base,
-    { name: "swapped", weight: 3, msg: { type: "swapped", process: own, build } },
-    { name: "swapped_foreign", msg: { type: "swapped", process: FOREIGN, build } },
+    { name: "swapped", weight: 3, msg: { ...Tag.cases.swapped.make({}), process: own, build } },
+    { name: "swapped_foreign", msg: { ...Tag.cases.swapped.make({}), process: FOREIGN, build } },
   ];
 };
 
 const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
   const j = w.model.journal;
   const meta = from();
-  const old = Arr.filter(w.sent, (m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
+  const old = Arr.filter(w.sent, (m) => COMPLETIONS.has(m._tag) && !sameWork(j, m));
   const stale = old.length === 0 ? [] : [{ name: "stale", msg: old[cell.pick % old.length]!, stale: true }];
-  const later = { name: "advance", msg: { type: "healthy", at: w.at + cell.gap }, apply: () => (w.at += cell.gap) };
+  const later = {
+    name: "advance",
+    msg: { ...Tag.cases.healthy.make({}), at: w.at + cell.gap },
+    apply: () => (w.at += cell.gap),
+  };
 
   switch (j._tag) {
     case "idle": {
@@ -251,7 +284,13 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
       const receipt = Option.getOrUndefined(Arr.findFirst(w.model.receipts, (r) => r.letter === letter));
       const fresh: Array<Move> =
         receipt === undefined
-          ? [{ name: "received", weight: 4, msg: { type: "received", receipt: receiptFor(letter, j.process) } }]
+          ? [
+              {
+                name: "received",
+                weight: 4,
+                msg: { ...Tag.cases.received.make({}), receipt: receiptFor(letter, j.process) },
+              },
+            ]
           : [];
 
       const request = `restart-${cell.pick % 3}`;
@@ -265,7 +304,14 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
               {
                 name: "begin_fresh",
                 weight: 6,
-                msg: { type: "begin", process: j.process, letter, build: w.model.build, phase: "fresh", at: w.at },
+                msg: {
+                  ...Tag.cases.begin.make({}),
+                  process: j.process,
+                  letter,
+                  build: w.model.build,
+                  phase: "fresh",
+                  at: w.at,
+                },
               },
             ]
           : []),
@@ -273,7 +319,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
           name: "begin_saved",
           weight: 2,
           msg: {
-            type: "begin",
+            ...Tag.cases.begin.make({}),
             process: j.process,
             letter: `saved-${letter}`,
             build: w.model.build,
@@ -282,11 +328,11 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
           },
         },
         later,
-        { name: "healthy", msg: { type: "healthy", at: w.at } },
+        { name: "healthy", msg: { ...Tag.cases.healthy.make({}), at: w.at } },
         {
           name: "interrupted_activity",
           msg: {
-            type: "interrupted",
+            ...Tag.cases.interrupted.make({}),
             process: j.process,
             letter: `marker-${letter}`,
             build: w.model.build,
@@ -298,7 +344,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         {
           name: "restart",
           msg: {
-            type: "restart_requested",
+            ...Tag.cases.restart_requested.make({}),
             id: request,
             build: w.requests.get(request) ?? `build-${cell.pick % 2}`,
             live: w.live,
@@ -312,10 +358,17 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
           : [
               {
                 name: "compacted",
-                msg: { type: "compacted", letter: compactable.letter, digest: `sha256:${compactable.letter}` },
+                msg: {
+                  ...Tag.cases.compacted.make({}),
+                  letter: compactable.letter,
+                  digest: `sha256:${compactable.letter}`,
+                },
               },
             ]),
-        { name: "limited", msg: { type: "limited", maxDeliveries: cell.gap % 3 === 0 ? null : 1 + (cell.gap % 4) } },
+        {
+          name: "limited",
+          msg: { ...Tag.cases.limited.make({}), maxDeliveries: cell.gap % 3 === 0 ? null : 1 + (cell.gap % 4) },
+        },
         ...stale,
       ];
     }
@@ -324,16 +377,22 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
       const seq = j.attempt.seq;
 
       return [
-        { name: "finished", msg: { type: "finished", seq } },
+        { name: "finished", msg: { ...Tag.cases.finished.make({}), seq } },
         {
           name: "threw",
           weight: 4,
-          msg: { type: "threw", seq, error: cell.error, reason: reasonFor(j.attempt.phase, cell.error), from: meta },
+          msg: {
+            ...Tag.cases.threw.make({}),
+            seq,
+            error: cell.error,
+            reason: reasonFor(j.attempt.phase, cell.error),
+            from: meta,
+          },
         },
         {
           name: "interrupted_attempt",
           msg: {
-            type: "interrupted",
+            ...Tag.cases.interrupted.make({}),
             process: j.attempt.process,
             letter: `marker-${cell.pick}`,
             build: j.attempt.build,
@@ -347,18 +406,22 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     }
 
     case "swapping":
-      return [{ name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } }, ...stale];
+      return [{ name: "swap_completed", msg: { ...Tag.cases.swap_completed.make({}), load: j.change.load } }, ...stale];
     case "checking":
       return [
         {
           name: "admitted",
-          msg: { type: "admitted", seq: j.attempt.seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) },
+          msg: {
+            ...Tag.cases.admitted.make({}),
+            seq: j.attempt.seq,
+            receipt: receiptFor(j.attempt.letter, j.attempt.process),
+          },
         },
         {
           name: "check_threw",
           weight: 4,
           msg: {
-            type: "check_threw",
+            ...Tag.cases.check_threw.make({}),
             seq: j.attempt.seq,
             receipt: receiptFor(j.attempt.letter, j.attempt.process),
             error: cell.error,
@@ -369,11 +432,14 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         ...stale,
       ];
     case "writing_reply":
-      return [{ name: "reply_written", msg: { type: "reply_written", seq: j.attempt.seq } }, ...stale];
+      return [{ name: "reply_written", msg: { ...Tag.cases.reply_written.make({}), seq: j.attempt.seq } }, ...stale];
     case "clearing_attempt":
-      return [{ name: "attempt_cleared", msg: { type: "attempt_cleared", seq: j.attempt.seq } }, ...stale];
+      return [
+        { name: "attempt_cleared", msg: { ...Tag.cases.attempt_cleared.make({}), seq: j.attempt.seq } },
+        ...stale,
+      ];
     case "writing_dead":
-      return [{ name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } }, ...stale];
+      return [{ name: "dead_written", msg: { ...Tag.cases.dead_written.make({}), seq: j.failure.seq } }, ...stale];
     case "writing_exit": {
       // The exit lands 0 to 50 ms after the throw, so a wait counted from the throw shows.
       const late = cell.gap % 51;
@@ -382,7 +448,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         {
           name: "exit_written",
           msg: {
-            type: "exit_written",
+            ...Tag.cases.exit_written.make({}),
             process: j.process,
             restarts: [...w.restarts],
             at: w.at + late,
@@ -398,14 +464,22 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     }
 
     case "writing_down":
-      return [{ name: "down_written", msg: { type: "down_written", process: j.recovery.process } }, ...stale];
+      return [
+        { name: "down_written", msg: { ...Tag.cases.down_written.make({}), process: j.recovery.process } },
+        ...stale,
+      ];
     case "waiting_recovery":
       return [
         later,
-        { name: "due", msg: { type: "due", at: w.at, program: PROGRAM, from: meta } },
+        { name: "due", msg: { ...Tag.cases.due.make({}), at: w.at, program: PROGRAM, from: meta } },
         {
           name: "adopted",
-          msg: { type: "adopted", process: pid(w.pids + 1), build: BUILD, restarts: [...w.restarts, w.at] },
+          msg: {
+            ...Tag.cases.adopted.make({}),
+            process: pid(w.pids + 1),
+            build: BUILD,
+            restarts: [...w.restarts, w.at],
+          },
         },
         ...stale,
       ];
@@ -416,13 +490,24 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
       return [
         later,
         ready
-          ? { name: "started", msg: { type: "started", id: j.request.id, process: pid(w.pids + 1), at: w.at } }
-          : { name: "started_early", msg: { type: "started", id: j.request.id, process: pid(w.pids + 1), at: w.at } },
+          ? {
+              name: "started",
+              msg: { ...Tag.cases.started.make({}), id: j.request.id, process: pid(w.pids + 1), at: w.at },
+            }
+          : {
+              name: "started_early",
+              msg: { ...Tag.cases.started.make({}), id: j.request.id, process: pid(w.pids + 1), at: w.at },
+            },
         ...(j.timing._tag === "scheduled"
           ? [
               {
                 name: "adopted",
-                msg: { type: "adopted", process: pid(w.pids + 1), build: BUILD, restarts: [...w.restarts, w.at] },
+                msg: {
+                  ...Tag.cases.adopted.make({}),
+                  process: pid(w.pids + 1),
+                  build: BUILD,
+                  restarts: [...w.restarts, w.at],
+                },
               },
             ]
           : []),
@@ -434,7 +519,13 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
       return [
         {
           name: "checkpointed",
-          msg: { type: "checkpointed", after: j.after, process: j.process, restarts: [...w.restarts], at: w.at },
+          msg: {
+            ...Tag.cases.checkpointed.make({}),
+            after: j.after,
+            process: j.process,
+            restarts: [...w.restarts],
+            at: w.at,
+          },
         },
         ...stale,
       ];
@@ -697,7 +788,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             const seq = before.journal.attempt.seq;
 
             const again = step(after, {
-              type: "interrupted",
+              ...Tag.cases.interrupted.make({}),
               process: before.journal.attempt.process,
               letter: before.journal.attempt.letter,
               build: before.journal.attempt.build,
@@ -707,7 +798,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             });
 
             const threw = step(after, {
-              type: "threw",
+              ...Tag.cases.threw.make({}),
               seq,
               error: "TypeError",
               reason: reasonFor("fresh", "TypeError"),
@@ -893,7 +984,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
         const send = (msg: Msg): Model => {
           const after = step(model, msg);
-          expect(after, `${msg.type} from ${model.journal._tag} moved the journal`).not.toEqual(model);
+          expect(after, `${msg._tag} from ${model.journal._tag} moved the journal`).not.toEqual(model);
           model = after;
 
           return after;
@@ -910,15 +1001,21 @@ describe("P34c slice 2: one saved recovery journal", () => {
           const process = model.journal._tag === "idle" ? model.journal.process : A;
 
           if (!tries.has(letter)) {
-            send({ type: "received", receipt: receiptFor(letter, process) });
+            send({ ...Tag.cases.received.make({}), receipt: receiptFor(letter, process) });
             tries.set(letter, 0);
           }
 
           at += cycle.alive;
-          send({ type: "begin", process, letter, build: model.build, phase: "fresh", at });
+          send({ ...Tag.cases.begin.make({}), process, letter, build: model.build, phase: "fresh", at });
           const seq = model.seq;
-          send({ type: "admitted", seq, receipt: receiptFor(letter, process) });
-          send({ type: "threw", seq, error: cycle.error, reason: reasonFor("fresh", cycle.error), from: from() });
+          send({ ...Tag.cases.admitted.make({}), seq, receipt: receiptFor(letter, process) });
+          send({
+            ...Tag.cases.threw.make({}),
+            seq,
+            error: cycle.error,
+            reason: reasonFor("fresh", cycle.error),
+            from: from(),
+          });
           crashes++;
           tries.set(letter, tries.get(letter)! + 1);
 
@@ -927,12 +1024,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
               _tag: "writing_dead",
             });
             seen.add(`dead:${p.maxDeliveries}`);
-            send({ type: "dead_written", seq });
+            send({ ...Tag.cases.dead_written.make({}), seq });
           }
 
           expect(model.journal._tag).toBe("writing_exit");
           at += cycle.exit;
-          send({ type: "exit_written", process, restarts: [...restarts], at, program: PROGRAM });
+          send({ ...Tag.cases.exit_written.make({}), process, restarts: [...restarts], at, program: PROGRAM });
           const earliest = at + Math.min(p.backoff.minMs * 2 ** (crashes - 1), p.backoff.maxMs);
 
           if (crashes === p.intensity + 1) {
@@ -960,9 +1057,9 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
           at = j.timing.until + cycle.late;
           pids++;
-          send({ type: "started", id: j.request.id, process: pid(pids), at });
+          send({ ...Tag.cases.started.make({}), id: j.request.id, process: pid(pids), at });
           restarts.push(at);
-          send({ type: "checkpointed", after: process, process: pid(pids), restarts: [...restarts], at });
+          send({ ...Tag.cases.checkpointed.make({}), after: process, process: pid(pids), restarts: [...restarts], at });
         }
 
         expect.unreachable(`the tape of ${cycles.length} crashes ended before the brake`);
@@ -991,7 +1088,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         const w = walk(p, tape, (before, move, after) => {
           expect(
             move.stale === true && canon(after) !== canon(before),
-            `a stale ${move.msg.type} changed the journal`,
+            `a stale ${move.msg._tag} changed the journal`,
           ).toBe(false);
 
           if (move.stale === true) {
@@ -1025,7 +1122,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             expect(valid(after), `reached ${after.journal._tag}`).toBe(true);
             expect(decodes(roundTrip(after))).toBe(true);
 
-            if (move.msg.type === "swapped") {
+            if (move.msg._tag === "swapped") {
               const j = before.journal;
 
               if (j._tag === "idle" && j.process === move.msg.process) {
@@ -1164,7 +1261,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 
 /** Whether a completion names the work the journal holds now. */
 const sameWork = (j: Journal, msg: Msg): boolean => {
-  switch (msg.type) {
+  switch (msg._tag) {
     case "finished":
       return j._tag === "stepping" && j.attempt.seq === msg.seq;
     case "dead_written":
@@ -1217,7 +1314,7 @@ describe("P13 A11 saved admission work", () => {
 
         if (j._tag === "idle") {
           send({
-            type: "begin",
+            ...Tag.cases.begin.make({}),
             process: j.process,
             letter: `fresh-${++letters}`,
             build: BUILD,
@@ -1225,15 +1322,15 @@ describe("P13 A11 saved admission work", () => {
             at: cell.gap,
           });
         } else if (j._tag === "checking") {
-          const choices = ["admitted", "refused", "abandoned"];
+          const choices = ["admitted", "refused", "abandoned"] as const;
           const move = choices[cell.move % choices.length]!;
           const seq = j.attempt.seq;
 
           if (move === "admitted") {
-            send({ type: move, seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) });
+            send({ ...Tag.cases[move].make({}), seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) });
           } else if (move === "refused") {
             send({
-              type: move,
+              ...Tag.cases[move].make({}),
               seq,
               reply: {
                 name: NAME,
@@ -1246,14 +1343,14 @@ describe("P13 A11 saved admission work", () => {
               },
             });
           } else {
-            send({ type: move, seq });
+            send({ ...Tag.cases[move].make({}), seq });
           }
         } else if (j._tag === "stepping") {
-          send({ type: cell.move % 2 === 0 ? "finished" : "abandoned", seq: j.attempt.seq });
+          send({ ...(cell.move % 2 === 0 ? Tag.cases.finished : Tag.cases.abandoned).make({}), seq: j.attempt.seq });
         } else if (j._tag === "writing_reply") {
-          send({ type: "reply_written", seq: j.attempt.seq });
+          send({ ...Tag.cases.reply_written.make({}), seq: j.attempt.seq });
         } else if (j._tag === "clearing_attempt") {
-          send({ type: "attempt_cleared", seq: j.attempt.seq });
+          send({ ...Tag.cases.attempt_cleared.make({}), seq: j.attempt.seq });
         }
       }
 
@@ -1269,11 +1366,11 @@ describe("P13 A11 saved admission work", () => {
           const before = trace.prev;
           const after = trace.next;
           const message = trace.msg;
-          reached.add(message.type);
+          reached.add(message._tag);
           expect(after.crashes).toBe(0);
           expect(after.observations).toEqual([]);
 
-          if (message.type === "begin") {
+          if (message._tag === "begin") {
             expect(after.journal).toMatchObject({
               _tag: "checking",
               attempt: { letter: message.letter, phase: "fresh" },
@@ -1281,7 +1378,7 @@ describe("P13 A11 saved admission work", () => {
             expect(after.receipts).toEqual(before.receipts);
           }
 
-          if (message.type === "admitted") {
+          if (message._tag === "admitted") {
             expect(after.journal).toMatchObject({ _tag: "stepping", attempt: { seq: message.seq } });
             expect(
               Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === message.receipt.letter))?.input,
@@ -1293,7 +1390,7 @@ describe("P13 A11 saved admission work", () => {
             ).toBe(false);
           }
 
-          if (message.type === "refused") {
+          if (message._tag === "refused") {
             expect(after.journal).toMatchObject({ _tag: "writing_reply", reply: message.reply });
             expect(after.receipts).toEqual(before.receipts);
           }
@@ -1303,7 +1400,7 @@ describe("P13 A11 saved admission work", () => {
             after.journal._tag === "writing_reply" ||
             after.journal._tag === "clearing_attempt"
           ) {
-            expect(step(after, { type: "finished", seq: after.journal.attempt.seq })).toEqual(after);
+            expect(step(after, { ...Tag.cases.finished.make({}), seq: after.journal.attempt.seq })).toEqual(after);
           }
 
           if ("attempt" in after.journal) {

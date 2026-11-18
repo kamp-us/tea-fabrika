@@ -7,12 +7,16 @@ import { expectTypeOf } from "vitest";
 import { ProgramLoader } from "./Entry.ts";
 import { type Admission, type Prepared, type Stepper, Input, Program, Write } from "./Program.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  foreign: {},
+});
+
 const Model = Schema.Struct({ count: Schema.Int });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("reset") }),
-]);
+const Msg = Schema.TaggedUnion({ add: { n: Schema.Int }, reset: {} });
 
 const save = Cmd.make("save", {
   input: Schema.Struct({ count: Schema.Int }),
@@ -115,7 +119,7 @@ function authoringTypeErrors() {
 
   const wrongPayload = {
     description: "Add",
-    schema: Schema.Struct({ type: Schema.Literal("reset") }),
+    schema: Schema.TaggedStruct("reset", {}),
     personOnly: true,
   };
 
@@ -128,10 +132,10 @@ function authoringTypeErrors() {
     ...fields,
     view: (m) => m,
     refuse: (m, msg) =>
-      msg.type === "add" && m.count + msg.n > 10 ? { reason: "limit", now: m.count, most: 10 } : null,
+      msg._tag === "add" && m.count + msg.n > 10 ? { reason: "limit", now: m.count, most: 10 } : null,
   });
   // @ts-expect-error Refusal parameters cannot replace the machine's fresh Msg.
-  Program.make({ ...fields, view: (m) => m, refuse: (_m, _msg: { type: "other" }) => null });
+  Program.make({ ...fields, view: (m) => m, refuse: (_m, _msg: { _tag: "other" }) => null });
   // @ts-expect-error Refusal parameters cannot replace the machine's model.
   Program.make({ ...fields, view: (m) => m, refuse: (_m: { other: number }) => null });
   // @ts-expect-error A refusal's reason is text.
@@ -234,7 +238,7 @@ function authoringTypeErrors() {
   machine.model = Model;
   // @ts-expect-error Schema fields on the tea machine are readonly.
   machine.msg = Msg;
-  const fresh: typeof machine.msg.Type = { type: "add", n: 1 };
+  const fresh: typeof machine.msg.Type = { ...Tag.cases.add.make({}), n: 1 };
   expectTypeOf(fresh).toExtend<typeof Msg.Type>();
   // @ts-expect-error The exposed msg schema excludes settled replies.
   const reply: typeof machine.msg.Type = save.ok(save({ count: 1 }), { stored: 1 }, 1);
@@ -259,8 +263,7 @@ function admissionTypeErrors(pure: Stepper, admitted: Admission) {
       data: metadata,
       select: (msg) => {
         expectTypeOf(msg).toEqualTypeOf<typeof Msg.Type>();
-
-        return { type: msg.type, total: msg.type === "add" ? msg.n : 0 };
+        return { type: msg._tag, total: msg._tag === "add" ? msg.n : 0 };
       },
     },
   });
@@ -270,7 +273,7 @@ function admissionTypeErrors(pure: Stepper, admitted: Admission) {
     audit: {
       data: metadata,
       // @ts-expect-error The audit selector consumes this machine's fresh Msg.
-      select: (_msg: { type: "foreign" }) => ({ type: "foreign", total: 0 }),
+      select: (_msg: { _tag: "foreign" }) => ({ ...Tag.cases.foreign.make({}), total: 0 }),
     },
   });
   Program.make({
@@ -279,7 +282,7 @@ function admissionTypeErrors(pure: Stepper, admitted: Admission) {
     audit: {
       data: metadata,
       // @ts-expect-error The selected value must match the declared metadata schema.
-      select: () => ({ type: "add", total: "invalid" }),
+      select: () => ({ ...Tag.cases.add.make({}), total: "invalid" }),
     },
   });
 

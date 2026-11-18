@@ -18,11 +18,17 @@ import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 import { Gone, Unreachable, WatcherManagerError } from "./WatcherManager.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  other: {},
+});
+
 const NAME = "watch-counter:1";
 
 const Model = Schema.Struct({ count: Schema.Int });
-
-const Msg = Schema.Struct({ type: Schema.Literal("inc") });
+const Msg = Schema.TaggedStruct("inc", {});
 
 const program = {
   name: "watch-counter",
@@ -169,7 +175,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
         id: InputId.make("input_0000000000e008000000000001"),
         by: owner,
         arrivedAt: 0,
-        input: { type: "inc" },
+        input: Tag.cases.inc.make({}),
       },
       sentAt: meta.sentAt,
       seen: 0,
@@ -243,7 +249,7 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
 
     if (gaps) {
       for (let gap = 0; gap <= step.pick % 4; gap++) {
-        yield* live.mailbox.send("unrelated:1", `gap-${i}-${gap}`, { type: "other" }, meta).pipe(Effect.orDie);
+        yield* live.mailbox.send("unrelated:1", `gap-${i}-${gap}`, Tag.cases.other.make({}), meta).pipe(Effect.orDie);
       }
 
       yield* rebuild();

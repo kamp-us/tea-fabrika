@@ -68,6 +68,13 @@ import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  inc: {},
+});
+
 const { ROOT, FIXTURE } = Effect.runSync(
   Path.Path.use((path) => {
     const root = path.resolve(import.meta.dirname, "../../../..");
@@ -132,7 +139,7 @@ const press = Effect.fnUntraced(function* (
   key: typeof TestKey.Type,
   pid: string,
   letter: string,
-  m: { readonly type: string; readonly name?: string },
+  m: { readonly _tag: string; readonly name?: string },
 ) {
   const id = yield* identity(key);
   const url: string = instance.url;
@@ -206,7 +213,7 @@ const press = Effect.fnUntraced(function* (
 
 /** Sends a counter one `inc` through `press`, and answers the count its view shows after it. */
 const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: string) =>
-  press(instance, key, pid, letter, { type: "inc" }).pipe(
+  press(instance, key, pid, letter, Tag.cases.inc.make({})).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
         Schema.Struct({ result: Schema.Struct({ view: Schema.Struct({ count: Schema.Finite }) }) }),
@@ -217,7 +224,7 @@ const inc = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
 
 /** Adds the item `name` to a checklist through `press`, and answers the item names its view shows. */
 const add = (instance: any, key: typeof TestKey.Type, pid: string, letter: string, name: string) =>
-  press(instance, key, pid, letter, { type: "add", name }).pipe(
+  press(instance, key, pid, letter, { ...Tag.cases.add.make({}), name }).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
         Schema.Struct({

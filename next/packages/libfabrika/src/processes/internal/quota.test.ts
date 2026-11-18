@@ -33,7 +33,7 @@ describe("P34c quota machine", () => {
 
           if (move === "clock") {
             at = [previous + 59_999, previous + 60_000, Math.max(0, at - 1)][c.pick % 3]!;
-            const msg = { type: "advance", at } as const;
+            const msg = Quota.Msg.cases.advance.make({ at });
             msgs.push(msg);
             model = applyCell(machine, model, msg)[0];
             continue;
@@ -50,14 +50,13 @@ describe("P34c quota machine", () => {
 
           const writes = move === "replace" && delta === 0 ? 0 : 1;
           const admitted = window + writes <= limits.writes && bytes + delta <= limits.bytes;
-          const msg = {
-            type: "propose",
+          const msg = Quota.Msg.cases.propose.make({
             at,
             operation: `op:${index}`,
             writes,
             bytes: delta,
             ahead: { writes: 0, bytes: 0 },
-          } as const;
+          });
           msgs.push(msg);
           const next = applyCell(machine, model, msg)[0];
           expect(next.decision._tag).toBe(admitted ? "admitted" : "refused");
@@ -110,7 +109,11 @@ describe("P34c quota machine", () => {
           if (model._tag === "reserve_fault") {
             const fault = model.fault;
             const operation = model.operation;
-            const advanced = applyCell(machine, model, { type: "advance", at: at + 60_001 + (c.amount % 100) })[0];
+            const advanced = applyCell(
+              machine,
+              model,
+              Quota.Msg.cases.advance.make({ at: at + 60_001 + (c.amount % 100) }),
+            )[0];
             expect(advanced._tag).toBe("reserve_fault");
             expect(advanced.fault).toEqual(fault);
             expect(advanced.operation).toEqual(operation);
@@ -126,14 +129,17 @@ describe("P34c quota machine", () => {
           const byteFault = cells[0]!.pick % 2 === 0;
           const growth = fail && byteFault ? limits.bytes + 1 : limits.bytes;
           const writes = fail && !byteFault ? limits.writes + 1 : 1;
-          const proposed = applyCell<Quota.Model, Quota.Msg, never>(machine, model, {
-            type: "propose",
-            at,
-            operation: `recovery:${n}`,
-            writes,
-            bytes: growth,
-            ahead: { writes: 0, bytes: 0 },
-          })[0];
+          const proposed = applyCell<Quota.Model, Quota.Msg, never>(
+            machine,
+            model,
+            Quota.Msg.cases.propose.make({
+              at,
+              operation: `recovery:${n}`,
+              writes,
+              bytes: growth,
+              ahead: { writes: 0, bytes: 0 },
+            }),
+          )[0];
 
           if (!fail) {
             totalBytes += growth;
@@ -183,15 +189,18 @@ describe("P34c quota machine", () => {
         for (const [n, c] of cells.entries()) {
           const message = `accepted:${n}:${c.amount}`;
           accepted.push(message);
-          const next = applyCell(machine, model, {
-            type: "propose",
-            at: 1,
-            operation: `replay:${n}`,
-            writes: limits.message.writes,
-            bytes: limits.message.bytes,
-            ahead: { writes: 0, bytes: 0 },
-            replay: { message, recovery: "restart:1" },
-          })[0];
+          const next = applyCell(
+            machine,
+            model,
+            Quota.Msg.cases.propose.make({
+              at: 1,
+              operation: `replay:${n}`,
+              writes: limits.message.writes,
+              bytes: limits.message.bytes,
+              ahead: { writes: 0, bytes: 0 },
+              replay: { message, recovery: "restart:1" },
+            }),
+          )[0];
           expect(next.decision._tag).toBe("admitted");
           writes += limits.message.writes;
           bytes += limits.message.bytes;
@@ -203,25 +212,31 @@ describe("P34c quota machine", () => {
         }
 
         // Spend the entire fixed allowance, then try to spend an earlier message's room again.
-        model = applyCell(machine, model, {
-          type: "propose",
-          at: 1,
-          operation: "fixed",
-          writes: limits.writes,
-          bytes: limits.bytes,
-          ahead: { writes: 0, bytes: 0 },
-        })[0];
+        model = applyCell(
+          machine,
+          model,
+          Quota.Msg.cases.propose.make({
+            at: 1,
+            operation: "fixed",
+            writes: limits.writes,
+            bytes: limits.bytes,
+            ahead: { writes: 0, bytes: 0 },
+          }),
+        )[0];
         expect(model.decision._tag).toBe("admitted");
         const message = accepted[cells[0]!.pick % accepted.length]!;
-        const twice = applyCell(machine, model, {
-          type: "propose",
-          at: 1,
-          operation: "replay:twice",
-          writes: 1,
-          bytes: 1,
-          ahead: { writes: 0, bytes: 0 },
-          replay: { message, recovery: "restart:1" },
-        })[0];
+        const twice = applyCell(
+          machine,
+          model,
+          Quota.Msg.cases.propose.make({
+            at: 1,
+            operation: "replay:twice",
+            writes: 1,
+            bytes: 1,
+            ahead: { writes: 0, bytes: 0 },
+            replay: { message, recovery: "restart:1" },
+          }),
+        )[0];
         expect(twice._tag).toBe("reserve_fault");
 
         if (twice._tag !== "reserve_fault") {
@@ -246,14 +261,17 @@ describe("P34c quota machine", () => {
         for (const [n, c] of cells.entries()) {
           const delta = bytes > 0 && c.pick % 3 === 0 ? -Math.min(bytes, c.amount % (bytes + 1)) : c.amount % 1000;
           const unchanged = delta === 0;
-          const next = applyCell(machine, model, {
-            type: "propose",
-            at: 1,
-            operation: `ordinary:${n}`,
-            writes: unchanged ? 0 : 1,
-            bytes: delta,
-            ahead: { writes: 0, bytes: 0 },
-          })[0];
+          const next = applyCell(
+            machine,
+            model,
+            Quota.Msg.cases.propose.make({
+              at: 1,
+              operation: `ordinary:${n}`,
+              writes: unchanged ? 0 : 1,
+              bytes: delta,
+              ahead: { writes: 0, bytes: 0 },
+            }),
+          )[0];
           bytes += delta;
 
           if (!unchanged) {

@@ -43,6 +43,12 @@ import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  comment: {},
+});
+
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
 
 const URL = "https://fabrika.test/entry/project-socket";
@@ -250,7 +256,7 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
           {
             msg: controls.audit === "decode" ? Schema.Struct({ missing: Schema.String }) : Input,
             audit: {
-              data: Schema.Struct({ type: Schema.Literal("comment") }),
+              data: Schema.TaggedStruct("comment", {}),
               select: () => {
                 const m = Schema.decodeSync(Input)(message);
 
@@ -258,7 +264,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
                   throw new Error(m.text);
                 }
 
-                return { type: controls.audit === "output" ? m.text : "comment" };
+                return controls.audit === "output"
+                  ? Schema.TaggedStruct(m.text, {}).make({})
+                  : Tag.cases.comment.make({});
               },
             },
           },
@@ -444,7 +452,9 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   expect(rows.length).toBeGreaterThan(0);
                   expect(
                     yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
-                  ).toMatchObject({ input: { type: "comment" } });
+                  ).toMatchObject({
+                    input: Tag.cases.comment.make({}),
+                  });
                 }
               }
             }).pipe(Effect.provide(w.layer));

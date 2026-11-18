@@ -50,6 +50,12 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const PROJECT = "desk-s2a";
@@ -336,7 +342,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               const sent = await socket.call("process.send", {
                 pid: tezgah.pid,
                 letter: `desk-s2a-l12-${++letters}`,
-                m: { type: "did", via: { _tag: "key", keys: "ctrl+b %" }, ...m },
+                m: { ...Tag.cases.did.make({}), via: { _tag: "key", keys: "ctrl+b %" }, ...m },
                 sentAt: SENT,
                 seen: 0,
               });

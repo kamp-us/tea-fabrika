@@ -25,10 +25,14 @@ const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("throw") }),
-]);
+const Msg = Schema.TaggedUnion({
+  add: { n: Schema.Int },
+  throw: {},
+});
+
+const add = (n: number) => Msg.cases.add.make({ n });
+/** The error `save` declares, made by its schema (0562). */
+const Disk = Schema.TaggedStruct("disk", {});
 
 const save = Cmd.make("save", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -57,7 +61,7 @@ const authoring = () => ({
   state: { v: 1, upgrades: [] },
   view: (s: Model) => ({ count: s.count }),
   refuse: (s: Model, m: typeof Msg.Type) =>
-    m.type === "add" && s.count + m.n > 10 ? { reason: "limit", now: s.count, most: 10 } : null,
+    Msg.guards.add(m) && s.count + m.n > 10 ? { reason: "limit", now: s.count, most: 10 } : null,
   inputs: {},
   outputs: {},
   writes: {},
@@ -97,8 +101,7 @@ describe("P13 A7 split checking and update", () => {
           }),
           refuse: (s, m) => {
             checks++;
-
-            return refuseAll || (m.type === "add" && s.count + m.n > 10)
+            return refuseAll || (Msg.guards.add(m) && s.count + m.n > 10)
               ? { reason: "limit", now: s.count, most: 10 }
               : null;
           },
@@ -132,14 +135,15 @@ describe("P13 A7 split checking and update", () => {
             expect(updates).toBe(before.updates + 1);
             expect(folded).toMatchObject({
               _tag: "stepped",
-              model: { count: current.count + (msg.type === "add" ? msg.n : 0) },
+              model: { count: current.count + (Msg.guards.add(msg) ? msg.n : 0) },
             });
             refuseAll = false;
             continue;
           }
 
-          const addition = { type: "add", n: move === "refuse" ? 11 - current.count : -1 - (entropy % 5) } as const;
-          const msg = move === "invalid" ? { type: "save_ok", value: 1 } : addition;
+          const addition = add(move === "refuse" ? 11 - current.count : -1 - (entropy % 5));
+          // An answer is never a fresh input, so it is invalid here.
+          const msg = move === "invalid" ? save.ok(save({ n: 1 }), 1, 0) : addition;
           const checked = pure.fresh(current, msg);
           expect(Result.isSuccess(checked)).toBe(true);
           expect({ updates, views, wakes }).toEqual({
@@ -374,8 +378,7 @@ const declarations = fc
   })
   .map(({ name, v, initial, ...data }) => {
     const modelSchema = Schema.Struct(Model.fields);
-    const msgSchema = Schema.Union(Msg.members);
-
+    const msgSchema = Schema.Union([Msg.cases.add, Msg.cases.throw]);
     return {
       ...data,
       initial,
@@ -701,43 +704,56 @@ describe("P11 program contract and p22 refusal", () => {
       expect(() => Schema.decodeUnknownSync(Program.schema)({ ...spec(), ...broken })).toThrow();
     }
   });
-  it.effect.prop(
-    "plant, let settled bypass program.msg: only fold accepts checked Cmd replies",
-    { generated: Schema.Int },
-    ({ generated }) =>
-      Effect.forEach(
-        [3, generated],
-        (value) =>
-          Effect.sync(() => {
-            const p = load(spec());
-            const before = { count: 2, replies: 0 };
-            const ok = { type: "save_ok", cmd: save({ n: value }), value, at: 42 };
-            const err = { type: "save_err", cmd: save({ n: value }), error: { _tag: "disk" }, at: 42 };
+  // K3 (ticket 1061, slice 2): an answer made by tea's own Cmd def is keyed `_tag`, and so is its
+  // `cmd`; the saved-letter check accepts it, and refuses the same answer with either key still `type`.
+  // Plants: (a) tea's `mint` and `defineCmd` answers keyed `type`; (b) tea's Cmd build keyed `type`, so
+  // the inner `cmd` is wrong; (c) Program's `settled` reading a key as `type`.
+  it("K3 plant, let settled bypass program.msg: only fold accepts tea's own answers, keyed _tag", () => {
+    const Other = Schema.TaggedStruct("other", { n: Schema.Int });
+    /** The same answer with its key renamed to the old `type`, as a raw saved row would hold it. */
+    const typed = (reply: { readonly _tag: string }) => {
+      const { _tag, ...rest } = reply;
+      return { ...rest, type: _tag };
+    };
+    fc.assert(
+      fc.property(
+        fc.record({ n: fc.integer(), value: fc.integer(), at: fc.integer({ min: 0, max: 2 ** 40 }) }),
+        ({ n, value, at }) => {
+          const p = load(spec());
+          const before = { count: 2, replies: 0 };
+          const cmd = save({ n });
+          const ok = save.ok(cmd, value, at);
+          const err = save.err(cmd, Disk.make({}), at);
+          expect([ok._tag, ok.cmd._tag, err._tag, err.cmd._tag]).toEqual(["save_ok", "save", "save_err", "save"]);
 
-            for (const reply of [ok, err]) {
-              expect(p.fold(before, reply)).toMatchObject({
-                _tag: "stepped",
-                model: { count: 2, replies: 1 },
-              });
-              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
-            }
+          for (const reply of [ok, err]) {
+            expect(p.fold(before, reply)).toMatchObject({
+              _tag: "stepped",
+              model: { count: 2, replies: 1 },
+            });
+            expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+          }
 
-            for (const reply of [
-              { ...ok, cmd: { type: "other", n: value } },
-              { ...ok, at: "42" },
-              { ...ok, value: "3" },
-              { ...err, error: { _tag: 3 } },
-            ]) {
-              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
-              expect(() => p.fold(before, reply)).toThrowError(
-                expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
-              );
-            }
-          }),
-        { concurrency: 1, discard: true },
+          for (const reply of [
+            { ...ok, cmd: Other.make({ n }) },
+            { ...ok, at: String(at) },
+            { ...ok, value: String(value) },
+            { ...err, error: { _tag: 3 } },
+            typed(ok),
+            typed(err),
+            { ...ok, cmd: typed(cmd) },
+            { ...err, cmd: typed(cmd) },
+          ]) {
+            expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+            expect(() => p.fold(before, reply)).toThrowError(
+              expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
+            );
+          }
+        },
       ),
-    { arbitrary: { seed: 119120, runs: 12 } },
-  );
+      parameters,
+    );
+  });
   it.effect.prop(
     "a Cmd with an async result schema cannot settle before validation finishes",
     { generated: Schema.Int },
@@ -756,9 +772,10 @@ describe("P11 program contract and p22 refusal", () => {
 
             const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
             const p = load(broken);
-            expect(
-              p.step({ count: 0, replies: 0 }, { type: "save_ok", cmd: save({ n: value }), value, at: 42 }),
-            ).toEqual({ _tag: "refused", reason: "bad_msg" });
+            expect(p.step({ count: 0, replies: 0 }, save.ok(save({ n: value }), value, 42))).toEqual({
+              _tag: "refused",
+              reason: "bad_msg",
+            });
           }),
         { concurrency: 1, discard: true },
       ),
@@ -796,7 +813,7 @@ describe("P11 program contract and p22 refusal", () => {
       cmds: [],
       wake: null,
     });
-    expect(p.step({ count: 2, replies: 0 }, { type: "add", n: 3 })).toMatchObject({
+    expect(p.step({ count: 2, replies: 0 }, add(3))).toMatchObject({
       _tag: "stepped",
       model: { count: 5, replies: 0 },
       view: { count: 5 },
@@ -813,11 +830,12 @@ describe("P11 program contract and p22 refusal", () => {
           Effect.sync(() => {
             const p = load(spec());
             const before = { count: 7, replies: 0 };
-            expect(p.step(before, { type: "add", n: "3" })).toEqual({
+            // A raw input whose field is the wrong type: made, then broken.
+            expect(p.step(before, { ...add(3), n: "3" })).toEqual({
               _tag: "refused",
               reason: "bad_msg",
             });
-            expect(p.step(before, { type: "add", n: 4 })).toEqual({
+            expect(p.step(before, add(4))).toEqual({
               _tag: "refused",
               reason: "limit",
               now: 7,
@@ -827,7 +845,7 @@ describe("P11 program contract and p22 refusal", () => {
 
             // Review 2: an empty reason is legal and must survive the real stepper too.
             const checked = load({ ...spec(), refuse: () => refusal });
-            expect(checked.step(before, { type: "add", n: 4 })).toEqual({
+            expect(checked.step(before, add(4))).toEqual({
               _tag: "refused",
               ...refusal,
             });
@@ -839,7 +857,7 @@ describe("P11 program contract and p22 refusal", () => {
   );
   it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", () => {
     const p = load(spec());
-    expect(p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 })).toMatchObject({
+    expect(p.fold({ count: 9, replies: 0 }, add(4))).toMatchObject({
       _tag: "stepped",
       model: { count: 13, replies: 0 },
       cmds: [save({ n: 4 })],
@@ -853,7 +871,7 @@ describe("P11 program contract and p22 refusal", () => {
         [{ count: 0, replies: 0 }, generated],
         (value) =>
           Effect.sync(() => {
-            expect(() => load(spec()).step(value, { type: "throw" })).toThrowError(
+            expect(() => load(spec()).step(value, Msg.cases.throw.make({}))).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
             );
           }),
@@ -880,13 +898,12 @@ describe("P11 program contract and p22 refusal", () => {
                     add: () =>
                       part === "model"
                         ? [{ count: "bad", replies: 0 }, []]
-                        : [{ count: 1, replies: 0 }, part === "cmd" ? [{ type: "save", n: "bad" }] : []],
+                        : [{ count: 1, replies: 0 }, part === "cmd" ? [{ ...save({ n: 0 }), n: "bad" }] : []],
                   },
                 },
                 view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
               };
-
-              expect(() => load(broken).step(value, { type: "add", n: 1 })).toThrowError(
+              expect(() => load(broken).step(value, add(1))).toThrowError(
                 expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
               );
             }),
@@ -904,7 +921,7 @@ describe("P11 program contract and p22 refusal", () => {
         [null, generated],
         (value) =>
           Effect.sync(() => {
-            expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: value })).toThrowError(
+            expect(() => load(spec()).fold({ count: 0, replies: 0 }, { ...add(0), n: value })).toThrowError(
               expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
             );
           }),
@@ -1042,8 +1059,9 @@ const oldIsSteps = (u: unknown) =>
   "init" in u &&
   typeof u.init === "function";
 
-const oldTyped = (u: unknown): u is { readonly type: string } =>
-  typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
+/** The key read, as before the change but on tea's `_tag` (0569): a raw value with a string key. */
+const oldTyped = (u: unknown): u is Readonly<Record<"_tag", string>> =>
+  typeof u === "object" && u !== null && "_tag" in u && typeof u._tag === "string";
 
 const oldCode = (u: unknown) => typeof u === "function";
 
@@ -1421,17 +1439,17 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
   });
 
   const oldSettled = (msg: unknown): boolean | undefined => {
-    if (!oldTyped(msg) || (msg.type !== "save_ok" && msg.type !== "save_err")) {
+    if (!oldTyped(msg) || (msg._tag !== "save_ok" && msg._tag !== "save_err")) {
       return undefined;
     }
 
     const cmd = "cmd" in msg ? msg.cmd : undefined;
 
-    if (!(oldTyped(cmd) && cmd.type === "save") || !("at" in msg) || typeof msg.at !== "number") {
+    if (!(oldTyped(cmd) && cmd._tag === "save") || !("at" in msg) || typeof msg.at !== "number") {
       return false;
     }
 
-    if (msg.type === "save_ok") {
+    if (msg._tag === "save_ok") {
       return "value" in msg && Schema.is(Schema.Int)(msg.value);
     }
 
@@ -1468,15 +1486,16 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     const own: Record<string, unknown> = a.extra === undefined ? {} : { extra: a.extra };
     const inherited: Record<string, unknown> = {};
 
+    // A raw saved row: its key is written as tea reads it, valid or not.
     if (a.type !== "missing") {
-      own.type = a.type;
+      own._tag = a.type;
     }
 
     if (a.cmd !== "missing") {
       own.cmd = Match.value(a.cmd).pipe(
         Match.when("pending", () => pending),
-        Match.when("other", () => ({ type: "other", n: 1 })),
-        Match.when("untyped", () => ({ type: 7 })),
+        Match.when("other", () => Schema.TaggedStruct("other", { n: Schema.Int }).make({ n: 1 })),
+        Match.when("untyped", () => ({ ...save({ n: 1 }), _tag: 7 })),
         Match.orElse(() => Object.assign([], pending)),
       );
     }
@@ -1571,7 +1590,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
         for (const { fresh, n, pick, answer: a } of moves) {
           // Answer a Cmd the machine really returned, once one exists.
           if (fresh < 3 || pending.length === 0) {
-            const stepped = p.step(model, { type: "add", n, extra: "kept out by the Msg schema" });
+            const stepped = p.step(model, { ...add(n), extra: "kept out by the Msg schema" });
             expect(stepped).toMatchObject({ _tag: "stepped" });
 
             if (stepped._tag === "stepped") {
@@ -1598,7 +1617,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           const settled = oldSettled(msg);
 
           const expected =
-            typed && !["add", "throw", "save_ok", "save_err"].includes(msg.type)
+            typed && !["add", "throw", "save_ok", "save_err"].includes(msg._tag)
               ? "skipped"
               : settled === true
                 ? "applied"
@@ -1737,8 +1756,8 @@ describe("A-Wire: the runner reads a letter with the Msg's JSON codec, next/", (
 // The program without the port is the made program with its `DOWN` input taken out, so the check is the
 // loader's, whatever `Program.make` does. Plant: load it anyway.
 describe("Program watch: a program that monitors declares DOWN, next/", () => {
-  const Watched = Schema.Struct({ type: Schema.Literal("watch"), name: Schema.String });
-  const DownMsg = Schema.Struct({ type: Schema.Literal("DOWN"), ref: Schema.String, process: Schema.String });
+  const Watched = Schema.TaggedStruct("watch", { name: Schema.String });
+  const DownMsg = Schema.TaggedStruct("DOWN", { ref: Schema.String, process: Schema.String });
   const watchMsg = Schema.Union([Watched, DownMsg]);
   const watchModel = Schema.Struct({ downs: Schema.Int });
 

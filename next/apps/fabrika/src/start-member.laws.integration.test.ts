@@ -12,6 +12,13 @@ import { Array as Arr, String as Str, DateTime, Effect, Exit, Option, Schema, Sc
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  inc: {},
+  start: {},
+});
+
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
@@ -183,7 +190,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
             try {
               const sent = await window.call(
                 "process.send",
-                letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1" }),
+                letter(starter, "start-1", { ...Tag.cases.start.make({}), program: "p42/child", name: "child:1" }),
               );
 
               expect(sent, "the starter takes the person's letter").toMatchObject({ result: { _tag: "accepted" } });
@@ -303,7 +310,9 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const boot = project.boot.process;
 
           const sent = yield* call(
-            ProjectService.use((p) => p.route(agent, "process.send", letter(boot, "agent-inc", { type: "inc" }))),
+            ProjectService.use((p) =>
+              p.route(agent, "process.send", letter(boot, "agent-inc", Tag.cases.inc.make({}))),
+            ),
           );
 
           expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });

@@ -54,6 +54,8 @@ const from = () => ({
   build: "test",
 });
 
+const Msg = Schema.TaggedUnion({ input: { text: Schema.String }, request: { text: Schema.String } });
+
 const Saved = Schema.TaggedStruct("saved", { text: Schema.String });
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 
@@ -146,13 +148,13 @@ const world = Effect.fnUntraced(function* (
     work: Effect.Effect<A, E, R>,
   ) => work.pipe(Effect.provide(live));
   const input = (name: string, id: string, text: string) =>
-    run(Mailbox.use((m) => m.send(name, id, { type: "input", text }, from())));
+    run(Mailbox.use((m) => m.send(name, id, Msg.cases.input.make({ text }), from())));
   const write = (name: string, id: string, text: string, over: Partial<Line> = {}) =>
     run(Referee.use((r) => r.append(`${name}/events`, id, { ...lineFor(from(), Saved.make({ text })), ...over })));
   const status = (identity: string) => run(Quotas.use((q) => q.program(identity)));
   return {
     legacyInput: (name: string, id: string, text: string) =>
-      Mailbox.use((m) => m.send(name, id, { type: "input", text }, from())).pipe(
+      Mailbox.use((m) => m.send(name, id, Msg.cases.input.make({ text }), from())).pipe(
         Effect.provide(Mailbox.layer),
         Effect.provide(bare),
       ),
@@ -276,7 +278,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const saved = w.snapshot();
               // The door's trial is this append's own admission, at the place the message will land.
               const trial = yield* w.run(
-                Quotas.use((q) => q.admits(name, id, letterLine(from(), { type: "input", text }), 0)),
+                Quotas.use((q) => q.admits(name, id, letterLine(from(), Msg.cases.input.make({ text })), 0)),
               );
               expect(w.snapshot()).toEqual(saved);
               const answer = yield* w.input(name, id, text);
@@ -337,7 +339,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                       source,
                       command: `${source.process}/${n}/0`,
                       to: "beta:1",
-                      m: { type: "request", text: cell.text },
+                      m: Msg.cases.request.make({ text: cell.text }),
                       from: from(),
                     }),
                   ),

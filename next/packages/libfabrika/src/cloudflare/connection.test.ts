@@ -1277,7 +1277,7 @@ const SOURCE = "export default {};\n";
 const declaration = () => {
   const machine = Machine.make({
     model: Schema.Struct({ count: Schema.Int }),
-    msg: Schema.Struct({ type: Schema.Literal("inc") }),
+    msg: Schema.TaggedStruct("inc", {}),
     cmds: [],
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },

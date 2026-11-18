@@ -34,6 +34,12 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { String as Str, pipe, Array as Arr, Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
 
 export const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
@@ -60,17 +66,11 @@ const Model = Schema.Struct({ body: Schema.String, version: Schema.Int });
 
 type Model = typeof Model.Type;
 
-export const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("save"),
-    body: Schema.String,
-    base: Schema.Finite,
-    work: Schema.Boolean,
-  }),
+export const Msg = Schema.TaggedUnion({
+  save: { body: Schema.String, base: Schema.Finite, work: Schema.Boolean },
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
-  Schema.Struct({ type: Schema.Literal("guard"), body: Schema.String }),
-]);
-
+  guard: { body: Schema.String },
+});
 type Msg = typeof Msg.Type;
 
 const probe = Cmd.make("probe", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
@@ -108,7 +108,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
       guard: { description: "Exam person-only save", personOnly: true },
       // A read port: never a write, so a fresh input naming it is bad_msg.
       peek: Input.cases.read.make({
-        schema: Schema.Struct({ type: Schema.Literal("peek") }),
+        schema: Schema.TaggedStruct("peek", {}),
         description: "Exam read",
         answer: (v: Model) => v.version,
       }),
@@ -138,7 +138,7 @@ export const incoming = (n: number, body: string, base = 0, work = false): Incom
     id: Schema.decodeSync(Id.InputId)(id("input", n)),
     by: writer,
     arrivedAt: n,
-    input: { type: "save", body, base, work },
+    input: { ...Tag.cases.save.make({}), body, base, work },
   },
   sentAt: "2030-01-01T00:00:00Z",
   seen: 0,

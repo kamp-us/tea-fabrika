@@ -34,6 +34,12 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  press: {},
+});
+
 const P1 = "process_0000000000e008000000000000";
 
 const P2 = "process_0000000000e008000000000001";
@@ -152,8 +158,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
   type Model = typeof Model.Type;
 
   // Wire inputs use _tag, tea uses type. The program's Msg keeps tea's own tag.
-  const TeaMsg = Schema.Struct({ type: Schema.Literal("press"), poison: Schema.Boolean });
-
+  const TeaMsg = Schema.TaggedStruct("press", { poison: Schema.Boolean });
   const tea = Machine.make({
     model: Model,
     msg: TeaMsg,
@@ -370,7 +375,7 @@ const world = ({ disk }: Disks, { window, other }: Effect.Success<typeof people>
       return A.ProgramRunner.use((r) =>
         r.msg({
           id: meta?.id ?? envelope.id,
-          envelope: { ...envelope, input: { type: "press", poison: envelope.input.poison } },
+          envelope: { ...envelope, input: { ...Tag.cases.press.make({}), poison: envelope.input.poison } },
           sentAt: meta?.sentAt ?? from().sentAt,
           seen: meta?.seen ?? 0,
           span,
@@ -540,7 +545,7 @@ describe("P34 door recovery", () => {
                             id: Schema.decodeSync(A.Id.InputId)(old),
                             by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
                             arrivedAt: 0,
-                            input: { type: "press", poison: false },
+                            input: { ...Tag.cases.press.make({}), poison: false },
                           },
                           sentAt: queued.sentAt,
                           seen: queued.seen,

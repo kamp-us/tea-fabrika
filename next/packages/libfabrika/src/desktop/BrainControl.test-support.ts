@@ -9,6 +9,12 @@ import { BrainControl, BrainControlError, Command, Status } from "./BrainControl
 import { BrainProbe, BrainProbeError, Unreachable, Foreign, Readiness, Children, Cleanup } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  observe: {},
+});
+
 export const spec = Schema.decodeSync(BrainSpec)({
   home: "/test/p19/home",
   executable: "/test/p19/Electron",
@@ -39,7 +45,7 @@ const World = Schema.Struct({
 
 type World = typeof World.Type;
 
-const Msg = Schema.Struct({ type: Schema.Literal("observe"), world: World });
+const Msg = Schema.TaggedStruct("observe", { world: World });
 
 const facts = Machine.make({
   model: World,
@@ -62,7 +68,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
 
   const observe = (next: Partial<World>) =>
     Effect.sync(() => {
-      [world] = applyCell(facts, world, { type: "observe", world: { ...world, ...next } });
+      [world] = applyCell(facts, world, { ...Tag.cases.observe.make({}), world: { ...world, ...next } });
     });
 
   yield* observe(initial);

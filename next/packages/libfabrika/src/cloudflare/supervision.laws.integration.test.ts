@@ -18,6 +18,12 @@ import { defaultPolicy, ProgramRunner, Supervision } from "../runtime/Runner.ts"
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
@@ -33,8 +39,7 @@ const BUILD = "build-a";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for });
 
 const Model = Schema.Struct({ count: Schema.Int });
-
-const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 
 type Move = "rpc" | "decode" | "throw";
 
@@ -281,7 +286,7 @@ const incoming = (letter: string, n: number): Incoming =>
       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
       by: owner,
       arrivedAt: 0,
-      input: { type: "add", n },
+      input: { ...Tag.cases.add.make({}), n },
     },
     sentAt: from().sentAt,
     seen: 0,

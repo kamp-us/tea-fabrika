@@ -8,6 +8,12 @@ import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  remember: {},
+});
+
 const SEED = 119120;
 
 type Reply = {
@@ -21,8 +27,7 @@ type Reply = {
 };
 
 type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonly reply: Reply };
-
-type Msg = { readonly type: "remember"; readonly reply: Reply };
+type Msg = { readonly _tag: "remember"; readonly reply: Reply };
 
 type Subject = {
   /** `Sub<never>`: no Subs, as `Machine.make` types a machine that declares none. */
@@ -71,7 +76,7 @@ const FIELDS = ["name", "id", "parent", "by", "for", "digest", "answer"] as cons
 /** The next remember, read from the state the fold has reached. */
 const next = (model: Model, [pick, fresh]: readonly [number, Reply]): Msg => {
   if (model._tag === "empty") {
-    return { type: "remember", reply: fresh };
+    return { ...Tag.cases.remember.make({}), reply: fresh };
   }
 
   // Same machine, so the same key: change one bound field or the answer, or repeat it exactly.
@@ -79,7 +84,7 @@ const next = (model: Model, [pick, fresh]: readonly [number, Reply]): Msg => {
   const stored = model.reply;
 
   return {
-    type: "remember",
+    ...Tag.cases.remember.make({}),
     reply: field === undefined || field === "name" || field === "id" ? stored : { ...stored, [field]: fresh[field] },
   };
 };

@@ -17,7 +17,7 @@
 //
 // The shots (plan, "Show it running"; AGENTS.md, "Shoot more than one layout") go to the folder
 // `SHOTS` names, only when it is set, named `tezgah-<state>-<layout>.png`.
-import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate } from "effect";
+import { String as Str, pipe, Array as Arr, Effect, Formatter, Option, Predicate, Schema } from "effect";
 
 import { describe, expect, it } from "vitest";
 import { browser, devServer, grant, home, profile, reader, suite, tab, waiting } from "./p14.test-support.ts";
@@ -38,6 +38,12 @@ import {
   statusBar,
   typeId,
 } from "./tezgah.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
 
 /** The law's own limit in ms: a brain, a browser and about twenty waits of at most 30 s each. */
 const LIMIT = 300_000;
@@ -191,7 +197,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
             r,
             pid,
             {
-              type: "did",
+              ...Tag.cases.did.make({}),
               does: "tezgah.split_right",
               from: t1.id,
               tile: typeId("tile", 4_242),

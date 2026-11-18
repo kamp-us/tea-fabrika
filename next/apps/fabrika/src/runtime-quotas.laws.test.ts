@@ -80,20 +80,12 @@ const Model = Schema.Struct({
   text: Schema.String,
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("inc"),
-    text: Schema.optionalKey(Schema.String),
-    parent: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("throw"), parent: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({
-    type: Schema.Literal("tell"),
-    to: Schema.NonEmptyString,
-    parent: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("ask"), parent: Schema.optionalKey(Schema.String) }),
-]);
+const Msg = Schema.TaggedUnion({
+  inc: { text: Schema.optionalKey(Schema.String), parent: Schema.optionalKey(Schema.String) },
+  throw: { parent: Schema.optionalKey(Schema.String) },
+  tell: { to: Schema.NonEmptyString, parent: Schema.optionalKey(Schema.String) },
+  ask: { parent: Schema.optionalKey(Schema.String) },
+});
 
 const worker = (name: string) => ({
   name,
@@ -107,7 +99,7 @@ const worker = (name: string) => ({
       throw: () => {
         throw new TypeError("quota wiring fixture");
       },
-      tell: (s, m) => [s, [send({ to: m.to, m: { type: "inc" } })]],
+      tell: (s, m) => [s, [send({ to: m.to, m: Msg.cases.inc.make({}) })]],
       ask: (s) => [s, [hands({ command: Command.cases.git_version.make({}) })]],
       send_ok: (s) => [{ ...s, told: s.told + 1 }, []],
       send_err: (s, m) => [{ ...s, failed: [...s.failed, m.error._tag] }, []],
@@ -701,7 +693,7 @@ describe("P34c live wiring, both object stores", () => {
 
             if (move === "throw") {
               const old = yield* w.pid(name);
-              yield* Effect.exit(w.input(name, `throw:${n}`, { type: "throw" }));
+              yield* Effect.exit(w.input(name, `throw:${n}`, Msg.cases.throw.make({})));
               crashes.set(name, required(crashes.get(name)) + 1);
               yield* w.settle(Effect.map(w.pid(name), (current) => current !== old));
               const after = yield* w.accounts;
@@ -726,9 +718,9 @@ describe("P34c live wiring, both object stores", () => {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
               const m = Match.value(move).pipe(
-                Match.when("tell", () => ({ type: "tell", to: peer })),
-                Match.when("ask", () => ({ type: "ask" })),
-                Match.orElse(() => ({ type: "inc", text: Str.repeat(c.amount % 64)("é😀") })),
+                Match.when("tell", () => Msg.cases.tell.make({ to: peer })),
+                Match.when("ask", () => Msg.cases.ask.make({})),
+                Match.orElse(() => Msg.cases.inc.make({ text: Str.repeat(c.amount % 64)("é😀") })),
               );
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
@@ -823,7 +815,7 @@ describe("P34c live wiring, both object stores", () => {
             const rows = yield* w.rows;
             const head = yield* w.head;
             const used = required(before.program[program]);
-            const reply = yield* w.input(name, id, { type: "inc", text });
+            const reply = yield* w.input(name, id, Msg.cases.inc.make({ text }));
 
             if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
               // The typed answer, before an envelope, a binding, a reply or a local step is saved.
@@ -880,7 +872,7 @@ describe("P34c live wiring, both object stores", () => {
               // A refusal is true only if the message did not fit: with the wall moved away the same
               // message lands, and its committed charge, the message and its step, passes that room.
               yield* w.widen;
-              expect(yield* w.input("alpha:1", "aimed", { type: "inc", text })).toMatchObject(accepted);
+              expect(yield* w.input("alpha:1", "aimed", Msg.cases.inc.make({ text }))).toMatchObject(accepted);
               yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
               expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
               return;
