@@ -1,0 +1,14 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "person": false,
+  "links": [],
+  "id": "2026-11-18-ticket-kalfa-quality-stryker",
+  "stage": "plan",
+  "kind": "friction",
+  "what": "Ticket text, filed as a row because this cloud session has no tracker. Title: @kalfa/quality/stryker: the plant runner on Stryker (0600), and libfabrika's laws in the hourly mutation run. Body: build decision 0600's first slice. Create kalfa/quality as @kalfa/quality with the /stryker subpath. A plant names its mutant by code shape (file, mutator, original, replacement) and the law that must kill it; it fails loudly unless the target is found exactly once; it runs Stryker 10.1.1 against the law's file with bail off and reads killedBy through the report's testFiles. Move the five product-code cases that have a Stryker mutant into .github/ci/plants.ts and drop the ten that edit a test file. Leave the old runner to its own lane and delete it in the follow-up. Let the hourly mutation run pick kind-sibling tests and pass CI's marker into its container, so libfabrika's laws, integration laws included, run there. Plan: docs/plan/quests/kalfa-quality-stryker-PLAN.md.",
+  "cause": null,
+  "primitive": "Check",
+  "fix": "File this text as the quest's tracker ticket when a tracker is in reach, and name it in the pull request.",
+  "test": "The ticket exists and the pull request names it."
+}
