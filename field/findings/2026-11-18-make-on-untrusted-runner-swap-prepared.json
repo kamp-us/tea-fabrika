@@ -13,6 +13,6 @@
   "proof": "In: next/packages/libfabrika/src/runtime/Runner.ts:2780 `wake: boot.wake` and :2800 `ran: upgraded.ran` come from the program's isolate, decoded only as `wake: Schema.NullOr(Schema.Number)` (next/packages/libfabrika/src/runtime/Program.ts:592) and `ran: Schema.Array(Schema.String)` (next/packages/libfabrika/src/runtime/Execution.ts:23). Make: next/packages/libfabrika/src/runtime/Runner.ts:2792 `SupervisorMsg.cases.swap_prepared.make({ change: { ... } })`, whose `CodeChange` needs `wake: Schema.NullOr(Millis)`, an integer of at least 0, and `ran: Schema.Array(Text)` (next/packages/libfabrika/src/runtime/internal/supervisor.ts:46-57).",
   "cost": "A program whose `wake` returns 0.5 or -1 runs normally until a code swap, and the swap then dies with a defect. Before #1619 the plain literal went into `complete`, whose `Effect.try` turned the supervisor's own make into a typed `bad_row`.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
-  "ticket": null,
+  "ticket": "kamp-us/tea-fabrika#1181",
   "pr": "kamp-us/tea-fabrika#1651"
 }

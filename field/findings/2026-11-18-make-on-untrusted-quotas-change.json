@@ -13,6 +13,6 @@
   "proof": "In: next/packages/libfabrika/src/processes/Quotas.ts:128 the public `change(operation, writes, bytes, at, recovery?)` takes plain numbers, implemented at next/packages/libfabrika/src/processes/QuotasSql.ts:687 with no decode. Make: next/packages/libfabrika/src/processes/QuotasSql.ts:703 `Quota.Msg.cases.propose.make({ at, operation, ... })`, whose `at` is `Schema.Finite` (next/packages/libfabrika/src/processes/internal/quota.ts:49), so `NaN` or `Infinity` throws.",
   "cost": "A caller that passes a non-finite count or time gets a throw instead of a typed `QuotasError`. Mostly this threw before #1619 too, at `save` (`Schema.encodeSync`, QuotasSql.ts:40); which callers turn it into a defect was not followed.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
-  "ticket": null,
+  "ticket": "kamp-us/tea-fabrika#1183",
   "pr": "kamp-us/tea-fabrika#1651"
 }

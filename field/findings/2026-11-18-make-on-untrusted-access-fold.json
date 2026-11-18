@@ -13,6 +13,6 @@
   "proof": "In: next/packages/libfabrika/src/access/ClientManagerLedger.ts:185 the public `ClientManager.write(event: MemberEvent, from)` hands the caller's event to `allows` at :200, and `allows` is exported at next/packages/libfabrika/src/access/AccessFold.ts:43. Make: next/packages/libfabrika/src/access/AccessFold.ts:23 `applyCell(access, model, Fold.make({ event }))`, which checks the whole event, including `counter: Schema.Int` (next/packages/libfabrika/src/access/Access.ts:102), so a well-typed event with counter 1.5 throws.",
   "cost": "A library caller that passes an event it built by hand gets a defect from `write` instead of a typed refusal. Before #1619 such an event was folded and appended, and every later read then failed as `bad_row`, so the old path was not safe either.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
-  "ticket": null,
+  "ticket": "kamp-us/tea-fabrika#1183",
   "pr": "kamp-us/tea-fabrika#1651"
 }

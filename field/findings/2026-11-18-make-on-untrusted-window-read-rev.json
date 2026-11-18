@@ -13,6 +13,6 @@
   "proof": "In: next/packages/libfabrika/src/client/WindowMachine.ts:1492 decodes the answer as `Entries` (`entries: Schema.Array(Schema.Unknown)`, :415), and :1876 keeps any `e.rev` that passes `Predicate.isNumber`. Make: next/packages/libfabrika/src/client/WindowMachine.ts:1872 `C.ClientMsg.cases.read.make({ rev: Math.max(s.client.seen, ...) })`, whose field is `read: { rev: Schema.Int }` (next/packages/libfabrika/src/runtime/Client.ts:112), so an answer `{\"entries\":[{\"rev\":1.5}]}` reaches a make that throws.",
   "cost": "A brain answer with a fractional rev kills the window's update with a defect instead of being dropped. Before #1619 the same value went quietly into `client.seen` and threw on the next press, so the gap is older and #1619 moved the throw earlier.",
   "head": "0dc333d73b6c146e3f7f3e6edba9473da09f471a",
-  "ticket": null,
+  "ticket": "kamp-us/tea-fabrika#1183",
   "pr": "kamp-us/tea-fabrika#1651"
 }
