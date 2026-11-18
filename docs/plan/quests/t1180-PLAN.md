@@ -44,6 +44,73 @@ saw it.
 
 The fix is wiring in three law files, about 20 test lines.
 
+## Amendment 1, 2026-11-18: two red visual laws, one cause, the same wiring
+
+**What changed:** the lead's run of the visual and tooling-integration layers at main dcb99bd4d
+(https://github.com/kamp-us/tea-fabrika/actions/runs/44418704040), which main's red run had
+cancelled, found two red visual laws. tooling-integration is green on both halves. One law has the
+same PR 1619 cause as laws B, C and D and gets the same wiring. The other is red only because it
+runs the first one as its child, and it needs no change. The body above is unchanged; this section,
+and the rows marked "(Amendment 1)" in the laws, files and proof sections, are the whole amendment.
+
+**Law F**, `next/apps/fabrika/e2e/one-file.visual.test.ts`, "P14 slice 1: the typed counter view in
+a real tab > S1.5 generated presses: the rendered counter shows its program's data and emits only
+its program's messages". The run reports `Error: getOrThrow called on a None` at line 527,
+counterexample `[[0]]`. Confirmed in code:
+
+- Line 550 picks the inputs the program accepts from the model with
+  `program.step(model, { type })`. `program` is `stepper(counter)`. Its `step`
+  (`next/packages/libfabrika/src/runtime/Program.ts` line 925) asks `fresh` first. `fresh` (line 879)
+  reads the Msg through `message`, which reads `_tag` (`decodeTyped`, line 690). `{ type: "inc" }`
+  has no `_tag`, so `fresh` answers `invalid` (line 884), and `step` answers
+  `Step.cases.refused.make({ reason: "bad_msg" })` (line 931) for every input.
+- So `available` is empty, `available[pick % 0]` is `undefined`, and `button(undefined)` finds no
+  input (line 527): `Option.getOrThrow` on `None`. Your reading is right, and it fails before the
+  page is ever pressed.
+- Two more lines would fail next. Line 557 expects the page to emit `{ type }`, but since PR 1619
+  the counter's window emits the made Msg: `next/programs/counter/src/window.tsx` lines 12 to 14
+  (`m: CounterMsg.cases.inc.make({})`, and so on), so the page emits `{ _tag: "inc" }`. Line 565
+  steps the program with `{ type }` again, which would be refused too.
+
+What the law must send and expect: the counter's own Msg, made by its maker, in all three places.
+
+```ts
+// A sketch: one-file.visual.test.ts, S1.5, after.
+const { counter, CounterMsg } = yield* Effect.promise(() => import("@kampus/counter")); // line 503
+const available = Arr.filter(inputs, (type) => program.step(model, CounterMsg.cases[type].make({}))._tag === "stepped"); // line 550
+expect(sent, "each press emits one Msg, the program's own").toEqual([...sent.slice(0, n), CounterMsg.cases[type].make({})]); // line 557
+step = program.step(model, CounterMsg.cases[type].make({})); // line 565
+```
+
+This is not loosening, for call 4's reason. The law still says that each press emits exactly one
+Msg, the program's own, and the expected Msg is now that Msg in the form the program has under
+0569. The `counter.msg` decode check at line 558, the count checks, the seed and the run counts all
+stay. A hand-written `{ _tag: type }` is refused by `fabrika/no-hand-tag`, so the maker is used, as
+in laws B, C and D (90%).
+
+**Law G**, `next/apps/fabrika/e2e/resources.laws.visual.test.ts`, "P14 slice 1: S1.6 browser and
+server resources close and the child suite exits > generated fault walks: success, setup failure,
+test failure and interruption after each reached acquisition". The run reports `"plain": a passing
+suite exits 0 by itself: expected { code: 1 } to match object { code: +0 }` at line 239. Confirmed:
+its child is `ONE_FILE`, `{ file: "one-file.visual.test.ts", test: "S1.5" }` (line 63), started with
+`-t` (lines 72 to 83). The `"plain"` walk sets no fault, so the child's exit code is law F's result:
+1 while law F is red, 0 once it is green. Law G needs no change of its own (90%). It goes green with
+law F, and it is the proof that the S1.5 child still exits by itself and leaves nothing behind.
+
+**The search, again, for the visual layer:** `rg -n "\{ type \}|type: \"(inc|dec|reset)\"" next/apps/fabrika/e2e`
+finds only lines 550, 557 and 565 above. `reload.visual.test.ts` line 304 already sends
+`Tag.cases[type].make({})`.
+
+**Proof (Amendment 1):** visual laws run on a pull request only with the `visual` label
+([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md), 0602) and in a
+branch's proof run. Law G spawns its child and signals it, so it runs only on disposable CI
+([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)), never on a laptop and never here. Law
+F starts Chromium and a real brain; it also runs on CI. So the lead proves both on the pull request
+with the `visual` label, or on a branch proof run at the head, and the tests step does not run them
+locally.
+
+**Size (Amendment 1):** about 5 more test lines in one more file; the estimate does not move.
+
 ## The full run, and what each red law is
 
 The lead's run of every next-integration law at main dcb99bd4d, four shards with no fail-fast
@@ -296,6 +363,8 @@ then checks that no secret reached any output.
 | C: "plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter" (unchanged expectations) | test | scenario: twelve `inc` letters, a second runner at letter 5, then the wake and its plants as the title names | Main as it is (red on run 44416548062: `expected { count: +0 } to deeply equal { count: 1 }` at line 299). After build: line 291 back to `{ type: "inc" }` (red) | `next/programs/counter/src/runner.laws.integration.test.ts` | Main's full run; the tests step runs it here if the host guard allows, else the lead's throwaway run |
 | D: "L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter" (unchanged expectations) | test | fc.array: `fc.nat()`, 2 to 24 items, seed 119120, 3 runs fast and 20 runs full | Main as it is (red on run 44416548062 at line 523, counterexample `[[0,0]]`). After build: line 512 sends `CounterMsg.cases.inc.make({})` for every cell (red: the hand count disagrees on a `dec` or `reset` cell) | `next/programs/counter/src/runner.laws.integration.test.ts` | As law C |
 | A Msg in these laws is never a hand-written `_tag` literal | lint | lint | After build: `m: { _tag: type }` at line 948: `fabrika/no-hand-tag` fails `pnpm lint` | `oxlint-plugins/no-hand-tag.ts` (unchanged) | `pnpm lint` on every pull request |
+| F (Amendment 1): "S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages" (unchanged expectations; the expected Msg is the counter's own, made by its maker) | test | fc.array: `fc.nat()` picks, 1 to 10 items, seed 119120, 3 runs fast and 20 runs full | Main as it is (red on run 44418704040: `getOrThrow called on a None` at line 527). After build: line 550 back to `program.step(model, { type })` (red, the same); line 557 back to expecting `{ type }` (red: the page emits `{ _tag: "inc" }`) | `next/apps/fabrika/e2e/one-file.visual.test.ts` | Main's full run; a pull request with the `visual` label, or a branch proof run |
+| G (Amendment 1): "generated fault walks: success, setup failure, test failure and interruption after each reached acquisition" (not changed) | test | fc.array: `fc.record` of a pick, a kind and a signal, seed 119120, 3 runs | Main as it is (red: the plain child exits 1, line 239). After build: line 565 of the child back to `{ type }` (law F red, so the plain child exits 1 and G is red) | `next/apps/fabrika/e2e/resources.laws.visual.test.ts` | As law F; it signals its child, so CI only (0594) |
 
 No law here is host-only in 0178's sense: no launchd, no Electron, no signal. Law B starts a real
 workerd child, which the local config's host guard refuses (`vitest.config.ts`, the
@@ -342,6 +411,9 @@ plan removes.
 | `next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts` | Import `DispatcherLive`; `checked` and `denied` call `control` directly and provide `DispatcherLive.layer`; the stale `Reflect.apply` comment goes. No expect changes | tests | tests | 1 | Law A green; A-type plant fails typecheck |
 | `next/apps/fabrika/src/instance-one-file.integration.test.ts` | Import `CounterMsg` from `@kampus/counter`; lines 948, 990 and 1022 send `CounterMsg.cases[...].make({})`. No expect changes | tests | tests | 1 | Law B green on the lead's throwaway run |
 | `next/programs/counter/src/runner.laws.integration.test.ts` | Laws C and D take `CounterMsg` from their existing `import("./program.ts")`; lines 291, 512 and 534 send it. No expect changes | tests | tests | 1 | Laws C and D green |
+| `next/apps/fabrika/e2e/one-file.visual.test.ts` | (Amendment 1) S1.5 takes `CounterMsg` from its existing `import("@kampus/counter")`; lines 550, 557 and 565 use `CounterMsg.cases[type].make({})`. No other expect changes | tests | tests | 1 | Law F green, and law G with it |
+| `next/apps/fabrika/e2e/resources.laws.visual.test.ts` | (Amendment 1) Not changed: its child is S1.5, so it is red only through law F | 0 | tests | none | Law G green |
+| `next/programs/counter/src/window.tsx`, `next/apps/fabrika/e2e/reload.visual.test.ts` | (Amendment 1) Not changed: the window emits the made Msg; the reload law already sends one | 0 | tests | none | read only |
 | `next/packages/libfabrika/src/cloudflare/control.ts`, `next/packages/libfabrika/src/cloudflare/Dispatcher.ts`, `next/packages/libfabrika/src/cloudflare/DispatcherLive.ts` | Not changed: the contract law A now meets | 0 | build | none | read only |
 | `next/apps/fabrika/src/runtime.ts`, `next/packages/libfabrika/src/gateway/Gateway.ts`, `next/packages/libfabrika/src/runtime/Runner.ts` | Not changed: the door and runner refuse a Msg with no `_tag`, as 0569 says | 0 | build | none | read only |
 | `next/programs/counter/src/program.ts` | Not changed: `CounterMsg` is exported already | 0 | build | none | read only |
@@ -412,6 +484,10 @@ four laws as in the bisect: a throwaway push-triggered workflow at the branch he
 `next/programs/counter/src/runner.laws.integration.test.ts` on disposable Linux CI, with no
 fail-fast, and records the run URL in the pull request. Main's next full run going green closes
 issue 1631. No window changes, so no screenshots.
+
+- (Amendment 1) Laws F and G are visual laws: they run on the pull request with the `visual` label
+  (0536) or on a branch proof run at the head, on CI only. Law G signals its child, so 0594 keeps it
+  off every laptop, this box included. The tests step does not run either locally.
 
 ## What this cannot tell us
 
