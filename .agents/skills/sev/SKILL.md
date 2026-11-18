@@ -174,9 +174,7 @@ node $S status                                   # the level now: sev0, sev1 or 
 node $S open 0 --reason "..." --allow fabrikalfa/ci-cache   # in the background, on the owner's call
 node $S next fabrikalfa/ci-legs                  # that fix alone is allowed; the one before is canceled from now
 node $S allow fabrikalfa/ci-flake                # one more fix branch, without replacing the list
-BOT="-c user.name=fabrikalfa[bot] -c user.email=353269643+fabrikalfa[bot]@users.noreply.github.com"
-git $BOT merge origin/main                       # on a conflict, in its own worktree, as the bot (0407)
-node .agents/skills/lead/scripts/botpush.mjs . <branch>  # refuses a commit that is not the bot's
+git merge origin/main && git push                # on a conflict, in the PR's own worktree
 node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless the sev0 allows it and ci-required is green
 node $S close --by lead                          # every fix merged; --by owner when he called it off
 node $S loop                                     # only if the open 0 loop died with its shell

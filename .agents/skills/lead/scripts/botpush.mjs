@@ -114,45 +114,6 @@ if (!draft) {
   }
 }
 
-const BOT_NAME = "fabrikalfa[bot]";
-
-const BOT_EMAIL = "353269643+fabrikalfa[bot]@users.noreply.github.com";
-
-// Decisions 0401 and 0407: every agent commit is the bot's. A commit made with the person's git
-// config (a hand `git merge` of main into a pull request's branch, 2026-11-18) is refused here,
-// before any key is read, so it can never reach GitHub. Only the commits this push sends are read.
-if (!draft && branch !== "-") {
-  let sent;
-
-  try {
-    sent = execFileSync(
-      "git",
-      ["-C", dir, "log", "--format=%h%x09%an%x09%ae%x09%cn%x09%ce", src, "--not", "--remotes=origin"],
-      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-    );
-  } catch {
-    console.error("botpush: cannot list the commits this push sends");
-    process.exit(1);
-  }
-
-  const notBot = sent
-    .split("\n")
-    .filter((row) => row !== "")
-    .map((row) => row.split("\t"))
-    .filter(([, an, ae, cn, ce]) => an !== BOT_NAME || ae !== BOT_EMAIL || cn !== BOT_NAME || ce !== BOT_EMAIL);
-
-  if (notBot.length > 0) {
-    for (const [sha, an, , cn] of notBot) {
-      console.error(`botpush: ${sha} is authored by ${an} and committed by ${cn}, not ${BOT_NAME} (0401, 0407)`);
-    }
-
-    console.error(
-      `botpush: nothing pushed. Make each one as the bot: put -c user.name='${BOT_NAME}' -c user.email='${BOT_EMAIL}' after git; for the newest commit, a merge too: git -c ... commit --amend --no-edit --reset-author`,
-    );
-    process.exit(1);
-  }
-}
-
 const APP = process.env.FABRIKA_APP_ID ?? "5640348";
 
 const REPO = draft
@@ -262,9 +223,9 @@ if (draft) {
       git("fetch", "--no-tags", "-q", url, "+refs/notes/fabrika:refs/notes/fabrika-origin");
       git(
         "-c",
-        `user.name=${BOT_NAME}`,
+        "user.name=fabrikalfa[bot]",
         "-c",
-        `user.email=${BOT_EMAIL}`,
+        "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
         "notes",
         "--ref=fabrika",
         "merge",

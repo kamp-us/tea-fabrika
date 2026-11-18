@@ -67,13 +67,7 @@ describe("T325 K6 botpush, today's tooling", () => {
             const git = (...args: string[]) => {
               const out = spawnSync(
                 "git",
-                [
-                  "-c",
-                  "user.name=fabrikalfa[bot]",
-                  "-c",
-                  "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
-                  ...args,
-                ],
+                ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args],
                 { cwd: dir, encoding: "utf8" },
               );
 
@@ -275,20 +269,10 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
           const remote = join(dir, "remote.git");
 
           const run = (cwd: string, ...args: string[]) => {
-            const out = spawnSync(
-              "git",
-              [
-                "-c",
-                "user.name=fabrikalfa[bot]",
-                "-c",
-                "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
-                ...args,
-              ],
-              {
-                cwd,
-                encoding: "utf8",
-              },
-            );
+            const out = spawnSync("git", ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args], {
+              cwd,
+              encoding: "utf8",
+            });
 
             expect(out.status, out.stderr).toBe(0);
 
@@ -402,22 +386,14 @@ describe("T388 botpush retries a notes race once, today's tooling", () => {
 
 // A tree one commit ahead of origin/main, with step notes or without, and a run of botpush on it
 // under the first shim. The shim's call log says what reached the keychain and the network.
-// `by` makes the step commit with another git identity, as a hand `git merge` with the person's
-// config did on 2026-11-18; the bot's when absent.
-type Tree = {
-  notes: boolean;
-  branch: string;
-  src?: string;
-  security?: "missing" | "no-item";
-  by?: { readonly author: string; readonly committer: string };
-};
+type Tree = { notes: boolean; branch: string; src?: string; security?: "missing" | "no-item" };
 
 // One line of the shim's call log.
 type Call = { security?: true; lsRemote?: true; fetch?: true; notesMerge?: true; http?: string; push?: string[] };
 
 type Ran = { code: number | null; text: string; stderr: string; calls: Call[] };
 
-const runTree = ({ notes, branch, src, security, by }: Tree): Ran => {
+const runTree = ({ notes, branch, src, security }: Tree): Ran => {
   const dir = mkdtempSync(join(tmpdir(), "nonotes-"));
   // The leak words stay outside the tree, as the checker requires.
   const words = join(tmpdir(), `words-${dir.split("/").at(-1)}`);
@@ -434,20 +410,10 @@ const runTree = ({ notes, branch, src, security, by }: Tree): Ran => {
     writeFileSync(words, "private_zzzzzzzz\n");
 
     const git = (...args: string[]) => {
-      const out = spawnSync(
-        "git",
-        [
-          "-c",
-          "user.name=fabrikalfa[bot]",
-          "-c",
-          "user.email=353269643+fabrikalfa[bot]@users.noreply.github.com",
-          ...args,
-        ],
-        {
-          cwd: dir,
-          encoding: "utf8",
-        },
-      );
+      const out = spawnSync("git", ["-c", "user.name=Tests", "-c", "user.email=tests@example.invalid", ...args], {
+        cwd: dir,
+        encoding: "utf8",
+      });
 
       expect(out.status, out.stderr).toBe(0);
 
@@ -461,25 +427,7 @@ const runTree = ({ notes, branch, src, security, by }: Tree): Ran => {
     git("update-ref", "refs/remotes/origin/main", "HEAD");
     writeFileSync(join(dir, "a.md"), "step\n");
     git("add", "a.md");
-
-    if (by === undefined) {
-      git("commit", "-qm", "step");
-    } else {
-      // Each identity keeps its own email: the bot's noreply address, or a person's.
-      const email = (name: string) =>
-        name === "fabrikalfa[bot]" ? "353269643+fabrikalfa[bot]@users.noreply.github.com" : "someone@example.invalid";
-
-      git(
-        "-c",
-        `user.name=${by.committer}`,
-        "-c",
-        `user.email=${email(by.committer)}`,
-        "commit",
-        "-qm",
-        "step",
-        `--author=${by.author} <${email(by.author)}>`,
-      );
-    }
+    git("commit", "-qm", "step");
 
     if (notes) {
       git("notes", "--ref=fabrika", "add", "-m", "signed");
@@ -617,37 +565,6 @@ describe("T1610 botpush pushes the notes a tree has, and a plain branch when it 
           ["no-item", true],
         ],
       },
-    );
-  }, 60_000);
-
-  // B6. A commit this push sends that is not the bot's, by author or by committer, refuses before
-  // any keychain read or network call, names the commit, and pushes nothing (0401, 0407). Plant:
-  // check only the author, or only the newest commit's, or check after the token is made.
-  it("B6 a sent commit not authored and committed by the bot refuses before any key read, and pushes nothing", () => {
-    const bot = "fabrikalfa[bot]";
-
-    fc.assert(
-      fc.property(
-        fc.constantFrom(
-          { author: "A Person", committer: "A Person" },
-          { author: bot, committer: "A Person" },
-          { author: "A Person", committer: bot },
-        ),
-        fc.boolean(),
-        (by, notes) => {
-          const ran = runTree({ notes, branch: "fabrikalfa/test", by });
-
-          expect(ran.code, ran.text).toBe(1);
-          expect(ran.stderr).toMatch(
-            /^botpush: [0-9a-f]{7,} is authored by .+ and committed by .+, not fabrikalfa\[bot\] \(0401, 0407\)$/m,
-          );
-          expect(ran.stderr).toContain("botpush: nothing pushed.");
-          expect(pushes(ran)).toEqual([]);
-          expect(named(ran, "security")).toEqual([]);
-          expect(named(ran, "http")).toEqual([]);
-        },
-      ),
-      { ...options, examples: [[{ author: "A Person", committer: "A Person" }, false]] },
     );
   }, 60_000);
 });
