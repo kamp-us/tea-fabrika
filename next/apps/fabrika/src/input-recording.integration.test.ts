@@ -123,6 +123,7 @@ const pendingReply = Effect.fnUntraced(function* (
 
 const resumedReply = Effect.fnUntraced(function* (home: string) {
   const db = yield* recovery(home);
+
   const saved = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Journal))(
     db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME)?.value,
   );
@@ -181,7 +182,9 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       from,
     ),
   );
+
   const pid = (yield* Schema.decodeUnknownEffect(Started)(started)).process;
+
   const connect = Effect.fnUntraced(function* (n: number) {
     const client = yield* Schema.decodeUnknownEffect(ConnectionId)(yield* invoke(() => project.connect()));
     const nonce = yield* Schema.decodeUnknownEffect(Schema.String)(yield* invoke(() => project.challenge(client)));
@@ -272,8 +275,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       } as const;
 
       const letter = `wire-${++serial}`;
+
       const route = () =>
         invoke(() => project.route(client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 }));
+
       let result;
 
       if (move === "reply_write" || move === "reply_complete") {
@@ -307,10 +312,12 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
 
     const page = yield* invoke(() => project.read("gateway/inputs", 0, "p13-check"));
     const rows = yield* Schema.decodeUnknownEffect(Schema.Array(Stored))(page);
+
     const selected = Arr.map(
       rows,
       (row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input,
     );
+
     expect(selected).toEqual(received);
     const output = Formatter.formatJson(rows);
 

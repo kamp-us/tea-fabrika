@@ -144,6 +144,7 @@ const press = Effect.fnUntraced(function* (
       const socket = new WebSocket(
         `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(id.fingerprint)}/${tab}`,
       );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -178,6 +179,7 @@ const press = Effect.fnUntraced(function* (
   const ask = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const n = ++serial;
     socket.send(Formatter.formatJson({ jsonrpc: "2.0", id: n, method, params }));
+
     return yield* next((frame) => frame.id === n);
   });
 
@@ -348,6 +350,7 @@ const reopened = Effect.gen(function* () {
 
 /** One Alchemy resource file, read whole so writing it back keeps every field in its place. */
 const Resource = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+
 /** A resource file as Alchemy writes it: `JSON.stringify(state, null, 2)`. */
 const AlchemyState = Schema.fromJsonString(Schema.Unknown, { space: 2 });
 
@@ -383,12 +386,14 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
     // in any other shape fails here rather than be rewritten.
     expect(yield* Schema.encodeEffect(AlchemyState)(resource), `${file} is not in Alchemy's own shape`).toBe(text);
+
     const relative = Option.getOrUndefined(
       Arr.findFirst(
         Arr.map(dists, (dist) => path.relative(dist, main)),
         (one) => !Str.startsWith("..")(one),
       ),
     );
+
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
     // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
     // saved attributes (`alchemy@2.0.0-beta.85`, `src/Local/LocalProvider.ts`, `diff`), and the
@@ -691,6 +696,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
     ),
     (row) => row.value,
   );
+
   const [last] = Arr.flatMap(
     yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
@@ -721,10 +727,12 @@ const reopenedOnItsCode = Effect.gen(function* () {
           yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
           "checklist:1 stepped one real input",
         ).toContain("t833 item");
+
         return Rec.fromEntries(Arr.map(Rec.toEntries(built.programs), ([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
   );
+
   const added = Arr.flatMap(
     yield* rowsUnder(
       home,
@@ -738,6 +746,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
   for (const descriptor of descriptors) {
     const hash = code[descriptor.program];
     expect(hash, `this build has ${descriptor.program}`).toBeDefined();
+
     const moves = Arr.filter(
       added,
       (line) =>
@@ -810,6 +819,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
   const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-u-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
+
   const counter = Option.getOrThrow(
     Arr.findFirst(
       Arr.map(
@@ -822,6 +832,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
       (d) => d.name === "counter:1",
     ),
   );
+
   const checkpoint = Option.getOrUndefined(
     Arr.findFirst(
       Arr.flatMap(
@@ -831,7 +842,9 @@ const upgradedOnItsCode = Effect.gen(function* () {
       (row) => row.process === counter.id,
     ),
   );
+
   expect(checkpoint, "the saved home holds counter:1's checkpoint").toBeDefined();
+
   const [last] = Arr.flatMap(
     yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
@@ -853,6 +866,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
       }),
     { "fabrika/counter": counterAt(2) },
   );
+
   const added = Arr.flatMap(
     yield* rowsUnder(
       home,
@@ -862,6 +876,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
     ),
     (found) => found.rows,
   );
+
   // The open moved counter:1 off its saved build first, as one code.loaded from "open" (0529).
   expect
     .soft(

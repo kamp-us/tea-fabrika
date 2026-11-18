@@ -264,6 +264,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                   env: { [field]: word },
                   version: "0.0.0",
                 });
+
                 return yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot);
               }),
             ).pipe(Effect.provide(services)),

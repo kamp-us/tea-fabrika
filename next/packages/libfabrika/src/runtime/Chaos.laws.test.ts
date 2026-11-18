@@ -251,6 +251,7 @@ it.prop(
       { ...restart("wrong-stream", target.name, process, next, after + 1, at), stream: "processes/other:1" },
       ...(matching ? [first, restart("later", target.name, process, other, after + 3, sameClock ? at : at + 1)] : []),
     ];
+
     const input = reverse ? Arr.reverse(rows) : rows;
     expect(Chaos.recovery(hit, input)).toEqual(
       matching ? { ref: first.id, rev: first.rev, arrivedAt: first.arrivedAt, process: next } : null,

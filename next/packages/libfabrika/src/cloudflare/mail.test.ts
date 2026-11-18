@@ -76,6 +76,7 @@ const delivery: Delivery = {
 it.effect("R1: RPC refusals keep their reason; failed transport and undecodable replies remain retryable", () =>
   Effect.gen(function* () {
     const context = yield* Effect.context<never>();
+
     const check = Effect.fnUntraced(function* (choice: typeof Cases extends fc.Arbitrary<infer A> ? A : never) {
       let wakes = 0;
 
@@ -121,6 +122,7 @@ it.effect("R1: RPC refusals keep their reason; failed transport and undecodable 
 
       expect(wakes, "no refused or unconfirmed delivery schedules a target").toBe(0);
     });
+
     const property = fc.asyncProperty(Cases, (choice) => Effect.runPromiseWith(context)(check(choice)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 100 }));
   }),
@@ -163,6 +165,7 @@ for (const flow of [
   it.effect(flow.name, () =>
     Effect.gen(function* () {
       const context = yield* Effect.context<never>();
+
       const check = Effect.fnUntraced(function* (
         fields: typeof ReceiptFields extends fc.Arbitrary<infer A> ? A : never,
         choice: string,
@@ -486,6 +489,7 @@ const AckRow = Schema.fromJsonString(Schema.Struct({ process: Schema.String, pos
 /** One booted Project over in-memory SQLite, with `counter:1` started by the boot, as leave.laws boots it. */
 const project = Effect.fnUntraced(function* () {
   const services = yield* Effect.context<never>();
+
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),

@@ -197,6 +197,7 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
     // Both forms are ones toml-eslint-parser 1.0.3 reports on their own line: a missing value is
     // reported on the next line, so it is not used here.
     const broken = fc.constantFrom('bad = "never closed', "bad = ]", "bad = 1 2");
+
     return fc.assert(
       fc.asyncProperty(doc, broken, fc.nat(), async (d, line, at) => {
         const w = write(d);
@@ -242,11 +243,13 @@ const Group = Schema.Struct({ name: Name, elements: Schema.Array(Element).check(
 
 // Every run holds these as array names, each with a table and an array inside its last element.
 const hostile = ["__proto__", "constructor", "toString"] as const;
+
 const prototype = Object.getOwnPropertyNames(Object.prototype).sort();
 
 // The model keeps every key as an own key, as a parsed document must.
 const own = <A>(table: object, key: string, value: A): A => {
   Object.defineProperty(table, key, { value, enumerable: true, writable: true, configurable: true });
+
   return value;
 };
 
@@ -316,11 +319,13 @@ it.effect.prop(
   ({ groups, leaves }) =>
     Effect.gen(function* () {
       const toml = yield* Toml;
+
       const nested = {
         leaves: [],
         sub: { name: "toString", leaves },
         items: { name: "constructor", elements: [leaves, leaves] },
       } as const;
+
       // The hostile arrays come first, so a drawn group of the same name is the one left out.
       const w = arrays([...hostile.map((name) => ({ name, elements: [{ leaves }, nested] })), ...groups]);
       const parsed = yield* toml.parse(w.text);

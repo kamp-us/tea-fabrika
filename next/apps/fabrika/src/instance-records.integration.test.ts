@@ -769,6 +769,7 @@ describe("P12 real object adapters", () => {
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
+
       expect(Arr.map(found, (r) => r.spanId)).toEqual(Arr.map(rows, (r) => r.span.spanId));
       const held = await first.read(chain, 0, 0);
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
@@ -786,11 +787,13 @@ describe("P12 real object adapters", () => {
       const { bucketCalls } = await import("@kampus/libfabrika/workers/runtime");
       const calls = bucketCalls(instance.bucket);
       const body = new TextEncoder().encode("local measurements archive");
+
       const expected = await Effect.runPromise(
         Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, body)).pipe(
           Effect.provide(Digest.layerWebCrypto),
         ),
       );
+
       await calls.put("p12/health.json", body, expected);
       expect(await calls.head("p12/health.json")).toEqual({ sha256: expected });
       await expect(calls.put("p12/bad.json", body, Str.repeat(64)("0"))).rejects.toThrow();

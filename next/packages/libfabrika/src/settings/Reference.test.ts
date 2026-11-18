@@ -170,6 +170,7 @@ const loaded = (ds: Declared) => {
       person[d.table] = { ...person[d.table], [d.key]: d.value };
     }
   });
+
   return Sources.resolve(group, {
     flags: Sources.flags(flags),
     env: Sources.env(env),

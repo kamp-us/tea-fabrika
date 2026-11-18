@@ -69,11 +69,13 @@ const disks = Effect.gen(function* () {
     const path = paths.join(top, `${++file}.db`);
     let db = open(path);
     let inner = nodeSql(db);
+
     const sql: Sql = {
       exec: (q, ...args) => inner.exec(q, ...args),
       transaction: (f) => inner.transaction(f),
       size: () => inner.size(),
     };
+
     return {
       sql,
       reopen: () => {

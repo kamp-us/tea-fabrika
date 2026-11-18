@@ -70,6 +70,7 @@ describe("tsconfig.base.json", () => {
   const text = readFileSync(join(ROOT, "tsconfig.base.json"), "utf8");
   const tree: Tree = parseSync("tsconfig.ts", `export default ${text}`).program;
   const config = Schema.decodeUnknownSync(Config)(toValue(tree.body[0].declaration));
+
   const overrides = pipe(
     config.compilerOptions.plugins,
     Arr.filter((p) => p.name === PLUGIN),

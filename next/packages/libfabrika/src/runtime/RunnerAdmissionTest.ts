@@ -353,20 +353,25 @@ const walk = Effect.fnUntraced(function* (
         const admission =
           /process_recovery/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
+
         const reply = /process_replies/.test(query);
 
         const cleanup =
           /process_activity/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
+
         const activity =
           /process_activity/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
+
         const refusal =
           /process_recovery/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"writing_reply"')(p));
+
         const abandonment =
           /process_recovery/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"clearing_attempt"')(p));
+
         const replyComplete =
           /process_recovery/.test(query) &&
           Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
@@ -637,10 +642,12 @@ const walk = Effect.fnUntraced(function* (
             (r) => r.errors.length === r.tries,
           ),
     ).toBe(true);
+
     const records = Arr.flatMap(
       live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
       ({ name }) => live.raw.exec(`SELECT * FROM "${name}"`),
     );
+
     const written = [...writes, ...Arr.map(records, (row) => JSON.stringify(row)), ...errors, ...monitor.text()];
     const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
@@ -651,6 +658,7 @@ const walk = Effect.fnUntraced(function* (
         encodeURIComponent(body),
         Str.slice(0, 14)(body),
       ];
+
       expect(
         Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",
@@ -663,6 +671,7 @@ const walk = Effect.fnUntraced(function* (
       failures,
       (failed) => !Arr.some(answers, (answered) => answered.input.id === failed.id),
     );
+
     const available = Arr.filter(enabled, (move) =>
       move === "refuse_failed"
         ? unansweredFailures.length > 0
@@ -692,6 +701,7 @@ const walk = Effect.fnUntraced(function* (
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
       const message = yield* Schema.decodeUnknownEffect(Save)(original.envelope.input);
+
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }

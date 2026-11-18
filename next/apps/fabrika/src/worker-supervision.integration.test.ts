@@ -322,6 +322,7 @@ const worldScoped = Effect.gen(function* () {
       const started = await instance
         .project(PROJECT)
         .start({ _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } }, from);
+
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
   };
@@ -367,6 +368,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
     while (now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
+
       // SAFETY: the read had no error, and ledger.read answers `{ entries }`, an array of rows.
       const found = Option.getOrUndefined(
         Arr.findFirst(

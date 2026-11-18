@@ -195,6 +195,7 @@ const insertLine = (text: string, at: number, content: string): string => {
   const eol = ending(text);
   const before = at > 0 && text[at - 1] !== "\n" ? eol : "";
   const after = at < text.length || Str.endsWith("\n")(text) ? eol : "";
+
   return apply(text, [{ start: at, end: at, text: before + content + after }]);
 };
 
@@ -236,6 +237,7 @@ export const set = (
     const at = parent.end - 1;
     const last = parent.members.at(-1);
     const separator = last !== undefined && !parent.commas.some((comma) => comma.start >= last.end) ? ", " : "";
+
     return Result.succeed(
       apply(text, [
         {

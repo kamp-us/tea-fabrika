@@ -299,9 +299,11 @@ const projectWalk = Effect.fnUntraced(function* (
 
     if (usage) {
       const key = `${CODE.hash}/${project.boot.process}`;
+
       const loaded = yield* Schema.decodeUnknownEffect(Schema.Struct({ tails: Schema.Array(Schema.Unknown) }))(
         loads.get(key),
       );
+
       expect(loaded.tails).toHaveLength(1);
       const props = yield* Schema.decodeUnknownEffect(Props)(bound.get(loaded.tails[0]));
       expect(props).toEqual({ project: "p13-project", name: NAME, process: project.boot.process });

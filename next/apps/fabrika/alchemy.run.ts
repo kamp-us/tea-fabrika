@@ -30,6 +30,7 @@ export const stack = (
     Effect.gen(function* () {
       const settings = checked.input;
       const instance = yield* setting(Formatter.formatJson(settings));
+
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],

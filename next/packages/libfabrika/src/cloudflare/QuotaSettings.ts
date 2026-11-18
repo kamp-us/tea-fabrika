@@ -38,6 +38,7 @@ export const read = Effect.fn("quota_settings.read")(function* (input: unknown) 
   const saved = yield* Schema.decodeUnknownEffect(Schema.Json)(input).pipe(Effect.mapError(refused));
   const checked = yield* Snapshot.read(Declarations.all, saved);
   const { writes, storage, recovery } = checked.values;
+
   return { writes, storage, recovery };
 });
 
@@ -60,5 +61,6 @@ export const limits = (declared: Declared): Limits => ({
  */
 export const instance = Effect.fn("quota_settings.instance")(function* (text: unknown) {
   const config = yield* Schema.decodeUnknownEffect(Instance)(text).pipe(Effect.mapError(refused));
+
   return limits(yield* read(config.settings));
 });

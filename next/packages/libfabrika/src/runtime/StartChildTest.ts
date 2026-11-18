@@ -104,6 +104,7 @@ const PIDS: ReadonlyArray<string> = Array.from(
 
 const ids = (...values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return {
     next: Effect.sync(() => {
       const value = values[calls++];
@@ -119,7 +120,9 @@ const ids = (...values: ReadonlyArray<string>) => {
 };
 
 const Reasons = Schema.TaggedUnion({ normal: {} });
+
 const NORMAL = Reasons.cases.normal.make({});
+
 /** Desk S1, L3: OTP's shutdown, the one reason a stopped child ends with. */
 const SHUTDOWN = ExitReason.cases.shutdown.make({});
 
@@ -131,13 +134,19 @@ type Entry = Tagged & {
 };
 
 const SEED = 119120;
+
 const BUILD = "p42-build-a";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 /** The brain's own session: a process ID no start in a walk reaches. */
 const DOOR = PIDS.at(-1) ?? "";
+
 /** The ledger's row limit (`ledger/Log.ts`). */
 const ROW_LIMIT = 2_000_000;
+
 // A valid 256-character program name adds more bytes to the Cmd than to its first letter.
 const BOUNDARY_PROGRAM = `m${Str.repeat(255)("é")}`;
 
@@ -171,7 +180,9 @@ const STOPPER_PROGRAMS = new Set(Arr.map(STOPPERS, ([, program]) => program));
 
 /** Desk S1, L2: a sender whose key the membership no longer admits, though its letter was delivered. */
 const OUTSIDER_KEY = "SHA256:outsider";
+
 const OUTSIDER_PERSON = "person_01m6v5270hf3c8x2q7w9z4k5zz";
+
 const outsider = Writer.cases.person.make({ key: OUTSIDER_KEY, for: OUTSIDER_PERSON });
 
 /** Desk S1, L1: a member's own writer, keyed by the person. */
@@ -185,6 +196,7 @@ export const FABRIKA = FabrikaModel.ref("fabrika", "p42");
 
 /** Desk S1: a role on the fabrika, or none. */
 type Role = "owner" | "admin" | "member" | null;
+
 type Drawn = { readonly person: string; readonly role: Role };
 
 const subject = (person: string) => `person:${person}`;
@@ -210,16 +222,20 @@ const encodeSender = Schema.encodeSync(Sender);
  *  as `childStarter` does. Built on first use: `stopChild` is the build's. */
 const stopper = (name: string) => {
   const Ask = Schema.Struct({ program: Schema.String, name: Schema.String });
+
   const Msg = Schema.Union([
     Schema.Struct({ type: Schema.Literal("start"), ask: Ask }),
     Schema.Struct({ type: Schema.Literal("stop"), name: Schema.String }),
   ]);
+
   const answer = (type: string, outcome: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)({ type, outcome: outcome ?? null });
+
   const keep = (type: string) => (s: Model, m: { value?: unknown; reason?: string }) => [
     { ...s, answers: [...s.answers, answer(type, Str.endsWith("_ok")(type) ? m.value : m.reason)] },
     [],
   ];
+
   const machine = Machine.make({
     model: Model,
     msg: Msg,
@@ -242,6 +258,7 @@ const stopper = (name: string) => {
       stop_child_err: keep("stop_child_err"),
     } as never,
   });
+
   return Program.make({
     name,
     machine,
@@ -260,6 +277,7 @@ let withStoppers: Record<string, unknown> | undefined;
 /** The loader's programs for a stopper's runner: every program, plus the three stoppers. */
 const stopperPrograms = (): Record<string, unknown> => {
   withStoppers ??= { ...PROGRAMS, ...Rec.fromEntries(Arr.map([...STOPPER_PROGRAMS], (p) => [p, stopper(p)])) };
+
   return withStoppers;
 };
 
@@ -278,6 +296,7 @@ const BOOT: ReadonlyArray<readonly [string, string]> = [
 const RUNS = new Set(["starter", "merger", "plain"]);
 
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
+
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
@@ -306,6 +325,7 @@ const raw = (tag: string, fields: object = {}): object =>
 
 const body = (entry: Entry | undefined): Record<string, unknown> => {
   const value = entry?.body;
+
   return Predicate.isObject(value) ? value : {};
 };
 
@@ -383,6 +403,7 @@ const faulting = (
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return wrapped;
 };
 
@@ -452,12 +473,15 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     ),
     SessionManager,
   );
+
   const shared = store.shared(faulting(store.sql("ledger"), world.fault), next, {
     rows: rows(world.people),
     sessions,
   });
+
   const context = yield* Layer.buildWithScope(shared, scope);
   const children = Context.get(context, Children);
+
   const hold = Effect.gen(function* () {
     const held = world.hold;
 
@@ -467,6 +491,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       yield* Deferred.await(held.release);
     }
   });
+
   const runnerContext = Context.add(
     Context.add(context, SessionManager, sessions),
     Children,
@@ -476,6 +501,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       start: (...args: Parameters<typeof children.start>) => Effect.andThen(hold, children.start(...args)),
     }),
   );
+
   /** The door's two steps before a delivery: the input is recorded with its sender, then delivered. */
   const deliver = (input: unknown, name: string, pid: string) => {
     // SAFETY: deliver runs only in the runner wrapper's `msg` above, and every `msg` call in this file passes an Incoming: `letter(...)`, or an Incoming written out.
@@ -497,7 +523,9 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       } as never)
       .pipe(Effect.andThen(sessions.delivered(i.envelope.id, pid)), Effect.orDie);
   };
+
   const runners = new Map<string, ProgramRunner["Service"]>();
+
   const runner = Effect.fnUntraced(function* (name: string) {
     const held = world.names.get(name);
 
@@ -515,6 +543,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -534,6 +563,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         };
       }),
     );
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(STOPPER_PROGRAMS.has(held.program) ? stopperPrograms() : PROGRAMS, {}),
       ProcessStore.layer(faulting(store.sql(`process-${name}`), world.fault), { process: held.pid }),
@@ -542,11 +572,14 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(runnerContext)));
+
     const descriptor = { id: held.pid, name, program: held.program, build: BUILD, owner };
+
     const options = {
       recovery: { sql: store.sql(`recovery-${name}`), name, capacity: 1024 ** 3 },
       chunk: ANY_CHUNK,
     };
+
     const layer =
       world.worker === true
         ? Layer.unwrap(
@@ -562,15 +595,20 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
             ),
           )
         : ProgramRunner.layer(descriptor, options);
+
     const built = yield* Layer.buildWithScope(layer.pipe(Layer.provide(own)), scope);
     const real = Context.get(built, ProgramRunner);
+
     const made: ProgramRunner["Service"] = {
       ...real,
       msg: (input) => Effect.andThen(deliver(input, name, held.pid), real.msg(input)),
     };
+
     runners.set(held.pid, made);
+
     return made;
   });
+
   return { context, runner };
 });
 
@@ -579,6 +617,7 @@ const savedModel = Effect.fnUntraced(function* (store: Store, name: string, pid:
   const saved = yield* ProcessStore.use((s) => s.load).pipe(
     Effect.provide(ProcessStore.layer(store.sql(`process-${name}`), { process: pid })),
   );
+
   return Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
 });
 
@@ -616,7 +655,9 @@ const Cell = fc.record({
   m: fc.jsonValue({ maxDepth: 2 }),
   extra: fc.subarray(["requester", "owner", "process", "hash", "reason", "source"], { minLength: 1 }),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, unknown> };
 
 const Tape = fc
@@ -668,6 +709,7 @@ const STOPS: ReadonlySet<Move> = new Set(["stopper_start", "stop_own", "stop_oth
 /** A forged operand for each extra field a program might add beside its Cmd. */
 const forged = (field: string, world: World): typeof Recipient.Type | typeof Owner.Type | string => {
   const sender = world.names.get("sender:1")?.pid ?? DOOR;
+
   return field === "requester"
     ? Recipient.cases.process.make({ process: sender })
     : field === "owner"
@@ -696,6 +738,7 @@ const walk = (
   ]) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: World = {
       people,
       members: new Map(),
@@ -706,14 +749,19 @@ const walk = (
       fault: { exited: false, message: "SQLITE_FULL planted at the exit" },
       n: 0,
     };
+
     const scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     const life = yield* host(store, world, next.next, scope);
+
     const inContext = <A, E>(effect: Effect.Effect<A, E, Layer.Success<ReturnType<Store["shared"]>>>) =>
       effect.pipe(Effect.provide(life.context));
+
     const all = (extra: Iterable<string> = []) => inContext(store.entries([...world.names.keys(), ...extra]));
+
     const letter = (input: unknown, by: Writer = person): Incoming => {
       const n = ++world.n;
+
       return {
         id: `letter-${n}`,
         envelope: { id: inputId(n), by, arrivedAt: 1794099600000 + n, input },
@@ -722,6 +770,7 @@ const walk = (
         span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
       };
     };
+
     /** A runner call that may refuse: it must answer, never hang. */
     const call = <A, E>(effect: Effect.Effect<A, E>, label: string) =>
       effect.pipe(
@@ -729,18 +778,23 @@ const walk = (
         Effect.timeoutOption("20 seconds"),
         Effect.map((answer) => {
           expect(Option.isSome(answer), `${label} answers`).toBe(true);
+
           return answer;
         }),
       );
+
     const door = Effect.fnUntraced(function* (name: string, input: unknown, by: Writer = person) {
       const runner = yield* life.runner(name);
       yield* call(runner.msg(letter(input, by)), `${name}'s letter`);
     });
+
     const answers = Effect.fnUntraced(function* (name: string) {
       // SAFETY: answers is called only for names the walk started, and each start is kept in world.names.
       const held = world.names.get(name) as Name;
+
       return (yield* inContext(savedModel(store, name, held.pid)))?.answers ?? [];
     });
+
     /** The last answer the program was told, once its own answer letter was folded. */
     const lastAnswer = Effect.fnUntraced(function* (name: string, before: number) {
       const told = yield* answers(name);
@@ -777,9 +831,11 @@ const walk = (
           true,
         );
         expect(b["hash"], "L5: the hash is the loader's, never the program's").toBe(BUILD);
+
         const registered = Option.getOrUndefined(
           Arr.findFirst(rows, (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
         );
+
         expect(body(registered)["owner"], "L5: the brain owns a started child").toEqual(Owner.cases.brain.make({}));
         world.starts.set(row.id, {
           name,
@@ -797,43 +853,55 @@ const walk = (
         }
       }
     });
+
     const registered = (name: string) =>
       Effect.map(all(), (rows) =>
         Arr.some(rows, (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
       );
+
     /** Desk S1: the `started` line a start wrote for `name`, read from the store's raw rows. */
     const startedLine = (name: string) =>
       Effect.map(all([name]), (rows) =>
         Option.getOrUndefined(Arr.findFirst(rows, (e) => e._tag === "started" && body(e)["name"] === name)),
       );
+
     /** Desk S1: the drawn people, by whether they hold a role. */
     const drawn = (holds: boolean) => Arr.filter(world.people, ({ role }) => (role !== null) === holds);
+
     const exitedRows = (pid: string) =>
       Effect.map(all(), (rows) => Arr.filter(rows, (e) => e._tag === "exited" && body(e)["process"] === pid));
+
     // Built on each read: `all()` lists the streams of the names known at the time it is called.
     const head = Effect.suspend(() => Effect.map(all(), (rows) => Math.max(0, ...Arr.map(rows, (e) => e.rev))));
     const fresh = (prefix = "merger") => `${prefix}:${1000 + ++world.n}`;
+
     const runnable = () =>
       Arr.map(
         Arr.filter([...world.names], ([, h]) => h.live && RUNS.has(h.program) && h.program !== "plain"),
         ([n]) => n,
       );
+
     const starters = () => runnable();
+
     /** Desk S1, L2: a starter, often a child a drawn person's letter started, so it has a member of its own. */
     const requester = (cell: Cell) => {
       const children = Arr.filter(starters(), (n) => world.members.has(n));
+
       return children.length > 0 && cell.shape % 2 === 0 ? choose(children, cell.pick) : choose(starters(), cell.pick);
     };
+
     const ended = () =>
       Arr.map(
         Arr.filter([...world.names], ([n, h]) => !h.live && world.parents.has(n)),
         ([n]) => n,
       );
+
     const stoppers = () =>
       Arr.filter(
         Arr.map(STOPPERS, ([n]) => n),
         (n) => world.names.get(n)?.live === true,
       );
+
     /** Desk S1, L3: each stopper's children, by state. */
     const stopperChildren = (live: boolean) =>
       Arr.filter(
@@ -842,9 +910,11 @@ const walk = (
           h.live === live &&
           Arr.some(STOPPERS, ([s]) => s === world.parents.get(n) && world.names.get(s)?.live === true),
       );
+
     /** Every process row written after `rev`, outside the inboxes. */
     const processRows = (rev: number) =>
       Effect.map(all(), (rows) => Arr.filter(rows, (e) => e.rev > rev && Str.startsWith("processes")(e.stream)));
+
     /** What each known name's process state is now, read from the process table. */
     const states = Effect.fnUntraced(function* () {
       const out = new Map<string, string>();
@@ -862,6 +932,7 @@ const walk = (
           p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
         ),
       ).pipe(Effect.orDie);
+
       world.names.set(name, { program, pid: started.process, live: true });
     }
 
@@ -896,6 +967,7 @@ const walk = (
         stop_ended: stopperChildren(false).length > 0,
         boundary_start: starters().length > 0 && next.calls() < PIDS.length - 6,
       };
+
       const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
@@ -920,11 +992,13 @@ const walk = (
           const existing = Arr.filter([...world.names], ([n, h]) => h.program === "merger" && n !== name);
           const target = cell.alt % 3 === 0 && existing.length > 0 ? choose(existing, cell.alt)[0] : fresh();
           const was = world.names.get(target);
+
           const ask: Ask = {
             program: "merger",
             name: target,
             ...(cell.shape % 2 === 0 ? {} : { input: { type: "ping" } }),
           };
+
           const before = (yield* answers(name)).length;
 
           if (move === "door_start") {
@@ -933,6 +1007,7 @@ const walk = (
             // Another live process's letter: the requester must still be the life that steps it.
             // SAFETY: sender:1 is one of the processes every world starts with.
             const sender = world.names.get("sender:1") as Name;
+
             const sent = yield* inContext(
               ProgramMail.use((mail) =>
                 mail.deliver({
@@ -944,6 +1019,7 @@ const walk = (
                 }),
               ),
             ).pipe(Effect.result);
+
             expect(Result.isSuccess(sent), "the sender's letter is delivered").toBe(true);
             const runner = yield* life.runner(name);
             yield* call(runner.due(yield* Clock.currentTimeMillis), `${name}'s drain`);
@@ -978,6 +1054,7 @@ const walk = (
 
           break;
         }
+
         case "forged": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
@@ -992,10 +1069,12 @@ const walk = (
           seen.add("forged");
           break;
         }
+
         case "bad": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const kind = cell.shape % 8;
+
           const bad: { ask: Ask; reason: string; tag: string } = Match.value(kind).pipe(
             Match.when(0, () => ({
               ask: { program: "merger", name: target, drop: ["program"] },
@@ -1034,6 +1113,7 @@ const walk = (
               tag: "bad_input",
             })),
           );
+
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
           yield* door(name, { type: "start", ask: bad.ask });
@@ -1051,6 +1131,7 @@ const walk = (
           seen.add(bad.tag);
           break;
         }
+
         case "undeclared": {
           const target = fresh();
           yield* door("plain:1", { type: "start", ask: { program: "merger", name: target } });
@@ -1058,6 +1139,7 @@ const walk = (
           seen.add("undeclared");
           break;
         }
+
         case "undeclared_exit": {
           // SAFETY: plain:1 is one of the processes every world starts with.
           const held = world.names.get("plain:1") as Name;
@@ -1074,6 +1156,7 @@ const walk = (
           seen.add("undeclared_exit");
           break;
         }
+
         case "queued_exit":
         case "interleaved_exit":
         case "worker_before_exit":
@@ -1151,6 +1234,7 @@ const walk = (
             ...Arr.map(after, (a) => a.name),
             late.ask.name,
           ]);
+
           const exits = Arr.filter(rows, (row) => row._tag === "exited" && body(row)["process"] === pid);
           expect(exits, "L7: one normal exit survives a queued turn or a Worker recovery cut").toHaveLength(1);
           expect(body(exits[0])["reason"]).toEqual(NORMAL);
@@ -1184,6 +1268,7 @@ const walk = (
           seen.add(move);
           break;
         }
+
         case "boundary_start": {
           const name = choose(starters(), cell.pick);
           const target = fresh();
@@ -1205,6 +1290,7 @@ const walk = (
           expect(letters, "L6: the boundary input is written once").toHaveLength(1);
           // SAFETY: the expect above failed the law unless exactly one letter is there, and inbox rows carry From.
           const first = letters[0] as Entry & From;
+
           const texts = [
             first.stream,
             first.id,
@@ -1217,6 +1303,7 @@ const walk = (
             first._tag,
             Formatter.formatJson(first.body),
           ];
+
           const size = Arr.reduce(texts, 0, (total, text) => total + (text === null ? 0 : encoder.encode(text).length));
           expect(size, "L6: the complete first-letter row fits the limit").toBeLessThanOrEqual(ROW_LIMIT);
           expect(body(first)["m"]).toBe(input);
@@ -1235,16 +1322,19 @@ const walk = (
           seen.add("boundary_start");
           break;
         }
+
         case "checkpoint_starts": {
           const name = choose(starters(), cell.pick);
           // SAFETY: starters() lists only names in world.names.
           const held = world.names.get(name) as Name;
           const before = (yield* answers(name)).length;
+
           const asks = Array.from({ length: 2 + (cell.shape % 2) }, () => ({
             program: "merger",
             name: fresh(),
             inputBytes: 1_100_000 + (cell.alt % 10_000),
           }));
+
           // The door letter holds sizes only. Its step emits individually valid Cmds whose sum
           // crosses the platform's row limit before any of them can be performed.
           yield* door(name, { type: "end", before: asks, after: [], twice: false });
@@ -1266,6 +1356,7 @@ const walk = (
           seen.add("checkpoint_starts");
           break;
         }
+
         case "exit":
         case "cut_exit": {
           const name = choose(runnable(), cell.pick);
@@ -1274,6 +1365,7 @@ const walk = (
           const before = Array.from({ length: cell.alt % 3 }, () => ({ program: "merger", name: fresh() }));
           const after = Array.from({ length: cell.shape % 3 }, () => ({ program: "merger", name: fresh() }));
           const twice = cell.shape % 2 === 0;
+
           const children = Arr.map(
             Arr.filter([...world.parents], ([, p]) => p === name),
             ([c]) => c,
@@ -1340,6 +1432,7 @@ const walk = (
             const watcher = Option.getOrUndefined(
               Arr.findFirst([...world.names], ([, h]) => h.pid === watch.watcher),
             )?.[0] as string;
+
             const downs = Arr.filter(
               yield* all(),
               (e) =>
@@ -1348,6 +1441,7 @@ const walk = (
                 // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
+
             expect(downs.length, "L7: each live watch gets one DOWN").toBe(1);
             // SAFETY: the filter above kept only DOWN letters, whose `m` carries its `reason`.
             expect((body(downs[0])["m"] as { reason?: unknown }).reason, "L7: the DOWN says normal").toEqual(NORMAL);
@@ -1373,14 +1467,17 @@ const walk = (
 
           break;
         }
+
         case "exit_extra": {
           const name = choose(runnable(), cell.pick);
           // SAFETY: runnable() lists only names in world.names.
           const held = world.names.get(name) as Name;
+
           const extra =
             cell.alt % 2 === 0
               ? { reason: choose(["kill", "shutdown", raw("crashed")], cell.shape) }
               : { [`x${cell.shape % 4}`]: cell.m };
+
           const before = (yield* answers(name)).length;
           yield* door(name, { type: "end", before: [], after: [], twice: false, extra });
           expect(yield* lastAnswer(name, before), "L8: exit's input takes no field").toEqual({
@@ -1391,11 +1488,13 @@ const walk = (
           seen.add("exit_extra");
           break;
         }
+
         case "after_exit": {
           const [name, held] = choose(
             Arr.filter([...world.names], ([, h]) => !h.live && RUNS.has(h.program)),
             cell.pick,
           );
+
           const stepped = (yield* inContext(savedModel(store, name, held.pid)))?.stepped;
           const runner = yield* life.runner(name);
           yield* call(runner.msg(letter({ type: "ping" })), `${name}'s late letter`);
@@ -1406,6 +1505,7 @@ const walk = (
           seen.add("after_exit");
           break;
         }
+
         case "watch": {
           const target = choose(runnable(), cell.pick);
           const watchers = Arr.filter([...world.names], ([n, h]) => h.live && n !== target);
@@ -1434,6 +1534,7 @@ const walk = (
           world.watches.push({ watcher: watcher.pid, target: held.pid, ref });
           break;
         }
+
         case "start_ended": {
           const name = choose(starters(), cell.pick);
           const target = choose(ended(), cell.alt);
@@ -1459,6 +1560,7 @@ const walk = (
           seen.add("already_present");
           break;
         }
+
         case "related_start": {
           // L1, L2: a drawn person with a role asks for any program, which no grant may name. The
           // sender is the one checked and the one recorded, never the requester's own member.
@@ -1492,6 +1594,7 @@ const walk = (
 
           break;
         }
+
         case "unrelated_start":
         case "removed_start": {
           // L1: a sender with no row is refused. L2: so is a sender whose key was removed, and
@@ -1524,6 +1627,7 @@ const walk = (
 
           break;
         }
+
         case "stopper_start": {
           const name = choose(stoppers(), cell.pick);
           // SAFETY: stoppers() lists only names in world.names.
@@ -1536,6 +1640,7 @@ const walk = (
           seen.add("stopper_started");
           break;
         }
+
         case "stop_own": {
           // L3: OTP's terminate_child: the requester's own child ends with shutdown.
           const [target, child] = choose(stopperChildren(true), cell.alt);
@@ -1568,6 +1673,7 @@ const walk = (
             const watcher = Option.getOrUndefined(
               Arr.findFirst([...world.names], ([, h]) => h.pid === watch.watcher),
             )?.[0] as string;
+
             const downs = Arr.filter(
               yield* all(),
               (e) =>
@@ -1576,6 +1682,7 @@ const walk = (
                 // SAFETY: a DOWN letter's `m` is the DOWN, which carries its `ref`.
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
+
             expect(downs.length, "L3: each watcher of a stopped child gets one DOWN").toBe(1);
             // SAFETY: the filter above kept only DOWN letters, whose `m` carries its `reason`.
             expect((body(downs[0])["m"] as { reason?: unknown }).reason, "L3: the DOWN says shutdown").toEqual(
@@ -1593,6 +1700,7 @@ const walk = (
           seen.add("stopped_own");
           break;
         }
+
         case "stop_other": {
           // L3: any name but the requester's own children: another stopper's child, a boot process,
           // another stopper, or the requester itself.
@@ -1611,6 +1719,7 @@ const walk = (
           seen.add("not_child");
           break;
         }
+
         case "stop_ended": {
           const [target] = choose(stopperChildren(false), cell.alt);
           // SAFETY: stopperChildren() keeps only children whose parent is in world.parents.
@@ -1626,9 +1735,11 @@ const walk = (
           seen.add("noproc");
           break;
         }
+
         case "retry_saved": {
           // A library caller asks a saved Cmd id again, after the child or the requester ended.
           const [id, saved] = choose([...world.starts], cell.pick);
+
           const answer = yield* inContext(
             Children.use((c) =>
               c.start(
@@ -1644,6 +1755,7 @@ const walk = (
               ),
             ),
           ).pipe(Effect.result);
+
           expect(
             Result.isSuccess(answer) ? answer.success : answer.failure,
             "L7, L3: the saved id still answers started",
@@ -1655,6 +1767,7 @@ const walk = (
 
       done.add(move);
     });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: world, real: { step } }), tape));
   });
@@ -1695,9 +1808,11 @@ const prop = (
 const capture = Effect.fnUntraced(function* (sql: Sql, makeTracer: Store["tracer"]) {
   const tracer = yield* makeTracer(sql);
   const lines: Array<string> = [];
+
   const logger = Logger.make((options) => {
     lines.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
   });
+
   // Inspect the real sink's saved span and failure content, including nested storage causes.
   const exported = () =>
     Arr.flatMap(sql.exec("SELECT row, content FROM unsent"), (row) => [
@@ -1705,6 +1820,7 @@ const capture = Effect.fnUntraced(function* (sql: Sql, makeTracer: Store["tracer
       String(row.row),
       String(row.content),
     ]);
+
   return { tracer, logger, lines, exported };
 });
 
@@ -1720,6 +1836,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
   Effect.fnUntraced(function* (secret: string, tape: Iterable<fc.AsyncCommand<object, Walk>>) {
     const store = yield* open;
     const next = ids(...PIDS);
+
     const world: World = {
       people: [],
       members: new Map(),
@@ -1730,6 +1847,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       fault: { exited: false, message: `SQLITE_FULL at ${secret}`, marker: secret },
       n: 0,
     };
+
     let scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     let life = yield* host(store, world, next.next, scope);
@@ -1738,25 +1856,30 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       const started = yield* ProcessManager.use((p) =>
         p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: BUILD } }), brainFrom()),
       ).pipe(Effect.provide(life.context), Effect.orDie);
+
       world.names.set(name, { program, pid: started.process, live: true });
     }
 
     const seenBy = yield* capture(store.sql("spans"), store.tracer);
+
     type Asked = {
       name: string;
       incoming: Incoming;
       kind: "answer" | "refusal" | "storage" | "checkpoint";
       before: number;
     };
+
     const pending = new Map<string, Asked>();
     const saved: Array<Asked> = [];
     const done = new Set<string>();
+
     const answers = (name: string) =>
       // SAFETY: answers is called only for names the walk started, and each start is kept in world.names.
       savedModel(store, name, world.names.get(name)?.pid as string).pipe(
         Effect.provide(life.context),
         Effect.map((model) => model?.answers ?? []),
       );
+
     const inspect = Effect.fnUntraced(function* (outcome: Exit.Exit<unknown, unknown>) {
       const outputs = [...seenBy.exported(), ...seenBy.lines];
 
@@ -1799,6 +1922,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         }
       }
     });
+
     const checkAnswer = Effect.fnUntraced(function* (ask: Asked) {
       if (ask.kind === "storage") {
         const rows = yield* store.entries(world.names.keys()).pipe(Effect.provide(life.context));
@@ -1809,6 +1933,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         // SAFETY: this ask's start was recorded in world.names when it was asked.
         const held = world.names.get(ask.name) as Name;
         held.live = false;
+
         return;
       }
 
@@ -1831,12 +1956,15 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
         expect(tagged((told.at(-1) as { outcome: unknown }).outcome)).toBe("started");
       }
     });
+
     const step = Effect.fnUntraced(function* (cell: Cell) {
       const live = Arr.map(
         Arr.filter([...world.names], ([name, held]) => held.live && held.program === "starter" && !pending.has(name)),
         ([name]) => name,
       );
+
       const retries = Arr.filter(saved, (ask) => world.names.get(ask.name)?.live === true && !pending.has(ask.name));
+
       const available = [
         ...(live.length === 0
           ? []
@@ -1893,6 +2021,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       } else {
         const name = choose(live, cell.pick);
         const n = ++world.n;
+
         const input =
           move === "storage"
             ? { type: "end", before: [], after: [], twice: false }
@@ -1904,6 +2033,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
                   ...(move === "refusal" ? {} : { input: { type: "ping", token: secret, nested: cell.m } }),
                 },
               };
+
         ask = {
           name,
           // SAFETY: the `recover` and `retry` branches above took those two moves, so move is answer, refusal, storage or checkpoint, the Asked kinds.
@@ -1956,6 +2086,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       done.add(move);
       seen.add(move);
     });
+
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check owns the generated command walk
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: { world, saved, pending }, real: { step } }), tape));
     expect(done.size, "L11: the operation walk was not empty").toBeGreaterThan(0);
@@ -1973,12 +2104,14 @@ const secretsLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         const law = secrets(open, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
         const property = fc.asyncProperty(Secret, Tape, (x, tape) => runPromise(Effect.scoped(law(x, tape))));
+
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 100 }),
           includeErrorInReport: true,
           endOnFailure: true,
         };
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
         expect([...seen].sort()).toEqual(["answer", "checkpoint", "recover", "refusal", "retry", "storage"]);
@@ -1995,9 +2128,11 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       let opened = 0;
       // Set once the walk holds its store and runner. A count of yields is no wait for real IO.
       const ready = yield* Deferred.make<void>();
+
       const held = Effect.scoped(
         Effect.gen(function* () {
           const store = yield* open;
+
           const world: World = {
             people: [],
             members: new Map(),
@@ -2009,6 +2144,7 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             fault: { exited: false, message: "" },
             n: 0,
           };
+
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const life = yield* host(store, world, ids(...PIDS).next, scope);
@@ -2035,9 +2171,11 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           opened = store.probe.open();
           probe = store.probe;
           yield* Deferred.succeed(ready, undefined);
+
           return yield* Effect.never;
         }),
       );
+
       const fiber = yield* Effect.forkChild(held);
       // The walk never ends on its own, so its join wins only when the walk fails before it is ready.
       yield* Effect.raceFirst(Deferred.await(ready), Fiber.join(fiber));

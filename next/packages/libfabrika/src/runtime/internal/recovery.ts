@@ -3,10 +3,13 @@ import { ProcessId } from "../../ProcessId.ts";
 
 /** @internal */
 export const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+
 /** @internal */
 export const Millis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 /** @internal */
 export const Text = Schema.NonEmptyString;
+
 /** How many times one letter is tried before it moves to the dead letters: 1 to 32. */
 /** @internal */
 export const Deliveries = Count.check(Schema.isLessThanOrEqualTo(32));
@@ -40,6 +43,7 @@ export const Policy = Schema.Struct({
     return true;
   }),
 );
+
 /** @internal */
 export type Policy = typeof Policy.Type;
 
@@ -52,6 +56,7 @@ export const Failure = Schema.TaggedUnion({
   saved: { ...AttemptFields, error: Text },
   interrupted: AttemptFields,
 });
+
 /** @internal */
 export type Failure = typeof Failure.Type;
 
@@ -81,6 +86,7 @@ export const Receipt = Schema.Struct({
       : "a failed delivery keeps its input; an accepted delivery keeps its digest",
   ),
 );
+
 /** @internal */
 export type Receipt = typeof Receipt.Type;
 
@@ -89,6 +95,7 @@ export type Receipt = typeof Receipt.Type;
 const encodeReceipt = Schema.encodeSync(Schema.fromJsonString(Receipt));
 
 const encoder = new TextEncoder();
+
 const bytes = (text: string) => encoder.encode(text).length;
 
 /** @internal What one save writes: each receipt whose text differs from its row, and the bytes that adds. */

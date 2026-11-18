@@ -406,6 +406,7 @@ const host = Effect.fnUntraced(function* (
         const reader =
           Option.getOrUndefined(Arr.findFirst([...world.readers], ([, r]) => r.pid === watch.watcher.process))?.[0] ??
           "";
+
         const asked = world.asked.get(watch.id) ?? { reader, watcher: watch.watcher.process, tries: 0 };
         asked.tries++;
         world.asked.set(watch.id, asked);
@@ -693,10 +694,12 @@ const walk = (
     for (const cell of cells) {
       const live = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === true);
       const ended = Arr.filter(TARGETS, (t) => world.targets.get(t)?.live === false);
+
       const watching = Arr.filter(
         [...world.watches.values()],
         (w) => w.state === "live" && world.readers.get(w.reader)?.pid === w.watcher,
       );
+
       const possible = Arr.filter(
         moves,
         (move) =>
@@ -856,6 +859,7 @@ const walk = (
               : kind === "foreign" && foreign.length > 0
                 ? choose(foreign, cell.alt).ref
                 : `${watcher}/${90_000 + world.n}/0`;
+
           const actual = Arr.some(own, (w) => w.ref === ref)
             ? "own"
             : Arr.some(foreign, (w) => w.ref === ref)
@@ -989,6 +993,7 @@ const walk = (
             Arr.findFirstIndex(log, (e) => e.type === "monitor_ok" && e.ref === entry.ref),
             () => -1,
           );
+
           expect(answered, `M3: in ${pid}, the answer for ${entry.ref} folds before its DOWN`).toBeGreaterThanOrEqual(
             0,
           );
@@ -1007,6 +1012,7 @@ const walk = (
       if (watch.state === "canceled") {
         // M8: no DOWN for a canceled ref folds after its cancel, including one already saved.
         expect(downs.length, `M8: ${label}: no DOWN folds after its demonitor`).toBe(watch.downsAtCancel ?? 0);
+
         const canceled = Arr.filter(
           rows,
           (r) =>
@@ -1059,10 +1065,12 @@ const walk = (
         name: watch.target,
         reason,
       });
+
       const last = Option.getOrElse(
         Arr.findLastIndex(log, (e) => e.type === "rows" && e.life === watch.process),
         () => -1,
       );
+
       expect(last < (downs[0]?.index ?? -1), `M2: ${label}: no message from the ended life folds after its DOWN`).toBe(
         true,
       );

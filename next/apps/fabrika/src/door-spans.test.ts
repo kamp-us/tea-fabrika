@@ -413,12 +413,14 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 yield* Effect.void.pipe(Effect.withSpan("archive-control"));
                 yield* (yield* SpanSink).flush;
                 expect(w.archived.length).toBeGreaterThan(0);
+
                 const cells = Arr.flatMap(w.databases, (db) =>
                   Arr.flatMap(
                     db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all(),
                     ({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all(),
                   ),
                 );
+
                 const shown = yield* Schema.encodeEffect(
                   Schema.fromJsonString(Schema.Unknown, {
                     replacer: (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
@@ -427,6 +429,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                   spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
                   events: tracer.events,
                 });
+
                 const outputs = Arr.flatMap(
                   [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors],
                   (output) => texts(output, decoded),

@@ -252,6 +252,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         const owned = () =>
           descriptors.get(storageKey) ??
           Option.getOrUndefined(Arr.findLast([...descriptors.values()], (d) => d.name === storageKey));
+
         return {
           configure: async (descriptor: Descriptor) => {
             if (options.callback === true) {
@@ -282,6 +283,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           recorded.push(...Arr.map(rows, (row) => row.span));
+
           return { _tag: "written" };
         },
       }),
@@ -551,6 +553,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
       Arr.filter(list, (p) => p.program !== "fabrika/counter"),
       (p) => ({ name: p.name, program: p.program }),
     );
+
   let refused = 0;
   expect(Arr.map(w.configured, (d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
@@ -1017,6 +1020,7 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
+
         const actions: Record<typeof operation, () => Effect.Effect<unknown, unknown>> = {
           ring: () => gateway.ring("events", rev),
           probe: () => gateway.probe("session-test"),
@@ -1030,6 +1034,7 @@ describe("P12 Connection recording", () => {
               }),
             ),
         };
+
         await runtime.runPromise(Effect.exit(actions[operation]()));
         const rows = w.recorded.slice(before);
         expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);

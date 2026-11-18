@@ -61,14 +61,23 @@ import type { RecoveryStoreError } from "./RecoveryStore.ts";
 import type { WatchersError } from "./Watchers.ts";
 
 const SEED = 119120;
+
 const PROCESS = Effect.runSync(processId);
+
 const REPLACEMENT = Effect.runSync(processId);
+
 const DOOR = Effect.runSync(processId);
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const OTHER_TRACE = "0bf92f3577b34da6a3ce929d0e0e4736";
+
 const SPAN = "00f067aa0ba902b7";
+
 const BUILD = "p11-build-a";
+
 const NAME = "queue:1";
 
 const writer = (as: "person" | "agent" = "person") => Writer.cases[as].make({ key: `SHA256:${as}`, for: PERSON });
@@ -95,6 +104,7 @@ const Request = Schema.Struct({
   parent: Schema.NullOr(Schema.String),
   tag: Schema.String,
 });
+
 type Request = typeof Request.Type;
 
 const Model = Schema.Struct({
@@ -106,6 +116,7 @@ const Model = Schema.Struct({
   failures: Schema.Array(Schema.String),
   wake: Schema.NullOr(Schema.Number),
 });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -177,6 +188,7 @@ const command = (r: Request) =>
 
 const nextWrite = (s: Model): readonly [Model, ReadonlyArray<ReturnType<typeof write>>] => {
   const [next, ...queue] = s.queue;
+
   return next === undefined ? [{ ...s, busy: false }, []] : [{ ...s, queue, busy: true }, [command(next)]];
 };
 
@@ -211,7 +223,9 @@ const machine = Machine.make({
 });
 
 const SavedEvent = Schema.TaggedStruct("saved", { token: Schema.String });
+
 const Answered = Schema.TaggedStruct("answered", { token: Schema.String });
+
 const Polled = Schema.TaggedStruct("polled", { token: Schema.String });
 
 const authoring = (name = "queue") => ({
@@ -309,6 +323,7 @@ const disks = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p11-runner-" });
+
   return { at: (file: string) => path.join(folder, file), scope, files: 0 };
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -324,6 +339,7 @@ const disk = (disks: Disks) => {
   let db = connect(disks, path);
   let inner = nodeSql(db);
   const fault = { query: (_q: string) => false, once: false };
+
   const sql: Sql = {
     exec: (q, ...values) => {
       if (fault.once && fault.query(q)) {
@@ -336,6 +352,7 @@ const disk = (disks: Disks) => {
     transaction: (f) => inner.transaction(f),
     size: () => inner.size(),
   };
+
   return {
     sql,
     fault,
@@ -353,13 +370,16 @@ const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stre
 const body = (row: Entry) => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(row.body);
 
 const inbox = read(`${NAME}/inbox`);
+
 const events = read("facts");
+
 const steps = read(PROCESS).pipe(Effect.map((rows) => Arr.filter(rows, (r) => r._tag === "stepped")));
 
 const resultLetters = inbox.pipe(
   Effect.map((rows) =>
     Arr.filter(rows, (r) => {
       const m = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ type: Schema.String }) }))(r.body);
+
       return Option.isSome(m) && /_(ok|err)$/.test(m.value.m.type);
     }),
   ),
@@ -370,6 +390,7 @@ const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.exit,
     Effect.map((exit) => {
       expect(Exit.isFailure(exit)).toBe(true);
+
       return Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
     }),
   );
@@ -387,8 +408,10 @@ const activityStorage = () => {
   let pending = durable;
   let aborted = false;
   const calls: Array<unknown> = [];
+
   const stored = <A>(f: () => A) =>
     Effect.suspend(() => (aborted ? Effect.fail(new LedgerError({ reason: "storage" })) : Effect.sync(f)));
+
   const storage: ActivityStorage = {
     get: (key) => stored(() => (key === "activity" ? structuredClone(pending) : undefined)),
     put: (key, value) =>
@@ -403,6 +426,7 @@ const activityStorage = () => {
         durable = structuredClone(pending);
       }),
   };
+
   return {
     storage,
     calls,
@@ -412,6 +436,7 @@ const activityStorage = () => {
     },
     wake: () => {
       aborted = false;
+
       return structuredClone(durable);
     },
   };
@@ -445,6 +470,7 @@ const worldOn = async (
   const checkedOwner = options.owner ?? owner;
   const normal = authoring(options.name ?? "queue");
   const ghost = Cmd.make("ghost", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
   const p = Program.make({
     ...normal,
     inputs: options.noPorts === true ? {} : normal.inputs,
@@ -457,11 +483,13 @@ const worldOn = async (
               ...machine.update,
               add: (s: Model, m: { readonly type: "add"; readonly n: number }) => {
                 options.onStep?.();
+
                 return [{ ...s, count: s.count + m.n }, []] as const;
               },
             },
           },
   });
+
   // The undeclared Cmd is an explicit broken module, not supported authoring.
   const loaded = () =>
     options.unknownCmd === true
@@ -481,6 +509,7 @@ const worldOn = async (
               add: Input.cases.write.make({ schema: options.addPort, description: "Add", personOnly: false }),
             },
           };
+
   const published = new Map<string, Update[]>();
   const alarms: Array<number | null> = [];
   const calls: Array<{ kind: string; id: string; parent: string | null }> = [];
@@ -499,20 +528,24 @@ const worldOn = async (
     pause: false,
     load: "" as "" | "down" | "pause" | "limit",
   };
+
   let fireCalls = 0;
   let workCalls = 0;
   const gate = await Effect.runPromise(Deferred.make<void>());
   const entered = await Effect.runPromise(Deferred.make<void>());
   const signCalls: Array<{ id: string; parent: string; process: string; kind: string }> = [];
+
   const data = () =>
     LedgerSql.layer(ledgerDisk.sql, { reader: "p11-runner" }).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
+
   const sessions = () =>
     Layer.effect(
       SessionManager,
       Effect.gen(function* () {
         const actual = yield* SessionManager;
+
         return {
           ...actual,
           signer: (parent: string, pid: string, kind: string) =>
@@ -523,6 +556,7 @@ const worldOn = async (
 
               if (fault.sign) {
                 fault.sign = false;
+
                 return yield* new SessionManagerError({ reason: new Storage({ cause: new Error("unreachable") }) });
               }
 
@@ -544,7 +578,9 @@ const worldOn = async (
         ),
       ),
     );
+
   const recordDisks = new Map<string, ReturnType<typeof disk>>();
+
   const records = RecordManager.sql(
     (name) => {
       const existing = recordDisks.get(name);
@@ -555,18 +591,22 @@ const worldOn = async (
 
       const made = disk(disks);
       recordDisks.set(name, made);
+
       return made.sql;
     },
     1024 * 1024 * 1024,
   );
+
   const monitors = () => Layer.mergeAll(SpanSink.layer(sink.sql, { object: process }), records, Archive.memory);
   const base = () => Layer.mergeAll(data(), sessions(), monitors());
+
   // Lose only the reply to a real answer append. The inbox row remains on disk.
   const mail = () =>
     Layer.effect(
       Mailbox,
       Effect.gen(function* () {
         const actual = yield* Mailbox;
+
         return {
           ...actual,
           send: (...args: Parameters<typeof actual.send>) =>
@@ -574,6 +614,7 @@ const worldOn = async (
               Effect.flatMap((answer) => {
                 if (fault.answer && Str.endsWith("/answer")(args[1])) {
                   fault.answer = false;
+
                   return Effect.fail(new LedgerError({ reason: "unreachable" }));
                 }
 
@@ -583,12 +624,15 @@ const worldOn = async (
         };
       }),
     ).pipe(Layer.provide(Mailbox.layer));
+
   const storageOptions = { process, storage: options.storage };
+
   const processStore = () =>
     Layer.effect(
       ProcessStore,
       Effect.gen(function* () {
         const actual = yield* ProcessStore;
+
         return {
           ...actual,
           record: (id: string, event: unknown, from: From) =>
@@ -596,6 +640,7 @@ const worldOn = async (
               Effect.flatMap((answer: unknown) => {
                 if (fault.record) {
                   fault.record = false;
+
                   return Effect.fail(new LedgerError({ reason: "unreachable" }));
                 }
 
@@ -605,6 +650,7 @@ const worldOn = async (
         };
       }),
     ).pipe(Layer.provide(ProcessStore.layer(store.sql, storageOptions)));
+
   const input = (n: number, m: unknown, as: "person" | "agent" = "person"): Incoming => ({
     id: `letter-${n}`,
     envelope: {
@@ -617,6 +663,7 @@ const worldOn = async (
     seen: 0,
     span: { traceId: TRACE, spanId: SPAN },
   });
+
   const deliver = (i: Incoming, name = "approve", to = process, personOnly = name === "approve") =>
     SessionManager.use((s) =>
       Effect.gen(function* () {
@@ -635,6 +682,7 @@ const worldOn = async (
         yield* s.delivered(i.envelope.id, to);
       }),
     );
+
   const wiring = () =>
     Layer.mergeAll(
       ProgramLoader.layer(
@@ -687,17 +735,20 @@ const worldOn = async (
           fire: () =>
             Effect.sync(() => {
               fireCalls++;
+
               return Outcome.ok(null);
             }),
         },
       ).pipe(
         Layer.flatMap((context) => {
           const actual = Context.get(context, ProgramLoader);
+
           return Layer.succeed(ProgramLoader, {
             load: (...args) =>
               Effect.gen(function* () {
                 if (fault.load === "down") {
                   fault.load = "";
+
                   return yield* new ProgramDown({ reason: "load" });
                 }
 
@@ -707,6 +758,7 @@ const worldOn = async (
                 }
 
                 const loaded = yield* actual.load(...args);
+
                 return {
                   ...loaded,
                   // A new delivery limit is a journal change the load saves.
@@ -722,11 +774,13 @@ const worldOn = async (
         publish: (client: string, update: WatcherUpdate) =>
           Effect.gen(function* () {
             const updates = published.get(client) ?? [];
+
             // A view the runner published that is not a Model is a bug under test, so it stays a defect.
             const decoded =
               update.type === "whole"
                 ? { ...update, view: yield* Effect.orDie(Schema.decodeUnknownEffect(Model)(update.view)) }
                 : update;
+
             updates.push(structuredClone(decoded));
             published.set(client, updates);
           }),
@@ -741,6 +795,7 @@ const worldOn = async (
         Recording,
         Effect.gen(function* () {
           const recording = yield* Recording;
+
           return {
             flush: Effect.gen(function* () {
               if (fault.flush) {
@@ -758,11 +813,13 @@ const worldOn = async (
           const mailbox = yield* Mailbox;
           const ledger = yield* Ledger;
           const s = yield* SessionManager;
+
           return {
             append: (i: Incoming) =>
               Effect.gen(function* () {
                 if (fault.append === "before") {
                   fault.append = "";
+
                   return yield* new LedgerError({ reason: "unreachable" });
                 }
 
@@ -786,6 +843,7 @@ const worldOn = async (
 
                 if (fault.append === "after") {
                   fault.append = "";
+
                   return yield* new LedgerError({ reason: "unreachable" });
                 }
 
@@ -816,6 +874,7 @@ const worldOn = async (
 
                 if (fault.commit) {
                   fault.commit = false;
+
                   return yield* new LedgerError({ reason: "unreachable" });
                 }
 
@@ -824,6 +883,7 @@ const worldOn = async (
             own: (id: string, stream: string, event: { _tag: string }) =>
               Effect.gen(function* () {
                 calls.push({ kind: event._tag, id, parent: null });
+
                 return yield* ledger.append(
                   stream,
                   id,
@@ -834,13 +894,16 @@ const worldOn = async (
         }),
       ).pipe(Layer.provide(mail())),
     );
+
   // Ticket 402: every runner is supervised. The real manager keeps this world's process table in
   // its own ledger, its first start names this world's process, and receipts live beside
   // ProcessStore.
   let pids = 0;
   const nextPid = Effect.suspend(() => (pids++ === 0 ? Effect.succeed(process) : processId));
+
   const manager = () => {
     const { ProcessManager } = coordination;
+
     const managed = ProcessManager.layer(
       {
         by: "SHA256:brain",
@@ -857,6 +920,7 @@ const worldOn = async (
         ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void }))),
       ),
     );
+
     const boot = Layer.effectDiscard(
       ProcessManager.use((m) =>
         m.status(NAME).pipe(
@@ -873,8 +937,10 @@ const worldOn = async (
         ),
       ).pipe(Effect.orDie),
     );
+
     return boot.pipe(Layer.provideMerge(managed));
   };
+
   // One built layer shares a runner/permit across concurrent inputs. Rebuilding it is a wake.
   const runner = () =>
     ProgramRunner.layer(
@@ -893,11 +959,13 @@ const worldOn = async (
         ),
       ),
     );
+
   const layer = () =>
     Layer.effect(
       ViewedRunner,
       Effect.gen(function* () {
         const actual = yield* ProgramRunner;
+
         return {
           ...actual,
           open: (client: string) =>
@@ -910,6 +978,7 @@ const worldOn = async (
         };
       }),
     ).pipe(Layer.provideMerge(runner()));
+
   return {
     p,
     store,
@@ -955,6 +1024,7 @@ const onDisks = <A>(
 describe("ticket 884, next/ brain mail", () => {
   // Independent of the new helper: this is the reserved wire format in A-BrainMail.
   const notice = (key: string) => JSON.stringify(["notice", key]);
+
   const appendNotice = (id: string, m: Schema.Json) =>
     Ledger.use((l) => l.append(`${NAME}/inbox`, id, letterLine(from({ by: "SHA256:brain" }), m)));
 
@@ -1002,6 +1072,7 @@ describe("ticket 884, next/ brain mail", () => {
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
             const before = (yield* r.open("before")).view;
+
             const by =
               sender === "recovered"
                 ? Writer.cases.person.make({ key: "SHA256:recovered", for: PERSON })
@@ -1079,6 +1150,7 @@ describe("ticket 884, next/ brain mail", () => {
     ([n]) =>
       onDisks(async (world) => {
         const checked: Array<number> = [];
+
         const w = await world({
           addPort: Msg.members[0].check(
             Schema.makeFilter((m) => {
@@ -1092,6 +1164,7 @@ describe("ticket 884, next/ brain mail", () => {
             }),
           ),
         });
+
         await Effect.runPromise(
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
@@ -1140,6 +1213,7 @@ describe("ticket 884, next/ brain mail", () => {
       onDisks(async (world) => {
         let failing = true;
         const error = new ProgramDown({ reason: "step", source });
+
         const w = await world({
           execution: (actual) => ({
             ...actual,
@@ -1147,6 +1221,7 @@ describe("ticket 884, next/ brain mail", () => {
             step: (model, m) => (failing && point === "step" ? Effect.fail(error) : actual.step(model, m)),
           }),
         });
+
         await Effect.runPromise(
           Effect.gen(function* () {
             const r = yield* w.ProgramRunner;
@@ -1174,10 +1249,12 @@ describe("P11 activity durability, experiment 231", () => {
   it.live("plant, skip sync: the runner puts stepping, completes sync, then starts the step", () =>
     onDisks(async (world) => {
       const activity = activityStorage();
+
       const w = await world({
         storage: activity.storage,
         onStep: () => activity.calls.push("step"),
       });
+
       await Effect.runPromise(
         Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
@@ -1203,6 +1280,7 @@ describe("P11 activity durability, experiment 231", () => {
           onDisks(async (world) => {
             const activity = activityStorage();
             let starts = 0;
+
             const w = await world({
               storage: activity.storage,
               onStep: () => {
@@ -1211,6 +1289,7 @@ describe("P11 activity durability, experiment 231", () => {
                 throw new Error("object aborted at step entry");
               },
             });
+
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -1277,9 +1356,11 @@ describe("p14 turns and watcher revisions", () => {
           yield* r.open("a");
           yield* r.open("b");
           const messages = Array.from({ length: 24 }, (_, i) => w.input(i + 1, { type: "add", n: 1 }));
+
           const answers = yield* Effect.forEach(messages, (m) => r.msg(m), {
             concurrency: "unbounded",
           });
+
           expect(Arr.every(answers, (a) => a._tag === "accepted")).toBe(true);
           expect(Arr.map(answers, (a) => (a._tag === "accepted" ? a.pos : -1)).sort((a, b) => a - b)).toEqual(
             Array.from({ length: 24 }, (_, i) => i + 1),
@@ -1461,11 +1542,13 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             onDisks(async (world) => {
               const w = await world();
               w.fault.work = mode;
+
               const declared = Cmd.make("work", {
                 input: Schema.Struct({ n: Schema.Int }),
                 ok,
                 err: ["disk"],
               });
+
               Object.assign(
                 w.p,
                 Program.make({
@@ -1489,6 +1572,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                     const saved = yield* Schema.decodeUnknownEffect(
                       Schema.Struct({ m: Schema.Struct({ error: DiskError }) }),
                     )(answers[0]!.body);
+
                     expect(saved.m.error).toBeInstanceOf(DiskError);
                   }
 
@@ -1496,6 +1580,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                     const saved = yield* Schema.decodeUnknownEffect(
                       Schema.Struct({ m: Schema.Struct({ value: WorkValue }) }),
                     )(answers[0]!.body);
+
                     expect(saved.m.value).toEqual(new WorkValue({ n: value }));
                   }
 
@@ -1679,6 +1764,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           ),
         );
+
         yield* Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
           const arrivals = [1_000_000 + asked + lag, 1_000_000 + asked + lag * 2];
@@ -1730,6 +1816,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           ),
         );
+
         const arrivedAt = 1_000_000 + asked + lag;
         yield* Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
@@ -1753,6 +1840,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
   );
+
   // The drain retries only a storage failure: LedgerError or RecoveryStoreError. Each fault lands
   // on a woken runner before it holds a live state, so the program's own wake cannot hide the
   // retry alarm. The recovery fault needs a journal save in that window: a new delivery limit.
@@ -1762,6 +1850,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
     down: { failure: "ProgramDown", retries: false },
     interrupt: { failure: "interrupted", retries: false },
   } as const;
+
   it.effect.prop(
     "A-Timer: only a storage failure in a drain sets the retry alarm, one backoff after the failure",
     {
@@ -1781,6 +1870,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                 }),
               ),
             );
+
             yield* Effect.gen(function* () {
               const r: Runner = yield* w.ProgramRunner;
               yield* r.msg(w.input(1, { type: "schedule", at: asked }));
@@ -1788,8 +1878,10 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }).pipe(Effect.provide(w.layer()));
             const now = 1_000_000 + asked + lag;
             const before = [...w.alarms];
+
             const failing =
               fault === "ledger" ? "SELECT checkpoint FROM process_state" : "INSERT INTO process_recovery";
+
             w.store.fault.query = (q) => Str.startsWith(failing)(q);
             w.store.fault.once = fault === "ledger" || fault === "recovery";
             w.fault.load = Match.value(fault).pipe(
@@ -1806,6 +1898,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               yield* Deferred.await(w.entered).pipe(Effect.race(Fiber.await(draining)));
               yield* Fiber.interrupt(draining);
               const exit = yield* Fiber.await(draining);
+
               const failed = Exit.isFailure(exit)
                 ? Cause.hasInterrupts(exit.cause)
                   ? "interrupted"
@@ -1813,6 +1906,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
                 : Exit.isFailure(exit.value)
                   ? Option.getOrUndefined(Cause.findErrorOption(exit.value.cause))?._tag
                   : false;
+
               expect(failed).toBe(failure);
               expect(w.store.fault.once).toBe(false);
               expect(w.alarms).toEqual(retries ? [...before, now + w.policy.backoff.minMs] : before);
@@ -1838,6 +1932,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             }),
           ),
         );
+
         yield* Effect.gen(function* () {
           const r: Runner = yield* w.ProgramRunner;
           expect((yield* r.open("initial")).view.wake).toBeNull();
@@ -1911,12 +2006,14 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(w.workCalls()).toBe(1);
           expect(yield* resultLetters).toHaveLength(0);
           const tables = w.store.db().prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+
           const saved = Arr.map(tables, ({ name }) =>
             w.store
               .db()
               .prepare(`SELECT * FROM "${String(name)}"`)
               .all(),
           );
+
           expect(Formatter.formatJson(saved)).toContain("dispatched");
           expect(Formatter.formatJson(saved)).toContain("31");
         }).pipe(Effect.provide(w.layer())),
@@ -2045,16 +2142,19 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
+
             const person = w.input(1, {
               type: "request",
               token: "person",
               tag: "answered",
             });
+
             const agent = w.input(
               2,
               { type: "request", token: value, parent: person.envelope.id, tag: "answered" },
               "agent",
             );
+
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r = yield* w.ProgramRunner;
@@ -2084,11 +2184,13 @@ describe("p69 sender survives queued work and Cmd replies", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
+
             const Stamped = Schema.Struct({
               type: Schema.Literal("work"),
               n: Schema.Int,
               parent: Schema.optionalKey(Schema.String),
             });
+
             Object.assign(
               w.p,
               Program.make({
@@ -2183,6 +2285,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
               seed: SEED,
               numRuns: 1,
             })[0]!;
+
             const senders = value ?? generated;
             const w = await world();
             await Effect.runPromise(
@@ -2413,9 +2516,11 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                 expect((yield* ProcessStore.use((s) => s.load))?.cmds).toMatchObject([
                   { cmd: { type: "write", write: { _tag: "caused", parent: b.envelope.id } } },
                 ]);
+
                 const session = yield* SessionManager.use((s) => s.signer(b.envelope.id, PROCESS, "saved")).pipe(
                   Effect.provideService(SignRequest, { id: `${PROCESS}/3/0` }),
                 );
+
                 expect(session).toMatchObject({ by: writer("agent"), parent: b.envelope.id });
                 expect(yield* events).toEqual([]);
                 expect(w.workCalls()).toBe(1);
@@ -2632,9 +2737,11 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
           Effect.gen(function* () {
             yield* w.deliver(input);
             const sessions = yield* SessionManager;
+
             const refused = yield* Effect.exit(
               sessions.signer(input.envelope.id, PROCESS, "saved").pipe(Effect.provideService(SignRequest, { id })),
             );
+
             expect(refused._tag, "runner ids never acquire a signing receipt").toBe("Failure");
             expect(w.authority.db().prepare("SELECT count(*) AS n FROM gateway_receipts").get()?.n).toBe(0);
             expect(
@@ -2883,6 +2990,7 @@ describe("P11 recovery gaps and durable installation", () => {
                 { id: `${PROCESS}/1/0`, state: "dispatched", cmd: { type: "work", n: 71 } },
               ]);
             });
+
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r = yield* w.ProgramRunner;
@@ -3025,6 +3133,7 @@ describe("P11 recovery gaps and durable installation", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
+
             const broken: unknown = {
               machine: {
                 ...w.p.machine,
@@ -3043,6 +3152,7 @@ describe("P11 recovery gaps and durable installation", () => {
                 ],
               },
             };
+
             Object.assign(w.p, broken);
             await Effect.runPromise(
               Effect.gen(function* () {
@@ -3135,6 +3245,7 @@ describe("P11 recovery gaps and durable installation", () => {
         const w = await world({ build: "new-build" });
         const Legacy = Schema.Struct({ n: Schema.Int });
         const Middle = Schema.Struct({ count: Schema.Int });
+
         const upgrades = [
           {
             name: "n_to_count",
@@ -3147,6 +3258,7 @@ describe("P11 recovery gaps and durable installation", () => {
             run: (raw: unknown) => ({ ...initial, count: Schema.decodeUnknownSync(Middle)(raw).count }),
           },
         ];
+
         Object.assign(w.p, Program.make({ ...authoring(w.p.name), state: { v: 3, upgrades } }));
         const { ProcessStore } = await import("./ProcessStore.ts");
         await Effect.runPromise(
@@ -3193,12 +3305,14 @@ describe("P11 recovery gaps and durable installation", () => {
         (value) =>
           onDisks(async (world) => {
             const w = await world();
+
             const i = w.input(1, {
               type: "request",
               token: "undeclared",
               tag: value,
               personOnly: false,
             });
+
             await Effect.runPromise(
               Effect.gen(function* () {
                 const r: Runner = yield* w.ProgramRunner;
@@ -3269,13 +3383,16 @@ describe("P11 recovery gaps and durable installation", () => {
           onDisks(async (world) => {
             const w = await world();
             const { ProcessStore } = await import("./ProcessStore.ts");
+
             const saved = {
               saved: { v: value, model: { n: 3 }, after: 0, build: "future-build" },
               turn: null,
               cmds: [],
             };
+
             const storeLayer = () =>
               ProcessStore.layer(w.store.sql, { process: PROCESS }).pipe(Layer.provide(w.base()));
+
             await Effect.runPromise(
               Effect.gen(function* () {
                 const store = yield* ProcessStore;
@@ -3410,6 +3527,7 @@ describe("P11 monitoring, content and storage failures", () => {
                 const r: Runner = yield* w.ProgramRunner;
                 yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
                 const rows: ReadonlyArray<SpanRow> = yield* recorded();
+
                 const tags = Formatter.formatJson(
                   Arr.map(rows, (row) => ({
                     attributes: row.attributes,
@@ -3417,6 +3535,7 @@ describe("P11 monitoring, content and storage failures", () => {
                     links: row.links,
                   })),
                 );
+
                 const measurements = Formatter.formatJson(w.sink.db().prepare("SELECT * FROM measurements").all());
 
                 for (const secret of [marker, signature, "private model body P11"]) {
@@ -3428,12 +3547,15 @@ describe("P11 monitoring, content and storage failures", () => {
                 expect(failed.length).toBeGreaterThan(0);
                 expect(Arr.some(failed, (row) => Predicate.isString(row.attributes["error.type"]))).toBe(true);
                 const records = yield* RecordManager;
+
                 const content = yield* Effect.forEach(
                   failed,
                   (row) => records.content({ _tag: "job", process: PROCESS }, row.spanId),
                   { concurrency: 1 },
                 );
+
                 expect(Formatter.formatJson(content)).toContain(marker);
+
                 const contentSpan =
                   failed[
                     Option.getOrElse(
@@ -3441,6 +3563,7 @@ describe("P11 monitoring, content and storage failures", () => {
                       () => -1,
                     )
                   ]!;
+
                 yield* records.deleteContent({ _tag: "job", process: PROCESS }, contentSpan.spanId, {
                   by: "SHA256:person",
                   reason: value,

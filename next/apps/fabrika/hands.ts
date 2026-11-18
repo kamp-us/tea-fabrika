@@ -59,8 +59,10 @@ const lineFor = (link: Link, fingerprint: string): Line =>
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const env = yield* environment;
   const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),

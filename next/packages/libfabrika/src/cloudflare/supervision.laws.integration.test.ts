@@ -353,6 +353,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
               Match.when(1, () => -1),
               Match.orElse(() => 0.5),
             );
+
             r.raw.policy = field < 9 ? { ...p, [key]: value } : { ...p, backoff: { ...p.backoff, [key]: value } };
           } else {
             r.raw.policy = Match.value(field).pipe(

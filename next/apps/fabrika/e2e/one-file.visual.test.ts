@@ -199,9 +199,11 @@ describe("P16 real browser from a copied one-file build", () => {
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
+
             const scripts = Arr.filter(Rec.toEntries(built.assets), ([, a]) =>
               pipe(a.type, Str.startsWith("text/javascript")),
             );
+
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
             await page.goto(instance.url);
@@ -337,6 +339,7 @@ const owned = <A, E, R>(
         Effect.sync(() => {
           const last = () => undo?.(a);
           process.on("exit", last);
+
           return { a, off: () => process.off("exit", last) };
         }),
       ),

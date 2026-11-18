@@ -318,6 +318,7 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
       const wake = Option.getOrUndefined(Arr.findFirst(wakes, (w) => w.span === span.spanId));
       expect(wake, "T1a: every queued Send saved its target alarm").toBeDefined();
       expect(span.attributes.get("fab.mail.to")).toBe(wake?.name);
+
       const children = Arr.filter(
         spans,
         (s) => s.name === "runner.mailed" && Option.getOrUndefined(s.parent)?.spanId === span.spanId,
@@ -414,6 +415,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 /** The ledger's Sql, with the two cuts a send can meet: its mail save and its acknowledgement. */
 const faulting = (sql: Sql, fault: World["fault"]) => {
   const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query)) {
@@ -468,6 +470,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
         const pair = Option.getOrUndefined(
           Arr.findFirst(PAIRS, (k) => responderName(k) === name || requesterName(k) === name),
         );
+
         const stall = pair === undefined ? undefined : world.stalled.get(pair);
 
         // SAFETY: stall is defined only when pair was found above.
@@ -552,6 +555,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
 
     return started.process;
   });
+
   const names: ReadonlyArray<readonly [string, string]> = Arr.flatMap(PAIRS, (k) => [
     [requesterName(k), REQUESTERS[k].name] as const,
     [responderName(k), world.timers === true ? timerProgram.name : mailResponder.name] as const,
@@ -720,6 +724,7 @@ const walk = (
 
     const pairFor = (name: string): Pair | undefined =>
       Option.getOrUndefined(Arr.findFirst(pairs, (k) => requesterName(k) === name || responderName(k) === name));
+
     /** Fires every saved alarm until none is left, or only those of stalled pairs. */
     const settle = Effect.fnUntraced(function* (skip: ReadonlySet<Pair>) {
       for (let round = 0; round < 64; round++) {
@@ -813,14 +818,17 @@ const walk = (
 
         const state = yield* requesterState(k);
         const asked = world.history.get(k) ?? [];
+
         const answers = Arr.filter(
           yield* bodies(requesterName(k)),
           (b) => b.type === "answer" && !world.forgedIds.has(b.id),
         );
+
         const requests = Arr.filter(
           yield* bodies(responderName(k)),
           (b) => b.type === "request" && !world.forgedIds.has(b.id) && asked.includes(b.ref ?? ""),
         );
+
         const refs = Arr.map(requests, (r) => r.ref);
         expect(new Set(refs).size, `L3: one request letter per command in ${responderName(k)}`).toBe(refs.length);
         const answered = Arr.map(answers, (a) => a.ref);
@@ -893,6 +901,7 @@ const walk = (
           !world.fault.ack &&
           !world.fault.wake,
       };
+
       const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
@@ -911,6 +920,7 @@ const walk = (
             move === "wakeDuringDrain" || move === "holdAlarm" ? Arr.filter(idle, (p) => !world.stopped.has(p)) : idle,
             cell.pick,
           );
+
           const other = Option.getOrUndefined(Arr.findFirst(pairs, (p) => p !== k)) ?? k;
           const ref = `${recorded?.secrets[k - 1] ?? "ref"}-${k}-${++world.n}`;
 
@@ -1041,6 +1051,7 @@ const walk = (
               Match.when("forbidden", () => requesterName(other)),
               Match.orElse(() => GHOST),
             );
+
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 
@@ -1139,6 +1150,7 @@ const walk = (
           );
 
           const current = world.current.get(k)?.ref;
+
           const reached = Arr.some(
             yield* bodies(requesterName(k)),
             (b) => b.type === "answer" && b.ref === current && !world.forgedIds.has(b.id),
@@ -1289,10 +1301,12 @@ const walk = (
       // L7: only admitted requests stepped the responder; forged and malformed mail did not.
       const model = Option.getOrNull(decodeResponder(yield* inContext(savedModel(store, responderName(k)))));
       const asked = world.history.get(k) ?? [];
+
       const requests = Arr.filter(
         yield* bodies(responderName(k)),
         (b) => b.type === "request" && !world.forgedIds.has(b.id),
       );
+
       const admitted = new Set(
         Arr.flatMap(requests, (b) =>
           b.ref !== undefined && asked.includes(b.ref) && !world.negative.has(b.ref) ? [b.ref] : [],
@@ -1336,6 +1350,7 @@ const prop = (
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
         const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(once(tape)));
+
         const options = {
           seed: SEED,
           numRuns: runsFor(runs),
@@ -1410,11 +1425,13 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
           let recoveryWait: number | null = null;
           let kept: ReadonlyArray<unknown> = [];
           const ticks: number[] = [];
+
           const saved = () =>
             Effect.map(
               store.alarms.saved,
               (rows) => Option.getOrUndefined(Arr.findFirst(rows, (a) => a.name === name))?.at ?? null,
             );
+
           yield* runner().due(0);
 
           for (const cell of tape) {
@@ -1556,6 +1573,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
                 checkpoint === null
                   ? timerMachine.init(null, stubCtxThrowingProxy<unknown>())[0]
                   : yield* Schema.decodeUnknownEffect(TimerModel)(checkpoint);
+
               expect(model.at, "M2: a mail drain keeps the program timer").toBe(timer);
               expect(model.ticks, "M2: only a due program timer adds its timer letter").toEqual(ticks);
             }
@@ -1624,11 +1642,13 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const name = responderName(1);
           const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
           const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
+
           const saved = () =>
             Effect.map(
               store.alarms.saved,
               (rows) => Option.getOrUndefined(Arr.findFirst(rows, (a) => a.name === name))?.at ?? null,
             );
+
           const input = (m: unknown): Incoming => ({
             id: `timer-${++world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
@@ -1969,6 +1989,7 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
   /** The pos of the newest inbox letter the reader's saved checkpoint has read. */
   const savedPos = Effect.gen(function* () {
     const after = (yield* checkpoint(PIPE_READER))?.saved.after ?? 0;
+
     return Math.max(
       0,
       ...Arr.map(
@@ -2211,6 +2232,7 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const send = Effect.fnUntraced(function* () {
                 const n = ++pipe.n;
                 yield* view.input({ type: "letter", n });
+
                 return Option.getOrUndefined(Arr.findFirst(yield* view.answers, (a) => a.n === n))?.answer;
               });
 
@@ -2263,9 +2285,11 @@ type Sent =
 /** L11's checks on what landed: Cmd order per pair, each send's parts in seq order once, each within its size. */
 const chunkChecks = Effect.fnUntraced(function* (view: PipeView, sent: ReadonlyMap<number, Sent>) {
   const landed = yield* view.inbox;
+
   const order = Arr.flatMap(landed, (l) =>
     l.m === null ? [] : l.m.type === "letter" ? [l.m.n] : [l.m.items[0]?.s ?? Number.NaN],
   );
+
   expect(
     order,
     `L11: letters one writer sends one reader arrive in its Cmd order: ${Arr.join(Arr.map(order, String), " ")}`,
@@ -2356,6 +2380,7 @@ const chunkLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                     sent.set(n, { kind: "rows", items, chunk: pipe.chunk });
                     const answer = yield* view.input({ type: "rows", n, items });
                     expect(Result.isSuccess(answer), "L11: the writer's turn answers, full or not").toBe(true);
+
                     const last = Arr.some(
                       yield* view.inbox,
                       (l) => l.m?.type === "rows" && l.m.items[0]?.s === n && l.m.part.last,
@@ -2623,8 +2648,10 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               };
 
               const view = yield* pipeWorld(open, pipe);
+
               const answer = (n: number) =>
                 Effect.map(view.answers, (all) => Option.getOrUndefined(Arr.findFirst(all, (a) => a.n === n))?.answer);
+
               const rows = ++pipe.n;
               const items = tagged(rows, pads);
               yield* view.input({ type: "rows", n: rows, items });
@@ -2683,6 +2710,7 @@ const pairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               // The held letter goes once the chunked send is done: a plain send, it lands or meets full.
               const last = yield* answer(held);
               expect(["queued", "full"], "the held letter was sent after the chunked send").toContain(last);
+
               const order = Arr.flatMap(yield* view.inbox, (l) =>
                 l.m === null ? [] : [l.m.type === "letter" ? l.m.n : (l.m.items[0]?.s ?? Number.NaN)],
               );
@@ -2754,6 +2782,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits the state-aware tape
             const property = fc.asyncProperty(Tape, fc.nat(), (tape, seed) => runPromise(once(tape, seed)));
+
             // Each run walks two real runners. Shrinking a failure runs hundreds more of them, so one
             // failed run became a 150 s timeout that hid its failing check (merge-group run
             // 43600068403). The first failing tape is reported as found.

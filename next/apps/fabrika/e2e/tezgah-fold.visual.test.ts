@@ -254,9 +254,11 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             Arr.map(stripped(clicked.narrow.view, clicked.narrow.d), (t) => t.id),
             "L33: at 1024x700 b and d fold while f holds the floor",
           ).toEqual([bb, d]);
+
           const fBox = Option.getOrUndefined(
             Arr.findFirst(clicked.narrow.d.regions, (x) => x.name === regionName(named(clicked.narrow.view, f))),
           )?.box;
+
           expect(
             fBox?.width ?? 0,
             "L33: f, opened from a 1/16 share, is drawn at least 220 wide",
@@ -296,6 +298,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
             Arr.map(stripped(banded.view, banded.d), (t) => t.id),
             "c and the whole lower row fold at 420x700",
           ).toEqual([c, a, bb, d, f]);
+
           const band = Arr.map(
             [a, bb, d, f],
             (id) =>

@@ -56,6 +56,7 @@ type Journal = Model["journal"];
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
 const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
+
 /** A process no fold creates. */
 const FOREIGN = pid(9_999_999_999);
 
@@ -197,6 +198,7 @@ const roomAt = (restarts: ReadonlyArray<number>, t: number, p: Policy): number =
     Arr.filter([t, ...Arr.map(restarts, (r) => r + p.periodMs + 1)], (c) => c >= t),
     Order.Number,
   );
+
   return (
     Option.getOrUndefined(
       Arr.findFirst(candidates, (c) => Arr.filter(restarts, (r) => r >= c - p.periodMs).length + 1 <= p.intensity),
@@ -249,15 +251,18 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
     case "idle": {
       const letter = LETTERS[cell.pick % LETTERS.length]!;
       const receipt = Option.getOrUndefined(Arr.findFirst(w.model.receipts, (r) => r.letter === letter));
+
       const fresh: Array<Move> =
         receipt === undefined
           ? [{ name: "received", weight: 4, msg: { type: "received", receipt: receiptFor(letter, j.process) } }]
           : [];
 
       const request = `restart-${cell.pick % 3}`;
+
       const compactable = Option.getOrUndefined(
         Arr.findFirst(w.model.receipts, (r) => r.tries === 0 && r.input !== null),
       );
+
       return [
         ...fresh,
         ...(receipt !== undefined && receipt.result === null
@@ -905,6 +910,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             Arr.filter([...tries], ([, n]) => n < p.maxDeliveries),
             ([letter]) => letter,
           );
+
           const letter = cycle.reuse && open.length > 0 ? open[cycle.pick % open.length]! : `letter-${tries.size + 1}`;
           expect(model.journal._tag).toBe("idle");
           const process = model.journal._tag === "idle" ? model.journal.process : A;
@@ -974,10 +980,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
       Arr.filter([...seen], (s) => Str.startsWith("brake:")(s)),
       (s) => Number(Str.slice(6)(s)),
     );
+
     const deads = Arr.map(
       Arr.filter([...seen], (s) => Str.startsWith("dead:")(s)),
       (s) => Number(Str.slice(5)(s)),
     );
+
     expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
     expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);
   });

@@ -11,6 +11,7 @@ const types = () => {
     Schema.Struct({ type: Schema.Literal("check"), name: Schema.String, note: Schema.optionalKey(Schema.String) }),
     Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
   ]);
+
   const machine = Machine.make({
     model: Schema.Null,
     msg,
@@ -18,6 +19,7 @@ const types = () => {
     init: () => [null, []],
     update: { check: (m) => [m, []], timer: (m) => [m, []] },
   });
+
   const program = Program.Program.make({
     name: "pack/checklist",
     machine,
@@ -29,8 +31,11 @@ const types = () => {
     writes: {},
     wake: () => null,
   });
+
   const port = Program.port(program, "check");
+
   type PortValue = Option.Option.Value<typeof port>["Type"];
+
   expectTypeOf<PortValue>().toEqualTypeOf<{ readonly name: string; readonly note?: string }>();
   Tools.list([program]);
   // @ts-expect-error A tool list accepts checked Program values only.

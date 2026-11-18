@@ -82,6 +82,7 @@ export const layer = (
           encode({ v: 1, build: descriptor.build, name: descriptor.name, state: next }),
         );
         const held = new Set(next._tag === "empty" ? [] : Arr.map(next.clients, (c) => c.client));
+
         return before._tag === "watching"
           ? Arr.map(
               Arr.filter(before.clients, (c) => !held.has(c.client)),

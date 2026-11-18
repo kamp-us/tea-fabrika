@@ -241,6 +241,7 @@ describe("P12 public Worker fetch", () => {
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
+
         const w = await world(port, name, (reply) =>
           Effect.runPromise(
             Effect.callback<ReturnType<typeof StartsTest.reply>>((resume) => {
@@ -248,6 +249,7 @@ describe("P12 public Worker fetch", () => {
             }),
           ),
         );
+
         const answered: Array<number> = [];
 
         const first = order.map(() =>

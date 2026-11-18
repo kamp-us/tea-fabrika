@@ -54,6 +54,7 @@ const SEED = 119120;
 const RUNS = runsFor({ fast: 10, full: 40 });
 
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
+
 const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 
 const from = (): From => ({
@@ -511,6 +512,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     for (const [index, cell] of tape.entries()) {
       const open = Arr.filter([...a.letters], ([id, l]) => Str.startsWith("poison")(id) && l.dead === null);
       const dead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
+
       const options = Arr.filter(
         allowed,
         (move) =>
@@ -760,6 +762,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
 const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof world>>, a: Account, limit: number) {
   const rows = w.rows();
   const lifecycle = Arr.filter(rows, (row) => row.stream === `processes/${NAME}`);
+
   const exits = Arr.map(
     Arr.map(
       Arr.filter(lifecycle, (row) => row.event === "exited"),
@@ -768,6 +771,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
     ),
     ({ process, reason }) => ({ process, reason }),
   );
+
   // J2, J12: each exit once, in order, with its producer's reason, through every cut and retry.
   expect(exits, "each exit is written once with its slice-1 reason").toEqual(a.exits);
   // J2, J6, J7: one successor per recovery; a cut start or transfer never starts another.

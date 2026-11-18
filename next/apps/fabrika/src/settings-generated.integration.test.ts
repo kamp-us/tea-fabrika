@@ -237,11 +237,14 @@ const target = fc.constantFrom("package", "relative", "relative-bare", "parser",
 /** The relative import spelling from one repo file to another, as `../../packages/x.ts`. */
 const relative = (from: string, to: string) => {
   const [a, b] = [Str.split(from, "/").slice(0, -1), Str.split(to, "/")];
+
   const n = Option.getOrElse(
     Arr.findFirstIndex(a, (s, i) => s !== b[i]),
     () => a.length,
   );
+
   const rest = Arr.join(b.slice(n), "/");
+
   return a.length === n ? `./${rest}` : `${Str.repeat(a.length - n)("../")}${rest}`;
 };
 
@@ -268,6 +271,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
               return { file: c.file, spec, allowed };
             },
           );
+
           fc.pre(planted.length > 0);
 
           const result = await plant(

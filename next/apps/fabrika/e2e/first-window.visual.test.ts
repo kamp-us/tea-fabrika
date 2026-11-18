@@ -211,6 +211,7 @@ const loseFirstAnswers = (pid: string) => {
 const checklistPid = (r: Effect.Success<ReturnType<typeof reader>>) =>
   Effect.gen(function* () {
     const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
+
     const pids = Arr.flatMap(yield* r.read(`processes/${NAME}`), (e) => {
       const started = Schema.decodeUnknownOption(Started)(e);
 
@@ -642,6 +643,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 ).toBeGreaterThan(0);
                 const credentials = [`tok_${token}`, `sec_${secret}`, h.credential, stranger.credential];
                 const granted = Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures);
+
                 const signatures = [
                   ...Arr.flatMap(granted, (signature) => [
                     signature,
@@ -667,6 +669,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                   "the signed removal stays in its history",
                 ).toBe(true);
                 const accessBodies = new Map<string, string>();
+
                 const records = Arr.map(access, (entry): readonly [string, string] => {
                   if (entry._tag !== "granted" && entry._tag !== "revoked") {
                     return ["access record", JSON.stringify(entry)];
@@ -688,10 +691,12 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
 
                   return ["access record", JSON.stringify({ ...entry, body: { ...body, signed } })];
                 });
+
                 const proofs = [
                   ...Arr.flatMap([...h.grants, ...stranger.grants], (g) => g.signatures),
                   revoked.armored,
                 ];
+
                 // The tabs' last look comes while the instance still runs. The scan reads the home once
                 // more while it runs, then stops it and reads a home nothing writes to any more.
                 const last = [...(yield* look(t.page, t.seen)), ...(yield* look(second.page, second.seen))];
@@ -727,6 +732,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     [output, percentDecoded(text)],
                   ],
                 );
+
                 const credentialOutputs = [
                   ...checkedOutputs,
                   ...Arr.flatMap(disk.raw, ([output, text]): ReadonlyArray<readonly [string, string]> => [

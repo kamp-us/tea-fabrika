@@ -35,6 +35,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
         }
 
         const skip = ["node_modules", "dist"].includes(entry.name) || pipe(entry.name, Str.startsWith("."));
+
         return skip ? [] : codeFiles(path);
       });
 
@@ -56,6 +57,7 @@ const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly
     ),
     Arr.map((machine) => {
       const stem = pipe(basename(machine), Str.replace(/\.tsx?$/, ""));
+
       const laws = Arr.filter(
         files,
         (file) =>
@@ -63,6 +65,7 @@ const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly
           pipe(basename(file), Str.startsWith(`${stem}.`)) &&
           pipe(basename(file), Str.endsWith(".laws.test.ts")),
       );
+
       return { path: Arr.join(Str.split(relative(next, machine), sep), "/"), laws };
     }),
   ).sort((a, b) => (a.path < b.path ? -1 : 1));
@@ -93,6 +96,7 @@ const unsynced = (next: string): ReadonlyArray<string> =>
     Arr.filter((m) =>
       Arr.every(m.laws, (file) => {
         const text = readFileSync(file, "utf8");
+
         return !pipe(text, Str.includes(SYNC_TEST)) && !LEFT_OUT.test(text);
       }),
     ),

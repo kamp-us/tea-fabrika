@@ -21,6 +21,7 @@ import * as TomlParser from "./TomlParser.ts";
 const declaration = (path: string) => {
   const found = Declarations.all.declarations.filter((d) => d.path === path);
   expect(found, `${path} must be declared once`).toHaveLength(1);
+
   return Option.getOrThrow(Option.fromUndefinedOr(found[0]));
 };
 
@@ -52,6 +53,7 @@ const empty = { value: {}, spans: [] };
 
 const resolve = Effect.fnUntraced(function* (text: string) {
   const parsed = yield* Toml.use((toml) => toml.parse(text));
+
   return yield* Sources.resolve(group(), {
     flags: Sources.flags({}),
     env: Sources.env({}),
@@ -78,6 +80,7 @@ describe("P34c Q11 settings", () => {
         const g = group();
         expect(numeric(g.settings.writes.default)).toBe(Math.ceil(10 * 2 * 688));
         expect(numeric(g.settings.storage.default)).toBe(1_000_000_000);
+
         const calculated = {
           process: {
             writes: Math.ceil(10 * Math.max(29, 25 + 3)),
@@ -90,6 +93,7 @@ describe("P34c Q11 settings", () => {
             message: { writes: Math.ceil(10 * 1), bytes: Math.ceil(10 * 546.83) },
           },
         };
+
         expect(calculated).toEqual(measured);
         expect(numeric(g.settings.recovery.default)).toEqual(measured);
 
@@ -125,16 +129,19 @@ describe("P34c Q11 settings", () => {
               [`recovery.${location}.message.bytes`, value.message.bytes] as const,
             ]),
           ]);
+
           const selected = new Map(defaults);
 
           for (const cell of tape) {
             const paths = [...selected.keys()];
             const key = paths[cell.pick % paths.length]!;
+
             const cap = Match.value(key).pipe(
               Match.when("writes", () => 13_760),
               Match.when("storage", () => 1_000_000_000),
               Match.orElse(() => 1_000_000),
             );
+
             selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
             const tables = new Map<string, string[]>();
 

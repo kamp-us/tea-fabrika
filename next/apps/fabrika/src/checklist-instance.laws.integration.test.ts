@@ -167,6 +167,7 @@ const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
 const callByName = (service: object, method: string, args: ReadonlyArray<unknown>): unknown => {
   const member = Predicate.hasProperty(service, method) ? service[method] : undefined;
   assert(Predicate.isFunction(member), `the service has no ${method} call`);
+
   return Reflect.apply(member, service, args);
 };
 
@@ -389,6 +390,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
                       Effect.asVoid,
                     ),
                   );
+
                   current.scheduled = { timer, work };
                 }
               });
@@ -407,6 +409,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
             };
 
             const current = processes.get(storageKey) ?? made();
+
             return Stub.make<ProcessBinding>(
               (method) =>
                 (...args: ReadonlyArray<unknown>) =>
@@ -414,6 +417,7 @@ const world = (options: { readonly lacks?: string; readonly proof?: Proof } = {}
               {
                 configure: (descriptor: Descriptor) => {
                   configured.push(structuredClone(descriptor));
+
                   return current.object.configure(descriptor);
                 },
                 descriptor: () => current.object.descriptor(),
@@ -661,6 +665,7 @@ describe("L13: notices name their process", () => {
             Effect.gen(function* () {
               const w = yield* world({ proof: counts });
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
+
               const [, [pid]] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([
                   Schema.Array(Schema.String),
@@ -675,10 +680,12 @@ describe("L13: notices name their process", () => {
 
               for (const [n] of names.entries()) {
                 counts.moves++;
+
                 const name = Arr.filter(
                   names,
                   (candidate) => !Arr.some(model.items, (item) => item.name === candidate),
                 )[0]!;
+
                 const msg = { type: "add" as const, name };
 
                 const answer = yield* call(w, (p) =>
@@ -699,6 +706,7 @@ describe("L13: notices name their process", () => {
                 yield* w.settled;
                 const late = yield* admit(w);
                 const opened = yield* call(w, (p) => p.route(late, "view.open", { pid }));
+
                 const { result } = yield* Schema.decodeUnknownEffect(
                   Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) }),
                 )(opened);
@@ -745,6 +753,7 @@ describe("L13: notices name their process", () => {
               Effect.gen(function* () {
                 const w = yield* world({ proof: counts });
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
+
                 const [, [pid]] = yield* Schema.decodeUnknownEffect(
                   Schema.Tuple([
                     Schema.Array(Schema.String),
@@ -789,6 +798,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
+
                     const refused = Str.includes('"refused"')(Formatter.formatJson(answer));
                     seen.refused += refused ? 1 : 0;
 
@@ -807,6 +817,7 @@ describe("L13: notices name their process", () => {
                 }
 
                 yield* w.settled;
+
                 // Read as the Connection object reads them: a view news, and the Published it holds.
                 const views = Arr.filter(
                   Arr.map(w.heard, (h) => h.news),
@@ -817,6 +828,7 @@ describe("L13: notices name their process", () => {
                   Arr.map(w.published, (h) => h.news),
                   Schema.is(Published),
                 );
+
                 expect(views.length, "the client heard the checklist's views").toBeGreaterThan(0);
                 expect(views.length).toBe(theirs.length);
 

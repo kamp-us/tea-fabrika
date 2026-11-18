@@ -126,6 +126,7 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
           : e % 4 === 2
             ? Arr.map(v.items, (it, j) => (j === i ? { ...it, done: !it.done } : it))
             : [{ name: word, done: false }, ...v.items];
+
     return { items, left: Arr.filter(items, (it) => !it.done).length };
   }
 
@@ -175,6 +176,7 @@ const step = (machine: Machine, c: Model, m: Msg): readonly [Model, Out] => appl
 
 /** L4's pids: each shows a bare list of words, so a press can capture the rev it shows. */
 const LETTER_PIDS = ["pid_a", "pid_b"] as const;
+
 const LETTER_KINDS: ReadonlyMap<string, Kind> = new Map(Arr.map(LETTER_PIDS, (pid) => [pid, "tags"]));
 
 const letterChoice = fc.record({
@@ -302,10 +304,12 @@ describe("L4: client letters (p1)", () => {
       fc.property(letterWalks, (list) => {
         letterWalk(list, (_prev, _m, next) => {
           const out = sendable(next);
+
           const firstDating = Option.getOrElse(
             Arr.findFirstIndex(next.pending, (p) => p._tag === "dating"),
             () => -1,
           );
+
           const expected = Arr.filter(
             firstDating < 0 ? next.pending : next.pending.slice(0, firstDating),
             (p): p is Ready => p._tag === "ready",
@@ -334,6 +338,7 @@ describe("L4: client letters (p1)", () => {
         letterWalk(list, (prev, m, next) => {
           const gone = Arr.filter(prev.c.pending, (p) => !Arr.some(next.pending, (q) => q.n === p.n));
           const terminal = m.type === "reply" && (m.answer._tag === "accepted" || m.answer._tag === "refused");
+
           const own = Arr.filter(
             prev.c.pending,
             (p) => p._tag === "ready" && m.type === "reply" && p.letter === m.letter,
@@ -417,6 +422,7 @@ const brainStep = (b: Brain, c: ViewChoice): object => {
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
   b.rev += 1;
+
   return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(json(before), json(after)) };
 };
 
@@ -432,6 +438,7 @@ const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
     Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
     Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
   );
+
   const pastEnd = Match.value(b.kind).pipe(
     Match.when("list", () => "/items/99"),
     Match.when("tags", () => "/99"),
@@ -439,6 +446,7 @@ const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
   );
 
   const other = Option.getOrThrow(Arr.findFirst(KINDS, (k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k])));
+
   return [
     next([{ op: "move", from: "/x", path: "/y" }]),
     next([{ op: "replace", path: "/missing/deep", value: 1 }]),
@@ -546,6 +554,7 @@ const viewWalks = fc.tuple(
 
 // SAFETY: every pid the walk makes ends in `_` and its kind, as `pid_${i}_${kind}`.
 const pidKind = (pid: string): Kind => Arr.lastNonEmpty(Str.split(pid, "_")) as Kind;
+
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
 /** A notice's `type` when it is a string: every caller compares it with a string. */
@@ -742,8 +751,11 @@ describe("L5: client views (p3)", () => {
 
 /** Process ids the fold can confuse: few enough that starts, exits and restarts name the same ones. */
 const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`);
+
 const F1_NAME = "checklist:1";
+
 const trusted = (writer: string) => writer === "brain" || Str.startsWith("brain:")(writer);
+
 const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
 
 const EXITS = [
@@ -767,6 +779,7 @@ const fact = fc.record({
 /** A name's stream as the door reads it out: each fact under its own rev, in rev order. */
 const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ? F : never>) => {
   let rev = 0;
+
   return Arr.map(facts, (f) => {
     rev += f.gap;
 
@@ -796,6 +809,7 @@ describe("P18 F1: a name's fold over pages", () => {
           const entries = stream(facts);
           const at = [...new Set(Arr.map(cuts, (n) => n % (entries.length + 1)))].sort((a, b) => a - b);
           const bounds = [0, ...at, entries.length];
+
           const pages = Arr.flatMap(bounds, (start, i) =>
             i + 1 < bounds.length ? [entries.slice(start, bounds[i + 1])] : [],
           );

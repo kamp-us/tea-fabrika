@@ -65,6 +65,7 @@ export type MailReply = typeof MailReplies.Type;
  * @category schemas
  */
 export const ConnectionId = Schema.String.pipe(Schema.brand("ConnectionId"));
+
 /**
  * The branded string that names one client's connection at the door.
  *

@@ -75,6 +75,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
       const socket = new WebSocket(
         `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
       );
+
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -90,6 +91,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
     until(
       Effect.sync(() => {
         const at = Arr.findFirstIndex(frames, match);
+
         return Option.isNone(at) ? undefined : frames.splice(at.value, 1)[0];
       }),
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
@@ -108,6 +110,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: SshsigTest.Identity)
   const call = Effect.fnUntraced(function* (method: string, params: Schema.Json) {
     const id = ++serial;
     socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
+
     return yield* next((frame) => frame.id === id);
   });
 
@@ -264,6 +267,7 @@ const read = (world: World["Service"], process: string) =>
   Effect.gen(function* () {
     // A later runner call flushes already delivered tails to the public JobRecord.
     yield* call(() => world.instance.process(process).open("usage-probe"));
+
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
@@ -314,6 +318,7 @@ const spinSample = Effect.gen(function* () {
     (rows) => cpu(rows, "update").length === 2,
     "the spinning update produced no second isolate.cpu row",
   );
+
   const baseline = Arr.map(cpu(idle, "update"), duration);
   const later = Arr.filter(cpu(busy, "update"), (row) => !Arr.some(idle, (old) => old.spanId === row.spanId));
   expect(later).toHaveLength(1);
@@ -367,6 +372,7 @@ it.layer(
             build: built.programs["fabrika/checklist"]?.hash ?? "missing",
           }),
         );
+
         const started = yield* until(
           call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")).pipe(
             Effect.flatMap(Schema.decodeUnknownEffect(lifecycle)),
@@ -374,6 +380,7 @@ it.layer(
           (rows) => Arr.some(rows, (row) => row.body.after === checklist),
           "restart recorded no successor within 10 seconds",
         );
+
         const successor = Option.getOrUndefined(Arr.findFirst(started, (row) => row.body.after === checklist))?.body
           .process;
 

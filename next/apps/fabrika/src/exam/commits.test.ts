@@ -421,6 +421,7 @@ const route = fc
   .tuple(fc.uniqueArray(sha, { minLength: 4, maxLength: 10 }), ticket, fc.array(role, { minLength: 10, maxLength: 10 }))
   .map(([trees, ticket, roles]) => {
     const versions = { tests: 0, build: 0, lead: 0 };
+
     const notes = Arr.map(trees.slice(1), (to, i): Note => ({
       _tag: "attested",
       step: roles[i]!,
@@ -431,6 +432,7 @@ const route = fc
       key: `key-${i}`,
       sig: `sig-${i}`,
     }));
+
     return { trees, notes, commits: Arr.map(notes, (n) => commit(n)) };
   });
 
@@ -591,6 +593,7 @@ describe("newest links (p89)", () => {
           signed({ ...n, version: n.version + 100 }, Option.getOrThrow(Arr.findFirst(ROLES, (r) => r !== n.step))),
           signed({ ...n, version: n.version + 100, ticket: `${n.ticket}0` }),
         ]);
+
         expect(answers(pr(commits, { notes: [...noise, ...Arr.map(notes, (n) => signed(n))] }))).toEqual([DONE]);
         expect(staleSteps(notes[0]!.ticket, [], [])).toEqual(new Set());
       }),
@@ -985,6 +988,7 @@ describe("0053 parent exam lists", () => {
             ),
             main,
           );
+
           expect(Arr.filter(result.answers, (a) => a._tag === "ask")).toEqual(matched.length > 0 ? [ask(matched)] : []);
         }
       }),
@@ -996,11 +1000,13 @@ describe("0053 parent exam lists", () => {
     fc.assert(
       fc.property(route, fc.array(filename), ({ commits }, paths) => {
         const cs = Arr.map(commits, (c) => ({ ...c, paths, exam: c.signed?.note.step === "build" ? null : c.exam }));
+
         const expected = pipe(
           cs,
           Arr.filter((c) => c.signed?.note.step === "build"),
           Arr.map((c) => stuck("no_exam_list", c.sha)),
         );
+
         expect(refusals(cs)).toEqual(expected);
       }),
       runs,

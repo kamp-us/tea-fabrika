@@ -432,6 +432,7 @@ describe("p21, receive", () => {
       id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
       m: fc.oneof(fc.integer(), fc.string({ maxLength: 5 }), fc.constant(null), fc.record({ n: fc.nat() })),
     });
+
     return fc.assert(
       fc.asyncProperty(fc.array(sendArb, { maxLength: 30 }), (sends) =>
         Effect.runPromise(

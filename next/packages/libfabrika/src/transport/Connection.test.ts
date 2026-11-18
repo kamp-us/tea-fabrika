@@ -182,6 +182,7 @@ const admits = (saved: Saved, wait: W) => {
   }
 
   const next = { ...saved, waits: [...saved.waits, wait] };
+
   return !Arr.some(saved.waits, (w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
 };
 
@@ -315,12 +316,14 @@ describe("T703 connection driver laws", () => {
                     }
 
                     yield* h.run(h.c.frame(waitFrame(id, { stream: wait.stream, after: wait.after })));
+
                     const refused = Arr.filter(
                       answers(h.log, from),
                       (f) => f.id === id && f.error?.message === "too_many_waits",
                     );
 
                     expect(refused).toHaveLength(ok ? 0 : 1);
+
                     const registered = Option.getOrUndefined(
                       Arr.findFirst(h.log.slice(from), (e) => e._tag === "wait"),
                     );
@@ -352,17 +355,21 @@ describe("T703 connection driver laws", () => {
                       move % 2 === 0
                         ? Answer.cases.ok.make({ result: null })
                         : Answer.cases.refused.make({ reason: "x" });
+
                     yield* Deferred.succeed(call!.reply, answer);
                     yield* settle;
                     const after = h.log.slice(from);
+
                     const sent = Option.getOrElse(
                       Arr.findFirstIndex(after, (e) => e._tag === "send"),
                       () => -1,
                     );
+
                     const idle = Option.getOrElse(
                       Arr.findFirstIndex(after, (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy),
                       () => -1,
                     );
+
                     // The response goes out first; only then is busy cleared.
                     expect(sent).toBeGreaterThanOrEqual(0);
                     expect(idle).toBeGreaterThan(sent);
@@ -484,6 +491,7 @@ describe("T703 connection driver laws", () => {
         other: fc.uuid(),
         id: fc.oneof(fc.string(), fc.integer()),
       });
+
       yield* promised(() =>
         fc.assert(
           fc.asyncProperty(fc.array(Step, { minLength: 1, maxLength: 40, size: "max" }), (steps) =>
@@ -713,6 +721,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
+
   const [change, value] = Str.split(r.mutation, ":");
 
   if (change === "drop") {
@@ -874,10 +883,12 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                   readonly method: string;
                   readonly params: unknown;
                 }> = [];
+
                 const check = (from: number) => {
                   const calls = Arr.flatMap(h.log.slice(from), (e) =>
                     e._tag === "call" ? [{ method: e.method, params: e.params }] : [],
                   );
+
                   // The calls the old decode accepted, in order, and no other.
                   expect(calls).toEqual(
                     Arr.map(queued.splice(0, calls.length), ({ method, params }) => ({ method, params })),
@@ -931,6 +942,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                     const trace: Array<string> = [];
                     const value = failure(f, trace);
                     const before = h.saved();
+
                     const id = Arr.findFirst(
                       before._tag === "online" ? before.waits : [],
                       (w) => `${w.stream}|${w.after}` === pending!.label,
@@ -938,6 +950,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                       Option.map((w) => w.id),
                       Option.getOrUndefined,
                     );
+
                     yield* Deferred.fail(pending!.reply, value);
                     yield* settle;
                     const old = oldAnswer(f);

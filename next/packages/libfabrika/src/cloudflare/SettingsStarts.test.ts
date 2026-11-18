@@ -401,13 +401,16 @@ StartsTest.law(
           Effect.sync(() => new DatabaseSync(":memory:")),
           (owned) => Effect.sync(() => owned.close()),
         );
+
         return yield* Layer.build(SettingsStartsLedger.layer(nodeSql(db)));
       });
+
       const first = yield* ledger();
       const second = yield* ledger().pipe(Effect.provide(first));
       const ledgers = [Context.get(first, Starts), Context.get(second, Starts)] as const;
       const held = [new Map<string, Start.Receipt>(), new Map<string, Start.Receipt>()] as const;
       let crossed = false;
+
       const read = Effect.fnUntraced(function* (side: 0 | 1, start: string) {
         const exit = yield* Effect.exit(ledgers[side].read(start));
         const receipt = held[side].get(start);
@@ -419,11 +422,14 @@ StartsTest.law(
             : { _tag: "Success", value: receipt },
         );
       });
+
       const record = Effect.fnUntraced(function* (side: 0 | 1, index: number) {
         const input = yield* StartsTest.input({ ...recipe, start: `${recipe.start}-${index}` });
         held[side].set(input.start, yield* ledgers[side].record(input));
+
         return input.start;
       });
+
       const opening = yield* record(0, 0);
 
       for (const [index, choice] of choices.entries()) {

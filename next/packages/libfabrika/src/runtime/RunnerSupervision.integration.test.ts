@@ -128,7 +128,9 @@ const world = (
   const ledger = storage(),
     state = storage(),
     authority = storage();
+
   const next = ids(initialProcess, ...Arr.filter(PIDS, (process) => process !== initialProcess));
+
   const controls = {
     throws: true,
     savedThrows: false,
@@ -732,6 +734,7 @@ describe("P34 runner supervision", () => {
 
                   const call =
                     pending === "fresh" || path === "msg" ? "step" : path === "restart" ? "restart.request" : path;
+
                   expect(Arr.map(spans, (row) => JSON.parse(String(row.row)))).toEqual(
                     expect.arrayContaining([
                       expect.objectContaining({ name: `runner.${call}` }),
@@ -787,6 +790,7 @@ describe("P34 runner supervision", () => {
                   Match.when("due early", () => time + delay),
                   Match.orElse(() => null),
                 );
+
                 const w = world(false, true, wakeAt);
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };
@@ -1444,6 +1448,7 @@ describe("P34 runner supervision", () => {
             }
 
             yield* ProcessManager.use((p) => p.exit(B, reason, from())).pipe(Effect.provide(w.manager()));
+
             const expected = Arr.map(refs, (ref) =>
               Down.make({
                 ref,
@@ -1500,12 +1505,14 @@ describe("P34 runner supervision", () => {
 
             const tables = () =>
               w.state.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+
             const processTables = new Set(Arr.map(tables(), (row) => String(row.name)));
             const poison = w.input(value);
             yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
             w.reopen();
             yield* recover(w);
             const goodId = (n: number) => `good-${Str.padStart(3, "0")(String(n))}`;
+
             const good = (n: number) =>
               ProgramRunner.use((r) => r.msg(w.input(goodId(n), { type: "add", n: 1 }))).pipe(
                 Effect.tap((answer) => Effect.sync(() => expect(answer).toMatchObject({ _tag: "accepted", pos: n }))),
@@ -1524,10 +1531,12 @@ describe("P34 runner supervision", () => {
 
               for (const event of ["INSERT", "UPDATE", "DELETE"]) {
                 const record = event === "DELETE" ? "OLD" : "NEW";
+
                 const bytes = Arr.join(
                   Arr.map(columns, ({ name }) => `coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`),
                   " + ",
                 );
+
                 w.state.sql.exec(
                   `CREATE TEMP TRIGGER ${quote(`p34_write_${index}_${event}`)} AFTER ${event} ON ${table}
 							BEGIN INSERT INTO p34_supervision_writes (bytes) VALUES (${bytes}); END`,
@@ -2141,6 +2150,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
                 { m: id, tries: expected, limit: expected, errors },
               ]);
               const process = PIDS[expected - 1]!;
+
               const started = Option.getOrUndefined(
                 Arr.findFirst(
                   Arr.map(
@@ -2150,6 +2160,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
                   (event) => event.process === process,
                 ),
               );
+
               expect(started).toBeDefined();
               expect(rows[0]!.stream).toBe(`${process}/dead`);
               expect(rows[0]!.body).toMatchObject({
@@ -2231,6 +2242,7 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           const checkpoint = yield* ProcessStore.use((store) =>
             Effect.flatMap(store.select(process), (own) => own.load),
           ).pipe(Effect.provide(w.layer()));
+
           const options = Arr.filter(
             moves,
             (move) =>
@@ -2322,6 +2334,7 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
 
           done.add(move);
           const rows = yield* lives.pipe(Effect.provide(w.manager()));
+
           const exits = Arr.map(
             Arr.map(
               Arr.filter(rows, (row) => row._tag === "exited"),
@@ -2330,14 +2343,18 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
             ),
             ({ process, reason }) => ({ process, reason }),
           );
+
           expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
+
           const restarted = Arr.map(
             Arr.filter(rows, (row) => row._tag === "restarted"),
             (row) => valueFor(row),
           );
+
           expect(restarted, "a person's restart keeps its request's reason for starting again").toHaveLength(
             expected.restarts.length + Arr.filter(expected.exits, (e) => e.reason._tag === "crashed").length,
           );
+
           const signals = Arr.map(
             Arr.map(
               yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())),
@@ -2346,15 +2363,18 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
             ),
             ({ m }) => [m.process, m.reason] as const,
           );
+
           expect(signals, "each DOWN carries its exit's reason unchanged").toEqual(
             Arr.map(expected.exits, ({ process, reason }) => [process, reason] as const),
           );
+
           // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
           const serialized = Formatter.formatJson([
             rows,
             signals,
             Arr.filter(w.ledger.rows(), (row) => row._tag === "send"),
           ]);
+
           expect(Str.includes(SENTINEL)(serialized), "no exception message in exit facts or monitor payloads").toBe(
             false,
           );

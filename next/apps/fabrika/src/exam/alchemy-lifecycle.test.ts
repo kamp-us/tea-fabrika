@@ -129,6 +129,7 @@ describe("P12 Alchemy lifecycle patch", () => {
               ...live,
               serve: (config: { sockets: Array<{ name: string }> }, ...args: Array<unknown>) => {
                 os.sockets.splice(0, os.sockets.length, ...Arr.map(config.sockets, (s) => s.name));
+
                 return live.serve(config, ...args);
               },
             };

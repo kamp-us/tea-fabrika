@@ -27,8 +27,10 @@ export const make = <E>(sql: Sql, send: (connection: string, client: string, new
     }
 
     yield* send(String(row.connection), client, news);
+
     return Publication.cases.sent.make({});
   });
+
   return {
     publish: (client: string, update: Published) => deliver(client, News.cases.view.make({ update })),
     notify: (client: string, news: News) => deliver(client, news).pipe(Effect.asVoid),

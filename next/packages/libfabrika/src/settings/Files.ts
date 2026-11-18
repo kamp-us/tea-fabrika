@@ -210,6 +210,7 @@ type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
   const [major = 0, minor = 0, patch = 0] = Str.split(version, ".").map(Number);
+
   return [major, minor, patch] as const;
 };
 

@@ -220,12 +220,15 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
       fc.integer({ min: -(2 ** 30), max: 0 }).map(String),
       fc.constantFrom('""', '"abc"', "1.5", "true"),
     );
+
     return fc.assert(
       fc.asyncProperty(fc.constantFrom(...ORDER), invalid, ports, async (winning, raw, below) => {
         const lower = ORDER.slice(ORDER.indexOf(winning) + 1);
+
         // A flag or the environment holds text; a file holds TOML.
         const text =
           winning === "flag" || winning === "env" ? (Str.startsWith('"')(raw) ? Str.slice(1, -1)(raw) : raw) : raw;
+
         const choices: Array<Choice> = [
           { [winning]: text, ...Rec.fromEntries(lower.map((slot) => [slot, String(below)])) },
           {},

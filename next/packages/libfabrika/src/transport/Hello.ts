@@ -30,6 +30,7 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
  */
 export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
   const shared = Arr.filter(client, (v) => server.includes(v));
+
   return shared.length === 0 ? null : Math.max(...shared);
 };
 

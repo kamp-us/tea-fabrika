@@ -14,7 +14,9 @@ const Positive = Count.check(Schema.isGreaterThanOrEqualTo(1));
 const Errors = ["NemesisError", "handler_failed", "bad_cmd"] as const;
 
 const SettledErrors = [...Errors, "malformed_result"] as const;
+
 const Error = Schema.Union(Arr.map(SettledErrors, (tag) => Schema.TaggedStruct(tag, {})));
+
 const Request = Schema.Struct({ id: Chaos.ExperimentId });
 
 const Inspect = Schema.Struct({ ...Request.fields, target: Chaos.Target });

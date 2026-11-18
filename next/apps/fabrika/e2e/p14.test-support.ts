@@ -137,6 +137,7 @@ const note = (row: Readonly<Record<string, unknown>>) =>
  *  `exit` listeners on that exit, synchronously, as the `tmp` package's graceful cleanup does. */
 const onExit = (undo: () => void) => {
   process.on("exit", undo);
+
   return () => process.off("exit", undo);
 };
 
@@ -466,6 +467,7 @@ export const grant = (h: Home, w: Waiting, key = h.key) =>
         ],
         { concurrency: 4 },
       );
+
       const sent = Arr.map(
         Arr.filter(Str.split(wire, "\n"), (line) => line !== ""),
         (line) => Schema.decodeSync(Schema.fromJsonString(GrantWire))(line),
@@ -514,7 +516,9 @@ export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
     const armored = execFileSync("ssh-keygen", ["-Y", "sign", "-n", "fabrika-client", "-f", h.key], {
       input: text,
     }).toString();
+
     const body = Formatter.formatJson({ text, armored });
+
     const r = yield* HttpClientRequest.post(`${dev.url}/grant`).pipe(
       HttpClientRequest.bodyText(body, "application/json"),
       HttpClient.execute,
@@ -599,6 +603,7 @@ export const tile = (page: Page, name: string) => {
         Arr.flatMap(Str.split(yaml, "\n"), (line) => {
           const m = BOX.exec(line);
           const [, item = "", state = ""] = m ?? [];
+
           return m === null
             ? []
             : [{ name: pipe(item, Str.replace(/\\(.)/g, "$1")), checked: pipe(state, Str.includes("[checked]")) }];
@@ -769,6 +774,7 @@ export const reader = (h: Home, dev: Dev) =>
 
         const id = ++serial;
         ws.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
+
         return yield* next((f) => f.id === id);
       });
 

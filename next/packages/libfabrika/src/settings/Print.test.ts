@@ -149,6 +149,7 @@ const loadRows = (ds: Declared) =>
 /** Whether `line` starts the row of `path`: the path first, then no further key character. */
 const starts = (line: string, path: string) => {
   const rest = Str.trimStart(line);
+
   return Str.startsWith(path)(rest) && !/^[a-z0-9.-]/.test(Str.slice(path.length)(rest));
 };
 

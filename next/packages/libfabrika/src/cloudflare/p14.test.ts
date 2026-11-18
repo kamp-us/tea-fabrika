@@ -62,9 +62,11 @@ const config = (port: number) =>
 /** An environment whose every stub call is written down, so the law can say none was made. */
 const world = (input: Awaited<ReturnType<typeof config>>) => {
   const calls: Array<string> = [];
+
   /** Any call on the stub for `to`: written down, and answered `{ _tag: "ok" }`. */
   const recorded = (to: string) => (method: string) => async () => {
     calls.push(`${to}.${method}`);
+
     return { _tag: "ok" };
   };
 
@@ -175,11 +177,13 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
+
             const originHeader = Match.value(s.origin % 5).pipe(
               Match.when(0, () => "http://evil.example"),
               Match.when(1, () => origin),
               Match.orElse(() => null),
             );
+
             const target = path === "/" ? (current !== undefined && Rec.has(current, PAGE) ? PAGE : null) : path;
 
             const asset =

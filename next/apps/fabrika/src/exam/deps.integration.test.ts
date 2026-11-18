@@ -98,6 +98,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
         }
 
         const skip = ["node_modules", "dist"].includes(entry.name) || pipe(entry.name, Str.startsWith("."));
+
         return skip ? [] : codeFiles(path);
       });
 
@@ -132,6 +133,7 @@ const packageAt = (spec: string): { readonly name: string; readonly subpath: str
 const pointsAt = (from: string, spec: string): string => {
   const base = join(dirname(from), spec);
   const tries = [base, `${base}.ts`, `${base}.tsx`, join(base, "index.ts"), pipe(base, Str.replace(/\.js$/, ".ts"))];
+
   return Option.getOrElse(
     Arr.findFirst(tries, (path) => existsSync(path) && statSync(path).isFile()),
     () => base,
@@ -206,6 +208,7 @@ const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string)
 
   const file = map.get(best.key);
   const matched = pipe(subpath, Str.slice((best.parts[0] ?? "").length, subpath.length - (best.parts[1] ?? "").length));
+
   return file === undefined ? { kind: "refused" } : { kind: "file", file: Arr.join(Str.split(file, "*"), matched) };
 };
 
@@ -267,6 +270,7 @@ const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fa
 const manifestFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const ours = new Set(Arr.map(packages, (pkg) => pkg.manifest.name));
+
   return Arr.flatMap(packages, (pkg) => {
     const location = shown(next, `${pkg.dir}${sep}package.json`);
     const m = pkg.manifest;
@@ -295,6 +299,7 @@ const EXAM = /^apps\/fabrika\/(?:e2e\.ts$|e2e\/|src\/exam\/)/;
 const importFaults = (next: string): ReadonlyArray<string> => {
   const packages = packagesIn(next);
   const byName = new Map(Arr.map(packages, (pkg) => [pkg.manifest.name, pkg]));
+
   return Arr.flatMap(codeFiles(next), (file) => {
     const location = shown(next, file);
     const pkg = ownerAt(packages, file);
@@ -304,6 +309,7 @@ const importFaults = (next: string): ReadonlyArray<string> => {
     }
 
     const names = listed(pkg.manifest);
+
     return Arr.flatMap(importsInFile(file), (spec) => {
       const found: Array<string> = [];
 
@@ -421,6 +427,7 @@ const browserEntries = (
   Arr.flatMap(packages, (pkg) => {
     const name = pkg.manifest.name;
     const keys = [...(BROWSER[name] ?? []), ...(pkg.group === "programs" ? ["./window"] : [])];
+
     return Arr.flatMap(keys, (key) => {
       const reached = exportAt(exportMap(pkg), key);
 
@@ -461,6 +468,7 @@ const reach = Effect.fnUntraced(function* (next: string, label: string, file: st
       }
 
       hits.push(`${label} reaches ${rule.value.name}: "${source}" from ${shown(next, importer ?? file)}`);
+
       return { id: source, external: true };
     },
   };
@@ -477,6 +485,7 @@ const bundleFaults = Effect.fnUntraced(function* (next: string) {
   const all = yield* Effect.forEach(browserEntries(packagesIn(next)), ({ label, file }) => reach(next, label, file), {
     concurrency: "unbounded",
   });
+
   return all.flat();
 });
 
@@ -493,8 +502,10 @@ const bundleContents = Effect.fnUntraced(function* (next: string, file: string) 
       return null;
     },
   };
+
   const { output } = yield* bundled(file, watch, (bundle) => bundling(() => bundle.generate({ format: "esm" })));
   const kept = Arr.flatMap(output, (chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+
   return { loaded, output: Arr.map(kept, (id) => shown(next, id)) };
 });
 
@@ -536,8 +547,10 @@ describe("the real next/", () => {
     const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(Option.isSome(found)).toBe(true);
     const library = Option.getOrThrow(found);
+
     const missing = Arr.filter(BROWSER["@kampus/libfabrika"] ?? [], (key) => {
       const reached = exportAt(exportMap(library), key);
+
       return !(reached.kind === "file" && existsSync(reached.file));
     });
 
@@ -742,6 +755,7 @@ describe("planted breaks", () => {
         "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
         "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
       });
+
       expect([...(yield* bundleFaults(bundles))].sort()).toEqual(
         [
           '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
@@ -782,6 +796,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
   const real = () => {
     const library = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === LIBRARY);
     expect(Option.isSome(library), "the library is a package of next/").toBe(true);
+
     return Option.getOrThrow(library);
   };
 
@@ -850,6 +865,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
               "apps/fabrika/package.json": manifest("@kampus/fabrika", { dependencies: { [LIBRARY]: "workspace:*" } }),
               "apps/fabrika/src/use.ts": lines(`import {x} from "${LIBRARY}/${subpath}";`),
             });
+
             const faults = Arr.map(importFaults(tree), (fault) => pipe(fault, Str.replace(/^.*: /, "")));
 
             expect(faults).toEqual(
@@ -874,6 +890,7 @@ it.live("format: L12 desktop contracts bundle for a browser without their implem
     const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(Option.isSome(found)).toBe(true);
     const library = Option.getOrThrow(found);
+
     const implementation =
       /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
 

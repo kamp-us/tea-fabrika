@@ -53,6 +53,7 @@ const handle = (path: string, first: DatabaseSync) => {
   let db = first;
   let backend = nodeSql(db);
   let fail = false;
+
   const sql: Sql = {
     exec: (q, ...values) => backend.exec(q, ...values),
     transaction: (f) =>
@@ -67,6 +68,7 @@ const handle = (path: string, first: DatabaseSync) => {
       }),
     size: () => backend.size(),
   };
+
   return {
     sql,
     db: () => db,
@@ -75,6 +77,7 @@ const handle = (path: string, first: DatabaseSync) => {
     },
     reopen: Effect.suspend(() => {
       db.close();
+
       return openDb(path);
     }).pipe(
       Effect.flatMap((again) =>
@@ -198,6 +201,7 @@ describe("P11 process storage", () => {
     [Schema.NonEmptyString.check(Schema.isMaxLength(12))],
     examples([[PROCESS]], (process: string) => {
       let calls = 0;
+
       const sql: Sql = {
         exec: () => {
           calls++;
@@ -206,6 +210,7 @@ describe("P11 process storage", () => {
         transaction: (f) => f(),
         size: () => 0,
       };
+
       return Effect.gen(function* () {
         const store: Store = yield* ProcessStore;
         expect(calls).toBe(0);
@@ -230,6 +235,7 @@ describe("P11 process storage", () => {
     examples([[checkpoint]], (checkpoint: typeof CheckpointSchema.Type) =>
       Effect.gen(function* () {
         const disk = yield* database;
+
         const pending = {
           ...checkpoint,
           turn: {
@@ -245,6 +251,7 @@ describe("P11 process storage", () => {
           },
           cmds: [{ id: "stable-cmd", _tag: "dispatched", input: { type: "save", n: 2 }, build: "build-a" }],
         };
+
         yield* Effect.gen(function* () {
           const store: Store = yield* ProcessStore;
           expect(yield* store.load).toBeNull();
@@ -377,6 +384,7 @@ describe("P11 process storage", () => {
     ],
     ([value, placed, activity]) => {
       const values = new Map<string, unknown>();
+
       const storage = {
         get: (key: string) => Effect.sync(() => values.get(key)),
         put: (key: string, value: unknown) =>
@@ -385,6 +393,7 @@ describe("P11 process storage", () => {
           }),
         sync: () => Effect.void,
       };
+
       return Effect.gen(function* () {
         const disk = yield* database;
         yield* Effect.gen(function* () {

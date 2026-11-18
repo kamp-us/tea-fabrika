@@ -247,6 +247,7 @@ const world = (
 const helpers = ({ instance, hashes, from }: Fixture) => {
   // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
+
   return {
     start: async (name: string, program: "starter" | "child") => {
       const started = await project().start(
@@ -271,6 +272,7 @@ const Secret = fc
   .map(([word, suffix]) => word + suffix);
 
 const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
+
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
 
@@ -514,6 +516,7 @@ const projectSecrets = Effect.fnUntraced(function* (
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
   expect(Arr.filter(fixture.configured, (c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+
   const recorded = Arr.flatMap(fixture.recorded, (batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,

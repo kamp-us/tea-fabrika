@@ -407,6 +407,7 @@ export const supervisor = Machine.make({
       const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
         ? s.receipts
         : [...s.receipts, m.receipt];
+
       return [{ ...s, receipts, journal: Journal.cases.stepping.make({ attempt: j.attempt }) }, []];
     },
     refused: (s, m) => {
@@ -449,6 +450,7 @@ export const supervisor = Machine.make({
       const receipts = Arr.some(s.receipts, (r) => r.letter === m.receipt.letter)
         ? s.receipts
         : [...s.receipts, m.receipt];
+
       return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
@@ -533,6 +535,7 @@ export const supervisor = Machine.make({
         Arr.filter(m.restarts, (at) => at >= until - s.policy.periodMs),
         Order.Number,
       );
+
       const edge = times[times.length - s.policy.intensity];
       const held = edge === undefined ? until : Math.max(until, edge + s.policy.periodMs + 1);
       const recovery = { process: m.process, reason, crashes, until: held };

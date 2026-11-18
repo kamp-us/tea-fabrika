@@ -39,9 +39,13 @@ export interface Store {
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 
 const BRAIN = "SHA256:brain";
+
 const PROGRAM = "sample/alpha";
+
 const OTHER = "sample/beta";
+
 const NAMES = ["alpha:1", "alpha:2", "beta:1"];
+
 const program = (name: string) => (Str.startsWith("alpha:")(name) ? PROGRAM : OTHER);
 
 const from = () => ({
@@ -55,6 +59,7 @@ const from = () => ({
 });
 
 const Saved = Schema.TaggedStruct("saved", { text: Schema.String });
+
 const Nat = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }));
 
 // Unsupported by Schema: bias operation picks independently of payload schemas during the fold.
@@ -102,10 +107,12 @@ const world = Effect.fnUntraced(function* (
   const pid = () => `process_0000000000e008${Str.padStart(12, "0")((++sequence).toString(16))}`;
   const pids = new Map<string, string>();
   const bell = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
   const bare = Layer.mergeAll(
     LedgerSql.layer(store.sql, { reader: "test" }),
     LedgerTransactionSql.layer(store.sql),
   ).pipe(Layer.provide(bell));
+
   const manager = ProcessManager.layer(
     {
       by: BRAIN,
@@ -114,6 +121,7 @@ const world = Effect.fnUntraced(function* (
     },
     Effect.sync(pid),
   );
+
   const boot = manager.pipe(Layer.provide(bare));
 
   for (const name of NAMES) {
@@ -127,29 +135,38 @@ const world = Effect.fnUntraced(function* (
         { ...from(), by: BRAIN },
       ),
     ).pipe(Effect.provide(boot));
+
     pids.set(name, started.process);
   }
 
   const quotas = QuotasSql.layer(store.sql, { brain: BRAIN, limits: { writes, storage, recovery } });
+
   const data = Layer.mergeAll(
     LedgerSql.layer(store.sql, { reader: "test" }),
     LedgerTransactionSql.layer(store.sql),
     RefereeSql.layer(store.sql),
   ).pipe(Layer.provideMerge(quotas), Layer.provide(bell));
+
   const services = Layer.mergeAll(Mailbox.layer, manager).pipe(Layer.provideMerge(data));
+
   // T1041: `mail.unread`'s largest value, so no quota law here meets a full inbox.
   const live = ProgramMailLedger.layer({
     grants: { "alpha:1": ["beta:1", "alpha:2"], "alpha:2": ["beta:1"] },
     cap: 16_384,
   }).pipe(Layer.provideMerge(services));
+
   const run = <A, E, R extends Ledger | Referee | Mailbox | ProcessManager | ProgramMail | Quotas>(
     work: Effect.Effect<A, E, R>,
   ) => work.pipe(Effect.provide(live));
+
   const input = (name: string, id: string, text: string) =>
     run(Mailbox.use((m) => m.send(name, id, { type: "input", text }, from())));
+
   const write = (name: string, id: string, text: string, over: Partial<Line> = {}) =>
     run(Referee.use((r) => r.append(`${name}/events`, id, { ...lineFor(from(), Saved.make({ text })), ...over })));
+
   const status = (identity: string) => run(Quotas.use((q) => q.program(identity)));
+
   return {
     legacyInput: (name: string, id: string, text: string) =>
       Mailbox.use((m) => m.send(name, id, { type: "input", text }, from())).pipe(
@@ -198,9 +215,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               const at = Math.max(now, lastArrival);
               const cost = cell.alt % 2 === 0 || n < 4 ? 2 : 1;
+
               const used = history
                 .filter((h) => h.program === program(name) && h.at > at - 60_000)
                 .reduce((s, h) => s + h.cost, 0);
+
               const answer =
                 cost === 2
                   ? yield* w.input(name, `input:${n}`, cell.text)
@@ -268,16 +287,20 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               // Chosen relative to current remaining bytes; non-ASCII, escaping and metadata all count.
               // Every third one is aimed at the room left, a drawn few bytes either side of it.
               const length = cell.alt % 2 === 0 ? Math.ceil(remaining / 4) + 1 : Math.min(4, remaining);
+
               const text =
                 cell.alt % 3 === 0 && overhead > 0
                   ? Str.repeat(Math.max(0, remaining - overhead + (cell.pick % 13) - 6))("a")
                   : `${cell.text}${Str.repeat(length)("😀é\n")}`;
+
               const id = `unicode:${n}`;
               const saved = w.snapshot();
+
               // The door's trial is this append's own admission, at the place the message will land.
               const trial = yield* w.run(
                 Quotas.use((q) => q.admits(name, id, letterLine(from(), { type: "input", text }), 0)),
               );
+
               expect(w.snapshot()).toEqual(saved);
               const answer = yield* w.input(name, id, text);
               const after = yield* w.status(alpha);
@@ -330,6 +353,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const name = required(NAMES[cell.pick % 2]);
               const source = { name, process: required(w.pids.get(name)) };
               const before = w.snapshot();
+
               const answer = yield* Effect.result(
                 w.run(
                   ProgramMail.use((m) =>
@@ -382,15 +406,19 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             for (const [n, cell] of tape.entries()) {
               const valid = lineFor(from(), Saved.make({ text: cell.text }));
               const tag = required(["saved", "started", "dead", "restarted"][cell.pick % 4]);
+
               const forged = {
                 ...valid,
                 ...Schema.TaggedStruct(tag, {}).make({}),
                 body: { text: cell.text, program: OTHER, account: "recovery", recovery: true, authority: BRAIN },
               };
+
               const before = w.snapshot();
+
               const answer = yield* w.run(
                 Referee.use((r) => r.append(`alpha:${1 + (cell.alt % 2)}/events`, `forged:${n}`, forged)),
               );
+
               expect(answer).toHaveProperty("_tag", "refused");
               expect(w.snapshot()).toEqual(before);
               expect((yield* w.status(PROGRAM)).writes).toBe(2);
@@ -435,6 +463,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                   m.exit(process, ExitReason.cases.shutdown.make({}), { ...from(), by: BRAIN }),
                 ),
               );
+
               const next = yield* w.run(
                 ProcessManager.use((m) =>
                   m.start(
@@ -449,6 +478,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                   ),
                 ),
               );
+
               w.pids.set(name, next.process);
               expect(yield* w.input(name, `after:${next.process}`, "")).toEqual(
                 Appended.cases.refused.make({ reason: "quota" }),

@@ -376,6 +376,7 @@ export const suite = (open: Effect.Effect<World, unknown, Scope.Scope>) =>
       const missing = Object.entries(REQUIRED).flatMap(([law, kinds]) =>
         kinds.filter((kind) => !(reached.get(law)?.has(kind) ?? false)).map((kind) => `${law}: ${kind}`),
       );
+
       expect(missing, "moves a law's walk never reached").toEqual([]);
     });
   });

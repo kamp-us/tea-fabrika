@@ -12,6 +12,7 @@ import * as RevokeHold from "../e2e/chaos-revoke.test-support.ts";
 
 /** One Msg of the hold controller. */
 type Msg = typeof RevokeHold.Msg.Type;
+
 RunnerTest.suite(ChaosTest.open, checklist);
 
 TargetsTest.suite(ChaosTest.open, checklist);

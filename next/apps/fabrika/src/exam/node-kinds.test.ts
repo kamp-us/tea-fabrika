@@ -19,6 +19,7 @@ const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const CODE = /\.[cm]?[jt]sx?$/;
 
 const TEST = /(?:\.test\.tsx?|Test\.ts|\.test-support\.ts)$/;
+
 /** code-graph 0.15.0's `TEST_FILE` in `isTestFile`: the files whose exports it never judges. */
 const UNJUDGED = /\.((test|spec)(-d)?|type-test)\.tsx?$/;
 
@@ -39,6 +40,7 @@ const untracked = (path: string, name: string) =>
 const walk = (dir: string): ReadonlyArray<string> =>
   Arr.flatMap(readdirSync(join(ROOT, dir), { withFileTypes: true }), (entry) => {
     const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
+
     return entry.isDirectory() ? (untracked(path, entry.name) ? [] : walk(path)) : entry.isFile() ? [path] : [];
   });
 
@@ -56,16 +58,19 @@ const inPackage = (path: string) => {
     Arr.findFirst(packages, (d) => d === "." || pipe(path, Str.startsWith(`${d}/`))),
     () => ".",
   );
+
   return dir === "." ? path : pipe(path, Str.slice(dir.length + 1));
 };
 
 const sources = Arr.filter(tracked, (p) => pipe(p, Str.startsWith("next/")) && CODE.test(p) && !TEST.test(p));
+
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** A file's text with every comment blanked, so a name in a comment is no binding. */
 const code = (path: string) => {
   const text = read(path);
   const { comments } = parseSync(path, text);
+
   return Arr.reduce(
     comments,
     text,
@@ -90,6 +95,7 @@ const problems = (text: string) => {
     }
 
     const names = new Set(Arr.flatMap(homes, exported));
+
     const others = pipe(
       sources,
       Arr.filter((p) => !homes.includes(p)),

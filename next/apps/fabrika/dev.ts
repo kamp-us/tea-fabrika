@@ -107,8 +107,10 @@ const command = Command.make("dev", flags, (options) => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
           path = yield* Path.Path;
+
         const env = yield* environment;
         const home = env.home ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
         // A person reads their file's name from ~ or FABRIKA_HOME, never as this machine's path.
         const person = {
           path: path.join(home, "fabrika.toml"),
@@ -211,6 +213,7 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
+
           process.stdout.write(`${Formatter.formatJson(selected)}\n`);
 
           if (selected._tag === "refused") {
@@ -237,6 +240,7 @@ const command = Command.make("dev", flags, (options) => {
                     Match.when("too_large", () => "the bundle is too large"),
                     Match.orElse(() => "the module failed to load"),
                   );
+
                   process.stdout.write(
                     `${answer.program} did not load: ${reason}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
                   );
@@ -253,6 +257,7 @@ const command = Command.make("dev", flags, (options) => {
                         Match.when("newer", () => "its state has a newer version"),
                         Match.orElse(() => "the new code could not load"),
                       );
+
                       return `${name} stays on ${Str.slice(0, 8)(outcome.was)}: ${reason}`;
                     },
                     not_now: () => `${name} will try the new code at the next brain start`,

@@ -693,6 +693,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
   return yield* s.run(
     Effect.gen(function* () {
       const mailbox = yield* Mailbox;
+
       const facts = Arr.map(
         Arr.filter(w.rig.rows(w.ledger.sql), (e) => e.stream === pid),
         (e): Fact => ({
@@ -703,6 +704,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
           build: e.build,
         }),
       );
+
       const inbox = yield* Stream.runCollect(mailbox.read(name, 0));
       const checkpoint = yield* ProcessStore.use((store) => store.load);
 
@@ -1103,6 +1105,7 @@ export const suite = (rig: Rig): void => {
               const { input } = press(w, "inc");
               const turn = yield* Effect.forkChild(s.runner.msg(input));
               yield* Deferred.await(held);
+
               const spec = g(() =>
                 fcFitting(
                   updateFor(Option.getOrThrow(Option.fromNullishOr(w.code.variants.get(a.build))), a.model, {
@@ -1111,6 +1114,7 @@ export const suite = (rig: Rig): void => {
                   a.v,
                 ),
               );
+
               const hash = yield* learn(w.code, spec);
               const swapping = yield* Effect.forkChild(swap(s, "install_held", hash));
 
@@ -1278,14 +1282,17 @@ export const suite = (rig: Rig): void => {
                     expect(after.checkpoint?.saved.after, "the inbox position survives the swap").toBe(
                       before.checkpoint?.saved.after ?? 0,
                     );
+
                     const upgrade = Option.getOrElse(
                       Arr.findFirstIndex(after.facts, (f) => f.id === `state.upgraded:${load}`),
                       () => -1,
                     );
+
                     const swapped = Option.getOrElse(
                       Arr.findFirstIndex(after.facts, (f) => f.id === `code.swapped:${load}`),
                       () => -1,
                     );
+
                     expect(upgrade, "the upgrade is recorded before the swap").toBeGreaterThanOrEqual(0);
                     expect(swapped).toBeGreaterThan(upgrade);
                     expect(Arr.filter(after.facts, (f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
@@ -1299,11 +1306,13 @@ export const suite = (rig: Rig): void => {
 
                 yield* evict(w, NAME);
                 const { facts, inbox } = yield* agrees(w, a, base);
+
                 // Every accepted letter is in the inbox, in the order it was accepted, and stepped once.
                 const ids = Arr.filter(
                   Arr.map(inbox, (l) => l.id),
                   (id) => a.accepted.includes(id),
                 );
+
                 expect(ids).toEqual(a.accepted);
                 const revs = Arr.map(inbox, (l) => l.rev);
                 expect(revs).toEqual([...revs].sort((x, y) => x - y));
@@ -1362,6 +1371,7 @@ export const suite = (rig: Rig): void => {
                   } else {
                     const updates = Option.getOrThrow(Option.fromNullishOr(w.names.get(NAME))).updates;
                     const counts = new Map(Arr.map(watchers, (c) => [c, updates.get(c)?.length ?? 0]));
+
                     const { answer } = yield* swapFitting(
                       w,
                       a,
@@ -1448,9 +1458,11 @@ export const suite = (rig: Rig): void => {
 
                     seen.add(late ? "late" : "early");
                     const { facts } = yield* agrees(w, a, old);
+
                     const answers = Arr.filter(byTag(facts, "stepped"), (f) =>
                       Str.endsWith("/answer")(String(f.body.input)),
                     );
+
                     expect(answers, "the answer folds once").toHaveLength(1);
                     expect(answers[0]?.body.build).toBe(late ? a.build : old);
                   }),
@@ -1490,9 +1502,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
+
                   const job = yield* Schema.decodeUnknownEffect(
                     Schema.Struct({ id: Schema.String, build: Schema.String }),
                   )(pending[0]);
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1596,9 +1610,11 @@ export const suite = (rig: Rig): void => {
                   const before = yield* history(w, NAME);
                   const pending = Option.getOrThrow(Option.fromNullishOr(before.checkpoint)).cmds;
                   expect(pending).toHaveLength(1);
+
                   const job = yield* Schema.decodeUnknownEffect(
                     Schema.Struct({ id: Schema.String, build: Schema.String }),
                   )(pending[0]);
+
                   expect(job.build).toBe(a.build);
                   expect(w.durable.attempts).toContain(job.id);
                   expect(w.durable.completed.has(job.id)).toBe(false);
@@ -1637,10 +1653,12 @@ export const suite = (rig: Rig): void => {
                   expect(after.checkpoint?.cmds).toEqual([]);
                   expect(after.checkpoint?.saved.model).toEqual(a.model);
                   expect(after.checkpoint?.saved.build).toBe(hash);
+
                   const answers = Arr.filter(
                     after.facts,
                     (f) => f.tag === "stepped" && f.body.input === `${job.id}/answer`,
                   );
+
                   expect(answers).toHaveLength(1);
                   expect(answers[0]?.body.build).toBe(hash);
                   expect(Arr.filter(after.facts, (f) => f.id === `code.swapped:${load}`)).toHaveLength(1);
@@ -1793,9 +1811,11 @@ export const suite = (rig: Rig): void => {
                 for (const [name, a] of accounts) {
                   const input = yield* pressOnce(w, a, g, name);
                   const { facts } = yield* agrees(w, a, base, name);
+
                   const step = Option.getOrUndefined(
                     Arr.findFirst(byTag(facts, "stepped"), (f) => f.body.input === input.id),
                   );
+
                   expect(step?.body.build, `${name} woke on the code that saved it`).toBe(a.build);
                   seen.add(a.build === base ? (a.accepted.length === 1 ? "descriptor" : "old") : "checkpoint");
                 }

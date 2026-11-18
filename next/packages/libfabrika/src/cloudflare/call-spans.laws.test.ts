@@ -35,6 +35,7 @@ import {
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const NAME = "counter:1";
+
 const PROGRAM = "test/counter";
 
 const CODE = {
@@ -48,10 +49,13 @@ const CODE = {
 };
 
 const PERSON = "test-person";
+
 const SENT = "2026-11-18T00:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const Model = Schema.Struct({ count: Schema.Int });
+
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });
 
 const counter = {
@@ -246,6 +250,7 @@ const open = Effect.fnUntraced(function* () {
           configureProcess(processCtx, descriptor, runtime),
         ),
       );
+
       deliveries.push(done);
       Effect.runSync(Deferred.succeed(entered, undefined));
 
@@ -293,6 +298,7 @@ const open = Effect.fnUntraced(function* () {
     // SAFETY: no client dials this Project, so those two are the only GatewayCalls members called on the door.
     door: () => Effect.succeed({ checkDelivery: () => Effect.void, retire: () => Effect.void } as never),
   });
+
   const process = processRuntime(processCtx, env, programs);
   runtimes.project = project;
   runtimes.process = process;
@@ -493,10 +499,12 @@ describe("T753 L16 a call commits its spans together", () => {
             const rows = w.projectHandles.unsent();
             const commits = w.projectHandles.transactions();
             const landings = w.projectHandles.landings.length;
+
             const update =
               type === "whole"
                 ? { type, rev: ++rev, view: null, pid: NAME }
                 : { type, base: rev, rev: ++rev, patch: [], pid: NAME };
+
             yield* w.call(w.projectStub, "publish", "nobody", update);
 
             expect(

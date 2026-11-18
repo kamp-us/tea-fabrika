@@ -248,6 +248,7 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
 
         return Str.slice(...node.key.range)(text);
       });
+
       return { value: checked, text: Str.slice(...assignment.value.range)(source), keys };
     },
     catch: (cause: unknown) => failure(new Value({ cause }), 1),

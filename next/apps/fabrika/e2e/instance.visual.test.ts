@@ -160,6 +160,7 @@ const driver = async (page: Page, url: string, tab: string) => {
       };
 
       const b64 = (data: Uint8Array) => btoa(String.fromCharCode(...data));
+
       // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       const db = await new Promise<IDBDatabase>((done, fail) => {
         const open = indexedDB.open("p12-client", 1);
@@ -167,6 +168,7 @@ const driver = async (page: Page, url: string, tab: string) => {
         open.onsuccess = () => done(open.result);
         open.onerror = () => fail(open.error);
       });
+
       // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
       let pair = await new Promise<CryptoKeyPair | undefined>((done, fail) => {
         const get = db.transaction("keys").objectStore("keys").get("window");
@@ -322,8 +324,10 @@ describe("P12 real browser protocol", () => {
         const s = yield* Effect.promise(() => start()),
           a = yield* Effect.promise(() => s.context.newPage()),
           b = yield* Effect.promise(() => s.context.newPage());
+
         const first = yield* Effect.promise(() => driver(a, s.url, "tab-a")),
           second = yield* Effect.promise(() => driver(b, s.url, "tab-b"));
+
         expect(first.extractable).toBe(false);
         expect(first.fingerprint).toBe(second.fingerprint);
         expect(first.first.error.data.reason).toBe("not_granted");
@@ -353,9 +357,11 @@ describe("P12 real browser protocol", () => {
           yield* Effect.promise(() =>
             page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized")),
           );
+
           const reinitialized = Option.getOrUndefined(
             Arr.findFirst(yield* Effect.promise(() => state(page)), (f: any) => f.method === "reinitialized"),
           );
+
           expect(reinitialized.result.error).toBeUndefined();
           expect(yield* Effect.promise(() => page.evaluate(() => window.p12.connections()))).toBe(1);
         }
@@ -363,6 +369,7 @@ describe("P12 real browser protocol", () => {
         const processes = yield* Effect.promise(() =>
           rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 }),
         );
+
         const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
         // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
         expect(started.body.program).toBe("fabrika/counter");
@@ -374,6 +381,7 @@ describe("P12 real browser protocol", () => {
         // W8 scenario: only a real clock can let the local runtime evict an idle Process.
         yield* Effect.promise(() => a.waitForTimeout(15_000));
         const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
+
         const accepted = yield* Effect.promise(() =>
           rpc(a, "process.send", {
             pid,
@@ -383,20 +391,24 @@ describe("P12 real browser protocol", () => {
             seen: 0,
           }),
         );
+
         expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
         expect((yield* Effect.promise(() => waiting)).result).toMatchObject({ rev: accepted.result.rev });
         // The original connection must receive the patch before a reload or another view.open.
         yield* Effect.promise(() =>
           a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch")),
         );
+
         const idlePatch = Option.getOrUndefined(
           Arr.findFirst(yield* Effect.promise(() => state(a)), (f: any) => f.method === "view.patch"),
         );
+
         expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
         expect(yield* Effect.promise(() => a.evaluate(() => window.p12.connections()))).toBe(1);
         const reloaded = yield* Effect.promise(() => driver(a, s.url, "tab-a"));
         expect(reloaded.fingerprint).toBe(first.fingerprint);
         expect(reloaded.first.error).toBeUndefined();
+
         const retry = yield* Effect.promise(() =>
           rpc(a, "process.send", {
             pid,
@@ -406,6 +418,7 @@ describe("P12 real browser protocol", () => {
             seen: 0,
           }),
         );
+
         expect(retry.result).toEqual(accepted.result);
         expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result.view).toEqual({ count: 1 });
         expect(s.output()).not.toContain("PRIVATE KEY");

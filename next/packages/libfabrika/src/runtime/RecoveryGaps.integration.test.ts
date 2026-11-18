@@ -500,6 +500,7 @@ describe("P34 interrupted recovery", () => {
         yield* Fiber.join(pending);
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
+
         const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
           Str.includes('"type":"wait_ok"')(JSON.stringify(row.body)),
         );
@@ -599,7 +600,9 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
+
       const modulePath = Option.getOrThrow(instanceDriver);
+
       const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );

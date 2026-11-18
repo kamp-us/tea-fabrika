@@ -169,6 +169,7 @@ const driver = (p: Page, url: string, tab: string) =>
             sentAt: "2026-11-11T04:00:00.000Z",
             signed: await proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
           });
+
         // @effect-diagnostics-next-line newPromise:off -- this runs inside the browser page, where Effect is not loaded
         const first = await new Promise<any>((done, fail) => {
           socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(fingerprint)}/${tab}`);
@@ -266,6 +267,7 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = Option.getOrUndefined(Arr.findFirst(objects(answer), (o) => Arr.isArray(o.processes)));
+
   // SAFETY: a watcher answer's `processes` is the brain's `Installed.loaded` list (runtime/Code.ts), each a name and its tagged `Swapped` outcome.
   const row = Option.getOrUndefined(
     Arr.findFirst(
@@ -273,7 +275,9 @@ const outcome = (answer: unknown) => {
       (p) => p.name === "counter:1",
     ),
   );
+
   const failed = Option.getOrUndefined(Arr.findFirst(objects(answer), (o) => o._tag === "failed"));
+
   return row?.outcome ?? (failed === undefined ? { _tag: "same" } : { _tag: "failed", reason: failed.reason });
 };
 
@@ -341,6 +345,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 `import ${Formatter.formatJson(specifiers[0])}; import "../dependency/imported.ts";\n`,
               );
               yield* fs.writeFileString(imported, `import ${Formatter.formatJson(specifiers[1])};\n`);
+
               const warnings = yield* Effect.acquireRelease(
                 Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
                 (spy) => Effect.sync(() => spy.mockRestore()),
@@ -355,6 +360,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 ledger: [],
                 chaos: false,
               });
+
               const printed = Arr.join(
                 Arr.map(warnings.mock.calls, (args) => Arr.join(Arr.map(args, String), " ")),
                 "\n",
@@ -386,6 +392,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               // The real brain reaches dependencies whose diagnostic frames differ from simple imports.
               const copy = yield* fixture;
               yield* fixtureBuild(copy, path.join(home, "instance-build"));
+
               const actual = Arr.join(
                 Arr.map(warnings.mock.calls, (args) => Arr.join(Arr.map(args, String), " ")),
                 "\n",
@@ -565,9 +572,11 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 Effect.gen(function* () {
                   const word = g(() => fc.stringMatching(/^[A-Z]{12}$/));
                   const sentinel = `P15SECRET${word}"/+`;
+
                   const fakeBytes = g(() =>
                     fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }),
                   );
+
                   const fakeBearer = Base64Url.encode(Uint8Array.from(fakeBytes));
                   const source = yield* counterSource;
                   const copy = yield* fixture;
@@ -584,6 +593,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                     Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
                     Effect.timeout("60 seconds"),
                   );
+
                   const recorded = new Set(Arr.map(initialSpans, (span) => span.spanId));
                   let k = 1;
                   let count = 0;
@@ -598,12 +608,14 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                     const message = `${sentinel} ${fakeBearer} ${copy.file}`;
                     // L12's real door path: even a granted person cannot invoke the control-only calls.
                     const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
+
                     const denied = yield* s.call(method, {
                       program: PROGRAM,
                       source: message,
                       hash: null,
                       reason: "load",
                     });
+
                     expect(denied.error?.data?.reason).toBe("unknown_method");
 
                     let text = edited(
@@ -709,6 +721,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                         !/^[A-Za-z]:/.test(named) &&
                         !Str.split(named, /[/\\]/).includes("..") &&
                         !pipe(named, Str.includes(copy.home));
+
                       expect(
                         relative && pipe(named, Str.startsWith(folder)),
                         `code.failed's path is repo-relative and inside ${folder}: ${named}`,

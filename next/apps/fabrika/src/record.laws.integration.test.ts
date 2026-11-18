@@ -175,12 +175,15 @@ for (const [kind, live] of [
                 process: `process_01m6v5270hf3c8x2q7w9z4k5${Str.padStart(2, "0")(String(input.at))}`,
               })
             : Chain.cases.spans.make({});
+
           const name = Formatter.formatJson([`law-${sequence++}`, partName(chain, input.at)]);
           const { driver } = yield* Wire;
 
           const actual = yield* driver(name, cap),
             oracle = yield* node(name, cap);
+
           const rows = Arr.map(input.rows, (r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
+
           const exercise = (part: Part) =>
             Effect.gen(function* () {
               // The cap is checked before a batch: this first batch lands whole,
@@ -223,6 +226,7 @@ for (const [kind, live] of [
           const input = wellFormed(generated);
           const chain = Chain.cases.spans.make({});
           const name = Formatter.formatJson([`full-${sequence++}`, partName(chain, input.at)]);
+
           const rows = Arr.map(input.rows, (row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },

@@ -242,6 +242,7 @@ type World = {
 };
 
 const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => Predicate.isString(p));
+
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
 /** The ledger's Sql with the letter cut: the statement after a saved hands answer letter fails. */
@@ -569,6 +570,7 @@ const walk = (
 
     const dispatched = (name: string) =>
       Effect.map(checkpoint(name), (saved) => Arr.flatMap(saved?.cmds ?? [], (c) => (isHandsCmd(c) ? [c.id] : [])));
+
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
     const task = (id: string) => inContext(Tasks.use((j) => j.read(id)).pipe(Effect.result));
 
@@ -708,6 +710,7 @@ const walk = (
             ? Option.toArray(Option.map(decodeLetter(l.m), (body) => ({ id: l.id, body })))
             : [],
         );
+
         const expected = Arr.map(delivered, ({ body }) =>
           body.type === "hands_ok" ? { ok: body.value } : { err: body.reason },
         );
@@ -759,6 +762,7 @@ const walk = (
       // A task really waiting on the hands, whoever asked for it: an ended process's task too.
       const waiting = Arr.filter([...world.seen.values()], (d) => phases.get(d.id) === "requested");
       const finished = Arr.filter([...world.seen.values()], (d) => d.result !== undefined);
+
       const can: Record<Move, boolean> = {
         ask: true,
         poke: true,
@@ -776,6 +780,7 @@ const walk = (
         steal: Arr.some([...world.seen.values()], (d) => d.orphan && d.result !== undefined),
         forge: true,
       };
+
       const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
@@ -1092,10 +1097,12 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     expect(world.alarms.has(CHECK), "L21: nothing keeps an alarm for a refused Cmd").toBe(false);
     expect(world.asked, "L21: the refused Cmd is never asked again").toEqual([id]);
     const inbox = yield* inContext(Mailbox.use((mb) => Stream.runCollect(mb.read(CHECK, 0))));
+
     const placed = Arr.map(
       Arr.filter(inbox, (l) => l.id === `${id}/answer`),
       (l) => Option.getOrNull(decodeLetter(l.m)),
     );
+
     expect(
       Arr.map(placed, (l) => [l?.type, l?.reason]),
       "L21: one answer letter, hands_err id_reused",

@@ -33,9 +33,13 @@ import * as TomlParser from "./TomlParser.ts";
 const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
+
 const DEFAULT = 18787;
+
 const ROOT = "/work";
+
 const HOME = "/people/one";
+
 const VERSION = "1.2.3";
 
 const services = Layer.mergeAll(TomlParser.layer, Digest.layerWebCrypto);
@@ -63,6 +67,7 @@ const SettingPath = Schema.String.check(
   Schema.isPattern(/^[a-z]{1,6}(-[a-z]{1,4})?\.[a-z]{1,6}$/u),
   Schema.makeFilter((path) => {
     const section = path.split(".")[0]!;
+
     return section !== "version" && !section.endsWith("-version");
   }),
 );
@@ -74,7 +79,9 @@ const Paths = Schema.Array(SettingPath).check(
 );
 
 const Value = Port.check(Schema.makeFilter((p) => p !== DEFAULT));
+
 const PLACES = ["b-repo", "b-person", "b-env", "a-repo", "a-person", "a-env", "none"] as const;
+
 type Place = (typeof PLACES)[number];
 
 const Selection = Schema.Array(
@@ -97,6 +104,7 @@ const later = (w: readonly number[], r: readonly number[]) =>
   w[0]! !== r[0]! ? w[0]! > r[0]! : w[1]! !== r[1]! ? w[1]! > r[1]! : w[2]! > r[2]!;
 
 const Hostile = Schema.String.check(Schema.isPattern(/^sk-([A-Za-z0-9]{6,12})["/ +\\&][A-Za-z0-9]{3}$/u));
+
 const HiddenCase = Schema.Struct({ pair: Names, list: Paths, word: Hostile });
 
 const VersionCase = Schema.Struct({
@@ -167,6 +175,7 @@ const disk = (input: Disk) =>
         exists: (path) => Effect.succeed(input.files[path] !== undefined),
         readFileString: (path) => {
           const text = input.files[path];
+
           return path === input.broken
             ? Effect.fail(
                 PlatformError.systemError({
@@ -195,6 +204,7 @@ const disk = (input: Disk) =>
 /** Where an app's two files sit on the disk, with or without `<APP>_HOME` set. */
 const placesFor = (app: App.App, homeSet: boolean) => {
   const home = `/apps/${app.name}`;
+
   return {
     repo: { path: `${ROOT}/.${app.name}/${app.name}.toml`, name: app.repo },
     person: homeSet
@@ -214,6 +224,7 @@ const run = Effect.fnUntraced(function* (
   return yield* Effect.gen(function* () {
     const exit = yield* Load.load(group, { repo: ROOT, home: HOME, flags, env, version }).pipe(Effect.exit);
     const reads = (yield* Recorder.calls(FileSystem.FileSystem, "readFileString")).map(([path]) => path);
+
     return { exit, reads };
   }).pipe(Effect.provide(Layer.mergeAll(disk(input), services)));
 });
@@ -224,18 +235,21 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
+
   return reason?._tag === "Fail" ? reason.error : undefined;
 };
 
 /** The message of a failed effect, or the empty string. */
 const message = (exit: Exit.Exit<unknown, unknown>) => {
   const error = failure(exit);
+
   return Schema.is(Files.SettingsError)(error) ? error.message : "";
 };
 
 const parse = (text: string) =>
   Effect.gen(function* () {
     const parser = yield* Toml;
+
     return yield* parser.parse(text);
   });
 
@@ -274,14 +288,17 @@ const isolation = Effect.fnUntraced(function* (
 ) {
   const { a, b } = apps(pair);
   const group = groupFor(a, list);
+
   const own = placesFor(a, aHome),
     other = placesFor(b, bHome);
+
   const entries: Record<"a-repo" | "a-person" | "b-repo" | "b-person", Array<readonly [string, string]>> = {
     "a-repo": [],
     "a-person": [],
     "b-repo": [],
     "b-person": [],
   };
+
   const env: Record<string, string> = { ...own.env, ...other.env };
   list.forEach((path, n) => {
     const [place, value] = picks[n]!;
@@ -295,18 +312,21 @@ const isolation = Effect.fnUntraced(function* (
       entries[place].push([path, String(value)]);
     }
   });
+
   const texts = {
     "a-repo": toml(entries["a-repo"]),
     "a-person": toml(entries["a-person"]),
     "b-repo": toml(entries["b-repo"]),
     "b-person": toml(entries["b-person"]),
   };
+
   const files = {
     [own.repo.path]: texts["a-repo"].text,
     [own.person.path]: texts["a-person"].text,
     [other.repo.path]: texts["b-repo"].text,
     [other.person.path]: texts["b-person"].text,
   };
+
   const { exit, reads } = yield* run(group, { files }, env);
   expect(failure(exit)).toBeUndefined();
 
@@ -317,6 +337,7 @@ const isolation = Effect.fnUntraced(function* (
   const loaded = exit.value;
   list.forEach((path, n) => {
     const [place, value] = picks[n]!;
+
     const want = Match.value(place).pipe(
       Match.when("a-repo", () => ({ value, origin: { _tag: "file", file: a.repo, line: texts["a-repo"].at[path] } })),
       Match.when("a-person", () => ({
@@ -326,6 +347,7 @@ const isolation = Effect.fnUntraced(function* (
       Match.when("a-env", () => ({ value, origin: { _tag: "env", name: envName(a.prefix, path) } })),
       Match.orElse(() => ({ value: DEFAULT, origin: { _tag: "default" } })),
     );
+
     expect({ value: loaded.snapshot.values[path], origin: loaded.snapshot.origins[path] }).toEqual(want);
   });
   // The other app's files are never opened.
@@ -361,6 +383,7 @@ const naming = Effect.fnUntraced(function* (
   const first = list[0]!;
   const table = first.split(".")[0]!;
   const empty = { value: {}, spans: [] };
+
   const ran = yield* Effect.gen(function* () {
     const resolved = yield* Sources.resolve(group, {
       flags: Sources.flags({ [first]: String(value) }),
@@ -368,28 +391,35 @@ const naming = Effect.fnUntraced(function* (
       repo: Sources.file(a.repo, empty),
       person: Sources.file(a.person, empty),
     });
+
     const at = (document: TomlDocument) => ({
       repo: { file: a.repo, document },
       person: { file: a.person, document: empty },
     });
+
     const unknown = yield* Files.validate(group, at(yield* parse("[zzzzzz]\nunknown = 1\n")), {
       version: VERSION,
     }).pipe(Effect.exit);
+
     const asTable = yield* Files.validate(group, at(yield* parse(`${table} = 1\n`)), {
       version: VERSION,
     }).pipe(Effect.exit);
+
     const refused = yield* Sources.resolve(group, {
       flags: Sources.flags({}),
       env: a.Sources.env({ [envName(upper, first)]: "not a port" }),
       repo: Sources.file(a.repo, empty),
       person: Sources.file(a.person, empty),
     }).pipe(Effect.exit);
+
     const snapshot = yield* Snapshot.make(group, resolved);
+
     // One key left at its default, so the report closes with its `--all` line.
     const partial = Reference.rows(group, {
       ...snapshot,
       origins: { ...snapshot.origins, [first]: { _tag: "default" } },
     });
+
     const homes = yield* Effect.forEach(
       [a, b],
       (app) =>
@@ -402,8 +432,10 @@ const naming = Effect.fnUntraced(function* (
         }).pipe(Effect.exit),
       { concurrency: 1 },
     );
+
     return { resolved, unknown, asTable, refused, partial, homes };
   }).pipe(Effect.provide(services));
+
   // The flag is `--section.key`, the variable `<APP>_<SECTION>_<KEY>`.
   expect(ran.resolved.origins[first]).toEqual({ _tag: "flag", name: `--${first}` });
 
@@ -428,6 +460,7 @@ const warning = Effect.fnUntraced(function* (
   value: number,
 ) {
   const { a, b } = apps(pair);
+
   const group = a.Setting.group(
     Object.fromEntries(
       list.map((path, n) => [
@@ -444,7 +477,9 @@ const warning = Effect.fnUntraced(function* (
       ]),
     ),
   );
+
   const empty = { value: {}, spans: [] };
+
   const rows = yield* Effect.gen(function* () {
     const resolved = yield* Sources.resolve(group, {
       flags: Sources.flags(Object.fromEntries(list.map((p) => [p, String(value)]))),
@@ -452,8 +487,10 @@ const warning = Effect.fnUntraced(function* (
       repo: Sources.file(a.repo, empty),
       person: Sources.file(a.person, empty),
     });
+
     return Reference.rows(group, yield* Snapshot.make(group, resolved));
   }).pipe(Effect.provide(services));
+
   const lines = Print.warnings(Reference.warnings(rows, "1.0.0"));
   expect(lines).toHaveLength(list.length);
 
@@ -511,14 +548,17 @@ const minimum = Effect.fnUntraced(function* (
   const group = a.Setting.group({ ...groupFor(a, list).settings, version: a.version });
   const owner = theirs ? b : a;
   const text = `${owner.version.path} = ${JSON.stringify(dotted(wanted))}\n`;
+
   const exit = yield* Effect.gen(function* () {
     const document = yield* parse(text);
+
     return yield* Files.validate(
       group,
       { repo: { file: a.repo, document }, person: { file: a.person, document: { value: {}, spans: [] } } },
       { version: dotted(running) },
     ).pipe(Effect.exit);
   }).pipe(Effect.provide(services));
+
   const error = failure(exit);
   const newer = later(wanted, running);
   reached.add(`${theirs ? "theirs" : "own"}-${newer ? "newer" : "older"}`);
@@ -550,12 +590,15 @@ const hidden = Effect.fnUntraced(function* (
 ) {
   const { a, b } = apps(pair);
   const group = groupFor(a, list);
+
   const own = placesFor(a, false),
     other = placesFor(b, false);
+
   const first = list[0]!;
   const [table, ...rest] = first.split(".");
   const s = JSON.stringify(word);
   const env: Record<string, string> = place === "b-env" ? { [envName(b.prefix, first)]: word } : {};
+
   const files: Record<string, string> = {
     [own.repo.path]: Match.value(place).pipe(
       Match.when("a-table", () => `[${first}]\nnested = ${s}\n`),
@@ -568,6 +611,7 @@ const hidden = Effect.fnUntraced(function* (
     [other.repo.path]: place === "b-repo" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
     [other.person.path]: place === "b-person" ? `[${table}]\n${rest.join(".")} = ${s}\n` : "",
   };
+
   const { exit } = yield* run(group, { files, ...(unreadable ? { broken: own.person.path } : {}) }, env);
   const outputs: Array<string> = [printed(exit), String(exit)];
 
@@ -735,6 +779,7 @@ const earlyMinimum = Effect.fnUntraced(function* (
         own.env,
         dotted(running),
       );
+
       const error = failure(exit);
       expect(error).toBeInstanceOf(Files.SettingsError);
       expect(Schema.is(Files.SettingsError)(error) ? error.reason : error).toBe(reason);
@@ -764,6 +809,7 @@ const earlyMinimum = Effect.fnUntraced(function* (
         own.env,
         dotted(running),
       );
+
       const error = failure(exit);
       expect(Schema.is(Files.SettingsError)(error) ? error.reason : error).toBe("read");
       expect(reads).toEqual([own.repo.path, own.person.path]);
@@ -848,6 +894,7 @@ it.effect.prop(
           VERSION,
           source === "flag" ? { [first]: word } : {},
         );
+
         expect(Exit.isFailure(exit)).toBe(true);
         const error = failure(exit);
         expect(error).toBeInstanceOf(Files.SettingsError);

@@ -98,6 +98,7 @@ const freezeAll = (value: unknown): void => {
 const frozen = <A>(value: A): A => {
   const copy = structuredClone(value);
   freezeAll(copy);
+
   return copy;
 };
 
@@ -250,6 +251,7 @@ const refusal = Effect.fnUntraced(function* (operation: Effect.Effect<unknown, T
 
 // The keys a walk down a path must read as own keys: each one names a member every object inherits.
 const hostile = ["__proto__", "constructor", "toString"] as const;
+
 const Key = Schema.Literals([...hostile, "leaf", "a.b", "雪"]);
 
 // What a write through an inherited key would land on: the prototype, its constructor and its
@@ -365,6 +367,7 @@ describe("T877 public TOML edits, next/", () => {
               .slice(0, slot)
               .reduce((n, s, j) => n + s.prefix.length + s.token.length + s.suffix.length + endings[j]!.length, 0) +
             current.prefix.length;
+
           const head = Str.slice(0, at)(text);
           const tail = Str.slice(at + current.token.length)(text);
           const value = frozen(values[i % values.length]!);
@@ -528,6 +531,7 @@ describe("T877 public TOML edits, next/", () => {
 
           if (path.length === 1 && (l.style === "explicit" || l.style === "implicit")) {
             const inserted = (yield* toml.parse(next)).spans.find((s) => same(s.path, path))!;
+
             const commentLine = Str.split(
               Str.slice(
                 0,
@@ -535,6 +539,7 @@ describe("T877 public TOML edits, next/", () => {
               )(next),
               /\r?\n/,
             ).length;
+
             expect(inserted.line).toBeLessThan(commentLine);
           }
 

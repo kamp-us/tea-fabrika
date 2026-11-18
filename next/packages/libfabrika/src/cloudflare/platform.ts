@@ -85,6 +85,7 @@ export const rejected = <E>(error: E): E | Error => {
   }
 
   const message = error.message;
+
   return Option.match(Str.indexOf(": ")(message), {
     onNone: () => error,
     onSome: (at) => Object.assign(new Error(Str.slice(at + 2)(message)), { name: Str.slice(0, at)(message) }),

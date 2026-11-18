@@ -209,6 +209,7 @@ describe("L1: the link machine", () => {
             expect(next._tag).toBe("dialing");
             expect(currentDial(next)).toBe(m.dial);
             expect(m.dial).toBeGreaterThan(Math.max(0, ...Arr.map(prev.delivered, (d) => ("dial" in d ? d.dial : 0))));
+
             return;
           }
 
