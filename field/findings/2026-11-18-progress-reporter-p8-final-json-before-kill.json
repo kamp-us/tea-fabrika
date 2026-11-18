@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-progress-reporter-p8-final-json-before-kill",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": ".github/ci/progress-reporter.integration.test.ts",
+    "line": 356
+  },
+  "says": "In today's CI, the law 'scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real' failed on a scheduled branch proof leg: after the SIGKILL, Vitest's final JSON already existed, so the timing read was 'read' where the law expects 'unavailable'. The kill races the child's own final write.",
+  "proof": "Branch proof run https://github.com/kamp-us/tea-fabrika/actions/runs/44315669639, leg changed (3), job 134841612997, at a2217352223acf0e6754240e1dd2a07dfbdd0e3f: `AssertionError: expected 'read' to be 'unavailable'` at progress-reporter.integration.test.ts:356:31; 1 failed, 467 passed in that leg. The branch (ticket 1161) does not touch the file or what it imports; PR 1567 reports the same law green on disposable runs 44108835179 and 44117144227.",
+  "cost": "Any scheduled run that reaches this file, main's full run included, can go red with no fault in the change; a rerun would hide it, which 0036 forbids.",
+  "head": "a2217352223acf0e6754240e1dd2a07dfbdd0e3f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1623"
+}
