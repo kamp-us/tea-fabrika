@@ -66,8 +66,9 @@ uses its native stack. The PRs link their independent reviews and CI evidence. T
 neither the later package move nor the CLI.
 
 Today's CI, serving both versions, adds automatic related integration and tooling checks for
-ready pull requests and queue groups, ticket 1155. Related visual tests join the existing next
-matrix without requiring a label. Global triggers select every file, and selected laws run at
+ready pull requests and queue groups, ticket 1155. Related visual tests run in the existing next
+matrix on a push to main, and on a pull request only with the `visual` label; a queue group never
+runs them (0536, the owner's ruling of 2026-11-18, [PR 1615](https://github.com/kamp-us/tea-fabrika/pull/1615)). Global triggers select every file, and selected laws run at
 full depth. All test jobs share the existing nine groups and one control group. The original
 regression suite remains intact. The [automatic checklist fault runner](../../field/notes/2026-11-17-automatic-checklist-faults.json)
 assigns the ten existing cases once across the existing integration legs, after each leg's ordinary files. The fixture's full100 suite stays in its one owning leg. It binds the catalog
@@ -115,6 +116,10 @@ found repeated strict line decoding dominated its time. Reusing successful decod
 unchanged 100-run test from 19.0 s to 7.0 s locally. It does not attribute CPU time in the Runner or L11 product workload.
 CI's CPU cause remains unproved. These measurements supply no
 branch proof or reliability claim.
+In `next/`, [pull request 1616](https://github.com/kamp-us/tea-fabrika/pull/1616) gives each cut of
+the L11 storage law a copy of one booted Project in place of a cold boot of its own, and splits the
+law into 16 parts, one per flow, that together cut exactly the old law's 1,369 cuts. The copy alone
+took the law to 52.1 s on CI, still near its 60 s bound, so the split is what gives each part room.
 
 Today's lead tooling has a manual [plant exercise](../../.github/workflows/plant.yaml), ticket 1133.
 It accepts seven fixed cases and an exact source commit, then records baseline, broken and restored observations.

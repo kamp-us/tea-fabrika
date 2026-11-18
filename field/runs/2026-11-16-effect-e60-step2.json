@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e60-step2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:53:23-08:00",
+  "ended": "2026-11-16T00:59:26-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, step 2 of 2 (the last fix step) for slice E60 (unstableApiUsage, 0574), on branch fabrikalfa/effect-e60 from b997ae8d. It deleted all 135 @stability doc lines from the 16 files of PR 1366 under next/packages/libfabrika/src (a scratchpad script, not committed; it also dropped the bare ' *' line when the tag was the last line of a block, so no block ends in an empty line; every other tag and text stayed). It removed the 'off' override for fabrika/no-stability-tag from .oxlintrc.json, so the rule now covers those 16 files too. It changed law 2 in oxlint-plugins/no-stability-tag.test.ts: the 16 files used to be asserted silent, and are now asserted to fire on the tag line like the other in-scope folders; the silent set is the paths outside the four folders. That law asks for more, not less. Plant L1 (run once, undone): a '@stability unstable' line put back into telemetry/Sink.ts was reported by oxlint as error fabrika(no-stability-tag) at line 10, then the file was restored from a copy. The jsdocs rule's tolerance of a tagged block (MODULE_TAGGED, RIGHT_TAGGED and the tagged cases in oxlint-plugins/jsdocs.test.ts) stays: the rule code is unchanged and still accepts the tag, so removing those cases would narrow what its laws assert; listed for the owner or integrator. Search: no '* @stability' doc line remains in next/, .agents, .github or oxlint-plugins source (the .github/ci/fixtures/same/*.new.txt byte-exact vectors, the word list in .github/ci/program.test.ts and the planted strings in the two oxlint-plugins tests stay). Recount with only unstableApiUsage at error per tsconfig, 13 tsconfigs: .agents 320, .github/ci 58, oxlint-plugins 9, next/packages/vitest 33, next/apps/fabrika 883, programs chaos 38, checklist 41, counter 9, inbox 9, pipeline 42, tezgah 10, next/packages/libfabrika 2112, next/packages/tuval 18; total 3582, and 0 hits from our own @kampus exports (every hit is an Effect unstable part). Step 1 had counted libfabrika 4271 and the app 1238; the drop is the removed @stability lines. Nothing set in allowedUnstableApis, no lock or override line for unstableApiUsage, and it is at error nowhere.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Distinct unstable Effect parts, hits summed over the 13 tsconfigs: @effect/vitest 1716, effect/Arbitrary 409, effect/FileSystem 301, @effect/platform-node/NodeServices 229, effect/Path 204, effect/process/ChildProcessSpawner 101, effect/crypto/Digest 94, effect/cli/Flag 75, effect/ByteSize 62, effect/process/ChildProcess 52, effect/cli/Command 50, effect/crypto/SecureRandom 48, effect/PlatformError 31, @effect/platform-node/NodeRuntime 31, effect/socket/Socket 30, effect/cli/Argument 25, effect/persistence/RateLimiter 21, effect/persistence/KeyValueStore 18, effect/Schema 14, effect/http/FetchHttpClient 14, effect/http/HttpClient 13, @effect/platform-node/NodeFileSystem 13, effect/http/HttpClientRequest 8, effect/testing/TestConsole 6, effect/http/HttpServerResponse 4, @effect/platform-node/NodePath 4, effect/Stdio 3, effect/http/HttpServerRequest 3, effect/cli/Prompt 1, @effect/platform-browser/BrowserRuntime 1, effect/http/HttpClientResponse 1. That is 31 parts. The integrator names them in allowedUnstableApis. Checks at this head: pnpm format clean; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, all 18 parts passed; one pnpm typecheck exit 0. Tests (vitest --maxWorkers=1, explicit files, since --changed and directory paths are refused locally as broad): settings/Files, settings/Snapshot, processes/internal/programMail, ledger/Log.integration, runtime/ProcessStore.integration, runtime/RecoveryStore.integration, runtime/Program, cloudflare/index, oxlint-plugins/jsdocs and no-stability-tag, 150 tests passed except the old law 2 of no-stability-tag, which failed on purpose after the override went and passes after its update (jsdocs and no-stability-tag rerun: 22 passed). --changed origin/fabrikalfa/test-sqlite-store: not run, the config refuses it as a broad run here. Not run: any other libfabrika integration test (comment-only change to those sources).",
+  "plants": [
+    {
+      "law": "law 2: with the real config the rule fires in next/, .agents/, .github/ci/ and oxlint-plugins/, and nowhere else",
+      "plant": "put '@stability unstable' back into the module block of next/packages/libfabrika/src/telemetry/Sink.ts and lint it with the real config",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

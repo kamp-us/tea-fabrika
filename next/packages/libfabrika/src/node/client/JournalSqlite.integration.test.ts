@@ -20,11 +20,15 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
@@ -45,17 +49,20 @@ const everyKeyWhole = (label: string) =>
 
     for (const [place, task] of TASKS.entries()) {
       const read = yield* journal.read(task).pipe(Effect.result);
-      const shown = JSON.stringify(read).slice(0, 200);
+      const shown = Function.pipe(Formatter.format(read), Str.slice(0, 200));
       expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
       const entry = read._tag === "Success" ? read.success : null;
       expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();
       expect(entry?._tag, `J2: ${task} ${label} holds a whole result entry`).toBe("result");
-      const n = entry?._tag === "result" ? Number(entry.execution.replace(/^execution-/, "")) : Number.NaN;
+
+      const n =
+        entry?._tag === "result" ? Number(Function.pipe(entry.execution, Str.replace(/^execution-/, ""))) : Number.NaN;
+
       expect(Number.isInteger(n) && n % TASKS.length === place, `J2: ${task} ${label} holds its own write`).toBe(true);
       const result = entry?._tag === "result" ? entry.result : null;
       const version = result?._tag === "exited" ? result.version : "";
       expect(
-        version.length === 64 * 1024 && version.startsWith(`${n}:`),
+        version.length === 64 * 1024 && Function.pipe(version, Str.startsWith(`${n}:`)),
         `J2: ${task} ${label} holds the whole value of write ${n}`,
       ).toBe(true);
     }

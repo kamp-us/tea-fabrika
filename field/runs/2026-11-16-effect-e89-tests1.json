@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e89-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:45:21-08:00",
+  "ended": "2026-11-16T01:00:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E89 of the Effect-check sweep (globalDateInEffect and globalDate together), in next/, on fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds pull request 1366. Counted with effect-tsgo diagnostics, only those two checks at error through --lspconfig, over all 13 tsconfigs in scope: 151 hits, 61 in this row's folders (app:src 57, lib:gateway 2, lib:settings 2; the plan said 60, app:src 56), 59 in exam paths and 2 in product files. Fixed all 59 exam-path hits by hand with the Edit tool: a wall-clock read in plain or async code is DateTime.toEpochMillis(DateTime.nowUnsafe()), which reads Date.now itself, so real-time waits and vi fake timers behave as before; a read inside an it.live Effect.gen is yield* Clock.currentTimeMillis; new Date(x) is DateTime.toDateUtc(DateTime.makeUnsafe(x)); new Date(ms).toISOString() is DateTime.formatIso(DateTime.makeUnsafe(ms)). Recount after: 0 in this row's exam paths; 2 left for the build, both in next/packages/libfabrika/src/gateway/Gateway.ts (lines 1420 and 1868). The other 90 hits sit in E48's folders, which E48's branch (fabrikalfa/effect-e48, not in this base) fixes; E48 conflicts with this base in 18 files, none of them this slice's. No lock line, no tsconfig override and no LOCKED row, as the owner ruled for judgment slices (locks added at the end). no-wall-clock and no-clock-in-view were not deleted: a probe through the checker showed it misses Date() and performance.now() (also window.performance.now()), which both rules refuse, so by 0573 ours still catches more.",
+  "laws": [
+    {
+      "law": "L1: the checker's globalDate and globalDateInEffect at error over this row's folders (the lock comes later, with the other judgment slices)",
+      "red": "red before the fix: 61 hits in the row's folders, e.g. next/apps/fabrika/src/start-member.laws.integration.test.ts:40 error effect(globalDate)"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L1: the checker's globalDate at error over next/apps/fabrika/tsconfig.json",
+      "plant": "start-member.laws.integration.test.ts's new wall-clock helper put back to `const now = () => Date.now();`, run once through --lspconfig, restored by copy",
+      "result": "red"
+    },
+    {
+      "law": "0573's premise that the checker catches what no-wall-clock and no-clock-in-view catch",
+      "plant": "a probe .tsx in next/apps/fabrika/src/entry with Date.now(), new Date(), Date(), window.Date.now(), globalThis.Date.now(), new globalThis.Date(), new Date(at), performance.now(), window.performance.now(), Math.random(), crypto.randomUUID(), the same inside Effect.gen and in an onClick handler, removed after one run",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Plant 1 failed with: start-member.laws.integration.test.ts(39,19): error effect(globalDate): This code uses `Date.now()`, time access is represented through `Clock` from Effect. Plant 2 flagged every form but Date() and performance.now() (outside Effect, inside Effect.gen, and in a handler), and new Date(at), which ours lets pass. Ran here, one file at a time with maxWorkers 1 and TYPESAFE_API_KEY unset: grant-readers.laws.test.ts 14 passed, settings.test.ts 1 passed, runtime.decode.test.ts 2 passed (both read StartsTest.ts), libfabrika settings/TomlEdit.test.ts 18 passed. Not run: the eleven changed .integration. files, which need workerd (a box). pnpm format applied one wrap; pnpm lint exit 0; the list ratchet exit 0. No pnpm typecheck in this step.",
+  "step": "tests"
+}

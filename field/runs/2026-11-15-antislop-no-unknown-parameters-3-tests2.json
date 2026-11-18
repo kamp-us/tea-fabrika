@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-unknown-parameters-3-tests2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:06:41-08:00",
+  "ended": "2026-11-15T23:11:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Small tests fix round of slice AS-no-unknown-parameters-3 (anti-slop judgment sweep, next/), on branch fabrikalfa/antislop-no-unknown-parameters-3 from the build's head 7d51692, no pull request (owner ruling). The build changed transport/Answer.ts:28 so a route takes params: Schema.Json | undefined, and could not commit the two exam hits that restate it. anti-slop/no-unknown-parameters, forced to error on libfabrika/src/transport in a scratch config outside the repo, met 2 hits in exam paths: transport/Answer.test.ts:14 (the Route type) and :299 (the p82 route spy's second parameter). Both are fixed by hand edits to Schema.Json | undefined, the type Answer.ts now passes; pnpm format then wrapped the Route type over several lines. No quick fix, no codemod, no disable line, no lock line, no .oxlintrc.json change, no assertion deleted or narrowed. Still in the transport folder, not this round's: Connection.ts:38 and :196 (product, in pull request 1366's diff, waiting on 1366) and Connection.test.ts:576 (left by the first tests round for the ignore line 0563 allows, waiting on the lock pull request).",
+  "plants": [
+    { "law": "anti-slop/no-unknown-parameters over next/packages/libfabrika/src/transport (scratch config)", "plant": "transport/Answer.test.ts put back to its unknown parameters by git stash; the rule flagged :14 and :299, then the edit was restored with git stash pop and Answer.test.ts gave 0 hits", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Ran at 7d51692 plus this change: vitest next/packages/libfabrika/src/transport/Answer.test.ts, 17 of 17 pass; tsc --noEmit for next/packages/libfabrika, clean. pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) each fail only on the four add-the-folder-to-its-block (0563) messages for libfabrika access and desktop, programs/checklist and programs/pipeline, the lock left for later; the list ratchet exits 0. No integration law is reached by this file.",
+  "step": "tests"
+}

@@ -6,7 +6,14 @@
  * allows, in the same ledger turn.
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import * as Equal from "effect/Equal";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -117,10 +124,10 @@ const eventStream = (name: string): string => `${PROCESSES}/${name}`;
  */
 export const brainOnly = (write: { readonly stream: string; readonly id: string; readonly tag: string }): boolean =>
   write.stream === PROCESSES ||
-  write.stream.startsWith(`${PROCESSES}/`) ||
-  write.stream.endsWith("/dead") ||
+  Str.startsWith(`${PROCESSES}/`)(write.stream) ||
+  Str.endsWith("/dead")(write.stream) ||
   write.tag === "dead" ||
-  Object.hasOwn(ProcessEvent.cases, write.tag) ||
+  Rec.has<string, unknown>(ProcessEvent.cases, write.tag) ||
   inSignalSpace(write.id) ||
   inNoticeSpace(write.id) ||
   inRunnerSpace(write.id);
@@ -413,9 +420,9 @@ export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, 
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 
 const led = (word: string) => {
-  const lead = JSON.stringify([word]).slice(0, -1);
-
-  return (id: string): boolean => id.startsWith(lead) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
+  const lead = Str.slice(0, -1)(JSON.stringify([word]));
+  return (id: string): boolean =>
+    Str.startsWith(lead)(id) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
 };
 
 /**
@@ -746,7 +753,7 @@ export class ProcessTable {
    * its own recipient, and only while its watch is live. Anything else is plain mail.
    */
   deliver(entry: Entry, m: unknown, process: string): "mail" | "signal" | "drop" {
-    if (typeof m !== "object" || m === null || !("_tag" in m) || m._tag !== "DOWN") {
+    if (!Predicate.isTagged(m, "DOWN")) {
       return "mail";
     }
 

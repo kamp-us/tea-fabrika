@@ -1,7 +1,6 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
 // The settings entry flows (L10, L16) are in entry-flows.laws.test.ts, split out unchanged so each
 // file stays under about 60 s on a CI leg.
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
@@ -10,8 +9,14 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import { Cause, Effect, Exit, Layer, Match, Option, Redacted, Schema } from "effect";
+
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -71,14 +76,26 @@ vi.mock("effect", async (original) => {
   return { ...actual, Effect: { ...actual.Effect } };
 });
 
-const config = instanceFixture({
-  name: "parse-test",
-  person: "person-test",
-  founder: "public-test",
-  window: null,
-  port: 18787,
-  build: "test",
-});
+const config = await Effect.runPromise(
+  StartsTest.fixture({
+    name: "parse-test",
+    person: "person-test",
+    founder: "public-test",
+    window: null,
+    port: 18787,
+    build: "test",
+  }),
+);
+
+/** A fresh Ed25519 public key in JWK's `x` form (base64url), from Effect's Signature on WebCrypto. */
+const freshPublicKey = Signature.Signature.use((signature) => signature.generateKeyPair(Signature.ed25519)).pipe(
+  Effect.flatMap(({ publicKey }) => Signature.toBytes(publicKey)),
+  Effect.map(Base64Url.encode),
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+);
+
+/** SHA-256 of no bytes (FIPS 180-2's empty-message digest). */
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
 
@@ -111,10 +128,17 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               continue;
             }
 
-            const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
             let consumers = 0;
             let settingsCalls = 0;
-
+            const w = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                world(async (wire) => {
+                  settingsCalls++;
+                  return StartsTest.reply(wire);
+                }),
+              ),
+              (value) => Effect.sync(() => value.db.close()),
+            );
             const bad =
               origin === undefined
                 ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
@@ -126,75 +150,45 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               ...w.ctx,
               id: {
                 ...w.ctx.id,
-                name:
-                  path === "Process"
-                    ? JSON.stringify(["settings-law", "worker"])
-                    : path === "RecordPart"
-                      ? JSON.stringify(["settings-law", "spans/0"])
-                      : "settings-law",
+                name: Match.value(path).pipe(
+                  Match.when("Process", () => Formatter.formatJson(["settings-law", "worker"])),
+                  Match.when("RecordPart", () => Formatter.formatJson(["settings-law", "spans/0"])),
+                  Match.orElse(() => "settings-law"),
+                ),
               },
               getWebSockets: () => {
                 consumers++;
 
                 return [];
               },
-              storage: new Proxy(w.ctx.storage, {
-                get: (target, key) => {
-                  if (key === "get") {
-                    return (...args: unknown[]) => {
-                      consumers++;
-
-                      return Reflect.apply(target.get, target, args);
-                    };
-                  }
-
-                  if (key === "sql") {
-                    return new Proxy(sql, {
-                      get: (target, key) =>
-                        key === "exec"
-                          ? (...args: unknown[]) => {
-                              consumers++;
-
-                              return Reflect.apply(target.exec, target, args);
-                            }
-                          : Reflect.get(target, key),
-                    });
-                  }
-
-                  return Reflect.get(target, key);
+              // The storage, with each read a consumer could make counted: `get`, and `sql.exec`.
+              storage: {
+                ...w.ctx.storage,
+                get: (...args: unknown[]) => {
+                  consumers++;
+                  return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
                 },
-              }),
+                sql: {
+                  ...sql,
+                  exec: (...args: unknown[]) => {
+                    consumers++;
+                    return Reflect.apply(sql.exec, sql, args);
+                  },
+                  get databaseSize() {
+                    return sql.databaseSize;
+                  },
+                },
+              },
             };
-
-            const env = {
-              ...w.env,
-              INSTANCE: JSON.stringify(bad),
-              PROJECT: new Proxy(w.env.PROJECT, {
-                get: (target, key) =>
-                  key === "getByName"
-                    ? () =>
-                        new Proxy(target.getByName("settings-law"), {
-                          get: (stub, method) =>
-                            method === "settingsStart"
-                              ? async (wire: StartsTest.Input) => {
-                                  settingsCalls++;
-
-                                  return StartsTest.reply(wire);
-                                }
-                              : Reflect.get(stub, method),
-                        })
-                    : Reflect.get(target, key),
-              }),
-            };
-
-            const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+            // The world's Project stub counts each `settingsStart` and answers the start it is given.
+            const env = { ...w.env, INSTANCE: Formatter.formatJson(bad) };
 
             const local = {
               ...config,
               name: "settings-law",
               port: recipe.port,
               person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-              founder: publicKey ?? "missing-public-key",
+              founder: yield* freshPublicKey,
               window: config.founding.window,
             };
 
@@ -223,6 +217,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                   Effect.provideService(WorkerEnvironment, env),
                   Effect.provideService(
                     ObjectState,
+                    // SAFETY: `ctx` holds the handles `fromDurableObjectState` reads; only the Request brands of the two types differ.
                     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
                     fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
                   ),
@@ -301,7 +296,9 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   });
 };
 
-const world = () => {
+/** In-memory platform handles over one SQLite database. The Project stub's `settingsStart` answers
+ *  as `settingsStart` says, the good start by default. */
+const world = (settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config)) => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
 
@@ -326,9 +323,11 @@ const world = () => {
     close: vi.fn(),
   };
 
+  // SAFETY: the readers use only the socket's attachment, `send` and `close`, which `ws` holds.
   // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
   const socket = ws as unknown as WebSocket;
 
+  // SAFETY: the readers call only the object's id, SQL storage and these socket methods, all given below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
   const ctx = {
     id: {
@@ -352,14 +351,15 @@ const world = () => {
     setWebSocketAutoResponse: vi.fn(),
   } as unknown as DurableObjectState;
 
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
+  const route = vi.fn(async (): Promise<object> => ({ _tag: "parked", stream: "stream", after: 0 }));
 
+  // SAFETY: these readers reach INSTANCE, PROJECT's settings and session calls, and RECORD's `write`, all doubled here.
   // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
   const env = {
     INSTANCE: JSON.stringify(config),
     PROJECT: {
       getByName: () => ({
-        settingsStart: async () => StartsTest.reply(config),
+        settingsStart,
         route,
         leave: async () => {},
         disconnect: async () => {},
@@ -582,8 +582,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
         );
 
         try {
-          const args: Array<unknown> =
-            field === "head key" ? [raw] : ["key", [], createHash("sha256").update("").digest("hex")];
+          const args: Array<unknown> = field === "head key" ? [raw] : ["key", [], EMPTY_SHA256];
 
           if (field === "put key") {
             args[0] = raw;
@@ -733,12 +732,6 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
   );
 });
 
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}
-
 StartsTest.law(
   "T753 L19 the legacy cap, fallback, resend and rollover behavior remain intact",
   fc.record({
@@ -753,10 +746,15 @@ StartsTest.law(
 
       const ctx = {
         ...w.ctx,
-        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
+        id: { ...w.ctx.id, name: Formatter.formatJson(["settings-law", "spans/0"]) },
         storage: {
           ...w.ctx.storage,
-          sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
+          sql: {
+            ...raw,
+            get databaseSize() {
+              return size;
+            },
+          },
         },
       };
 
@@ -765,7 +763,7 @@ StartsTest.law(
       const row = (n: number) => ({
         span: {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-          spanId: n.toString(16).padStart(16, "0"),
+          spanId: Str.padStart(16, "0")(n.toString(16)),
           parentSpanId: null,
           name: "settings-cap-fixture",
           kind: "internal" as const,

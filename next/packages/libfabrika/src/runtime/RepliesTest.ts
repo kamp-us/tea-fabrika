@@ -3,7 +3,24 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
+
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -66,19 +83,19 @@ const Wrong = Schema.TaggedUnion({
 /** The three forms a leaked body takes in text: as it is, JSON-escaped and URL-encoded. */
 const forms = (secret: string): ReadonlyArray<string> => [
   secret,
-  JSON.stringify(secret).slice(1, -1),
+  Str.slice(1, -1)(JSON.stringify(secret)),
   encodeURIComponent(secret),
-  secret.slice(0, 14),
+  Str.slice(0, 14)(secret),
 ];
 
 /** Fails when any output holds any form of any secret, and names each output that does. It scans
  *  first and asserts once: one `expect` for each output and form took more than half of a walk
  *  that looks after every move. */
 export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
-  const leaks = secrets.flatMap(forms);
-  const leaked = outputs.filter((output) => leaks.some((form) => output.includes(form)));
+  const leaks = Arr.flatMap(secrets, forms);
+  const leaked = Arr.filter(outputs, (output) => Arr.some(leaks, (form) => Str.includes(form)(output)));
   // The outputs go in the message: a property law prints the message and not the diff.
-  expect(leaked, `input text leaked: ${leaked.join("\n")}`).toEqual([]);
+  expect(leaked, `input text leaked: ${Arr.join(leaked, "\n")}`).toEqual([]);
 };
 
 /** Made-up input text with a quote, a space, a slash and a non-ASCII letter, so its three forms
@@ -86,7 +103,7 @@ export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<
 export const sentinel = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"])), {
   minLength: 10,
   maxLength: 10,
-}).pipe(Arbitrary.map((core) => `BODY${core.join("")} "x"/ü`));
+}).pipe(Arbitrary.map((core) => `BODY${Arr.join(core, "")} "x"/ü`));
 
 /** Entropy a walk reads against its state. */
 export const nat = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })));
@@ -94,7 +111,7 @@ export const nat = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum:
 /** Text of these characters, as long as asked. */
 export const text = (chars: string, maxLength: number) =>
   Arbitrary.array(Arbitrary.schema(Schema.Literals([...chars])), { minLength: 1, maxLength }).pipe(
-    Arbitrary.map((cs) => cs.join("")),
+    Arbitrary.map((cs) => Arr.join(cs, "")),
   );
 
 /** A tracer that keeps every span it makes. */
@@ -116,16 +133,18 @@ export const capture = () => {
   const ended = new WeakMap<Tracer.NativeSpan, string>();
 
   const write = (span: Tracer.NativeSpan) =>
-    [
-      span.name,
-      JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
-    ].join("\n");
-
+    Arr.join(
+      [
+        span.name,
+        JSON.stringify([...span.attributes], (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
+        JSON.stringify(span.events, (_, value) => (Predicate.isBigInt(value) ? value.toString() : value)),
+        span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
+      ],
+      "\n",
+    );
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
-    spans.map((span) => {
+    Arr.map(spans, (span) => {
       const known = ended.get(span);
 
       if (known !== undefined) {
@@ -166,9 +185,10 @@ const faulty = (sql: Sql, control: Control): Sql => ({
 
 /** Every table and row of the database, as text, for retained-row and body checks. */
 const dump = (sql: Sql): ReadonlyArray<{ readonly table: string; readonly row: Record<string, unknown> }> =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .flatMap(({ name }) => sql.exec(`SELECT * FROM "${String(name)}"`).map((row) => ({ table: String(name), row })));
+  Arr.flatMap(
+    sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+    ({ name }) => Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => ({ table: String(name), row })),
+  );
 
 const NAMES = ["notes:1", "notes:2", "counter:1"] as const;
 
@@ -214,8 +234,10 @@ const key = (name: string, id: string) => JSON.stringify([name, id]);
 
 /** A stored cell read as a JSON object, or undefined when it is not one. */
 export const parsed = (cell: string): Record<string, unknown> | undefined => {
+  // SAFETY: JSON.parse answers any JSON value, and unknown says only that.
   const value = Result.try(() => JSON.parse(cell) as unknown);
 
+  // SAFETY: the cast runs only after Predicate.isObject checked that the value is an object.
   return Result.isSuccess(value) && Predicate.isObject(value.success)
     ? (value.success as Record<string, unknown>)
     : undefined;
@@ -227,6 +249,7 @@ type Proposed = Reply & { readonly body: string };
 const propose = (n: number, step: Step, name: string, id: string): Proposed => ({
   name,
   id,
+  // SAFETY: a reply's parent is an input id: `input_`, then 26 characters, as this one is built.
   parent: `input_0000000000e0080000000000${step.parent[0]}${step.parent[1]}` as Reply["parent"],
   by: `SHA256:${step.by}`,
   for: step.for,
@@ -248,7 +271,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
   reason: Module.RepliesError["reason"],
 ) {
   const exit = yield* Effect.exit(effect);
-  expect(Exit.isFailure(exit), `expected a ${reason} failure, got ${JSON.stringify(exit)}`).toBe(true);
+  expect(Exit.isFailure(exit), `expected a ${reason} failure, got ${Formatter.formatJson(exit)}`).toBe(true);
 
   if (Exit.isSuccess(exit)) {
     return null;
@@ -256,6 +279,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
 
   // A throw or defect is not a typed failure: the plant of R5.
   expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+  // SAFETY: the expect above failed the law unless the cause holds a typed failure, and refusedWith takes an Effect whose only typed failure is RepliesError.
   const error = Cause.squash(exit.cause) as Module.RepliesError;
   expect(error._tag).toBe("RepliesError");
   expect(error.reason).toBe(reason);
@@ -300,7 +324,7 @@ const walk = (
 
     const unseen = (step: Step, n: number): { name: string; id: string } => {
       // Half the time, a letter already stored under another registered name.
-      const known = [...first.values()].filter((r) => !first.has(key(nth(NAMES, step.kind), r.id)));
+      const known = Arr.filter([...first.values()], (r) => !first.has(key(nth(NAMES, step.kind), r.id)));
       const reuse = step.kind % 2 === 0 ? known[step.pick % Math.max(known.length, 1)] : undefined;
       const name = nth(NAMES, step.kind);
 
@@ -312,9 +336,8 @@ const walk = (
     };
 
     for (const [n, step] of steps.entries()) {
-      const good = [...first.entries()].filter(([k]) => !corrupt.has(k));
-
-      const moves = enabled.filter((move) =>
+      const good = Arr.filter([...first.entries()], ([k]) => !corrupt.has(k));
+      const moves = Arr.filter(enabled, (move) =>
         move === "repeat" || move === "read" || move === "corrupt" || move === "accepted" ? good.length > 0 : true,
       );
 
@@ -338,7 +361,7 @@ const walk = (
         const [, stored] = chosen;
         expect(yield* service.reply(stored.name, stored.id)).toEqual(stored);
         // The same letter under a registered name that holds no reply for it.
-        const other = NAMES.find((name) => !first.has(key(name, stored.id)));
+        const other = Option.getOrUndefined(Arr.findFirst(NAMES, (name) => !first.has(key(name, stored.id))));
 
         if (other !== undefined) {
           expect(yield* service.reply(other, stored.id)).toBeNull();
@@ -366,10 +389,9 @@ const walk = (
         expect(yield* service.reply(name, id), "a failed write is not a stored reply").toBeNull();
       } else if ((move === "corrupt" || move === "accepted") && chosen !== undefined) {
         const [k, stored] = chosen;
-
-        const located = dump(raw).flatMap(({ table, row }) =>
-          Object.entries(row).flatMap(([column, value]) => {
-            if (typeof value !== "string" || parsed(value)?.["digest"] !== stored.digest) {
+        const located = Arr.flatMap(dump(raw), ({ table, row }) =>
+          Arr.flatMap(Rec.toEntries(row), ([column, value]) => {
+            if (!Predicate.isString(value) || parsed(value)?.["digest"] !== stored.digest) {
               return [];
             }
 
@@ -378,27 +400,37 @@ const walk = (
         );
 
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+        )(value);
         const secret = step.body;
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
-        const damaged =
-          kind === "json"
-            ? `${value.slice(0, -1)}${secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
-                : kind === "typed"
-                  ? JSON.stringify({ ...json, by: { text: secret } })
-                  : kind === "accepted"
-                    ? JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                    : JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
+        const damaged = Match.value(kind).pipe(
+          Match.when("json", () => `${Str.slice(0, -1)(value)}${secret}`),
+          Match.when("missing", () =>
+            Formatter.formatJson(
+              Rec.fromEntries(Arr.filter(Rec.toEntries(json), ([f]) => f !== fields[n % fields.length])),
+            ),
+          ),
+          Match.when("key", () =>
+            Formatter.formatJson({
+              ...json,
+              ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }),
+            }),
+          ),
+          Match.when("typed", () => Formatter.formatJson({ ...json, by: { text: secret } })),
+          Match.when("accepted", () =>
+            Formatter.formatJson({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() =>
+            Formatter.formatJson({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) }),
+          ),
+        );
 
         raw.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, damaged, value);
         corrupt.set(k, damaged);
@@ -414,17 +446,16 @@ const walk = (
 
         note(yield* refusedWith(service.reply(stored.name, stored.id), "bad_row"));
         note(yield* refusedWith(service.rememberReply(stored), "bad_row"));
-        const cells = dump(raw).flatMap(({ row }) => Object.values(row));
+        const cells = Arr.flatMap(dump(raw), ({ row }) => Rec.values(row));
         expect(cells, "a corrupt row is retained as it was").toContain(damaged);
       }
 
       // After every move: no stored row, printed error or span holds a body (R11).
       const damaged = new Set(corrupt.values());
-
-      const cells = dump(raw)
-        .flatMap(({ row }) => Object.values(row))
-        .filter((cell): cell is string => typeof cell === "string" && !damaged.has(cell));
-
+      const cells = Arr.filter(
+        Arr.flatMap(dump(raw), ({ row }) => Rec.values(row)),
+        (cell): cell is string => Predicate.isString(cell) && !damaged.has(cell),
+      );
       unleaked([...cells, ...errors, ...spans.text()], secrets);
     }
 

@@ -21,7 +21,11 @@
 //   (tmux's send-prefix) and for any other key while idle; and `dropped` for Escape or an unbound key
 //   while armed.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import * as Result from "effect/Result";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Keys from "./Keys.ts";
@@ -40,12 +44,12 @@ const idle = Prefix.cases.idle.make({});
 const armed = Prefix.cases.armed.make({ since: 0 });
 
 /** Every backend a window can be, with its cannot keys, read from the real `Keys.backend`. */
-const BACKENDS = PLATFORMS.flatMap((platform) =>
-  OSES.map((os) => ({ platform, os, backend: Keys.backend(platform, os) })),
+const BACKENDS = Arr.flatMap(PLATFORMS, (platform) =>
+  Arr.map(OSES, (os) => ({ platform, os, backend: Keys.backend(platform, os) })),
 );
 
 /** Each backend's cannot keys, one pair per key: the generator L15 names. */
-const CANNOT = BACKENDS.flatMap((b) => b.backend.cannot.map((key) => ({ ...b, key })));
+const CANNOT = Arr.flatMap(BACKENDS, (b) => Arr.map(b.backend.cannot, (key) => ({ ...b, key })));
 
 /** Made-up commands of a made-up program, so a law never leans on tezgah's own defaults. */
 const WORDS = ["split_right", "split_down", "close", "zoom", "fold", "detach"] as const;
@@ -56,7 +60,7 @@ const FREE = ["<prefix>%", '<prefix>"', "<prefix>x", "<prefix>|", "<prefix>-", "
 const binding = (word: string, keys: ReadonlyArray<string>): Binding => ({
   does: `demo.${word}`,
   keys,
-  word: word.replace("_", " "),
+  word: Function.pipe(word, Str.replace("_", " ")),
   label: word,
 });
 
@@ -66,7 +70,7 @@ const freeRows = fc
   .chain((words) =>
     fc
       .shuffledSubarray([...FREE], { minLength: words.length, maxLength: words.length })
-      .map((keys) => words.map((w, i) => binding(WORDS[w]!, [keys[i]!]))),
+      .map((keys) => Arr.map(words, (w, i) => binding(WORDS[w]!, [keys[i]!]))),
   );
 
 describe("L15: a binding on a key the backend cannot have fails at load; a default on one is never shipped", () => {
@@ -77,7 +81,7 @@ describe("L15: a binding on a key the backend cannot have fails at load; a defau
     expect(CANNOT.length, "L15: some backend has keys it cannot have").toBeGreaterThan(0);
     const seen = { owned: 0, kept: 0 };
     // A browser tab on any other OS is not walked: the plan decides F6 for Windows and Linux only.
-    const decided = BACKENDS.filter((b) => b.platform !== "browser" || b.os === "windows" || b.os === "linux");
+    const decided = Arr.filter(BACKENDS, (b) => b.platform !== "browser" || b.os === "windows" || b.os === "linux");
     fc.assert(
       fc.property(fc.constantFrom(...decided), ({ platform, os }) => {
         const owned = platform === "browser";
@@ -121,20 +125,20 @@ describe("L15: a binding on a key the backend cannot have fails at load; a defau
       fc.property(fc.constantFrom(...CANNOT), freeRows, fc.nat(), (pick, rows, at) => {
         const i = at % rows.length;
         // One default sits on a key this backend cannot have, beside a key it can.
-        const defaults = rows.map((r, j) => (j === i ? { ...r, keys: [pick.key, ...r.keys] } : r));
+        const defaults = Arr.map(rows, (r, j) => (j === i ? { ...r, keys: [pick.key, ...r.keys] } : r));
         const shipped = Keys.ship(defaults, pick.backend);
         expect(
-          shipped.map((r) => [r.does, r.word, r.label]),
+          Arr.map(shipped, (r) => [r.does, r.word, r.label]),
           "L15: every default row ships, in order",
-        ).toEqual(defaults.map((r) => [r.does, r.word, r.label]));
+        ).toEqual(Arr.map(defaults, (r) => [r.does, r.word, r.label]));
 
         for (const [j, row] of shipped.entries()) {
           expect(
-            row.keys.filter((k) => pick.backend.cannot.includes(k)),
+            Arr.filter(row.keys, (k) => pick.backend.cannot.includes(k)),
             `L15: ${row.does} ships no key ${pick.platform} on ${pick.os} cannot have`,
           ).toEqual([]);
           expect(row.keys, `L15: ${row.does} keeps every key the backend can have`).toEqual(
-            defaults[j]!.keys.filter((k) => !pick.backend.cannot.includes(k)),
+            Arr.filter(defaults[j]!.keys, (k) => !pick.backend.cannot.includes(k)),
           );
         }
 

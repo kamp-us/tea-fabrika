@@ -33,6 +33,7 @@
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
 // is the safe side for a rule that blocks.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
+import { Array as Arr, pipe, Option, Predicate } from "effect";
 import { below, dotted, type Node } from "./match.ts";
 
 const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
@@ -42,7 +43,7 @@ type Label = (typeof LABELS)[number];
 /** One leading ticket or law id, `T652 ` or `R3.1 `, may stand before the label (lead, 2026-11-11). */
 const ID = /^[A-Za-z0-9.]+ /;
 
-const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${LABELS.join("|")}):\\s*\\S`);
+const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${Arr.join(LABELS, "|")}):\\s*\\S`);
 
 const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminates"]);
 
@@ -68,7 +69,11 @@ const RUNS = new Set([
 /** Calls that make a test from their own call: `it.each(rows)` is not a test, `it.each(rows)(...)` is. */
 const MAKERS = new Set(["each", "for", "skipIf", "runIf"]);
 
-export const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${LABELS.map((l) => `${l}:`).join(", ")} and its reason (0093, 0527).`;
+export const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${pipe(
+  LABELS,
+  Arr.map((l) => `${l}:`),
+  Arr.join(", "),
+)} and its reason (0093, 0527).`;
 
 export const TYPE_MESSAGE =
   "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels (0527).";
@@ -116,12 +121,15 @@ const chainOf = (callee: Node): readonly string[] | null => {
 const leading = (text: string): Label | "none" => {
   const found = LABELED.exec(text)?.[1];
 
-  return LABELS.find((label) => label === found) ?? "none";
+  return Option.getOrElse(
+    Arr.findFirst(LABELS, (label) => label === found),
+    () => "none",
+  );
 };
 
 /** The label a written title starts with, `"none"`, or `null` when the source does not say. */
 const labelOf = (title: Node | undefined): Label | "none" | null => {
-  if (title?.type === "Literal" && typeof title.value === "string") {
+  if (title?.type === "Literal" && Predicate.isString(title.value)) {
     return leading(title.value);
   }
 
@@ -138,13 +146,13 @@ const labelOf = (title: Node | undefined): Label | "none" | null => {
   // `format: ${x}` is labeled, with its reason in `x`. `${x}`, `form${x}` and `T652 ${x}` could
   // still become a label, so the source does not say. `the window ${x}` cannot.
   const rest = head.replace(ID, "");
-  const started = LABELS.find((label) => head.startsWith(`${label}:`) || rest.startsWith(`${label}:`));
+  const started = Arr.findFirst(LABELS, (label) => head.startsWith(`${label}:`) || rest.startsWith(`${label}:`));
 
-  if (started !== undefined) {
-    return started;
+  if (Option.isSome(started)) {
+    return started.value;
   }
 
-  return LABELS.some((label) => `${label}:`.startsWith(head) || `${label}:`.startsWith(rest)) ? null : "none";
+  return Arr.some(LABELS, (label) => `${label}:`.startsWith(head) || `${label}:`.startsWith(rest)) ? null : "none";
 };
 
 /** The calls of one `expectTypeOf(...)...` or `assertType(...)` chain, or `null` for any other expression. */
@@ -269,7 +277,7 @@ export const lawShape: CreateRule = {
 
         for (const node of below(program)) {
           const named =
-            node.type === "FunctionDeclaration" && node.id
+            node.type === "FunctionDeclaration" && node.id !== null
               ? { name: node.id.name, fn: node }
               : node.type === "VariableDeclarator" && node.id.type === "Identifier" && isFn(node.init)
                 ? { name: node.id.name, fn: node.init }
@@ -298,7 +306,10 @@ export const lawShape: CreateRule = {
               return true;
             }
 
-            if (node.callee.type === "Identifier" && (local.get(node.callee.name) ?? []).some((f) => proves(f, seen))) {
+            if (
+              node.callee.type === "Identifier" &&
+              Arr.some(local.get(node.callee.name) ?? [], (f) => proves(f, seen))
+            ) {
               return true;
             }
           }
@@ -330,12 +341,13 @@ export const lawShape: CreateRule = {
           const title = node.arguments[0];
           const label = labelOf(title);
 
-          const bodies = node.arguments.flatMap((arg): Fn[] =>
+          const bodies = Arr.flatMap(node.arguments, (arg): Fn[] =>
             isFn(arg) ? [arg] : arg.type === "Identifier" ? (local.get(arg.name) ?? []) : [],
           );
 
           if (label === "type") {
-            const kept = !chain.includes("prop") && bodies.length > 0 && bodies.every((body) => typeOnly(body, checks));
+            const kept =
+              !chain.includes("prop") && bodies.length > 0 && Arr.every(bodies, (body) => typeOnly(body, checks));
 
             if (!kept) {
               context.report({ node: title ?? node, message: TYPE_MESSAGE });
@@ -346,7 +358,7 @@ export const lawShape: CreateRule = {
 
           const seen = new Set<Node>();
 
-          if (chain.includes("prop") || bodies.some((body) => proves(body, seen))) {
+          if (chain.includes("prop") || Arr.some(bodies, (body) => proves(body, seen))) {
             continue;
           }
 

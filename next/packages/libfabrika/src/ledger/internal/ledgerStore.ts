@@ -7,6 +7,8 @@
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
 import { Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
 import { ParentText, Rev } from "../../Rev.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";
 import { causeClass, errorClass, short } from "../../telemetry/Trace.ts";
@@ -82,7 +84,7 @@ const decodeStream = Schema.decodeUnknownSync(Schema.Struct({ stream: Schema.Str
 const encoder = new TextEncoder();
 
 const bytes = (texts: ReadonlyArray<string | null>): number =>
-  texts.reduce((n, text) => n + (text === null ? 0 : encoder.encode(text).length), 0);
+  Arr.reduce(texts, 0, (n, text) => n + (text === null ? 0 : encoder.encode(text).length));
 
 type Reason = (typeof Appended.cases.refused.Type)["reason"];
 
@@ -148,12 +150,13 @@ class Threw extends Schema.TaggedError<Threw>()("Threw", { error: Schema.Unknown
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
-  if (typeof error !== "object" || error === null) {
+  if (!Predicate.isObjectOrArray(error)) {
     return Option.none();
   }
 
   const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
-  return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
+
+  return Predicate.isNumber(code) || Predicate.isString(code) ? Option.some(code) : Option.none();
 };
 
 /** @internal */
@@ -269,9 +272,10 @@ export const ledgerStore = (
       line._tag,
       JSON.stringify(line.body),
     );
-    const rings = sql
-      .exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev)
-      .map((row) => decodeRing(row));
+    const rings = Arr.map(
+      sql.exec(`DELETE FROM rings WHERE stream = ? AND after < ? RETURNING "to", after`, stream, rev),
+      (row) => decodeRing(row),
+    );
     return Placing.cases.placed.make({ rev, pos, rings });
   };
 
@@ -353,9 +357,10 @@ export const ledgerStore = (
     });
     return yield* atomic((now) => {
       const { head, lag } = behind(stream, after);
-      const entries = sql
-        .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`, stream, after, PAGE)
-        .map((row) => decodeRow(row));
+      const entries = Arr.map(
+        sql.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev LIMIT ?`, stream, after, PAGE),
+        (row) => decodeRow(row),
+      );
       return { head, lag, entries, at: now() };
     }).pipe(
       Effect.tap(({ head, lag, entries, at }) =>
@@ -414,9 +419,10 @@ export const ledgerStore = (
     const turn: LedgerTurn = {
       read: (stream, after) => {
         ensureOpen();
-        return sql
-          .exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after)
-          .map((row) => decodeRow(row));
+        return Arr.map(
+          sql.exec(`SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev`, stream, after),
+          (row) => decodeRow(row),
+        );
       },
       get: (stream, id) => {
         ensureOpen();
@@ -484,8 +490,8 @@ export const ledgerStore = (
 
   const streams = Effect.fn("ledger.streams")(function* (prefix: string, after: string | null) {
     return yield* atomic(() =>
-      sql
-        .exec(
+      Arr.map(
+        sql.exec(
           `SELECT DISTINCT stream FROM entries
          WHERE substr(stream, 1, length(?)) = ? AND (? IS NULL OR stream > ?)
          ORDER BY stream LIMIT ?`,
@@ -494,8 +500,9 @@ export const ledgerStore = (
           after,
           after,
           PAGE,
-        )
-        .map((row) => decodeStream(row).stream),
+        ),
+        (row) => decodeStream(row).stream,
+      ),
     );
   });
 
@@ -533,7 +540,7 @@ export const committedEntries = (sql: Sql, selection: Selection): ReadonlyArray<
       sql.exec("SELECT * FROM entries WHERE stream = ? AND rev > ? ORDER BY rev", stream, after),
     entry: ({ stream, pos }) => sql.exec("SELECT * FROM entries WHERE stream = ? AND pos = ?", stream, pos),
   });
-  return rows.map((row) => decodeRow(row));
+  return Arr.map(rows, (row) => decodeRow(row));
 };
 
 const Place = Schema.Struct({ rev: Rev, pos: Rev, arrivedAt: Schema.Int });

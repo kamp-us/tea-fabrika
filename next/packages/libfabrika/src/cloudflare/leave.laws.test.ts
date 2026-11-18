@@ -8,12 +8,19 @@
 // Generator contract: each run boots one Project and walks it. Every move reads the watches the walk
 // holds: a new watch for a session, a repeat of a held one, the one exit of the watched process,
 // or the close of a session that holds watches or of one that holds none.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -49,8 +56,8 @@ const REFS = ["watch-a", "watch-b", "watch-c"];
  * sessions that never held a watch take them from here on, so the two never meet. */
 const NONE = 20;
 
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -58,8 +65,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 /** A watch's fact on the processes stream, as the law reads it back. */
@@ -116,6 +122,7 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 /** One booted Project over one SQLite database, with the door's `monitor` kept for the law. */
 const instance = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<never>();
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
@@ -124,6 +131,7 @@ const instance = Effect.fnUntraced(function* () {
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
 
+  // SAFETY: the Project reads its name, SQL, key-value storage and tail exports, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -145,9 +153,10 @@ const instance = Effect.fnUntraced(function* () {
 
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
 
+  // SAFETY: the leave composition calls only these namespace methods: configure, descriptor, msg, swap, ring and notify.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: { getByName: () => ({}) },
     PROCESS: {
       getByName: (key: string) => ({
@@ -169,13 +178,13 @@ const instance = Effect.fnUntraced(function* () {
     LOADER: {
       get: () => ({
         getEntrypoint: () => ({
-          describe: () => Effect.runPromise(declaration()),
+          describe: () => Effect.runPromiseWith(services)(declaration()),
         }),
       }),
     },
   } as unknown as Env;
 
-  const door = Object.fromEntries(
+  const door = Rec.fromEntries(
     [
       "connect",
       "challenge",
@@ -204,6 +213,7 @@ const instance = Effect.fnUntraced(function* () {
       door: (options) => {
         monitor = options.monitor;
 
+        // SAFETY: `door` above holds each door method the Project calls, built from a list of names, which loses its type.
         return Effect.succeed(door as never);
       },
     }),
@@ -271,7 +281,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                         const to = Recipient.cases.client.make({ client, session });
                         expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
                         const watches = held.get(session) ?? new Map<string, "live" | "fired">();
-                        const key = JSON.stringify([client, ref]);
+                        const key = yield* Schema.encodeEffect(Key)([client, ref]);
                         watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
                         held.set(session, watches);
                       } else if (move === 5) {

@@ -2,7 +2,8 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
-import { parseSync } from "oxc-parser";
+import { Predicate, Result } from "effect";
+import { parseSync, type Program } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
 export type Runner = (args: string[]) => { status: number | null; stdout: string };
@@ -40,11 +41,11 @@ const tool = (comment: Comment) =>
   (comment.type === "Block" && declares.test(comment.value));
 
 /** The tree as text with every position dropped. `raw` stays, so `16` and `0x10` differ. */
-const shape = (program: unknown) =>
+const shape = (program: Program) =>
   JSON.stringify(program, (key, value: unknown) =>
     key === "start" || key === "end" || key === "range" || key === "loc"
       ? undefined
-      : typeof value === "bigint"
+      : Predicate.isBigInt(value)
         ? String(value)
         : value,
   );
@@ -74,15 +75,15 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
  */
 const refusal = (name: string, before: string, after: string, parse: typeof parseSync): string | undefined => {
   const options = { lang: name.endsWith(".tsx") ? "tsx" : "ts", sourceType: "module" } as const;
-  let old;
-  let fresh;
+  const parsed = Result.try(() => ({ old: parse(name, before, options), fresh: parse(name, after, options) }));
 
-  try {
-    old = parse(name, before, options);
-    fresh = parse(name, after, options);
-  } catch (error) {
+  if (Result.isFailure(parsed)) {
+    const error = parsed.failure;
+
     return `the parser threw: ${error instanceof Error ? error.message : String(error)}`;
   }
+
+  const { old, fresh } = parsed.success;
 
   if (old.errors.length > 0 || fresh.errors.length > 0) {
     return `a parse error on the ${old.errors.length > 0 ? "old" : "new"} side`;

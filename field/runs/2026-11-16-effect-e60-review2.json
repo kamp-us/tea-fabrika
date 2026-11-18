@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e60-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:21:03-08:00",
+  "ended": "2026-11-16T01:23:23-08:00",
+  "parent": "2026-11-16-effect-e60-fix1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice E60 (unstableApiUsage, 0574) in next/ and tooling after its fix round, diff 12d312b1..57279a39: merge-ready. The diff changes only oxlint-plugins/no-stability-tag.test.ts, three comments (oxlint-plugins/no-stability-tag.ts:8-10, oxlint-plugins/README.md:399, oxlint-plugins/jsdocs.test.ts:51) and adds the fix row and one finding row; no product file, config or tsconfig changed. Law 2's two properties now pass fast-check examples listing every path. A scratch copy that logged each run path (deleted after) saw all 26 distinct paths run (23 firing, 3 outside), where the head before ran 15 of 23 and 2 of 3; the assertions are unchanged, so the blocking class is fixed. The oxlint-plugins/ folder is now covered by a scenario that reads the no-stability-tag error block of .oxlintrc.json and asserts its files list holds oxlint-plugins/**. The reason given holds: next/apps/fabrika/src/exam/plant.ts:65 symlinks the real oxlint-plugins/ folder into its temp home, so a planted file there would be written into the repo. It is weaker than a real lint: a later override that turns the rule off for oxlint-plugins/** would still pass it. I accept it, about 80% sure, since no override of that kind exists and law 2's lint of the other three folders already reads the config as the linter merges it; a plant helper that copies the folder instead of linking it would settle it. The three comments now say what is true.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Read-only apart from this row. Head 57279a39; after the checkout the index still held the old content and was restored with git checkout HEAD -- field oxlint-plugins before any read. Ran at 57279a39: oxlint-plugins/no-stability-tag.test.ts 6 passed; oxlint-plugins/jsdocs.test.ts 17 passed; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed. The clone was shallow, so it was unshallowed first; the landing leak check (the added lines of git diff -U0 origin/main...HEAD, 19578 lines over 1034 files, through leakgrep.sh --text) printed 'added text clean'. Not run: pnpm typecheck (only a test and comments changed). The saved finding field/findings/2026-11-16-e60-plan-parts-left-undone.json is not the row this review gave: its rule is bug not missing_test, its location is oxlint-plugins/jsdocs.ts:1 not tsconfig.base.json:259, and its head is a short sha where field/README.md asks for the full one; it blocks nothing.",
+  "step": "review"
+}

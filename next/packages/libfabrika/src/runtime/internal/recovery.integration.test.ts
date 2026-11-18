@@ -3,6 +3,9 @@
 // fixed dead operation that supervision needs, including file reopen and foreign ledger rows.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
@@ -128,7 +131,7 @@ const seeded = Effect.fnUntraced(function* (h: History) {
 
   for (const row of disk.rows()) {
     if (row._tag === "started" && row.by === BRAIN) {
-      starts.push(Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)));
+      starts.push(yield* Schema.decodeUnknownEffect(ProcessEvent.cases.started)(valueFor(row)));
     }
   }
 
@@ -198,11 +201,11 @@ describe("T319, next/ dead-letter identity", () => {
                 }
               }
 
-              const deadRows = w.disk.rows().filter((row) => row._tag === "dead");
+              const deadRows = Arr.filter(w.disk.rows(), (row) => row._tag === "dead");
               expect(deadRows).toHaveLength(w.starts.length);
 
               for (const row of deadRows) {
-                expect(row.body).toMatchObject({ process: row.stream.slice(0, -"/dead".length) });
+                expect(row.body).toMatchObject({ process: Str.slice(0, -"/dead".length)(row.stream) });
               }
             }),
           ),
@@ -220,8 +223,7 @@ describe("T319, next/ dead-letter identity", () => {
             const w = yield* seeded(h);
 
             for (const started of w.starts) {
-              const other = w.starts.find((s) => s.name !== started.name)!;
-
+              const other = Option.getOrThrow(Arr.findFirst(w.starts, (s) => s.name !== started.name));
               const forged = {
                 ...h.input,
                 _tag: "dead" as const,
@@ -447,8 +449,8 @@ describe("P34 coordination recovery", () => {
               const p = yield* ProcessManager;
               yield* p.exit(A, value, from());
               expect((yield* p.start(again(A), from())).process).toBe(B);
-              expect((yield* events("counter:1")).filter((r) => r._tag === "exited")).toHaveLength(1);
-              expect((yield* events("counter:1")).filter((r) => r._tag === "restarted")).toHaveLength(1);
+              expect(Arr.filter(yield* events("counter:1"), (r) => r._tag === "exited")).toHaveLength(1);
+              expect(Arr.filter(yield* events("counter:1"), (r) => r._tag === "restarted")).toHaveLength(1);
               expect(yield* read("client:window-a/inbox")).toMatchObject([
                 { body: { m: { ref: "watch-a", process: A, to: brain().recipient } } },
               ]);

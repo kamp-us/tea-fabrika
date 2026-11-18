@@ -17,7 +17,21 @@
 // oracle reads the store's own rows through `Ledger.read`, never the product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -53,7 +67,7 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00a00${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00a00${Str.padStart(10, "0")(String(n))}`,
 );
 
 type Holder = "founder" | "other";
@@ -145,6 +159,7 @@ const stack = (sql: Sql, changes: ReadonlyArray<Relation.Change>, inputs: Readon
       ProcessManager.layer(
         {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: PIDS holds 40 ids, so the brain's session at index 39 is present.
           recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[39] as string }),
           by: BRAIN,
         },
@@ -162,7 +177,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
 
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  return Rec.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 /** One ledger row: its global rev, stream, id, tag and body. */
@@ -211,6 +226,7 @@ const world = Effect.fnUntraced(function* (
                 stream,
                 id: e.id,
                 tag: e._tag,
+                // SAFETY: every ledger row's body is a JSON object here, and an absent body reads as the empty object.
                 body: (e.body ?? {}) as Row["body"],
               })),
             ),
@@ -231,7 +247,7 @@ const world = Effect.fnUntraced(function* (
           Start.cases.first.make({
             id: `start:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             ...(options.requester === undefined
               ? {}
               : { requester: Recipient.cases.process.make({ process: options.requester }) }),
@@ -255,7 +271,7 @@ const world = Effect.fnUntraced(function* (
           Start.cases.again.make({
             id: `again:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             after,
             reason: "crashed",
           }),
@@ -290,6 +306,7 @@ const world = Effect.fnUntraced(function* (
       ),
     ).pipe(
       Effect.exit,
+      // SAFETY: the exit holds what `monitor` answers or fails with, which is the `Answer` exit type.
       Effect.map((answer) => ({ id, answer: answer as Answer })),
     );
 
@@ -341,6 +358,7 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
 
+    // SAFETY: the sample is drawn from `Arbitrary.schema(schema)`, so it is a value of the schema's type.
     return value as S["Type"];
   });
 
@@ -469,7 +487,17 @@ const m4 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     expect(Math.max(...turn) - Math.min(...turn), `${label}: the three rows are one turn`).toBe(2);
   });
 
-const BAD_NAMES = ["", "Upper:1", "has space", "a/b", "client:x", "processes", "gateway", "-lead", "x".repeat(257)];
+const BAD_NAMES = [
+  "",
+  "Upper:1",
+  "has space",
+  "a/b",
+  "client:x",
+  "processes",
+  "gateway",
+  "-lead",
+  Str.repeat(257)("x"),
+];
 
 const M5Case = fc
   .record({
@@ -514,7 +542,7 @@ const m5 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
     const before = snapshot(w.sql);
     const { answer } = yield* w.watch(watcher, c.bad ? c.badName : c.name, parent);
-    refused(w, answer, before, firstRefusal(c), `M5: ${JSON.stringify({ ...c, name: c.bad ? c.badName : c.name })}`);
+    refused(w, answer, before, firstRefusal(c), `M5: ${Formatter.format({ ...c, name: c.bad ? c.badName : c.name })}`);
   });
 
 const M6Case = fc.record({
@@ -544,17 +572,19 @@ const m6 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ...(recorded === undefined ? {} : { member: recorded }),
     });
 
-    const target =
-      c.pair === "child"
-        ? { name: "child:1", life: yield* w.start("child:1", { requester: watcher }) }
-        : c.pair === "starter"
-          ? { name: "parent:1", life: starter as string }
-          : { name: "other:1", life: yield* w.start("other:1") };
+    // SAFETY: in the starter case `starter` was set by the start above, so it holds that process id.
+    const target = yield* Match.value(c.pair).pipe(
+      Match.when("child", () =>
+        w.start("child:1", { requester: watcher }).pipe(Effect.map((life) => ({ name: "child:1", life }))),
+      ),
+      Match.when("starter", () => Effect.succeed({ name: "parent:1", life: starter as string })),
+      Match.orElse(() => w.start("other:1").pipe(Effect.map((life) => ({ name: "other:1", life })))),
+    );
 
     const sender = c.sender === "none" ? undefined : senderFrom(c.sender, c.as);
     const parent = sender === undefined ? null : w.deliver(watcher, sender);
     const member = sender ?? recorded;
-    const label = `M6: ${JSON.stringify(c)}`;
+    const label = `M6: ${Formatter.format(c)}`;
     const before = snapshot(w.sql);
     const { id, answer } = yield* w.watch(watcher, target.name, parent);
 
@@ -588,9 +618,9 @@ const prop = <A>(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromise(Effect.scoped(law(c))));
-
+        const property = fc.asyncProperty(arbitrary, (c) => Effect.runPromiseWith(context)(Effect.scoped(law(c))));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 25, full: 100 }),

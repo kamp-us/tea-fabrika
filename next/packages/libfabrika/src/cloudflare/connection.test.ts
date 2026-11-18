@@ -1,13 +1,27 @@
-import { createHash } from "node:crypto";
 // next/, 0140. Only the platform and project answer are fake. The call handler and sink are real.
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
+
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
-import { Digest } from "effect/crypto";
-import { TestClock } from "effect/testing";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
 import type * as Tracer from "effect/Tracer";
+
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { hash } from "../runtime/Built.ts";
@@ -20,7 +34,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import * as Trace from "../telemetry/Trace.ts";
-import { Answer, Attached, type Wait } from "../transport/Wire.ts";
+import { Answer, Attached, type Wait, PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
 import type { GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import { ProjectClient } from "./platform.ts";
@@ -29,7 +43,7 @@ import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Clock, Context, Exit, Layer, Option, Scope, Stream } from "effect";
+
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
@@ -37,7 +51,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
-import { PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
+
 import * as Runtime from "./runtime.ts";
 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -56,12 +70,15 @@ const HOUR = 3_600_000;
 
 const H = 1_790_002_800_000;
 
+// SAFETY: each law gives `fake` the platform members the connection code reads in it, and the code reads no others.
 const fake = <A>(value: object): A => value as A;
 
 const database = Effect.acquireRelease(
   Effect.sync(() => new DatabaseSync(":memory:")),
   (db) => Effect.sync(() => db.close()),
 );
+
+const INPUT = await Effect.runPromise(StartsTest.fixture({ name: "test-project", port: 8787 }));
 
 const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "unreachable") => {
   const base = nodeSql(db);
@@ -78,9 +95,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     },
   };
 
-  const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+  const input = INPUT;
 
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",
@@ -241,13 +256,13 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
 };
 
 const tableCounts = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+        String(name),
+        db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
 
@@ -311,7 +326,12 @@ StartsTest.law(
         yield* owner.service
           .message(
             owner.w.socket,
-            JSON.stringify({ jsonrpc: "2.0", id: index, method: "process.send", params: { by: `forged-${index}` } }),
+            Formatter.formatJson({
+              jsonrpc: "2.0",
+              id: index,
+              method: "process.send",
+              params: { by: `forged-${index}` },
+            }),
           )
           .pipe(Effect.provideContext(owner.context));
         expect(owner.w.stats.writes).toBe(writes);
@@ -362,14 +382,14 @@ it.effect.prop(
         for (let id = 0; id < count; id++) {
           yield* service.message(
             w.socket,
-            JSON.stringify({
+            Formatter.formatJson({
               jsonrpc: "2.0",
               id,
               method: parked ? "ledger.wait" : "process.send",
               params: parked ? { stream: "empty", after: 0 } : {},
             }),
           );
-          expect(JSON.parse(w.frames.at(-1)!)).toMatchObject({
+          expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1))).toMatchObject({
             id,
             error: { data: { reason: "rate_limited", retryAfter } },
           });
@@ -431,10 +451,12 @@ it.effect.prop(
 
         for (let i = 0; i < count; i++) {
           yield* send(i + 2, { by: `t844-forged-${i}`, m: { _tag: "comment" } });
-          expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
-            id: i + 2,
-            error: { data: { reason: "reserved" } },
-          });
+          expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject(
+            {
+              id: i + 2,
+              error: { data: { reason: "reserved" } },
+            },
+          );
           const rows = tableCounts(db);
           first ??= rows;
           expect(rows).toEqual(first);
@@ -471,9 +493,9 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       const baselineWrites = stats.writes;
       const beforeMeasurements = Number(db.prepare("SELECT count(*) AS n FROM measurements").get()?.n);
       const params = { by: "t844-forged", m: { _tag: "comment" } };
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
+      yield* service.message(socket, Formatter.formatJson({ jsonrpc: "2.0", id: 1, method: "process.send", params }));
       expect(calls).toEqual([{ method: "process.send", params }]);
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 1,
         error: { data: { reason: "reserved" } },
       });
@@ -492,14 +514,20 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       ]);
 
       w.answer(Answer.cases.refused.make({ reason: "bad_input" }));
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }));
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }),
+      );
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 2,
         error: { data: { reason: "bad_input" } },
       });
       w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
-      yield* service.message(socket, JSON.stringify({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }));
-      expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }),
+      );
+      expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 3,
         result: { delivered: true },
       });
@@ -558,13 +586,13 @@ const t864Due = (db: DatabaseSync, now: number) =>
   );
 
 const t864Tables = (db: DatabaseSync) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     db
       .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
       .all()
       .map(({ name }) => [
-        name,
-        db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
+        String(name),
+        db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}" ORDER BY rowid`).all(),
       ]),
   );
 
@@ -579,12 +607,14 @@ const t864Prepare = Effect.fnUntraced(function* (db: DatabaseSync, draw: typeof 
   const now = yield* Clock.currentTimeMillis;
 
   if (
-    !db.prepare("SELECT name FROM sqlite_schema WHERE name='unsent'").get() ||
+    db.prepare("SELECT name FROM sqlite_schema WHERE name='unsent'").get() === undefined ||
     t864Pending(db).length === 0 ||
     t864Due(db, now).length === 0
   ) {
     for (let i = 0; i <= draw.pick % 3; i++) {
-      yield* Effect.void.pipe(Effect.withSpan("t864.pending", { attributes: { value: JSON.stringify(draw.value) } }));
+      yield* Effect.void.pipe(
+        Effect.withSpan("t864.pending", { attributes: { value: Formatter.formatJson(draw.value) } }),
+      );
     }
 
     yield* TestClock.adjust(17 * T864_DAY + draw.pick);
@@ -835,7 +865,7 @@ it.effect.prop(
 
           const answer =
             category === "parked_full" && sampled._tag === "parked"
-              ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
+              ? { ...sampled, stream: Str.padEnd(FULL, "s")(sampled.stream) }
               : sampled;
 
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
@@ -844,7 +874,7 @@ it.effect.prop(
           const before = w.calls.length;
           const wait = answer._tag === "parked" ? { id: request.id, stream: answer.stream, after: answer.after } : null;
           const keeps = wait !== null && fits(wait);
-          yield* service.message(w.socket, JSON.stringify(request));
+          yield* service.message(w.socket, Formatter.formatJson(request));
 
           // Under the limits, a call answered parked is kept as a wait on the stream the answer
           // names and registered again through the wait path, as a parked ledger.wait is (P39 slice
@@ -853,7 +883,7 @@ it.effect.prop(
             wait === null || !keeps
               ? []
               : [
-                  wait.stream.startsWith(targetStream(""))
+                  Str.startsWith(targetStream(""))(wait.stream)
                     ? { method: "tasks.wait", params: { after: wait.after } }
                     : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
                 ];
@@ -874,7 +904,7 @@ it.effect.prop(
             expect(w.frames, "a parked call with room gets no reply yet").toHaveLength(replies);
           } else {
             expect(w.frames).toHaveLength(replies + 1);
-            const reply = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
+            const reply = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!);
             expect(reply).toMatchObject(
               answer._tag === "ok"
                 ? { id: request.id, result: answer.result }
@@ -896,7 +926,7 @@ it.effect.prop(
           reached.add(category);
         }
 
-        expect([...reached].sort()).toEqual([...Object.keys(answerCases), "too_many_waits"].sort());
+        expect([...reached].sort()).toEqual([...Rec.keys(answerCases), "too_many_waits"].sort());
       }).pipe(Effect.provide(w.layer));
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -926,9 +956,11 @@ it.effect.prop(
                 expect(state._tag).toBe(initial._tag);
                 const request = yield* ordinaryFrame(state, walk.seed + i, i);
                 const replies = w.frames.length;
-                yield* service.message(w.socket, JSON.stringify(request));
+                yield* service.message(w.socket, Formatter.formatJson(request));
                 expect(w.frames).toHaveLength(replies + 1);
-                expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+                expect(
+                  yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!),
+                ).toMatchObject({
                   id: request.id,
                   error: { data: { reason: "no_hello" } },
                 });
@@ -943,9 +975,11 @@ it.effect.prop(
               const answer = yield* sample(Answer.cases.ok, walk.seed + walk.count);
               const request = yield* ordinaryFrame(state, walk.seed + walk.count + 1, walk.count);
               w.answer(answer);
-              yield* service.message(w.socket, JSON.stringify(request));
+              yield* service.message(w.socket, Formatter.formatJson(request));
               expect(w.calls).toEqual([{ method: request.method, params: request.params }]);
-              expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+              expect(
+                yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!),
+              ).toMatchObject({
                 id: request.id,
                 result: answer.result,
               });
@@ -1013,7 +1047,7 @@ it.effect.prop(
         const service = yield* ConnectionService;
         yield* service.message(
           w.socket,
-          JSON.stringify({ jsonrpc: "2.0", id: "j1.1", method: "tasks.wait", params: { after } }),
+          Formatter.formatJson({ jsonrpc: "2.0", id: "j1.1", method: "tasks.wait", params: { after } }),
         );
 
         // Rings at or before `after` do not pass the wait: each asks the door again.
@@ -1034,7 +1068,7 @@ it.effect.prop(
 
         // A ring past `after` answers the parked call on this socket.
         yield* service.ring(stream, after + 1);
-        expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
+        expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject({
           id: "j1.1",
           result: { rev: after + 1 },
         });
@@ -1269,18 +1303,15 @@ const project = Effect.fnUntraced(function* () {
   const db = yield* database;
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
-  const start = StartsTest.fixture(
-    {
-      name: "project-test",
-      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-      // A public key line made from 32 fixed bytes: no private key exists for it.
-      founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
-      window: null,
-      port: 18787,
-      build: "brain-build-test",
-    },
-    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+  const start = yield* StartsTest.fixture({
+    name: "project-test",
+    person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    // A public key line made from 32 fixed bytes: no private key exists for it.
+    founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH",
+    window: null,
+    port: 18787,
+    build: "brain-build-test",
+  });
   const notified: Array<{ connection: string; client: string; news: unknown }> = [];
   const descriptors = new Map<string, Pick<Descriptor, "id" | "name" | "build" | "program">>();
   const ctx = fake<DurableObjectState>({

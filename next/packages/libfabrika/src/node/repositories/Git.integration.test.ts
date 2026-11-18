@@ -3,12 +3,16 @@
 // `.integration.` and runs on main's full run only (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -81,7 +85,7 @@ const session = (
               { concurrency: "unbounded" },
             );
 
-            return { code, out: out.replaceAll(root, "<root>") };
+            return { code, out: Function.pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
       });
@@ -94,7 +98,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${args.join(" ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${Function.pipe(Arr.join(args, " "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
 
         return out;
@@ -216,9 +220,10 @@ const session = (
 describe("0535 memory git contract", () => {
   it.runIf(GitLaws.realOnly)(
     "every generated session answers alike on memory git and real git: codes, ids, trees and the files on disk",
-    async () => {
+    () => {
       const [memory, real] = GitLaws.gits;
-      await fc.assert(
+
+      return fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/),

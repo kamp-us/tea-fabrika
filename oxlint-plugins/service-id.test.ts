@@ -1,11 +1,22 @@
+import { spawnSync } from "node:child_process";
+import { join, resolve } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 737, G2. `fabrika/service-id` asks a libfabrika service ID for the package, its file's path,
 // then `.Name` when the service is named otherwise (decision 0023). The fixtures are the rule's own
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
-import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const CODE = "fabrika(service-id)";
 
@@ -21,13 +32,17 @@ const Pascal = word.map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
 const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
-  text: `${lines.map(([line]) => line).join("\n")}\n`,
-  fires: lines.flatMap(([, fires], i) => (fires ? [i + 1] : [])),
+  text: `${pipe(
+    lines,
+    Arr.map(([line]) => line),
+    Arr.join("\n"),
+  )}\n`,
+  fires: Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 1] : [])),
 });
 
 describe("T737 G2 service IDs carry the package and the file's path", () => {
-  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", async () => {
-    await fc.assert(
+  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", () =>
+    fc.assert(
       fc.asyncProperty(
         // Two service names in one file must differ, or the file does not parse and nothing fires.
         fc
@@ -126,16 +141,15 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
             ]),
           };
 
-          const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
+          const linted = await plant(Rec.fromEntries(Arr.map(Rec.toEntries(files), ([path, f]) => [path, f.text])));
 
-          for (const [path, f] of Object.entries(files)) {
+          for (const [path, f] of Rec.toEntries(files)) {
             expect(linted(CODE, path), path).toEqual(f.fires);
           }
         },
       ),
       { seed: 119120, numRuns: 4 },
-    );
-  });
+    ));
 
   // The plan's mapping, old to new, kept here because diagnostics can hold either spelling.
   // `ProgramRunner` was renamed after it, by ticket 909, and has no row.
@@ -181,39 +195,41 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   /** An old ID as it was written: bare names had the package in front. */
   const written = (old: string) => (old.includes("/") ? old : `${P}/${old}`);
 
-  it("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", async () => {
-    const files = new Map<string, Array<readonly [string, boolean]>>();
+  it.live("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", () =>
+    Effect.gen(function* () {
+      const files = new Map<string, Array<readonly [string, boolean]>>();
 
-    for (const [path, name, old, next] of mapping) {
-      const lines = files.get(path) ?? [['import { Context } from "effect";', false]];
+      for (const [path, name, old, next] of mapping) {
+        const lines = files.get(path) ?? [['import { Context } from "effect";', false]];
 
-      const declare = (id: string, n: number) =>
-        name === null
-          ? `export const notes${n} = () => Context.Reference<number>("${id}", { defaultValue: () => 0 });`
-          : `export class ${name}${n === 0 ? "" : "Old"} extends Context.Service<${name}, {}>()("${id}") {}`;
+        const declare = (id: string, n: number) =>
+          name === null
+            ? `export const notes${n} = () => Context.Reference<number>("${id}", { defaultValue: () => 0 });`
+            : `export class ${name}${n === 0 ? "" : "Old"} extends Context.Service<${name}, {}>()("${id}") {}`;
 
-      lines.push([declare(`${P}/${next}`, 0), false]);
+        lines.push([declare(`${P}/${next}`, 0), false]);
 
-      // The old spelling, as a second class of the same name in its file, so the expected ID is the same.
-      if (name !== null) {
-        lines.push([
-          `export const ${name}Old = class ${name} extends Context.Service<${name}, {}>()("${written(old)}") {};`,
-          written(old) !== `${P}/${next}`,
-        ]);
-      } else {
-        lines.push([declare(written(old), 1), true]);
+        // The old spelling, as a second class of the same name in its file, so the expected ID is the same.
+        if (name !== null) {
+          lines.push([
+            `export const ${name}Old = class ${name} extends Context.Service<${name}, {}>()("${written(old)}") {};`,
+            written(old) !== `${P}/${next}`,
+          ]);
+        } else {
+          lines.push([declare(written(old), 1), true]);
+        }
+
+        files.set(path, lines);
       }
 
-      files.set(path, lines);
-    }
+      const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
+      const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
 
-    const planted = [...files].map(([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-    const linted = await plant(Object.fromEntries(planted.map(([path, f]) => [path, f.text])));
-
-    for (const [path, f] of planted) {
-      expect(linted(CODE, path), path).toEqual(f.fires);
-    }
-  });
+      for (const [path, f] of planted) {
+        expect(linted(CODE, path), path).toEqual(f.fires);
+      }
+    }),
+  );
 
   // Law 9 of docs/plan/effect-rules-small.md. The rule blocks since ticket 909, so it starts at zero
   // (decision 0168). The real tree is the input: no generator can stand in for the IDs that are there.
@@ -227,7 +243,12 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     const report: { readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }> } =
       JSON.parse(ran.stdout);
 
-    const hits = report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename);
+    const hits = pipe(
+      report.diagnostics,
+      Arr.filter((d) => d.code === CODE),
+      Arr.map((d) => d.filename),
+    );
+
     expect(hits).toEqual([]);
   });
 });

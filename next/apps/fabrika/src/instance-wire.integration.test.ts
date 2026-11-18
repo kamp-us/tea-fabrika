@@ -2,26 +2,61 @@
 // Every wire law starts the real dev.ts, never a raw Miniflare substitute.
 // CLI fixture contract: --name, --person, --founder (public SSH line), --window (public raw key),
 // and the plan's --port. These are bootstrap settings, never a public signing capability.
-import { spawn, type ChildProcess } from "node:child_process";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
+import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import {
+  Clock,
+  Deferred,
+  Effect,
+  FileSystem,
+  Fiber,
+  Path,
+  Predicate,
+  Schema,
+  Array as Arr,
+  String as Str,
+  DateTime,
+  Formatter,
+  Option,
+  Duration,
+} from "effect";
+
+import { Digest } from "effect/crypto";
+import { HttpClient, FetchHttpClient, HttpBody, HttpClientRequest } from "effect/http";
+
+import { ChildProcess } from "effect/process";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
+import { type Child, start } from "./dev-child.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
-const APP = resolve(import.meta.dirname, "..");
+/** One step on the real disk, through Effect's FileSystem and Path. */
+const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* use(yield* FileSystem.FileSystem, yield* Path.Path);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+const path = await disk((_fs, path) => Effect.succeed(path));
+
+const APP = path.resolve(import.meta.dirname, "..");
+
+/** The SHA-256 of a text in hex, as the brain writes an ETag. */
+const hash = (text: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -31,6 +66,24 @@ const SENT = "2026-11-08T04:00:00.000Z";
 
 // A bound on one wait for an observable fact after a kill, as worker-supervision's WAIT is.
 const WAIT = 25_000;
+
+// One request through Effect's fetch client, for this file's Promise code: its status, headers and
+// body, read whole before the request's own scope closes and releases it. It fails when nothing
+// listens at the address.
+const exchange = (request: HttpClientRequest.HttpClientRequest) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+      const response = yield* client.execute(request);
+
+      return {
+        ok: response.status >= 200 && response.status < 300,
+        status: response.status,
+        headers: response.headers,
+        text: yield* response.text,
+      };
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
 
 it(
   "pinned: checklist stays reachable after its first add on the real dev.ts, including a later subscriber",
@@ -46,7 +99,7 @@ it(
         const pid = resolveName(
           yield* first.read(`processes/${name}`),
           name,
-          (by) => by === "brain" || by.startsWith("brain:"),
+          (by) => by === "brain" || Str.startsWith("brain:")(by),
         );
 
         expect(pid).not.toBeNull();
@@ -66,88 +119,47 @@ it(
           ).toMatchObject({ result: { _tag: "accepted" } });
           yield* Effect.sleep("100 millis");
           const second = yield* reader(h, dev);
-          const opened = Schema.decodeUnknownSync(View)(yield* second.call("view.open", { pid }));
-          expect(opened.result.view.items.map((row) => row.name)).toEqual(["milk", "bread"].slice(0, n + 1));
+          const opened = yield* Schema.decodeUnknownEffect(View)(yield* second.call("view.open", { pid }));
+          expect(Arr.map(opened.result.view.items, (row) => row.name)).toEqual(["milk", "bread"].slice(0, n + 1));
         }
 
         const inbox = yield* first.read(`${name}/inbox`);
-        expect(inbox.filter((row) => row.id.startsWith("progress_")).map((row) => row.id)).toEqual([
-          "progress_0",
-          "progress_1",
-        ]);
+        expect(
+          Arr.map(
+            Arr.filter(inbox, (row) => Str.startsWith("progress_")(row.id)),
+            (row) => row.id,
+          ),
+        ).toEqual(["progress_0", "progress_1"]);
       }),
       context,
     ),
 );
 
-const field = (a: string | Buffer) => {
-  const bytes = typeof a === "string" ? Buffer.from(a) : a;
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(bytes.length);
-
-  return Buffer.concat([size, bytes]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x!;
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
-
-  return {
-    raw,
-    fingerprint,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    proof: (text: string) => {
-      const digest = createHash("sha512").update(text).digest();
-
-      const signed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(digest),
-      ]);
-
-      const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, pair.privateKey))]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(signature),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
+const pause = (ms = 20) => Effect.runPromise(Effect.sleep(Duration.millis(ms)));
 
 // Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
-// wrong-host check sends its request with node:http, which sends the header as given.
+// wrong-host check sends its request with Effect's node:http client, which sends the header as given.
 const statusWithHost = (url: string, host: string) =>
-  new Promise<number>((done, fail) => {
-    const sent = request(url, { headers: { host } }, (response) => {
-      response.resume();
-      done(response.statusCode ?? 0);
-    });
+  Effect.runPromise(
+    HttpClient.get(url, { headers: { host } }).pipe(
+      Effect.map((response) => response.status),
+      Effect.provide(NodeHttpClient.layerNodeHttp),
+    ),
+  );
 
-    sent.once("error", fail);
-    sent.end();
-  });
+/** The environment a dev.ts child runs with: this one's, with its own home and no key or foreground. */
+const devEnv = (home: string) => {
+  const env: Record<string, string | undefined> = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
+  delete env.TYPESAFE_API_KEY;
+  delete env.FABRIKA_FOREGROUND;
+  delete env.CLOUDFLARE_API_TOKEN;
+  delete env.FABRIKA_GATEWAY_LIMIT;
+  delete env.FABRIKA_GATEWAY_WINDOW;
 
-const children: Array<ChildProcess> = [];
+  return env;
+};
+
+const children: Array<Child> = [];
 
 const homes: Array<string> = [];
 
@@ -157,22 +169,17 @@ const sockets: Array<WebSocket> = [];
 
 // What one instance holds: its dev.ts children, its homes and its held ports. The older cases share one
 // set that `afterEach` gives back; a case written with `Effect.acquireRelease` owns its own.
-type Held = { children: Array<ChildProcess>; homes: Array<string>; ports: Array<Effect.Effect<void>> };
+type Held = { children: Array<Child>; homes: Array<string>; ports: Array<Effect.Effect<void>> };
 
 const shared: Held = { children, homes, ports };
 
 const giveBack = async (held: Held) => {
   for (const child of held.children.splice(0)) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      continue;
-    }
-
-    child.kill("SIGTERM");
-    await new Promise<void>((done) => child.once("exit", () => done()));
+    await Effect.runPromise(child.stop);
   }
 
   for (const h of held.homes.splice(0)) {
-    rmSync(h, { recursive: true, force: true });
+    await disk((fs) => fs.remove(h, { recursive: true, force: true }));
   }
 
   // Last, so the pair stays held until every instance that used its port is gone.
@@ -196,7 +203,7 @@ const unusedPort = async (held: Held) => {
   return port.port;
 };
 
-type Saved = { key: ReturnType<typeof identity>; home: string; port: number };
+type Saved = { key: SshsigTest.Identity; home: string; port: number };
 
 const launch = async (
   held: Held,
@@ -204,18 +211,12 @@ const launch = async (
   rateLimit = { limit: 100_000, window: 60_000 },
   source: "flags" | "env" | "file" = "flags",
 ) => {
-  readFileSync(join(APP, "dev.ts"), "utf8");
-  const key = saved?.key ?? identity();
-  const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
+  const key = saved?.key ?? (await Effect.runPromise(SshsigTest.identity));
+  const home = saved?.home ?? (await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" })));
   held.homes.push(home);
   const port = saved?.port ?? (await unusedPort(held));
   const url = `http://127.0.0.1:${port}`;
-  const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
-  delete env.TYPESAFE_API_KEY;
-  delete env.FABRIKA_FOREGROUND;
-  delete env.CLOUDFLARE_API_TOKEN;
-  delete env.FABRIKA_GATEWAY_LIMIT;
-  delete env.FABRIKA_GATEWAY_WINDOW;
+  const env = devEnv(home);
 
   if (source === "env") {
     env.FABRIKA_GATEWAY_LIMIT = String(rateLimit.limit);
@@ -223,48 +224,58 @@ const launch = async (
   }
 
   if (source === "file") {
-    writeFileSync(join(home, "fabrika.toml"), `[gateway]\nlimit = ${rateLimit.limit}\nwindow = ${rateLimit.window}\n`);
+    await disk((fs) =>
+      fs.writeFileString(
+        path.join(home, "fabrika.toml"),
+        `[gateway]\nlimit = ${rateLimit.limit}\nwindow = ${rateLimit.window}\n`,
+      ),
+    );
   }
 
-  const child = spawn(
-    process.execPath,
-    [
-      join(APP, "dev.ts"),
-      "--port",
-      String(port),
-      "--name",
-      "p12-wire",
-      "--person",
-      PERSON,
-      "--founder",
-      key.line,
-      "--window",
-      key.raw,
-      ...(source === "flags"
-        ? ["--gateway.limit", String(rateLimit.limit), "--gateway.window", String(rateLimit.window)]
-        : []),
-    ],
-    { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
+  let output = "";
+
+  const child = await Effect.runPromise(
+    start(
+      ChildProcess.make(
+        process.execPath,
+        [
+          path.join(APP, "dev.ts"),
+          "--port",
+          String(port),
+          "--name",
+          "p12-wire",
+          "--person",
+          PERSON,
+          "--founder",
+          key.line,
+          "--window",
+          key.raw,
+          ...(source === "flags"
+            ? ["--gateway.limit", String(rateLimit.limit), "--gateway.window", String(rateLimit.window)]
+            : []),
+        ],
+        { cwd: APP, env, extendEnv: false, stdin: "ignore" },
+      ),
+      (text) => {
+        output += text;
+      },
+    ),
   );
 
   held.children.push(child);
-  let output = "";
-  child.stdout!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
-  child.stderr!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
 
   for (;;) {
-    if (child.exitCode !== null) {
+    if (!(await Effect.runPromise(child.running))) {
       throw new Error(`P12 dev.ts did not start: ${output}`);
     }
 
     try {
       // The page is served while startup is still flushing the lifecycle outbox.
       // dev.ts emits ready only after that flush. Read history after its ready message.
-      if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok) {
+      if (
+        Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) &&
+        (await exchange(HttpClientRequest.get(url))).ok
+      ) {
         break;
       }
     } catch {
@@ -281,35 +292,40 @@ const instance = (saved?: Saved) => launch(shared, saved);
 
 // Read only the named public metadata tables. Never inspect general storage or key rows. The crash cases
 // read two more rows through `killedMoment`: the name's `process_recovery` row and its object's `activity` row.
-const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
-  const rows: Array<Record<string, unknown>> = [];
+const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") =>
+  disk((fs, path) =>
+    Effect.gen(function* () {
+      const rows: Array<Record<string, unknown>> = [];
 
-  for (const entry of readdirSync(home, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) {
-      continue;
-    }
+      for (const name of yield* fs.readDirectory(home, { recursive: true })) {
+        const file = path.join(home, name);
 
-    // The instance is running, so its own writes may hold the lock this read waits for.
-    const read = instanceDatabase(join(entry.parentPath, entry.name), { readOnly: true }).pipe(
-      Effect.map((db) =>
-        db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
-          ? db
-              .prepare(
-                table === "gateway_bindings"
-                  ? "SELECT letter,value FROM gateway_bindings"
-                  : "SELECT client,connection FROM dev_clients",
-              )
-              .all()
-          : [],
-      ),
-      Effect.scoped,
-    );
+        if (!/\.(sqlite|db)$/.test(name) || (yield* fs.stat(file)).type !== "File") {
+          continue;
+        }
 
-    rows.push(...Effect.runSync(read));
-  }
+        // The instance is running, so its own writes may hold the lock this read waits for.
+        const read = instanceDatabase(file, { readOnly: true }).pipe(
+          Effect.map((db) =>
+            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
+              ? db
+                  .prepare(
+                    table === "gateway_bindings"
+                      ? "SELECT letter,value FROM gateway_bindings"
+                      : "SELECT client,connection FROM dev_clients",
+                  )
+                  .all()
+              : [],
+          ),
+          Effect.scoped,
+        );
 
-  return rows;
-};
+        rows.push(...(yield* read));
+      }
+
+      return rows;
+    }),
+  );
 
 type Frame = {
   id?: string | number;
@@ -329,14 +345,14 @@ class Client {
   private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
-  private readonly key: ReturnType<typeof identity>;
+  private readonly key: SshsigTest.Identity;
   private readonly tab: string;
 
-  constructor(base: string, key: ReturnType<typeof identity>, tab: string) {
+  constructor(base: string, key: SshsigTest.Identity, tab: string) {
     this.base = base;
     this.key = key;
     this.tab = tab;
-    this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+    this.ws = new WebSocket(`${Str.replace("http", "ws")(base)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
     this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
@@ -366,10 +382,10 @@ class Client {
 
   async next(test: (f: Frame | string) => boolean): Promise<any> {
     for (;;) {
-      const at = this.frames.findIndex(test);
+      const at = Arr.findFirstIndex(this.frames, test);
 
-      if (at >= 0) {
-        return this.frames.splice(at, 1)[0];
+      if (Option.isSome(at)) {
+        return this.frames.splice(at.value, 1)[0];
       }
 
       if (this.closed || this.ws.readyState === WebSocket.CLOSED) {
@@ -381,7 +397,8 @@ class Client {
   }
 
   async challenge() {
-    return (await this.next((f) => typeof f !== "string" && f.method === "challenge")).params.nonce as string;
+    // SAFETY: the instance's challenge frame carries its nonce as a string.
+    return (await this.next((f) => !Predicate.isString(f) && f.method === "challenge")).params.nonce as string;
   }
 
   hello(nonce?: string, overrides: object = {}) {
@@ -389,26 +406,30 @@ class Client {
 
     return challenge.pipe(
       Effect.flatMap((n) =>
-        Effect.promise(() =>
-          this.call("initialize", {
-            versions: [1],
-            has: ["seal"],
-            ping: "30s",
-            key: this.key.raw,
-            tab: this.tab,
-            nonce: n,
-            platform: "headless",
-            os: "linux",
-            sentAt: SENT,
-            signed: this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`),
-            ...overrides,
-          }),
+        this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`).pipe(
+          Effect.flatMap((signed) =>
+            Effect.promise(() =>
+              this.call("initialize", {
+                versions: [1],
+                has: ["seal"],
+                ping: "30s",
+                key: this.key.raw,
+                tab: this.tab,
+                nonce: n,
+                platform: "headless",
+                os: "linux",
+                sentAt: SENT,
+                signed,
+                ...overrides,
+              }),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  async call(method: string, params: unknown): Promise<Frame> {
+  async call(method: string, params: Schema.Json): Promise<Frame> {
     const id = ++this.serial;
 
     while (this.ws.readyState === WebSocket.CONNECTING) {
@@ -421,7 +442,7 @@ class Client {
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
 
-    return this.next((f) => typeof f !== "string" && f.id === id);
+    return this.next((f) => !Predicate.isString(f) && f.id === id);
   }
 
   ping() {
@@ -452,15 +473,19 @@ const read = async (client: Client, stream: string, after = 0): Promise<Readonly
 
 const counter = async (c: Client) => {
   const rows = await read(c, "processes/counter:1");
-  const started = rows.findLast((r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1");
+  // SAFETY: a `started` row's body is the start record, whose `name` is the process's name.
+  const started = Option.getOrUndefined(
+    Arr.findLast(rows, (r) => r._tag === "started" && (r.body as { name?: string }).name === "counter:1"),
+  );
   expect(started, "instance must start the real counter:1").toBeDefined();
   // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
   expect(started!.body).toMatchObject({ program: "fabrika/counter" });
 
+  // SAFETY: the expect above matched this body as a start record, which names its `process`.
   return (started!.body as { process: string }).process;
 };
 
-const send = (c: Client, pid: string, letter: string, m: unknown = { type: "inc" }, seen = 0) =>
+const send = (c: Client, pid: string, letter: string, m: Schema.Json = { type: "inc" }, seen = 0) =>
   c.call("process.send", { pid, letter, m, sentAt: SENT, seen, traceId: TRACE });
 
 const ratePolicy = { limit: 4, window: 1000 };
@@ -497,12 +522,11 @@ const spent = Effect.fnUntraced(function* (c: Client, pid: string, letter: strin
     );
 
     // Drain every reply: calls after the first refusal can still spend a later window's budget.
-    allowed.push(...calls.filter((call) => !call.reply.error));
-    const refused = calls.find((call) => call.reply.error);
+    allowed.push(...Arr.filter(calls, (call) => call.reply.error === undefined));
+    const refused = Option.getOrUndefined(Arr.findFirst(calls, (call) => call.reply.error !== undefined));
 
-    if (refused) {
-      const last = calls.reduce((last, call) => (call.replied > last.replied ? call : last), refused);
-
+    if (refused !== undefined) {
+      const last = Arr.reduce(calls, refused, (last, call) => (call.replied > last.replied ? call : last));
       return { allowed, refused, last };
     }
   }
@@ -537,6 +561,7 @@ const placing = (r: Frame) => {
     pos: expect.any(Number),
   });
 
+  // SAFETY: the expect above matched an accepted result with a numeric rev and pos.
   return r.result as { rev: number; pos: number };
 };
 
@@ -544,6 +569,7 @@ const view = async (c: Client, pid: string) => {
   const response = await c.call("view.open", { pid });
   expect(response.error).toBeUndefined();
 
+  // SAFETY: the expect above saw no error, and view.open answers the rev and the counter's view.
   return response.result as { rev: number; view: { count: number } };
 };
 
@@ -609,9 +635,9 @@ it.live.each(["flags", "env", "file"] as const)(
           const second = yield* client(s, "budget-two");
           const again = yield* timed(second, pid, letter);
           rounds.push(
-            JSON.stringify({
+            Formatter.formatJson({
               previous: times(previous),
-              allowed: allowed.map(times),
+              allowed: Arr.map(allowed, times),
               refused: times(refused),
               again: times(again),
             }),
@@ -637,7 +663,8 @@ it.live.each(["flags", "env", "file"] as const)(
       }).pipe(
         Effect.timeoutOrElse({
           duration: WAIT,
-          orElse: () => Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${rounds.join(",")}]`)),
+          orElse: () =>
+            Effect.die(new Error(`no single-window round in ${WAIT} ms; rounds: [${Arr.join(rounds, ",")}]`)),
         }),
       );
 
@@ -668,10 +695,10 @@ it.live.each(["flags", "env", "file"] as const)(
 const reconnected = (s: Launched, tab: string) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
-      const end = Date.now() + WAIT;
+      const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
       let last: unknown = null;
 
-      while (Date.now() < end) {
+      while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
         try {
           return await connected(s, tab);
         } catch (error) {
@@ -695,12 +722,12 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
   Effect.promise(async (): Promise<Settled> => {
     const reply = await send(c, pid, letter).then(
       (r) => r,
-      (error: unknown) => {
-        if (error instanceof Error && error.message === "wire closed before answer") {
+      (cause: unknown) => {
+        if (cause instanceof Error && cause.message === "wire closed before answer") {
           return null;
         }
 
-        throw error;
+        throw cause;
       },
     );
 
@@ -711,15 +738,18 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
  *  the test with the tags it saw, so a missing restart is a failure, never a hang. */
 const restartedAfter = (c: Client, stream: string, after: string) =>
   Effect.promise(async () => {
-    const end = Date.now() + WAIT,
+    const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT,
       tags: Array<string> = [];
 
     let seen = 0;
 
-    while (Date.now() < end) {
+    while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
       const rows = await read(c, stream, seen);
-      tags.push(...rows.map((row) => row._tag));
-      const hit = rows.find((row) => row._tag === "restarted" && (row.body as { after?: string }).after === after);
+      tags.push(...Arr.map(rows, (row) => row._tag));
+      // SAFETY: a `restarted` row's body (ProcessEvent in libfabrika's processes/internal/processTable.ts) names the process it came `after`.
+      const hit = Option.getOrUndefined(
+        Arr.findFirst(rows, (row) => row._tag === "restarted" && (row.body as { after?: string }).after === after),
+      );
 
       if (hit !== undefined) {
         return hit;
@@ -736,10 +766,10 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
       }
     }
 
-    throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${JSON.stringify(tags)}`);
+    throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${Formatter.format(tags)}`);
   });
 
-const restartedRows = (rows: ReadonlyArray<Entry>) => rows.filter((row) => row._tag === "restarted");
+const restartedRows = (rows: ReadonlyArray<Entry>) => Arr.filter(rows, (row) => row._tag === "restarted");
 
 const crashStarts = (c: Client, firstStart: string) =>
   Effect.promise(async (signal) => {
@@ -747,9 +777,10 @@ const crashStarts = (c: Client, firstStart: string) =>
     // The test's time limit bounds this wait.
     for (;;) {
       signal.throwIfAborted();
-      const starts = (await read(c, "gateway/brain")).filter((r) => r._tag === "started");
+      const starts = Arr.filter(await read(c, "gateway/brain"), (r) => r._tag === "started");
 
-      if (starts.some((row) => (row.body as { after: string | null }).after === firstStart)) {
+      // SAFETY: a `started` row's body names the start it came `after`, or null for the first.
+      if (Arr.some(starts, (row) => (row.body as { after: string | null }).after === firstStart)) {
         return starts;
       }
 
@@ -761,18 +792,16 @@ describe("P12 real dev.ts wire", () => {
   it("scenario: a new dev command links its lifecycle event to the previous runtime", async () => {
     const first = await instance(),
       c = await connected(first);
-
-    const starts = (await read(c, "gateway/brain")).filter((row) => row._tag === "started");
+    const starts = Arr.filter(await read(c, "gateway/brain"), (row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
-    first.child.kill("SIGTERM");
-    await new Promise<void>((done) => first.child.once("exit", () => done()));
+    await Effect.runPromise(first.child.stop);
 
     const second = await instance(first),
       reopened = await connected(second, "reopened");
-
-    const now = (await read(reopened, "gateway/brain")).filter((row) => row._tag === "started");
+    const now = Arr.filter(await read(reopened, "gateway/brain"), (row) => row._tag === "started");
     expect(now).toHaveLength(2);
+    // SAFETY: starts holds only `started` rows, whose body names its `start`.
     expect(now[1]!.body).toMatchObject({ after: (starts[0]!.body as { start: string }).start });
   });
   it("scenario: p10 plant: save twice or accept changed content; return the original placing", async () => {
@@ -789,7 +818,7 @@ describe("P12 real dev.ts wire", () => {
     expect(rows[0]).toMatchObject({ id: "once", rev: first.rev, pos: first.pos });
     expect((await view(c, pid)).view).toEqual({ count: 1 });
 
-    const otherKey = identity(),
+    const otherKey = await Effect.runPromise(SshsigTest.identity),
       other = new Client(s.url, otherKey, "other-key");
 
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
@@ -813,14 +842,14 @@ describe("P12 real dev.ts wire", () => {
       sentAt: SENT,
     });
 
-    const granted = await fetch(`${s.url}/grant`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, armored: s.key.proof(text) }),
-    });
+    const granted = await exchange(
+      HttpClientRequest.post(`${s.url}/grant`, {
+        body: HttpBody.jsonUnsafe({ text, armored: await Effect.runPromise(s.key.proof(text)) }),
+      }),
+    );
 
     expect(granted.ok).toBe(true);
-    const notification = await other.next((f) => typeof f !== "string" && f.method === "client.granted");
+    const notification = await other.next((f) => !Predicate.isString(f) && f.method === "client.granted");
     expect((await Effect.runPromise(other.hello(notification.params.nonce))).error).toBeUndefined();
     const identityChanged = await send(other, pid, "once");
     expect(identityChanged.error?.data?.reason ?? identityChanged.result?.reason).toBe("id_reused");
@@ -839,7 +868,8 @@ describe("P12 real dev.ts wire", () => {
     // Tried and survived: the same sends from two sockets, turn by turn, passed 3 runs of 3. Both
     // local sockets deliver in sending order, so this scenario cannot tell one socket from two and
     // claims nothing about the order of two.
-    const accepted = (await Promise.all(Array.from({ length: PAGE + 3 }, (_, n) => send(c, pid, `page-${n}`)))).map(
+    const accepted = Arr.map(
+      await Promise.all(Array.from({ length: PAGE + 3 }, (_, n) => send(c, pid, `page-${n}`))),
       placing,
     );
 
@@ -847,13 +877,13 @@ describe("P12 real dev.ts wire", () => {
     expect(first).toHaveLength(PAGE);
     const second = await read(c, "counter:1/inbox", first.at(-1)!.rev);
     expect(second).toHaveLength(3);
-    expect([...first, ...second].map(({ rev, pos }) => ({ rev, pos }))).toEqual(
-      accepted.map(({ rev, pos }) => ({ rev, pos })),
+    expect(Arr.map([...first, ...second], ({ rev, pos }) => ({ rev, pos }))).toEqual(
+      Arr.map(accepted, ({ rev, pos }) => ({ rev, pos })),
     );
-    expect(accepted.map((a) => a.pos)).toEqual(Array.from({ length: PAGE + 3 }, (_, n) => n + 1));
-    expect(accepted.every((a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
+    expect(Arr.map(accepted, (a) => a.pos)).toEqual(Array.from({ length: PAGE + 3 }, (_, n) => n + 1));
+    expect(Arr.every(accepted, (a, n) => n === 0 || a.rev > accepted[n - 1]!.rev)).toBe(true);
     // Gateway input events occupy the intervening global revisions.
-    expect(accepted.some((a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
+    expect(Arr.some(accepted, (a, n) => n > 0 && a.rev > accepted[n - 1]!.rev + 1)).toBe(true);
     // The limit, from measured times. The time is the law's own work: a second page needs PAGE + 3 real
     // sends, and the gateway answers one socket's sends one at a time (sent all at once they took as long).
     // On main's CI, in 22 runs from 43365290308 to 43529835092, all while the client still polled for its
@@ -888,13 +918,15 @@ describe("P12 real dev.ts wire", () => {
       pid = await counter(a);
 
     expect(await view(a, pid)).toEqual({ rev: 0, view: { count: 0 } });
-    const replies = await Promise.all(Array.from({ length: 12 }, (_, n) => send(n % 2 ? a : b, pid, `burst-${n}`)));
-    const placed = replies.map(placing).sort((x, y) => x.pos - y.pos);
-    expect(placed.map((p) => p.pos)).toEqual(Array.from({ length: 12 }, (_, n) => n + 1));
+    const replies = await Promise.all(
+      Array.from({ length: 12 }, (_, n) => send(n % 2 !== 0 ? a : b, pid, `burst-${n}`)),
+    );
+    const placed = Arr.map(replies, placing).sort((x, y) => x.pos - y.pos);
+    expect(Arr.map(placed, (p) => p.pos)).toEqual(Array.from({ length: 12 }, (_, n) => n + 1));
     let count = 0;
 
     for (let pos = 1; pos <= 12; pos++) {
-      const news = await a.next((f) => typeof f !== "string" && f.method === "view.patch");
+      const news = await a.next((f) => !Predicate.isString(f) && f.method === "view.patch");
       expect(news.params).toMatchObject({ base: pos - 1, rev: pos });
 
       for (const p of news.params.patch) {
@@ -918,16 +950,18 @@ describe("P12 real dev.ts wire", () => {
       c = await connected(s);
 
     expect(await statusWithHost(s.url, "wrong.test")).toBe(421);
-    expect((await fetch(s.url, { headers: { origin: "https://foreign.test" } })).status).toBe(403);
+    expect((await exchange(HttpClientRequest.get(s.url, { headers: { origin: "https://foreign.test" } }))).status).toBe(
+      403,
+    );
     // Every routed call is recorded, so reader c's own reads add rows here. Only rows
     // written by anyone other than c's key could come from a stranger.
-    const notC = (rows: ReadonlyArray<Entry>) => rows.filter((r) => r.by !== s.key.fingerprint);
+    const notC = (rows: ReadonlyArray<Entry>) => Arr.filter(rows, (r) => r.by !== s.key.fingerprint);
     const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
 
-    const strangerKey = identity(),
-      unknownKey = identity(),
-      badKey = identity();
+    const strangerKey = await Effect.runPromise(SshsigTest.identity),
+      unknownKey = await Effect.runPromise(SshsigTest.identity),
+      badKey = await Effect.runPromise(SshsigTest.identity);
 
     const stranger = new Client(s.url, strangerKey, "pre-hello");
     await stranger.challenge();
@@ -947,18 +981,17 @@ describe("P12 real dev.ts wire", () => {
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
 
-    const connections = savedRows(s.home, "dev_clients").filter((row) =>
-      keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
+    const connections = Arr.filter(await savedRows(s.home, "dev_clients"), (row) =>
+      Arr.some(keys, (key) => Str.includes(encodeURIComponent(key.fingerprint))(String(row.connection))),
     );
 
     expect(connections).toHaveLength(3);
 
     const identities = [
-      ...keys.flatMap((key) => [key.raw, key.fingerprint]),
-      ...connections.map((row) => String(row.client)),
+      ...Arr.flatMap(keys, (key) => [key.raw, key.fingerprint]),
+      ...Arr.map(connections, (row) => String(row.client)),
     ];
-
-    const attributed = (row: unknown) => identities.some((id) => JSON.stringify(row).includes(id));
+    const attributed = (row: object) => Arr.some(identities, (id) => Str.includes(id)(JSON.stringify(row)));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
     expect(attributed({ attributes: { "fab.client": connections[0]!.client } })).toBe(true);
@@ -974,7 +1007,9 @@ describe("P12 real dev.ts wire", () => {
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
     const accepted = placing(await send(c, pid, "metadata", { type: "inc" }, seen));
-    const original = savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`);
+    const original = Option.getOrUndefined(
+      Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),
+    );
     expect(original).toBeDefined();
     const binding = JSON.parse(String(original!.value));
     // P17a saves the completed answer before replying; a retry reuses this settled binding.
@@ -987,9 +1022,13 @@ describe("P12 real dev.ts wire", () => {
     });
     await send(c, pid, "later", { type: "dec" });
     expect(placing(await send(c, pid, "metadata", { type: "inc" }, seen))).toEqual(accepted);
-    expect(savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`)).toEqual(original);
+    expect(
+      Option.getOrUndefined(
+        Arr.findFirst(await savedRows(s.home, "gateway_bindings"), (row) => row.letter === `${pid}/metadata`),
+      ),
+    ).toEqual(original);
     const rows = await read(c, "counter:1/inbox");
-    const row = rows.find((r) => r.id === "metadata")!;
+    const row = Option.getOrThrow(Arr.findFirst(rows, (r) => r.id === "metadata"));
     expect(row).toMatchObject({
       sentAt: SENT,
       seen,
@@ -999,7 +1038,9 @@ describe("P12 real dev.ts wire", () => {
     });
     expect(row.traceId).toMatch(/^[0-9a-f]{32}$/);
     const inputs = await read(c, "gateway/inputs");
-    expect(inputs.find((r) => r.id === row.parent)).toMatchObject({ traceId: row.traceId });
+    expect(Option.getOrUndefined(Arr.findFirst(inputs, (r) => r.id === row.parent))).toMatchObject({
+      traceId: row.traceId,
+    });
     const records = await c.call("spans.read", { chain: { _tag: "job", process: pid }, after: 0 });
     expect(records.result.spans.some((r: any) => r.traceId === row.traceId && r.name.includes("runner"))).toBe(true);
   });
@@ -1026,9 +1067,9 @@ describe("P12 real dev.ts wire", () => {
   });
   it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the instance child fails", async () => {
     const s = await instance();
-    const ready = `${JSON.stringify({ ready: s.url }).slice(0, -1)},"build":`;
+    const ready = `${Str.slice(0, -1)(JSON.stringify({ ready: s.url }))},"build":`;
 
-    for (let n = 0; !s.output().includes(ready); n++) {
+    for (let n = 0; !Str.includes(ready)(s.output()); n++) {
       expect(n, `no ready line on dev.ts stdout: ${s.output()}`).toBeLessThan(500);
       await pause();
     }
@@ -1036,51 +1077,56 @@ describe("P12 real dev.ts wire", () => {
     // Only POST /grant and GET /grant/client/KEY reach the grant routes. P14 slice 2 (ticket 828): the
     // app's build carries its tab, so `/` is the built page and `/window.js` the script it loads, each
     // with its type and its ETag over the real wire; a write elsewhere still gets the plain answer.
-    const root = await fetch(s.url);
+    const root = await exchange(HttpClientRequest.get(s.url));
     expect(root.status).toBe(200);
-    expect(root.headers.get("content-type")).toBe("text/html; charset=utf-8");
-    const page = await root.text();
+    expect(root.headers["content-type"]).toBe("text/html; charset=utf-8");
+    const page = root.text;
     expect(page, "/ is the tab's page").toContain('<script type="module" src="/window.js"></script>');
-    expect(root.headers.get("etag")).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
-    const script = await fetch(`${s.url}/window.js`);
+    expect(root.headers.etag).toBe(`"${await hash(page)}"`);
+    const script = await exchange(HttpClientRequest.get(`${s.url}/window.js`));
     expect(script.status).toBe(200);
-    expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
-    const scriptBody = await script.text();
-    expect(script.headers.get("etag")).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
+    expect(script.headers["content-type"]).toBe("text/javascript; charset=utf-8");
+    const scriptBody = script.text;
+    const scriptHash = await hash(scriptBody);
+    expect(script.headers.etag).toBe(`"${scriptHash}"`);
     expect(page, "the page names the script it loads by its build").toContain(
-      `<meta name="fabrika-build" content="${createHash("sha256").update(scriptBody).digest("hex")}">`,
+      `<meta name="fabrika-build" content="${scriptHash}">`,
     );
-    const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
-    expect(await posted.text()).toBe("fabrika");
-    const home = mkdtempSync(join(tmpdir(), "p12-w-"));
+    const posted = await exchange(
+      HttpClientRequest.post(`${s.url}/elsewhere`, { body: HttpBody.text("{}", "text/plain;charset=UTF-8") }),
+    );
+    expect(posted.text).toBe("fabrika");
+    const home = await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" }));
     homes.push(home);
-    const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
-    delete env.TYPESAFE_API_KEY;
-    delete env.FABRIKA_FOREGROUND;
-    delete env.CLOUDFLARE_API_TOKEN;
-    const key = identity();
+    const key = await Effect.runPromise(SshsigTest.identity);
 
     // Port 0 is outside the settings range, so the instance child fails before it builds.
-    const failed = spawn(
-      process.execPath,
-      [
-        join(APP, "dev.ts"),
-        "--port",
-        "0",
-        "--name",
-        "p12-wire",
-        "--person",
-        PERSON,
-        "--founder",
-        key.line,
-        "--window",
-        key.raw,
-      ],
-      { cwd: APP, env, stdio: ["ignore", "ignore", "ignore"] },
+    const code = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const failed = yield* ChildProcess.make(
+            process.execPath,
+            [
+              path.join(APP, "dev.ts"),
+              "--port",
+              "0",
+              "--name",
+              "p12-wire",
+              "--person",
+              PERSON,
+              "--founder",
+              key.line,
+              "--window",
+              key.raw,
+            ],
+            { cwd: APP, env: devEnv(home), extendEnv: false, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+          );
+
+          return yield* failed.exitCode;
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
     );
 
-    children.push(failed);
-    const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
     expect(code).not.toBe(0);
   });
   it.effect(
@@ -1092,11 +1138,9 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
-
-        const firstStart = (yield* Effect.promise(() => read(c, "gateway/brain"))).find(
-          (row) => row._tag === "started",
-        )!;
-
+        const firstStart = Option.getOrThrow(
+          Arr.findFirst(yield* Effect.promise(() => read(c, "gateway/brain")), (row) => row._tag === "started"),
+        );
         const accepted = new Map<string, Placing>();
         yield* Effect.forEach(
           range(10),
@@ -1104,7 +1148,7 @@ describe("P12 real dev.ts wire", () => {
             sendPlaced(c, pid, `kill-${n}`).pipe(Effect.tap((p) => Effect.sync(() => accepted.set(`kill-${n}`, p)))),
           { concurrency: "unbounded" },
         );
-        yield* killWorkerd(s.child.pid!);
+        yield* killWorkerd(s.child.pid);
         const resumed = yield* reconnected(s, "after-crash");
         // Every answer was in before the kill, so the rows the wake reads say no step was cut.
         expect(yield* killedMoment(s.home, "counter:1", pid)).toEqual({ _tag: "between" });
@@ -1120,14 +1164,16 @@ describe("P12 real dev.ts wire", () => {
 
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
         expect(inbox).toHaveLength(20);
-        expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
+        expect(new Set(Arr.map(inbox, (r) => r.id)).size).toBe(20);
         expect((yield* Effect.promise(() => view(resumed, pid))).view.count).toBe(20);
         expect(yield* Effect.promise(() => counter(resumed))).toBe(pid);
         // The kill missed every step, so no process restarted.
         expect(restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1")))).toEqual([]);
+        // SAFETY: firstStart is a `started` row, whose body names its `start`.
         const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
         expect(starts).toHaveLength(2);
         expect(starts[1]!.body).toMatchObject({
+          // SAFETY: firstStart is a `started` row, whose body names its `start`.
           after: (firstStart.body as { start: string }).start,
           build: expect.any(String),
           reason: "crash",
@@ -1144,11 +1190,9 @@ describe("P12 real dev.ts wire", () => {
         const s = yield* launched;
         const c = yield* client(s, "tab-a");
         const pid = yield* Effect.promise(() => counter(c));
-
-        const firstStart = (yield* Effect.promise(() => read(c, "gateway/brain"))).find(
-          (row) => row._tag === "started",
-        )!;
-
+        const firstStart = Option.getOrThrow(
+          Arr.findFirst(yield* Effect.promise(() => read(c, "gateway/brain")), (row) => row._tag === "started"),
+        );
         const firstAnswer = yield* Deferred.make<void>();
 
         const fibers = yield* Effect.forEach(
@@ -1160,7 +1204,7 @@ describe("P12 real dev.ts wire", () => {
         );
 
         yield* Deferred.await(firstAnswer);
-        yield* killWorkerd(s.child.pid!);
+        yield* killWorkerd(s.child.pid);
         const before = yield* Effect.forEach(fibers, Fiber.join, { concurrency: "unbounded" });
         const resumed = yield* reconnected(s, "after-crash");
         // The old workerd is gone and nothing has called the object yet: read where the kill landed, from the
@@ -1177,7 +1221,7 @@ describe("P12 real dev.ts wire", () => {
 
             expect(moment, `${call} refused after a kill between steps`).toMatchObject({ _tag: "inside" });
             expect(
-              refused.map((r) => r.call),
+              Arr.map(refused, (r) => r.call),
               "exactly one call meets a refusal",
             ).toEqual([]);
             expect(first.error.data?.reason).toBe("unreachable");
@@ -1205,8 +1249,7 @@ describe("P12 real dev.ts wire", () => {
 
         const inbox = yield* Effect.promise(() => read(resumed, "counter:1/inbox"));
         expect(inbox).toHaveLength(20);
-        expect(new Set(inbox.map((r) => r.id)).size).toBe(20);
-
+        expect(new Set(Arr.map(inbox, (r) => r.id)).size).toBe(20);
         // When the gateway answered every resend (each letter settled or held), the view is the first call
         // into the object: it wakes a cut step and is the one refusal, so it too waits for the fact.
         const opened = yield* answered(
@@ -1218,8 +1261,9 @@ describe("P12 real dev.ts wire", () => {
         expect(opened.error).toBeUndefined();
         const live = yield* Effect.promise(() => counter(resumed));
         expect((yield* Effect.promise(() => view(resumed, live))).view.count).toBe(20);
-
-        const restarted = restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))).filter(
+        const restarted = Arr.filter(
+          restartedRows(yield* Effect.promise(() => read(resumed, "processes/counter:1"))),
+          // SAFETY: restartedRows keeps only `restarted` rows, whose body names the process it came `after`.
           (row) => (row.body as { after?: string }).after === pid,
         );
 
@@ -1230,16 +1274,19 @@ describe("P12 real dev.ts wire", () => {
           expect(live).toBe(pid);
         } else {
           // The kill cut a step: one call was refused, one restart followed, and its one retry was accepted.
-          expect(refused.map((r) => r.call)).toHaveLength(1);
+          expect(Arr.map(refused, (r) => r.call)).toHaveLength(1);
           expect(refused[0]!.retry.error).toBeUndefined();
           expect(restarted).toHaveLength(1);
+          // SAFETY: a `restarted` row's body names the new `process`.
           expect(live).toBe((restarted[0]!.body as { process: string }).process);
           expect(live).not.toBe(pid);
         }
 
+        // SAFETY: firstStart is a `started` row, whose body names its `start`.
         const starts = yield* crashStarts(resumed, (firstStart.body as { start: string }).start);
         expect(starts).toHaveLength(2);
         expect(starts[1]!.body).toMatchObject({
+          // SAFETY: firstStart is a `started` row, whose body names its `start`.
           after: (firstStart.body as { start: string }).start,
           build: expect.any(String),
           reason: "crash",

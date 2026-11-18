@@ -1,16 +1,19 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
-// remain on the existing next matrix. A selector error fails the required check, never means zero.
+// remain on the existing next matrix. A pull request and a queue group pick tooling alone: the
+// `next-integration` laws run on main's full run (scheduled.yaml, on a push to main and hourly,
+// 0581) and a branch's proof run (0590), never on a pull request or a queue group (`projectsOf`).
+// A selector error fails the required check, never means zero.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
-import type { Request } from "./plant-cases.ts";
-import { checklistCases, fixture, wanted } from "./plant-related.ts";
 import { isTrigger, legsOf, whole } from "./proof.ts";
 
 const PROJECTS = ["next-integration", "tooling"] as const;
+
+const checklistFixture = "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts";
 
 type Project = (typeof PROJECTS)[number];
 
@@ -18,10 +21,38 @@ export type Sizing = Readonly<Record<Project, { readonly most: number; readonly 
   readonly table: Readonly<Record<string, number>>;
 };
 
+/**
+ * Keep the existing product law in the ordinary related run when its former plant inputs change.
+ * It is a `next-integration` file, so only a run that picks that project runs it (`projectsOf`); on
+ * a pull request or a queue group it waits for main's full run like every other integration law.
+ */
+export const wantsChecklistLaw = (paths: readonly string[] | null): boolean =>
+  paths === null ||
+  paths.some(
+    (path) =>
+      path === checklistFixture ||
+      /^\.github\/ci\/plant(?:-cases|-errors|-machine|-reporter|-related)?\.ts$/.test(path),
+  );
+
+/**
+ * The projects a related run picks from, by the GitHub event that started it. A pull request and a
+ * merge queue group pick tooling alone: the owner moved the `next-integration` laws back to main's
+ * full run on 2026-11-18, after real-resource laws failed about a dozen of that night's pull
+ * request and queue runs on code those changes never touched (0536's rule). Any other event, which
+ * in check.yaml is a push to main whose changes job failed, picks both, as before.
+ */
+const projectsOf = (event: string | undefined): readonly Project[] =>
+  event === "pull_request" || event === "merge_group" ? ["tooling"] : PROJECTS;
+
+/** Each project's files, asked for only when the run picks that project, so a skipped one is never listed. */
+type Lists = Readonly<Record<Project, () => readonly string[]>>;
+
 /** Separate project legs keep their existing full-depth counts and test-step limits. */
 
-export const select = (files: Readonly<Record<Project, readonly string[]>>, sizing: Sizing, plants = false) => {
-  const all = PROJECTS.flatMap((project) => files[project]);
+export const select = (event: string | undefined, lists: Lists, sizing: Sizing) => {
+  const picked = projectsOf(event).map((project) => [project, lists[project]()] as const);
+
+  const all = picked.flatMap(([, paths]) => paths);
 
   if (all.some((path) => /\s/.test(path)) || new Set(all).size !== all.length) {
     throw new Error("related: selected files must be distinct paths without whitespace");
@@ -31,8 +62,8 @@ export const select = (files: Readonly<Record<Project, readonly string[]>>, sizi
 
   const projects: Record<string, Project> = {};
 
-  for (const project of PROJECTS) {
-    const split = legsOf(files[project], { ...sizing[project], table: sizing.table });
+  for (const [project, paths] of picked) {
+    const split = legsOf(paths, { ...sizing[project], table: sizing.table });
 
     for (const paths of Object.values(split)) {
       const name = String(Object.keys(legs).length + 1);
@@ -45,33 +76,7 @@ export const select = (files: Readonly<Record<Project, readonly string[]>>, sizi
     throw new Error("related: the selection must fit check.yaml's related max-parallel of nine legs");
   }
 
-  const owners = Object.entries(legs).filter(
-    ([leg, paths]) => projects[leg] === "next-integration" && paths.includes(fixture),
-  );
-
-  if (plants && owners.length !== 1) {
-    throw new Error("related: checklist faults need exactly one owning integration leg");
-  }
-
-  const integration = Object.keys(legs).filter((leg) => projects[leg] === "next-integration");
-
-  const assignment: Record<string, readonly Request["case"][]> = plants
-    ? Object.fromEntries(
-        integration.map((leg, offset) => [
-          leg,
-          checklistCases.filter((_, index) => index % integration.length === offset),
-        ]),
-      )
-    : {};
-
-  if (
-    plants &&
-    (Object.values(assignment).flat().length !== 10 || new Set(Object.values(assignment).flat()).size !== 10)
-  ) {
-    throw new Error("related: every checklist case must have exactly one existing integration leg");
-  }
-
-  return { legs, projects, plants: assignment };
+  return { legs, projects };
 };
 
 export const outputs = (selection: ReturnType<typeof select>): string[] => [
@@ -79,7 +84,6 @@ export const outputs = (selection: ReturnType<typeof select>): string[] => [
   `legs=${JSON.stringify(Object.keys(selection.legs))}`,
   `files=${JSON.stringify(Object.fromEntries(Object.entries(selection.legs).map(([leg, paths]) => [leg, paths.join(" ")])))}`,
   `projects=${JSON.stringify(selection.projects)}`,
-  `plants=${JSON.stringify(selection.plants)}`,
 ];
 
 if (import.meta.main) {
@@ -120,18 +124,18 @@ if (import.meta.main) {
 
   const narrowed = !full && base !== null ? [`--changed=${base}`] : [];
 
-  const integration = list(root, ["--project", "next-integration", ...narrowed]);
+  // The runner sets it on every step: `pull_request`, `merge_group` or `push` in check.yaml.
+  const event = process.env["GITHUB_EVENT_NAME"];
 
-  const plants = wanted(changed);
-
-  const files = {
-    "next-integration": withReaders(integration, [
-      ...(!full && changed?.some((path) => path.startsWith("next/"))
-        ? list(root, ["--project", "next-integration", ...readers])
-        : []),
-      ...(plants ? [fixture] : []),
-    ]),
-    tooling: list(root, ["--project", "tooling", ...narrowed]),
+  const lists: Lists = {
+    "next-integration": () =>
+      withReaders(list(root, ["--project", "next-integration", ...narrowed]), [
+        ...(!full && changed?.some((path) => path.startsWith("next/"))
+          ? list(root, ["--project", "next-integration", ...readers])
+          : []),
+        ...(wantsChecklistLaw(changed) ? [checklistFixture] : []),
+      ]),
+    tooling: () => list(root, ["--project", "tooling", ...narrowed]),
   };
 
   const sizing: Sizing = {
@@ -146,11 +150,11 @@ if (import.meta.main) {
     table: rowsAt("full"),
   };
 
-  const selected = select(files, sizing, plants);
+  const selected = select(event, lists, sizing);
 
   const lines = outputs(selected);
 
-  const record = { base, head, at: new Date().toISOString(), changed, triggers, full, ...selected };
+  const record = { event, base, head, at: new Date().toISOString(), changed, triggers, full, ...selected };
 
   const target = process.env["RECORD"];
 

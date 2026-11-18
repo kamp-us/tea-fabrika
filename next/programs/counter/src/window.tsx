@@ -3,6 +3,7 @@
 // press goes to the brain as a letter, and the count changes when the checked view does.
 import { defineWindow, type WindowProps } from "@kampus/libfabrika";
 import { Button, Kbd } from "@manti-ui/react";
+import { Array as Arr } from "effect";
 import { counter, counterKeys, counterModel } from "./program.ts";
 
 type Props = WindowProps<typeof counter>;
@@ -19,7 +20,7 @@ export const CounterWindow = ({ data, press, hint }: Props) => (
       {data.count}
     </output>
     <div className="counter-actions">
-      {ACTIONS.map(({ m, command, label }) => {
+      {Arr.map(ACTIONS, ({ m, command, label }) => {
         const key = hint?.(command) ?? null;
 
         return (

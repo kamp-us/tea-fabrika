@@ -26,8 +26,25 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Stream, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+
+import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -72,16 +89,15 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = open(`${name.replaceAll("/", "_")}.db`);
+      const made = open(`${Str.replaceAll("/", "_")(name)}.db`);
       parts.set(name, made);
       const sql = nodeSql(made);
       sqls.set(name, sql);
 
       return sql;
     };
-
-    const bytes = (marker: string) => readdirSync(dir).filter((file) => readFileSync(join(dir, file)).includes(marker));
-
+    const bytes = (marker: string) =>
+      Arr.filter(readdirSync(dir), (file) => readFileSync(join(dir, file)).includes(marker));
     return { dir, db, sql: nodeSql(db), open, part, parts, bytes };
   }),
 );
@@ -123,8 +139,8 @@ const places = (db: DatabaseSync, marker: string): Array<string> => {
 
   for (const { name } of tables) {
     for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
-      for (const [column, value] of Object.entries(row)) {
-        if (typeof value === "string" && value.includes(marker)) {
+      for (const [column, value] of Rec.toEntries(row)) {
+        if (Predicate.isString(value) && Str.includes(marker)(value)) {
           found.add(`${String(name)}.${column}`);
         }
       }
@@ -203,7 +219,7 @@ const bucket = () => {
   return { calls, files };
 };
 
-const ids = (rows: ReadonlyArray<Row>) => rows.map((r) => r.spanId);
+const ids = (rows: ReadonlyArray<Row>) => Arr.map(rows, (r) => r.spanId);
 
 describe("T246, P37 decodes TypeID process ids", () => {
   it.effect.prop(
@@ -216,7 +232,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
           yield* step("runner.step", { "fab.process": process });
           expect(yield* flush).toEqual({ sent: 1 });
           expect(count(db, "unsent")).toBe(0);
-          expect((yield* recorded(job(process))).map((row) => row.name)).toEqual(["runner.step"]);
+          expect(Arr.map(yield* recorded(job(process)), (row) => row.name)).toEqual(["runner.step"]);
         }).pipe(Effect.provide(world(sql)));
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } },
@@ -225,12 +241,12 @@ describe("T246, P37 decodes TypeID process ids", () => {
   // Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
   for (const [label, original] of [
     ["old eight-hex id", "3f9a0c21"],
-    ...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${"0".repeat(24)}`] as const),
-    ["first character 8", `process_8${"0".repeat(25)}`],
-    ["uppercase suffix", `process_${P1.slice(8).toUpperCase()}`],
-    ["25 characters", `process_${"0".repeat(25)}`],
-    ["27 characters", `process_${"0".repeat(27)}`],
-    ["wrong prefix", `person_${P1.slice(8)}`],
+    ...Arr.map(["i", "l", "o", "u"], (char) => [char, `process_0${char}${Str.repeat(24)("0")}`] as const),
+    ["first character 8", `process_8${Str.repeat(25)("0")}`],
+    ["uppercase suffix", `process_${Str.toUpperCase(Str.slice(8)(P1))}`],
+    ["25 characters", `process_${Str.repeat(25)("0")}`],
+    ["27 characters", `process_${Str.repeat(27)("0")}`],
+    ["wrong prefix", `person_${Str.slice(8)(P1)}`],
     ["leading space", ` ${P1}`],
     ["trailing space", `${P1} `],
     ["trailing newline", `${P1}\n`],
@@ -266,7 +282,7 @@ describe("T246, P37 decodes TypeID process ids", () => {
                 sql.exec(`UPDATE unsent SET chain = json_set(chain, '$.process', ?)`, P1);
                 expect(yield* flush).toEqual({ sent: 1 });
                 expect(count(db, "unsent")).toBe(0);
-                expect((yield* recorded(job(P1))).map((row) => row.name)).toEqual(["runner.step"]);
+                expect(Arr.map(yield* recorded(job(P1)), (row) => row.name)).toEqual(["runner.step"]);
               }).pipe(Effect.provide(world(sql)));
             }),
           { concurrency: 1, discard: true },
@@ -279,10 +295,11 @@ describe("T246, P37 decodes TypeID process ids", () => {
 describe("p98, a span that ends is never dropped", () => {
   it.live("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", () =>
     Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
       const { db, open } = yield* home;
 
       // Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
-      const exit = Effect.runSyncExit(
+      const exit = Effect.runSyncExitWith(context)(
         traced("runner.step", { "fab.process": P1 }, step("ledger.call")).pipe(
           Effect.provide(SpanSink.layer(nodeSql(db), { object: OBJECT })),
         ),
@@ -296,7 +313,7 @@ describe("p98, a span that ends is never dropped", () => {
       yield* Effect.gen(function* () {
         expect(yield* flush).toEqual({ sent: 2 });
         const rows = yield* recorded(job(P1));
-        expect(rows.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.step"]);
+        expect(Arr.map(rows, (r) => r.name).sort()).toEqual(["ledger.call", "runner.step"]);
         expect(count(again, "unsent")).toBe(0);
       }).pipe(Effect.provide(world(nodeSql(again))));
     }),
@@ -320,9 +337,9 @@ describe("p98, a span that ends is never dropped", () => {
         const one = yield* recorded(job(P1));
         const two = yield* recorded(job(P2));
         const outside = yield* recorded(spans);
-        expect(one.map((r) => r.name).sort()).toEqual(["ledger.call", "runner.cmd", "runner.step", "runner.step"]);
-        expect(two.map((r) => r.name).sort()).toEqual(["leaf", "runner.cmd", "runner.step", "supervisor.restart"]);
-        expect(outside.map((r) => r.name).sort()).toEqual(["gateway.envelope", "ledger.append"]);
+        expect(Arr.map(one, (r) => r.name).sort()).toEqual(["ledger.call", "runner.cmd", "runner.step", "runner.step"]);
+        expect(Arr.map(two, (r) => r.name).sort()).toEqual(["leaf", "runner.cmd", "runner.step", "supervisor.restart"]);
+        expect(Arr.map(outside, (r) => r.name).sort()).toEqual(["gateway.envelope", "ledger.append"]);
         const all = [...ids(one), ...ids(two), ...ids(outside)];
         expect(new Set(all).size, "no span in two chains").toBe(10);
         expect(count(db, "unsent")).toBe(0);
@@ -346,8 +363,8 @@ describe("p98, a span that ends is never dropped", () => {
         );
         yield* flush;
         const rows = yield* recorded(job(P1));
-        const parent = rows.find((r) => r.name === "runner.step");
-        const child = rows.find((r) => r.name === "ledger.call");
+        const parent = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.name === "runner.step"));
+        const child = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.name === "ledger.call"));
         expect(parent).toEqual({
           traceId: expect.any(String),
           spanId: expect.any(String),
@@ -371,7 +388,7 @@ describe("p98, a span that ends is never dropped", () => {
           ok: true,
         });
         const measurements = db.prepare(`SELECT piece, ms, ok FROM measurements ORDER BY piece`).all();
-        expect(measurements.map((h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
+        expect(Arr.map(measurements, (h) => [h["piece"], h["ms"], Boolean(h["ok"])])).toEqual([
           ["ledger.call", 3, true],
           ["runner.step", 7, true],
         ]);
@@ -399,9 +416,9 @@ describe("p98, a span that ends is never dropped", () => {
         const outside = yield* recorded(spans);
         expect(outside).toHaveLength(2);
         expect(
-          outside
-            .map((r) => r.resource)
-            .sort((x, y) => String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"]))),
+          Arr.map(outside, (r) => r.resource).sort((x, y) =>
+            Str.localeCompare(String(y.attributes["fab.object"]))(String(x.attributes["fab.object"])),
+          ),
         ).toEqual([{ attributes: { "fab.object": OBJECT } }, { attributes: { "fab.object": P2 } }]);
 
         for (const row of outside) {
@@ -537,7 +554,7 @@ describe("p98, a span that ends is never dropped", () => {
         }
 
         const rows = yield* recorded(job(P1));
-        expect(rows.map((r) => r.attributes["fab.n"])).toEqual(Array.from({ length: 90 }, (_, n) => n));
+        expect(Arr.map(rows, (r) => r.attributes["fab.n"])).toEqual(Array.from({ length: 90 }, (_, n) => n));
         const part = db.prepare(`SELECT max(part) AS part FROM parts`).get()?.["part"];
         expect(Number(part), "90 spans under a 16 KB cap roll past part 0").toBeGreaterThan(0);
       }).pipe(Effect.provide(world(sql, RecordManager.memory(16 * 1024))));
@@ -568,7 +585,7 @@ describe("p98, a span that ends is never dropped", () => {
               expect(count(db, "unsent"), "the held span landed at the next end").toBe(3);
               expect(yield* flush).toEqual({ sent: 3 });
               const rows = yield* recorded(job(P1));
-              expect(rows.map((r) => r.attributes["fab.n"]).sort()).toEqual([value, 1, 2].sort());
+              expect(Arr.map(rows, (r) => r.attributes["fab.n"]).sort()).toEqual([value, 1, 2].sort());
             }).pipe(Effect.provide(world(sql)));
           }),
         { concurrency: 1, discard: true },
@@ -608,7 +625,7 @@ describe("p98, a span that ends is never dropped", () => {
               yield* step("runner.step", { "fab.n": 8 });
               expect(yield* flush).toEqual({ sent: 10 });
               const rows = yield* recorded(spans);
-              expect(rows.map((r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
+              expect(Arr.map(rows, (r) => r.attributes["fab.n"] ?? "warm").sort()).toEqual(
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, "warm"].sort(),
               );
             }).pipe(Effect.provide(world(sql)));
@@ -634,7 +651,7 @@ describe("p98, a span that ends is never dropped", () => {
               const made = value;
 
               for (let n = 0; n < made; n++) {
-                yield* step("runner.step", { "fab.n": n, "fab.pad": "p".repeat(100) });
+                yield* step("runner.step", { "fab.n": n, "fab.pad": Str.repeat(100)("p") });
               }
 
               const error = yield* Effect.flip(flush);
@@ -717,7 +734,7 @@ describe("p98, a span that ends is never dropped", () => {
               yield* step("runner.step", { "fab.process": P1, "fab.n": 2 });
               expect(yield* flush).toEqual({ sent: 3 });
               const rows = yield* recorded(job(P1));
-              expect(rows.map((r) => r.attributes["fab.n"])).toEqual([value, 1, 2]);
+              expect(Arr.map(rows, (r) => r.attributes["fab.n"])).toEqual([value, 1, 2]);
               expect(count(db, "unsent")).toBe(0);
               expect(Number(db.prepare(`SELECT part FROM parts`).get()?.["part"])).toBe(1);
             }).pipe(Effect.provide(world(sql, RecordManager.memory(1))));
@@ -879,10 +896,10 @@ const frameCases = Arbitrary.schema(FrameInput).pipe(
     return {
       root,
       // A span's name can hold a slash, and a name is kept whole: S1 reads only the rest of its frame.
-      slashed: frames.flatMap(({ shape, name }) =>
+      slashed: Arr.flatMap(frames, ({ shape, name }) =>
         shape === "slashName" || shape === "slashBare" ? [`${name}/${word}`] : [],
       ),
-      frames: frames.map(({ shape, name, line, column }) => frameText({ shape, name, line, column, root, word })),
+      frames: Arr.map(frames, ({ shape, name, line, column }) => frameText({ shape, name, line, column, root, word })),
     };
   }),
 );
@@ -895,13 +912,16 @@ const storedStack = Effect.fnUntraced(function* (
   const { sql } = yield* walkHome;
 
   return yield* Effect.gen(function* () {
-    const outer = errors.reduceRight<Error | undefined>((cause, { message, stack }) => {
-      const error = cause === undefined ? new Error(message) : new Error(message, { cause });
-      error.stack = stack;
+    const outer = Arr.reduceRight<(typeof errors)[number], Error | undefined>(
+      errors,
+      undefined,
+      (cause, { message, stack }) => {
+        const error = cause === undefined ? new Error(message) : new Error(message, { cause });
+        error.stack = stack;
 
-      return error;
-    }, undefined);
-
+        return error;
+      },
+    );
     const fail = Effect.fn("sink.frames")(function* () {
       return yield* Effect.sync(() => {
         // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- A-Sink exercises a thrown Error and its nested cause
@@ -919,8 +939,8 @@ const storedStack = Effect.fnUntraced(function* (
     const pretty = Cause.pretty(exit.cause);
     yield* flush;
     const rows = yield* recorded(spans);
-    expect(rows.filter((row) => row.name === "sink.frames")).toHaveLength(1);
-    const row = rows.find((row) => row.name === "sink.frames");
+    expect(Arr.filter(rows, (row) => row.name === "sink.frames")).toHaveLength(1);
+    const row = Option.getOrUndefined(Arr.findFirst(rows, (row) => row.name === "sink.frames"));
     const content = yield* RecordManager.use((records) => records.content(spans, row?.spanId ?? ""));
     expect(Option.isSome(content) && content.value._tag === "kept").toBe(true);
     const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
@@ -932,9 +952,9 @@ const storedStack = Effect.fnUntraced(function* (
 /** S1 and S2's two errors, each stack its frames joined by `\n`, as before ticket 955. */
 const storedFrames = (sample: typeof frameCases extends Arbitrary.Arbitrary<infer A> ? A : never) =>
   storedStack(
-    ["outer message C:\\message\\path stays", "inner message /message/path stays"].map((message) => ({
+    Arr.map(["outer message C:\\message\\path stays", "inner message /message/path stays"], (message) => ({
       message,
-      stack: [`Error: ${message}`, ...sample.frames.map(({ raw }) => `    ${raw}`)].join("\n"),
+      stack: Arr.join([`Error: ${message}`, ...Arr.map(sample.frames, ({ raw }) => `    ${raw}`)], "\n"),
     })),
   );
 
@@ -948,18 +968,20 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Str.slice(1, -1)(Formatter.formatJson(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
-          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+          expect(Str.includes(root)(message), "stored content copied a generated root").toBe(false);
         }
 
-        for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
-          const frame = line.trim();
-          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
-          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
-          const withoutNode = location.replace(/node:[^)]*/g, "");
+        for (const line of Arr.filter(Str.split(message, "\n"), (line) => /^\s*at /.test(line))) {
+          const frame = Str.trim(line);
+          const named = Option.getOrUndefined(
+            Arr.findFirst(sample.slashed, (name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame)),
+          );
+          const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
+          const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
           expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
         }
       }),
@@ -972,8 +994,8 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
     ({ sample }) =>
       Effect.gen(function* () {
         const { pretty, message } = yield* storedFrames(sample);
-        const before = pretty.split("\n");
-        const after = message.split("\n");
+        const before = Str.split(pretty, "\n");
+        const after = Str.split(message, "\n");
         expect(after).toHaveLength(before.length);
 
         for (const [index, line] of before.entries()) {
@@ -984,7 +1006,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
             continue;
           }
 
-          const generated = sample.frames.find(({ raw }) => raw === `at ${frame[2]}`);
+          const generated = Option.getOrUndefined(Arr.findFirst(sample.frames, ({ raw }) => raw === `at ${frame[2]}`));
 
           if (generated !== undefined) {
             expect(after[index]).toBe(`${frame[1]}${generated.kept}`);
@@ -1047,39 +1069,36 @@ const StrayInput = Schema.Struct({
 const strayCases = Arbitrary.schema(StrayInput).pipe(
   Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
     const folder = `${before}${stray}${breaker}${after}`;
-    const separator = prefix.endsWith("\\") ? "\\" : "/";
-
+    const separator = Str.endsWith("\\")(prefix) ? "\\" : "/";
     const root = {
       posix: `/sink-${word}/${folder}/private`,
       url: `file:///sink-${word}/${folder}/private`,
       windows: `C:\\sink-${word}\\${folder}\\private`,
       relative: `${prefix}sink-${word}${separator}${folder}${separator}private`,
     }[rootKind];
-
-    const generated = frames.map(({ shape, name, line, column }) =>
+    const generated = Arr.map(frames, ({ shape, name, line, column }) =>
       frameText({ shape, name, line, column, root, word }),
     );
 
     return {
       root,
-      slashed: frames.flatMap(({ shape, name }) =>
+      slashed: Arr.flatMap(frames, ({ shape, name }) =>
         shape === "slashName" || shape === "slashBare" ? [`${name}/${word}`] : [],
       ),
       frames: generated,
-      errors: [
-        "outer message C:\\message\\path stays",
-        "inner message /message/path stays",
-        "innermost message stays",
-      ].map((message) => ({
-        message,
-        stack: `${[`Error: ${message}`, ...generated.map(({ raw }) => `    ${raw}`)].join(ending)}${tail}`,
-      })),
+      errors: Arr.map(
+        ["outer message C:\\message\\path stays", "inner message /message/path stays", "innermost message stays"],
+        (message) => ({
+          message,
+          stack: `${Arr.join([`Error: ${message}`, ...Arr.map(generated, ({ raw }) => `    ${raw}`)], ending)}${tail}`,
+        }),
+      ),
     };
   }),
 );
 
 /** A text's lines and the breaks between them, every break kept: `\r\n`, `\r` and `\n`. */
-const pieces = (text: string) => text.split(/(\r\n|\r|\n)/);
+const pieces = (text: string) => Str.split(text, /(\r\n|\r|\n)/);
 
 describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
   it.effect.prop(
@@ -1091,20 +1110,22 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Str.slice(1, -1)(Formatter.formatJson(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
-          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+          expect(Str.includes(root)(message), "stored content copied a generated root").toBe(false);
         }
 
-        for (const line of message.split(/\r\n|\r|\n/).filter((line) => /^\s*at /.test(line))) {
+        for (const line of Arr.filter(Str.split(message, /\r\n|\r|\n/), (line) => /^\s*at /.test(line))) {
           // A third error gives the inner's last line ` {`, the mark of a cause that follows.
-          const frame = line.trim().replace(/ \{$/, "");
-          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
-          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
-          const withoutNode = location.replace(/node:[^)]*/g, "");
-          expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
+          const frame = Str.replace(/ \{$/, "")(Str.trim(line));
+          const named = Option.getOrUndefined(
+            Arr.findFirst(sample.slashed, (name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame)),
+          );
+          const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
+          const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
+          expect(withoutNode, `a stored frame names a folder: ${Formatter.format(line)}`).not.toMatch(/[/\\]/);
         }
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -1128,14 +1149,14 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
             continue;
           }
 
-          const generated = sample.frames.find(({ raw }) => raw === `at ${frame[2]}`);
+          const generated = Option.getOrUndefined(Arr.findFirst(sample.frames, ({ raw }) => raw === `at ${frame[2]}`));
 
           if (generated !== undefined) {
             expect(after[index]).toBe(`${frame[1]}${generated.kept}${frame[3] ?? ""}`);
           } else {
             // Effect.fn contributes its own real frame, beside the generated Error stacks.
             const own = /^(\s*at sink\.frames(?: \(definition\))? \().*[/\\]([^/\\]+:\d+:\d+\)(?: \{)?)$/s.exec(piece);
-            expect(own, `unexpected Effect.fn frame: ${JSON.stringify(piece)}`).not.toBeNull();
+            expect(own, `unexpected Effect.fn frame: ${Formatter.format(piece)}`).not.toBeNull();
             expect(after[index]).toBe(`${own?.[1]}${own?.[2]}`);
           }
         }
@@ -1150,26 +1171,28 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
       const { message } = yield* storedStack([
         {
           message: "m",
-          stack: [
-            "Error: m",
-            "    at fn (/root/a)b/c.ts:1:2)",
-            "    at fn (/root/a(b/c.ts:1:2)",
-            "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
-            "    at /root/a(b/c.ts:5:6",
-            // A relative location: its start is a word and a separator, not a scheme or a "/".
-            "    at fn (src/a (b/c.ts:1:2)",
-            "    at fn (./a (b/c.ts:1:2)",
-            "    at fn (../a (b/c.ts:1:2)",
-            "    at fn (~/a (b/c.ts:1:2)",
-            "    at fn (.\\a (b\\c.ts:1:2)",
-            "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
-          ].join("\n"),
+          stack: Arr.join(
+            [
+              "Error: m",
+              "    at fn (/root/a)b/c.ts:1:2)",
+              "    at fn (/root/a(b/c.ts:1:2)",
+              "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
+              "    at /root/a(b/c.ts:5:6",
+              // A relative location: its start is a word and a separator, not a scheme or a "/".
+              "    at fn (src/a (b/c.ts:1:2)",
+              "    at fn (./a (b/c.ts:1:2)",
+              "    at fn (../a (b/c.ts:1:2)",
+              "    at fn (~/a (b/c.ts:1:2)",
+              "    at fn (.\\a (b\\c.ts:1:2)",
+              "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
+            ],
+            "\n",
+          ),
         },
       ]);
-
-      const lines = message.split("\n").map((line) => line.trim());
-      expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
-      expect(lines.filter((line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
+      const lines = Arr.map(Str.split(message, "\n"), (line) => Str.trim(line));
+      expect(Arr.filter(lines, (line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
+      expect(Arr.filter(lines, (line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
       expect(lines).toContain("at c.ts:5:6");
       expect(message).not.toContain("/root");
       expect(message).not.toMatch(/a \(/);
@@ -1180,14 +1203,13 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
     Effect.gen(function* () {
       // No law fed the sink a `\r` before: every CRLF frame line was stored whole, folder and all.
       const { message } = yield* storedStack(
-        ["m", "m", "m"].map((message) => ({
+        Arr.map(["m", "m", "m"], (message) => ({
           message,
           stack: "Error: m\r\n    at fn (/root/a/b/c.ts:1:2)\r\n    at g (/root/x.ts:3:4)\r",
         })),
       );
-
-      expect(message.match(/at fn \(c\.ts:1:2\)\r\n/g)).toHaveLength(3);
-      expect(message.match(/at g \(x\.ts:3:4\)\r/g)).toHaveLength(3);
+      expect(Option.getOrNull(Str.match(/at fn \(c\.ts:1:2\)\r\n/g)(message))).toHaveLength(3);
+      expect(Option.getOrNull(Str.match(/at g \(x\.ts:3:4\)\r/g)(message))).toHaveLength(3);
       expect(message).toContain("at g (x.ts:3:4)\r {");
       expect(message).not.toContain("/root");
     }).pipe(Effect.scoped),
@@ -1199,8 +1221,7 @@ const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 
 const NOTE_TWO = "note-two-p99";
-
-const a = (n: number) => "a".repeat(n);
+const a = (n: number) => Str.repeat(n)("a");
 
 class NoteError extends Error {
   override readonly name = "NoteError";
@@ -1238,21 +1259,23 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
           ]);
           expect(places(h.db, NOTE_TWO)).toEqual(["unsent.content"]);
           const measurements = h.db.prepare(`SELECT piece, ok, error FROM measurements ORDER BY piece`).all();
-          expect(measurements.map((x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
+          expect(Arr.map(measurements, (x) => [x["piece"], Boolean(x["ok"]), x["error"]])).toEqual([
             ["ledger.call", false, "NoteError"],
             ["runner.step", false, "TypeError"],
           ]);
 
           yield* flush;
           const rows = yield* recorded(job(P1));
-          const failed = rows.find((x) => x.name === "runner.step");
+          const failed = Option.getOrUndefined(Arr.findFirst(rows, (x) => x.name === "runner.step"));
           expect(failed?.ok).toBe(false);
           expect(failed?.attributes["fab.key"]).toBe("<redacted>");
           expect(failed?.attributes["error.type"]).toBe("TypeError");
-          expect(rows.find((x) => x.name === "ledger.call")?.attributes["error.type"]).toBe("NoteError");
+          expect(
+            Option.getOrUndefined(Arr.findFirst(rows, (x) => x.name === "ledger.call"))?.attributes["error.type"],
+          ).toBe("NoteError");
 
           for (const x of rows) {
-            for (const value of Object.values(x.attributes)) {
+            for (const value of Rec.values(x.attributes)) {
               expect(String(value)).not.toContain(NOTE);
               expect(String(value)).not.toContain(NOTE_TWO);
             }
@@ -1278,7 +1301,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
           for (const [name, db] of h.parts) {
             for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
-              expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
+              expect(Str.startsWith("content.")(place), `${name}: ${place}`).toBe(true);
             }
           }
 
@@ -1287,7 +1310,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       }),
   );
 
-  it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
+  it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", () => {
     const key = fc.constantFrom(...Array.from({ length: 8 }, (_, n) => `fab.k${n}`));
 
     const value = fc.oneof(
@@ -1301,8 +1324,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.constant(null),
       fc.bigInt(),
     );
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -1314,16 +1336,16 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               const kept = row?.attributes ?? {};
               let dropped = 0;
 
-              for (const [k, v] of Object.entries(tags)) {
-                if (typeof v === "string") {
+              for (const [k, v] of Rec.toEntries(tags)) {
+                if (Predicate.isString(v)) {
                   if (v.length <= 128) {
                     expect(kept[k]).toBe(v);
                   } else {
-                    expect(v.startsWith(String(kept[k]))).toBe(true);
+                    expect(Str.startsWith(String(kept[k]))(v)).toBe(true);
                     expect(String(kept[k]).length).toBeLessThanOrEqual(128);
                     expect(kept[`${k}.length`]).toBe(v.length);
                   }
-                } else if (typeof v === "number" || typeof v === "boolean") {
+                } else if (Predicate.isNumber(v) || Predicate.isBoolean(v)) {
                   expect(kept[k]).toBe(v);
                 } else if (Redacted.isRedacted(v)) {
                   expect(kept[k]).toBe("<redacted>");
@@ -1335,10 +1357,13 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
               expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
 
-              for (const v of Object.values(kept)) {
-                expect(["string", "number", "boolean"]).toContain(typeof v);
+              for (const v of Rec.values(kept)) {
+                expect(
+                  Predicate.isString(v) || Predicate.isNumber(v) || Predicate.isBoolean(v),
+                  `${String(v)} is a string, a number or a boolean`,
+                ).toBe(true);
 
-                if (typeof v === "string") {
+                if (Predicate.isString(v)) {
                   expect(v.length).toBeLessThanOrEqual(128);
                   expect(v).not.toContain(SECRET);
                 }
@@ -1439,14 +1464,14 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
         const full = Number(tail?.[1]);
         expect(full).toBeGreaterThan(1_100_000);
         expect(message.length).toBe(1_000_000 + (tail?.[0].length ?? 0));
-        expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
+        expect(Str.slice(0, 1_000_000)(message)).toContain(`NoteError: ${a(1000)}`);
       }).pipe(Effect.provide(world(sql)));
     }),
   );
 
-  it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", async () => {
+  it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", () => {
     const word = fc.stringMatching(/^[A-Z][A-Za-z]{0,15}$/);
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(word, word, fc.string({ maxLength: 40 }), (outer, tag, text) => {
         const reason = Object.assign(new Error(`${NOTE}-${text}`), {
           _tag: tag,
@@ -1531,13 +1556,13 @@ describe("T705, the sink's public calls keep their order through one machine", (
         const { db, sql: real } = yield* walkHome;
         const { sql, arm } = filling(real);
         yield* Effect.gen(function* () {
+          const ambient = yield* Effect.context<never>();
           const services = yield* Effect.context<SpanSink>();
 
           /** Ends one span outside any fiber: its rows are there the moment `runSync` returns. */
           const end = (n: number, word: string, fails: boolean) => {
             arm(fails ? 1 : 0);
-
-            const exit = Effect.runSyncExit(
+            const exit = Effect.runSyncExitWith(ambient)(
               step("runner.step", { "fab.n": n, "fab.word": word }).pipe(Effect.provideContext(services)),
             );
 
@@ -1613,7 +1638,9 @@ describe("T705, the sink's public calls keep their order through one machine", (
           const rows = yield* recorded(spans);
           const byN = (x: readonly [number, string], y: readonly [number, string]) => x[0] - y[0];
           expect(
-            rows.map((row) => [Number(row.attributes["fab.n"]), String(row.attributes["fab.word"])] as const).sort(byN),
+            Arr.map(rows, (row) => [Number(row.attributes["fab.n"]), String(row.attributes["fab.word"])] as const).sort(
+              byN,
+            ),
             "every ended span reaches its record once, with its own payload",
           ).toEqual([...seen.ended, [calls.length, "last"] as const].sort(byN));
           expect(count(db, "unsent")).toBe(0);
@@ -1639,7 +1666,7 @@ const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 const rootForms = [
   repoRoot,
-  JSON.stringify(repoRoot).slice(1, -1),
+  Str.slice(1, -1)(JSON.stringify(repoRoot)),
   encodeURI(repoRoot),
   encodeURIComponent(repoRoot),
   pathToFileURL(repoRoot).href,
@@ -1648,7 +1675,7 @@ const rootForms = [
 /** A span frame of a generated `Effect.fn`, "at <span>[ (definition)] (<location>)", with its
  *  location cut to the last path segment by this test's own reading. */
 const spanFrames = (text: string) =>
-  text.split("\n").flatMap((line) => {
+  Arr.flatMap(Str.split(text, "\n"), (line) => {
     const frame = /^\s*at (typed\.[a-z]+\.\d+(?: \(definition\))?) \((.*)\)(?: \{)?$/.exec(line);
 
     if (frame === null) {
@@ -1656,8 +1683,7 @@ const spanFrames = (text: string) =>
     }
 
     const location = frame[2] ?? "";
-
-    return [`${frame[1]} (${location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1)})`];
+    return [`${frame[1]} (${Arr.lastNonEmpty(Str.split(location, /[/\\]/))})`];
   });
 
 describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no machine folder", () => {
@@ -1671,16 +1697,16 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
             reason: Schema.String,
           }) {}
-          const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
+          const names = Arr.map(sample.names, (name, depth) => `typed.${name}.${depth}`);
 
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
             return yield* new Typed({ reason: sample.reason });
           });
-
-          const outermost = names
-            .slice(0, -1)
-            .reduceRight<() => Effect.Effect<never, Typed>>((inner, name) => Effect.fn(name)(() => inner()), innermost);
-
+          const outermost = Arr.reduceRight<string, () => Effect.Effect<never, Typed>>(
+            names.slice(0, -1),
+            innermost,
+            (inner, name) => Effect.fn(name)(() => inner()),
+          );
           const exit = yield* Effect.exit(outermost());
 
           if (!Exit.isFailure(exit)) {
@@ -1690,26 +1716,27 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           const expected = spanFrames(Cause.pretty(exit.cause));
 
           for (const name of names) {
-            expect(expected.some((frame) => frame.startsWith(`${name} (`))).toBe(true);
+            expect(Arr.some(expected, (frame) => Str.startsWith(`${name} (`)(frame))).toBe(true);
           }
 
           yield* flush;
-          const rows = (yield* recorded(spans)).filter((row) => names.includes(row.name));
+          const rows = Arr.filter(yield* recorded(spans), (row) => names.includes(row.name));
           expect(rows).toHaveLength(names.length);
 
           for (const row of rows) {
             const content = yield* RecordManager.use((records) => records.content(spans, row.spanId));
             const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
-            expect(message.includes(sample.tag) && message.includes(sample.reason), "tag and reason are kept").toBe(
-              true,
-            );
+            expect(
+              Str.includes(sample.tag)(message) && Str.includes(sample.reason)(message),
+              "tag and reason are kept",
+            ).toBe(true);
 
             for (const form of rootForms) {
-              expect(message.includes(form), `stored content copied the repo root: ${message}`).toBe(false);
+              expect(Str.includes(form)(message), `stored content copied the repo root: ${message}`).toBe(false);
             }
 
-            for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
-              expect(line.replace(/node:[^)]*/g, ""), "a stored frame names a folder").not.toMatch(/[/\\]/);
+            for (const line of Arr.filter(Str.split(message, "\n"), (line) => /^\s*at /.test(line))) {
+              expect(Str.replace(/node:[^)]*/g, "")(line), "a stored frame names a folder").not.toMatch(/[/\\]/);
             }
 
             expect(spanFrames(message), "each span frame keeps its name, file, line and column").toEqual(expected);

@@ -5,6 +5,7 @@
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Equal, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Rec from "effect/Record";
 import * as Codec from "../settings/Codec.ts";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
@@ -26,8 +27,8 @@ export const check = Effect.fnUntraced(function* (raw: unknown) {
   const input = yield* Schema.decodeUnknownEffect(Start.Input)(raw, { onExcessProperty: "error" });
 
   // Preserve the shared decoder's own failure for existing app error boundaries.
-  const values = Object.fromEntries(
-    Object.entries(Declarations.all.settings).map(([name, declaration]) => [
+  const values = Rec.fromEntries(
+    Rec.toEntries(Declarations.all.settings).map(([name, declaration]) => [
       name,
       input.settings.values[declaration.path],
     ]),

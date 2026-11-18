@@ -4,6 +4,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
 import { processId } from "../Id.test-support.ts";
@@ -196,7 +197,7 @@ describe("P12 saved mail recovery", () => {
                     schema: Supervision,
                   }).load.pipe(
                     Effect.map((saved) => [
-                      ...(saved?.receipts ?? []).filter((r) => r.tries > 0 || r.errors.length > 0),
+                      ...Arr.filter(saved?.receipts ?? [], (r) => r.tries > 0 || r.errors.length > 0),
                       ...(saved?.observations ?? []),
                     ]),
                   );

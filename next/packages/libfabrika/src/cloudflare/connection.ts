@@ -1,4 +1,14 @@
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -27,7 +37,7 @@ import {
 const METHOD = { whole: "view.whole", patch: "view.patch" } as const satisfies Record<Published["type"], string>;
 
 /** One JSON-RPC notification, as the text a socket is sent. */
-const frame = (method: string, params: Schema.Json) => JSON.stringify({ jsonrpc: "2.0", method, params });
+const frame = (method: string, params: Schema.Json) => Formatter.formatJson({ jsonrpc: "2.0", method, params });
 
 // A route's answer, its rate failures counted as storage and its refusals tagged on the span.
 const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Type, LedgerError>) {
@@ -56,7 +66,7 @@ const routed = Effect.fnUntraced(function* (work: Effect.Effect<typeof Answer.Ty
 // `LedgerError` of reason `bad_row`, in the typed channel.
 const waitOn = (p: ProjectClient["Service"]) =>
   Effect.fnUntraced(function* (client: ConnectionId, stream: string, after: number, reader: string) {
-    const asked = stream.startsWith(targetStream(""))
+    const asked = Str.startsWith(targetStream(""))(stream)
       ? p.route(client, "tasks.wait", { after }, reader)
       : p.route(client, "ledger.wait", { stream, after }, reader);
     const answer = yield* rpc(routed(asked));
@@ -152,11 +162,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       close: (code) => ws.close(code, "reconnect"),
       ping: () => ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? null,
       wait: Effect.fnUntraced(function* (stream, after, reader) {
+        // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and `call` and the connection's `save` copy the `client` they read back.
         const client = (yield* attached(ws)).client as ConnectionId;
         return yield* waits.wait(client, stream, after, reader);
       }),
       call: Effect.fnUntraced(
         function* (method, params) {
+          // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and this call and the connection's `save` copy the `client` they read back.
           const client = (yield* attached(ws)).client as ConnectionId;
 
           if (method === "initialize") {
@@ -263,6 +275,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
         ctx.getTags(ws),
       ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
     yield* rpc(p.leave(state.client, session));
+    // SAFETY: `Attached` decodes `client` as a plain string, but each writer of this socket's attachment puts a `ConnectionId` there: `fetch` saves the one `p.clientConnect()` returned, and `call` and the connection's `save` copy the `client` they read back.
     yield* rpc(p.disconnect(state.client as ConnectionId));
     connections.delete(ws);
   });
@@ -325,9 +338,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
   return {
     fetch: Effect.fnUntraced(function* (request: Request) {
-      const path = new URL(request.url).pathname.split("/");
+      const path = Str.split(new URL(request.url).pathname, "/");
 
-      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      if (
+        !Option.exists(
+          Option.fromNullishOr(request.headers.get("upgrade")),
+          (upgrade) => Str.toLowerCase(upgrade) === "websocket",
+        )
+      ) {
         return new Response("WebSocket required", { status: 426 });
       }
 
@@ -348,13 +366,13 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       server.serializeAttachment(Attached.cases.new.make({ client, nonce }));
       yield* rpc(p.register(client, gateway, session));
       yield* make(server);
-      server.send(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+      server.send(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }),
     message: Effect.fnUntraced(function* (ws: WebSocket, text: string | ArrayBuffer) {
       const state = yield* attached(ws);
 
-      if (typeof text !== "string") {
+      if (!Predicate.isString(text)) {
         return;
       }
 

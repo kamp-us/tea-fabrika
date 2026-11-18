@@ -2,6 +2,7 @@
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { Config } from "effect";
 import { ByteSize, Exit, Schema } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Setting from "./Fabrika.ts";
@@ -84,7 +85,7 @@ describe("T753 shared codecs", () => {
         }
 
         const encoded = Schema.encodeSync(file)(ByteSize.bytes(count));
-        expect(typeof encoded).toBe("string");
+        expect(encoded).toBeTypeOf("string");
         expect(Schema.decodeUnknownSync(file)(encoded)).toBe(ByteSize.bytes(count));
       }),
       check,
@@ -101,7 +102,7 @@ describe("T753 shared codecs", () => {
         expect(Schema.encodeSync(codec)(decoded)).toEqual(json);
         expect(Schema.decodeUnknownSync(Schema.fromJsonString(codec))(JSON.stringify(json), strict)).toEqual(decoded);
 
-        for (const key of Object.keys(json)) {
+        for (const key of Rec.keys(json)) {
           const missing = { ...json };
           Reflect.deleteProperty(missing, key);
           expect(Exit.isFailure(Schema.decodeUnknownExit(codec)(missing, strict))).toBe(true);

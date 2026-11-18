@@ -4,9 +4,18 @@
 // No test implements recovery or supplies a fake store. SQL corruption is planted after save.
 // Ticket 921 slice 1: the store fails with its own `RecoveryStoreError`, whose tagged reason keeps
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
-import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import type * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -36,11 +45,7 @@ type Subject = {
 
 const modulePath = "./RecoveryStore.ts";
 
-const subject = async (): Promise<Subject> => {
-  expect(existsSync(new URL(modulePath, import.meta.url)), "P34 durable RecoveryStore is missing").toBe(true);
-
-  return await import(modulePath);
-};
+const subject = async (): Promise<Subject> => await import(modulePath);
 
 const policy = {
   maxDeliveries: 3,
@@ -104,7 +109,7 @@ const snapshot = {
   },
   build: "build-a",
   restarts: [100, 300],
-  observations: [1, 2, 3].map((seq) => ({
+  observations: Arr.map([1, 2, 3], (seq) => ({
     seq,
     process: seq === 3 ? B : A,
     letter: "poison",
@@ -177,7 +182,7 @@ describe("P34 recovery storage", () => {
                   ...snapshot,
                   receipts: [
                     ...snapshot.receipts,
-                    { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
+                    { ...terminal, letter: "other", input: { ...input, padding: Str.repeat(value)("x") } },
                   ],
                 };
 
@@ -220,7 +225,7 @@ describe("P34 recovery storage", () => {
             );
             // Find the actual saved JSON column, without prescribing the store's table names.
             let planted = 0;
-            const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
+            const quote = (word: string) => `"${Str.replaceAll('"', '""')(word)}"`;
 
             for (const { name } of disk.sql.exec(
               "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
@@ -228,12 +233,12 @@ describe("P34 recovery storage", () => {
               const table = quote(String(name));
 
               for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
-                for (const [column, value] of Object.entries(row)) {
-                  if (typeof value === "string" && value.includes('"journal"')) {
+                for (const [column, value] of Rec.toEntries(row)) {
+                  if (Predicate.isString(value) && Str.includes('"journal"')(value)) {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
                       // An old saved shape fails explicitly too: it is never silently reset (P34c slice 2).
-                      JSON.stringify(typeof corrupt === "string" ? { v: 999, journal: corrupt } : corrupt),
+                      Formatter.formatJson(Predicate.isString(corrupt) ? { v: 999, journal: corrupt } : corrupt),
                       row.rowid!,
                     );
                     planted++;
@@ -357,7 +362,7 @@ describe("P34 recovery storage", () => {
         fc.array(receipt, { minLength: 6, maxLength: 6 }),
         fc.array(fc.boolean(), { minLength: 6, maxLength: 6 }),
         async (ids, bodies, kept) => {
-          const all = ids.map((letter, n) => {
+          const all = Arr.map(ids, (letter, n) => {
             const body = bodies[n]!;
             const tries = body.dead ? Math.max(body.tries, 1) : body.tries;
 
@@ -380,7 +385,7 @@ describe("P34 recovery storage", () => {
               const s = yield* S;
               yield* s.save({ ...idle, receipts: all });
               // A compact snapshot: only some receipts ride along.
-              yield* s.save({ ...idle, seq: 4, receipts: all.filter((_, n) => kept[n]) });
+              yield* s.save({ ...idle, seq: 4, receipts: Arr.filter(all, (_, n) => kept[n] === true) });
             }).pipe(Effect.provide(layer())),
           );
           disk.reopen();
@@ -392,6 +397,7 @@ describe("P34 recovery storage", () => {
                 expect(yield* s.receipt(r.letter)).toEqual(r);
               }
 
+              // SAFETY: the store's load answers its saved receipts and its sequence number.
               const loaded = (yield* s.load) as { receipts: ReadonlyArray<unknown>; seq: number };
               expect(loaded.seq).toBe(4);
               expect(loaded.receipts).toHaveLength(all.length);

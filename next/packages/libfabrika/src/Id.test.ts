@@ -5,17 +5,31 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 const seed = 119120;
 
@@ -30,13 +44,13 @@ const maxClock = 2 ** 48 - 1;
 const letters = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz");
 
 const text = (minLength: number, maxLength: number) =>
-  fc.array(letters, { minLength, maxLength }).map((chars) => chars.join(""));
+  fc.array(letters, { minLength, maxLength }).map((chars) => Arr.join(chars, ""));
 
 const prefix = fc.oneof(
   letters,
   fc
     .tuple(letters, fc.array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz_"), { maxLength: 61 }), letters)
-    .map(([first, middle, last]) => first + middle.join("") + last),
+    .map(([first, middle, last]) => first + Arr.join(middle, "") + last),
 );
 
 // Each generated family visits every structural edge, including repeated interior underscores.
@@ -48,7 +62,7 @@ const prefixShapes = fc
     longest,
     `${first}_${last}`,
     `${first}__${last}`,
-    first + "_".repeat(61) + last,
+    first + Str.repeat(61)("_") + last,
   ]);
 
 const badPrefixShapes = fc
@@ -58,7 +72,7 @@ const badPrefixShapes = fc
     "_",
     `_${word}`,
     `${word}_`,
-    word.toUpperCase(),
+    Str.toUpperCase(word),
     long,
     // A bad character is refused in the middle and at both ends, so `${word}1` stays refused.
     `${word}${bad}${word}`,
@@ -84,55 +98,61 @@ const uuid = fc.tuple(clock, fc.uint8Array({ minLength: 10, maxLength: 10 })).ma
 
 // Independent oracle: follow the spec's bit-string recipe, not the generator's shift loop.
 const referenceEncode = (bytes: Uint8Array): string => {
-  const bits = `00${[...bytes].map((byte) => byte.toString(2).padStart(8, "0")).join("")}`;
+  const bits = `00${Arr.join(
+    Arr.map([...bytes], (byte) => Str.padStart(8, "0")(byte.toString(2))),
+    "",
+  )}`;
 
-  return Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)]).join("");
+  return Arr.join(
+    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)] ?? ""),
+    "",
+  );
 };
 
 const referenceDecode = (suffix: string): Uint8Array => {
-  const bits = [...suffix]
-    .map((char) => alphabet.indexOf(char).toString(2).padStart(5, "0"))
-    .join("")
-    .slice(2);
+  const bits = Str.slice(2)(
+    Arr.join(
+      Arr.map([...suffix], (char) => Str.padStart(5, "0")(Option.getOrThrow(Str.indexOf(char)(alphabet)).toString(2))),
+      "",
+    ),
+  );
 
-  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
+  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(Str.slice(i * 8, i * 8 + 8)(bits), 2));
 };
 
 const wire = (type: string, bytes: Uint8Array): string => (type === "" ? "" : `${type}_`) + referenceEncode(bytes);
 
-const split = (value: string): readonly [string, string] => {
-  const separator = value.lastIndexOf("_");
-
-  return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
-};
+const split = (value: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(value), {
+    onNone: (): readonly [string, string] => ["", value],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(value), Str.slice(separator + 1)(value)],
+  });
 
 const validPrefix = (type: string): boolean =>
   type.length > 0 &&
   type.length <= 63 &&
   /^[a-z]$/.test(type[0]!) &&
-  /^[a-z]$/.test(type.at(-1)!) &&
-  [...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
+  Option.exists(Str.at(type, -1), (last) => /^[a-z]$/.test(last)) &&
+  Arr.every([...type], (char) => Str.includes(char)("abcdefghijklmnopqrstuvwxyz_"));
 
-const accepts = (input: unknown, type?: string): boolean => {
-  if (typeof input !== "string") {
-    return false;
-  }
-
+/** The oracle: `input` is a well-formed ID, of `type` when one is given. A caller with a value that
+ *  may be no string at all checks `Predicate.isString` first, since no other value is an ID. */
+const accepts = (input: string, type?: string): boolean => {
   const [found, suffix] = split(input);
 
   if (!validPrefix(found) || (type !== undefined && found !== type)) {
     return false;
   }
 
-  if (found === "" && input.includes("_")) {
+  if (found === "" && Str.includes("_")(input)) {
     return false;
   }
 
-  if (suffix.length !== 26 || ![...suffix].every((char) => alphabet.includes(char))) {
+  if (suffix.length !== 26 || !Arr.every([...suffix], (char) => Str.includes(char)(alphabet))) {
     return false;
   }
 
-  if (alphabet.indexOf(suffix[0]!) > 7) {
+  if (Option.exists(Str.indexOf(suffix[0]!)(alphabet), (index) => index > 7)) {
     return false;
   }
 
@@ -145,12 +165,7 @@ const canonical = fc.tuple(prefix, uuid).map(([type, bytes]) => wire(type, bytes
 
 const unknown = fc.oneof(fc.anything(), fc.string(), canonical);
 
-const expectDecoded = <A, E>(
-  exit: Exit.Exit<A, E>,
-  ok: boolean,
-  input: unknown,
-  error: (value: unknown) => boolean,
-) => {
+const expectDecoded = <A, E>(exit: Exit.Exit<A, E>, ok: boolean, input: unknown, error: (value: E) => boolean) => {
   expect(Exit.isSuccess(exit)).toBe(ok);
 
   if (Exit.isSuccess(exit)) {
@@ -169,7 +184,7 @@ const expectDecoded = <A, E>(
 };
 
 const timestamp = (id: string): number =>
-  [...referenceDecode(split(id)[1]).slice(0, 6)].reduce((total, byte) => total * 256 + byte, 0);
+  Arr.reduce([...referenceDecode(split(id)[1]).slice(0, 6)], 0, (total, byte) => total * 256 + byte);
 
 const increasing = (ids: ReadonlyArray<string>): void => {
   expect(new Set(ids).size).toBe(ids.length);
@@ -238,7 +253,7 @@ describe("T518 Id format", () => {
           expect(Schema.is(Specific)(wire("", bytes))).toBe(false);
         }
 
-        expect(Schema.is(Id.Type)(type)).toBe(builtins.some(([name]) => name === type));
+        expect(Schema.is(Id.Type)(type)).toBe(Arr.some(builtins, ([name]) => name === type));
       }),
       options,
     );
@@ -265,7 +280,7 @@ describe("T518 Id format", () => {
           for (const schema of [builtin, Id.Input, Front.InputId]) {
             expectDecoded(
               Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(schema)(value))),
-              accepts(value, "input"),
+              Predicate.isString(value) && accepts(value, "input"),
               value,
               Schema.isSchemaError,
             );
@@ -292,7 +307,7 @@ describe("T518 Id format", () => {
 
           const exit = Effect.runSync(Effect.exit(Id.makeEffect(name)).pipe(Effect.withTracer(tracer)));
           expect(Exit.isSuccess(exit)).toBe(validPrefix(name));
-          const made = spans.filter((span) => span.name === "id.makeEffect");
+          const made = Arr.filter(spans, (span) => span.name === "id.makeEffect");
           expect(made).toHaveLength(1);
           const status = made[0]!.status;
           expect(status._tag).toBe("Ended");
@@ -380,20 +395,21 @@ describe("T518 Id format", () => {
           wrongVariant[8] = (bytes[8]! & 63) | (variant << 6);
 
           const bad = [
-            raw.toUpperCase(),
-            head + suffix.toUpperCase(),
-            head + suffix.slice(0, index) + suffix.slice(index + 1),
-            `${head + suffix.slice(0, index)}0${suffix.slice(index)}`,
+            Str.toUpperCase(raw),
+            head + Str.toUpperCase(suffix),
+            head + Str.slice(0, index)(suffix) + Str.slice(index + 1)(suffix),
+            `${head + Str.slice(0, index)(suffix)}0${Str.slice(index)(suffix)}`,
             `${raw}0`,
             // A count is never an id: an id is not derived from how many came before it.
             `${head}${count}`,
             `${raw}-${count}`,
-            head + alphabet[overflow] + suffix.slice(1),
+            head + alphabet[overflow] + Str.slice(1)(suffix),
             wire(type, wrongVersion),
             wire(type, wrongVariant),
-            ...[" ", "\t", "\n", "\r\n", "\u00a0"].flatMap((space) => [space + raw, raw + space]),
-            ...["i", "l", "o", "u", "A", "-", "_", "é", "\0"].map(
-              (char) => head + suffix.slice(0, index) + char + suffix.slice(index + 1),
+            ...Arr.flatMap([" ", "\t", "\n", "\r\n", "\u00a0"], (space) => [space + raw, raw + space]),
+            ...Arr.map(
+              ["i", "l", "o", "u", "A", "-", "_", "é", "\0"],
+              (char) => head + Str.slice(0, index)(suffix) + char + Str.slice(index + 1)(suffix),
             ),
             ...(type === "" ? [`_${suffix}`] : [type + suffix, `${type}__${suffix}`]),
           ];
@@ -479,13 +495,13 @@ describe("T518 Id format", () => {
       fc.property(unknown, prefix, (input, type) => {
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Schema)(input))),
-          accepts(input),
+          Predicate.isString(input) && accepts(input),
           input,
           Schema.isSchemaError,
         );
         expectDecoded(
           Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.make(type))(input))),
-          accepts(input, type),
+          Predicate.isString(input) && accepts(input, type),
           input,
           Schema.isSchemaError,
         );
@@ -500,8 +516,18 @@ describe("T518 Id format", () => {
         const common = Id.Schema.makeEffect(input);
         // @ts-expect-error Deliberately test runtime validation beyond the typed constructor input.
         const specific = Id.make(type).makeEffect(input);
-        expectDecoded(Effect.runSync(Effect.exit(common)), accepts(input), input, SchemaIssue.isIssue);
-        expectDecoded(Effect.runSync(Effect.exit(specific)), accepts(input, type), input, SchemaIssue.isIssue);
+        expectDecoded(
+          Effect.runSync(Effect.exit(common)),
+          Predicate.isString(input) && accepts(input),
+          input,
+          SchemaIssue.isIssue,
+        );
+        expectDecoded(
+          Effect.runSync(Effect.exit(specific)),
+          Predicate.isString(input) && accepts(input, type),
+          input,
+          SchemaIssue.isIssue,
+        );
       }),
       options,
     );
@@ -549,7 +575,7 @@ describe("T518 Id format", () => {
           wire("process", wrongVariant),
           wire("letter", bytes),
         ]) {
-          const ok = accepts(value, "process");
+          const ok = Predicate.isString(value) && accepts(value, "process");
           expectDecoded(
             Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(ProcessId)(value))),
             ok,
@@ -592,7 +618,7 @@ describe("T518 Id order and generation", () => {
         expect(accepts(yield* generator.next(Specific), type)).toBe(true);
         yield* TestClock.setTime(-at - 1);
         expectIdFailure(yield* Effect.exit(generator.next(Specific)), "clock");
-        const made = spans.filter((span) => span.name === "id.next");
+        const made = Arr.filter(spans, (span) => span.name === "id.next");
         expect(made).toHaveLength(2);
 
         for (const [index, span] of made.entries()) {
@@ -650,7 +676,7 @@ describe("T518 Id order and generation", () => {
 
           for (const id of ids) {
             expect(accepts(id, type)).toBe(true);
-            expect(id.startsWith(`${type}_`)).toBe(true);
+            expect(Str.startsWith(`${type}_`)(id)).toBe(true);
             expect(Schema.decodeSync(Specific)(id)).toBe(id);
             expect(timestamp(id)).toBe(at);
           }
@@ -670,10 +696,10 @@ describe("T518 Id order and generation", () => {
         uuid,
         prefixShapes,
         (values, tied, shapes) => {
-          const ids = [
-            ...values.map(([type, bytes]) => wire(type, bytes)),
-            ...shapes.map((type) => wire(type, tied)),
-          ].map((raw) => Id.Schema.make(raw));
+          const ids = Arr.map(
+            [...Arr.map(values, ([type, bytes]) => wire(type, bytes)), ...Arr.map(shapes, (type) => wire(type, tied))],
+            (raw) => Id.Schema.make(raw),
+          );
 
           const expected = [...ids].sort((left, right) => {
             const [lp, ls] = split(left),
@@ -979,7 +1005,7 @@ describe("T518 Id order and generation", () => {
           const suffixes: Array<string> = [];
           let highest = 0;
 
-          for (const now of [start, start, start + rollback, start, start - 1, ...deltas.map((n) => start + n)]) {
+          for (const now of [start, start, start + rollback, start, start - 1, ...Arr.map(deltas, (n) => start + n)]) {
             yield* TestClock.setTime(Math.max(0, now));
             highest = Math.max(highest, Math.max(0, now));
 
@@ -987,8 +1013,8 @@ describe("T518 Id order and generation", () => {
               chaos = yield* generator.next(Chaos);
 
             if (suffixes.length === 0) {
-              const expected = raw.reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & ((1n << 74n) - 1n);
-              const uuid = [...referenceDecode(split(input)[1])].reduce((n, byte) => (n << 8n) | BigInt(byte), 0n);
+              const expected = Arr.reduce(raw, 0n, (n, byte) => (n << 8n) | BigInt(byte)) & ((1n << 74n) - 1n);
+              const uuid = Arr.reduce([...referenceDecode(split(input)[1])], 0n, (n, byte) => (n << 8n) | BigInt(byte));
               const actual = (((uuid >> 64n) & 4095n) << 62n) | (uuid & ((1n << 62n) - 1n));
               expect(actual, "a fresh id uses the supplied entropy, not a count").toBe(expected);
             }
@@ -1022,7 +1048,7 @@ describe("T518 shared Id generator", () => {
   const checkSchedule = async (schedule: Schedule) => {
     const Specific = Id.make(schedule.type);
     const allocated: Array<string> = [];
-    const check = Specific.ast.checks?.find((check) => check._tag === "Filter");
+    const check = Option.getOrUndefined(Arr.findFirst(Specific.ast.checks ?? [], (check) => check._tag === "Filter"));
 
     if (check === undefined) {
       throw new Error("The Id schema needs its real format check");
@@ -1033,7 +1059,7 @@ describe("T518 shared Id generator", () => {
     // The real format check runs synchronously after the state write and encoding.
     // Observe there: a fiber can yield between allocation and returning to its caller.
     const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
-      if (typeof input === "string") {
+      if (Predicate.isString(input)) {
         allocated.push(input);
       }
 
@@ -1075,7 +1101,7 @@ describe("T518 shared Id generator", () => {
           }
 
           return ids;
-        }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
+        }).pipe(Effect.provide(Id.Generator.layer.pipe(Layer.provideMerge(TestClock.layer())))),
       );
 
       expect(allocated).toHaveLength(returned.length);
@@ -1087,8 +1113,8 @@ describe("T518 shared Id generator", () => {
     }
   };
 
-  it("shared fibers allocate unique, strictly increasing ids over generated schedules", async () => {
-    await fc.assert(
+  it("shared fibers allocate unique, strictly increasing ids over generated schedules", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           type: prefix,
@@ -1106,13 +1132,14 @@ describe("T518 shared Id generator", () => {
         checkSchedule,
       ),
       { ...options, numRuns: 40 },
-    );
-  });
-  it("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", async () => {
-    await checkSchedule({
-      type: "process",
-      entropy: 0,
-      batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
-    });
-  });
+    ));
+  it.live("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
+    promised(() =>
+      checkSchedule({
+        type: "process",
+        entropy: 0,
+        batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
+      }),
+    ),
+  );
 });

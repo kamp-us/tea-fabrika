@@ -7,9 +7,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
@@ -63,7 +66,8 @@ const steps = fc.constantFrom<Step>(
 );
 
 /** The build options and disk that make `step` fail with `failure` (a damaged file for a decode). */
-const world = (step: Step, failure: unknown, bad: string) => {
+const world = (step: Step, failure: object, bad: string) => {
+  // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it, and the Effect only fails, so its success type is free.
   const fails = <A>() => Effect.fail(failure as never) as Effect.Effect<A, never>;
   const damaged = Effect.succeed(bad);
 
@@ -92,7 +96,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
   };
 };
 
-const stepReason = (step: Step) => (step.startsWith("manifest") ? "table" : "read");
+const stepReason = (step: Step) => (Function.pipe(step, Str.startsWith("manifest")) ? "table" : "read");
 
 describe("T695, the build's shared callback keeps what failed", () => {
   // C5, build.ts:51 through :66, :71, :273 and :283. Plant: `const fail = (reason) => () => ...`.
@@ -115,7 +119,7 @@ describe("T695, the build's shared callback keeps what failed", () => {
         expect(error).toBeInstanceOf(BuildError);
         expect(error.reason).toBe(stepReason(step));
 
-        if (step.endsWith("_decode")) {
+        if (Function.pipe(step, Str.endsWith("_decode"))) {
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
         } else {
           expect(error.cause).toBe(failure);
@@ -142,6 +146,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
         const failure = new Error(message);
 
         const error = yield* Effect.flip(
+          // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it.
           Effect.provide(inlineStylesheet(`${ROOT}/${file}`), disk({ realPath: () => Effect.fail(failure as never) })),
         );
 
@@ -173,7 +178,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
 });
 
 /** A Rolldown plugin whose `hook` throws `failure`, as a broken plugin does. */
-const throwingPlugin = (hook: "buildStart" | "resolveId", failure: unknown) => ({
+const throwingPlugin = (hook: "buildStart" | "resolveId", failure: object) => ({
   name: "cause-probe",
   [hook]: () => {
     throw failure;
