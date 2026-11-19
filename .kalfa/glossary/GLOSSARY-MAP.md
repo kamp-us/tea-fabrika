@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Two exist so
-far: Ledger and Program. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Three exist so
+far: Ledger, Program and Identity. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -48,8 +48,10 @@ moves the line here if it does.
 - **Delivery** (`kalfa/ci/GLOSSARY.md`): getting a change onto main safely, in an order we choose.
 - **CI** (`kalfa/ci/GLOSSARY.md`): one CI execution for one revision (a build), its pieces (jobs),
   and choosing which builds start first (priority, admission).
-- **Access** (`next/packages/libfabrika/src/access/GLOSSARY.md`): who someone is, and what they may
-  do.
+- **Identity** ([`kalfa/identity/GLOSSARY.md`](../../kalfa/identity/GLOSSARY.md)): who is acting:
+  keys, clients, and the humans and agents they act for.
+- **Permissions** (no glossary yet): what a human or agent may do, and the roles owner, admin and
+  member.
 - **Configuration** (`kalfa/config/GLOSSARY.md`): settings that should match a file, and drift.
 - **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in chat apps.
 - **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
@@ -78,8 +80,9 @@ its words are ours.
   and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
   words (pull request, check run, ruleset) into Code hosting's.
 - **Delivery uses CI.** A change lands only when the builds it needs have passed.
-- **Access and Configuration are asked by many.** Any context may ask who someone is, or read a
-  setting, and neither owns the question's words.
+- **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
+  what they may do, or read a setting, and none owns the question's words.
+- **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
   words into ours.
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
@@ -89,6 +92,8 @@ its words are ours.
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/provider-github`.
 - A word that means two things in two contexts gets an entry in each glossary and a line here.
+- **Recovery** means two things: in Program, a process getting back its saved state; in Identity, a
+  human getting back in after losing every device.
 
 ## Open clashes
 
@@ -96,7 +101,7 @@ Borders that are still fuzzy, one line each.
 
 - **Delivery vs Pipeline:** both own "a change on its way to main"; unclear where one stops.
 - **Delivery vs CI:** who owns priority, the order builds and merges go in.
-- **Access vs the Ledger's `WritePolicy`:** who may write is Access's question, but the ledger
-  enforces it.
+- **Permissions vs the Ledger's `WritePolicy`:** who may write is Permissions' question, but the
+  ledger enforces it.
 - **Conversation vs Tracker:** an ask in chat and an ask in the inbox may be one thing.
 - **Configuration's drift:** a context of its own, or a pattern other contexts use.
