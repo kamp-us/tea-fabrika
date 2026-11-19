@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-19-changes-lint-rule-skips-steps-before-classify",
+  "date": "2026-11-19",
+  "by": "review",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/workflow-lint/changes.ts",
+    "line": 88
+  },
+  "says": "The rule that every pnpm install, pnpm/action-setup or actions/setup-node step in the changes job is guarded and ordered read only the steps after the classify step, so one placed before classify escaped it.",
+  "proof": "In a scratch copy at ae8be62a, a plant that inserts { run: 'pnpm install --frozen-lockfile' } before the classify step, and one with an unguarded actions/setup-node@v7, both linted clean. The base rule read every changes step.",
+  "cost": "An unguarded install or setup in front of the classifier could fail the changes job, and through it every check, with no lint red. Fixed in the same pull request's fix round.",
+  "head": "ae8be62ad6707e5b62d6c621f7b1a79f808057c3",
+  "ticket": "kamp-us/tea-fabrika#810",
+  "pr": "kamp-us/tea-fabrika#1666"
+}

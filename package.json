@@ -39,6 +39,7 @@
     "@demlik/structure-sweep": "catalog:",
     "@effect/tsgo": "catalog:",
     "@effect/vitest": "catalog:",
+    "@kalfa/ci": "workspace:*",
     "@kalfa/config": "workspace:*",
     "@kalfa/records": "workspace:*",
     "@kampus/vitest": "workspace:*",

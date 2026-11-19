@@ -25,7 +25,9 @@
 // With no scheduled proof at the head, the newest exact-head automatic check can prove the related
 // set. It must be a successful ready PR run from this repository, with select, related and the real
 // ci-required check complete. Red or unfinished new-route CI refuses. Legacy and draft checks do
-// not count. With no matching automatic route, the branch's newest older scheduled run counts: a green full run arms with
+// not count. A docs-only change (@kalfa/ci/DocsOnly) needs no select or related legs: its check skipped
+// its heavy jobs by design, so ci-required green, with every other job green or skipped, proves it (kind
+// `docs`). With no matching automatic route, the branch's newest older scheduled run counts: a green full run arms with
 // the note; a changed-set run, or one red or not ended, refuses. Read through its module:
 // `Arm.arm(...)`.
 //
@@ -34,6 +36,7 @@
 // the plain tooling laws its change reaches (related.ts's `onMergeLine`). Only main's full run runs
 // them, after the merge. Arm reads each job's name and how it ended, never which laws it ran, so
 // nothing here names a project.
+import { docsOnly } from "@kalfa/ci/DocsOnly";
 import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
@@ -46,11 +49,6 @@ import { type Detail, PullRequests } from "./PullRequests.ts";
 export const WORKFLOW = "scheduled.yaml";
 
 const AUTOMATIC = "check.yaml";
-
-/** The folders of a docs pull request: only words, which no full run tests. */
-export const DOCS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/"] as const;
-
-export const isDocs = (path: string): boolean => DOCS.some((folder) => path.startsWith(folder));
 
 /**
  * The jobs a branch's proof run skips by design (0590): `select` on a hand start on main, the test
@@ -66,8 +64,11 @@ export const passes = (job: Job): boolean =>
   job.status === "completed" &&
   (job.conclusion === "success" || (job.conclusion === "skipped" && SKIPPED_BY_DESIGN.includes(job.name)));
 
-/** What a proof run tested: every test, or the changed set of its head's diff (0590). */
-const Kind = Schema.Literals(["full", "changed", "automatic"]);
+/**
+ * What a proof run tested: every test, the changed set of its head's diff (0590), or, for a docs-only
+ * change, its automatic check alone (`docs`).
+ */
+const Kind = Schema.Literals(["full", "changed", "automatic", "docs"]);
 
 type Kind = typeof Kind.Type;
 
@@ -133,8 +134,11 @@ const judge = Effect.fn("Arm.judge")(function* (run: Run) {
     : Verdict.cases.red.make({ run: run.id, jobs: bad });
 });
 
-/** Ready CI's required check covers both the existing next matrix and the related tooling matrix. */
-const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head: string) {
+/**
+ * Ready CI's required check covers both the existing next matrix and the related tooling matrix. A
+ * docs-only change (`docs`) takes the other route the file's header names: its skipped heavy jobs prove it.
+ */
+const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head: string, docs: boolean) {
   const runs = yield* Runs;
   const { at } = pick(head, yield* runs.on(AUTOMATIC, branch));
 
@@ -175,6 +179,23 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
     );
   }
 
+  const succeeded = (name: string) => {
+    const found = jobs.filter((job) => job.name === name);
+
+    return found.length === 1 && found.every((job) => job.status === "completed" && job.conclusion === "success");
+  };
+
+  // A docs-only change's heavy jobs are skipped by design (@kalfa/ci/DocsOnly), so the run proves it when
+  // ci-required passed and every job ended green or skipped. A draft or legacy run never does.
+  if (
+    docs &&
+    !jobs.some((job) => job.name === "ci-required (draft)" || job.name === "lint") &&
+    succeeded("ci-required") &&
+    jobs.every((job) => job.status === "completed" && (job.conclusion === "success" || job.conclusion === "skipped"))
+  ) {
+    return Option.some(Verdict.cases.green.make({ run: run.id, kind: "docs" }));
+  }
+
   const related = jobs.filter((job) => job.name.startsWith("related"));
 
   // A legacy or draft run never stands in for ready CI's related coverage, its plain tooling laws.
@@ -184,12 +205,6 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
   ) {
     return Option.none<Verdict>();
   }
-
-  const succeeded = (name: string) => {
-    const found = jobs.filter((job) => job.name === name);
-
-    return found.length === 1 && found.every((job) => job.status === "completed" && job.conclusion === "success");
-  };
 
   const skipped = related.length === 1 && related[0]?.name === "related" && related[0]?.conclusion === "skipped";
 
@@ -217,8 +232,11 @@ const automaticAt = Effect.fn("Arm.automaticAt")(function* (branch: string, head
       );
 });
 
-/** The full run on `branch` that `head` is judged by: the newest at the head, else the newest older one. */
-export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, head: string) {
+/**
+ * The full run on `branch` that `head` is judged by: the newest at the head, else the newest older one.
+ * `docs` says the change is docs only (@kalfa/ci/DocsOnly), which lets its automatic check prove the head.
+ */
+export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, head: string, docs: boolean) {
   const runs = yield* Runs;
   const { at, newest } = pick(head, yield* runs.on(WORKFLOW, branch));
 
@@ -226,7 +244,7 @@ export const fullRunAt = Effect.fn("Arm.fullRunAt")(function* (branch: string, h
     return FullRun.cases.at.make({ verdict: yield* judge(at.value) });
   }
 
-  const automatic = yield* automaticAt(branch, head);
+  const automatic = yield* automaticAt(branch, head, docs);
 
   if (Option.isSome(automatic)) {
     return FullRun.cases.at.make({ verdict: automatic.value });
@@ -352,10 +370,29 @@ const redReport = Effect.fn("Arm.redReport")(function* (
 const proofNote = "automatic ready and queue CI provide the required checks";
 
 /** The line a head with no full run of its own is armed with (0544). */
-const unrunNote = (seen: string, oid: string, docsOnly: boolean): string =>
+const unrunNote = (seen: string, oid: string, docs: boolean): string =>
   `no full run at ${oid.slice(0, 12)}${seen}; arming as 0544 allows (${
-    docsOnly ? `a docs pull request, only ${DOCS.join(", ")} files, starts no full run` : proofNote
+    docs ? "a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run" : proofNote
   })`;
+
+/** What a green run arms with: the kind of run it was, and the head it was green at. */
+const judgedBy = (run: number, kind: Kind, oid: string): string => {
+  const head = oid.slice(0, 12);
+
+  if (kind === "full") {
+    return `full run ${run} green on every job at ${head}`;
+  }
+
+  if (kind === "automatic") {
+    return `automatic ready check ${run} green with related-test coverage at ${head}`;
+  }
+
+  if (kind === "docs") {
+    return `automatic ready check ${run} green at ${head}: docs only (@kalfa/ci/DocsOnly), so CI skipped its heavy jobs and ci-required passed`;
+  }
+
+  return `changed-set run ${run} green on every job at ${head}, the tests this change reaches (0590)`;
+};
 
 export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const prs = yield* PullRequests;
@@ -382,9 +419,9 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   }
 
   const files = yield* prs.files(found.number);
-  const docsOnly = files.length > 0 && files.every(isDocs);
+  const docs = docsOnly(files);
 
-  const note = (seen: string) => Effect.succeed(unrunNote(seen, found.oid, docsOnly));
+  const note = (seen: string) => Effect.succeed(unrunNote(seen, found.oid, docs));
 
   // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
   const judged = (
@@ -402,20 +439,11 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
         Effect.flatMap(redReport(a.repo, run, jobs, reason), (report) => Effect.fail(refuse(`${place}: ${report}`))),
     });
 
-  const full = yield* fullRunAt(found.head, found.oid);
+  const full = yield* fullRunAt(found.head, found.oid, docs);
 
   const said = yield* FullRun.match(full, {
     none: () => note(""),
-    at: ({ verdict }) =>
-      judged(verdict, "at this head", (run, kind) =>
-        Effect.succeed(
-          kind === "full"
-            ? `full run ${run} green on every job at ${found.oid.slice(0, 12)}`
-            : kind === "automatic"
-              ? `automatic ready check ${run} green with related-test coverage at ${found.oid.slice(0, 12)}`
-              : `changed-set run ${run} green on every job at ${found.oid.slice(0, 12)}, the tests this change reaches (0590)`,
-        ),
-      ),
+    at: ({ verdict }) => judged(verdict, "at this head", (run, kind) => Effect.succeed(judgedBy(run, kind, found.oid))),
     older: ({ head, verdict }) => {
       const place = `no full run at this head, and at the older head ${head.slice(0, 12)}`;
 
