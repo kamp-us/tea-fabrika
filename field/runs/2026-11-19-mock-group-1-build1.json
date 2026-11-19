@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-mock-group-1-build1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1665",
+  "started": "2026-11-19T01:00:00-08:00",
+  "ended": "2026-11-19T01:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Group 1 of the mock sweep for ticket 1067, in next/ and our lint tooling, with no plan step and no test writer: one builder wrote the laws and the one product change from the approved plans docs/plan/quests/mock-lib-top-PLAN.md and docs/plan/quests/mock-gateway-processes-telemetry-PLAN.md. Branch fabrikalfa/mock-group-1, cut from main at 75b436003. Work: law M3 of the processes slice (ProcessIdGenerator.test.ts draws its bytes through generatorWith, no spy; ProcessIdGenerator.ts gains the static layerWithGenerator, since layer provided Id.Generator.layer inside itself); the vi lock pair for libfabrika's top files, gateway, processes and telemetry, as its own pair of blocks at warn; plants.test.ts updated for it; the pattern doc .patterns/effect-crypto-through-services.md made exact; one finding row for the plan's M3 wiring.",
+  "note": "Node 22.23.5 was first on PATH (the repo pins 26.13.0), TYPESAFE_API_KEY unset. Commands and results: vitest from next/packages/libfabrika on src/processes/ProcessIdGenerator.test.ts (7 passed, without CI=1); from the repo root, CI=1 nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts, oxlint-plugins/plants.test.ts and oxlint-plugins/advice.test.ts (3 files, 296 passed; the root config refuses Node 22 without CI=1); the same two oxlint-plugins files by name filter during the plants (V1, M1, L10, L1: 40 passed with the lock as written); pnpm format (clean); pnpm lint (three whole runs, each with exactly one of its 21 parts killed by the kernel for memory while the parts ran in parallel: lint:dead in the first, lint:promise-types in the second and third; each of those alone passed, lint:dead with 'unreachable ledger: PASS' and lint:promise-types with 0 findings; then all 21 parts run one at a time, with the finding row and this run row in place, exited 0 each; oxlint itself printed 0 blocking, 1224 advice, the same count as before the lock); pnpm typecheck inside next/packages/libfabrika (clean, 9 seconds); pnpm typecheck inside oxlint-plugins (clean, 2 seconds); leak grep on commits and on the diff before each push (clean); rg for vi.fn, vi.mock, vi.doMock, vi.spyOn, vi.stubEnv and vi as in the top files, gateway, processes and telemetry (no match). A throwaway oxlint config in the scratchpad showed that a `src/*` override glob matches a file directly under src and not one in a subfolder. Not run: the full vitest suite and the changed-files run (the lead's), and no launchd, Electron or process-signal law (ProcessIdGenerator.test.ts is in memory and reads no host). The started and ended times are approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "M3, next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts",
+      "plant": "Id.ts makeGenerator draws from globalThis.crypto.getRandomValues again, past SecureRandom",
+      "result": "red"
+    },
+    {
+      "law": "M3, next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts",
+      "plant": "the law provides Id.Generator.layer in place of generatorWith(...)",
+      "result": "red"
+    },
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (V1 coverage; M1 walks only the folders the config lists)",
+      "plant": ".oxlintrc.json: processes/** deleted from the first block of the new vi pair",
+      "result": "red"
+    },
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (VI_PROPERTIES scenario and V1)",
+      "plant": ".oxlintrc.json: the five vi entries dropped from eslint/no-restricted-properties in both new blocks, so the chained lines pass",
+      "result": "red"
+    },
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (V1, the REFLECT plant in each new path)",
+      "plant": ".oxlintrc.json: the Reflect has entry dropped from the first new block, an entry lost",
+      "result": "red"
+    }
+  ]
+}

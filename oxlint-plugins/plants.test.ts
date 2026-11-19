@@ -1113,9 +1113,11 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
       // leftover list block, blocking or warning, makes a fourth or a second list. Each of the three
       // base blocks has one copy right after it for libfabrika's files but its tests, with the two
       // `process` entries added (M13), so the order is each block and then its copy, and client/'s
-      // copy comes after the warn block's. Between the warn blocks and client/ sit the `vi` lock's two blocks
-      // for the libfabrika folders at zero (V1): they write out again the entries their folders took, at
-      // error, so no list of leftovers is among them. The two last are the mock sweep's `vi` lock for the
+      // copy comes after the warn block's. Between the warn blocks and client/ sit the `vi` lock's four blocks
+      // for libfabrika (V1): the pair for the folders at zero writes out again the entries its folders took, at
+      // error, and the pair for the top files and `gateway/`, `processes/` and `telemetry/`, which still advise on
+      // JSON.parse, writes them out again at warn. A list of folders after the warn blocks is that second pair,
+      // so no list of leftovers is among them. The two last are the mock sweep's `vi` lock for the
       // app's e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
       // file sets takes: the warn block's for the folder's own files, `next/**/*`'s for `node/`.
       expect(
@@ -1128,6 +1130,8 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
         "a list of folders",
         "next/packages/libfabrika/src/node/repositories/**",
         "next/packages/libfabrika/src/node/repositories/**",
+        "a list of folders",
+        "a list of folders",
         "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/client/**",
         "next/apps/fabrika/e2e/*",
@@ -1143,7 +1147,7 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
 
           return Arr.isArray(setting) ? setting[0] : setting;
         }),
-      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "deny", "deny", "warn", "deny"]);
+      ).toEqual(["deny", "deny", "warn", "warn", "deny", "deny", "warn", "warn", "deny", "deny", "warn", "deny"]);
     });
   }, 120_000);
 });
@@ -1268,14 +1272,23 @@ describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's
   }, 180_000);
 });
 
+/** The libfabrika folders of the `vi` lock that still hold a JSON.parse oracle, so JSON.parse advises there. */
+const ADVISING_FOLDERS: ReadonlyArray<string> = [
+  LIBFABRIKA_SRC,
+  `${LIBFABRIKA_SRC}/gateway`,
+  `${LIBFABRIKA_SRC}/processes`,
+  `${LIBFABRIKA_SRC}/telemetry`,
+];
+
 describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block that sets the vitest rule holds it, and loses no entry", () => {
   // V1. scenario: the repo's own config, read by oxlint's own --print-config. Each glob of each block that
   // sets `vitest/no-restricted-vi-methods` gets a product file, a test-support file and a test file, each with
   // the `vi` lines of VI_METHODS and VI_PROPERTIES. A line is held when either plant's rule refuses it, which
   // is the pair. A block's options replace an earlier block's, so a folder that joins the lock must carry the
-  // entries it took before: REFLECT and TAGGED_ERROR everywhere, a JSON.parse line in next/ (blocking, since
-  // the lock's folders are at zero), and the two `process` entries in libfabrika's files but its `*.test.ts`
-  // (M13). No entry is lost, and none is gained.
+  // entries it took before: REFLECT and TAGGED_ERROR everywhere, a JSON.parse line in next/ (blocking in a
+  // folder at zero, advising in one of ADVISING_FOLDERS, which still hold a JSON.parse oracle and keep the
+  // level of the warn blocks they took it from), and the two `process` entries in libfabrika's files but its
+  // `*.test.ts` (M13). No entry is lost, and none is gained.
   // Plants: (a) drop the folder from the lock's `files`, and its lines are not held, red on the coverage;
   // (b) drop the `vi` entries from `eslint/no-restricted-properties` in its blocks, and the chained lines are
   // not held; (c) delete the `JSON.parse` entry or a `process` entry from one block, and that entry's line is
@@ -1289,8 +1302,15 @@ describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block 
         ),
       );
 
-      // Coverage: the tooling's folder, and the libfabrika folder that joined with node/repositories.
-      expect(globs).toEqual(expect.arrayContaining(["oxlint-plugins/**", `${LIBFABRIKA_SRC}/node/repositories/**`]));
+      // Coverage: the tooling's folder, the libfabrika folder that joined with node/repositories, and the top
+      // files and three folders that joined at warn.
+      expect(globs).toEqual(
+        expect.arrayContaining([
+          "oxlint-plugins/**",
+          `${LIBFABRIKA_SRC}/node/repositories/**`,
+          ...Arr.map(ADVISING_FOLDERS, (folder) => (folder === LIBFABRIKA_SRC ? `${folder}/*` : `${folder}/**`)),
+        ]),
+      );
 
       const folders = Arr.dedupe(Arr.map(globs, folderOf));
 
@@ -1358,16 +1378,17 @@ describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block 
         );
       }
 
-      // The level a folder took the JSON.parse entry at is kept for the tooling's none, and a libfabrika lock
-      // folder is at zero for it, so it blocks there: an error, never a warning (advice.ts: a warn line with no
-      // fire fails). The app's e2e lock keeps the level of the block it writes out again, which L10 holds.
+      // The level a folder took the JSON.parse entry at is kept for the tooling's none. A libfabrika lock folder
+      // at zero for it blocks there: an error, never a warning (advice.ts: a warn line with no fire fails). The
+      // top files and `gateway/`, `processes/` and `telemetry/` still advise, so they keep the warning. The
+      // app's e2e lock keeps the level of the block it writes out again, which L10 holds.
       for (const { folder, name, file } of planted) {
         if (name === "parse" && Str.startsWith(LIBFABRIKA_SRC)(folder)) {
           const fires = Arr.filter(current, (d) => d.filename === file && d.code === parse.code);
           expect(
             Arr.map(fires, (d) => d.severity),
             file,
-          ).toEqual(["error"]);
+          ).toEqual([ADVISING_FOLDERS.includes(folder) ? "warning" : "error"]);
         }
       }
     });
