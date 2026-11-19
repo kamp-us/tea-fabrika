@@ -32,8 +32,8 @@ moves the line here if it does.
 - **Clients and Frame** (`next/packages/tuval/GLOSSARY.md`): the app side: how clients reach the
   brain, and the window a person sees.
 - **Delivery** (`kalfa/ci/GLOSSARY.md`): getting a change onto main safely, in an order we choose.
-- **Runs** (`kalfa/ci/GLOSSARY.md`, or its own folder if it outgrows it): running checks, and what
-  runs first.
+- **CI** (`kalfa/ci/GLOSSARY.md`): one CI execution for one revision (a build), its pieces (jobs),
+  and choosing which builds start first (priority, admission).
 - **Access** (`next/packages/libfabrika/src/access/GLOSSARY.md`): who someone is, and what they may
   do.
 - **Configuration** (`kalfa/config/GLOSSARY.md`): settings that should match a file, and drift.
@@ -63,7 +63,7 @@ its words are ours.
 - **A git provider implements Source control.** `@kalfa/provider-github` implements Code hosting
   and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
   words (pull request, check run, ruleset) into Code hosting's.
-- **Delivery uses Runs.** A change lands only when the checks it needs have run.
+- **Delivery uses CI.** A change lands only when the builds it needs have passed.
 - **Access and Configuration are asked by many.** Any context may ask who someone is, or read a
   setting, and neither owns the question's words.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
@@ -71,6 +71,9 @@ its words are ours.
 - **Clients and Frame speak to Runtime** over a published protocol, and show what Tracker and
   Pipeline say.
 - **Records talk about every context** and translate nothing.
+- **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
+  CI says build and job, Code hosting says check, Runtime says process. A GitHub "workflow run" is
+  translated into a build inside `@kalfa/provider-github`.
 - A word that means two things in two contexts gets an entry in each glossary and a line here.
 
 ## Open clashes
@@ -78,7 +81,7 @@ its words are ours.
 Borders that are still fuzzy, one line each.
 
 - **Delivery vs Pipeline:** both own "a change on its way to main"; unclear where one stops.
-- **Delivery vs Runs:** who owns priority, the order checks and merges go in.
+- **Delivery vs CI:** who owns priority, the order builds and merges go in.
 - **Access vs the Ledger's `WritePolicy`:** who may write is Access's question, but the ledger
   enforces it.
 - **Conversation vs Tracker:** an ask in chat and an ask in the inbox may be one thing.
