@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-mock-node-repositories-lock-at-error",
+  "date": "2026-11-18",
+  "quests": ["kamp-us/tea-fabrika#1647"],
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "primitive": "Check",
+  "what": "The node/repositories plan (docs/plan/quests/mock-node-repositories-PLAN.md, the lock's amendment of 2026-11-16) sketched the folder's vi lock as one block at warn that writes out the JSON.parse entry again. Its tests step found two facts against that. (1) At warn, pnpm lint fails: oxlint-plugins/advice.ts's stale check refuses a warn line with no fire left in its folder, and the folder has no JSON.parse call. So the lock's no-restricted-properties is at error, which makes JSON.parse blocking in this one folder, at 0 fires. (2) One block is not enough: the folder's product files also take the process.stdout and process.stderr entries the cloudflare slice's M13 added, and its test files do not, so the lock is two blocks, one for the folder and one for its files but its tests. Adding the folder to the existing oxlint-plugins/** lock block would have dropped JSON.parse and both process entries; a plant showed it red. The lead ruled both: error is stricter at 0 fires, as 0523 allows, and no loosening.",
+  "cause": "The plan read the warn level from the block it copied and did not run pnpm lint on its sketch; the stale check and M13's entries landed or applied after it counted the folder's entries.",
+  "fix": "A plan that writes out a rule's options again lists the entries per file kind (test, test support, product) from oxlint --print-config at the step's start, and names the level that pnpm lint's advice and stale checks accept. Here the tests step did both, and its V1 scenario in oxlint-plugins/plants.test.ts checks each entry is kept in a test, test-support and product path.",
+  "test": "The next libfabrika folder that joins the lock joins both new blocks' files, and V1 stays green with no other change.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1647"]
+}

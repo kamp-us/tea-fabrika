@@ -551,9 +551,9 @@ for today's app (tile guidelines and pipe colors, the design package and typogra
 keybindings, the inbox, the move to Manti) go to plan and build in parallel with the pipeline
 work, so what is wrong shows early. Every "after ticket 117" below that holds one of them back no
 longer holds. A plan that only builds a decided note is approved by the lead agent; one that
-raises a new design call goes to the owner. When the lead fills agent slots, these quests count as
-much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
-[0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
+raises a new design call goes to the owner. Today's version is frozen now: these foundations are
+built in `next/`, and no agent slot goes to a today's-app lane
+([0525](../../.decisions/0525-todays-version-is-frozen.md)).
 
 - **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`. *2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): the order is `fabsh` v1 as today's terminal, then pipe slice 1, then `summon` as today's `tsh` has it, then `join` as IRC has it.*
 

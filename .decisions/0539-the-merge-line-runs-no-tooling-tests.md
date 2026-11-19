@@ -1,7 +1,8 @@
 ---
 id: 0539
 title: The merge line runs no tooling tests, a tooling pull request runs its narrow tests locally, and the 3-hour schedule runs the whole tooling project
-status: amended-in-part by [0584](0584-a-tests-kind-follows-what-it-uses.md)
+status: superseded
+successor: "0584"
 date: 2026-11-14
 tags: [ci, tests, tooling, schedule, merge-queue]
 ---

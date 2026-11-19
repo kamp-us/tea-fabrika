@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-transport-s2-build2",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1638",
+  "started": "2026-11-18T15:50:00-08:00",
+  "ended": "2026-11-18T16:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build round 2 for slice 2 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md, ticket 1067, next/ only) on fabrikalfa/mock-transport at 82febb64, the two changes round 1 reported. In next/packages/libfabrika/src/cloudflare/runtime.ts, projectStorage's error mapping is now renderedStorage: an AdmissionError whose cause is a LedgerError leaves as a bare LedgerError with its reason alone, as one did before slice 2, and any other error, a GatewayError inside an AdmissionError included, passes as it is. Law L11 in cloudflare/connection.test.ts holds it (no law held projectStorage's stripping before); its plant drops the AdmissionError branch and the law goes red. In next/apps/fabrika/src/door.integration.test.ts, review 3.1 now expects AdmissionError holding the old GatewayError Storage failure with cause undefined, comparing everything it compared before. All five brief law files, Answer.test.ts, connection.test.ts, readers.laws.test.ts and door.integration.test.ts are green.",
+  "note": "Started and ended are approximate; usage and cost are not recorded. Model and effort are the requested values. Node 22.23.5 here, the pin is Node 26, so each narrow run used CI=1, one file at a time under nice -n 19 and --maxWorkers=1. The first lint and typecheck runs lost a part to the kernel's memory kill and were run again.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "costUsd": null,
+  "billed": null
+}

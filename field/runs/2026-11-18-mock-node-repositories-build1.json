@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-node-repositories-build1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1647",
+  "started": "2026-11-18T15:46:00-08:00",
+  "ended": "2026-11-18T15:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build step for the slice mock-node-repositories of docs/plan/quests/mock-node-repositories-PLAN.md, in next/ and our lint tooling (branch fabrikalfa/mock-node-repositories, head eac8d38). The plan's amendment of 2026-11-15 (ruling 5) says this slice changes no product file, so the build changes nothing: git diff of the merge base with main against HEAD touches only .oxlintrc.json, oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts, OpenRepository.test.ts, OpenRepository.composed.integration.test.ts and field rows. Every check the amendment names is green at the tests step's head, so there is nothing to send back.",
+  "note": "Node 26.13.0 from the scratchpad was first on PATH, TYPESAFE_API_KEY unset. Commands and results: nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts and OpenRepository.composed.integration.test.ts (2 files, 4 passed); the same on oxlint-plugins/plants.test.ts and oxlint-plugins/advice.test.ts (289 passed); pnpm lint (oxlint: 0 blocking, 1222 advice; every part passed); pnpm typecheck inside next/packages/libfabrika (clean); pnpm typecheck inside oxlint-plugins (clean, about 2 seconds); rg -n '\\bvi\\.' next/packages/libfabrika/src/node/repositories (no match, exit 1). Two things happened on the way and are not code faults. First, the first pnpm lint run had its lint:promise-types part killed by the kernel for memory while the parts ran in parallel; pnpm -s lint:promise-types alone reported 0 findings, and a second whole pnpm lint then passed with exit 0. Second, the first libfabrika typecheck failed in next/packages/libfabrika/src/node/build/bundle-warnings.test.ts (a file from pull request 1648, not in this slice's diff; TestConsole.warnLines missing) because this worktree's node_modules held an effect patch (hash 062265) older than the lockfile's (hash 0bca9e); pnpm install --frozen-lockfile (the offline form failed on the supply-chain metadata check) relinked it and the typecheck went clean. No tracked file was changed by it. Every green result above was re-run after the install. The ratchet and the loosening script were not run: no product or list file changed. The started and ended times are approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

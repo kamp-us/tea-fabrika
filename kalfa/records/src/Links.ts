@@ -4,10 +4,11 @@
  * its successor.
  *
  * Read: `AGENTS.md` and `CLAUDE.md` files, `.agents/skills/`, `docs/guidelines/`, `.runbooks/`,
- * `docs/plan/`, `.patterns/` and `.glossary/` (Markdown), and the comments of tracked `.ts`, `.tsx`,
- * `.js`, `.mjs`, `.sh` and `.yaml` files. Not read: `.decisions/`, `experiments/`, `field/` and
- * `docs/direction/`, which are history, fenced code, symlinks, and a bare number, which is too often a
- * count or a port.
+ * `docs/plan/` (but not `docs/plan/quests/`), `.patterns/` and `.glossary/` (Markdown), and the comments of
+ * tracked `.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. Not read: `.decisions/`, `experiments/`,
+ * `field/`, `docs/direction/` and `docs/plan/quests/`, which are history, fenced code, symlinks, and a bare
+ * number, which is too often a count or a port. A signed plan in `docs/plan/quests/` is a record of what was
+ * agreed, held by its body hash, so the check does not read it.
  */
 import { Effect, Path, Result } from "effect";
 import { comments } from "./Comments.ts";
@@ -17,7 +18,7 @@ import { markdown } from "./Markdown.ts";
 import { decodeStatus } from "./Status.ts";
 import { read, Tracked } from "./Tracked.ts";
 
-const HISTORY = [".decisions/", "experiments/", "field/", "docs/direction/"];
+const HISTORY = [".decisions/", "experiments/", "field/", "docs/direction/", "docs/plan/quests/"];
 
 const MARKDOWN = [".agents/skills/", "docs/guidelines/", ".runbooks/", "docs/plan/", ".patterns/", ".glossary/"];
 

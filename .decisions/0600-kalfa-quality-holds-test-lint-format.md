@@ -58,9 +58,8 @@ plant into product code; 11 edit the test file's own fake.
   subpaths share, such as Schemas and settings.
 - Each tool is an optional peer dependency, so a project installs only the tools it imports. This is
   how drizzle-orm ships one driver per subpath.
-- It replaces `@kalfa/vitest` and `@kalfa/oxlint`. Everything 0557 and
-  [0579](0579-property-laws-use-it-prop.md) say of `@kalfa/vitest` holds for
-  `@kalfa/quality/vitest`; everything 0585 says of `@kalfa/oxlint` holds for `@kalfa/quality/oxlint`.
+- It replaces `@kalfa/vitest` and `@kalfa/oxlint` with `@kalfa/quality/vitest` and
+  `@kalfa/quality/oxlint`.
 - **Its first build is the plant runner on Stryker**, in `/stryker`, built from the pipeline's
   driver:
   - A plant names its mutant by code shape. If the target is not found exactly once, the plant fails
@@ -80,8 +79,8 @@ plant into product code; 11 edit the test file's own fake.
 
 ## Consequences
 
-- 0557, 0579 and 0585 are amended in part: the package name and 0585's count of six. The rest of
-  each holds. 0585's build order changes only in that `/stryker` starts now, beside `@kalfa/config`.
+- 0557, 0579 and 0585 are amended in part: the package name and 0585's count of six.
+  0585's build order changes only in that `/stryker` starts now, beside `@kalfa/config`.
 - A breaking change in one tool bumps the whole package's major version. That matters only once it
   is published, and it stays private until the owner says publish (0556). If release coupling
   hurts, a subpath can split out with almost no import changes.

@@ -500,7 +500,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
     () =>
       Effect.gen(function* () {
         const { stepper } = yield* Effect.promise(() => import("@kampus/libfabrika"));
-        const { counter } = yield* Effect.promise(() => import("@kampus/counter"));
+        const { counter, CounterMsg } = yield* Effect.promise(() => import("@kampus/counter"));
         const program = Result.getOrThrow(stepper(counter));
         const inputs = Rec.keys(counter.inputs);
         const pressedTypes = new Set<string>();
@@ -547,14 +547,19 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
 
                   for (const [n, pick] of picks.entries()) {
                     const model = step.model;
-                    const available = Arr.filter(inputs, (type) => program.step(model, { type })._tag === "stepped");
+
+                    const available = Arr.filter(
+                      inputs,
+                      (type) => program.step(model, CounterMsg.cases[type].make({}))._tag === "stepped",
+                    );
+
                     const type = available[pick % available.length]!;
                     pressedTypes.add(type);
                     await button(type).click();
                     const sent = (await pressed()).slice(start);
                     expect(sent, "each press emits one Msg, the program's own").toEqual([
                       ...sent.slice(0, n),
-                      { type },
+                      CounterMsg.cases[type].make({}),
                     ]);
                     expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
                     // The view never steps the program: until the next view arrives, the count stays.
@@ -562,7 +567,7 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                       // SAFETY: this step came from the same counter program, whose view is always `{ count }`.
                       String((step.view as { count: number }).count),
                     );
-                    step = program.step(model, { type });
+                    step = program.step(model, CounterMsg.cases[type].make({}));
                     assert(step._tag === "stepped");
                     await render(step.view);
                     expect(await count.textContent(), "the shown count is the program's").toBe(

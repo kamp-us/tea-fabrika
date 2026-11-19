@@ -32,11 +32,18 @@ never fails the command.
 | `link` | [0607](../../.decisions/0607-every-link-lands-on-a-live-record.md) | A Markdown link, or a `.decisions/NNNN-slug.md` path in a code comment, to a superseded record. The finding names the live record at the end of the chain of successors. |
 | `map` (advice) | [0610](../../.decisions/0610-agents-md-follows-memory-guide.md) | A tracked `AGENTS.md`, the root or one folder down, with more than 200 lines. The 200 is `maxLines` in `MapSize.ts`: Claude Code's memory guide says to keep each file "under 200 lines per file" ([memory](https://code.claude.com/docs/en/memory)), as 0610 says. Lines count as `wc -l` counts them. A constant, not a setting. |
 
+A fifth check, `runbook` ([0571](../../.decisions/0571-runbooks-live-in-top-level-runbooks.md),
+[0611](../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md)), runs only by its name, and
+`pnpm lint` runs it: each tracked `.runbooks/*.md` has a `summary` and a `follows` list whose ids are
+accepted records, each `.runbooks/sev-*.md` has the level-two headings Trigger, Roles, Steps, Exit and
+Comms, and `.agents/skills/sev/SKILL.md` links every sev runbook and none that is not there.
+
 The link check reads `AGENTS.md` and `CLAUDE.md` files, `.agents/skills/`, `docs/guidelines/`,
-`.runbooks/`, `docs/plan/`, `.patterns/` and `.glossary/` (Markdown), and the comments of tracked
-`.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does not read `.decisions/`, `experiments/`,
-`field/` or `docs/direction/`, which are history, nor fenced code, nor symlinks. A bare number is not
-a link.
+`.runbooks/`, `docs/plan/` (but not `docs/plan/quests/`, below), `.patterns/` and `.glossary/`
+(Markdown), and the comments of tracked `.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does
+not read `.decisions/`, `experiments/`, `field/`, `docs/direction/` or `docs/plan/quests/`, which are
+history, nor fenced code, nor symlinks. A signed plan in `docs/plan/quests/` is a record of what was
+agreed, held by its body hash, so the check skips it. A bare number is not a link.
 
 Markdown is read by micromark into mdast (`mdast-util-from-markdown` with GitHub's tables, the
 reader `programs/markdown` uses), so a link's text may wrap and a table cell is its own block. The
@@ -48,7 +55,7 @@ here, since no parser in the catalog reads them.
 
 ```text
 node kalfa/records/src/bin.ts check            all four, every finding, exit 1 if any
-node kalfa/records/src/bin.ts check status     one check: status, patch, link or map
+node kalfa/records/src/bin.ts check status     one check: status, patch, link, map or runbook
 ```
 
 Run it in the repo's root: the tracked files come from `git ls-files -s` in the working folder.
@@ -59,7 +66,7 @@ runs it with Node's file system and git.
 ## Public modules
 
 `Status` (the two cases and `decodeStatus`), `Frontmatter` (the status check and the `Decision`
-schema of the keys every decision has), `Finding` (the one union of the four checks' findings) and
-`cli`. The other files are private: `Patches`, `Links`, `MapSize`, `Markdown` and
+schema of the keys every decision has), `Finding` (the one union of the checks' findings) and
+`cli`. The other files are private: `Patches`, `Links`, `MapSize`, `Runbooks`, `Markdown` and
 `Comments` hold the checks and what they read, and `Tracked` is the service behind `git ls-files`, so
 no law starts git and a law hands in a list.

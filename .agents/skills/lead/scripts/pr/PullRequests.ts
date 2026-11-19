@@ -81,7 +81,8 @@ export class PullRequests extends Context.Service<
     readonly arm: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
     /**
      * Squash-merges pull request `number` past the merge queue, pinned to the head `oid`: an admin
-     * merge, which only pr/Merge.ts asks, for a docs-only pull request (0183) or a sev0 fix (0532).
+     * merge, which only pr/Merge.ts asks, for a docs-only pull request (0183), a sev fix at either
+     * level (0611), or a ready pull request in a sev0 (0603).
      */
     readonly admin: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
   }

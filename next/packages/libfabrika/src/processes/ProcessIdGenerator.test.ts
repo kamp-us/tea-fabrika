@@ -1,13 +1,40 @@
 // Next/, P10/P33 shared process generator contract, retained by T518 PR 1.
 // ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
-import { describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it } from "@effect/vitest";
 // The id format, clocks, rollback and exhaustion are Id.Generator's own laws, in Id.test.ts.
+import { Stub } from "@kampus/vitest";
 import { Cause, Effect, Exit, Option, Schema, Tracer, Match } from "effect";
+import { WebCrypto } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 
 const maxClock = 2 ** 48 - 1;
+
+type Crypto = typeof globalThis.crypto;
+
+const unexpected = (member: string): never => {
+  throw new Error(`unused crypto member in a law: ${member}`);
+};
+
+/**
+ * A stand-in crypto for `Id.Generator.layer`, which draws its bytes through the `WebCrypto` reference
+ * (decision 0555): all ones, or a throw of `failure` as a platform with no entropy left does.
+ */
+const cryptoFilling = (failure: Option.Option<Error>): Crypto =>
+  Stub.make<Crypto>(unexpected, {
+    getRandomValues: (array) => {
+      if (Option.isSome(failure)) {
+        throw failure.value;
+      }
+
+      if (array instanceof Uint8Array) {
+        array.fill(255);
+      }
+
+      return array;
+    },
+  });
 
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 10_000 }));
 
@@ -148,61 +175,52 @@ describe("P10 shared process ids", () => {
           },
         });
 
-        const random = vi.spyOn(crypto, "getRandomValues").mockImplementation((array) => {
-          if (exitReason === "entropy") {
-            throw new Error(marker);
-          }
-
-          if (array instanceof Uint8Array) {
-            array.fill(255);
-          }
-
-          return array;
-        });
+        // The generator draws through the WebCrypto reference: all ones for `clock` and `exhausted`, a throw for `entropy`.
+        const crypto = cryptoFilling(exitReason === "entropy" ? Option.some(new Error(marker)) : Option.none());
 
         return Effect.gen(function* () {
-          try {
-            yield* TestClock.setTime(
-              Match.value(exitReason).pipe(
-                Match.when("clock", () => -distance),
-                Match.when("exhausted", () => maxClock),
-                Match.orElse(() => at),
-              ),
-            );
-            const generator = yield* ProcessIdGenerator;
+          yield* TestClock.setTime(
+            Match.value(exitReason).pipe(
+              Match.when("clock", () => -distance),
+              Match.when("exhausted", () => maxClock),
+              Match.orElse(() => at),
+            ),
+          );
+          const generator = yield* ProcessIdGenerator;
 
-            if (exitReason === "exhausted") {
-              yield* generator.next;
-            }
-
-            const exit = yield* Effect.exit(generator.next);
-            expect(Exit.isFailure(exit)).toBe(true);
-
-            if (Exit.isFailure(exit)) {
-              expect(exit.cause.reasons).toHaveLength(1);
-              const reason = exit.cause.reasons[0]!;
-              expect(Cause.isDieReason(reason)).toBe(true);
-
-              if (Cause.isDieReason(reason)) {
-                expect(reason.defect).toMatchObject({ _tag: "IdError", reason: exitReason });
-              }
-            }
-
-            const process = spans.filter((span) => span.name === "process.next").at(-1)!;
-            const id = spans.filter((span) => span.name === "id.next").at(-1)!;
-            expect(id.parent).toEqual(Option.some(process));
-
-            for (const span of [process, id]) {
-              expect(span.status._tag).toBe("Ended");
-
-              if (span.status._tag === "Ended") {
-                expect(Exit.isFailure(span.status.exit)).toBe(true);
-              }
-            }
-          } finally {
-            random.mockRestore();
+          if (exitReason === "exhausted") {
+            yield* generator.next;
           }
-        }).pipe(Effect.provide(ProcessIdGenerator.layer), Effect.withTracer(tracer));
+
+          const exit = yield* Effect.exit(generator.next);
+          expect(Exit.isFailure(exit)).toBe(true);
+
+          if (Exit.isFailure(exit)) {
+            expect(exit.cause.reasons).toHaveLength(1);
+            const reason = exit.cause.reasons[0]!;
+            expect(Cause.isDieReason(reason)).toBe(true);
+
+            if (Cause.isDieReason(reason)) {
+              expect(reason.defect).toMatchObject({ _tag: "IdError", reason: exitReason });
+            }
+          }
+
+          const process = spans.filter((span) => span.name === "process.next").at(-1)!;
+          const id = spans.filter((span) => span.name === "id.next").at(-1)!;
+          expect(id.parent).toEqual(Option.some(process));
+
+          for (const span of [process, id]) {
+            expect(span.status._tag).toBe("Ended");
+
+            if (span.status._tag === "Ended") {
+              expect(Exit.isFailure(span.status.exit)).toBe(true);
+            }
+          }
+        }).pipe(
+          Effect.provide(ProcessIdGenerator.layer),
+          Effect.provide(WebCrypto.layer(crypto)),
+          Effect.withTracer(tracer),
+        );
       },
       options,
     );

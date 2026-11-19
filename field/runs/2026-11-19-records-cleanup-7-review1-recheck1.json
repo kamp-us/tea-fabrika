@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-records-cleanup-7-review1-recheck1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1658",
+  "started": "2026-11-18T16:29:00-08:00",
+  "ended": "2026-11-18T16:36:00-08:00",
+  "parent": "2026-11-19-records-cleanup-7-fix1",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Recheck of slice 7's fix round at ed0273f9 against my three findings. L9 now reads near-miss statuses and bad successors as other, and my two plants (a startsWith on accepted, an unanchored four-digit successor) now go red, as does a startsWith on superseded. The still-holds clauses in 0097, 0146 and 0600 are gone and what each record changed is kept. The new scenario builds its chain through readStatus and goes red when a successor-less superseded reads as superseded again. records.test.ts passes, 35 of 35, and the records check prints 6 findings, none new: four YAML errors and two links in signed plans. Merge-ready.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22, so the vitest run used CI=1. Plants ran in a scratch copy outside the repo, with node_modules linked; none touched the branch. No full pnpm lint and no typecheck, because memory is tight.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "costUsd": null,
+  "billed": null,
+  "base": "c3dac8ab55806e6f29b8a5a91961fbdadb92f665",
+  "plants": [
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus reads any status that starts with accepted as accepted",
+      "result": "red"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, the successor's four digits are matched anywhere in the key, not anchored",
+      "result": "red"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus reads any status that starts with superseded as superseded",
+      "result": "red"
+    },
+    {
+      "law": "scenario: a chain that meets a superseded record with no successor is broken, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus no longer needs a four-digit successor for superseded",
+      "result": "red"
+    }
+  ]
+}

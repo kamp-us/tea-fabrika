@@ -19,6 +19,8 @@
 //
 // Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
 // the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
+// K2's door admits through `Layer.mock(Admissions, ...)`, the service `checkHello` asks for (ticket
+// 1067 slice 2).
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -29,10 +31,12 @@ import * as Layer from "effect/Layer";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
+import { Admissions } from "../../transport/Admissions.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { checkHello, helloText } from "../../transport/Hello.ts";
 import { writeSshsig } from "../../transport/Sshsig.ts";
@@ -285,68 +289,71 @@ describe("P39 slice 4b: the hands key file", () => {
     300_000,
   );
 
-  it.live(
+  // K2's nonce and tab are strings of 1 to 40 characters, 60 runs, as before; Effect's Arbitrary for
+  // a checked String draws them. Plant: compute the fingerprint over the key line, not the raw bytes.
+  it.effect.prop(
     "K2: the key file's identity passes the door's own hello check: its raw, fingerprint and line agree, and a hello signed with its sign is admitted",
-    () =>
-      property(
-        fc.record({
-          nonce: fc.string({ minLength: 1, maxLength: 40 }),
-          tab: fc.string({ minLength: 1, maxLength: 40 }),
-        }),
-        ({ nonce, tab }) =>
-          Effect.gen(function* () {
-            const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
-            const exit = yield* open(r, null);
-            expect(Exit.isSuccess(exit), `K2: a new key opens, ${String(exit)}`).toBe(true);
+    {
+      nonce: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40)),
+      tab: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(40)),
+    },
+    ({ nonce, tab }) =>
+      Effect.gen(function* () {
+        const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
+        const exit = yield* open(r, null);
+        expect(Exit.isSuccess(exit), `K2: a new key opens, ${String(exit)}`).toBe(true);
 
-            if (!Exit.isSuccess(exit)) {
-              return;
-            }
+        if (!Exit.isSuccess(exit)) {
+          return;
+        }
 
-            const key = exit.value;
+        const key = exit.value;
 
-            const signed = yield* writeSshsig({
-              text: helloText({ url: ORIGIN, tab, nonce }),
-              space: "fabrika-client",
-              line: key.line,
-              sign: key.sign,
-            });
+        const signed = yield* writeSshsig({
+          text: helloText({ url: ORIGIN, tab, nonce }),
+          space: "fabrika-client",
+          line: key.line,
+          sign: key.sign,
+        });
 
-            const hello = {
-              versions: [1],
-              has: ["git"],
-              ping: "5s",
-              key: key.raw,
-              tab,
-              nonce,
-              platform: "headless",
-              os: "macos",
-              build: "k2-build",
-              sentAt: "2026-11-15T10:00:00.000Z",
-              signed,
-            };
+        const hello = {
+          versions: [1],
+          has: ["git"],
+          ping: "5s",
+          key: key.raw,
+          tab,
+          nonce,
+          platform: "headless",
+          os: "macos",
+          build: "k2-build",
+          sentAt: "2026-11-15T10:00:00.000Z",
+          signed,
+        };
 
-            const checked = yield* checkHello({
-              hello,
-              url: ORIGIN,
-              tab,
-              nonce,
-              name: key.fingerprint,
-              versions: [1],
-              ping: { min: 1000, max: 60_000 },
-              consume: () => true,
+        const checked = yield* checkHello({
+          hello,
+          url: ORIGIN,
+          tab,
+          nonce,
+          name: key.fingerprint,
+          versions: [1],
+          ping: { min: 1000, max: 60_000 },
+        }).pipe(
+          Effect.provide(
+            Layer.mock(Admissions, {
+              consume: Effect.succeed(true),
               admit: (fingerprint) =>
                 Effect.succeed(
-                  Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
+                  Admission.cases.admitted.make({
+                    identity: { key: fingerprint, person: "person_k2", as: "hands" },
+                  }),
                 ),
-            });
+            }),
+          ),
+        );
 
-            expect(checked._tag, `K2: the door admits the key file's hello: ${Formatter.format(checked)}`).toBe(
-              "online",
-            );
-          }),
-        { numRuns: 60 },
-      ),
-    120_000,
+        expect(checked._tag, `K2: the door admits the key file's hello: ${Formatter.format(checked)}`).toBe("online");
+      }),
+    { timeout: 120_000, arbitrary: { runs: 60 } },
   );
 });

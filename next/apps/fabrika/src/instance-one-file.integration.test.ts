@@ -4,6 +4,7 @@
 // returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
 import assert from "node:assert/strict";
 import { NodeHttpServer, NodeServices } from "@effect/platform-node";
+import { CounterMsg } from "@kampus/counter";
 import { Id } from "@kampus/libfabrika";
 import * as SshsigTest from "@kampus/libfabrika/transport/Sshsig.test-support";
 import { workerLoader } from "@kampus/libfabrika/workers";
@@ -945,7 +946,7 @@ describe("P16 copied-file real instance, serial", () => {
                             const answer = await a.call("process.send", {
                               pid,
                               letter: `p16-${n}`,
-                              m: { type },
+                              m: CounterMsg.cases[type].make({}),
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
@@ -987,7 +988,7 @@ describe("P16 copied-file real instance, serial", () => {
                             const retried = await a.call("process.send", {
                               pid,
                               letter: "unanswered",
-                              m: { type: "inc" },
+                              m: CounterMsg.cases.inc.make({}),
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
@@ -1019,7 +1020,7 @@ describe("P16 copied-file real instance, serial", () => {
                                 params: {
                                   pid,
                                   letter: "unanswered",
-                                  m: { type: "inc" },
+                                  m: CounterMsg.cases.inc.make({}),
                                   sentAt: "2026-11-08T04:00:00.000Z",
                                   seen: 0,
                                 },

@@ -1,6 +1,6 @@
 ---
 id: 0105
-title: A Durable Object never stays awake on its own: it works inside a wake, sets an alarm for later work and sleeps, and holds no timer or loop between wakes
+title: "A Durable Object never stays awake on its own: it works inside a wake, sets an alarm for later work and sleeps, and holds no timer or loop between wakes"
 status: accepted
 date: 2026-11-11
 tags: [durable-object, hibernation, alarm, loop, telemetry, cost, cloudflare, patterns]

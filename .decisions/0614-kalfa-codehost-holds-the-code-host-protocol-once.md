@@ -1,12 +1,12 @@
 ---
 id: 0614
-title: The code host protocol lives once, in @kalfa/codehost, as Effect services with GitHub as one Layer at @kalfa/codehost/github, ship stays in @kalfa/ci and uses it, and next/'s CodeHost is a client of it, never a second protocol
+title: The code host protocol lives once, in @kalfa/codehost, as Effect services with GitHub as one Layer in @kalfa/provider-github, ship stays in @kalfa/ci and uses it, and next/'s CodeHost is a client of it, never a second protocol
 status: accepted
 date: 2026-11-18
 tags: [kalfa, codehost, github, ship, pull-requests, merge-queue, libfabrika, tooling]
 ---
 
-# 0614: The code host protocol lives once, in @kalfa/codehost, as Effect services with GitHub as one Layer at @kalfa/codehost/github, ship stays in @kalfa/ci and uses it, and next/'s CodeHost is a client of it, never a second protocol
+# 0614: The code host protocol lives once, in @kalfa/codehost, as Effect services with GitHub as one Layer in @kalfa/provider-github, ship stays in @kalfa/ci and uses it, and next/'s CodeHost is a client of it, never a second protocol
 
 ```mermaid
 flowchart LR
@@ -18,7 +18,7 @@ flowchart LR
   subgraph codehost["@kalfa/codehost"]
     services["code host services"]
   end
-  gh["@kalfa/codehost/github: the Layer"]
+  gh["@kalfa/provider-github: the codehost Layer"]
   runs["@kalfa/ci: Runs (0612)"]
   ship --> services
   sev --> services
@@ -65,7 +65,7 @@ our glossary word.
 ## Decision
 
 **`@kalfa/codehost` holds the code host protocol once, as Effect services, with GitHub as one
-Layer at `@kalfa/codehost/github`. `ship` stays in `@kalfa/ci`. Every user of the code host is a
+Layer in `@kalfa/provider-github` (0616). `ship` stays in `@kalfa/ci`. Every user of the code host is a
 client.**
 
 - **The protocol is services,** one family for each job a code host does:
@@ -74,7 +74,7 @@ client.**
   - pushes and commits;
   - reviews and comments;
   - repo labels and variables.
-- **GitHub is a Layer,** `@kalfa/codehost/github`. Another code host is another Layer, and no
+- **GitHub is a Layer,** in the provider package `@kalfa/provider-github` (0616). Another code host is another Layer, and no
   client changes. The Layer is where the GitHub API is called; nothing else calls it (0231).
 - **`ship` stays in `@kalfa/ci`,** as `@kalfa/ci/ship`: today's `land.ts` and `pr/`. Its rules
   stay: it never merges without a leakgrep pass in the same run and never arms a pull request whose
@@ -94,8 +94,8 @@ client.**
 - No tool, script or libfabrika module defines its own code host protocol or calls GitHub for
   pull requests, merges, pushes, reviews, comments or repo labels and variables directly. It uses
   `@kalfa/codehost`.
-- `@kalfa/codehost` is one package. The Layer is a subpath, `@kalfa/codehost/github`, never a new
-  package.
+- `@kalfa/codehost` holds interfaces and a test Layer only. The GitHub Layer is in `@kalfa/provider-github`
+  (0616), never in `@kalfa/codehost`.
 - `ship` is `@kalfa/ci/ship`. It is not in `@kalfa/codehost`, which holds no pipeline logic.
 
 ## Consequences

@@ -167,7 +167,7 @@ Tool facts that cost us time (`gh pr edit`, `claude -p` tools, `rg` and dot fold
 
 - No secrets, and never print or write a key.
 - A list of open security holes stays out of this repo. Each fix lands as a normal pull request.
-- No absolute paths from anyone's machine. Use repo-relative paths or `~`. No personal names or account names.
+- No absolute paths from anyone's machine. Use repo-relative paths or `~`. No personal names or account names, except inside a license notice the law requires (an upstream LICENSE file).
 - Never quote what a person typed in a chat session. Record the decision, not the conversation. Text a person posted
   publicly on an issue or pull request may be linked and summarised.
 

@@ -158,7 +158,7 @@ describe("p22 real counter in the runner", () => {
   );
   it.live("plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter", () =>
     Effect.gen(function* () {
-      const { counter } = yield* Effect.promise(() => import("./program.ts"));
+      const { counter, CounterMsg } = yield* Effect.promise(() => import("./program.ts"));
       const A: typeof import("@kampus/libfabrika") = yield* Effect.promise(() => import(LIBRARY));
       const C = yield* Effect.promise(() => import("@kampus/libfabrika/runtime/ProcessStore"));
       const folder = yield* scopedFolder;
@@ -288,7 +288,7 @@ describe("p22 real counter in the runner", () => {
               id: `input_0000000000e0080000000000${Str.padStart(2, "0")(n.toString(16))}`,
               by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
               arrivedAt: n,
-              input: { type: "inc" },
+              input: CounterMsg.cases.inc.make({}),
             },
             sentAt: "writer clock",
             seen: 0,
@@ -380,7 +380,7 @@ const managerLayer = (db: DatabaseSync) =>
 describe("P40 the counter under its qualified identity", () => {
   it.live("L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter", () =>
     Effect.gen(function* () {
-      const { counter } = yield* promised(() => import("./program.ts"));
+      const { counter, CounterMsg } = yield* promised(() => import("./program.ts"));
       const A: typeof import("@kampus/libfabrika") = yield* promised(() => import(LIBRARY));
       const C = yield* promised(() => import("@kampus/libfabrika/runtime/ProcessStore"));
 
@@ -509,7 +509,7 @@ describe("P40 the counter under its qualified identity", () => {
                               id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                               by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                               arrivedAt: sent,
-                              input: { type },
+                              input: CounterMsg.cases[type].make({}),
                             },
                             sentAt: "writer clock",
                             seen: 0,
@@ -531,7 +531,7 @@ describe("P40 the counter under its qualified identity", () => {
                               id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                               by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                               arrivedAt: sent,
-                              input: { type: "inc" },
+                              input: CounterMsg.cases.inc.make({}),
                             },
                             sentAt: "writer clock",
                             seen: 0,

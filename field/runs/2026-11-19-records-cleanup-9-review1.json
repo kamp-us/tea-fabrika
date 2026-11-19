@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-records-cleanup-9-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1667",
+  "started": "2026-11-18T17:20:00-08:00",
+  "ended": "2026-11-18T17:42:00-08:00",
+  "parent": "2026-11-19-records-cleanup-9-build1",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "One review of slice 9 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling and the records both versions read, at 4f98510db83b. Merge-ready with one finding, not blocking. The records check prints nothing on the branch and on a merge with origin/main at 4c2ebab (clean merge, exit 0). L5 still proves docs/plan/ outside quests in scope: a plant that skips all of docs/plan/ turns it red, and so does dropping quests from HISTORY. A planted link in docs/plan/tiers.md is a finding, so README, tiers and tier-1 are still read. The four quoted titles parse the same in records.ts (it decodes a quoted value) and governance.ts (it reads words only), and each heading still repeats its title. The lint entry runs through oxlint-plugins/parallel.ts with exit 1 passed through; package.json changes only the lint line. One finding: 0607 and R5 name plan files as read, and the check now skips the signed plans in docs/plan/quests/, which hides one live link to superseded 0539.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22, so vitest used CI=1. Plants ran in a scratch clone outside the repo with node_modules linked; none touched the branch. The full pnpm lint was not run (known memory kill in lint:promise-types); the records check, field-check, format check and lint.ts were run on their own, and parallel.ts was run with the records entry and a plant.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "costUsd": null,
+  "billed": null,
+  "base": "75b436003569fdb25f7f815504caafec137a0c4d",
+  "plants": [
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts",
+      "plant": "kalfa/records/src/Links.ts: HISTORY holds docs/plan/ in place of docs/plan/quests/, so every plan page is skipped",
+      "result": "red"
+    },
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts",
+      "plant": "kalfa/records/src/Links.ts: docs/plan/quests/ dropped from HISTORY",
+      "result": "red"
+    },
+    {
+      "law": "L10, package.json",
+      "plant": "a ## Amendments heading appended to .decisions/0556-kalfa-holds-our-tooling-packages.md, then oxlint-plugins/parallel.ts run with the records entry: the part fails with exit 1 and the run exits 1; with the heading removed the run exits 0",
+      "result": "red"
+    }
+  ]
+}

@@ -225,6 +225,12 @@ export const layer = (
 
       const cancel = (id: number) => Effect.asVoid(gh(`repos/${repo}/actions/runs/${id}/cancel`, ["--method", "POST"]));
 
-      return WorkflowRuns.of({ unfinished, cancel });
+      // One call: GitHub answers 204 with no body, and the run it starts is a fresh one on `ref`.
+      const dispatch = (workflow: string, ref: string) =>
+        Effect.asVoid(
+          gh(`repos/${repo}/actions/workflows/${workflow}/dispatches`, ["--method", "POST", "-f", `ref=${ref}`]),
+        );
+
+      return WorkflowRuns.of({ unfinished, cancel, dispatch });
     }),
   );

@@ -442,7 +442,7 @@ the `oxlint-plugins` folder and the CI scripts, one match per call.
 
 | Folder | `vi.fn` | `toHaveBeenCalled*` | `spyOn` | What it watches, and what it needs first |
 |---|---|---|---|---|
-| `libfabrika/src/transport` | 9 | 11 | 1 | `admit`, `consume` and `route` passed as plain functions to `checkHello` and `answerFrame`; 1 `crypto.subtle` spy. Needs a product change: those arguments become a service the law records |
+| `libfabrika/src/transport` | 9 | 11 | 1 | `admit`, `consume` and `route` passed as plain functions to `checkHello` and `answerFrame`; 1 `crypto.subtle` spy. Needs a product change: those arguments become a service the law records. Slice 1 landed in #1526; slice 2 (the hello's admission, `Admissions`) is built in #1638. The folder's lock waits: its lint rule (L1) is not in that round |
 | `libfabrika/src/cloudflare` | 8 | 0 | 15 | WebSocket and object-state doubles, which are platform fakes for this package (0554, 0557), not the Recorder; spies on `Effect.result` 3, `ProgramRunner.withLoader` 3, `SpanSink.layer` 3, `ProjectClient.make` 1, `Tracer.NativeSpan.prototype` 1, `console` 1, `process.stdout` and `process.stderr` 2, `crypto.subtle` 1 |
 | `libfabrika/src/node` (the `RunnerAdmission` integration law) | 4 | 0 | 0 | platform namespace doubles; platform fakes, not the Recorder |
 | `libfabrika/src/node/dev` | 0 | 2 | 15 | `fetch` 7, `process.kill` 6, `console` 2; all need a product change first |

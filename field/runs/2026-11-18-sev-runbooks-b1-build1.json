@@ -1,0 +1,176 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-sev-runbooks-b1-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1646",
+  "started": "2026-11-18T15:55:00-08:00",
+  "ended": "2026-11-18T16:15:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Built slice B1 of docs/plan/quests/sev-runbooks-PLAN.md in today's lead tooling (0611): Route.admin with sev0, sev0Fixes and sev1 and a fix case with the ancestor check in pr/Merge.ts and land.ts; the fix entry, sev1Fix and sev0Fixes in sev/scripts/Level.ts; Incident.fix, Incident.drop and a close that dispatches scheduled.yaml on main in sev/scripts/Incident.ts; WorkflowRuns.dispatch in the contract, the gh layer and the test layer; main's check push run kept in Freeze.ts; sev.ts fix and fix --drop; the runbook case of Finding, Runbooks.ts and records check runbook in kalfa/records; the eight .runbooks/sev-*.md; the sev skill cut to its judgment and a list of the runbooks; and one sentence of the lead skill. Every law of the tests row is green, file by file, and all 30 of its plants went red on the real build.",
+  "note": "Started and ended are estimates; usage and cost are not recorded. The container has Node 22, so the laws ran on the Node 26.13.0 the tests step fetched outside the repo. pnpm lint was green except lint:promise-types, which the kernel killed for memory once (EPIPE) and which passed alone. The whole pnpm typecheck was killed for memory once (SIGKILL on three packages) and passed with the same recursive command at one package at a time. A sev1's named fix is read from the issues its fix line answered, not from a clock: the sev tests run on a test clock that starts in 1970, so a time comparison against an issue's start would drop every named fix. Plant 0 is the plan's old verdict made on the real build by taking out the new case, not the old file.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "1f0c3bfb78b41cd3d56add46d19004653720aa39",
+  "plants": [
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Real build with Freeze.verdict's case for main's check push run removed",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Same change made to the real build: keep every push run on main, so main's full run is kept too",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Same change made to the real build: keep a check push run on any branch",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Same change made to the real build: keep a check run on main of any event",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: ancestor check dropped, so a fix whose head lacks main is admitted",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: ancestor check asked of a sev0 ready pull request too",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: the sev1 fix read as any branch once a fix is named",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: any branch admitted while a sev0 lists some branch",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: ci-required skipped for a fix",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: a sev0 fix read as a ready pull request",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Same change made to the real build: the ancestor check tolerates a head up to 5 commits behind",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: fix overwrites the named fix, so a second fix is named silently",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: fix refuses even after the named fix merged",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: fix --drop leaves the fix named",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: close dispatches before the loop's end line, one dispatch",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: close dispatches twice (before the loop's end and after)",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: close dispatches check.yaml in place of scheduled.yaml",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: close dispatches on a branch other than main",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Same change made to the real build: close dispatches nothing",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: follows is not read",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: a follows id that names no accepted record passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: a superseded record counts as resolved",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: the summary check is off",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: headings asked of every runbook, not the sev ones",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: a heading is any line that mentions its name",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: a sev runbook the skill does not link passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: a skill link to a missing sev runbook passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: only the skill's first link is read",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: records check runbook runs the status check",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Same change made to the real build: runbook is not a name check takes",
+      "result": "red"
+    }
+  ]
+}

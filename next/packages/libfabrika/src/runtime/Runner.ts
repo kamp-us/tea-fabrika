@@ -2788,24 +2788,30 @@ export class ProgramRunner extends Context.Service<
                   saved: { v: next.v, build: request.hash, model: next.model, after: next.after },
                 }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
 
-                yield* complete(
-                  SupervisorMsg.cases.swap_prepared.make({
-                    change: {
-                      process: process.id,
-                      load: request.load,
-                      program: request.program,
-                      was: old,
-                      checkpoint: kept,
-                      from: state.v,
-                      ran: upgraded.ran,
-                      origin: { ...(yield* from(null, yield* traceId)), build: request.hash },
-                      pos: next.pos,
-                      view: next.view,
-                      wake: next.wake,
-                      maxDeliveries: loaded.declaration.maxDeliveries ?? null,
-                    },
+                // The new build's own answers (its init's wake and view, its upgrade's names and v) are
+                // untrusted (0215): a change the journal cannot keep is refused as the new code's.
+                const change = yield* Effect.result(
+                  Schema.decodeUnknownEffect(SupervisorMsg.cases.swap_prepared.fields.change)({
+                    process: process.id,
+                    load: request.load,
+                    program: request.program,
+                    was: old,
+                    checkpoint: kept,
+                    from: state.v,
+                    ran: upgraded.ran,
+                    origin: { ...(yield* from(null, yield* traceId)), build: request.hash },
+                    pos: next.pos,
+                    view: next.view,
+                    wake: next.wake,
+                    maxDeliveries: loaded.declaration.maxDeliveries ?? null,
                   }),
                 );
+
+                if (Result.isFailure(change)) {
+                  return yield* refuse("shape");
+                }
+
+                yield* complete(SupervisorMsg.cases.swap_prepared.make({ change: change.success }));
                 yield* fault("after_swap_prepared");
                 yield* finishSwap(next);
                 yield* Effect.annotateCurrentSpan({

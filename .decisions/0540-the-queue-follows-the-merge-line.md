@@ -1,7 +1,8 @@
 ---
 id: 0540
 title: Pull requests enter the merge queue only in the order of the lead's merge line, and only the first one not yet queued or merged has auto-merge on
-status: superseded by [0544](0544-every-reviewed-pull-request-is-armed.md)
+status: superseded
+successor: "0544"
 date: 2026-11-14
 tags: [merge-queue, lead, auto-merge, order, ci]
 ---

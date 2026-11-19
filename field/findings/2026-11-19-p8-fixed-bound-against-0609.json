@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-19-p8-fixed-bound-against-0609",
+  "date": "2026-11-19",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/progress-reporter.integration.test.ts",
+    "line": 309
+  },
+  "says": "In today's CI, the P8 law waits for the child journal's acknowledgement under a fixed 30-second bound, which decision 0609 rules out: a law waits on the event, and only the test runner's own limit backstops a part that never answers.",
+  "proof": ".github/ci/progress-reporter.integration.test.ts:309 reads `observation.pipe(Effect.timeoutOption(\"30 seconds\"), Effect.map(Option.getOrNull))`; .decisions/0609-laws-wait-on-events-never-on-a-fixed-time-bound.md's binding constraint says 'No law wraps a real build or other machine-speed work in a fixed time bound.' PR 1624 (da86605) added the bound on 2026-11-18, the date 0609 was accepted.",
+  "cost": "The law keeps a shape an accepted decision forbids, so the next fix to it must first settle whether 0036's 'no timeout grows' or 0609's 'remove the clock' governs; on a very slow runner a slow acknowledgement turns the law red instead of only slower.",
+  "head": "5c2dc3102030f3abacf6a97d109fe2d0ef21230d",
+  "ticket": "kamp-us/tea-fabrika#1170",
+  "pr": null
+}

@@ -1,7 +1,8 @@
 ---
 id: 0034
 title: A next/ library's src/ has one folder per bounded context, with Effect's flat PascalCase modules and an internal/ inside each, never one flat src/
-status: superseded by [0043](0043-rooms-on-floors.md)
+status: superseded
+successor: "0043"
 date: 2026-11-09
 tags: [layout, files, folders, bounded-context, ddd, layers, internal, libfabrika, next]
 ---
@@ -50,10 +51,8 @@ the path. That note's path table maps `next/`'s layers to contexts: layer 1 is c
 and 3 are ledger, layer 4 is runtime
 ([the five layers](../docs/direction/a-local-first-sync-engine.md)).
 
-This amends 0032 in part. Everything in 0032 still holds inside a folder: PascalCase modules, tests
-beside them, variants as prefixed siblings, a folder for a concept's parts, `internal/`, the
-namespace index, and no platform at the top level. Only "one flat `src/`" and "no folders by area"
-are replaced. Tracker ticket 480.
+This amends 0032 in part. Only "one flat `src/`" and "no folders by area" are replaced. Tracker
+ticket 480.
 
 Read from the code on main for this record, not from a summary:
 

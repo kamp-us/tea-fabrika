@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-mock-node-repositories-plan-corrections",
+  "date": "2026-11-18",
+  "quests": ["kamp-us/tea-fabrika#1647"],
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "primitive": "Gather",
+  "what": "The mock sweep's node/repositories plan (docs/plan/quests/mock-node-repositories-PLAN.md), approved on 2026-11-15, met three facts that had changed by its tests step on 2026-11-18. (1) Its one file, OpenRepository.test.ts, had been renamed OpenRepository.composed.integration.test.ts (pull request 1420, under 0584), so rewriting L3 in place would have put a law the plan says runs on every pull request on main's schedule only (0536, 0581). The old L3 left that file and the rewritten one went in a new plain OpenRepository.test.ts, the plan's own file name. (2) Snapshot.ts and Load.ts had moved to kalfa/config/src (pull request 1583), where make and read are called from Load.resolve, not Load.load, so the plants edit resolve. (3) Its amendment to land on the fold branch fabrikalfa/mock-fold no longer applied: that branch does not exist, and 1526 and 1636 landed as their own pull requests. Twice an open pull request held a file the lock needs (.oxlintrc.json, by 1644 and then 1634), so the lock laws V1 and V2 waited while L3 went ahead.",
+  "cause": "The plan named its files from main at f7169af and ran three days later, after the test-kind rename, the @kalfa/config move and 1644's lint blocks had landed. A plan names a file by its path on the day it is written, and a rename since then is not caught until a step opens the file.",
+  "fix": "The lead takes the plan's files again from main before each step with git log --follow, and the brief names any rename. Here the coordinator was told by mail, and the placement of L3 is in the pull request's Plan corrections for the review.",
+  "test": "On the next sweep slice, count the plan's files that were renamed or moved before its tests step. This one had two.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1647"]
+}

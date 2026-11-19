@@ -31,6 +31,7 @@ import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
 import { control } from "../../cloudflare/control.ts";
+import * as DispatcherLive from "../../cloudflare/DispatcherLive.ts";
 import type { Env } from "../../cloudflare/runtime.ts";
 import { Doorbell, Ledger } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
@@ -465,36 +466,28 @@ const flow = async (sample: Flow) => {
       readFileSync(join(home, "brain.last.json"), "utf8"),
     );
 
-    // Control receives a Redacted at the service boundary. Reflect.apply keeps this runtime
-    // law runnable on the old string signature; the type law below forbids that signature.
-    const request = new Request("http://local/", {
-      method: "POST",
-      headers: { authorization: `Bearer ${bearer}` },
-      body: JSON.stringify({
-        target: "project",
-        project: config.name,
-        name: "",
-        method: "info",
-        args: [],
-      }),
-    });
+    // Control receives a Redacted at the service boundary and asks for the Dispatcher service,
+    // so both calls are typed and provide the live layer, as the Worker edge does.
+    const post = (authorization: string) =>
+      new Request("http://local/", {
+        method: "POST",
+        headers: { authorization },
+        body: JSON.stringify({
+          target: "project",
+          project: config.name,
+          name: "",
+          method: "info",
+          args: [],
+        }),
+      });
 
-    const checked: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
-      request,
-      env,
-      Redacted.make(bearer),
-      {},
-    ]);
+    const checked = control(post(`Bearer ${bearer}`), env, Redacted.make(bearer), {}).pipe(
+      Effect.provide(DispatcherLive.layer),
+    );
 
-    const forged = request.clone();
-    forged.headers.set("authorization", `Bearer wrong-${sample.pass}`);
-
-    const denied: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
-      forged,
-      env,
-      Redacted.make(bearer),
-      {},
-    ]);
+    const denied = control(post(`Bearer wrong-${sample.pass}`), env, Redacted.make(bearer), {}).pipe(
+      Effect.provide(DispatcherLive.layer),
+    );
 
     expect((await Effect.runPromise(denied)).status).toBe(403);
     const answer = await Effect.runPromiseExit(checked.pipe(Effect.provide(logger)));

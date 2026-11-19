@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-records-cleanup-7-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1658",
+  "started": "2026-11-18T16:23:15-08:00",
+  "ended": "2026-11-18T16:27:19-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "fix",
+  "model": "haiku",
+  "effort": "max",
+  "outcome": "pass",
+  "why": "Fix round for slice 7 of docs/plan/quests/rules-and-records-build-PLAN.md, after the review. Today's lead tooling and records, not next/. Part 1 removes three still-holds clauses (rule 0605: no record patches another with a still-holds line). 0097 drops its clause that 0049's rule and binding constraints stay, and keeps its amendment sentence. 0146 drops its clause that the pinned head and the no-override rule still hold. 0600 replaces its clause about 0557, 0579 and 0585 with one line that names @kalfa/quality/vitest and @kalfa/quality/oxlint. A grep confirmed that 0557, 0579 and 0585 already name @kalfa/quality in their own text. Part 2 extends L9 in records.test.ts. It keeps the same test, seed 119120, 100 runs and every old expect. It now checks that accepted with text, accepted-in-part, superseded with text and superseded by read as other with their raw text. It also checks that superseded with a successor of five digits, an x before the four digits, or three digits reads as other. Part 3 adds a scenario to the resolve block that builds its chain through readStatus. 0005 is superseded by 0006, and 0006 is superseded with no successor. resolve of 0005 is broken, with the reason that 0006's status is superseded. The hand-built 0004 case is unchanged. Each plant was made once, seen red and undone. records.ts matches its base commit again.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Started is the time of the first decision edit, not of the first command, and ended is when this row was written; both are estimates. Node here is v22, not the pinned 26.13.0, so the vitest runs used CI=1 to pass the local pinned-Node gate. pnpm typecheck and the full pnpm lint were not run, by the brief.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "9eb8ddabd6fa805b6db451d61a631f50952a516a",
+  "plants": [
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus takes status.startsWith(\"accepted\") in place of status === \"accepted\"",
+      "result": "red"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus takes /\\d{4}/ in place of /^\\d{4}$/ for the successor",
+      "result": "red"
+    },
+    {
+      "law": "scenario: a chain that meets a superseded record with no successor is broken, and says so, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, follow's other-status reason drops the words \", whose status is\"",
+      "result": "red"
+    }
+  ]
+}

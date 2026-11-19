@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0604, 0605, 0606, 0607 and 0608, amended by the lead's answers on slices 2 and 3's records; body dbeb2350f421
+Approved by the lead agent, builds 0604, 0605, 0606, 0607 and 0610, with the build's corrections from slices 4 to 8 folded for slice 9; body 23e950c01bc9
 Plancheck-Version: 3
 
 # Plan: the rules and records checks, and the cleanup of today's records they would fail, in our tooling
@@ -11,8 +11,8 @@ today's app or in `next/`. It builds the approved
 decisions: [0605](../../../.decisions/0605-no-record-patches-another.md) (R2, no record patches
 another), [0606](../../../.decisions/0606-a-record-is-accepted-or-superseded.md) (R4, two statuses,
 typed), [0607](../../../.decisions/0607-every-link-lands-on-a-live-record.md) (R5, no link to a
-superseded record) and [0608](../../../.decisions/0608-the-map-fits-its-readers-limits.md) (R6, the
-map fits its readers' limit). The checks live in a new `@kalfa/records`
+superseded record) and [0610](../../../.decisions/0610-agents-md-follows-memory-guide.md) (R6, the
+map stays under 200 lines; 0610 replaced 0608's byte limit). The checks live in a new `@kalfa/records`
 ([0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md)).
 
 ```ts
@@ -31,6 +31,34 @@ map fits its readers' limit). The checks live in a new `@kalfa/records`
 Nine slices. Seven clean today's records up, two build and turn on the checks. No two slices edit
 the same file, so slices 1 to 6 and slice 8 run in parallel; slice 7 follows slices 1 to 5. Slice 9
 turns every check on in `pnpm lint`, and lands only after slices 1 to 8 are on main.
+
+## Corrections from the build, folded before slice 9
+
+Slices 1 to 8 landed with these corrections in their pull request bodies. They hold over the text
+below wherever the two differ, and slice 9 builds on them.
+
+- **Slice 4** ([1632](https://github.com/kamp-us/tea-fabrika/pull/1632)): its list is 35 records,
+  with `.decisions/0414-jev-at-volume-uses-hand-labels.md` added. A still-holds form can run across a
+  sentence, not one line.
+- **Slice 5** ([1642](https://github.com/kamp-us/tea-fabrika/pull/1642)): 0539 moved to slice 7,
+  superseded whole by 0584, and 0600 and 0603 were given to a slice, as
+  `field/findings/2026-11-18-records-plan-slice-5-corrections.json` lists.
+- **Slice 6** ([1633](https://github.com/kamp-us/tea-fabrika/pull/1633)): R6 follows
+  [0610](../../../.decisions/0610-agents-md-follows-memory-guide.md). The map check is an advice
+  finding for a tracked `AGENTS.md` over 200 lines, not a blocking byte check. The `map` finding
+  carries lines and 200, not `bytes` and `max`, and L6 and L7 test the line count. The
+  `records.map.max-bytes` setting and `Settings.ts` are gone.
+- **Slice 7** ([1658](https://github.com/kamp-us/tea-fabrika/pull/1658)): the 15 records with a
+  prose status moved to `status: superseded` with a `successor` key. 0063's successor is 0525.
+- **Slice 8** ([1634](https://github.com/kamp-us/tea-fabrika/pull/1634)): the patch check reads
+  blocks with link targets stripped, and its two sentence forms need a record reference in the same
+  sentence or the one before. 0227 and 0603 are no-finding cases. `@kalfa/records` is a root
+  `devDependency`, so slice 9 changes only the `lint` script line. `DecisionId` lives in
+  `Finding.ts`, and no law reads a committed record: each real shape is fixture text with the commit
+  it came from.
+- **Slice 9** (this plan's last): the link check skips `docs/plan/quests/`, since a signed plan is a
+  record of what was agreed and its body digest holds it. Slice 9 also fixes the four YAML parse
+  findings in 0099, 0105, 0255 and 0582, so its first green `pnpm lint` has no records finding.
 
 ## Doubts, first
 

@@ -1,7 +1,8 @@
 ---
 id: 0608
 title: The AGENTS.md files an agent reads together stay under the smallest documented limit of the agents that read them, a setting with its source, held by a size check in pnpm lint
-status: superseded by [0610](0610-agents-md-follows-memory-guide.md)
+status: superseded
+successor: "0610"
 date: 2026-11-18
 tags: [agents-md, map, size, setting, codex, lint, kalfa-records]
 ---

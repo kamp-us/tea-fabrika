@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-vi-lock-misses-alias-with-chained-call",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "claude-sonnet-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "oxlint-plugins/builtin-plants.ts",
+    "line": 141
+  },
+  "says": "The vi lock, a pair of oxlint's own rules, does not refuse a call chained onto an aliased vi, such as v.spyOn(o, \"m\").mockImplementation(...) after import { vi as v } from \"vitest\", which 0555 bans.",
+  "proof": "On oxlint 1.90.0 (the lockfile's), with the lock on, in a test file of a locked folder: v.spyOn(console, \"log\") fires vitest(no-restricted-vi-methods), and v.spyOn(console, \"warn\").mockImplementation(() => undefined) fires nothing. vitest/no-restricted-vi-methods misses chained calls (oxc#29656), and eslint/no-restricted-properties names the object vi, so it never sees v. VI_LOCK in oxlint-plugins/builtin-plants.ts holds the line as a documented pass (false, false), run by the V1 scenario in oxlint-plugins/plants.test.ts.",
+  "cost": "A test can still spy through an aliased vi with a chained call, with no lint failure, until oxc fixes the chain or a trusted rule that follows the alias is found.",
+  "head": "bbdc9f1815c92df6b9dcc29edefea70ea8a6d7de",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1647"
+}

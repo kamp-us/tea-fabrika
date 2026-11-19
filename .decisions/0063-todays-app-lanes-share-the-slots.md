@@ -1,14 +1,13 @@
 ---
 id: 0063
 title: The owner's picked work on today's app fills agent slots beside Tier 1, never parked behind next/
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md), [0597](0597-eight-workers-before-twelve.md)
+status: superseded
+successor: "0525"
 date: 2026-11-10
 tags: [lead, slots, priority, todays-app, tier-1]
 ---
 
 # 0063: The owner's picked work on today's app fills agent slots beside Tier 1, never parked behind next/
-
-Current staffing counts follow [0597](0597-eight-workers-before-twelve.md); 0525's limits on today's work still hold.
 
 **What this decides:** when the lead fills agent slots, the owner's picked work on today's app counts
 as much as `next/` work, so its lanes keep moving beside Tier 1.

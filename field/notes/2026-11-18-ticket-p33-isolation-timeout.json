@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "person": false,
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44416548062"
+  ],
+  "id": "2026-11-18-ticket-p33-isolation-timeout",
+  "stage": "plan",
+  "kind": "friction",
+  "what": "Ticket text, filed as a row because this cloud session has no tracker. Title: P16's p33 real isolation law times out under load in next/. Body: next/apps/fabrika/src/instance-one-file.integration.test.ts line 708, p33 real isolation, timed out at 60 s in a 38-file next-integration shard (run 44416548062) and passes in 11 to 15 s alone or on main's own leg. Decision 0036 asks a flaky test to be fixed the day it is seen. Find what it waits on that grows with load, and check whether its inline sealed program's { type: \"read\" } step is a stale Msg after decision 0569. Finding row: field/findings/2026-11-18-p33-isolation-times-out-under-load.json.",
+  "cause": "The law's pass depends on runner load, and the 0602 split runs it only on main's full run, so its time under other shard splits was never seen.",
+  "primitive": "Check",
+  "fix": "Make the law wait on the event its work ends with rather than on the run being quick, as decision 0609 asks, and settle the read step's Msg key.",
+  "test": "The law passes in a 38-file shard, run a few times with no fail-fast."
+}

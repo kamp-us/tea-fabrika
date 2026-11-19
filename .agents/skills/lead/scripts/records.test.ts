@@ -18,6 +18,7 @@ import {
   readStatus,
   readTop,
   recordLine,
+  resolutionLine,
   resolve,
   Resolution,
   Status,
@@ -330,7 +331,7 @@ describe("records.ts on a real clone", () => {
     put(
       third,
       ".decisions/0001-x.md",
-      "---\nid: 0001\ntitle: Pelicans nest\nstatus: superseded by [0002](0002-x.md)\n---\n",
+      '---\nid: 0001\ntitle: Pelicans nest\nstatus: superseded\nsuccessor: "0002"\n---\n',
     );
     git(third, "add", ".");
     git(third, "commit", "-q", "-m", "ten decisions");
@@ -380,12 +381,12 @@ const corpus = [
   decision(
     "0001",
     "Saved state carries its shape number",
-    "amended-in-part by [0011](0011-x.md)",
+    "accepted",
     "**What this decides:** each saved shape has a number.\n\n## Context\n\nA long story about zebras.\n\n## Decision\n\nThe shape number is stored.",
   ),
   decision("0002", "The ledger keeps every fact", "accepted", "## Decision\n\nNothing is dropped from the ledger."),
-  decision("0003", "Old shapes are migrated", "superseded by [0004](0004-x.md)", "## Decision\n\nA migration runs."),
-  decision("0004", "Old shapes are upgraded", "superseded by [0011](0011-x.md)", "## Decision\n\nAn upgrade runs."),
+  decision("0003", "Old shapes are migrated", 'superseded\nsuccessor: "0004"', "## Decision\n\nA migration runs."),
+  decision("0004", "Old shapes are upgraded", 'superseded\nsuccessor: "0011"', "## Decision\n\nAn upgrade runs."),
   decision("0005", "Tickets live in the tracker", "accepted", "## Decision\n\nOne tracker."),
   decision("0006", "The lead merges on green", "accepted", "## Decision\n\nGreen CI merges."),
   decision("0007", "A proposed shape rule", "proposed", "## Decision\n\nA saved shape migration rule."),
@@ -498,8 +499,8 @@ describe("find", () => {
     expect(Arr.map(live, (h) => [h.path, h.notes])).toEqual([[".decisions/0011-x.md", ["supersedes: 0003"]]]);
     const all = shortlist(find("migrated", entries, { limit: 8, all: true }));
     expect(Arr.map(all, (h) => [h.path, h.notes])).toEqual([[".decisions/0003-x.md", ["superseded by: 0004"]]]);
-    const amended = shortlist(find("number", entries, { limit: 8, all: false }));
-    expect(amended[0]?.notes).toEqual(["amended by: 0011"]);
+    const accepted = shortlist(find("number", entries, { limit: 8, all: false }));
+    expect(accepted[0]?.notes).toEqual([]);
   });
 
   it("scenario: a proposed decision is in force nowhere, so only --all finds it", () => {
@@ -529,9 +530,9 @@ describe("resolve", () => {
     Arr.flatMap(entries, (e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
   );
 
-  it("scenario: a superseded chain lands on the accepted decision at its end; an accepted one names its amendments", () => {
+  it("scenario: a superseded chain lands on the accepted decision at its end; an accepted one lands on itself", () => {
     expect(resolve("0003", statuses)).toEqual(Resolution.cases.superseded.make({ id: "0003", by: ["0011"] }));
-    expect(resolve("0001", statuses)).toEqual(Resolution.cases.accepted.make({ id: "0001", amendedBy: ["0011"] }));
+    expect(resolve("0001", statuses)).toEqual(Resolution.cases.accepted.make({ id: "0001" }));
     expect(resolve("0007", statuses)).toEqual(Resolution.cases.other.make({ id: "0007", status: "proposed" }));
     expect(resolve("0099", statuses)).toEqual(Resolution.cases.absent.make({ id: "0099" }));
   });
@@ -546,7 +547,7 @@ describe("resolve", () => {
           Arr.map(ids, (id, i) => [
             id,
             i === ids.length - 1
-              ? Status.cases.accepted.make({ amendedBy: [] })
+              ? Status.cases.accepted.make({})
               : Status.cases.superseded.make({ by: [ids[i + 1] ?? ""] }),
           ]),
         );
@@ -562,7 +563,7 @@ describe("resolve", () => {
       ["0001", Status.cases.superseded.make({ by: ["0002"] })],
       ["0002", Status.cases.superseded.make({ by: ["0001"] })],
       ["0003", Status.cases.superseded.make({ by: ["0009"] })],
-      ["0004", readStatus("superseded by a later rule")],
+      ["0004", Status.cases.superseded.make({ by: [] })],
     ]);
 
     expect(Resolution.isAnyOf(["broken"])(resolve("0001", loop))).toBe(true);
@@ -570,14 +571,86 @@ describe("resolve", () => {
     expect(Resolution.isAnyOf(["broken"])(resolve("0004", loop))).toBe(true);
   });
 
+  it("scenario: a chain that meets a superseded record with no successor is broken, and says so", () => {
+    const chain = new Map([
+      ["0005", readStatus("superseded", "0006")],
+      ["0006", readStatus("superseded")],
+    ]);
+
+    expect(resolve("0005", chain)).toEqual(
+      Resolution.cases.broken.make({ id: "0005", reason: "0005 is superseded by 0006, whose status is superseded" }),
+    );
+  });
+
   it("scenario: two links that meet on one live decision are not a loop", () => {
     const meet = new Map<string, Status>([
       ["0001", Status.cases.superseded.make({ by: ["0002", "0003"] })],
       ["0002", Status.cases.superseded.make({ by: ["0004"] })],
       ["0003", Status.cases.superseded.make({ by: ["0004"] })],
-      ["0004", Status.cases.accepted.make({ amendedBy: [] })],
+      ["0004", Status.cases.accepted.make({})],
     ]);
 
     expect(resolve("0001", meet)).toEqual(Resolution.cases.superseded.make({ id: "0001", by: ["0004"] }));
   });
+});
+
+describe("status shape", () => {
+  const read = (id: string, status: string, successor?: string) =>
+    Arr.flatMap(
+      readEntries(
+        `.decisions/${id}-x.md`,
+        `---\nid: ${id}\ntitle: Rule ${id}\nstatus: ${status}\n${successor === undefined ? "" : `successor: "${successor}"\n`}---\n`,
+      ),
+      (e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const]),
+    );
+
+  const padded = (n: number) => pipe(String(n), Str.padStart(4, "0"));
+
+  it("property: L9, `superseded` with a successor resolves to that record, `accepted` to itself with no amended-by line, and any other status shows as other with its raw text", () =>
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(fc.integer({ min: 1, max: 9999 }), { minLength: 2, maxLength: 2 }),
+        value.filter((s) => s !== "accepted" && s !== "superseded"),
+        ([a, b], text) => {
+          const [old, live] = [padded(a ?? 1), padded(b ?? 2)];
+          const paths = new Map([[live, `.decisions/${live}-x.md`]]);
+
+          const statuses = new Map([...read(old, "superseded", live), ...read(live, "accepted")]);
+          expect(resolve(old, statuses)).toEqual(Resolution.cases.superseded.make({ id: old, by: [live] }));
+          expect(resolve(live, statuses)).toEqual(Resolution.cases.accepted.make({ id: live }));
+          expect(resolutionLine(resolve(old, statuses), paths)).toBe(
+            `${old}  superseded  live: .decisions/${live}-x.md`,
+          );
+          expect(resolutionLine(resolve(live, statuses), paths)).toBe(`${live}  accepted  .decisions/${live}-x.md`);
+          expect(resolutionLine(resolve(live, statuses), paths)).not.toContain("amended");
+
+          // Not the new shape: the old links, `superseded` with no successor, and any other text.
+          // A longer word that starts with `accepted` or `superseded` is other too, with its raw text.
+          for (const raw of [
+            text,
+            `superseded by [${live}](${live}-x.md)`,
+            `amended-in-part by [${live}](${live}-x.md)`,
+            `accepted ${text}`,
+            "accepted-in-part",
+            `superseded ${text}`,
+            "superseded by",
+          ]) {
+            expect(readStatus(raw)).toEqual(Status.cases.other.make({ status: raw }));
+            expect(readStatus(raw, live)).toEqual(Status.cases.other.make({ status: raw }));
+          }
+
+          // A successor that is not exactly four digits is no successor: `superseded` with it is other.
+          for (const bad of [`${live}0`, `x${live}`, live.slice(1)]) {
+            expect(readStatus("superseded", bad)).toEqual(Status.cases.other.make({ status: "superseded" }));
+          }
+
+          expect(readStatus("superseded")).toEqual(Status.cases.other.make({ status: "superseded" }));
+          expect(readStatus("")).toEqual(Status.cases.other.make({ status: "(no status)" }));
+          expect(resolutionLine(resolve(old, new Map([[old, readStatus(text)]])), paths)).toBe(
+            `${old}  status: ${text}  `,
+          );
+        },
+      ),
+      { seed: 119120, numRuns: 100 },
+    ));
 });

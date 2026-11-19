@@ -567,10 +567,13 @@ visible, and never weaken the rules to hide this message.
    GitHub then tests the pull request on newest main and merges it. Nobody merges main in to catch
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
-   pass `--auto`. Two exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev0
-   fix on a branch the open sev0 allows
-   ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
-   docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
+   pass `--auto`. Three exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev
+   fix at either level, on a branch `sev.ts fix` named in a sev1 or `open --allow` or `next` named in a
+   sev0, with current main in its head
+   ([0611](../../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md), the [sev skill](../sev/SKILL.md)); a
+   ready pull request in a sev0
+   ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)); and a docs-only pull request
+   ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the
    quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack
    ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)): GitHub refuses `gh pr merge` and merge when ready on a stack member
@@ -582,7 +585,7 @@ visible, and never weaken the rules to hide this message.
    current by merging its parent's head with `gh pr update-branch <child>`
    ([0599](../../../.decisions/0599-native-stack-upkeep.md)), never a rebase or a force push; if its
    signed tree links changed, only its own step owner signs them again. In a sev0 the lead lands
-   every ready pull request by admin merge, in order, as [the sev skill](../sev/SKILL.md#sev0) says.
+   every ready pull request by admin merge, in order, as [the sev0 runbook](../../../.runbooks/sev-nothing-lands.md) says.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.

@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-transport-s2-build1",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1638",
+  "started": "2026-11-18T12:28:00-08:00",
+  "ended": "2026-11-18T12:42:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Build step for slice 2 of the transport mock sweep (docs/plan/quests/mock-transport-PLAN.md, ticket 1067, next/ only) on fabrikalfa/mock-transport at 82e0bb0f. Added next/packages/libfabrika/src/transport/Admissions.ts (the Admissions service and AdmissionError, in the repo's branded form as transport/Routes.ts has it, which the plan's sketch lacked), made checkHello in transport/Hello.ts ask for Admissions in place of its admit and consume arguments, and made gateway/Gateway.ts provide Admissions per attempt, wrapping the door's admission error as AdmissionError with the cause kept; initialize's declared error type gains AdmissionError. Added an Admissions row to .glossary/TERMS.md and said in docs/plan/quests/recorder-PLAN.md that slice 2 is built in #1638 and the folder's lock waits. Every law the brief names is green (Hello.test.ts 26, transport/ErrorCause.test.ts 3, KeyFile.laws.test.ts 2, node/ErrorCause.test.ts 30 with H5, Answer.test.ts 18). The plan's doubt is settled by a read, with one hit: cloudflare/runtime.ts projectStorage matches Schema.is(LedgerError) and strips its cause, so a LedgerError from admission now arrives inside AdmissionError and is no longer stripped; that reader was not changed and is reported to the lead as a plan amendment. One test outside the brief goes red with the plan's wrapping: next/apps/fabrika/src/door.integration.test.ts review 3.1 (line 2208) expects initialize's failure to be GatewayError and now gets AdmissionError; not edited, reported.",
+  "note": "Started time is approximate; usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. Node 22.23.5 here, the pin is Node 26, so each narrow run used CI=1 for the local-limit guard, one file at a time under nice -n 19 and --maxWorkers=1. next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts has 4 failing laws with and without this change (a LedgerError from a generated empty string), so they are not this build's.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "costUsd": null,
+  "billed": null
+}

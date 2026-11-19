@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
+import { docsOnly } from "@kalfa/ci/DocsOnly";
+import { TABLE } from "@kalfa/ci/DocsOnly.test-support";
 import { Effect, Match, Predicate, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
@@ -661,6 +663,18 @@ it("scenario: plain Markdown under today's trees is no file of today's version",
   // scenario: an app's README is read by no check, so it starts no build, on any event.
   expect(ci.jobs(["apps/fabrika/README.md"], "pull_request", false)).toMatchObject(off);
   expect(ci.jobs(["apps/fabrika/README.md"], "push", false)).toMatchObject(off);
+});
+
+// The table (@kalfa/ci/DocsOnly.test-support) is the one answer every tool reads. CI's classify skips
+// its heavy jobs exactly on the table's docs-only rows, and the classifier the lead's tools use agrees.
+// Plant: changes.mjs's quiet takes only the docs kind, so instruction text starts the heavy jobs.
+it("vector: the fixed table (@kalfa/ci/DocsOnly.test-support) gets the same answer from CI as from the lead's tools: classify skips check, typecheck and next exactly on its docsOnly rows", () => {
+  for (const row of TABLE) {
+    const flags = ci.classify(row.paths, "pull_request");
+
+    expect(!flags.check && !flags.typecheck && !flags.next, row.pr).toBe(row.docsOnly);
+    expect(docsOnly(row.paths), row.pr).toBe(row.docsOnly);
+  }
 });
 
 // 0174 narrowed this law: the group no longer runs every job, and it is still never a draft. 0534

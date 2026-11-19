@@ -1,0 +1,16 @@
+{
+  "date": "2026-11-18",
+  "quests": [],
+  "person": false,
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1655"
+  ],
+  "id": "2026-11-18-t1180-plan-said-the-box-refuses-a-real-instance-law",
+  "stage": "tests",
+  "kind": "friction",
+  "what": "Ticket 1180's plan and the lead's brief said the local host guard refuses next/apps/fabrika/src/instance-one-file.integration.test.ts in the cloud box. It does not: vitest.hostrun.ts allows a Linux box with CLAUDE_CODE_REMOTE=true on purpose. So the tests agent ran the real-instance law here, it timed out on a missing build and left workerd children, and the agent ended them by hand, which the lead's rule for this lane (no process signals in the box) meant to avoid.",
+  "cause": "The plan and the brief stated the guard's answer from memory of the laptop case, not from vitest.hostrun.ts's table.",
+  "primitive": "Brief",
+  "fix": "A brief that keeps a law off the box says so as its own rule, with the file named, since the guard allows every real-resource law in a cloud box.",
+  "test": "The next lane's brief names each law the box must not start, and its tests row shows none started."
+}

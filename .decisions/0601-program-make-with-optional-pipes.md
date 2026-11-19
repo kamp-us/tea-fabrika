@@ -244,9 +244,10 @@ const check = (state: State, name: string) =>
   memory version.
 - **Who may write what is a `WritePolicy` service** in `@kalfa/ledger`. fabrika implements its
   person-only rules.
-- **Every journal sits on the ledger.** A process has one journal stream, with one writer, and one
-  inbox stream, with many writers. tea's Journal maps onto a ledger turn, and the adapter is a
-  libfabrika Layer.
+- **A process's journal sits on the ledger.** A process has one journal stream, with one writer, and
+  one inbox stream, with many writers. `@kalfa/ledger` provides a tea journal driver built on a
+  ledger stream, and it must pass tea's journal conformance tests
+  ([0616](0616-providers-are-one-package-each.md)).
 - **Local first.** Each place keeps a copy and writes to it at once. Logs with ids merge by union.
   A journal's local order is its order, and shared streams wait for their home's order. One process
   runs in one place at a time, and `appendFenced` shows a second writer.
@@ -286,9 +287,10 @@ const check = (state: State, name: string) =>
   test version: `@kalfa/program`, `@kalfa/ledger` and `@kalfa/transport`. All are
   `"private": true` for now.
 - **`@kalfa/program`** holds programs and their running instances, `Program.supervise`, and the
-  `Supervisor`, `Journal`, `Errors` and `Machine` services.
-- **libfabrika implements them and joins them:** the ledger on Durable Objects, the Journal on the
-  ledger, the `Supervisor` with its records, and the WebSocket and WebRTC Layers. The goal is
+  `Supervisor`, `Errors` and `Machine` services. It defines no Journal: the journal driver
+  interface is tea's, and [0616](0616-providers-are-one-package-each.md) has the rest.
+- **libfabrika implements them and joins them:** the ledger's storage on Durable Objects, which is a
+  provider's Ledger Layer (`@kalfa/provider-cloudflare`, 0616), the journal driver on the ledger, the `Supervisor` with its records, and the WebSocket and WebRTC Layers. The goal is
   `fabrika.run(checklist)`, with everything provided.
 - `@kampus/libfabrika` keeps its name. An `@libfabrika/*` scope waits until packages move to their
   own repos.
