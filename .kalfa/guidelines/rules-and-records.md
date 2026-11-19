@@ -149,6 +149,5 @@ a reader   -> reads the home; git log is its history; the record says why
 - **Example:** who may open GitHub issues was a line in 0534; it is now
   `.github/ci/workflow-lint/issues.ts`.
 - **Held by:** the review, and AGENTS.md's "seen a second time" rule.
-- **Breaks today:** `.agents/skills/guidelines/SKILL.md:171` asks for an index row that
- forbids; another guidelines pull
-  request already filed it as a finding, and this study met it a second time.
+- **Breaks today:** nothing. The guidelines skill used to ask for an index row that this folder
+  forbids; that step is gone.
