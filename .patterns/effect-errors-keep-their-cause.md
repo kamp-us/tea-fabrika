@@ -43,8 +43,7 @@ An error is a `Schema.TaggedError`. When it wraps a failure from below (a reject
 `mapError` that builds it passes the cause on. A handler catches by tag with `Effect.catchTag`,
 `Effect.catchTags` or `Effect.catchReason`, on an error union the type spells out.
 
-The cause is written in one of two forms, as the Effect library writes it
-([0568](../.decisions/0568-error-cause-follows-effect.md)):
+The cause is written in one of two forms, as the Effect library writes it:
 
 | Every caller has a cause? | The field |
 |---|---|
@@ -58,7 +57,7 @@ required form 12 times (`sql/SqlError.ts:21`) and `optionalKey` around a `Schema
 With `exactOptionalPropertyTypes` on (`tsconfig.base.json:8`), that is what lets
 `new X({ reason, cause })` compile when `cause` may be `undefined`. Ordinary optional fields are
 another rule: `Schema.optionalKey` stays their default
-([0566](../.decisions/0566-effect-skill-pieces-taken.md), N8).
+(N8).
 
 Effect's own example error carries the cause (`node_modules/effect/AGENTS.md`, "Context.Service",
 and `ai-docs/src/01_effect/03_services/20_layer-unwrap.ts`,
@@ -98,8 +97,7 @@ Rules:
   (`fabrika/no-throw-in-effect-gen`). A throw stays only inside a sync SQLite transaction, where it
   is how the transaction rolls back, and is caught into a typed error at the Effect border.
 - **The key is `reason`** (`next/packages/libfabrika/src/ledger/Ledger.ts:32`).
-- **A family of cases** is one service error whose `reason` is a union of tagged errors
-  ([0119](../.decisions/0119-an-errors-reason-is-a-tagged-error.md)), handled with
+- **A family of cases** is one service error whose `reason` is a union of tagged errors, handled with
   `Effect.catchReason` (`ai-docs/src/01_effect/04_errors/20_reason-errors.ts`).
   `ProcessHistoryError` and `RepositoriesError`
   (`next/packages/libfabrika/src/repositories/Repositories.ts:109-110`) have that shape. Older
@@ -119,7 +117,7 @@ size, not a list:
 
 - 12 causes are `Schema.optionalKey(Schema.Defect())`, for example
   `next/packages/libfabrika/src/client/Journal.ts:58` and `next/apps/fabrika/dev.ts:22`. Each
-  becomes required or `Schema.optional` once its call sites are read (0568). The other causes are
+  becomes required or `Schema.optional` once its call sites are read. The other causes are
   58 required and 14 `Schema.optional`.
 - 27 `mapError(() =>` and 80 `catch: () =>`, `catch: fail` or `catch: unreachable`. For example
   `next/apps/fabrika/src/exam/compiler.ts:17` drops the read failure and keeps only the path.
@@ -142,21 +140,20 @@ cause is a dropped fact.
 - Lint, on: `fabrika/no-data-taggederror`, `fabrika/no-throw-in-effect-gen` and
   `fabrika/no-cause-squash` (`.oxlintrc.json:38`, `:44`, `:667`), with oxlint's
   `no-restricted-properties` on `Data.TaggedError` beside the first (`:56`). Ours stays because
-  only it refuses `Data.TaggedError` in a type position
-  ([0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md)).
+  only it refuses `Data.TaggedError` in a type position.
 - Effect's checker, on in `next/`: `preferSchemaTaggedError` (`tsconfig.base.json:55`) and
   `errorPayloadShadowsName` (`tsconfig.base.json:81`). Not yet on:
-  `anyUnknownInErrorContext` and `instanceOfSchema`; [0565](../.decisions/0565-effects-own-checks-block.md)
+  `anyUnknownInErrorContext` and `instanceOfSchema`
   turns every check on, one at a time.
 - No check holds the cause's form. Whether a lint rule or a checker check holds "no `optionalKey`
-  on a cause" is for the cleanup's plan (0568).
+  on a cause" is for the cleanup's plan.
 - A dropped cause has no built-in check. A custom oxlint rule could flag a `catch:` or `mapError`
   callback with no parameter; not built.
 
 ## Decision
 
-[0568](../.decisions/0568-error-cause-follows-effect.md) for the cause's form,
-[0119](../.decisions/0119-an-errors-reason-is-a-tagged-error.md) for tagged reasons, and
+ for the cause's form,
+ for tagged reasons, and
 [Build on Effect](../docs/direction/build-on-effect.md): Effect's own modules and shapes first.
 Credit: kamp-us/phoenix's [effect-errors.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-errors.md)
 and [effect-error-operators.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-error-operators.md)

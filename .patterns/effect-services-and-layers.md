@@ -88,7 +88,7 @@ Rules:
   service is named otherwise than its file: `@kampus/libfabrika/ledger/Ledger`,
   `@kampus/libfabrika/ledger/Ledger.Doorbell`, `@kampus/libfabrika/Id.Generator` (Effect's own
   advice, `node_modules/effect/AGENTS.md`, "Context.Service", which
-  [0023](../.decisions/0023-next-follows-effects-code-style.md) has `next/` follow). Moving the file
+ has `next/` follow). Moving the file
   changes the key. `fabrika/service-id` advises on a key that does not fit
   (`oxlint-plugins/service-id.ts`).
 - **Write the service's type out.** The contract is the type, so it is never inferred from an
@@ -221,14 +221,14 @@ Referee, RefereeSql, LedgerTransactionSql and ledgerStore.
   module's `internal/` private, and `layer-rules.json` keeps `ledger/` from importing `cloudflare/`.
 - Lint, on for the folders at zero: `fabrika/no-static-layer` (`oxlint-plugins/no-static-layer.ts`,
   `.oxlintrc.json:947-969`) refuses every static member of a class that extends `Context.Service`,
-  as [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) was amended on
+  as was amended on
   2026-11-13. Tests, shared suites and test support are left out. Its laws are in
   `oxlint-plugins/no-static-layer.test.ts`.
 
 ## Decision
 
-[0095: a service file holds only its
-contract](../.decisions/0095-a-service-file-holds-only-its-contract.md), which departs from
+0095: a service file holds only its
+contract, which departs from
 `node_modules/effect/AGENTS.md`'s static layer; [an object class stays
 thin](../docs/direction/object-classes-stay-thin.md). Credit: kamp-us/phoenix's
 [effect-context-service.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-context-service.md)

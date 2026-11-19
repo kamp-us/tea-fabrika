@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 `next/` and our tooling (the lead and step scripts under `.agents/`, `oxlint-plugins/`,
 `.github/ci/`). Today's app is not touched. It builds
-[0568](../../../.decisions/0568-error-cause-follows-effect.md) (owner, 2026-11-15, merged as
+ (owner, 2026-11-15, merged as
 https://github.com/kamp-us/tea-fabrika/pull/1376 while this plan was written): a cause every caller always has is
 `cause: Schema.Defect()`; a cause that may be missing is `cause: Schema.optional(Schema.Defect())`;
 never `Schema.optionalKey` on a cause; ordinary optional fields keep `optionalKey`. It is one of the
@@ -40,7 +40,7 @@ Each is a call taken, with its lean. None contradicts a decision, so none is an 
   `MailDeliveryError` (`next/packages/libfabrika/src/runtime/ReloadTest.ts:545`). They become
   required, and the fakes pass a generated cause. The doubt: the ruling says "every caller", and a
   fake is a caller. The lean holds because a fake that makes an error the product never makes shows
-  an agent a shape that cannot happen ([0562](../../../.decisions/0562-nothing-teaches-the-wrong-shape.md)).
+  an agent a shape that cannot happen.
   What would settle it: the owner reading this line. If he says no, those two stay optional, and
   slices 2 and 3 each lose one row; nothing else moves.
 - **The five audit errors take `Schema.Defect()` and lose `disallowJsonEncode`** (75%).
@@ -187,10 +187,9 @@ No fact is lost by this change: a placeholder never held one. Nothing new needs 
 - **A trusted repo:** clanka writes `cause: Schema.optional(Schema.Defect())` on its boundary errors
   (`src/CodexAuth.ts:50-59`, cited in `.patterns/effect-errors-keep-their-cause.md`; not fetched
   again for this plan).
-- **Decision 0566 N8** sets `optionalKey` for a key that may be absent and left the cause out of it
+- **an earlier decision N8** sets `optionalKey` for a key that may be absent and left the cause out of it
   on purpose ("not decided here"). 0568 is that missing piece, so N8 and 0568 agree: a cause is the
-  one field where `optional` is right, the way Effect writes it. 0568 also amends
-  [0119](../../../.decisions/0119-an-errors-reason-is-a-tagged-error.md): a reason's cause is
+  one field where `optional` is right, the way Effect writes it. 0568 also amends: a reason's cause is
   required only when every caller has one, which is what lets the four placeholder reasons below
   become optional.
 - **Elm and OTP** have no answer here: this is how a schema field is written.
@@ -206,7 +205,7 @@ No fact is lost by this change: a placeholder never held one. Nothing new needs 
     imports, exports, globals and properties (`configuration_schema.json`). `no-restricted-properties`
     could ban `Schema.optionalKey` everywhere, but not on one key, and every ordinary optional field
     uses it.
-  - The anti-slop plugin (0563) at `5360c12`: 27 rules, listed through the GitHub API; none is about
+  - The anti-slop plugin at `5360c12`: 27 rules, listed through the GitHub API; none is about
     schemas, optional keys or causes.
   So the rule is ours: `fabrika/error-cause` in `oxlint-plugins/error-cause.ts`.
 - **Required or optional is type, and judgment.** No rule can tell whether every caller has a cause.
@@ -225,7 +224,7 @@ No fact is lost by this change: a placeholder never held one. Nothing new needs 
 // oxlint-plugins/error-cause.ts, a sketch.
 // An error's cause is `Schema.Defect()` when every caller has one, and
 // `Schema.optional(Schema.Defect())` when one may be missing. Never `Schema.optionalKey`, and never
-// another schema (0568).
+// another schema.
 //
 // What counts as an error's fields: the second argument of `<S>.TaggedError<T>()(tag, fields)` or
 // `<S>.TaggedErrorClass<T>()(tag, fields, ...)`, where <S> is `Schema` imported from `effect`, or
@@ -263,8 +262,7 @@ Nothing in the scope passes options today. A call, 85%.
 
 The rule is set to `error` for `next/**`, `.agents/**`, `oxlint-plugins/**` and `.github/ci/**`, tests
 included, in the same override blocks that set `fabrika/no-hand-tag` for 0562's scope, and on only
-in slice 4, when the tree is at zero. It is not a setting: nobody turns a code shape on per install
-([0069](../../../.decisions/0069-choices-are-settings.md)).
+in slice 4, when the tree is at zero. It is not a setting: nobody turns a code shape on per install.
 
 **Its false alarms, counted on the real tree** by reading each of the 116 `cause` lines above
 against the rule's logic: it fires on 16 lines (12 `optionalKey(Defect())`, the audit line through
@@ -318,16 +316,16 @@ Notes on the laws:
 - L6 and L7 may already exist in part: `next/packages/libfabrika/src/runtime/ErrorCause.test.ts`
   holds cause laws today. The tests step reads it first and extends a law rather than writing a
   second one for the same thing.
-- Every plant is run once by the tests step and recorded in its run row, never committed (0093).
+- Every plant is run once by the tests step and recorded in its run row, never committed.
 - **No host-only law.** Nothing needs launchd, the real app, a real process or a signal.
 - **No `.integration.` or `.visual.` file runs on the laptop.** Three such files change:
   `next/apps/fabrika/src/door.integration.test.ts` (one expectation),
   `next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts` (one schema line) and
   `next/apps/fabrika/e2e/node/P19Launchd.test-support.ts` (one schema line, read by integration
   tests). They are edited by reading, checked by `pnpm lint` and the lead's typecheck, and run on
-  the schedule ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)).
+  the schedule.
 
-## How this meets decision 0566 N7
+## How this meets an earlier decision N7
 
 N7 rewrites 113 inline wrappers, `mapError((cause) => new X({ ..., cause }))`, into one named helper
 per error. This sweep edits other lines:
@@ -452,7 +450,7 @@ Estimate: 14 steps, $46
   this plan; each slice's run row records its own recount.
 - `field/runs/` rows for each step, written by the lead.
 - `.patterns/effect-errors-keep-their-cause.md` and `oxlint-plugins/README.md`, both in slice 4.
-- The decision is [0568](../../../.decisions/0568-error-cause-follows-effect.md). This plan makes no
+- The decision is. This plan makes no
   new decision; each call above builds it, and 0568's "whether a check holds it is for the
   cleanup's plan" is answered under "Which check holds it".
 

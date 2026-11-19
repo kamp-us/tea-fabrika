@@ -8,8 +8,7 @@ summary: "A rule that matters is held by a type, a refusal or a failing test. A 
 Decided 2026-10-12. Parts of it were set earlier, on 2026-10-04 and 2026-10-05,
 and written down here on 2026-10-18.
 
-Its decided rules are in: [0233](../../.decisions/0233-rules-are-held-by-code.md),
-[0234](../../.decisions/0234-a-skipped-check-says-so.md).
+Its decided rules are in:,.
 
 ```ts
 // Not protection: a sentence someone has to remember.

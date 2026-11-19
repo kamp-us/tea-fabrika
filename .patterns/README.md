@@ -2,13 +2,13 @@
 
 How the code is shaped now, one doc per shape. Each doc opens with a Mermaid diagram of the
 mechanism, then one small real code block, then the words, and it points at real files with
-`path:line` ([0005](../.decisions/0005-patterns-and-decisions-are-visual.md)). Write or re-ground
+`path:line`. Write or re-ground
 one with the [write-pattern skill](../.agents/skills/write-pattern/SKILL.md).
 
 ```mermaid
 flowchart LR
   shape["a code shape agents rely on"] --> patterns[".patterns/name.md"]
-  why["why it was chosen"] --> decisions[".decisions/NNNN-slug.md"]
+  why["why it was chosen"] --> decisions[".kalfa/decisions/NNNN-slug.md"]
   word["what a word means"] --> glossary[".glossary/TERMS.md, then GLOSSARY.md"]
   measured["what was measured"] --> experiments["experiments/NN-title.md"]
 ```
@@ -31,8 +31,7 @@ A doc that already covers the shape is extended, never doubled.
 
 ## Every doc
 
-This folder keeps no table of its docs
-([0522](../.decisions/0522-no-folder-keeps-an-index-table.md)). Each doc opens with a small top
+This folder keeps no table of its docs. Each doc opens with a small top
 block above its `# ` heading: `where` is the code it covers, and `when` is the moment to read it.
 Each value is one line, in double quotes. The Mermaid diagram comes right after the heading.
 
@@ -45,8 +44,8 @@ when: "Adding a setting, or reading or writing a settings file"
 # One settings declaration gives both encodings
 ```
 
-The lead's command prints one line per doc as it is on `origin/main`:
+Each doc's `where` and `when` are in its frontmatter:
 
 ```sh
-node .agents/skills/lead/scripts/records.ts list .patterns
+rg -n '^(where|when):' .patterns
 ```

@@ -7,8 +7,7 @@ summary: "Draft, the handful only; `next/`. Three doors on one local instance wi
 # 275. Does a script at the agent door beat one tool call at a time, and does it stay safe when the brain is killed or a note is poisoned?
 
 **Draft, started 2026-11-11. The handful has run (5 notes, 10 agent runs, $0.16); 20 and 100
-notes have not.** This page is written on its branch from its first line
-([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)). It follows
+notes have not.** This page is written on its branch from its first line. It follows
 [experiment 265](./265-code-mode-for-the-mcp-door.md), which read what the makers say. `next/`
 only.
 
@@ -98,7 +97,7 @@ nice -n 19 node replay.ts                                   # no model
 - **The bridge** (`bridge.ts`) is a stdio MCP server that `claude -p` starts. It offers one door's
   tools. Every door reaches the program only through one function, `call`, and logs each call.
 - **Door B's wall is Cloudflare's Worker Loader**, through Alchemy's `Cloudflare.WorkerLoader()`
-  ([0042](../.decisions/0042-platform-pieces-go-through-alchemy.md)), as in
+  ([0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)), as in
   [experiment 173](./173-worker-loader.md). `scripts/worker.js` loads each script into its own
   isolate keyed `<code hash>/<run id>`, with `globalOutbound: null` and one binding, `FABRIKA`: a
   `Handle` stub made with `ctx.exports.Handle({props: {run, callback}})`. Each handle call goes back
@@ -235,14 +234,14 @@ functions like fetch()". The globals are the platform's own: `navigator`, `proce
 ## Security from the first version
 
 The owner asked for each part as a thin working slice now
-([0068](../.decisions/0068-tiers-carry-every-part.md)'s rule, applied here).
+('s rule, applied here).
 
 | Part | Round one has | Left for later |
 |---|---|---|
 | The handle holds only what the grant allows | `fabrika.notes` has only the inputs in the agent's grant, and the bridge refuses any other input by name (`not_granted`). The isolate has `globalOutbound: null` and one binding. | The grant is an env value here, not read from the agent's real grant: agent grants (P25) are not built, so the agent signs in "as window". |
-| A time limit and a call cap, each a named refusal | `time_limit` and `call_cap`, held by fabrika in the bridge. Both fired on every provocation. | A wall that stops the isolate. Locally nothing does: a spin kept workerd near 100% CPU until the instance was restarted, and experiment 173 saw Miniflare ignore `limits.cpuMs`. The full walls of [0020](../.decisions/0020-programs-get-hard-walls.md) (quota, supervisor, CPU limit per isolate), and a restart of the Scripts Worker when a limit fires. |
+| A time limit and a call cap, each a named refusal | `time_limit` and `call_cap`, held by fabrika in the bridge. Both fired on every provocation. | A wall that stops the isolate. Locally nothing does: a spin kept workerd near 100% CPU until the instance was restarted, and experiment 173 saw Miniflare ignore `limits.cpuMs`. The full walls of [0007](../.kalfa/decisions/0007-otp-supervision-per-program.md) (quota, supervisor, CPU limit per isolate), and a restart of the Scripts Worker when a limit fires. |
 | A record of every script | `scripts.jsonl`, written as each thing happens: `script_started {via, hash, by, tab, grant, limits, code}`, then `script_called {seq, input, value}` and `script_answered {seq, input, result or error}` for each call in order, then `script_ended {ok, calls, ms, refused, error}`. `flow_started {by, hash, steps}` for C. Raw rows under `runs/`. | Writing it to the ledger as the agent, beside the program's own entries, instead of a file. |
-| A person's yes by risk tier | Nothing. | [0082](../.decisions/0082-approvals-is-a-floor-for-every-run.md)'s floor, applied to a script's writes the way it applies to a flow. |
+| A person's yes by risk tier | Nothing. |'s floor, applied to a script's writes the way it applies to a flow. |
 | A check before a program is loaded | Nothing. | Needed before the fourth door. |
 
 ## Planned, not in this round
@@ -273,7 +272,7 @@ doubt.
   the handle obeys is an env value.
 - **A, B and C run through a bridge we wrote,** not P25's. Reads go through `view.open` and the
   program's read port in the bridge, since the door has no read-port call yet.
-- **C's flow runs in the bridge, not as a recorded process in the brain** (0074, 0070). A kill
+- **C's flow runs in the bridge, not as a recorded process in the brain** (0035). A kill
   during a flow was not tried; a real flow runner would survive one, this one would not.
 - **The kill was tried once, on door B only,** and the agent never repeated a write, so the run did
   not exercise the guards. `replay.ts` did, without a model.

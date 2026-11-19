@@ -7,7 +7,7 @@ summary: "Review is a different agent from build. The reviewer only finds; code 
 
 Decided 2026-10-04, the first night of the rebuild.
 
-Its decided rules are in: [0393](../../.decisions/0393-an-agent-says-it-posts-on-say-so.md).
+Its decided rules are in:.
 
 ```ts
 // The reviewer finds. Code checks. Code decides.

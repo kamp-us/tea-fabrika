@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-10-31; order set 2026-11-01; order changed 2026-11-05 by the owner: `next/` first, pipeline paused; merge rule amended 2026-11-09 by [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)"
+state: "decided 2026-10-31; order set 2026-11-01; order changed 2026-11-05 by the owner: `next/` first, pipeline paused; merge rule amended 2026-11-09 by"
 summary: "Every pull request, in either version, goes through today's pipeline programs. A step that cannot run yet goes by hand for that pull request, logged in `field/`. Since 2026-11-05 the pipeline programs are paused and `next/` does not wait on them: Tier 1 is built by the lead session's agents, the steps by hand, the lead agent reading every diff before a merge. The lead merges any pull request once every step passed and nothing really loosens; only real loosening or a new design call waits on the owner."
 ---
 
@@ -41,7 +41,7 @@ ticket -> triage -> plan (the owner approves its Properties)
 then, each hour: StrykerJS on what merged to main, a fixed sample of about 150 -> tickets
 ```
 
-*Changed 2026-11-10 ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)):* mutation left
+*Changed 2026-11-10:* mutation left
 the pull request's steps and runs hourly against main. *It said: a mutation step between build and
 review.*
 
@@ -60,9 +60,9 @@ review.*
 
 ## The mechanical branch
 
-**Added 2026-11-18 ([0615](../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)).** demlik runs old fabrika, and this pipeline is
+**Added 2026-11-18.** demlik runs old fabrika, and this pipeline is
 built on its ideas. One branch was missing, for tickets a command can finish. In `next/` it is a
-pipeline branch built from the six primitives (0421), with no plan and no test writer:
+pipeline branch built from the six primitives, with no plan and no test writer:
 
 ```text
 ticket -> Judge: a fix command exists?       no / "I don't know" -> plan, tests, build, review
@@ -81,16 +81,14 @@ in the decision.
 - **A live run on a target repository:** only through the ship stage.
 - **A pull request that went by hand:** it follows [autonomy is measured trust](./autonomy-is-measured-trust.md):
   a merge does not wait on the owner. One review by a separate agent says merge-ready, CI is green,
-  and the lead agent reads the diff and runs a leak grep, then adds it to GitHub's merge queue
-  (0162). After the merge, `land.ts merged` comments on
+  and the lead agent reads the diff and runs a leak grep, then adds it to GitHub's merge queue. After the merge, `land.ts merged` comments on
   each ticket it closes with the pull request and its merge commit
   (`.agents/skills/lead/scripts/pr/Queue.ts`); the row per merge that note proposes (M1) is
   not written yet.
   This holds for product code, exam pull requests and exam paths too: the lead lands it through
   the queue once every step passed and `loosening.sh` shows no real loosening after the lead's
   hand check. The lead reads each new edge comment. Still the owner's: real loosening or removal
-  of a law, and any new design call
-  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed 2026-11-09
+  of a law, and any new design call. *Changed 2026-11-09
   (owner): this said the owner kept exam pull requests, the read of any exam path a pull request
   touches ([a unit of work is a commit](./a-unit-of-work-is-a-commit.md)) and each edge comment a
   build adds.* *Changed 2026-11-05 (owner): this said every such pull request waited on the

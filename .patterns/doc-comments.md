@@ -88,7 +88,7 @@ and each one is visible in the installed source:
 - **A type directly under its same-name schema shares the schema's block.** The pair is one
   thing to a reader, so it gets one block, above the schema. "Directly" means the statement right
   before it (`oxlint-plugins/jsdocs.ts:21-24`). This is a kept difference from Effect, which gives
-  the type its own block ([0023](../.decisions/0023-next-follows-effects-code-style.md#amendments)):
+  the type its own block:
 
   ```ts
   // A sketch: no pair in a folder the rule is on has this shape yet.
@@ -118,18 +118,17 @@ and each one is visible in the installed source:
 - **No plan codes, no history.** A comment never cites a plan row, a law number or a flag (`P6`,
   `law p92`, `flag 13`, `Tier 1`), and never points at a past version ("as before"). A stranger
   cannot read them, and they rot when the plan moves. Keep the reason in words; a decision number
-  such as `(0095)` may stay, since the record lasts. Effect's source cites no ticket.
+  such as `` may stay, since the record lasts. Effect's source cites no ticket.
 
 ## Where it applies
 
 Every public export of a library under `next/packages/` (today `libfabrika` and `tuval`), and its
-module files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
-[0120](../.decisions/0120-effect-code-guidelines.md)). `fabrika/jsdocs` is on at `error` for
+module files. `fabrika/jsdocs` is on at `error` for
 `next/packages/*/src/**` (`.oxlintrc.json:2028-2029`), so a new folder or package blocks from its
 first file. A folder not yet at zero has one line in the `warn` override right after it
 (`.oxlintrc.json:2036-2047`), where its fires print as advice and do not fail. The pull request that
 fills a folder deletes its line, and a whole `pnpm lint` fails until it does
-([0523](../.decisions/0523-advice-rules-block-where-clean.md), ticket 948,
+(ticket 948,
 [Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until then, review holds the
 shape in that folder.
 
@@ -139,7 +138,7 @@ suites (`*Test.ts`), fixtures and declaration files, where the rule is off
 there. App code in `next/apps/` is not asked either. `@since` carries the library's own version,
 `0.0.0` while it is unpublished, so a block leaves the tag out until a first release, and the
 rule's `since: "absent"` fires on one
-([0118](../.decisions/0118-no-since-tag-before-a-release.md), `oxlint-plugins/jsdocs.ts:114-115`).
+(`oxlint-plugins/jsdocs.ts:114-115`).
 
 How far it is, counted by the rule on 2026-11-14 on main `c0aaf4a24`
 (`oxlint-plugins/README.md`, "The docs rule, E6"), beside the counts made before it:

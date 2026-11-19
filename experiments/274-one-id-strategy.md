@@ -1,7 +1,7 @@
 ---
 date: "2026-11-07"
 scripts: "none; a throwaway script made example ids and the math, not kept"
-summary: "Reading, not a measurement; `next/`. The input id's 32-bit random run part per door start repeats: `1 - exp(-N²/2^33)`, 1.2% at 10,000 starts, 50% at 77,163, 98% at 182,500. At a guessed 500 to 3,000 starts a day, that is 50% in 26 to 154 days, and a repeat can sign a write as the wrong person. The 16-bit note id `n-7f3a` repeats at about 301 notes. The letter id repeats if a client's counter resets. A UUIDv7 written as a TypeID collides at about `k²/2^75`: 3 in 10^17 at 1,000 ids in one millisecond. Lean 80%. For outside events, the lean is to dedupe in the ledger on the source's key, 70%. Decided as [one id per thing](../.decisions/0211-one-typeid-per-thing.md), with the input id added on 11-08. The study's \"a number in place of an id\" did not survive. No model, $0."
+summary: "Reading, not a measurement; `next/`. The input id's 32-bit random run part per door start repeats: `1 - exp(-N²/2^33)`, 1.2% at 10,000 starts, 50% at 77,163, 98% at 182,500. At a guessed 500 to 3,000 starts a day, that is 50% in 26 to 154 days, and a repeat can sign a write as the wrong person. The 16-bit note id `n-7f3a` repeats at about 301 notes. The letter id repeats if a client's counter resets. A UUIDv7 written as a TypeID collides at about `k²/2^75`: 3 in 10^17 at 1,000 ids in one millisecond. Lean 80%. For outside events, the lean is to dedupe in the ledger on the source's key, 70%. Decided as [one id per thing](../.kalfa/decisions/0011-one-typeid-per-thing.md), with the input id added on 11-08. The study's \"a number in place of an id\" did not survive. No model, $0."
 ---
 
 # 274. Do `next/`'s settled id shapes repeat, and what one id strategy fixes them?
@@ -9,7 +9,7 @@ summary: "Reading, not a measurement; `next/`. The input id's 32-bit random run 
 Read on 2026-11-07; moved here on 2026-11-11. **This is reading, not a measurement,** plus one
 throwaway script that made the example ids and did the collision math (not kept). Nothing was
 built or run in the repo, no model was called beyond the one agent that read, and it cost $0. It is
-about `next/` only. The decision it led to is [0211, one id per thing](../.decisions/0211-one-typeid-per-thing.md),
+about `next/` only. The decision it led to is [0211, one id per thing](../.kalfa/decisions/0011-one-typeid-per-thing.md),
 decided the same day and extended on 2026-11-08; that note holds the rule, and this write-up holds
 the math and the sources behind it. Where the decision differs from the study's lean, the section
 "What was decided" says so.
@@ -178,7 +178,7 @@ database keys. Stripe's "two separate Event objects" are each source's adapter's
 
 ## What was decided
 
-- [One id per thing](../.decisions/0211-one-typeid-per-thing.md), 2026-11-07: every thing has one TypeID,
+- [One id per thing](../.kalfa/decisions/0011-one-typeid-per-thing.md), 2026-11-07: every thing has one TypeID,
   `<type>_<UUIDv7 in 26 base32>`, made with `Id.make`; a thing people count also gets `n:
   Schema.Int`, printed only by its owning program. **The study's "kind 1, a number in place of an
   id" did not survive:** a ticket is `ticket_…` with `n: 193` beside it, not `{ticket: 41}` alone.

@@ -11,8 +11,7 @@ public docs, public source and today's code say. One more probe, on editors, ran
 is written up in [its own section](#a-probe-2026-11-10). It feeds [settings](../docs/direction/settings.md),
 a decided note, and a private Design canvas, "Settings guidelines".
 
-**A word.** In `next/`, one running copy of fabrika is an instance, never a stage
-([0080](../.decisions/0080-a-running-copy-is-an-instance.md)). The code on main still says stage
+**A word.** In `next/`, one running copy of fabrika is an instance, never a stage. The code on main still says stage
 (`stage.json`, `StageError`, `STAGE`, `stage-records.test.ts`) until the rename sweep, tracker ticket
 681, runs, so a name cited from code keeps it here.
 
@@ -52,13 +51,13 @@ below was checked again on main at `889f1f235`, after the folder move.
 
 Decided before this study, and not reopened here:
 
-- **[0069](../.decisions/0069-choices-are-settings.md)** (owner, 2026-11-10): a choice that makes
+- **** (owner, 2026-11-10): a choice that makes
   sense as a `fabrika.toml` value is one, declared once as an Effect `Config` with its schema and
   default, fed alike by the file, the environment, a flag and a test; in `next/` this holds now, and
   Tier 1's P38 builds the foundation.
 - **Which settings Tier 1 gets is P38's plan's answer** (owner, 2026-11-10, in 0069), never a
   question for the owner.
-- **[0070](../.decisions/0070-flow-runner-stays-a-machine.md)** (2026-11-10): the lead's flow runner
+- **** (2026-11-10): the lead's flow runner
   stays a plain tea machine, not a program, until a program can run outside fabrika's app.
 - **[One fabrika.toml per repo](../docs/direction/one-fabrika-toml-per-repo.md)** (2026-10-05, the
   folder 2026-10-30): `.fabrika/fabrika.toml` and `~/.fabrika/fabrika.toml`, one spelling, TOML; a
@@ -74,7 +73,7 @@ Decided before this study, and not reopened here:
 - **[Secrets are Redacted](../docs/direction/secrets-are-redacted.md)** (2026-10-26): no secret in
   the file; a secret is read with `Config.Redacted`.
 - **[Pin exact versions](../docs/direction/pin-exact-versions.md)**, and
-  **[0068](../.decisions/0068-tiers-carry-every-part.md)** (2026-11-10): each tier carries a working
+  **** (2026-11-10): each tier carries a working
   slice of every core idea, settings among them.
 
 ## What was read
@@ -287,8 +286,7 @@ hover and diagnostics in an editor, under both TOML language servers?
   `ConfigProvider.fromEnv().pipe(ConfigProvider.nested("fabrika"), ConfigProvider.constantCase)`,
   fell back to a `fromUnknown` file under `orElse`, and read through `ConfigProvider.layer`. With
   `constantCase` before `nested`, it read nothing and gave the default.
-- **Kept outside git.** The probe's files stay in the owner's private archive, not in the repo
-  ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+- **Kept outside git.** The probe's files stay in the owner's private archive, not in the repo.
 - **What it cannot tell us.** One editor, one person, a two-key schema. Other editors (VS Code, Zed,
   Helix) were not tried.
 

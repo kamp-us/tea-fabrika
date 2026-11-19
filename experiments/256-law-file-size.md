@@ -231,13 +231,13 @@ Why nothing caught them (reading):
   (the plan's A5 to A16, the stale-answer and late-open rules) shaped the new laws. A writer who
   reads only the plan might do worse; this run cannot say.
 - **No plants in the new file.** Here the mutation run showed each law can fail. In this repo
-  mutation runs hourly on main, not per pull request (0066), so a law with no plant could ship
+  mutation runs hourly on main, not per pull request, so a law with no plant could ship
   vacuous until that run.
 - **The hang law's real-time bound is not restated.** The new file checks that the window's link
   timer is exactly `timerDeps(link)` and leaves the 10 s detection bound to `Link.laws.test.ts`.
   The old file simulates the clock itself. If the window ever added a timer of its own that held
   the link, the new file would see it only as a deps mismatch.
-- **Ran on the host, not in a container.** The brief ruled out Docker; decision 0045 puts a
+- **Ran on the host, not in a container.** The brief ruled out Docker; an earlier decision puts a
   mutation step in a container. Stryker's log server listened on the host's loopback, which the
   laptop sandbox allowed without any setting changed. This was an experiment, not a pipeline step.
 - **Line counts depend on the formatter.** The new file is 1,001 lines as first formatted and
@@ -252,7 +252,7 @@ runs.
 
 ## Where things are
 
-None of it is on main (decision 0027). The new law file,
+None of it is on main (an earlier decision). The new law file,
 `next/packages/tuval/src/window/machine.model.laws.test.ts`, its first version, the sampler
 wrapper, the Stryker scripts and the comparison script live on the branch
 `fabrikalfa/exp-law-size`. Every Stryker report and the sample are raw results, so they are in the

@@ -25,13 +25,10 @@ same, and the row in `next-ledger.json` is deleted in the same pull request.
 - **Can the debt be paid from what is already decided? Yes for 35 of the 71 lines, and yes in kind
   for the other 36, with one open question about a name and a shape.**
 - **Decided, no question** (slices 1 to 3, and the test rule for all of it): a store that has a
-  fault of its own gets an error named after its service
-  ([0055](../../.decisions/0055-errors-named-by-their-service.md)), with tagged reasons
-  ([0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md)); `processes/` answers in
-  its own words; a test that needs a real database is a suite that `node/` runs
-  ([0062](../../.decisions/0062-test-files-keep-the-floors.md)).
+  fault of its own gets an error named after its service, with tagged reasons; `processes/` answers in
+  its own words; a test that needs a real database is a suite that `node/` runs.
 - **Decided in kind, open in shape** (slices 4 to 7): 11 product lines read or write a ledger
-  stream directly. [0043](../../.decisions/0043-rooms-on-floors.md) says who fixes that: the
+  stream directly. [0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md) says who fixes that: the
   module between adds a service, and that service names none of the ledger's types. It names
   `processes/` for the runtime's case. It does not say what the service is called or how wide it
   is. That is open question 1.
@@ -90,9 +87,7 @@ Every number here is from a command run on 2026-11-13 in one checkout at `48460b
 
 ## What is decided, in one place
 
-Read whole for this plan: 0043 with its amendments, 0055, 0062,
-[0091](../../.decisions/0091-modules-and-layers.md), 0119 and
-[0168](../../.decisions/0168-old-lint-breaks-are-fixed.md).
+Read whole for this plan: 0043 with its amendments, 0055, 0062,, 0119 and.
 
 - **Rule 11 and its 2026-11-10 answer:** `runtime/`, `gateway/` and `access/` import no
   `ledger/` file, with no exemption. Where a module needs something from two layers down, the
@@ -198,8 +193,8 @@ export class SessionManagerError extends Schema.TaggedError<SessionManagerError>
 | `SessionManager` | `SessionManagerError` | `Storage`, `BadRow`, `Membership` (the membership check failed below) |
 | `RecoveryStore` | `RecoveryStoreError` | `Storage`, `BadRow` |
 | `Gateway` | `GatewayError` | `Storage`, `BadRow`, `Crypto`, `Refused`, `Unreachable` |
-| `Mailbox` | `MailboxError` (0055) | `Unreachable`, `BadRow`, `Storage` |
-| `ProcessManager` | `ProcessManagerError` (0055) | `Unreachable`, `BadRow`, `Storage` |
+| `Mailbox` | `MailboxError` | `Unreachable`, `BadRow`, `Storage` |
+| `ProcessManager` | `ProcessManagerError` | `Unreachable`, `BadRow`, `Storage` |
 | `Connections` | `ConnectionsError` | `Unreachable`, `BadRow`, `Storage` |
 | `Runner` | `RunnerError`, which exists | adds `BadRow`, `Storage`, `Refused`, `Unreachable` beside `bad_input` and `bad_client`, all as tagged reasons |
 | `ProcessStore` | `ProcessStoreError` | `Storage`, `BadRow`, `Refused` |
@@ -213,7 +208,7 @@ of `processes/`' own with the same two cases, `placed` and `refused`, decoded by
 ### The stream service (slices 4 to 7, a sketch, waits on question 1)
 
 ```ts
-// sketch: processes/Streams.ts. The contract only (0095); StreamsLedger.layer delivers it.
+// sketch: processes/Streams.ts. The contract only; StreamsLedger.layer delivers it.
 // Every name in this block is a lean, not a decision.
 
 /** One event as it comes back out: processes' own row, not the ledger's Entry. */
@@ -282,7 +277,7 @@ The 54 lines are four kinds of use. Counts are by the ledger file imported.
 
 | Kind | Lines | What it should use instead |
 |---|---|---|
-| A real SQLite driver: `nodeSql` | 10 | The laws become a suite, `<Module>Test.ts` beside the module, that takes a way to open a database. A runner in `node/` hands it the driver (0062) |
+| A real SQLite driver: `nodeSql` | 10 | The laws become a suite, `<Module>Test.ts` beside the module, that takes a way to open a database. A runner in `node/` hands it the driver |
 | A real ledger: `LedgerSql`, `LedgerTransactionSql`, `RefereeSql` | 16 | The same suite takes the built layers of the module below as an argument. The runner in `node/` builds them |
 | A service to wire or to fake: `Ledger`, `Doorbell`, `LedgerTransaction`, `Referee`, and the `LedgerError` they fail with | 18 | The suite fakes the service one layer down in that service's own words: `Mailbox`, `ProcessManager` or the stream service. A law about the ledger's own fault moves to the runner's side as a harness the suite calls |
 | Lines and entries for fixtures: `lineFor`, `valueFor`, `fromHere`, `Line`, `Entry`, `Appended`, `InputId` | 10 | `InputId` from `../Id.ts` (2 of the lines are only that). The rest are written through the module below: a letter through `Mailbox.send`, an event through the stream service |
@@ -357,7 +352,7 @@ modules in `.oxlintrc.json`, and `oxlint-plugins/ledger.test.ts`, which holds th
 
 - **Law 1** is today's rule. What changes is that its list reaches zero, slice by slice.
 - **Law 2** is the same rule with one more path in its `files`, turned on in slice 3 when the
-  two lines are gone, so it starts at zero (0168). oxlint's rule reads `export ... from` as it
+  two lines are gone, so it starts at zero. oxlint's rule reads `export ... from` as it
   reads an import (`oxlint-plugins/README.md`, "libfabrika's modules").
 - **Law 3** is 0043's named fallback for rule 12: a type-level test per module. It is one
   `*.types.test.ts` beside each module that pulls every method's error out of the service type
@@ -380,7 +375,7 @@ modules in `.oxlintrc.json`, and `oxlint-plugins/ledger.test.ts`, which holds th
 
 ## Is it a setting?
 
-No new choice here fits `fabrika.toml` ([0069](../../.decisions/0069-choices-are-settings.md)).
+No new choice here fits `fabrika.toml`.
 An error's name, a module's layer and which file a test lives in are shapes of the code, not
 values a person would set. `PAGE` (256 rows a read) is a constant today and stays one: it moves
 to a shared file by rule 13 and its value does not change.

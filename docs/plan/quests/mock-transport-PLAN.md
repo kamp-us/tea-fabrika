@@ -4,9 +4,9 @@ Plancheck-Version: 3
 # Plan: the mock sweep in `libfabrika/src/transport`, in next/ (ticket 1067)
 
 This is `next/` only. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.spyOn`, `vi.mock`, `vi.doMock` or
-`vi.stubEnv`; a stand-in comes from a service), [0579](../../../.decisions/0579-property-laws-use-it-prop.md)
-(the `Recorder` is our one way to watch calls), [0043](../../../.decisions/0043-rooms-on-floors.md)
+ (no `vi.spyOn`, `vi.mock`, `vi.doMock` or
+`vi.stubEnv`; a stand-in comes from a service)
+(the `Recorder` is our one way to watch calls), [0021](../../../.kalfa/decisions/0021-modules-import-lower-layers.md)
 (a module offers services in its own types and errors) and the approved
 [Recorder plan](recorder-PLAN.md), whose "Size" section lists this folder as one later slice:
 9 `vi.fn`, 11 `toHaveBeenCalled*` and 1 `vi.spyOn`.
@@ -68,7 +68,7 @@ place of `globalThis.crypto`, so the law that injects a WebCrypto rejection prov
 ## How others do it
 
 - **Effect's own answer for a call the code makes on the platform** is a service or a reference the
-  test provides. For `fetch` it is `FetchHttpClient.Fetch` (0555). For WebCrypto it is
+  test provides. For `fetch` it is `FetchHttpClient.Fetch`. For WebCrypto it is
   `effect/crypto`'s `WebCrypto` reference: `node_modules/effect/src/crypto/WebCrypto.ts:37`, a
   `Context.Reference<Crypto>` that defaults to `globalThis.crypto`, and its `layer` at `:68`, whose
   doc names "a test double" as a use. Read in the installed `effect` 4.1.3 (the lockfile).
@@ -80,7 +80,7 @@ place of `globalThis.crypto`, so the law that injects a WebCrypto rejection prov
 - **A service provided for one call** is `Effect.provideService`, as the gateway already does for
   its own per-call values. The gateway's `admit` and `consume` close over one attempt's state
   (`attempt`, `claimed`), so the gateway provides `Admissions` per attempt.
-- **The lock** is oxlint's own rules, as 0555 says and [0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md)
+- **The lock** is oxlint's own rules, as 0555 says
   prefers: `vitest/no-restricted-vi-methods` and `vitest/no-restricted-matchers`, both in the
   installed oxlint 1.90.0 (their names are in its binary). Neither is set in `.oxlintrc.json` on main.
 
@@ -89,7 +89,7 @@ place of `globalThis.crypto`, so the law that injects a WebCrypto rejection prov
 ### `Admissions`, the hello's admission (slice 2)
 
 ```ts
-// next/packages/libfabrika/src/transport/Admissions.ts, the contract only (0095). A sketch.
+// next/packages/libfabrika/src/transport/Admissions.ts, the contract only. A sketch.
 import { Context, type Effect, Schema } from "effect";
 import type { Admission } from "./Wire.ts";
 
@@ -228,7 +228,7 @@ const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A
 `Rejecting.crypto` is a test-support helper in transport (`internal/rejecting.test-support.ts`): a
 `typeof globalThis.crypto` whose `subtle[method]` rejects with `failure`, and whose other members are
 the real ones. It is a platform stand-in, not a call watcher, as the Recorder plan files the
-`cloudflare/` WebSocket doubles. It has no `Reflect.get` (0554), no double cast, and its one
+`cloudflare/` WebSocket doubles. It has no `Reflect.get`, no double cast, and its one
 rejected Promise is a marked `fabrika/no-promises` edge. How it builds that object is the tests
 step's call.
 
@@ -259,7 +259,7 @@ counter sees also change with the signatures: they are listed too.
 
 The source read found `fc.assert` in d2 in both files, p82 agreement, T737 D1, C5 and C3.
 When those laws are rewritten here, move them to `it.prop` or `it.effect.prop` with Schema
-inputs and the package setup seed (0579). Keep their input bounds, run counts, checks and first
+inputs and the package setup seed. Keep their input bounds, run counts, checks and first
 failing case; replacing a mock does not exempt a rewritten law from that rule.
 
 ## One value traced: a refused signed hello (law d2)
@@ -278,7 +278,7 @@ failing case; replacing a mock does not exempt a rewritten law from that rule.
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -325,7 +325,7 @@ that moving a runner keeps the same first failing case.
 | next/packages/libfabrika/src/transport/Routes.ts | build | 22 | slice 1, new: `Routes` and `RouteError`, the contract only |
 | next/packages/libfabrika/src/transport/Answer.ts | build | 15 | slice 1: `answerFrame(text, attached)` asks for `Routes`; `Frame`, `Incoming` and `isOnline` go; the doc says so |
 | next/packages/libfabrika/src/transport/internal/binary.ts | build | 2 | slice 1: `subtle` reads `WebCrypto.WebCrypto` |
-| tsconfig.base.json | tests | 1 | slice 1. Amendment (2026-11-16, merge session ruling on transport-s1's review), an exam path, so the tests step writes it, as `plancheck.sh` holds: the one `allowedUnstableApis` list, in the override that sets `unstableApiUsage` to error, gains `"effect/crypto/WebCrypto"` in its sorted place after `effect/crypto/SecureRandom`. Pull request 1462 (`b490a32`) put the transport folder in that override, and `internal/binary.ts` and `ErrorCause.test.ts` read the module. The reason, which goes into the pull request that adds the entry, as [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md) asks: this plan chose Effect's own `WebCrypto` reference on purpose, because it is the swap point Effect ships for a WebCrypto test double (`WebCrypto.ts:37`, `:68`), so the edge needs no service of ours and the law spies on nothing. It is a chosen part, not an entry that lets a hit pass |
+| tsconfig.base.json | tests | 1 | slice 1. Amendment (2026-11-16, merge session ruling on transport-s1's review), an exam path, so the tests step writes it, as `plancheck.sh` holds: the one `allowedUnstableApis` list, in the override that sets `unstableApiUsage` to error, gains `"effect/crypto/WebCrypto"` in its sorted place after `effect/crypto/SecureRandom`. Pull request 1462 (`b490a32`) put the transport folder in that override, and `internal/binary.ts` and `ErrorCause.test.ts` read the module. The reason, which goes into the pull request that adds the entry, as asks: this plan chose Effect's own `WebCrypto` reference on purpose, because it is the swap point Effect ships for a WebCrypto test double (`WebCrypto.ts:37`, `:68`), so the edge needs no service of ours and the law spies on nothing. It is a chosen part, not an entry that lets a hit pass |
 | next/packages/libfabrika/src/transport/Answer.test.ts | tests | tests | slice 1: A1 to A6 on `Recorder.layer(Routes, ...)` and `Layer.mock(Routes, ...)` |
 | next/packages/libfabrika/src/transport/ErrorCause.test.ts | tests | tests | slice 1: C5 on `WebCrypto.layer`, and C6 |
 | next/packages/libfabrika/src/transport/internal/rejecting.test-support.ts | tests | tests | slice 1, new: `crypto(method, failure)`, a stand-in `Crypto` |
@@ -348,7 +348,7 @@ that moving a runner keeps the same first failing case.
   and in libfabrika: a client written from scratch needs the door's hello and frame logic.
   `rejecting.test-support.ts` is in `internal/`, since no other module's law needs it.
 - H5 goes in `GatewayCauseTest.ts`, the gateway's suite for "the failure it translates keeps its
-  cause" (T695), which `node/ErrorCause.test.ts` runs on a real `Sql` (0062). If the suite cannot
+  cause" (T695), which `node/ErrorCause.test.ts` runs on a real `Sql`. If the suite cannot
   reach `initialize`, the tests step puts H5 beside the gateway's `initialize` laws
   (`gateway/TasksTest.ts:368` calls `d.initialize`) and says where in its report.
 - `apps/fabrika` is not touched: `brain.ts` reads `initialize` through `ProjectService`, which keeps
@@ -360,25 +360,25 @@ that moving a runner keeps the same first failing case.
 // .oxlintrc.json, a new override block. A sketch, not run. If another folder's slice added this
 // block first, slice 2 adds the transport folder to its files and nothing else.
 {
-  // Decisions 0555 and 0579: no vi mock, spy, env stub or vi.fn in a test, and no call matcher.
-  // Each folder joins the day its slice brings it to zero; none is taken off (0524).
+  // an earlier decision and 0579: no vi mock, spy, env stub or vi.fn in a test, and no call matcher.
+  // Each folder joins the day its slice brings it to zero; none is taken off.
   "files": ["next/packages/libfabrika/src/transport/**"],
   "rules": {
     "vitest/no-restricted-vi-methods": ["error", {
-      "fn": "Watch the call with Recorder.layer and Recorder.calls (0579).",
-      "spyOn": "Put the call behind a service and record it with the Recorder (0555).",
-      "mock": "Give the code a service and provide a test layer (0555).",
-      "doMock": "Give the code a service and provide a test layer (0555).",
-      "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+      "fn": "Watch the call with Recorder.layer and Recorder.calls.",
+      "spyOn": "Put the call behind a service and record it with the Recorder.",
+      "mock": "Give the code a service and provide a test layer.",
+      "doMock": "Give the code a service and provide a test layer.",
+      "stubEnv": "Read through Config and provide a ConfigProvider layer."
     }],
     "vitest/no-restricted-matchers": ["error", {
-      "toHaveBeenCalled": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenCalledOnce": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenCalledTimes": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenCalledWith": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenLastCalledWith": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenNthCalledWith": "Read Recorder.calls and compare the whole record (0579).",
-      "toHaveBeenCalledExactlyOnceWith": "Read Recorder.calls and compare the whole record (0579)."
+      "toHaveBeenCalled": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenCalledOnce": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenCalledTimes": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenCalledWith": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenLastCalledWith": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenNthCalledWith": "Read Recorder.calls and compare the whole record.",
+      "toHaveBeenCalledExactlyOnceWith": "Read Recorder.calls and compare the whole record."
     }]
   }
 }
@@ -404,7 +404,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -419,11 +419,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's warn block.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -476,7 +476,7 @@ Amendment 2026-11-16: these searches confirm the two contracts already chosen ab
 - **Rewritten property laws follow 0579,** as required under "Every site". Their behavior and
   generated coverage stay the same.
 - **Is this a setting?** No, for each choice. The services and the lock are code and lint config,
-  nothing a person running fabrika picks (0069).
+  nothing a person running fabrika picks.
 - **What fact is lost if not recorded now?** None. A call record lives inside one test run.
 
 ## Validation
@@ -485,7 +485,7 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `pnpm format`, then `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`,

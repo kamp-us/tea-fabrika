@@ -1,5 +1,5 @@
 /**
- * Markdown read as Markdown, for the rules about what prose says (0605, 0607). micromark reads it, as
+ * Markdown read as Markdown, for the rules about what prose says. micromark reads it, as
  * `programs/markdown` does, with GitHub's tables: fenced and indented code and inline code are code
  * and so are never read as prose, a link's text may wrap, and a table cell is its own place.
  */

@@ -12,7 +12,7 @@ counts, with one small probe script. No model was called, $0. 85 non-test source
 their state-holding parts, the rest by search. The counts are in
 [`results/246-implicit-state-machines-in-next.json`](./results/246-implicit-state-machines-in-next.json).
 
-*Note, 2026-11-09, after this run: [0046](../.decisions/0046-one-tea-machine-per-file.md) removed
+*Note, 2026-11-09, after this run: removed
 the plain form. Where this write-up names "a tagged union plus one transition function" as a form
 (the T3 row, the Form column and each machine's Form paragraph), the form is now a tea machine. The
 findings and counts stand as run.*
@@ -236,7 +236,7 @@ A second copy of one fact sits here too: "a step is in flight" is saved as `atte
 `recovery` cases, so each node above is one case, and turn the runner's nine hand edits into Msgs
 (`dead_written`, `exit_written`, `down_written`, `started`, `checkpointed`). Do it inside P34c,
 which rewrites this machine anyway
-([0016](../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)). OTP's name for
+([0007](../.kalfa/decisions/0007-otp-supervision-per-program.md)). OTP's name for
 the outer shape is the supervisor behaviour; the journal of durable steps is ours, because a
 restart here is several writes.
 
@@ -258,7 +258,7 @@ successor. This is reachable, and line `:661` exists to repair it.
 
 **Form.** OTP's: a supervisor learns of a death by message and keeps no second copy of the child's
 state ([supervisor behaviour](https://www.erlang.org/doc/system/sup_princ.html)).
-[0020](../.decisions/0020-programs-get-hard-walls.md) already decides that the supervisor learns of
+[0007](../.kalfa/decisions/0007-otp-supervision-per-program.md) already decides that the supervisor learns of
 a crash by a letter. So this is not new work: P34c should leave one authority, the ledger's fold,
 and keep in the record only the journal that machine 2 needs. 70% sure; the doubt is whether the
 journal can drop `recovery.process` entirely.

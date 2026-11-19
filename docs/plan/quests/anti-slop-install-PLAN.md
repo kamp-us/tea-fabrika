@@ -41,7 +41,7 @@ table here.
 - **How many sweep pull requests, 60%.** The table has 188 folder-and-rule cells with hits. One
   rule in one folder per pull request is the unit. How many cells a pull request may carry when the
   folders are small is the lead's call per batch, and this plan only gives the rule for it.
-- **The false-alarm share of the cast rule, not measured.** Decision 0561's draft asks for a
+- **The false-alarm share of the cast rule, not measured.** an earlier decision's draft asks for a
   hand-read sample of the 987 before the rule blocks anywhere. This plan does not carry that
   sample. The first cast sweep, in the lead scripts folder, reads all of its own hits and reports
   the three shares. See "Where a draft is unclear".
@@ -85,7 +85,7 @@ Node 26.13.0. Nothing from these runs is in the branch: every trial file was rem
   meant to be vendored", that there is no npm package, and gives `tools/oxlint/anti-slop/` as the
   place and `jsPlugins` with `name` and `specifier` as the wiring. It also says to add the folder
   to the lint ignore list, and to keep `@oxlint/plugins` at exactly oxlint's version. The README
-  goes on to say "change them to match your team's standards". We do not: decision 0563 and the
+  goes on to say "change them to match your team's standards". We do not: an earlier decision and the
   owner's ruling of 2026-11-15 keep the source unchanged.
 - **The plugin does the same with its own upstream.** `src/vendor/eslint-stylistic/` is a copied
   rule with the upstream `LICENSE` and an `UPSTREAM.md` that names the source commit. Our folder
@@ -93,19 +93,19 @@ Node 26.13.0. Nothing from these runs is in the branch: every trial file was rem
 - **Go's `vendor/` folder and `go mod verify`.** Go keeps third-party source in a top-level
   `vendor/` folder and checks it against recorded hashes. From memory of the Go modules reference,
   not fetched for this plan.
-- **Tools looked at for the "still unchanged" check** (0040): git itself, which already hashes a
+- **Tools looked at for the "still unchanged" check**: git itself, which already hashes a
   folder as a tree; `git subtree`, which records the upstream commit in a commit message and checks
   nothing later; Carvel's `vendir`, which syncs and locks a folder but is one more binary on every
   machine and in CI. Not fetched: `vendir`'s docs, named from memory. Git is used, since it is
   already everywhere this repo runs and its tree id is the one the fork itself reports.
 - **Turning a new rule on in an old tree.** Google's Tricorder paper (CACM 2018) is this repo's
-  source for "a check that blocks must be nearly free of false alarms". Decisions 0168, 0523 and
+  source for "a check that blocks must be nearly free of false alarms". an earlier decision, 0523 and
   0524 are our own answer for the old hits: fix them, folder by folder, with no list.
 
 ## The install: their `src/`, whole and unchanged
 
 **The owner ruled on 2026-11-15:** their `src/` comes in whole and unchanged at one commit of the
-fork, with the commit and license recorded, as the plugin's README says. Decision 0563 gets this as
+fork, with the commit and license recorded, as the plugin's README says. an earlier decision gets this as
 an amendment in another pull request. "We do not copy" means we do not rewrite or hand-copy single
 rules.
 
@@ -131,7 +131,7 @@ vendor/anti-slop/
 ```
 
 - **Where it lives: a top-level `vendor/anti-slop/`. 85%.**
-  - Not `kalfa/`: decision 0556 makes that the home of `@kalfa` packages, which are ours, in the
+  - Not `kalfa/`: an earlier decision makes that the home of `@kalfa` packages, which are ours, in the
     pnpm workspace, held to `next/`'s standards. This folder is someone else's code, is no
     workspace package and is held to none of our rules.
   - Not inside `oxlint-plugins/`: that folder is in the scope of every taken rule and of decision
@@ -152,7 +152,7 @@ vendor/anti-slop/
   | the leak check | passes on all of their text | nothing: it reads their files like any added text |
   | the unchanged check (law L1) | new | see Laws |
 
-- **An ignore line for `vendor/**` is not a list of broken code** (0524). It names a class of files
+- **An ignore line for `vendor/**` is not a list of broken code**. It names a class of files
   our rules do not apply to: code we do not own and may not edit. The same two files already ignore
   `**/fixtures/**` for the same kind of reason.
 - **The unchanged check. Lint, type or test? None of the three: it is not a check on the shape of
@@ -165,9 +165,9 @@ vendor/anti-slop/
   commit, and change `commit` and `tree` in `pin.json`. Nothing else. The diff of that pull request
   is their change, read like a version bump, and the pull request says which taken rules changed
   and what the count table does. No rule is updated alone.
-- **Is the pin a setting (0069)?** No. It is a dependency's version, like a catalog line: nobody
+- **Is the pin a setting?** No. It is a dependency's version, like a catalog line: nobody
   flips it per project, and `pin.json` is its one place. `maxDepth: 2` and the marker word `SAFETY`
-  are their defaults, written once in `.oxlintrc.json`, and decisions 0558 and 0561 fix both.
+  are their defaults, written once in `.oxlintrc.json`, and an earlier decision and 0561 fix both.
 - **Their `LICENSE` holds its author's name.** The MIT license asks that the notice stays with
   every copy. "No personal names" in this repo is about our own people and accounts, so the notice
   stays as written. 90%.
@@ -179,12 +179,12 @@ One block per taken rule, at the end of `overrides`, so nothing after it can tur
 ```jsonc
 // a sketch: two of the eight blocks
 {
-  // anti-slop/max-ternary-depth (0558). On where the count is zero; a sweep adds its folder.
+  // anti-slop/max-ternary-depth. On where the count is zero; a sweep adds its folder.
   "files": ["next/packages/libfabrika/src/access/**", "next/packages/libfabrika/src/packs/**"],
   "rules": { "anti-slop/max-ternary-depth": ["error", { "maxDepth": 2 }] }
 },
 {
-  // anti-slop/require-safety-comment-for-type-assertion (0561). Marker SAFETY, their default.
+  // anti-slop/require-safety-comment-for-type-assertion. Marker SAFETY, their default.
   "files": ["next/packages/libfabrika/src/packs/**", "next/programs/inbox/**"],
   "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
 }
@@ -194,7 +194,7 @@ One block per taken rule, at the end of `overrides`, so nothing after it can tur
   0524). A folder not on a rule's list is simply not under it yet.
 - **A folder is one row of the count table:** each tooling folder, each module of libfabrika, each
   other package, each program, the app. Its glob is the folder with `/**`. Tests and product code
-  of a folder go on together: decision 0562 says "it is a test" is no reason to leave a file out.
+  of a folder go on together: an earlier decision says "it is a test" is no reason to leave a file out.
 - **Pull request 1 lists every folder whose cell is `0/0`,** busy folders included. Nothing is
   edited there, so no open branch gets a conflict. A branch that adds a hit in such a folder goes
   red when it merges main, which is the rule working.
@@ -206,14 +206,14 @@ One block per taken rule, at the end of `overrides`, so nothing after it can tur
   that file counts as unused. So the 156 right `unknown` parameters of ticket 1053 get their lines
   in the sweep of their own folder, not before.
 - **The spacing rule's fix runs in `pnpm format`** from the moment a folder is on its list, because
-  `format` already runs `lint.ts --fix` with this config. Nobody adds a blank line by hand (0021).
+  `format` already runs `lint.ts --fix` with this config. Nobody adds a blank line by hand.
 - **The eight rules,** by their real names: `anti-slop/max-ternary-depth`,
   `anti-slop/require-safety-comment-for-type-assertion`, `anti-slop/require-readable-spacing`,
   `anti-slop/no-unknown-parameters`, `anti-slop/no-unknown-returns`, `anti-slop/no-runtime-typeof`,
   `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type`.
   The last two are in the second plugin, so their prefix is `anti-slop-effect`.
 - **Not turned on, in any folder:** every other rule of the two plugins. They wait on the owner,
-  one by one, and `no-reprovide-ambient-service` is refused (0560, 0563).
+  one by one, and `no-reprovide-ambient-service` is refused.
 
 **The zero-lock check (law L4).** A whole `pnpm lint` run does one more oxlint run, with a config it
 builds in memory: the two plugins, the eight rules at `error`, over the scope. For each rule and
@@ -295,7 +295,7 @@ and the scripts folder under `.github/`.
 - **Against the decision drafts.** Ternary (145), cast (987), unknown returns (139) and typeof (575)
   match the drafts' numbers exactly. Unknown parameters: 253 in `next/` product code, as ticket
   1053 says, and 797 in all. The two tag rules fire 2,087 times, where our own
-  `fabrika/no-hand-tag` fired 2,070 for decision 0562. Spacing is 15,200, not the "about 12,000,
+  `fabrika/no-hand-tag` fired 2,070 for an earlier decision. Spacing is 15,200, not the "about 12,000,
   rough" of 0563's draft.
 - **By group.** Tooling: 3,831 hits in 24 cells. Cold and touched `next/` folders: 3,668 in 108
   cells. Busy folders: 12,431 in 56 cells. Spacing is 15,200 of the 19,930.
@@ -305,21 +305,21 @@ and the scripts folder under `.github/`.
 **The unit is one rule in one folder per pull request.** Each ends at zero with its folder added to
 that rule's block.
 
-- **No list of leftovers, no rule turned down, no path narrowed** (0168, 0524). An inline ignore
+- **No list of leftovers, no rule turned down, no path narrowed**. An inline ignore
   goes only where the code is right, and its reason is a fact about its own line. The same sentence
-  down a folder is a bulk disable (0523, 0563).
+  down a folder is a bulk disable.
 - **A fix does not hide the shape from the rule:** no ternary pushed into a call or an `&&` to
-  restart its count (0558), no cast swapped for `Reflect` or `Object(x)[key]` (0561, 0554), no
-  computed `["_tag"]` key (0562).
+  restart its count, no cast swapped for `Reflect` or `Object(x)[key]`, no
+  computed `["_tag"]` key.
 - **Each sweep reports** the hits it met, each fix, and each ignore line with its reason, in its
-  pull request (0523). For the cast rule it also reports the three shares 0561 asks for: the cast
+  pull request. For the cast rule it also reports the three shares 0561 asks for: the cast
   went away, it stayed with a real fact, it stayed and the comment is noise.
 - **Batching.** The lead may put several folders of one rule in one pull request when each lands
   whole and all are cold. Never two rules in one pull request, and never a busy folder with a cold
   one.
 - **One sweep at a time per folder.** A folder is taken by one sweep branch at a time, whatever the
   rule, since two sweeps of one folder touch the same files.
-- **Who writes.** A sweep changes no law: same assertions, same generators (0168). Test files and
+- **Who writes.** A sweep changes no law: same assertions, same generators. Test files and
   the config line are the tests step's, product files the build's.
 
 **Order of folders.**
@@ -347,11 +347,11 @@ Open pull requests are at https://github.com/kamp-us/tea-fabrika/pulls, read on 
 3. **Unknown parameters,** where ticket 1053 allows (below).
 4. **The cast rule.** Many casts go away when a decode or a real type arrives with the rules
    above, so it is cheaper after them.
-5. **The two tag rules, together last.** They are one decision (0562) and the largest count after
+5. **The two tag rules, together last.** They are one decision and the largest count after
    spacing. They are two rules, so two blocks, but one sweep may carry both in a folder: a
    hand-written tagged type and its hand-written values change together.
 
-**The first spacing pull request carries the amendment to decision 0021:** the places that need a
+**The first spacing pull request carries the amendment to an earlier decision:** the places that need a
 blank line gain "before a `return`" and "around a multi-line binding in any block", and its line
 that Effect does not enforce blank lines gains the measure 0563 records. The lead writes it with
 the adr skill, in that pull request, as 0563 says.
@@ -370,7 +370,7 @@ the adr skill, in that pull request, as 0563 says.
 - Ticket 1053's plan is `docs/plan/quests/t1053-PLAN.md` on branch `fabrikalfa/unknown-params`. It
   plans no lint rule, which fits: the rule comes from here.
 
-**How this meets the Effect checker's sweep (decision 0565's draft, 135 checks).** Both go folder by
+**How this meets the Effect checker's sweep (an earlier decision's draft, 135 checks).** Both go folder by
 folder over the same scope. They share the folder lock above: one sweep branch per folder at a
 time, either kind. Where both are ready for a folder, spacing goes first, then the checker's sweeps
 that rewrite calls (`preferEffectArray` and the like), then this quest's other rules, since a
@@ -467,7 +467,7 @@ The lint rules are the exam, so each taken rule is seen to fail through the real
   the `vendor/**` row. New files: `oxlint-plugins/anti-slop.ts` and `oxlint-plugins/vendored.ts`
   with their tests.
 
-- **The review's round (2026-11-15).** Decision 0567, merged after this plan was approved, took the two
+- **The review's round (2026-11-15).** an earlier decision, merged after this plan was approved, took the two
   Match rules (`anti-slop-effect/no-manual-tag-comparison`, `anti-slop-effect/prefer-effect-match`),
   so pull request 1 takes ten rules: each gets its own block, with its 0/0 folders (5 and 13 today),
   and L2, L3 and the zero lock cover them. **Law L7, test:** the config loads `anti-slop` and

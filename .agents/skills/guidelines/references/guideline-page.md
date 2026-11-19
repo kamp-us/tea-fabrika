@@ -1,7 +1,6 @@
 # The guideline page
 
-Step 7 writes one page per design area
-([0136](../../../../.decisions/0136-guidelines-live-in-their-own-pages.md)). It holds the area's
+Step 7 writes one page per design area. It holds the area's
 rules together, read whole, and it is edited in place when a guideline changes. The long
 reasoning, the leans, the Linear rows and the smaller calls stay in the experiment, and the page
 links it.
@@ -52,7 +51,7 @@ were read on main on 2026-11-11.
   no time limit.
 - **Example:** info mode's own words, `apps/fabrika/src/window/frame.ts:947`:
   `"Info mode on. Escape leaves."`
-- **Held by:** [0270](../../.decisions/0270-escape-always-leaves-a-mode.md); the key load refuses a
+- **Held by:**; the key load refuses a
   mode with no way out (PR 282); the test "leaves on Escape, once what lies over the desk has
   closed, and says so", `apps/fabrika/src/window/frame.test.ts:1134`.
 - **Breaks today:** Nothing: info mode leaves on Escape once what lies over the desk has closed,

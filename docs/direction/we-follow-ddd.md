@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context ([0043](../../.decisions/0043-rooms-on-floors.md), named 2026-11-10 by [0091](../../.decisions/0091-modules-and-layers.md))"
+state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context ([0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md), named 2026-11-10 by)"
 summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The rule is decided; the context list in `.glossary/TERMS.md` is a draft map, checked with Event Storming."
 ---
 
@@ -90,12 +90,11 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   `Ledger` service mixes layers 2 to 4, and `next/` splits it.
 
   *Changed 2026-11-09 (owner,
-  [0043](../../.decisions/0043-rooms-on-floors.md)): inside `@kampus/libfabrika` a folder is
+  [0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md)): inside `@kampus/libfabrika` a folder is
   not a context and not a layer. It is one subject, a module (`access/`, `processes/`, `ledger/`),
   Evans's Module, and the library's layers live only in the rule file. A module's words still have
   their rows in the context that owns them: `access/`'s under clients, `processes/`'s under ledger.
-  The table above stays as the map from layers to contexts. Renamed 2026-11-10 (owner,
-  [0091](../../.decisions/0091-modules-and-layers.md)): 0043 said room, which stays only as the
+  The table above stays as the map from layers to contexts. Renamed 2026-11-10 (owner): 0043 said room, which stays only as the
   analogy.*
 
 - **The package.** A package belongs to one context, or to the shared names.

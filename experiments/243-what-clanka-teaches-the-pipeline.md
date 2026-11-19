@@ -1,7 +1,7 @@
 ---
 date: "2026-11-09"
 scripts: "none"
-summary: "`next/`, reading [clanka](https://github.com/Effectful-Tech/clanka) v0.24.4, not a measurement. clanka is one agent, not a factory: no plan, tests, review, ledger, asks or signing. It shows the inside of one Draft. Top leans: keep the loop and the model call outside the box and only the hands inside, over Effect RPC (65%, walks back part of programs run in a box); drive Claude Code one model step at a time with its tool parked (55%, walks back the Tier 5 resume law); transcripts leave as history events (70%); limits as `Context.Reference` and one named `Schedule` (75%); executor state as a value the caller holds (80%). Not taken: loop state outside tea, history outside the ledger, free-text done, 20 retries, `bash` and `gh` from the agent, tokens with no dollars. Two owner questions for the Tier 5 walk, both answered no ([0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)); borrows 3 to 5 decided ([0030](../.decisions/0030-copy-clankas-shapes-where-better.md))."
+summary: "`next/`, reading [clanka](https://github.com/Effectful-Tech/clanka) v0.24.4, not a measurement. clanka is one agent, not a factory: no plan, tests, review, ledger, asks or signing. It shows the inside of one Draft. Top leans: keep the loop and the model call outside the box and only the hands inside, over Effect RPC (65%, walks back part of programs run in a box); drive Claude Code one model step at a time with its tool parked (55%, walks back the Tier 5 resume law); transcripts leave as history events (70%); limits as `Context.Reference` and one named `Schedule` (75%); executor state as a value the caller holds (80%). Not taken: loop state outside tea, history outside the ledger, free-text done, 20 retries, `bash` and `gh` from the agent, tokens with no dollars. Two owner questions for the Tier 5 walk, both answered no ([0001](../.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md)); borrows 3 to 5 decided."
 ---
 
 # 243. What clanka teaches `next/`'s pipeline
@@ -10,8 +10,7 @@ Read 2026-11-09. **This is reading, not a measurement.** Nothing ran. It reads
 [clanka](https://github.com/Effectful-Tech/clanka) at v0.24.4 (head `44eb97a4`), a coding agent
 built on Effect and written mostly by [one of Effect's maintainers](https://github.com/tim-smart),
 against our side on origin/main at `399cf26f`. The owner asked for it as a reference design for
-`next/`'s pipeline side, not only for code style; code style is settled in
-[0023](../.decisions/0023-next-follows-effects-code-style.md). Claims about our pipeline are about `next/` unless they say today's version;
+`next/`'s pipeline side, not only for code style; code style is settled in. Claims about our pipeline are about `next/` unless they say today's version;
 `drive.ts` and `box.sh` are today's lead tooling. clanka paths are cited as `clanka/<path>:<line>`.
 
 **The answer.** clanka is one agent, not a factory. It has no plan, tests, mutation or review
@@ -29,13 +28,12 @@ machines wrap. Five things are worth taking, in this order:
    back a Tier 5 law: "when hands restart, they resume the maker's session".
 3. **The transcript leaves as events.** Every change to history goes out on the output stream as
    `HistoryAppended` or `HistoryReplaced`, so the caller keeps the transcript without reading the
-   agent's memory. Lean 70%. **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)). It fits [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md).
+   agent's memory. Lean 70%. **Decided** (owner, 2026-11-09). It fits [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md).
 4. **Limits are `Context.Reference`s, retries are one named `Schedule`, and a typed error says the
    tries ran out.** Lean 75% on the shape. Not its numbers: they have no source. **Decided** (owner,
-   2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)).
+   2026-11-09).
 5. **The executor's state is a Schema value the caller holds and hands back.** Store it beside the
-   transcript, and a resume needs nothing in memory. Lean 80%. **Decided** (owner, 2026-11-09,
-   [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)). Fits P6 of the
+   transcript, and a resume needs nothing in memory. Lean 80%. **Decided** (owner, 2026-11-09). Fits P6 of the
    [pipeline guidelines](../docs/direction/pipeline-guidelines.md).
 
 What not to take: its loop state in `let` and `MutableRef` (ours is a tea machine), its in-memory
@@ -303,15 +301,15 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 | Build | all of clanka is this: one agent loop with tools | an agent drafts inside a step machine; code checks, commits and signs ([code commits and signs each step](../docs/direction/code-commits-and-signs-each-step.md), proposed) |
 | Mutation | none | its own step, a fixed sample ([fast and daily mutation](../docs/direction/fast-and-daily-mutation.md)) |
 | Review | none (a sub-agent could) | one review by another agent ([nobody grades their own work](../docs/direction/nobody-grades-their-own-work.md)) |
-| Drive's loop | `send`'s loop in one fiber: model step, scripts, steers, compaction, until `taskComplete` | a tea machine holds the loop ([tea is the engine](../docs/direction/tea-is-the-engine.md), [control lives in code](../docs/direction/control-in-code.md)); drive is the lab and never retries ([0007](../.decisions/0007-drive-is-the-pipeline-lab.md)) |
+| Drive's loop | `send`'s loop in one fiber: model step, scripts, steers, compaction, until `taskComplete` | a tea machine holds the loop ([tea is the engine](../docs/direction/tea-is-the-engine.md), [control lives in code](../docs/direction/control-in-code.md)); drive is the lab and never retries |
 | Retries | 20 model retries in a row, backoff to 5 s | three kinds, each bounded, each with a source (P8 of the [pipeline guidelines](../docs/direction/pipeline-guidelines.md), 65%) |
-| Boxes | no OS wall; the executor can run elsewhere over RPC | the box goes around the whole program; keys stay out, Cmds pass out ([programs run in a box](../docs/direction/programs-run-in-a-box.md), [0020](../.decisions/0020-programs-get-hard-walls.md)) |
+| Boxes | no OS wall; the executor can run elsewhere over RPC | the box goes around the whole program; keys stay out, Cmds pass out ([programs run in a box](../docs/direction/programs-run-in-a-box.md), [0007](../.kalfa/decisions/0007-otp-supervision-per-program.md)) |
 | Signing | none; the agent runs git and `gh` itself | code signs each step (proposed, above) |
 | Ledger | none; history in memory, ACP saves a record in a key-value store | facts in the ledger ([the ledger behind a service](../docs/direction/ledger-behind-a-service.md), [a job record holds its trace](../docs/direction/a-job-record-holds-its-trace.md)) |
 | Transcripts | `HistoryAppended` and `HistoryReplaced` events | content beside the spans, deletable ([an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md), proposed) |
-| Asks to a person | none; `permissionMode: "dontAsk"`, and `steer` is the only way in | one ask with the hash of what was shown ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md), [ask for decisions](../.decisions/0415-ask-a-person-for-decisions.md)) |
+| Asks to a person | none; `permissionMode: "dontAsk"`, and `steer` is the only way in | one ask with the hash of what was shown ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md), ask for decisions) |
 | Money | tokens, no dollars | one meter, list dollars on every run (same note) |
-| Helpers | the agent starts sub-agents itself; tasks belong to their starter | an agent asks through one tool; tea-host's `DynamicSupervisor` starts it with limits ([0417](../.decisions/0417-fabrika-has-no-supervisor-of-its-own.md)) |
+| Helpers | the agent starts sub-agents itself; tasks belong to their starter | an agent asks through one tool; tea-host's `DynamicSupervisor` starts it with limits |
 | Providers | a model layer per provider, picked by a flag | one `Agents` service, providers swapped by config ([agents behind one service](../docs/direction/agents-behind-one-service.md)) |
 
 ## What to borrow
@@ -373,7 +371,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 - **Why.** The caller never reads the agent's memory, so a crash loses at most one step. A
   replace (a compaction) is a fact we would lose forever if only the final history were kept,
   which [record wide](../AGENTS.md) forbids.
-- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)): the events and the compaction
+- **What it changes.** **Decided** (owner, 2026-11-09): the events and the compaction
   record, read from the harness's own stream. *It said: nothing decided.* It gives [an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md)
   (proposed) its event shape.
 - **Cost.** Small, in the service. **How sure: 70%.** The doubt is volume on a long step; content
@@ -388,7 +386,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
 - **Why.** `next/` has one `Context.Reference` and no `Schedule` today (`rg` on main: one, in `next/packages/libfabrika/src/workers/runtime.ts:269`).
   An inactivity limit that pauses while a tool runs is also a better stop than drive's one
   60-minute wall clock, which cannot tell a long test run from a stalled model.
-- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)), for `next/` and the new
+- **What it changes.** **Decided** (owner, 2026-11-09), for `next/` and the new
   `drive.ts`, with our own numbers from field rows. *It said: nothing decided.* A model call's 429 retry is P8's first row (the service
   that owns the call retries, with backoff), so it lives in `Agents`, never in the lane.
 - **Cost.** Small. **How sure: 75%** on the shape. clanka's numbers (20 tries, 5 minutes, 5 s cap)
@@ -401,7 +399,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
   never reading inside it.
 - **Why.** P6 says every stop saves what a resume needs. With this, a resume needs nothing in
   memory, in the box or in the maker's session files.
-- **What it changes.** **Decided** (owner, 2026-11-09, [0030](../.decisions/0030-copy-clankas-shapes-where-better.md)): the parent stores it in the
+- **What it changes.** **Decided** (owner, 2026-11-09): the parent stores it in the
   lane's record before and after each box step. *It said: nothing decided.* **Cost.** Small. **How sure: 80%.**
 
 ### Smaller ones
@@ -420,7 +418,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
   that steps on Msgs ([tea is the engine](../docs/direction/tea-is-the-engine.md): "nothing replaces
   a tea machine"). clanka's fiber is a fine inside for one Cmd, never the loop.
 - **History in memory, saved by the caller.** Ours is facts in the ledger. A host can die mid-spend
-  ([0418](../.decisions/0418-limits-are-counted-by-the-ledger.md), experiment 102), so the ledger keeps
+  (experiment 102), so the ledger keeps
   the count and the record.
 - **The agent says it is done, in free text.** Our step's answer is checked by its schema, and a
   misfit ends the step `stuck`, with no "fix your answer" turn (Tier 5 law). clanka's "please try
@@ -430,7 +428,7 @@ Each job our pipeline does, what clanka does for it, and what `next/` decided.
   for a step. A step that could not run starts at most twice (P8).
 - **`bash` and `gh` straight from the agent.** Ours talks to typed services, never to `gh`
   ([the backend is a library](../docs/direction/backend-as-a-library.md)), and the box is the fence.
-- **No OS wall.** Its worker stops a busy script; it fences nothing. Our box stays ([0020](../.decisions/0020-programs-get-hard-walls.md)).
+- **No OS wall.** Its worker stops a busy script; it fences nothing. Our box stays ([0007](../.kalfa/decisions/0007-otp-supervision-per-program.md)).
 - **Sub-agents the agent starts with no limits.** Ours go through tea-host's `DynamicSupervisor`,
   with limits counted by the ledger.
 - **Tokens with no dollars.** Every run of ours records list dollars, even on a subscription.
@@ -448,7 +446,7 @@ contradicting a decision: a no keeps the note as it is.
    [programs run in a box](../docs/direction/programs-run-in-a-box.md).
 
    **Answered no** (owner, 2026-11-09,
-   [0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)): fabrika never owns the agent
+   [0001](../.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md)): fabrika never owns the agent
    loop. The harness and the user's subscription login stay in the box, and the box is the
    protection.
 2. Should the Claude adapter drive Claude Code one model step at a time and own the history, so a
@@ -456,9 +454,9 @@ contradicting a decision: a no keeps the note as it is.
    walks back the Tier 5 law "when hands restart, they resume the maker's session".
 
    **Answered no** (owner, 2026-11-09,
-   [0026](../.decisions/0026-fabrika-never-owns-the-agent-loop.md)): the adapter does not own the
+   [0001](../.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md)): the adapter does not own the
    history, and a restart resumes the harness's own session. Borrows 3 to 5 do not need our own
-   loop. *It said: they stay open leads.* All three were then decided ([0030](../.decisions/0030-copy-clankas-shapes-where-better.md)).
+   loop. *It said: they stay open leads.* All three were then decided.
 
 ## What it cannot tell us
 

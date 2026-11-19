@@ -1,6 +1,5 @@
 ---
 summary: Refresh stale native-stack merge refs without changing source heads.
-follows: ["0004", "0571"]
 ---
 
 # Refresh native stack metadata
@@ -8,8 +7,8 @@ follows: ["0004", "0571"]
 Use this when GitHub says a native stacked PR conflicts, its branch and PR head agree, and its
 merge ref still names an older head. The merge ref is GitHub's temporary commit for PR checks.
 Check read-only merge calculations separately.
-This records the operation performed on 2026-11-17 with gh-stack 0.3.0. It changes PR grouping and review bases; source history still follows [0004](../.decisions/0004-squash-merges-and-native-stacks.md).
-The runbook follows [0571](../.decisions/0571-runbooks-live-in-top-level-runbooks.md).
+This records the operation performed on 2026-11-17 with gh-stack 0.3.0. It changes PR grouping and review bases; source history still follows.
+The runbook follows.
 
 - [ ] Record the stack's exact membership and order, both source heads, bases and ready states.
   Read both auto-merge and queue entries. This operation was used with two open, unmerged,

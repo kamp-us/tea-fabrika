@@ -35,14 +35,14 @@ description says it: "thin skill wrappers over deterministic CLI verbs".
   lines each. A shell carries no behavior: its frontmatter preloads one skill (`skills:
   ["fabrika:build"]`) and lists its tools. The `builder` shell runs the `build` skill. No shell pins
   an effort, and no caller passes one
-  ([phoenix 0310](https://github.com/kamp-us/phoenix/blob/main/.decisions/0310-no-agent-shell-pins-effort.md)).
+  (phoenix 0310).
 - **The driver.** The [`operate` skill](https://github.com/kamp-us/phoenix/blob/main/claude-plugins/fabrika/skills/operate/SKILL.md)
   (2,556 lines) drives one lane: it folds the lane's state, asks for the brief, spawns the shell the
   state names, and records the shell's answer.
 - **State on disk.** Each lane is an append-only log, `.fabrika/lanes/<n>/events.jsonl`, folded
   fresh by `fabrika lane status` on every read. Only drive-loop order lives there; verdicts, claims,
   labels and queue position stay on GitHub
-  ([phoenix 0283](https://github.com/kamp-us/phoenix/blob/main/.decisions/0283-local-ledger-holds-ownable-orderings.md)).
+  ([phoenix 0283](../.kalfa/decisions/0009-each-place-keeps-a-copy.md)).
 - **The brief is code's, not the driver's.** `fabrika lane brief <lane> --task <t>` prints the spawn
   prompt ([`lane/brief-verb.ts`](https://github.com/kamp-us/phoenix/blob/main/packages/fabrika-cli/src/lane/brief-verb.ts)).
   Its format has three sections and nothing else
@@ -86,8 +86,8 @@ No, and that was checked, not assumed.
 | Name the step's agent | agent shells preloading one skill | a brief line "use the X skill" | reuse the idea, later | a `.claude/agents/<step>.md` could preload the skill and cut tools; needs the owner (call 5) |
 | Keep a quest's state | `events.jsonl` folded by `lane status` | `BOXES/state/<quest>.md`, run rows, the plan file | leave | ours already lives on disk and in the repo; chain.ts is paused |
 | Hand off between steps | closed terminal token, `lane report` | review's `answer:` line; tests and build report in prose | reuse the idea | every step skill now ends on one `answer:` line (0396's verbs) |
-| Commit and push | `build commit`, `build push`, `build pr` | plain `git commit`, `leakgrep.sh`, `botpush.mjs` | leave | ours is decided (0161, 0164) and works |
-| Land | `ship gate`, `ship enqueue` | `land.ts queue`, merge when ready (0530, 0544) | leave | decided here |
+| Commit and push | `build commit`, `build push`, `build pr` | plain `git commit`, `leakgrep.sh`, `botpush.mjs` | leave | ours is decided and works |
+| Land | `ship gate`, `ship enqueue` | `land.ts queue`, merge when ready | leave | decided here |
 | Record cost | `hook claude-spend`, `spend read` | `clauderow.ts` from a subagent transcript | reuse ours | no hooks here; `clauderow.ts` already prices a run, and nobody ran it (below) |
 | Session handoff | `handoff take` on the issue | the state file and the report | leave | it posts on a GitHub issue |
 | Driver skill | `operate`, an agent holds the loop | the lead session; chain.ts | leave | 0064: no agent holds a loop |
@@ -163,7 +163,7 @@ All of it is in this pull request as real files.
    real signal or launchd or Electron on the laptop, fix it properly, the checks in order with the
    list ratchet CI runs, the run row, plain commit with leak check and `botpush.mjs`, and the report
    with its last `answer:` line.
-2. **Rules code already holds are cited, not restated** (0408): the test config refuses a broad run
+2. **Rules code already holds are cited, not restated**: the test config refuses a broad run
    and a wrong Node and prints the right command; `typecheck.sh` holds one lock;
    `fabrika/law-shape` and `fabrika/integration-test-name` hold test shape and names; CI's `field`
    job checks a row's shape.
@@ -231,7 +231,7 @@ each of those is an owner call below.
   rule.
 - **Restart `chain.ts` and `drive.ts`.** The written path in the lead skill. Loses the hand-run
   speed the owner chose today, and its Codex boxes are not the agents running now.
-- **One shared standing-rules page** that the four skills link. One home (0130), but each agent
+- **One shared standing-rules page** that the four skills link. One home, but each agent
   reads one more file, and the rules differ by step (who runs a typecheck, who commits what).
   About 70% that per-skill sections read better.
 

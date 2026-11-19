@@ -17,7 +17,7 @@ describe.
 ```mermaid
 flowchart TD
   start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .patterns/ own it?"}
-  owns -- "it is a why" --> routed["routed: .decisions/ via the adr skill"]
+  owns -- "it is a why" --> routed["routed: .kalfa/decisions/ via the adr skill"]
   owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .glossary/TERMS.md"]
   owns -- "it is a measurement" --> routedExp["routed: experiments/"]
   owns -- "it is a shape" --> bar{"clears the bar in .patterns/README.md?"}
@@ -36,7 +36,7 @@ Four places sit next to each other, and material often arrives in the wrong one'
 | Place | Holds |
 |---|---|
 | `.patterns/` | how the code is shaped now |
-| `.decisions/` and `docs/direction/` | why, and its history |
+| `.kalfa/decisions/` and `docs/direction/` | why, and its history |
 | `.glossary/TERMS.md` and each context's `GLOSSARY.md` | what a word means |
 | `experiments/` and `field/` | what was measured, on a date |
 
@@ -75,11 +75,10 @@ are below the bar. Writing nothing is a correct result.
 ## 3. Read the library before you add to it
 
 ```sh
-node .agents/skills/lead/scripts/records.ts list .patterns
+rg -n '^(where|when):' .patterns
 ```
 
-It prints one line per doc on `origin/main`, from each doc's own frontmatter. A line that says
-`(no where)` or `(no when)` is a doc nobody will find. Fix it in step 6.
+It prints each doc's `where` and `when` from its own frontmatter. A doc with no `where` or no `when` is a doc nobody will find. Fix it in step 6.
 
 A doc that already covers the shape gets **extended**. A second doc on one subject is how a corpus
 starts to contradict itself.
@@ -140,7 +139,7 @@ pattern doc reads exactly like a held one, and a reader cannot tell them apart.
 ### The doc's shape
 
 Frontmatter (step 6), then the heading. One file per shape, a short kebab-case name. **A
-picture first, then one small real code block, then the words** ([0005](../../../.decisions/0005-patterns-and-decisions-are-visual.md)):
+picture first, then one small real code block, then the words**:
 
 ````markdown
 ---
@@ -194,9 +193,9 @@ read from a pinned dependency.
 
 ## 6. Give it frontmatter, or nobody finds it
 
-The folder keeps no index table ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)),
+The folder keeps no index table,
 so the doc says at its own top where it applies and when to read it. That block is what
-`records.ts list .patterns` prints. Each value is one line, in double quotes:
+the list above prints. Each value is one line, in double quotes:
 
 ```markdown
 ---

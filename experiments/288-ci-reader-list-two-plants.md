@@ -64,9 +64,9 @@ a test that reads lines as text sees code-shaped lines:
 import { spawn } from "node:child_process";
 import { Plant } from "../../../x-ci-plant-not-a-file.ts";
 export { Plant } from "@kampus/libfabrika/gateway/Gateway";
- * defineMachine({ id: "x-ci-plant" }) and defineProgram( and syncTest( and Effect.runPromise(
+ * defineMachine({ id: "x-ci-plant" }) and defineProgram(and syncTest(and Effect.runPromise(
  * person:x-ci-plant p8-clean-window p8-mcp-marker node:fs node:child_process
- * imports "../access/Access.ts" and new Promise( and process.env.X_CI_PLANT
+ * imports "../access/Access.ts" and new Promise(and process.env.X_CI_PLANT
  * paths: ./next/apps/fabrika/src/x-ci-plant.ts ../../x-ci-plant/secret.txt /etc/x-ci-plant
  * a url: https://example.invalid/x-ci-plant and a line pin: x-ci-plant.ts:1:1
  */
@@ -74,7 +74,7 @@ export { Plant } from "@kampus/libfabrika/gateway/Gateway";
 
 The strings come from what the exam's tests grep for (`defineMachine(`, `syncTest(`, lines that
 start with `import`, `p8-clean-window`, `person:`, `imports "..."`). Plant 2 also puts
-`/** x-ci-plant-2 inner: defineMachine( and syncTest( in a function body. */` right after the `{`
+`/** x-ci-plant-2 inner: defineMachine(and syncTest(in a function body. */` right after the `{`
 of the first function body in 219 files, where `fn.toString()` and an unminified bundle show it,
 and a three-line block before a middle top-level statement in 284 files. 4,338 lines added and 219
 changed.
@@ -127,7 +127,7 @@ what it does. What points at load and not at the plants:
 
 So T753 L16 is a law that runs close to its timeout on a loaded CI machine. It is a flaky-test
 finding, `field/findings/2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine.json`, not a hole in
-the list. A flaky test also owes a tracker ticket and a fix the same day (0036); this session has
+the list. A flaky test also owes a tracker ticket and a fix the same day; this session has
 no tracker, so the lead files the ticket.
 
 **Plant 1's machine 6 was not seen whole.** It was cancelled at the job's 17-minute limit

@@ -78,7 +78,7 @@ tests step stops and the plan is amended before any product change.
 ## Settled rules and existing evidence
 
 Read for this plan: `AGENTS.md`, `next/AGENTS.md`, `docs/plan/README.md` (its 2026-11-18 entry
-names this flake), decisions 0036, 0052, 0178, 0291, 0292, 0555, 0567, 0587 and 0594,
+names this flake), an earlier decision, 0052, 0178, 0291, 0292, 0555, 0567, 0587 and 0594,
 `docs/direction/hot-reload.md`, the 1122 plan `docs/plan/quests/dev-watch-rebuild-fix-PLAN.md`, its
 proof row `field/runs/2026-11-18-dev-watch-rebuild-fix-cloud-proof.json`, and the watcher findings
 under `field/findings/` dated 2026-11-13 to 2026-11-18.
@@ -95,7 +95,7 @@ under `field/findings/` dated 2026-11-13 to 2026-11-18.
   `rolldown` wrapper; it adds no new mock.
 - **0567** rules out hand `_tag` comparisons in `next/` test files. New code matches unions with
   `Match.tag` (finding `2026-11-18-watch-save-law-compares-tags-by-hand`).
-- **Decision 0602** (open PR 1614, named in `docs/plan/README.md`): no `.integration.` law runs on a
+- **an earlier decision** (open PR 1614, named in `docs/plan/README.md`): no `.integration.` law runs on a
   pull request, a queue group or a branch proof run. The proof is therefore the Linux cloud box, as
   for 1542.
 - **The 1542 findings on its proof** (`2026-11-18-watch-plan-plants-and-ordering-not-recorded`,
@@ -384,7 +384,7 @@ No new exported name, no new code file and no new dependency.
 
 This adds no setting. Each bound is a property of the law: how long a watcher may take to answer
 an owed install before the law calls it broken. A person never chooses to accept a later answer,
-so these are not `fabrika.toml` values (0069). The depth setting, `FABRIKA_TEST_DEPTH`, stays as
+so these are not `fabrika.toml` values. The depth setting, `FABRIKA_TEST_DEPTH`, stays as
 it is.
 
 ## Files
@@ -509,7 +509,7 @@ owner rulings, not the lead's calls, and they replace open question 1 and the 3 
 
 Why: the cloud proof at 2f388a50 (`field/runs/2026-11-18-l10-boot-drain-cloud-proof.json`) passed
 10 of 10 idle and failed 3 of 3 beside a `pnpm lint` with "an owed install never came". A fixed
-budget for a real build measures the machine (0052). Removing it removes the cause, which is what
+budget for a real build measures the machine. Removing it removes the cause, which is what
 0036 asks, so it does not count as a wider timeout.
 
 **What changes in "The change", applying Q2's principle to every wait L10 owns:**
@@ -556,7 +556,7 @@ budget for a real build measures the machine (0052). Removing it removes the cau
    literally, and change the product so the watcher skips an install whose hash equals the
    program's last answered hash. That is a new design call. It undoes the `same` replies that
    1542's laws check, and it needs its own plan. With the owner away, the steps run on the yes,
-   and the lead holds the merge for the answer (0014).
+   and the lead holds the merge for the answer.
 
 ## Findings
 

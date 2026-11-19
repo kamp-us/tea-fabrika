@@ -1,7 +1,7 @@
 ---
 date: "2026-11-11"
 scripts: "none; reading and measurement of our own logs, not an experiment run"
-summary: "Today's lead tooling, the night of 2026-11-10 21:00 to 11-11 10:00, plus reading (Google's presubmit and postsubmit, Chromium's commit queue, Prow, GitHub's merge queue, Zuul, Kubernetes controllers and GC, OTP timers, SQS, Sidekiq, Temporal). Two questions sort 39 pieces of work: does it judge this change or shared state, and does the next step need it? About 25 stay in the lane. The wrong home cost: a cleanup inside every step start 8.4 lane-hours (12 starts waited over 6 min on a hung `docker ps`); a merge line run by hand shells about 28 PR-hours before the CI apt outage (20 merges, 29 reds, 10 conflict aborts); a tool checkout 36 commits stale, 12 tooling fixes never run; 19 of 20 merges closed no ticket; nobody read main's red; the 20-minute lead check 6 lane-hours over 33 parks. Lean, about 75%: a thin lane, one merge queue, three scheduled jobs. Two guesses were wrong and are kept: the tool checkout on a scheduled job (it hangs on the merge) and about 12 min of PR checks being fine (0106: five). Decided as [0108](../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md). One night of logs. No model, $0."
+summary: "Today's lead tooling, the night of 2026-11-10 21:00 to 11-11 10:00, plus reading (Google's presubmit and postsubmit, Chromium's commit queue, Prow, GitHub's merge queue, Zuul, Kubernetes controllers and GC, OTP timers, SQS, Sidekiq, Temporal). Two questions sort 39 pieces of work: does it judge this change or shared state, and does the next step need it? About 25 stay in the lane. The wrong home cost: a cleanup inside every step start 8.4 lane-hours (12 starts waited over 6 min on a hung `docker ps`); a merge line run by hand shells about 28 PR-hours before the CI apt outage (20 merges, 29 reds, 10 conflict aborts); a tool checkout 36 commits stale, 12 tooling fixes never run; 19 of 20 merges closed no ticket; nobody read main's red; the 20-minute lead check 6 lane-hours over 33 parks. Lean, about 75%: a thin lane, one merge queue, three scheduled jobs. Two guesses were wrong and are kept: the tool checkout on a scheduled job (it hangs on the merge) and about 12 min of PR checks being fine (0106: five). Decided as. One night of logs. No model, $0."
 ---
 
 # 260. Which pieces of work in a change belong in every lane, which in a queue, and which on a timer?
@@ -12,10 +12,10 @@ tooling's chain records, the lander log and `gh run list`, plus reading on how o
 before and after a merge. **Every claim about lanes is about today's lead tooling** (`chain.ts`,
 `drive.ts`, `box.sh`, `catchup.sh`) running work for both versions. Claims about `next/` say so.
 Nothing in the repo changed, no model was called beyond the one agent that read, and it cost $0.
-It follows [0101](../.decisions/0101-box-cleanup-runs-on-a-timer.md), the first trial of moving a
+It follows, the first trial of moving a
 piece of work out of the lane. The owner decided the rule and the picture after a walk of this
 research; they are in [lane, queue or scheduled job](../docs/direction/lane-queue-or-scheduled-job.md)
-and [0108](../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md).
+and.
 
 **The answer: ask two questions of each piece of work.** Does it judge this one change, or
 something shared (main, the laptop, the tracker)? Must its answer exist before the next step
@@ -93,7 +93,7 @@ hides a taken message for a visibility timeout and shows it again if it is not d
 notes "a Worker that crashes ... is not reported", so a timeout forces the retry.
 
 **Flaky tests.** [Fowler](https://martinfowler.com/articles/nonDeterminism.html) quarantines with a
-cap and a time limit. This repo turned that down ([0036](../.decisions/0036-a-flaky-test-is-fixed.md)).
+cap and a time limit. This repo turned that down.
 
 ## The work, sorted
 
@@ -112,7 +112,7 @@ next" means the next step cannot start without the answer.
 | Lint on the true merge, the squash, requeue after red | `catchup.sh`, three lander shells, lead | this change and main | yes for this PR | the merge queue |
 | Conflict fix after main moved | an agent, by hand | this change and main | yes for this PR | lane (sent back to build) |
 | Close the tickets a merge finished | `catchup.sh`, often missed | tracker | no | on the merge, a scheduled job as backstop |
-| Box cleanup, stale processes, Docker health | step start, lead by hand, nobody | laptop | no | scheduled job (0101) |
+| Box cleanup, stale processes, Docker health | step start, lead by hand, nobody | laptop | no | scheduled job |
 | Full suite on main; who reads main's red | GitHub on push; nobody | main | no | stays on push; a main watcher, a scheduled job |
 | Hourly mutation | a scheduler session | main | no | stays as 0066 and 0067 have it |
 | Bring the tool checkout up to date | lead, "after every merge", often missed | laptop tooling | no | scheduled job (**wrong**, see below) |
@@ -142,7 +142,7 @@ one open pull request not merged for one hour.
   batch.
 - **Main red that nobody reads.** Every push to main runs the full suite (13.9 min median, p90
   18.1; 24 green and 2 red of 30). Nobody reads the result, and
-  [0097](../.decisions/0097-a-green-pull-request-lands-without-catching-up.md) leans on someone
+ leans on someone
   fixing a red main the same turn.
 - **The lead's 20-minute check.** 33 parks after an ask or a stuck, 359 min in all, median about
   10 min, longest 34 min: 6 lane-hours, an upper bound since it includes the fix itself.
@@ -194,8 +194,7 @@ event ([the note](../docs/direction/lane-queue-or-scheduled-job.md#the-picture))
   to date after it merges, once for a burst of merges, at a moment when no step is starting.
 - **Wrong: a check run of about 12 minutes is a fair price for keeping tests on the pull request.**
   The research took the 12.5 min median as acceptable. Decided instead: tests stay on the pull
-  request and its checks finish in five minutes at most
-  ([0106](../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md)).
+  request and its checks finish in five minutes at most.
 
 ## What it cannot tell us
 
@@ -206,7 +205,7 @@ event ([the note](../docs/direction/lane-queue-or-scheduled-job.md#the-picture))
   only the end of each attempt.
 - How long `freshmain.ts`'s lint takes on the true merge. Guessed at minutes; not measured.
 - Whether GitHub's merge queue is offered to this repo. The docs page read does not say;
-  [0049](../.decisions/0049-merge-behind-main-once-lint-passes-on-the-true-merge.md) says not.
+ says not.
 - The rate of flaky reds on main: 2 red of 30 recent push runs, causes not read.
 - Whether more than one plan writer at a time is safe. That needs the `redact.sh` lock fix and its
   test first.

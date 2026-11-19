@@ -138,7 +138,7 @@ on `isAnyOf`.
 
 ## Decision
 
-[0567](../.decisions/0567-a-tagged-value-is-matched.md) holds the rule, the two lint rules that
+ holds the rule, the two lint rules that
 will block a hand comparison, the order of the cleanup and what is still open. It also says where
 this is stricter than the Effect team's own code.
 

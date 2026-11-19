@@ -7,7 +7,7 @@ summary: "Tickets, criteria, questions, review results, who is on it, quests. Pr
 
 Decided 2026-10-12, written down 2026-10-18.
 
-Its decided rules are in: [0216](../../.decisions/0216-ledger-is-a-folded-list.md).
+Its decided rules are in: [0011](../../.kalfa/decisions/0011-one-typeid-per-thing.md).
 
 ## What was decided
 

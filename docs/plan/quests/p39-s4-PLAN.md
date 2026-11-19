@@ -20,13 +20,9 @@ Base read: branch `fabrikalfa/p39-s3` at `c2b8345a6` (slice 3, pull request
 https://github.com/kamp-us/tea-fabrika/pull/1309, reviewed and not merged yet). This slice stacks
 on it. Every code line cited here is read on that branch.
 
-Builds [0102](../../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md),
-[0105](../../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md),
-[0171](../../../.decisions/0171-make-it-work-then-better-then-secure.md),
-[0061](../../../.decisions/0061-resources-are-acquired-in-a-scope.md),
-[0045](../../../.decisions/0045-test-steps-run-in-containers.md),
-[0178](../../../.decisions/0178-host-only-laws-run-first.md),
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) and
+Builds [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),
+[0022](../../../.kalfa/decisions/0022-objects-never-stay-awake.md),,,,,
+ and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md).
 
@@ -74,11 +70,10 @@ adds wire beside a sentence of 0102.
   that gives `failed output_limit`.
 - The launcher `next/apps/fabrika/hands.ts`: the hands key on disk, the instance address from
   `instance.port`, the journal file's place as a declared setting.
-- How the hands start on a Mac: started by the app, as the brain is (0280), or a launchd entry of
+- How the hands start on a Mac: started by the app, as the brain is (0045), or a launchd entry of
   its own. A launchd entry waits for the owner.
 - A person approves the hands key in a window: a person presses it.
-- The host-only run of the real command on the owner's Mac, after the lead's read and his yes
-  (0178).
+- The host-only run of the real command on the owner's Mac, after the lead's read and his yes.
 
 Slice 5, a real program asking for a real `git --version`, stays after 4b and needs P40.
 
@@ -165,7 +160,7 @@ const Listed = Schema.Struct({
 // jobs.wait { after }     -> ok { rev } now, or parked on `target:<key>` until an append past `after`
 ```
 
-The stream comes from the authenticated identity, never from the params (0102, 0140). `jobs.wait`
+The stream comes from the authenticated identity, never from the params (0027). `jobs.wait`
 goes through the same parked-wait path `ledger.wait` uses (`gateway/Gateway.ts:1597-1607`), outside
 the write turn, so the referee rings it when an append lands. A window or agent key calling either
 gets `not_allowed`, as the other jobs calls do (`gateway/Jobs.ts:42`).
@@ -189,7 +184,7 @@ slice 3, so nothing is migrated: a person who wants one run asks again. Said onc
 ### The journal
 
 ```ts
-// client/Journal.ts, sketch. The contract only (0095).
+// client/Journal.ts, sketch. The contract only.
 export const Entry = Schema.TaggedUnion({
   /** Taken; nothing ran. Safe to start. */
   prepared: { execution: Schema.NonEmptyString, at: Schema.String },
@@ -234,7 +229,7 @@ The name follows 0029's plural service names. It is not `Runner` (the program ru
 ### The machine
 
 ```ts
-// client/HandsMachine.ts, sketch. One machine (0046); it steps Link and Handshake by hand.
+// client/HandsMachine.ts, sketch. One machine; it steps Link and Handshake by hand.
 const Ptr = Schema.Struct({ id: Schema.NonEmptyString, process: ProcessId });
 const Exec = { ...Ptr.fields, execution: Schema.NonEmptyString };
 
@@ -334,7 +329,7 @@ client sends the same finish again after backoff (slice 3's contract).
 
 Seed **119120** for every generated law. Each walk reads the state it reached and picks its next
 move from what is possible there: a job really requested, a call really out, a cut at a real
-journal or call boundary (0093). Shrinking replays the shorter walk. Each walk requires its
+journal or call boundary. Shrinking replays the shorter walk. Each walk requires its
 transition at least once, so an empty walk cannot pass. The oracle keeps its own count of `execute`
 calls and of results sent; it never calls the product's `update`.
 
@@ -419,7 +414,7 @@ Product lines count additions and deletions.
 | How many jobs run at once | No | One is the only behavior built. Buildkite's `spawn` is a setting because it has more than one; ours becomes one when a second is built |
 | Retry spacing after a refusal or lost answer | No new one | `transport/Link.ts`'s `backoff` and `CAP`, already the client's numbers |
 | What the hands `has` | No | A fact about the `Commands` layer in use, as 0102 says `has` is "can" |
-| Where the journal lives | Yes, in 4b | A person-scoped path, declared once (0069, 0086). 4a has no file, only layers |
+| Where the journal lives | Yes, in 4b | A person-scoped path, declared once. 4a has no file, only layers |
 | The brain's address | No new one | 4b reads the existing `instance.port` |
 | Which hands key is asked | Already one | Slice 3's `hands.target`; this slice reads nothing of it |
 | The `target:` stream's name | No | A protocol fact, not a choice between behaviors |
@@ -496,7 +491,7 @@ Estimate: 6 steps, $20
    unknown. That is the five-slice plan's rule, and 0102 says an uncertain job is recovered by
    hand. Confidence: 90%.
 5. **The journal is Effect's `KeyValueStore`, not our ledger or SQLite.** It has a memory, a file
-   and a browser layer already (0040). Confidence: 85%.
+   and a browser layer already. Confidence: 85%.
 6. **A finish refused for any reason but `unavailable` is held, not retried.** A revoked key keeps
    its result locally (the five-slice plan's edge case) and a person sees it. Confidence: 85%.
 7. **The service is `Commands`, the module word "journal" is new.** Neither clashes with a word
@@ -508,7 +503,7 @@ Estimate: 6 steps, $20
    starts them as a child service beside the brain, the way 0280 starts the brain, so a person still
    opens only the app; 70%. The other way is a launchd entry of its own, which survives the app
    quitting, and a launchd entry waits for the owner. What settles it: the owner's pick, then 4b's
-   host-only run after the lead's read and his yes (0178).
+   host-only run after the lead's read and his yes.
 
 Searched first: `.decisions/` (0102, 0105, 0171, 0178, 0045, 0061, 0280, 0322, 0333, 0424, 0526,
 0536), `docs/direction/brain-hands-window-agent.md`, `.glossary/TERMS.md` (hands, hands key,

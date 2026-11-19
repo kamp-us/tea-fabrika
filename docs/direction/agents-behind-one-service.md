@@ -7,9 +7,8 @@ summary: "Every stage reaches an agent only through one Effect service of ours, 
 
 Decided 2026-10-26 by the owner.
 
-Its decided rules are in: [0325](../../.decisions/0325-agents-behind-one-service-of-ours.md),
-[0326](../../.decisions/0326-the-agent-service-leaves-room-for-chat.md),
-[0327](../../.decisions/0327-a-login-is-lent-to-one-box.md).
+Its decided rules are in: [0034](../../.kalfa/decisions/0034-agents-behind-one-service.md),,
+[0032](../../.kalfa/decisions/0032-login-lent-to-one-sandbox.md).
 
 The goal: people bring their own plan with any provider, and a team of any
 size works in one fabrika project. The team shares the work, never a login.
@@ -45,7 +44,7 @@ const drafted = yield* Agents.run({
   earlier try at the same shape, and the first map.
   - Wrong, kept for the record: the first version of this note said "the
     service's default implementation is our ACP client", restating the
-    2026-10-19 ruling of the old helpers note (its adapter rule is now [0419](../../.decisions/0419-a-harness-adapter-is-the-official-one.md))
+    2026-10-19 ruling of the old helpers note (its adapter rule is now)
     that our contract with a harness is ACP.
 - **A provider is swapped by config.** Claude, Codex, the fake, and later
   others are rows in one provider table. A stage's provider and model are

@@ -4,14 +4,14 @@ Plancheck-Version: 3
 # Plan: the last fifteen shell and Python scripts become TypeScript and Effect, behind services with a test layer, and lint refuses a new one (ticket 766)
 
 This is our tooling: `.agents/`, the root lint list, two CI files. Today's app, `next/` and product
-code are not touched. It builds [0113](../../../.decisions/0113-no-shell-or-python-scripts.md) (port
+code are not touched. It builds (port
 every script, behind services with a real and a test layer, and a lint check that refuses a new
-one), under [0589](../../../.decisions/0589-agents-edit-files-with-any-tool.md) (a sweep lands as
-few pull requests, never one per slice), [0033](../../../.decisions/0033-agents-code-follows-next-rules.md)
-(lead tooling follows `next/`'s code rules), [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)
-and [0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md) (name the tools searched),
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass) and
-[0408](../../../.decisions/0408-skills-keep-only-judgment.md) (a rule code checks leaves the prose).
+one), under (a sweep lands as
+few pull requests, never one per slice)
+(lead tooling follows `next/`'s code rules)
+and (name the tools searched),
+ (no list lets broken code pass) and
+ (a rule code checks leaves the prose).
 `scripts/typecheck.sh` is its own job (branch `fabrikalfa/port-typecheck`) and is left out, except
 where an order below depends on it.
 
@@ -39,9 +39,9 @@ export class Commits extends Context.Service<Commits, {
 - **Settled by rules in force, read by the lead (2026-11-16).** The three questions this draft
   first put to the owner are answered by decisions already in force, so none is open:
   1. **All fifteen port now, the five checks and the step runner included.** The owner ordered
-     every port (0113). leakgrep, loosening, governance, skillscheck and redact are written in the
+     every port. leakgrep, loosening, governance, skillscheck and redact are written in the
      shape a `@kalfa/ci/checks` subpath takes (an `effect/cli` command per check, its services in
-     their own files), so [0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md)'s later
+     their own files), so [0054](../../../.kalfa/decisions/0054-tooling-is-domain-packages.md)'s later
      move is a plain `git mv`. `box` and `mutbox` port too: a port that keeps every command line
      and law counts as the fix 0585 allows the step runner.
   2. **The mutation container's entry is TypeScript on Node's built-ins, each use marked as an
@@ -122,7 +122,7 @@ checks), not the entry script. The branch `fabrikalfa/port-typecheck` is not on 
   a heartbeat; not fetched for this plan, and not needed while the repo's own one works.
 - **A TypeScript lexer.** `loosening.sh` hand-lexes TypeScript in Python. `oxc-parser` is installed
   (0.157.0, used by `oxlint-plugins/script-reads.mjs`) and gives the real tree and comments. S13
-  uses it (0040), so `loosening.ts` finds `it`, `expect` and `numRuns` in the tree, not by a
+  uses it, so `loosening.ts` finds `it`, `expect` and `numRuns` in the tree, not by a
   hand lexer.
 - **A check that refuses file types.** ls-lint (https://ls-lint.org) checks file names per folder;
   not fetched, read from memory: it reads the work tree, not git's tracked files, so a person's
@@ -228,7 +228,7 @@ The same list, one line per new code file, as 0587's check reads it:
 | `FileSystem`, `Clock` | Effect's own | Node platform | `layerNoop`, `TestClock` | S2 | every slice |
 
 ```ts
-// git/Git.ts, a sketch: the contract only (0095). Only the calls the ports make.
+// git/Git.ts, a sketch: the contract only. Only the calls the ports make.
 export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   command: Schema.String,
   reason: Schema.String,
@@ -274,12 +274,12 @@ A lint step, not an oxlint rule: oxlint reads only JavaScript and TypeScript, so
 ```ts
 // oxlint-plugins/tracked-scripts.ts, a sketch.
 // The scripts 0113 orders ported that are still on main. Only shrinks: a port deletes its line in
-// the commit that deletes its file. When it is empty, this list and its check go (0524).
+// the commit that deletes its file. When it is empty, this list and its check go.
 const NOT_YET_PORTED = [
   ".agents/skills/lead/scripts/box.sh",
   // ... the 15 of this plan, and scripts/typecheck.sh
 ] as const;
-// An edge is one line in the file's first five: `# edge: <reason> (0113)`, as 0524's `edge:` lines.
+// An edge is one line in the file's first five: `# edge: <reason>`, as 0524's `edge:` lines.
 const EDGE = /^#\s*edge:\s*\S.*\(0113\)\s*$/;
 
 type Finding =
@@ -296,7 +296,7 @@ it, and it ends empty and deleted. The one lasting exception, `apt.sh`, is not o
 carries its own `edge:` line, which is the form 0524 keeps.
 
 The message on a hit: `tracked-scripts: <path> is a shell or Python file. Write it in TypeScript
-and Effect (0113); a script that must run before Node exists carries one "# edge: <why> (0113)"
+and Effect; a script that must run before Node exists carries one "# edge: <why>"
 line in its first five lines, decided in its pull request.`
 
 ### Keeping the commit path working while it is ported
@@ -388,7 +388,7 @@ go through the plan's owner rows like any step's; the signed route refuses `plan
 a bare file name is no command, and `botpush.mjs` also wants the worktree before the branch. Two
 laptop agents hit it, a second sighting (finding `2026-11-16-stepcommit-publisher-runs-its-value`).
 With no flag, the publisher is `publish.ts`, as today; `bot` runs `node botpush.mjs <worktree>
-<branch>`. A flag per call, not a `fabrika.toml` setting (0069): which publisher pushes is the
+<branch>`. A flag per call, not a `fabrika.toml` setting: which publisher pushes is the
 caller's choice for one commit, not the project's.
 
 S10 waits for https://github.com/kamp-us/tea-fabrika/pull/1454 to merge (it adds 0587's Existing
@@ -401,10 +401,10 @@ tools check to `plancheck.sh`); if it has not merged when S10 starts, S10 ports 
 |---|---|---|---|
 | S14 | `box.sh` `new`, `run`, `fetch`, and `env.sh` | `Git`, `Env`, `Lock`, `Redact`, `PullRequests`, `Signer` (ssh-keygen verify, `pnpm commits sign`), `run` | `drive.ts` (`node box.ts`), `gcloop.ts` (`node gc.ts`), `flow/host.ts`, `boxrm.test-support.ts`, lead and step-commit skills, two direction notes, `script-reads.mjs`'s comment |
 | S15 | `mutation/scripts/run.sh` | `run` (process group), `FileSystem`, `Clock` (the 300 s cap) | `mutbox-entry`, `scripts/caps.test.ts` (imports the config builder in place of reading text), mutation skill, `mutation.yaml`'s comment |
-| S16 | `mutbox-entry.sh` | `node:child_process` and `node:fs`, each use one marked `edge:` line (0250), before the install; then `run.ts` from the commit under test | `mutbox.Dockerfile`, `mutbox.ts`, `mutbox.test.ts`, `.agents/raw.d.ts` (deleted with its last `?raw` reader) |
+| S16 | `mutbox-entry.sh` | `node:child_process` and `node:fs`, each use one marked `edge:` line, before the install; then `run.ts` from the commit under test | `mutbox.Dockerfile`, `mutbox.ts`, `mutbox.test.ts`, `.agents/raw.d.ts` (deleted with its last `?raw` reader) |
 
 S16's entry runs before `pnpm install`, so it cannot import Effect: `mutbox-entry.ts` does the
-checkout and the offline install on Node's built-ins, each use one marked `edge:` line (0250), then
+checkout and the offline install on Node's built-ins, each use one marked `edge:` line, then
 runs the arms by importing `.agents/skills/mutation/scripts/run.ts` from the commit under test, and
 falls back to `run.sh` for a commit from before S15. S14 deletes `env.sh` with `box.sh`, its last reader. When S14 lands and the typecheck port has too,
 whichever lands last deletes `NOT_YET_PORTED` and the code that reads it.
@@ -423,7 +423,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | A tracked `.sh` or `.py` file that is not listed and has no edge line fails lint, and names the file | S1 | test | fc.stringMatching: a file name under a generated folder, 50 runs | the check skips `.py` |
 | A listed file that git does not track fails lint as a stale entry | S1 | test | fc.subarray: of the list, 50 runs | the check ignores stale entries |
 | The list is a subset of the 16 files this plan names | S1 | test | pinned: the 16 paths of this plan | a 17th entry |
-| `apt.sh` passes by its edge line alone, and an edge line without `(0113)` or a reason fails | S1 | test | fc.string: the reason text, 50 runs | the check accepts `# edge:` with no reason |
+| `apt.sh` passes by its edge line alone, and an edge line without `` or a reason fails | S1 | test | fc.string: the reason text, 50 runs | the check accepts `# edge:` with no reason |
 | A diff's words list every decision whose slug, title or tags share a word of four letters or more, edited ones first | S2 | test | fc.array: generated decision records and diff lines, 100 runs | the stop list drops a real word |
 | `governance.ts` always exits 0 and prints the no-match line when nothing matches | S2 | test | scenario: an empty diff | exit 1 on no match |
 | The Codex row's fields, sums and list price match `fieldrow.py`'s for the same events file | S3 | test | fc.array: generated `turn.completed` events, 100 runs | `cachedTokens` billed at the input rate |
@@ -602,14 +602,13 @@ Mac. The real-layer sets run in a box on real git, which any Linux box has.
 **Amended 2026-11-16, the lead's rulings, the four rows above:**
 
 - S5's `redact/RedactFs.ts` is the `Redact` service's real layer.
-  [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md) keeps the contract
+ keeps the contract
   file `redact/Redact.ts` free of layers, so the layer is its own file.
 - S5's `box.sh` and `runplan.sh` lines pass `--` before the wrapped command when they call `node
   redact.ts --run`, since `effect/cli` refuses flag-like words (the wrapped command's `-n`, `-m`,
   `-c`) after a positional argument.
 - S9's `exam.integration.test.ts` holds the law that runs both entry points, `exam.py` and
-  `exam.ts`, as processes, so it is an integration file by
-  [0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md): no stand-in shows that the
+  `exam.ts`, as processes, so it is an integration file by: no stand-in shows that the
   two real commands print and exit alike. `exam.py` is deleted at integrator 2's switch, not in S9:
   its row above says S9, and the switch is where it goes.
 
@@ -625,7 +624,7 @@ names, so it follows every rename with no edit), and the `skillscheck` clause ta
 as prose). Outside main: `step-rules.md` on the `fabrikalfa/twin-tools` branch.
 
 Is any new choice a setting? The only new value is the lock's stale-pid reclaim, which follows
-the pid's life, not a time; and the list, which is not a choice. No new setting (0069).
+the pid's life, not a time; and the list, which is not a choice. No new setting.
 
 What fact is lost if not recorded now: none new. Each port keeps every row and receipt its script
 writes today (`redacted N`, the `.box` facts, the field row, the `phase` lines).
@@ -638,7 +637,7 @@ writes today (`redacted N`, the `.box` facts, the field row, the `phase` lines).
   head, and the review's verdict.
 - `docs/plan/README.md`'s "where we are" names ticket 766's state after each integrator lands.
 - No decision file: this plan builds decided notes, and the three calls in "Doubts" come from
-  rules already in force (0113, 0040, 0585, 0250).
+  rules already in force (0054).
 
 ## Size
 
@@ -689,6 +688,6 @@ None.
 ## Findings
 
 ```json
-{"id":"2026-11-16-two-exam-path-matchers-disagree","date":"2026-11-16","rule":"one meaning, one way (0212)","what":"exam.py and next/apps/fabrika/src/exam/commits.ts both turn exam-paths.json's globs into regexes, by different rules. A glob ending in /** matches its own folder name in commits.ts (`(?:/.*)?`) and not in exam.py (`/.*`), and commits.ts counts any path with a control character as an exam path while exam.py does not. So a step tool and CI's commits check can answer differently for the same path.","proof":"Read on origin/main at bcad008: .agents/skills/step-commit/scripts/exam.py lines 4 to 11, and commits.ts's globRegex and examMatcher, lines 169 to 200.","where":".agents/skills/step-commit/scripts/exam.py","next":"S9 of docs/plan/quests/port-scripts-0113-PLAN.md replaces exam.py with an import of examMatcher."}
+{"id":"2026-11-16-two-exam-path-matchers-disagree","date":"2026-11-16","rule":"one meaning, one way","what":"exam.py and next/apps/fabrika/src/exam/commits.ts both turn exam-paths.json's globs into regexes, by different rules. A glob ending in /** matches its own folder name in commits.ts (`(?:/.*)?`) and not in exam.py (`/.*`), and commits.ts counts any path with a control character as an exam path while exam.py does not. So a step tool and CI's commits check can answer differently for the same path.","proof":"Read on origin/main at bcad008: .agents/skills/step-commit/scripts/exam.py lines 4 to 11, and commits.ts's globRegex and examMatcher, lines 169 to 200.","where":".agents/skills/step-commit/scripts/exam.py","next":"S9 of docs/plan/quests/port-scripts-0113-PLAN.md replaces exam.py with an import of examMatcher."}
 {"id":"2026-11-16-lockfs-has-no-law","date":"2026-11-16","rule":"missing_test","what":"Added 2026-11-16 by the lead's ruling. No law in this plan covers sys/LockFs.ts, the Lock service's real layer (a pid file written with the wx flag, reclaimed when its pid is dead). S5's only lock law runs on LockTest, so the real layer's reclaim and its refusal of a live holder are unpinned.","proof":"This plan at c756f02: the Files row for .agents/skills/lead/scripts/sys/LockFs.ts (line 474) has no matching row in the Laws table; the one lock law (line 420) names LockTest.","where":"docs/plan/quests/port-scripts-0113-PLAN.md","next":"Saved as field/findings/2026-11-16-lockfs-has-no-law.json; the lead decides whether S5 gains a real-layer lock law."}
 ```

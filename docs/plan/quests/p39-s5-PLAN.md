@@ -22,13 +22,9 @@ Base read: branch `fabrikalfa/p39-s4` at `7dad34bb6` (slice 4a, draft pull reque
 https://github.com/kamp-us/tea-fabrika/pull/1315, not merged). This slice stacks on it. Every code
 line cited here is read on that branch.
 
-Builds [0102](../../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md),
-[0061](../../../.decisions/0061-resources-are-acquired-in-a-scope.md),
-[0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md),
-[0280](../../../.decisions/0280-the-app-starts-a-launchd-brain.md),
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md),
-[0178](../../../.decisions/0178-host-only-laws-run-first.md),
-[0171](../../../.decisions/0171-make-it-work-then-better-then-secure.md) and
+Builds [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),,,
+[0045](../../../.kalfa/decisions/0045-the-app-starts-the-brain.md),,,
+ and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md), build order step 5.
 
@@ -44,10 +40,10 @@ What "run a turn" means, from the notes:
 - [Talk where you work](../../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)
   (decided 2026-11-06): the brain keeps the alias and the session, and "the turn runs on hands".
   A turn needs files and agents, so a browser tab never takes one.
-- [0026](../../../.decisions/0026-fabrika-never-owns-the-agent-loop.md): a turn is the maker's own
-  harness, unchanged, on the person's own login. [0325](../../../.decisions/0325-agents-behind-one-service-of-ours.md):
+- [0001](../../../.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md): a turn is the maker's own
+  harness, unchanged, on the person's own login. [0034](../../../.kalfa/decisions/0034-agents-behind-one-service.md):
   reached only through one agent service of ours.
-- [0185](../../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md): Tier 1 holds
+-: Tier 1 holds
   "hands far enough to run one turn", and Tier 2 builds hands for real.
 - `docs/plan/tier-1.md`, piece 5: "no slice of P39 runs an agent turn yet. The five slices end at
   `git --version`, so 'far enough to run a turn' needs more than the five, and how much more is not
@@ -88,7 +84,7 @@ starting the hands. See [What waits](#what-waits-and-on-what).
 |---|---|---|
 | A person approves the hands key | the thin menu bar (P21 in part) or the window's approve screen | A person presses it. 0280 says Approve asks for a finger; it is the same press as a new window's |
 | The app starts the hands | P19 slice 3, the Electron client | `next/` has no app main yet (no file imports `electron` outside an exam). By 0280's principle the hands start as a second launchd service beside the brain, with its plist in the app's home; the launchd layer and `ProcessGroups` already exist in `node/launchd/` |
-| A guard that ends the hands' child after a SIGKILL of the hands | the launchd start above | `git --version` ends in milliseconds. The guard outside the process (0061) is the launchd job's process group, built with the start |
+| A guard that ends the hands' child after a SIGKILL of the hands | the launchd start above | `git --version` ends in milliseconds. The guard outside the process is the launchd job's process group, built with the start |
 | Slice 5: a real program asks for `git --version` end to end | P40's pack path | Slice 3's plan: "a real pack whose program returns `hands`" |
 | An agent turn on hands | the owner's answer to [open question 1](#open-questions), then piece 6's walks | The turn's command shape is piece 6's design |
 
@@ -102,7 +98,7 @@ Not fetched this session; each is from the makers' public docs as known, marked 
 - **GitHub Actions self-hosted runner** keeps its identity in files in its own folder
   (`.runner`, `.credentials`, `.credentials_rsaparams`), made once by `config.sh` and reused on
   every start. Kept: one folder, made once, reused. Left: no registration token; the person grants
-  the key on the ledger (0102). Not fetched.
+  the key on the ledger (0027). Not fetched.
 - **kubelet** keeps its client key under `/var/lib/kubelet/pki/` and asks the API server to approve
   it (TLS bootstrapping, a CSR a person or a controller approves). Kept: the machine makes its own
   key and a person approves it at the brain. Not fetched.
@@ -114,7 +110,7 @@ Not fetched this session; each is from the makers' public docs as known, marked 
   skips that job forever (`client/HandsMachine.ts:721`). So the file layer is not used.
   `KeyValueStore.layerSql` needs Effect's `SqlClient`, and no Effect SQL client for Node's SQLite
   is in the lockfile (only `@effect/sql-d1`). The repo's own node:sqlite handle
-  (`ledger/NodeSqlite.ts:37`) is the existing tool (0040).
+  (`ledger/NodeSqlite.ts:37`) is the existing tool.
 - **Elm and OTP.** Nothing here changes the hands machine. The launcher is a start, the way
   `dev.ts` is: it wires layers and holds the scope. A restart is a new process (OTP), and the
   journal is what carries over.
@@ -131,7 +127,7 @@ Effect 4.1.2 has `process/ChildProcess` with `extendEnv`, `env`, `forceKillAfter
 
 The libfabrika test (`next/AGENTS.md`): a from-scratch Node hands client would have to write the
 real command, the key file and the journal file again, so they are libfabrika. Each names a
-platform (a child process, POSIX modes, node:sqlite), so they live in `node/` (0095), in a new
+platform (a child process, POSIX modes, node:sqlite), so they live in `node/`, in a new
 folder `node/client/`, as `node/jobs/` sits beside `jobs/`. The start file is composition only,
 like `dev.ts` and `grant.ts`, so it is the app's.
 
@@ -170,7 +166,7 @@ export const layer = Layer.effect(Commands, Effect.gen(function* () {
 ```
 
 ```ts
-// node/client/internal/capped.ts, sketch. One child, in its own scope (0061).
+// node/client/internal/capped.ts, sketch. One child, in its own scope.
 // spawn fails                      -> failed spawn_failed
 // stdout + stderr pass the cap     -> close the scope (the child is killed), failed output_limit
 // exits                            -> exited { code, version: stdout as UTF-8, one trailing "\n" dropped }
@@ -279,14 +275,14 @@ reports `unknown interrupted` (4a's table). It never reads a torn row.
 ## Laws
 
 Seed **119120** for every generated law. A walk picks each move from what is possible in the state
-it reached (0093). The oracle keeps its own count of spawns and results; it never calls the
+it reached. The oracle keeps its own count of spawns and results; it never calls the
 product's code to decide what is right.
 
 Plants run once each, are recorded and are undone; no plant is committed. "Merge line" means the
-fast run on pull requests, over in-memory layers. "Schedule" means the 3-hour run (0536): the file
+fast run on pull requests, over in-memory layers. "Schedule" means the 3-hour run: the file
 system, node:sqlite on a file, real processes, real sockets, workerd. **Host-only laws** are the
 ones that send a real signal or start a real brain and a real hands process: they run only in
-CI's full run on the schedule, in its container (0045), never on a laptop. None runs on the
+CI's full run on the schedule, in its container, never on a laptop. None runs on the
 owner's Mac, so none waits on 0178's yes; if the lead wants a Mac run, that waits for the lead's
 read of every kill line and the owner's yes.
 
@@ -392,8 +388,7 @@ A boxed step runs its own narrow vitest paths under the repo's caps, its plants 
 `pnpm lint`. The lead runs the changed-tests run once, one type check, the leak check, ownership
 and `loosening.sh`. The schedule laws (C4, C5, K3, J2, E2, S2) run in CI's full run; C5, J2, E2 and
 S2 are host-only and run only there, in its container, never on a laptop. The lead asks CI for one
-full run on the branch before the review, so their first signal comes before the first review
-(0178).
+full run on the branch before the review, so their first signal comes before the first review.
 
 This plan step ran no tests and changed no file but this plan.
 

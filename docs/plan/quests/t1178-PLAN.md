@@ -7,7 +7,7 @@ Plancheck-Version: 3
 request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recorded) {
   return (yield* call(request.id, Msg.cases.request.make({ request }), recorded)).receipt; // throws
 }),
-// After (Amendment 1): decode each caller field with its schema's decoder, as decision 0215 says,
+// After (Amendment 1): decode each caller field with its schema's decoder, as an earlier decision says,
 // then build the Msg from the decoded values. A decoder fills no constructor default; makeEffect does.
 const badInput = (cause: Schema.SchemaError) => TasksError.make({ reason: "bad_input", cause });
 
@@ -25,9 +25,8 @@ request: Effect.fn("tasks.request")(function* (request: Request, recorded: Recor
 `next/` only: `next/packages/libfabrika/src/tasks/`. Ticket 1178, sev1
 [issue 1631](https://github.com/kamp-us/tea-fabrika/issues/1631), branch
 `fabrikalfa/t1178-tasks-ledger-refusal` from origin/main at d48ff74. It builds
-[0215](../../../.decisions/0215-untrusted-input-never-throws.md) for the ledger's five write calls.
-It changes no law, no seed, no timeout and no retry
-([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)), and walks back no decision.
+ for the ledger's five write calls.
+It changes no law, no seed, no timeout and no retry, and walks back no decision.
 
 **Said plainly first:** L8 is red on main because five calls in `TasksLedger.ts` build their Msg
 with `Msg.cases.<case>.make(...)` from the caller's own values. `make` throws when a field does not
@@ -131,7 +130,7 @@ new plant on L8 and the L1 to L7 plant's wording; the files table's `TasksLedger
   `fabrika/no-hand-tag` lint rule (`oxlint-plugins/no-hand-tag.ts`). The maker now runs, and
   throws, before `call` can decode.
 - Why it merged green: L8 is an integration law (a SQLite file), and since
-  [0602](../../../.decisions/0602-integration-laws-leave-merge-line.md) integration laws run only
+ integration laws run only
   in main's full run. The lead's read is right on every point.
 
 ## Calls taken
@@ -156,14 +155,14 @@ new plant on L8 and the L1 to L7 plant's wording; the files table's `TasksLedger
 5. **The sync decodes of saved rows stay** (85%): `decodeStored`, `decodeEvent`, `decodePointer`
    and `encodePointer` (lines 44 to 52). They read the ledger's own rows, not the caller's input; a
    saved row that does not fit is a storage fault, not `bad_input`. They are part of the
-   `schemaSync` sweep under [0576](../../../.decisions/0576-schema-sync-error-result-in-plain-code.md),
+   `schemaSync` sweep under,
    which has its own finding row, `field/findings/2026-11-18-tsconfig-base-lacks-schemasync-error.json`.
 6. **The `id` argument of `take`, `started`, `finish` and `collected` is not decoded** (80%). The
    contract types it as a plain `string` with no schema. An unknown or empty id reads an empty
    stream and answers `not_found`, never a throw; the existing `unknown_id` move holds that.
 7. **L8b runs where L8 runs, in main's full run only** (75%). A stand-in exists (node:sqlite on
    `:memory:`, as `next/packages/libfabrika/src/node/runtime/RunnerHands.test.ts` runs the hands
-   suite), and [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md) says a
+   suite), says a
    law that can run on one runs on every pull request. Putting the whole tasks suite on a stand-in
    adds ten laws to every pull request's run and is outside this sev1's scope, so it is one finding
    row below, for its own ticket.
@@ -199,7 +198,7 @@ new plant on L8 and the L1 to L7 plant's wording; the files table's `TasksLedger
 ### TasksLedger.ts, after (a sketch, not compiled)
 
 ```ts
-/** A call's field that does not decode is the caller's input (0215): `bad_input`, and no transaction runs. */
+/** A call's field that does not decode is the caller's input: `bad_input`, and no transaction runs. */
 const badInput = (cause: Schema.SchemaError) => TasksError.make({ reason: "bad_input", cause });
 
 /** One field the caller gave, decoded by its own schema; a decoder fills no default, so a missing tag is refused. */

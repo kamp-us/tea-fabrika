@@ -1,6 +1,6 @@
 ---
 date: "2026-11-13"
-summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at `14f96d9a3`. No rule has a whole check: six have part of one (E1, E2, E3, E4, E7, 0252) and four have none (E5, E6, E8, 0095). Every one is broken somewhere: 13 hand guards and 14 raw crypto lines (E1), 33 `instanceof` and 10 `Cause.squash` (E2), 3 inferred service types (E3), 19 static layers (E5, 0095), about 394 exports with no doc block and about 119 plan codes (E6), 321 named-import lines in `next/packages` (E7), 13 exported `fnUntraced` (0252). E1, E2, E6, E7 and 0252 still leak in files added by the newest 15 commits; E5 does not. The note's fix order stopped after step 2: no rule from step 3 or step 5 has landed. `effectFnOpportunity` is on while 0252's text says it stays off. The counts are grep heuristics, wider than the note's, with no false alarm rate measured."
+summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at `14f96d9a3`. No rule has a whole check: six have part of one (E1, E2, E3, E4, E7, 0252) and four have none (E5, E6, E8, 0095). Every one is broken somewhere: 13 hand guards and 14 raw crypto lines (E1), 33 `instanceof` and 10 `Cause.squash` (E2), 3 inferred service types (E3), 19 static layers (E5, 0095), about 394 exports with no doc block and about 119 plan codes (E6), 321 named-import lines in `next/packages` (E7), 13 exported `fnUntraced`. E1, E2, E6, E7 and 0252 still leak in files added by the newest 15 commits; E5 does not. The note's fix order stopped after step 2: no rule from step 3 or step 5 has landed. `effectFnOpportunity` is on while 0252's text says it stays off. The counts are grep heuristics, wider than the note's, with no false alarm rate measured."
 ---
 
 # 282. Which of the Effect guidelines have a check, and where does `next/` break them today?
@@ -8,12 +8,12 @@ summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at
 Read on 2026-11-13, on `origin/main` at `14f96d9a3`. It is about `next/`, the new version. Nothing
 ran but `git grep`: no model, no key, no network, **$0**. No script is kept, because each count is
 one grep, and each pattern is written beside its number below. This page was written on its branch
-from its first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)).
+from its first line.
 
-The guidelines are E1 to E8 in [0120](../.decisions/0120-effect-code-guidelines.md), told at length
+The guidelines are E1 to E8 in, told at length
 in [Effect code guidelines](../docs/direction/effect-code-guidelines.md). Two neighbors they lean on
-are read too: [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) (a service file
-holds only its contract) and [0252](../.decisions/0252-effect-fn-for-exported-effects.md)
+are read too: (a service file
+holds only its contract)
 (`Effect.fn` for exported effects).
 
 **The answer: the guidelines are written, and most of them are not held by code.**
@@ -192,7 +192,7 @@ sampled look like local data (`next/packages/libfabrika/src/runtime/WatchersSql.
 
 ## E5: a layer asks for what it needs
 
-It never builds its own dependencies, and the service file is its contract (0095). Kind: lint plus
+It never builds its own dependencies, and the service file is its contract. Kind: lint plus
 pattern. **Check: no.**
 
 - `fabrika/no-static-layer` is not written. 0095 requires it, and no pull request or commit adds

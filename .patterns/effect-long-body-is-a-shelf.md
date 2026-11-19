@@ -52,8 +52,7 @@ Rules:
 - **State the pieces share is one named value with one owner.** `files` is made in `build`
   (`:269`), filled by the compiler plugin (`:292`) and read once by `check` (`:352`). No `let` is
   shared between pieces; the only `let` in the file is a loop's own (`:63`). Control state, a value
-  that decides what may happen next, is a tea machine instead
-  ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md)).
+  that decides what may happen next, is a tea machine instead.
 - **When one body must stay long, mark it and move the hard parts out.** A layer's body whose pieces
   share a lock or a model may stay one `Effect.gen`. Then each part gets a `// --- Name ---` banner,
   and each hard part moves to the module's `internal/`, taking its services as arguments and
@@ -67,14 +66,14 @@ Rules:
 ## Where it applies
 
 Every long Effect body in `next/`: a function like `build`, and a layer's `Effect.gen` body. Stops
-at a tea machine's `update`, which [0046](../.decisions/0046-one-tea-machine-per-file.md) shapes.
+at a tea machine's `update`, which shapes.
 
 ## Not yet
 
 - `next/packages/libfabrika/src/runtime/Runner.ts:211-1733` is one `Layer.effect` closure with one
   banner (`:1086`, `// --- Cmds ---`) and nine `let`s shared by every piece (`:215-239`). 0043's
   rule 9 splits it move-only into a front file and `internal/` files
-  ([0043](../.decisions/0043-rooms-on-floors.md)); the shared `let`s need the holder machine of
+  ([0021](../.kalfa/decisions/0021-modules-import-lower-layers.md)); the shared `let`s need the holder machine of
   [experiment 246](../experiments/246-implicit-state-machines-in-next.md) to cut cleanly.
 - `next/packages/libfabrika/src/gateway/Gateway.ts` (one `make` used at `:1625`) and the project
   logic in `next/packages/libfabrika/src/cloudflare/runtime.ts` have the same shape.
@@ -94,8 +93,8 @@ traced or tested alone, and every piece may touch every `let`.
 
 ## Decision
 
-[0043](../.decisions/0043-rooms-on-floors.md) rule 8 (`internal/`) and rule 9 (split move-only);
-[0037](../.decisions/0037-implicit-state-machines-made-explicit.md) for state that decides what is
+[0021](../.kalfa/decisions/0021-modules-import-lower-layers.md) rule 8 (`internal/`) and rule 9 (split move-only);
+ for state that decides what is
 legal; the [`Effect.fn` note](../docs/direction/effect-fn-for-traced-functions.md) for one named
 span per piece.
 

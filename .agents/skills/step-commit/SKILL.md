@@ -22,7 +22,7 @@ Why one command:
 
 - **`<step>` is `tests`, `build`, `mutation`, `lead` or `fix`.** `mutation` signs as `tests` for now, a
   stopgap until it has a role of its own (field note 2026-11-08-19).
-- **`fix` is a fix round** ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)): one agent
+- **`fix` is a fix round**: one agent
   writes the law and the fix, so the commit may hold exam paths and takes the paths the plan gives to
   `tests` or `build`, and an exam path it gives to no step. A path the plan gives to any other step is
   refused. It signs nothing; it still pushes.
@@ -45,7 +45,7 @@ Why one command:
   new commit on top. A rewrite leaves signed links that no longer match (`stale_link`).
 - **Never read, print or copy a key file.** The script reads `~/.fabrika/step-keys/<step>` itself.
 - **It pushes for you.** A commit is pushed at once, after the leak grep, and the branch gets
-  a draft pull request when it has none (0134). If the push cannot run, it exits 6 with the commit
+  a draft pull request when it has none. If the push cannot run, it exits 6 with the commit
   made (and signed, unless it is a `fix`): put the command it prints in your report and go on with your step, and the lead
   runs it. `--commit-only` and a box's commit push nothing here; the quest's host part pushes them.
 - The co-author comes from `FABRIKA_COAUTHOR` (`Name <email>`), or your global git config. It never

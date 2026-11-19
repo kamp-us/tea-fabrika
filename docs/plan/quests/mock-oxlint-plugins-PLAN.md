@@ -27,11 +27,11 @@ expect(reports).toEqual(keys.map((key) => ({ node: key, message })));
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "fn": "Watch calls with a Recorder, or keep a plain list the test owns (0579).",
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it in the law's layer (0555).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+        "fn": "Watch calls with a Recorder, or keep a plain list the test owns.",
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it in the law's layer.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer."
       }
     ]
   }
@@ -39,12 +39,12 @@ expect(reports).toEqual(keys.map((key) => ({ node: key, message })));
 ```
 
 All of this is our tooling, the `oxlint-plugins/` folder. Today's app is not touched, and `next/`
-is not touched. It builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi` mock,
-spy or env stub in a test), [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the
-Recorder replaces `vi.fn`) and [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md)
+is not touched. It builds (no `vi` mock,
+spy or env stub in a test) (the
+Recorder replaces `vi.fn`)
 (a test gets its tools from our test package), on
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
-and [0589](../../../.decisions/0589-agents-edit-files-with-any-tool.md) (one pull request per
+ (no list lets broken code pass)
+and (one pull request per
 sweep). (Amendment 2026-11-15: the decisions named here.)
 
 ## The answer first
@@ -103,7 +103,7 @@ it("format: diagnostic names the five words and offers no autofix", () => {
     keys.map((key) => ({
       node: key,
       message:
-        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
+        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names.",
     })),
   );
 });
@@ -118,9 +118,9 @@ it("format: diagnostic names the five words and offers no autofix", () => {
 - The `context as Context` cast stays as today, with its comment: the rule reads only `report`.
 - The lock is the override in the second block at the top, placed after the `oxc/no-accumulating-spread`
   override (the first in `overrides`, `.oxlintrc.json:423`). It is an error, with no warn line and
-  no list of leftovers ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
+  no list of leftovers.
 - **Is this a setting?** No: a lint rule's scope is the repo's own code rule, not a choice a
-  person makes in `fabrika.toml` ([0069](../../../.decisions/0069-choices-are-settings.md)).
+  person makes in `fabrika.toml`.
 
 **Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
 `vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
@@ -135,7 +135,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -150,11 +150,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "error",
       // Written out again, since an override replaces options: the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's tooling block, which has no `JSON.parse` entry.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -193,7 +193,7 @@ nothing, so `reports.length` is 5.
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -258,7 +258,7 @@ amended 2026-11-15), after these steps, one fresh agent each, in its own box.
 | `.oxlintrc.json` | tests | none | M2 to M4: the one override after the `oxc/no-accumulating-spread` one, about 15 lines |
 | `oxlint-plugins/builtin-plants.ts` | tests | tests | M2: the plant entry, about 14 lines |
 | `oxlint-plugins/plants.test.ts` | tests | tests | M3: three rows in the "rules that apply by path" block, about 10 lines |
-| `oxlint-plugins/README.md` | tests | docs | one paragraph after the `oxc/no-accumulating-spread` one: the lock went on for this folder on its slice (0555, 0579), by an override whose `files` grows per folder, with `fn` banned too, and the renamed-import probe result |
+| `oxlint-plugins/README.md` | tests | docs | one paragraph after the `oxc/no-accumulating-spread` one: the lock went on for this folder on its slice, by an override whose `files` grows per folder, with `fn` banned too, and the renamed-import probe result |
 | `oxlint-plugins/**`, `oxlint-plugins/` | tests | none | not changed beyond the files above: named by the override's `files` and by the text |
 | `oxlint-plugins/no-question-word-key.ts` | tests | none | not changed: M1's plant is made here and taken out again |
 
@@ -268,7 +268,7 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step, under `nice -n 19 pnpm exec vitest run --maxWorkers=1`, one path at a time:
@@ -311,7 +311,7 @@ Estimate: 4 steps, $11
 - **Other ways around the lock:** `vi["fn"]()` or a `vi` passed through a variable. The probe did not
   try them, and M2 does not plant them.
 - **When the hold moves:** 0555 says the ban may later be held by `@kalfa/vitest` exporting no `vi`,
-  or by `anti-slop/no-module-mocking` (0563). This override is the hold until then.
+  or by `anti-slop/no-module-mocking`. This override is the hold until then.
 
 ## Open questions
 

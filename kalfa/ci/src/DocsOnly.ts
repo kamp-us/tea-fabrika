@@ -26,9 +26,9 @@ const INPUT_FOLDERS = new Set(["brief", "briefs", "prompt", "prompts"]);
 const SKILL_TREES = [".agents/skills/", ".claude/skills/"];
 
 // The folders whose docs the admin merge takes (decision 0183), the five it took before ticket 810. An
-// experiment's write-up is not among them: `records.ts list experiments` reads its frontmatter, so it
+// experiment's write-up is not among them: a tool reads its frontmatter, so it
 // lands through the queue, as the lead ruled for pull request 1671.
-const ADMIN_FOLDERS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/"];
+const ADMIN_FOLDERS = [".kalfa/decisions/", "docs/", "field/", ".glossary/", ".runbooks/"];
 
 /** A skill's script, which a lead script or a test runs, whatever its extension. */
 const isScript = (path: string): boolean => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
@@ -93,7 +93,7 @@ const isInstruction = (path: string): boolean => isSkillProse(path) || isToolMar
 export const isRow = (path: string): boolean =>
   /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 
-/** A context's glossary: a file named `GLOSSARY.md`, at the root or in any folder. `records.ts find` reads every one (0617). */
+/** A context's glossary: a file named `GLOSSARY.md`, at the root or in any folder. A tool reads every one. */
 const isGlossary = (path: string): boolean => path === "GLOSSARY.md" || path.endsWith("/GLOSSARY.md");
 
 /**

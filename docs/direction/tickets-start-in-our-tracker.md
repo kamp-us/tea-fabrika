@@ -7,12 +7,8 @@ summary: "The tracker is in the first version: tickets are ledger facts, filed t
 
 Decided 2026-10-24, for the pipeline's first version.
 
-Its decided rules are in: [0340](../../.decisions/0340-tickets-are-ledger-facts.md),
-[0341](../../.decisions/0341-a-tickets-window-is-its-timeline.md),
-[0342](../../.decisions/0342-a-comment-never-moves-an-approval.md),
-[0343](../../.decisions/0343-an-approval-covers-its-text.md),
-[0344](../../.decisions/0344-github-stays-the-code-host.md),
-[0345](../../.decisions/0345-github-is-a-tracker-integration.md).
+Its decided rules are in: [0038](../../.kalfa/decisions/0038-tickets-live-on-our-ledger.md),,,,
+[0038](../../.kalfa/decisions/0038-tickets-live-on-our-ledger.md),.
 
 ```ts
 // A sketch. A ticket is facts on the ledger. No stage reads a GitHub issue.
@@ -41,7 +37,7 @@ const view = (facts: TicketFact[]) => [...facts.map(row), ...openAsks(facts).map
     [the smallest ledger](./smallest-ledger-proof-to-grow.md) says.~~
     Replaced 2026-10-27: the tracker is built like Linear, as the base the
     pipeline, milestones and packs build on
-    ([the tracker is like Linear](../../.decisions/0346-the-tracker-is-built-like-linear.md)).
+    (the tracker is like Linear).
 - **A ticket's window is its timeline** (decided 2026-10-24). Every fact about
   the ticket shows in one list, oldest first: filed, edited, comments, each
   stage's answer. It is the one place to see what is being done.

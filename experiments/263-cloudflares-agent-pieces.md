@@ -6,7 +6,7 @@ summary: "`next/`. Borrow, do not build on them. The 2026-11-09 Codex entry is a
 
 # Should `next/` build on Cloudflare's agent pieces (Lifecycle, Tasks, Streams, Sessions, Workspace), or borrow from them?
 
-Read 2026-11-11. **This is reading, not a measurement.** Nothing ran. The owner walked it the same day and decided [0121](../.decisions/0121-borrow-from-cloudflares-agent-pieces.md). Sources were read from the packages themselves (`npm pack` into a temp folder,
+Read 2026-11-11. **This is reading, not a measurement.** Nothing ran. The owner walked it the same day and decided. Sources were read from the packages themselves (`npm pack` into a temp folder,
 files only, nothing run), GitHub through `gh api`, and Cloudflare's docs. "Secondary" marks a page
 Cloudflare did not write. "Not found" means I looked and it was not there.
 
@@ -215,7 +215,7 @@ so newer edits can be lost. A container lost mid-turn ends the turn `unanswered`
 
 Settled notes I read: brain, hands, window, agent (`docs/direction/brain-hands-window-agent.md`),
 the cloud is one more host (its brain-and-hands section and the alarm rule), the five layers,
-agents are programs, an agent run keeps its content, decision 0042, and and the P39 and P41 plans. All claims below are about `next/` unless they say otherwise.
+agents are programs, an agent run keeps its content, decision 0019, and and the P39 and P41 plans. All claims below are about `next/` unless they say otherwise.
 
 | Cloudflare piece | Our piece | Fit |
 |---|---|---|
@@ -252,7 +252,7 @@ agents are programs, an agent run keeps its content, decision 0042, and and the 
 - **The ledger is the one record.** Tasks journals, Streams blocks and Sessions trees are three
   more records in the same SQLite file, with their own retry and replay rules. "An agent run keeps
   its content" puts content in the job's own record, beside its spans, where a person can delete it.
-- **Effect all the way, no Promises** (no-promises note) and **through Alchemy** (0042). Every API
+- **Effect all the way, no Promises** (no-promises note) and **through Alchemy** (0019). Every API
   here is Promise-based and `extends DurableObject` from `cloudflare:workers`. Installed Alchemy
   2.0.0-beta.84 exposes the *platform* parts:
   - Containers with `schedulingPolicy: "durable_object"`
@@ -286,7 +286,7 @@ agents are programs, an agent run keeps its content, decision 0042, and and the 
 ## Lean
 
 The owner took this lean on 2026-11-11, and added one idea: a hand with git and files and no
-shell, for doc changes (0121).
+shell, for doc changes.
 
 Don't adopt it as a base. Borrow the ideas we lack, and keep a cloud hand as a later option.
 

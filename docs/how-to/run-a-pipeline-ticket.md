@@ -17,8 +17,7 @@ tsh> ticket --ticket 117              the questions, answered here
 A live run changes a real repository. Each rule was learned from a run.
 
 - The target repository's own merge rules apply. Never merge by hand, never arm auto-merge, never
-  push to its main branch. A change lands only through the ship stage
-  ([0224](../../.decisions/0224-real-repos-keep-their-merge-rules.md)).
+  push to its main branch. A change lands only through the ship stage.
 - A pull request that went by hand is not a live run, and neither is what is left once a quest is
   finished and stuck. Each lands by [the plan's rule](../plan/README.md#how-a-change-lands).
 - No agent approves a pull request or answers a question the quest put to a person: that rule is in
@@ -201,7 +200,7 @@ spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pi
 ## The leak check
 
 Today the leak check is a by-hand grep, before the merge yes, when the branch is already public. A gate
-before the push ([nothing is pushed before review](../../.decisions/0392-push-is-a-step-after-review.md)) is not built. A
+before the push (nothing is pushed before review) is not built. A
 person or an agent reads the pull request's added lines and greps them for keys, machine paths, personal
 names and account names. Do not give the merge yes until that is clean.
 

@@ -1,8 +1,7 @@
 # Glossary map
 
 This is the map of the project's words. It names the contexts, says where each context's glossary
-will live, and says how the contexts relate. It defines no term. The rule for it is
-[0617](../.decisions/0617-glossary-reset-to-a-map.md).
+will live, and says how the contexts relate. It defines no term. The rule for it is.
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
@@ -64,7 +63,7 @@ moves the line here if it does.
   context.
 
 GitHub is not a context. It sits behind an anticorruption layer, in a provider package
-(`@kalfa/provider-github`, [0616](../.decisions/0616-providers-are-one-package-each.md)), so none of
+(`@kalfa/provider-github`, [0018](../.kalfa/decisions/0018-protocols-once-providers-apart.md)), so none of
 its words are ours.
 
 ## Relationships

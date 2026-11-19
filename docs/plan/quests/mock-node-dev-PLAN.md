@@ -4,16 +4,16 @@ Plancheck-Version: 3
 # Plan: the mock sweep in `libfabrika/src/node/dev`, in next/: 15 spies and 2 call matchers go, `process.kill` moves behind a `Signals` service, and lint holds the folder at zero (ticket 1067)
 
 This is `next/` only. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.spyOn` in a test: the call goes
+ (no `vi.spyOn` in a test: the call goes
 through a service and the law's layer records it) and
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the `Recorder` is our one way to
+ (the `Recorder` is our one way to
 watch calls), for one folder of the sweep that
 [the recorder plan](./recorder-PLAN.md#size) lists:
 `next/packages/libfabrika/src/node/dev`. Amendment 2026-11-15: it also builds
-[0592](../../../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md)
+
 (libfabrika writes output only through Effect's `Console`, law M3) and follows
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) and
-[0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md).
+ and
+[0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md).
 
 ```ts
 // The whole idea, on the L6 law of local-dev.laws.test.ts. A sketch, not compiled.
@@ -63,7 +63,7 @@ out of this sweep). The slice lands on the sweep's one fold branch (ruling 1).
   open question 3).** The six `vi.stubEnv` calls go in this slice and the `rolldown` mock takes
   0555's exception line, but `supervision-spans.integration.test.ts` keeps a `cloudflare:workers`
   mock that waits on 0042's Alchemy work, so the folder cannot reach zero, and no narrower interim
-  lock is allowed (0524). See "The other `vi` hits 0555 bans".
+  lock is allowed. See "The other `vi` hits 0555 bans".
 - **The order with the Reflect ban's slice 9 (80%).** Both touch `dev.ts`,
   `dev-control.laws.integration.test.ts`, `dev-secrets.laws.integration.test.ts` and
   `watch.laws.integration.test.ts`. This slice goes first: it waits on nothing, and slice 9 waits on
@@ -98,8 +98,7 @@ lock block when they reach zero.
   here is started by Alchemy's local provider, so only its pid reaches us. Erlang/OTP keeps the OS
   edge in one port module, and a supervisor ends a child by message, never by a global
   (`supervisor` shutdown: `brutal_kill` or a timeout then `kill`); `terminate` here already
-  follows that shape. The known way left is a service at the edge, one per
-  [0555](../../../.decisions/0555-no-vi-mock-or-domock.md).
+  follows that shape. The known way left is a service at the edge, one per.
 - **Rolldown's logs.** Rolldown follows Rollup's `onLog(level, log, defaultHandler)`: given a
   handler, Rolldown calls it for each log at or above `logLevel`, and prints only if the handler
   calls `defaultHandler` (Rollup docs, "onLog"; read in the installed `rolldown@1.2.13`, not
@@ -110,7 +109,7 @@ lock block when they reach zero.
 ### `Signals`, the one way `next/` signals an OS pid
 
 ```ts
-// next/packages/libfabrika/src/node/dev/Signals.ts: the contract only (0095). A sketch.
+// next/packages/libfabrika/src/node/dev/Signals.ts: the contract only. A sketch.
 import { Context, Effect, Schema } from "effect";
 
 /** A signal the OS refused: `missing` when the pid has no process (ESRCH), `refused` for any other. */
@@ -146,7 +145,7 @@ export const make = (kill: (pid: number, signal: string) => void): Signals["Serv
 // The one line in next/'s product code that calls process.kill.
 export const layer = Layer.succeed(Signals, make((pid, signal) => process.kill(pid, signal)));
 
-// next/packages/libfabrika/src/node/dev/SignalsTest.ts, beside its service (0538). A sketch.
+// next/packages/libfabrika/src/node/dev/SignalsTest.ts, beside its service. A sketch.
 export const layer = (
   impl: Layer.PartialEffectful<Signals["Service"]> = { send: () => Effect.void },
   fails: Recorder.Fails<Signals["Service"]> = {},
@@ -173,10 +172,10 @@ export const signal = (pid: number, name: Signal): Effect.Effect<void, never, Si
   `SignalsNode` calls the global). The app's own sweep slice moves the provide up to
   `local-instance.ts` after 1366 lands, so its law can swap `Signals` too.
 - `next/packages/libfabrika/package.json` gets one export, `"./node/signals": "./src/node/dev/SignalsNode.ts"`.
-- **The name.** `Signals`, a plural service name (0029), after what it sends: POSIX's word, and
+- **The name.** `Signals`, a plural service name, after what it sends: POSIX's word, and
   Node's (`process.kill` sends a signal). Not `Processes` or `Kill`: in `next/`, a process is a
   running copy of a program (`.glossary/TERMS.md`), and an OS pid is not one. A glossary row says so.
-- **Is this a setting?** No. Which OS call ends a process is not a person's choice (0069).
+- **Is this a setting?** No. Which OS call ends a process is not a person's choice.
 - **What fact is lost?** None: the facts of a replace (`replacing`, `killed`) are written before
   the signal as today (`dev.ts:478`).
 
@@ -211,7 +210,7 @@ a law owns, not services, the case the Recorder pattern leaves to the law
   reads, before it writes the law, every other outside package the path runs for a direct
   `console` or `process.stdout`/`process.stderr` write (`rg` over each package's installed
   `dist/`), and names each in its run row. A package found writing directly gets the same answer
-  as tea: a local `pnpm patch` with a hook, and the upstream issue the same day (0054). If one is
+  as tea: a local `pnpm patch` with a hook, and the upstream issue the same day. If one is
   found, the slice stops and the lead adds it to this plan before the law is written.
 - **`eslint/no-console` at error** in `next/packages/libfabrika/src/**`, test files and test
   support left out. `rg -n '\bconsole\.'` finds 0 hits there on main, so it blocks from the start
@@ -288,16 +287,15 @@ was ever called, which would print past `Console`.
 
 The laptop lead ruled that `vi.mock`, `vi.doMock` and `vi.stubEnv` are 0555's own targets, so this
 sweep fixes those hits too, and that a folder's lock lands whole in the one fold pull request only
-once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass
-([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). Counted on main at `0683861`
+once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass. Counted on main at `0683861`
 with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 2 `vi.mock`, 0 `vi.doMock`, 6
 `vi.stubEnv`.
 
 | What it replaces | Calls | Where | In this sweep? |
 |---|---|---|---|
-| `vi.stubEnv("FABRIKA_HOME", home)` | 6 | `dev.laws.integration.test.ts` 2, `dev-errors.laws.integration.test.ts` 3, `dev-secrets.laws.integration.test.ts` 1 | yes, this slice: the law provides the home with `ConfigProvider.layer(ConfigProvider.fromUnknown({ FABRIKA_HOME: home }))` (0555). The settings command already reads it through `Config` (`node/settings/Command.ts:56`, `optional("FABRIKA_HOME")`); the tests step reads each stub's reader first, and a reader found on `process.env` moves to `Config` in the build, about 4 product lines |
-| `vi.mock("rolldown")` | 1 | `watch.laws.integration.test.ts` | yes, as 0555's one exception: this is the law of `watch.ts`, the one file that wraps Rolldown, so the line takes `// oxlint-disable-next-line vitest/no-restricted-vi-methods -- the law of watch.ts, the one file that wraps rolldown; nothing below it to swap (0555)` |
-| `vi.mock("cloudflare:workers")` | 1 | `supervision-spans.integration.test.ts:34` | **no**: [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work, which has no plan yet |
+| `vi.stubEnv("FABRIKA_HOME", home)` | 6 | `dev.laws.integration.test.ts` 2, `dev-errors.laws.integration.test.ts` 3, `dev-secrets.laws.integration.test.ts` 1 | yes, this slice: the law provides the home with `ConfigProvider.layer(ConfigProvider.fromUnknown({ FABRIKA_HOME: home }))`. The settings command already reads it through `Config` (`node/settings/Command.ts:56`, `optional("FABRIKA_HOME")`); the tests step reads each stub's reader first, and a reader found on `process.env` moves to `Config` in the build, about 4 product lines |
+| `vi.mock("rolldown")` | 1 | `watch.laws.integration.test.ts` | yes, as 0555's one exception: this is the law of `watch.ts`, the one file that wraps Rolldown, so the line takes `// oxlint-disable-next-line vitest/no-restricted-vi-methods -- the law of watch.ts, the one file that wraps rolldown; nothing below it to swap` |
+| `vi.mock("cloudflare:workers")` | 1 | `supervision-spans.integration.test.ts:34` | **no**: [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work, which has no plan yet |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The block M1 describes
 is the shape it lands with, whole, for `node/dev/**`, on the day the `cloudflare:workers` mock
@@ -345,11 +343,11 @@ Counted on main at `f7169af` with `rg -n 'vi\.fn\(|toHaveBeenCalled|spyOn\('` in
 Every law that runs `startDev` and did not spy on `process.kill` gets `SignalsTest.layer()` too,
 since `startDev` now asks for `Signals`. Each layer is built per run, so no law patches a global
 another law can see, which the `mockRestore` lines guarded by hand. Those `try/finally` and
-`acquireRelease` restores go with their spies (0061).
+`acquireRelease` restores go with their spies.
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -358,7 +356,7 @@ that moving a runner keeps the same first failing case.
 
 | Law | Kind | Generator | What it holds | Plant |
 |---|---|---|---|---|
-| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub (0555). Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3; answered 2026-11-15 by the laptop lead: M1 does not land in this sweep, since the folder keeps a `cloudflare:workers` mock, and no interim block is allowed (0524) | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red |
+| M1 | lint | lint | `vitest/no-restricted-vi-methods` refuses `vi.fn`, `vi.spyOn` and `vi.stubGlobal` in `next/packages/libfabrika/src/node/dev/**`; `vi.stubGlobal` too, so a spy does not move to a global stub. Amendment 2026-11-15 (ruling 2): this is node's M1 for the folder; every file at zero for all five also refuses `vi.mock`, `vi.doMock` and `vi.stubEnv`; where the five files with `vi.mock` or `vi.stubEnv` keep their lock meanwhile is open question 3; answered 2026-11-15 by the laptop lead: M1 does not land in this sweep, since the folder keeps a `cloudflare:workers` mock, and no interim block is allowed | node's `VI_METHODS` set in `oxlint-plugins/builtin-plants.ts`, with this plan's `vi.stubGlobal` line added to it (amended 2026-11-15; was a `VI_SPY` plant of its own); `plants.test.ts` runs its lines in every path of every block. Plant: drop the folder from the block, and its line is not refused. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red |
 | M2 | lint | lint | `eslint/no-console` refuses `console.*` in libfabrika's product files and takes it in a test file | a `NO_CONSOLE` plant, run in a product path and a test path. Plant: widen the block to test files, and the test line is refused |
 | M3 | lint | lint | (amendment 2026-11-15, owner ruling) `eslint/no-restricted-properties` refuses `process.stdout` and `process.stderr` in every libfabrika file but a `*.test.ts` file, in each of the five blocks that set the rule for a libfabrika path, and the one exception line above is the only disable line that names those entries; the cloudflare plan's M13 | the planted lines `process.stdout.write(secret)` and `process.stderr.write(secret)` in a `node/dev` product path and in a `*.test-support.ts` path, refused, and in a `*.test.ts` path, taken. Plants: drop the two entries from one block, and that block's planted write is taken; add `process.stdout.write(bearer)` to `dev.ts`, and `pnpm lint` is red |
 | L6a | test | Effect Arbitrary: SignalCase | `signal` succeeds on `missing`, dies on `refused`, and sends exactly one `send(pid, name)` | let `missing` escape `signal`, or swallow `refused` too (the L6 plant of today) |
@@ -384,9 +382,8 @@ const Thrown = Schema.Union([
 ]);
 ```
 
-- **L6c sends a real process signal.** Amendment 2026-11-16: under
-  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), it runs on eligible disposable
-  Linux or macOS CI, with proof before the first review (0178). It never runs on the owner's
+- **L6c sends a real process signal.** Amendment 2026-11-16: under, it runs on eligible disposable
+  Linux or macOS CI, with proof before the first review. It never runs on the owner's
   laptop. The selected runner must support its dependencies, isolation and cleanup. It signals
   only its own child, already waited for. Why no stand-in will do: it checks what Node really
   throws, which L6b's inputs copy.
@@ -411,7 +408,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -428,11 +425,11 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry, and on the folder's files but `*.test.ts` M3's two `process` entries, the way M3 leaves test files out.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." },
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." },
       { "object": "vi", "property": "stubGlobal", "message": "<the text of the vitest rule's stubGlobal entry>" }
     ]
   }
@@ -496,8 +493,8 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 - **The libfabrika test** (`next/AGENTS.md`): a from-scratch client that runs a local dev brain
   needs `Signals` too, so it lives in libfabrika, and `instance.ts` only provides it.
 - `node/dev` is one module with an `internal/`; `Signals.ts` is its front file, `SignalsNode.ts`
-  a sibling layer file (0095). `make` sits in `internal/` so the law L6b imports it inside its own
-  module and the export is used by `SignalsNode.ts`, never only by a test (0006).
+  a sibling layer file. `make` sits in `internal/` so the law L6b imports it inside its own
+  module and the export is used by `SignalsNode.ts`, never only by a test.
 - **Pull request 1366** has no file in this table. Its `local-instance.integration.test.ts` keeps
   its own `process.kill` spy and passes unchanged; that spy waits for the app's slice.
 
@@ -560,14 +557,14 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 The tests and build steps run the verified-safe narrow paths under the repo's machine caps,
 plus `pnpm lint` (M1, M2 and the plants). Read the selected tests and their cleanup first; an
 `.integration.` filename alone gives no clearance. L6c and any selected law that sends real
 process signals run on eligible disposable Linux or macOS CI, never the owner's laptop, with
-proof before the first review (0594). The lead's changed-files pass uses explicit verified-safe
+proof before the first review. The lead's changed-files pass uses explicit verified-safe
 local paths and obtains remote proof for the signal laws separately, then runs the one type
 check.
 

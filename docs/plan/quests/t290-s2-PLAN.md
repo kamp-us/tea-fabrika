@@ -45,7 +45,7 @@ Slice 2 makes a tile follow its process across restarts, the OTP way.
   is a new process id, a monitor never follows the name, and a surviving tile looks the name up
   again and monitors the process it finds with a fresh ref. From P33: the window's monitor names
   its exact client session, and its DOWN lands in `client:<id>/inbox`.
-- **Decided notes:** [0276](../../../.decisions/0276-a-tile-shows-one-process.md) (a tile shows one
+- **Decided notes:** (a tile shows one
   process, monitored as OTP monitors, then follows its `keep`); the desktop layer's W3
   (`docs/direction/the-desktop-layer.md`); [a browser is always a
   client](../../direction/a-browser-is-always-a-client.md); the five layers' C5
@@ -266,7 +266,7 @@ const taken = (entry: unknown, s: WindowModel) =>
   the DOWN (it was for an earlier session's ref). The name's stream always has the `exited` fact
   with its reason, so the tile shows the same thing whichever way it got there. A DOWN with
   `noproc` names no reason of its own.
-- **The states are explicit (0037), in one tea machine (0046).** `Reach` and `Inbox` are named
+- **The states are explicit, in one tea machine.** `Reach` and `Inbox` are named
   tagged unions stepped only by `update`. An open tile cannot lack a ref, and an ended tile cannot
   lack its reason.
 
@@ -322,10 +322,10 @@ loading").
   focus at that moment; the window machine's `tellEnded` holds that, where focus is known. The
   guideline has no row for the focused tile's own end, so nothing extra is said for it. It stays
   polite, not `role="alert"`, as the guideline's live-region table and 0504 say.
-- Color is never the cue: the state is words (0502). This is no new screen, so there is no Linear
+- Color is never the cue: the state is words. This is no new screen, so there is no Linear
   question; the state word follows 0502.
 
-### Is any of this a setting? (0069)
+### Is any of this a setting?
 
 - **The ref format, the inbox cursor and the paging:** no. Nobody running fabrika picks them; they
   are how the code keeps a decided rule.
@@ -422,7 +422,7 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
   are tests. T1 and T2 are shapes, so they are type laws. No rule here is about how code is
   written, so there is no new lint rule.
 - **No host-only law.** E1 needs workerd and Chromium. It is a visual test, so it runs on the
-  3-hour full run on Linux, and on a pull request only with the `visual` label (0536), as slice
+  3-hour full run on Linux, and on a pull request only with the `visual` label, as slice
   1's suite does. Nothing here touches launchd or the owner's Mac.
 - **The OTP behaviors already proven** (one DOWN per watch, `noproc`, a stale DOWN never reaching a
   new life) keep their P33 laws in `ProcessMonitors.integration.test.ts`. D2 proves the door's path into them.
@@ -466,7 +466,7 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 About 395 product lines. The tests step owns every test file; the build owns the product code and
 the docs.
 
-**No list lets broken code pass (0524).** No ledger entry, skip or waiver is added. L8's clause is
+**No list lets broken code pass.** No ledger entry, skip or waiver is added. L8's clause is
 replaced, with its mapping above, and gets stricter about why a read repeats.
 
 ## What fact is lost if not recorded now
@@ -491,7 +491,7 @@ Validation for the tests and build steps:
 
 - `nice -n 15 pnpm exec vitest run --maxWorkers=3 next/packages/libfabrika/src/client next/packages/libfabrika/src/runtime/Client.laws.test.ts next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts next/apps/fabrika/src/door.integration.test.ts`, and `pnpm lint`.
 - The lead runs `--changed` and the one typecheck.
-- E1 runs on the 3-hour full run, and on this pull request through its `visual` label (0536). It
+- E1 runs on the 3-hour full run, and on this pull request through its `visual` label. It
   needs workerd and Chromium, so no step's box runs it. D1 to D3 and P1 are integration tests: the
   full run runs them, and each step runs their narrow paths.
 - **Shots:** the window changes, so the PR carries shots of `Ended (crashed)` and of the followed
@@ -510,7 +510,7 @@ Estimate: 6 steps, $70
 ## Records
 
 - No new decision file: this builds 0276 and the row's OTP answer.
-- The OTP table changes in this PR (0017): a new row for monitoring a registered name ("same"),
+- The OTP table changes in this PR: a new row for monitoring a registered name ("same"),
   and the watcher row now covers client sessions ("same").
 - Glossary rows change for `ProcessManager` and `recipient life`. No new word: `leave` is
   `Connections.leave`'s word, the session's end.

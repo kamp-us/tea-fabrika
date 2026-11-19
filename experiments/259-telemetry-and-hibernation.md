@@ -84,7 +84,7 @@ matches the shell that runs it. The 12 s runs used `pgrep -x`, which counted 0 b
 
 ## Lean
 
-The owner decided on 2026-11-11 ([0122](../.decisions/0122-telemetry-goes-out-later-through-a-connector.md)): the first version sends no telemetry out, and when one is added it goes through a connector and follows (a).
+The owner decided on 2026-11-11: the first version sends no telemetry out, and when one is added it goes through a connector and follows (a).
 
 **(a), no patch.** Sure: 85%.
 

@@ -46,7 +46,7 @@ Rules:
   (`ledgerStore.ts:7-8`), "SYN cookies keep an unproved connection out of storage"
   (`gateway/GatewayNonce.ts:6`), "a timer fiber is what 'a wait is data' forbids. Nothing is
   dropped." (`telemetry/Sink.ts:5-6`).
-- **Point at the record when one decided it.** A decision number such as `(0095)` (as
+- **Point at the record when one decided it.** A decision number such as `` (as
   `ledger/internal/ledgerPages.ts:1` does) or a standard such as `(RFC 4987, section 3.6)`
   (`GatewayNonce.ts:6`). Never a plan code: a stranger cannot read `P6`
   ([doc-comments.md](./doc-comments.md)).
@@ -58,11 +58,11 @@ Each of these differs from Effect's habit, and each reason is recorded.
 
 | Ours | Effect's habit | Reason, and where it is written |
 |---|---|---|
-| Synchronous SQL and ledger steps | async `SqlClient` transactions | a step decides and writes in one transaction ([0050](../.decisions/0050-a-ledger-step-is-a-plain-function.md); `ledgerStore.ts:5-8`, `NodeSqlite.ts:3`) |
+| Synchronous SQL and ledger steps | async `SqlClient` transactions | a step decides and writes in one transaction ([0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md); `ledgerStore.ts:5-8`, `NodeSqlite.ts:3`) |
 | A span sink that writes each span to SQLite | an OTLP exporter with an in-memory buffer and a timer | a sleeping object keeps every span (`telemetry/Sink.ts:5-7`) |
 | A stateless HMAC nonce | a challenge kept in memory | a sleeping object loses memory (`GatewayNonce.ts:6`) |
 | The supervisor's backoff as a saved tea machine | a `Schedule` | a `Schedule` cannot be saved across a sleep ([durable-objects-sleep.md](./durable-objects-sleep.md)) |
-| Contract-only service files, no static layer | a static `layer` on the service class | bundles stay platform-clean ([0095](../.decisions/0095-a-service-file-holds-only-its-contract.md)) |
+| Contract-only service files, no static layer | a static `layer` on the service class | bundles stay platform-clean |
 | A named `Effect.fn` span on every exported function | `fnUntraced` in library code | record wide ([the `Effect.fn` note](../docs/direction/effect-fn-for-traced-functions.md)) |
 
 ## Where it applies
@@ -90,8 +90,7 @@ Review only: whether a comment gives a real reason is judgment. A plan names the
 module for each new hand-built part, and the review reads the reason beside it.
 
 ## Decision
-
-[0023](../.decisions/0023-next-follows-effects-code-style.md): `next/` follows Effect's style, and a
+: `next/` follows Effect's style, and a
 kept difference names its reason.
 
 > Derived from `effect@4.1.2` and `@effect/sql-d1@4.1.2`; re-verify on pin bump.

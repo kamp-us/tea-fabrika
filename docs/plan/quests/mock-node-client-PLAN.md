@@ -5,8 +5,7 @@ Plancheck-Version: 3
 
 This is `next/` only. Today's app is not touched. It is one later slice of the Recorder plan
 ([`recorder-PLAN.md`](./recorder-PLAN.md), "Size", the row `libfabrika/src/node/client`), and it
-builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) and
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md).
+builds and.
 
 ```ts
 // The whole idea, a sketch, not compiled. Before: the S2 law patches the process's globals.
@@ -46,7 +45,7 @@ plan's law M13.
   that calls `console.warn` itself is no longer seen. On this path that was tea alone (read below),
   and giving tea a sink closes the one door tea writes through on this start. A direct write in our
   own code is held by Effect's checks `globalConsole` and `globalConsoleInEffect` once they are
-  locked for these folders ([0565](../../../.decisions/0565-effects-own-checks-block.md)); they are
+  locked for these folders; they are
   not locked here yet, which "What this cannot tell us" repeats.
 
   **Amendment (2026-11-15, merge session ruling 4): nothing is lost, and this doubt's acceptance is
@@ -219,7 +218,7 @@ yield* Effect.acquireRelease(
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -262,8 +261,7 @@ and no open pull request adds it (searched 2026-11-16). 0555 names that rule and
   to that block's `files`.
 - **If another mock slice landed the entry first,** this slice only adds its folder to the block's
   `files`, and N1 is that plant run in one more folder.
-- The rule is on at zero for the folder, at `error`, never `warn`, with no list of leftovers
-  ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
+- The rule is on at zero for the folder, at `error`, never `warn`, with no list of leftovers.
 - Open pull request [1373](https://github.com/kamp-us/tea-fabrika/pull/1373) also edits
   `.oxlintrc.json`, for the anti-slop plugin. Whichever lands second merges the latest main and preserves both
   blocks. 0555 says the hold may move to anti-slop's `no-module-mocking` later; that does not change
@@ -282,7 +280,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -297,11 +295,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -369,7 +367,7 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
   finalizers run and a failing exit code, instead of an uncaught throw.
 - **The lock rule is 0555's `vitest/no-restricted-vi-methods`,** 90%. 0555 names it.
 - **Is this a setting?** No. Where tea's failures go and the test `Console` are code, nothing a
-  person running fabrika picks (0069).
+  person running fabrika picks.
 - **What fact is lost if not recorded now?** Today a tea failure on a hands start goes to the
   terminal as a raw `console.warn` or a crash trace, outside the logs. After this slice it is a log
   line with its `phase`, so the logs keep it. Nothing recorded today is dropped.
@@ -380,7 +378,7 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `pnpm format`, `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144` in a

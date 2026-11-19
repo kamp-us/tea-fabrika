@@ -11,7 +11,7 @@ amendment (`docs/plan/quests/kalfa-config-package-ordinary-routing-amendment-PLA
 `c4b73d23406a`: O1 to O4). It also plans the two CI speed items the lead asked for, A and B2,
 which the lead has answered (see Calls taken).
 
-This is the plan approved with body `06fb72170771`, amended after decision 0602 (see "Amendment:
+This is the plan approved with body `06fb72170771`, amended after an earlier decision (see "Amendment:
 the archive is kept by main's full run"). Every section the amendment changes says so in its
 first line; the rest stand as approved.
 
@@ -24,11 +24,10 @@ Doubts first, because the owner is away:
   fault step for P1 alone, in `related.ts` (answered under Calls taken).
 - **B2 has one run of data, so B2 is a measuring step here, not a split.** See "B2".
 - **Amendment: P2's first run at the merged head is main's full run after the merge, 90% sure
-  this is decided.** Decision 0602 puts every `.integration.` law on main's full run alone, so no
+  this is decided.** an earlier decision puts every `.integration.` law on main's full run alone, so no
   pull request run, queue run or branch proof run can run P2 before 1583 and this layer land. The
   last P2 run in CI is this pull request's green run at `2aee1e4f2`, before main `279f97ee`. A red
-  P2 or a refused receipt on main opens the `ci-scheduled` issue, a sev1, within about an hour
-  (0581), and the fix goes forward (0544). That is 0602's stated loss, not a new one.
+  P2 or a refused receipt on main opens the `ci-scheduled` issue, a sev1, within about an hour, and the fix goes forward. That is 0602's stated loss, not a new one.
 - **Amendment: the test job's backstop, 75% sure it needs no change.** The receipt and the
   archive upload each take a one-minute step limit after the vitest step, so the step limits after
   a test step rise from 2 to 4 minutes against SC13's 3-minute backstop. Expected cost is about
@@ -38,7 +37,7 @@ Doubts first, because the owner is away:
   settles it the other way.
 
 ```ts
-// Sketch. The whole idea, after decision 0602. Main's full run builds, tests and keeps the archive:
+// Sketch. The whole idea, after an earlier decision. Main's full run builds, tests and keeps the archive:
 // each numbered vitest leg of scheduled.yaml's `tests` job, on main alone, reads its own report.
 // The one leg whose report holds P2 checks the receipt and uploads exactly the two files; every
 // other leg checks that P2 is a next-integration file and that it left no folder. The merge line
@@ -57,7 +56,7 @@ selection.consumer; // "" or the one tooling leg that holds P1; `archive` is gon
 What happened. The parent branch `fabrikalfa/kalfa-config-package` (PR 1583) moved to
 `7d38689ff734316fb5626d07f49b62e8b1e9cd50`, which carries main `279f97ee`. That main holds
 [PR 1613](https://github.com/kamp-us/tea-fabrika/pull/1613) and
-[PR 1618](https://github.com/kamp-us/tea-fabrika/pull/1618), which build decision 0602
+[PR 1618](https://github.com/kamp-us/tea-fabrika/pull/1618), which build an earlier decision
 ([PR 1614](https://github.com/kamp-us/tea-fabrika/pull/1614), branch
 `fabrikalfa/adr-integration-off-merge-line`): no pull request, merge queue or branch proof run
 starts an `.integration.` law, and main's full run (`scheduled.yaml`, on a push to main and on the
@@ -144,7 +143,7 @@ npm install ./kalfa-config/kalfa-config-<sha>-attempt-<n>/kalfa-config-0.0.0.tgz
 - **A green run may hold none.** A push whose gate said `false` ends green in seconds and runs no
   tests. Skip it and read the next run.
 - **The hourly catch-up keeps, and never re-keeps.** The gate starts it only on a main head that
-  has had no full run (0581), so its archive is that head's first. It should keep: after a burst of
+  has had no full run, so its archive is that head's first. It should keep: after a burst of
   pushes inside the hour, the catch-up's head is main's newest, and without it the newest archive
   would lag main by up to an hour of pushes. A hand start on main may run a head again; it keeps a
   second archive of the same commit in its own run, which names the same tested source.
@@ -153,11 +152,11 @@ npm install ./kalfa-config/kalfa-config-<sha>-attempt-<n>/kalfa-config-0.0.0.tgz
 
 ## Scope, base and what this plan takes on
 
-Amended after decision 0602: the base, the sequence's third step, the path count and the pieces
+Amended after an earlier decision: the base, the sequence's third step, the path count and the pieces
 read but not changed.
 
 This pull request is the fourth layer of native stack 1554: 1427, then 1525, then 1583, then
-ours, kept current under decision 0599 (link the whole chain, keep children current by merging,
+ours, kept current under an earlier decision (link the whole chain, keep children current by merging,
 never rebase). Branch `fabrikalfa/kalfa-config-delivery` starts from 1583's branch,
 `fabrikalfa/kalfa-config-package`. The approved plan was read against 1583's head `322e6c16`,
 main `397e63f4` (PR 1581) and `a6761bce`. This amendment was read against our head `2aee1e4f2`,
@@ -170,13 +169,13 @@ The sequence, as the lead ruled, with the third step amended:
    folder; its autofix of the files 1581 added is one mechanical commit inside 1525, owned by
    another lane. Our edits go on top of it. No step of ours reformats those files; `pnpm format`
    touches only lines we wrote.
-2. **Decision 0598's build lands first on the shared lines.** Done: it is on main, and on our
+2. **an earlier decision's build lands first on the shared lines.** Done: it is on main, and on our
    branch since the merge at `2aee1e4f2`.
-3. **1583 and our layer land together, on their merge-line checks.** Decision 0602 takes P2 off
+3. **1583 and our layer land together, on their merge-line checks.** an earlier decision takes P2 off
    every run before the merge, so our receipt can no longer be green on the merged head before it
    lands. The package's lifecycle proof and the first kept archive come from main's first full run
-   after the merge, within about an hour (0581). A red P2 or a refused receipt there is a sev1, as
-   every red law on main is (0602). Our pull request's checks still run P1 and its source fault.
+   after the merge, within about an hour. A red P2 or a refused receipt there is a sev1, as
+   every red law on main is. Our pull request's checks still run P1 and its source fault.
 4. **We never write to layers 1 to 3.** A change any of them needs is the other lane's, named to
    the lead.
 
@@ -198,7 +197,7 @@ What this plan takes on, for the lead's handoff checklist:
 | P2's runtime proof: its strict declaration check, its installed-copy refusals and the restored positive, then the upload of the exact tested archive and receipt | yes, on main | P2 runs them inside one test on main's full run; our receipt step on that leg uploads only after P2's own passing, unskipped result (D2, SC22). |
 | P1's source fault and its restore proof | yes | The fault step (D5), on the tooling leg that owns P1, on our pull request. |
 | A fresh review of the applied delivery source at the real package head | yes | The review step runs at our head after the merge of `7d38689ff` (Validation). |
-| Decision 0599's upkeep | yes | One plain merge of 1583's branch per parent move; no rebase, no force-push, no write to layers 1 to 3. |
+| an earlier decision's upkeep | yes | One plain merge of 1583's branch per parent move; no rebase, no force-push, no write to layers 1 to 3. |
 | 1583's own whole-diff review | no | It reviews 1583's diff. Our review reads our diff. |
 | A, B2 | planned here | Follow-up pull requests, each with its own laws; both come back to the lead for a new plan (see each). |
 
@@ -215,10 +214,10 @@ names it to the lead as a blocker.
 
 ## The merge of 7d38689ff
 
-Amended: replaces "Where our edits meet decision 0598's build", whose build has landed.
+Amended: replaces "Where our edits meet an earlier decision's build", whose build has landed.
 
 The lead makes the merge commit, as for each earlier parent move: `git merge 7d38689ff`, a plain
-merge (0599). A trial with `git merge-tree` at `2aee1e4f2` conflicts in three files; every other
+merge. A trial with `git merge-tree` at `2aee1e4f2` conflicts in three files; every other
 file merges clean, check.yaml and the related guard included. The merge commit resolves the
 conflicts by both sides' behavior, with no amendment edit in it, so a review can read the merge
 and the amendment apart. The tests step's commits after it make the amendment. The merge commit
@@ -268,7 +267,7 @@ Amended: the last three bullets are new.
   `forceRerunTriggers` makes listed files run everything ([CLI](https://vitest.dev/guide/cli.html#changed),
   [config](https://vitest.dev/config/forcereruntriggers), read in Vitest 5.0.5's installed
   `cli-api` chunk by `proof.ts`'s comment). A test that reads files without importing them is
-  invisible to `--changed`; decision 0590 item 4 and `changes.mjs`'s `readers` add such tests by
+  invisible to `--changed`; an earlier decision item 4 and `changes.mjs`'s `readers` add such tests by
   path. P1 is added by path the same way, the way `related.ts` already adds the checklist fixture
   through `wantsChecklistLaw`.
 - **npm's tarball install.** `npm install <file>.tgz` installs a packed archive like a registry
@@ -285,7 +284,7 @@ Amended: the last three bullets are new.
 - **Presubmit and post-submit.** Google runs only fast, reliable tests before a submit and every
   affected test, larger ones included, after it
   ([Software Engineering at Google, chapter 23](https://abseil.io/resources/swe-book/html/ch23.html),
-  as decision 0602 cites it). P2 is a larger test, so it runs post-submit, on main's full run.
+  as an earlier decision cites it). P2 is a larger test, so it runs post-submit, on main's full run.
 - **Build once, keep what was tested.** Continuous delivery's rule is to build the binary once
   and promote that same binary, never to rebuild it for release (Humble and Farley, *Continuous
   Delivery*, 2010, "Only build your binaries once"; not fetched for this plan). Here P2 packs the
@@ -365,7 +364,7 @@ export const checkDelivery = (input: {
 // 5. P2 in the report: missing, extra, unreadable, digest, source (== head), requested (== head),
 //    stage, exports, as built.
 // The main block prints `kept=true` or `kept=false` to GITHUB_OUTPUT and exits 0; refused exits 1
-// with its reason. It branches on the verdict with Match.valueTags (0567).
+// with its reason. It branches on the verdict with Match.valueTags.
 ```
 
 The mode reads the runner's own variables, as 1618's select step reads `GITHUB_EVENT_NAME`, so the
@@ -457,7 +456,7 @@ const ARCHIVE_WITH = {
   name: "kalfa-config-${{ github.sha }}-attempt-${{ github.run_attempt }}",
   path: [`${DELIVERY}/kalfa-config-0.0.0.tgz`, `${DELIVERY}/receipt.json`], // these two, in order
   "if-no-files-found": "error",
-}; // and `retention-days`, a setting (0069): only a whole number of 1 or more is held
+}; // and `retention-days`, a setting: only a whole number of 1 or more is held
 
 // SC22. Main's full run keeps the tested archive, once, on the leg that ran P2.
 //  - In `tests`, exactly one step runs RECEIPT: name `package receipt`, id `receipt`, if RECEIPT_IF,
@@ -554,7 +553,7 @@ step's decisions on generated reports and bytes; the real red and green runs of 
 the CI step itself.
 
 No law here is host-only: P2 is an approved `.integration.` law on Linux CI, on main's full run
-alone (0594, 0536, 0602), the fault step runs P1 on a CI tooling leg, and the guard tests read
+alone, the fault step runs P1 on a CI tooling leg, and the guard tests read
 files only.
 
 ## Files
@@ -595,7 +594,7 @@ routing amendment requires.
 
 ## Taken from the batch
 
-Amended: since decision 0602, the items on P2's selection, `requested` against a pull request's
+Amended: since an earlier decision, the items on P2's selection, `requested` against a pull request's
 head, `id: integration` and the shared R1 and Q1 predicate no longer apply; the amendment section
 says what replaces each. The rest stands.
 
@@ -706,7 +705,7 @@ Amended: the second and eighth calls are reworded for P1 alone, and the last eig
 - `record.test.ts` stays unedited, 85% (see Scope).
 - The lead answered the plan's two first questions. A and B2 are follow-up pull requests after this
   one; each comes back to the lead for a slot before it starts.
-- Is this a setting? `retention-days: 90` is one, as `record.ts` already says (0069), and it
+- Is this a setting? `retention-days: 90` is one, as `record.ts` already says, and it
   matches the checklist observations. The archive name follows the package version. The route
   paths, the event clause and the P1 fault are code facts, not choices a person sets. No other
   new choice.
@@ -733,7 +732,7 @@ Amended: the second and eighth calls are reworded for P1 alone, and the last eig
 
 ## Speed item A: compute the related set in `changes`
 
-Amended: since decision 0602 the related job runs plain tooling legs alone, at most two, and
+Amended: since an earlier decision the related job runs plain tooling legs alone, at most two, and
 `select` prints five outputs, not eight. A's sketch below predates both; A comes back to the lead
 with a new plan, re-measured, before it starts.
 
@@ -795,7 +794,7 @@ keeps all three as they are. If any of them must change, A stops and names it as
 
 ## Speed item B2: more tooling legs, measured first
 
-Amended: since decision 0602 the merge line runs no integration leg, so B2's threshold below,
+Amended: since an earlier decision the merge line runs no integration leg, so B2's threshold below,
 which compares a tooling leg with the longest integration leg, no longer applies. B2 comes back to
 the lead with a new threshold before its measuring step starts.
 
@@ -918,7 +917,7 @@ package's own source is run for P2. The batch was read as input and not run. B2'
 rests on one run, and the claim that its waits came from group contention is read from
 timestamps, not from GitHub's queue. P2 has not run at the merged head: its last CI run is this
 pull request's at `2aee1e4f2`, and its next is main's full run after the landing, where a break
-shows as a sev1 instead of a held merge (0602). The receipt's added seconds per leg are a guess
+shows as a sev1 instead of a held merge. The receipt's added seconds per leg are a guess
 until that run, and so is the claim that the backstop holds.
 
 ## Open questions

@@ -11,13 +11,13 @@ Proposed 2026-10-18. Walked when Tier 7 starts (owner, 2026-11-08): add-on packs
 `next/programs/` is already the shape a pack has, and repo programs in `.fabrika/programs`
 come first, in Tier 5, lean about 60% ([the tiers](../plan/tiers.md)).*
 
-*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
+*Changed 2026-11-10 by:* programs written
 outside fabrika's own source get a thin slice before Tier 5; repo programs and packs harden it later.
 
-*Changed 2026-11-10 by [0075](../../.decisions/0075-cold-author-checks-outside-programs.md):* each
+*Changed 2026-11-10 by:* each
 tier checks that slice with a cold agent as the author, and every place it gets stuck is a gap.
 
-*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* in `next/`, every
+*Changed 2026-11-10 by [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md):* in `next/`, every
 program is in a pack: libfabrika is the syntax, the core pack `fabrika` ships with fabrika as its
 standard library, and a repo's own programs are a pack in `.fabrika/packs/<name>/`; "core" below is
 today's word, not the core pack.

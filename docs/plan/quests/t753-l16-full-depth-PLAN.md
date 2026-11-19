@@ -134,7 +134,7 @@ Effect code. No upstream package is patched.
   kill. After A, a hard kill in the middle of a call loses all of that call's spans. A clean failure
   or a fiber interruption loses nothing, because the commit is in `Effect.ensuring`. This meets
   0122 as written, and it matches the three places above. An object sleeps only between calls
-  (0105), so a sleeping object still keeps every span. The pattern row in
+  (0022), so a sleeping object still keeps every span. The pattern row in
   `.patterns/effect-differences-say-why.md:62` stays true.
 - **Kept as they are:**
   - Refusal counting. A batched span with its own refusal tag, or a refusal-tagged ancestor, is
@@ -195,7 +195,7 @@ Effect code. No upstream package is patched.
   sequences: when rows land, which answer a check sees, who writes `normal`. No code shape holds
   them. A lint rule on `ExitReason.cases.normal` would miss a decoded reason, and a type change to
   `exit` would change the Project's RPC, which is a design call.
-- **Settings (0069).** Neither batching nor the per-step read is a setting. Both are correctness
+- **Settings.** Neither batching nor the per-step read is a setting. Both are correctness
   choices that 0122 and the code's own serial steps decide, and nobody would pick another value.
 - **What is lost if not recorded now:** the before and after timings and the per-case cost. They
   go into the PR and the build's field run row with the exact heads. Product data loses nothing,
@@ -203,7 +203,7 @@ Effect code. No upstream package is patched.
 - **Placement (next/AGENTS.md).** All product changes are in libfabrika: a from-scratch client
   needs the sink and the runner. The laws sit in the module that owns each piece. B's suite is
   `runtime/RunnerLifecycleTest.ts`, run by `node/RunnerLifecycle.test.ts`, which owns the SQLite
-  driver (0062).
+  driver.
 
 ## Existing tools
 
@@ -339,7 +339,7 @@ The laws for A go in `next/packages/libfabrika/src/telemetry/SinkBatch.test.ts` 
 the same in-memory platform handles `entry-flows.laws.test.ts` uses). B's laws go in
 `next/packages/libfabrika/src/runtime/RunnerLifecycleTest.ts`, run by
 `next/packages/libfabrika/src/node/RunnerLifecycle.test.ts` on in-memory SQLite. Every new law runs
-on a stand-in, so none is `.integration.` (0581), and each runs on every pull request. No law here
+on a stand-in, so none is `.integration.`, and each runs on every pull request. No law here
 is host-only: none needs launchd, Electron, a real process signal or a real Worker.
 
 These existing laws must stay green unchanged. Each is listed with owner `tests` in the files

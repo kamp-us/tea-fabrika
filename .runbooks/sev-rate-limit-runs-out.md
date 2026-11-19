@@ -1,6 +1,5 @@
 ---
 summary: GitHub's REST limit for the shared login reaches 0, or sev.ts logs a limited call; the loop waits it out, and the log names each call that did not land
-follows: ["0532", "0611"]
 ---
 
 # GitHub's rate limit runs out

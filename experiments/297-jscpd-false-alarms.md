@@ -1,12 +1,12 @@
 ---
 date: "2026-11-15"
 scripts: "none committed; jscpd 5.4.3 run by hand on origin/main at a1df7569d, three fixed-seed samples of its JSON report judged by reading"
-summary: "Our tooling and both versions; $0. jscpd 5.4.3, the copy-paste detector, on main's code with its defaults: 235 clones in code that is no test, and 7 of a 30-clone sample (23%) were false alarms, mostly tea update cases, Schema declarations and config boilerplate. With the settings chosen from that sample (weak mode, which skips comments, 60 tokens, test, fixture and config files left out), 5 of 60 fresh clones (8%) were false alarms. That is under the 10% bar for advice and far over the 0% bar to block, so .jscpd.json runs as advice on each pull request (0587)."
+summary: "Our tooling and both versions; $0. jscpd 5.4.3, the copy-paste detector, on main's code with its defaults: 235 clones in code that is no test, and 7 of a 30-clone sample (23%) were false alarms, mostly tea update cases, Schema declarations and config boilerplate. With the settings chosen from that sample (weak mode, which skips comments, 60 tokens, test, fixture and config files left out), 5 of 60 fresh clones (8%) were false alarms. That is under the 10% bar for advice and far over the 0% bar to block, so .jscpd.json runs as advice on each pull request."
 ---
 
 # 297. jscpd's false alarms on main, before it advises on a pull request
 
-[0587](../.decisions/0587-new-helpers-and-names-cite-sources.md) runs a copy-paste detector on
+ runs a copy-paste detector on
 each pull request as advice until its false alarms are measured. `AGENTS.md`'s checks section sets
 the bars: about 0% to block, up to 10% to only advise. This measures
 [jscpd](https://github.com/kucherenko/jscpd) 5.4.3 (0040: try the existing tool first) on
@@ -68,4 +68,4 @@ stay(s);`, which jscpd cannot tell from a copy.
   finding about a law-shape test copying a plant helper
   (`field/findings/2026-11-14-law-shape-test-copies-plant-helper.json`) shows real copies live
   there too. They are not checked.
-- Raw reports stay outside git (0027).
+- Raw reports stay outside git.

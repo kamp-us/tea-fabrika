@@ -102,7 +102,7 @@ it came. Then the file and the snapshot drift apart, and a byte size past 2^53 l
 way through a JSON number. A reader would also fill a missing saved value from its default, which
 hides a snapshot that was cut short.
 
-The reason for one declaration is in [0086](../.decisions/0086-settings-are-declared-once.md) and
+The reason for one declaration is in and
 [the settings note](../docs/direction/settings.md).
 
 > Derived from `effect@4.1.2`; re-verify on pin bump.

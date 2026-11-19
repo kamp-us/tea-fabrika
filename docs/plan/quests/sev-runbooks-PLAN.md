@@ -1,4 +1,4 @@
-Approved by the lead agent, builds slice 1 of the sev runbooks (0571, 0603), as the lead (fabrikaa-merger) approved it, open question 1 answered no, keeping 0595; body 9637522634de
+Approved by the lead agent, builds slice 1 of the sev runbooks, as the lead (fabrikaa-merger) approved it, open question 1 answered no, keeping 0595; body 9637522634de
 Plancheck-Version: 3
 
 # Sev runbooks, sev fixes admin-merged in both levels, and a runner reserve while a sev is open, in today's lead tooling and CI (slice 2, priority classes and preemption, is a @kalfa/ci plan)
@@ -34,7 +34,7 @@ for a plan because the change moves rules.
   records it.
 - **Clearing the reserve when a sev1 issue closes is done by our tooling, not by CI.** The report
   job that closes the issue runs with `GITHUB_TOKEN`, which has no variables scope (quoted below),
-  and [0595](../../../.decisions/0595-scheduled-runs-share-slots.md) and 0598 rule out a new token
+ and 0598 rule out a new token
   grant. So `sev.ts` reconciles the variable each time it runs, and a stale value only slows normal
   pull requests until the next `sev.ts` call. That is the one owner question.
 
@@ -42,20 +42,8 @@ for a plan because the change moves rules.
 
 What was read, on `origin/main` at d524d4e69 (`kalfa/` at d2968b0e2), so a reader can check each claim.
 
-- Decisions: [0532](../../../.decisions/0532-a-sev0-freezes-ci.md),
-  [0542](../../../.decisions/0542-two-sev-levels-one-skill.md),
-  [0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md),
-  [0571](../../../.decisions/0571-runbooks-live-in-top-level-runbooks.md),
-  [0595](../../../.decisions/0595-scheduled-runs-share-slots.md),
-  [0598](../../../.decisions/0598-merge-line-leaves-scheduled-groups.md),
-  [0602](../../../.decisions/0602-integration-laws-leave-merge-line.md),
-  [0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md),
-  [0605](../../../.decisions/0605-no-record-patches-another.md),
-  [0606](../../../.decisions/0606-a-record-is-accepted-or-superseded.md),
-  [0609](../../../.decisions/0609-laws-wait-on-events-never-on-a-fixed-time-bound.md),
-  [0069](../../../.decisions/0069-choices-are-settings.md),
-  [0231](../../../.decisions/0231-ledger-and-codehost-are-separate.md),
-  [0408](../../../.decisions/0408-skills-keep-only-judgment.md).
+- Decisions:,,,,,,,,,,,,
+  [0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md),.
 - Field notes: `field/notes/2026-11-14-ci-sev0-froze-ci-and-ended-as-a-sev1.json`,
   `field/notes/2026-11-14-ci-sev1-three-reds-the-schedule-alone-could-see.json`,
   `field/notes/2026-11-15-ci-sev1-the-workspace-program-broke-the-saved-home-law.json`,
@@ -77,7 +65,7 @@ What was read, on `origin/main` at d524d4e69 (`kalfa/` at d2968b0e2), so a reade
 | Source | What it says, short quotes | What we take |
 |---|---|---|
 | [Google SRE book, ch. 14, Managing Incidents](https://sre.google/sre-book/managing-incidents/) | Roles: incident command, operations, communication, planning. "The incident commander holds the high-level state about the incident." "The operations team should be the only group modifying the system during an incident." Declare early: "It is better to declare an incident early." Prioritize: "Stop the bleeding, restore service, and preserve the evidence for root-causing." Prepare: "Develop and document your incident management procedures in advance". Handoff "until receiving firm acknowledgment of handoff." | The lead is the incident commander; one owner per fix modifies; the procedures are written down before the next sev, as runbooks |
-| [Google SRE book, ch. 13, Emergency Response](https://sre.google/sre-book/emergency-response/) | "First of all, don't panic!" "If you feel overwhelmed, pull in more people." Change-induced emergencies: "sometimes configuration changes don't go entirely according to plan." "Keep a History of Outages": "There is no better way to learn than to document what has broken in the past." | Every runbook names the day it ran for real; every sev ends with a field note (0542) |
+| [Google SRE book, ch. 13, Emergency Response](https://sre.google/sre-book/emergency-response/) | "First of all, don't panic!" "If you feel overwhelmed, pull in more people." Change-induced emergencies: "sometimes configuration changes don't go entirely according to plan." "Keep a History of Outages": "There is no better way to learn than to document what has broken in the past." | Every runbook names the day it ran for real; every sev ends with a field note |
 | [SRE Workbook, ch. 9, Incident Response](https://sre.google/workbook/incident-response/) | The 3Cs: "Coordinate response effort", "Communicate...", "Maintain control over the incident response." "the IC leads the incident response, and the CL and OL report to the IC." "Declare incidents early and often." "first responders must prioritize mitigation above all else." "Regularly review and iterate on your incident management plans and playbooks." | Mitigation first: land the fix, then the root cause ticket. Runbooks are revised after each sev |
 | [SRE Workbook, ch. 8, On-Call](https://sre.google/workbook/on-call/) (cited by 0571) | "Playbooks contain high-level instructions on how to respond to automated alerts" | One runbook per trigger, the industry's runbook form |
 | [PagerDuty, During an Incident](https://docs.pagerduty.com/ops-guides/incident-response-guide/during-an-incident) (response.pagerduty.com redirects here) | The IC should "Announce on the call and in Slack that you are the incident commander"; size-up: "Identify if there is an obvious cause to the incident"; status "roughly every 30mins"; ends once it "has recovered or is actively recovering"; then the after-incident steps | Trigger, roles, steps, exit and comms as fixed parts of each runbook. Our comms stay at three lines to the owner (open, each red fix, close), the owner's standing rule, not every 30 minutes |
@@ -99,7 +87,7 @@ Slice 1 takes the cheap known step: capacity held back for a class while a sev i
 GitHub-native way (slot groups, as 0598 already uses). Slice 2 takes the full known way, Kubernetes'
 classes and preemption, as pure domain code in `@kalfa/ci`, the one CI protocol, with GitHub Actions
 as one Layer behind it, the way `CodeHost` puts GitHub behind a service
-([0231](../../../.decisions/0231-ledger-and-codehost-are-separate.md)), so GitHub's lack of priority
+([0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)), so GitHub's lack of priority
 stops shaping the design.
 
 ## The shape
@@ -192,9 +180,9 @@ type AdminFor =
 - **Current main merged in, for fixes only.** In a sev0, a ready pull request that is not a fix
   still lands as 0603 says, with no catch-up first. A fix differs because the next fix is tested on
   top of it.
-- **Everything else in a sev1 stays on the merge queue** (0544). In a sev0 everything else lands as
+- **Everything else in a sev1 stays on the merge queue**. In a sev0 everything else lands as
   0603 says.
-- **A sev1 fix is still proven by main's next full run** (0542): admin merge only makes it land
+- **A sev1 fix is still proven by main's next full run**: admin merge only makes it land
   sooner. The issue closes on that run's green.
 - **The sev1 log.** A sev1 had no log (0542: "its open issue is the record"). `sev.ts fix` writes a
   `fix` line to `runs/sev/log.jsonl`, the one fact land.ts needs (which branch is the fix), and the
@@ -216,7 +204,7 @@ type Level =
 ### Part 3: a runner reserve while a sev is open, and no cap on normal days
 
 ```yaml
-# .github/workflows/check.yaml, a sketch of the three test jobs. Today none has a job group (0598).
+# .github/workflows/check.yaml, a sketch of the three test jobs. Today none has a job group.
 jobs:
   changes:
     # one new step: .github/ci/slots.ts reads SLOTS and the labels, prints `slots`, a JSON map of
@@ -248,7 +236,7 @@ export const wanted = (level: Level, slots: number): Reserve =>
     ? Reserve.cases.on.make({ slots })
     : Reserve.cases.off.make({});
 
-// .agents/skills/sev/scripts/Variables.ts, the contract (0095), like WorkflowRuns.ts. No GitHub word
+// .agents/skills/sev/scripts/Variables.ts, the contract, like WorkflowRuns.ts. No GitHub word
 // or type in it: names and string values only, so it moves into @kalfa/ci whole.
 export class Variables extends Context.Service<Variables, {
   readonly read: (name: string) => Effect.Effect<Option.Option<string>, VariablesError | RateLimited>;
@@ -276,7 +264,7 @@ export class Variables extends Context.Service<Variables, {
   `land.ts` change only their imports. 85%.
 - **Why a sev1 turns it on at `fix`, not when the issue opens:** the issue is opened by
   `scheduled.yaml`'s report job, whose `GITHUB_TOKEN` cannot write variables, and a new token is
-  ruled out (0595). Until a fix exists there is nothing to reserve for.
+  ruled out. Until a fix exists there is nothing to reserve for.
 - **The `sev` label:** `sev.ts next`, `allow` and `fix` add it to the fix's pull request through
   today's `PullRequests` service (`.agents/skills/lead/scripts/pr/PullRequests.ts`), and `close`
   and `fix --drop` remove it. `slots.ts` gives a labeled pull request `{}`, so its legs take no
@@ -293,7 +281,7 @@ export class Variables extends Context.Service<Variables, {
   seen to merged), so the legs ahead of it have drained. When it is not enough, the fix waits in
   GitHub's FIFO queue for at most one leg's time. Slice 2's preemption, in `@kalfa/ci`, is the full answer.
 
-**`SEV_PR_SLOTS = 3`, a setting (0069)** declared once as a repository Actions variable's value in
+**`SEV_PR_SLOTS = 3`, a setting** declared once as a repository Actions variable's value in
 `.agents/skills/sev/scripts/sev.ts`'s settings (beside `SEV_SECONDS`), not in a workflow, since
 the workflow reads only whether and how big. The number:
 
@@ -308,7 +296,7 @@ Measured by this plan: every job of the 627 `check` and `scheduled` runs created
 2026-11-17 22:00Z to 2026-11-18 22:00Z, through the jobs API, 3,865 job runs with a start and an
 end. Peak jobs at once per run, median and p90 and max: pull request 2, 11, 32; merge queue 3, 12,
 14; push 1, 3, 7; scheduled 1, 5, 9. All jobs at once across the day: median 5, p90 19, p99 28,
-peak 34. The script and its raw table stay off git (0027); the numbers are here.
+peak 34. The script and its raw table stay off git; the numbers are here.
 
 **What normal pull requests lose, only while a sev is open:** in a sev0, nothing more than today,
 since the freeze already cancels their runs. In a sev1, a ready run's test legs (up to 5 `next`, 1
@@ -348,7 +336,7 @@ lines, the write-up's fields, telling the owner.
 ### Part 6: the decision file
 
 One new record, `0611` (`records.ts next .decisions`), written with `/adr` in its own docs pull
-request, which lands first (0183). Its shape follows 0605 and 0606: no Amendments section, no
+request, which lands first. Its shape follows 0605 and 0606: no Amendments section, no
 still-holds line, no copy of another record's rule. Its context names what it changed:
 
 - 0542's table row "How a fix lands" for sev1 (through the merge line) and its "A sev1 has no log".
@@ -357,8 +345,7 @@ still-holds line, no copy of another record's rule. Its context names what it ch
 - 0603's "no catch-up first", for fixes only.
 
 The homes of those rules change in this quest's pull requests: the sev skill, the runbooks,
-`pr/Merge.ts`, `Freeze.ts`, `sev.ts`, `check.yaml`. 0532, 0542, 0544 and 0603 stay `accepted`
-(0606): none is reversed whole. Where a record is itself the only home of a changed line, that line
+`pr/Merge.ts`, `Freeze.ts`, `sev.ts`, `check.yaml`. 0532, 0542, 0544 and 0603 stay `accepted`: none is reversed whole. Where a record is itself the only home of a changed line, that line
 is edited in place in the same pull request, as 0605 allows; the lead checks each with
 `records.ts resolve` and the records check. Its title, a draft: "Sev handling is a set of runbooks,
 a sev fix is admin-merged one at a time on current main in both levels, normal pull requests share
@@ -392,7 +379,7 @@ export const admit = (waiting: ReadonlyArray<RunState>, running: ReadonlyArray<R
   : { start: ReadonlyArray<RunState>; preempt: ReadonlyArray<RunState> } => { /* by class, then FIFO */ };
 // preempt: when a sev-fix run waits and no runner is free, the newest `normal` runs, as few as
 // free its need. Each preempted run is dispatched again later as a fresh run on its branch merged
-// with current main, never a rerun (0542).
+// with current main, never a rerun.
 
 // kalfa/ci/src/github/ (the `@kalfa/ci/github` export): Runs and Variables over GitHub Actions,
 // grown from today's WorkflowRunsGh.ts and VariablesGh.ts.
@@ -402,7 +389,7 @@ What slice 2's plan must settle, each a design call for that plan: where admissi
 that waits for our admit, or runs started only by `dispatch`); how many runners we have, given the
 measured 34; how a preempted run's branch is caught up; and the order in which `sev.ts`, `land.ts`
 and next/'s `Ci.ts` move onto it. It is tooling any repo could use, so it is a `kalfa/` package
-(0585), not `next/` product code.
+(0054), not `next/` product code.
 
 ## One value traced through
 
@@ -453,7 +440,7 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
 
 | File | Change | Owner | Product lines expected |
 |---|---|---|---|
-| `.decisions/0611-sev-runbooks-fixes-reserve-priority.md` | the new record, its own docs pull request (A) | lead | docs |
+| `sev runbooks fixes reserve priority` | the new record, its own docs pull request (A) | lead | docs |
 | `.agents/skills/sev/SKILL.md` | keeps the level table and judgment; lists the runbooks; step lists and code-checked rules leave | build | docs |
 | `.runbooks/sev-main-is-red.md` | new runbook | build | docs |
 | `.runbooks/sev-ci-is-slow.md` | new runbook | build | docs |
@@ -509,7 +496,7 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
 - `.agents/skills/sev/scripts/Reserve.ts`: searched `Level.ts` and `Incident.ts` for a value
   derived from the level; none. Small pure module beside `Level.ts`.
 - `.github/ci/slots.ts`: searched the CI scripts folder for a slot rotation and found proof.ts's private
-  `slots(run, count)` (0598); it moves here and is reused, not rewritten.
+  `slots(run, count)`; it moves here and is reused, not rewritten.
 - `kalfa/records/src/Runbooks.ts`: searched `pnpm lint`'s parts, `records.ts` and `@kalfa/records`
   for a check that reads `.runbooks/`; none (0571 left it open). `@kalfa/records` already decodes
   frontmatter (`Frontmatter.ts`) and statuses (`Status.ts`) and has the `records check` command, so
@@ -524,11 +511,11 @@ answer-shape laws `WorkflowRunsGh.test.ts` has, on recorded `gh` answers labeled
 
 ## Who lands first
 
-1. **A, the decision record 0611**, docs only, lands at once (0183).
+1. **A, the decision record 0611**, docs only, lands at once.
 2. **B1, the runbooks and the fix route**: SKILL.md, the eight runbooks, Level, Incident, Freeze,
    Merge, land.ts, WorkflowRuns `dispatch`, the runbooks check, R10's rule. No CI workflow file.
 3. **B2, the runner reserve**: Variables, Reserve, the reconcile, slots.ts, check.yaml,
-   workflow-lint. One writer of `check.yaml` at a time (0598): it waits for any open pull request
+   workflow-lint. One writer of `check.yaml` at a time: it waits for any open pull request
    that edits `check.yaml`, and merges main before its ready run. The runbooks from B1 name
    `sev.ts fix` as the step that turns on the reserve; B2 makes it true, and B1's runbook says
    "from B2" until then, in no visible stub: the line is added in B2.

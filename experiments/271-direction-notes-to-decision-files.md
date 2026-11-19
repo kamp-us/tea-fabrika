@@ -9,7 +9,7 @@ summary: "Both versions' notes under `docs/direction/`, at `259704b1f`. Of 148 n
 Read on 2026-11-11. **This is reading, not a measurement.** Seven agents read every note under
 `docs/direction/` at commit `259704b1f` and listed each decided rule with its date, its version and
 any clash; nothing ran and nothing in the repo changed. It is the inventory behind
-[0115](../.decisions/0115-decided-rules-live-in-decision-files.md) and the first half of tracker
+ and the first half of tracker
 ticket 767. It is about the notes, which speak for both versions: each rule below says whether it is
 about `next/` or today's version, where the note says so.
 
@@ -84,10 +84,9 @@ The 13 not decided: `a-canvas-per-work`, `a-review-list-can-only-shrink`, `agent
 `fabsh-grows-into-a-language`, `pipeline-strategies`, `the-checker-is-a-tea-package`,
 `windows-in-next`.
 
-The 9 linked only in passing, with the decision that links each: `a-job-record-holds-its-trace`
-(0038), `a-yes-binds-to-the-diff` (0071), `agents-behind-one-service` (0026),
-`design-for-bounded-objects` (0020, 0038), `hot-reload` (0080), `react-compiler` (0080),
-`recovery-key` (0080), `secrets-are-redacted` (0024, 0069), `the-ledger-goes-to-cloudflare` (0051).
+The 9 linked only in passing, with the decision that links each: `a-job-record-holds-its-trace`, `a-yes-binds-to-the-diff`, `agents-behind-one-service` (0001),
+`design-for-bounded-objects` (0007), `hot-reload`, `react-compiler`,
+`recovery-key`, `secrets-are-redacted`, `the-ledger-goes-to-cloudflare`.
 
 The 36 decided in part: `a-job-record-holds-its-trace`, `a-local-first-sync-engine`,
 `a-ticket-runs-from-the-app`, `a-ticket-says-where-it-came-from`, `a-yes-binds-to-the-diff`,
@@ -151,8 +150,7 @@ lists stay out of this file for that reason.
 
 Groups 5 and 6 started on the same day and group 7 holds batch 21's notes; which of batches 15 to 28
 each of the three takes was not checked. The one rule that is already a decision is in batch 16
-(`outcome-names`): in `next/` and `.agents/` the ask's `who` key is `to`, held by
-[0081](../.decisions/0081-no-question-word-names.md).
+(`outcome-names`): in `next/` and `.agents/` the ask's `who` key is `to`, held by.
 
 ## Needs the owner's read
 
@@ -166,7 +164,7 @@ decision is in the next section instead.
    before it). Record wide wins for facts lost at write time; the proof rule may still hold for
    board-style fields (priority, labels). One line on the scope is needed.
 2. **`north-star-first-harden-later`'s order of work** (lines 14-18: experiments, then fabrika, then
-   Tuval, then a hardening pass) against [0068](../.decisions/0068-tiers-carry-every-part.md) (each
+   Tuval, then a hardening pass) against (each
    tier carries a working slice of every core idea, later tiers harden it). 0068 is later, but the
    read was under 80% sure the owner sees a clash: tiers could be the "finish fabrika" step. The
    order was not recorded as a rule.
@@ -177,7 +175,7 @@ decision is in the next section instead.
    600), and the desktop layer (2026-10-31, `next/`) moves the layout into the brain.
 4. **`read-fresh-run-alone`'s `behind` rule for a repo with no merge queue.** Lines 54-57 end a head
    `behind` when main moved; `ship-stage-rules` lines 19-21 and 27-28 say a branch behind main ships
-   as it is, and [0097](../.decisions/0097-a-green-pull-request-lands-without-catching-up.md) settles
+   as it is, settles
    it for this repo's own merges. For the product on a repo with no merge queue, it is open.
 5. **`areas` against `label-guidelines` for `next/`.** Areas line 382 says "an area is not a label in
    a group"; label-guidelines call 1 (2026-11-06, line 256) makes Area the first label group, and
@@ -198,7 +196,7 @@ decision is in the next section instead.
    the rules.
 9. **`the-test-writer`'s mutant answers.** Lines 48-75 and 100 have the test writer answer each
    surviving mutant (`send:test_writer:mutant_survived`). Under
-   [0066](../.decisions/0066-mutation-runs-on-a-schedule.md) no pull request has a mutation step, and
+ no pull request has a mutation step, and
    0077 sends a repeated gap to the tests step as a ticket. 0066 leaves the `next/` mutation queue
    program (Tier 6) undecided. Should the rule stand for the product, or go?
 10. **`codex-box-home-listing`'s status.** Lines 3-7 call the same built code both "decided, in
@@ -262,7 +260,7 @@ Each was found by the read; the winner is named. A decision file writes the winn
   143) against `design-for-bounded-objects`' parts and `job/<pid>/<part>` (2026-11-07, later).
   Bounded objects wins for `next/`; the trace-id key holds for today's version only.
 - `build-on-effect`'s "types are inferred" (line 27) against
-  [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) (a service's type is written
+ (a service's type is written
   out). 0095 wins for `next/` service files; inference holds elsewhere.
 - `design-for-bounded-objects`: the sealing lean is decided at 70% in its table (line 67) and "still
   proposed" in its differs section (lines 156-157). The status line wins: decided at 70%.
@@ -277,7 +275,7 @@ Each was found by the read; the winner is named. A decision file writes the winn
   are events", elm-first's required `refuse`, P11's required inputs, outputs and writes, and the word
   fact. program-shape wins for `next/`; tea-program keeps its rule for today's version.
 - `agents-commit-as-a-bot` makes the commit inside the box (lines 15-18, 119-121);
-  [0028](../.decisions/0028-the-parent-holds-every-right.md) makes it a call to the parent. 0028
+  [0031](../.kalfa/decisions/0031-parent-holds-every-right.md) makes it a call to the parent. 0028
   wins.
 - `the-test-writer`'s "no login" in its box (line 78) against 0026 and 0028 (the box holds the
   model login). The decisions win.
@@ -312,7 +310,7 @@ Drift is a stale word, an old shape or a line that no longer matches what was la
 
 | Kind | Settled by | Notes it was found in |
 |---|---|---|
-| Question-word keys (`why`, `what`, `where`, `who`, `how`) in decided sketches | [0081](../.decisions/0081-no-question-word-names.md): `reason`, `to` and other nouns | ask-desk, react-compiler, ui-verification, the-plan-stage, the-test-writer, outcome-names, a-yes-binds-to-the-diff, agents-behind-one-service, label-guidelines, sort-answers-yes-or-no, tracker-views-are-programs, recovery-key, the-ledger-goes-to-cloudflare, saved-state, ledger-behind-a-service, the-desktop-layer, hot-reload, a-key-per-client, triage-asks, layers (proposed text) |
+| Question-word keys (`why`, `what`, `where`, `who`, `how`) in decided sketches |: `reason`, `to` and other nouns | ask-desk, react-compiler, ui-verification, the-plan-stage, the-test-writer, outcome-names, a-yes-binds-to-the-diff, agents-behind-one-service, label-guidelines, sort-answers-yes-or-no, tracker-views-are-programs, recovery-key, the-ledger-goes-to-cloudflare, saved-state, ledger-behind-a-service, the-desktop-layer, hot-reload, a-key-per-client, triage-asks, layers (proposed text) |
 | Mutation as a pull request step | 0066: mutation runs hourly on main | the-plan-stage, the-test-writer, ui-verification (and the proposed a-ticket-runs-from-the-app) |
 | One ticket, one PR; a plan ends in one PR | 0099: big work lands as slices; 0087's stacks; 0015: a merge closes only the tickets its PR names | done-is-per-criterion (lines 17, 82), a-project-is-a-parent-plan, agent-hours, outcome-names, smallest-ledger-proof-to-grow |
 | Old names | 0080 (instance, not stage or host), 0051 (gateway, not door), 0091 (module and layer, not room and floor), 0038 (measurement, not health row), 0029 (plural services: `Leases`, `Sessions`, not `LeaseManager`, `SessionManager`, `LimitManager`), program-shape (Event, not Fact), `sentAt` not `said`, status bar not bottom line, `fabrika/tezgah` not `fabrika/desk`, `fabsh` not `tsh` in `next/`, step not stage | many; the-cloud-is-one-more-host lines 384, 442; tea-is-the-engine line 54; inputs-carry-their-sender lines 30, 89-90, 110-111; the-desktop-layer lines 12-13, 173; modes lines 42, 167, 315; tile-guidelines, popovers, fold-not-tabs |
@@ -366,7 +364,7 @@ The other stale flags, one line each, as the readers found them (line numbers at
 - `an-old-host-is-named-then-restarted`: "no version number on each machine" (line 44) is walked back
   by its own lines 47-50 (saved-state S3); the note is today's version and does not warn a `next/`
   reader.
-- `the-ledger-goes-to-cloudflare`: "the door" throughout (0051); "one host per project" (line 86);
+- `the-ledger-goes-to-cloudflare`: "the door" throughout; "one host per project" (line 86);
   "GitHub OAuth as a second `Proof` layer" (line 1235).
 - `hot-reload`: H3's upcast sketch and `schemaMigrate` (lines 96-100, 109-110), marked replaced by
   saved-state S3 but still reading as the way; "stage programs" (line 209).
@@ -387,7 +385,7 @@ The other stale flags, one line each, as the readers found them (line numbers at
   "stage" throughout.
 - `the-test-writer`: `{mutant, answer: "cannot", why}` (lines 53-54).
 - `agent-hours`: `said` for the writer's clock (line 283); "Tier 1 already says one ticket per PR"
-  (line 195); `field/runs.jsonl`, now one file per row (0090).
+  (line 195); `field/runs.jsonl`, now one file per row.
 - `a-yes-binds-to-the-diff`: `why` in its shape (lines 17, 37-39, 76, 126); today's built `carry.ts`
   may keep it until it goes.
 - `outcome-names`: the body teaches "verb : who : why" (lines 17, 40-41, 82, 84), while its 2026-11-09

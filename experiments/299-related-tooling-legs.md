@@ -1,7 +1,7 @@
 ---
 date: "2026-11-18"
-scripts: "related-legs.ts, on the branch fabrikalfa/ci-related-tooling-legs-script at experiments/299-related-legs.ts. It reads job rows fetched with the GitHub MCP list_workflow_jobs call and prints the per-run lines, the split rule and the medians below. The fetched rows stayed in a scratch folder and are not committed (0027)."
-summary: "Today's CI; about $11 at list price. Should the related job get more tooling legs (MOST_TOOLING is 2)? Not on this evidence. Of the 7 first-attempt runs since decision 0598 whose related legs all finished, the split rule fires in 1, so it cannot reach 7 of 10. A tooling leg finishes last in every run, and the tooling pair is the biggest part of every wall time. What sets the slowest runs apart from the median is runner wait: median 24 s on the critical path, but 209 and 357 s in the two slowest groups, and a median of 88 s (max 522 s) across 49 legs of canceled runs. That wait is the organization's runners, which decision 0598 said were not the bottleneck. Only 2 complete runs carry the refreshed shard rows of PR 1588."
+scripts: "related-legs.ts, on the branch fabrikalfa/ci-related-tooling-legs-script at experiments/299-related-legs.ts. It reads job rows fetched with the GitHub MCP list_workflow_jobs call and prints the per-run lines, the split rule and the medians below. The fetched rows stayed in a scratch folder and are not committed."
+summary: "Today's CI; about $11 at list price. Should the related job get more tooling legs (MOST_TOOLING is 2)? Not on this evidence. Of the 7 first-attempt runs since an earlier decision whose related legs all finished, the split rule fires in 1, so it cannot reach 7 of 10. A tooling leg finishes last in every run, and the tooling pair is the biggest part of every wall time. What sets the slowest runs apart from the median is runner wait: median 24 s on the critical path, but 209 and 357 s in the two slowest groups, and a median of 88 s (max 522 s) across 49 legs of canceled runs. That wait is the organization's runners, which an earlier decision said were not the bottleneck. Only 2 complete runs carry the refreshed shard rows of PR 1588."
 ---
 
 # 299. Does today's related job need more tooling legs, or is the long tail queue wait?
@@ -9,11 +9,11 @@ summary: "Today's CI; about $11 at list price. Should the related job get more t
 **The answer.** This is about today's CI (`.github/workflows/check.yaml`, the `select` and
 `related` jobs), which serves both versions. Do not raise `MOST_TOOLING` on this evidence. The
 delivery lane's rule fires in 1 of the 7 first-attempt runs that finished their related legs since
-decision 0598 merged. Even if the next 3 runs all fired it would be 4 of 10, short of 7. A tooling
+an earlier decision merged. Even if the next 3 runs all fired it would be 4 of 10, short of 7. A tooling
 leg finishes last in every run, and the tooling pair's run time is the biggest part of every wall
 time. But what makes the slowest runs slower than the median run is runner wait: 209 and 357 s on
 the last leg of the two slowest groups, against 24 s in the median run. Runner wait is also a
-finding against decision 0598's premise, below.
+finding against an earlier decision's premise, below.
 
 ```text
 the rule (from the delivery lane's plan), per run:
@@ -30,7 +30,7 @@ result: 7 first-attempt runs whose related legs all finished green, 4 of them wi
 
 ## How this was measured
 
-- **Runs.** Every `pull_request` and `merge_group` run of `check.yaml` created after decision 0598
+- **Runs.** Every `pull_request` and `merge_group` run of `check.yaml` created after an earlier decision
   merged (PR https://github.com/kamp-us/tea-fabrika/pull/1590, `92f5f416b`, whose push run on main
   was made at 2026-11-18 02:05:12 UTC), to 03:23 UTC, from GitHub's run list for the workflow: 59
   runs. When the list was read, 30 had ended green and 29 canceled. A newer push or a queue rebuild
@@ -134,10 +134,10 @@ between the median run and the slowest ones, not the biggest part of any one wal
 
 ## What queue wait costs after 0598
 
-Decision 0598 took the merge line's `next`, `select` and `related` legs out of the shared
+an earlier decision took the merge line's `next`, `select` and `related` legs out of the shared
 `scheduled-*` job groups, so they no longer wait behind main's full run or a branch proof for a
 group slot. Its context says the organization's runners were not the bottleneck, the locks were
-(`.decisions/0598-merge-line-leaves-scheduled-groups.md`). These numbers walk part of that back:
+(`merge line leaves scheduled groups`). These numbers walk part of that back:
 
 - **What is left to wait on is runner supply.** In check.yaml the `related` job has no job-level
   `concurrency` and `max-parallel: 9`, so a leg that is made waits for nothing but a runner. Legs

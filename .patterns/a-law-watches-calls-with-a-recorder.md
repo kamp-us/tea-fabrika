@@ -144,9 +144,9 @@ built context alive until the law has read it, and closes it after.
 Any law in `next/` or our tooling that checks which calls code made on an Effect service. It stops
 at what a call record is: method and args. The record keeps no answer, since the law wrote the
 implementation. A stateful fake, such as `PushesTest`'s remote branches, stays in its service's own
-test layer, beside the service (0538), and the Recorder wraps it. A plain function argument, a
+test layer, beside the service, and the Recorder wraps it. A plain function argument, a
 platform object or a global such as `fetch` or `console` is not a service, so it needs a product
-change to a service first (0555, 0579). `Console` is the one service the Recorder cannot watch,
+change to a service first. `Console` is the one service the Recorder cannot watch,
 since its members answer `void`: a law provides Effect's `TestConsole.layer` and reads
 `TestConsole.warnLines` (ours, through `patches/effect@4.1.3.patch`), as L17 does after `bundle.ts` prints through `Console.Console`
 (`next/apps/fabrika/e2e/reload.visual.test.ts:371`).
@@ -166,7 +166,7 @@ Effect's `FileSystem` has one.
 
 ## Decision
 
-[0579](../.decisions/0579-property-laws-use-it-prop.md) names the Recorder; the shape is the
+ names the Recorder; the shape is the
 approved plan of ticket 1067.
 
 > Derived from `effect@4.1.3` (`Layer.mock`, `Layer.PartialEffectful`); re-verify on pin bump.

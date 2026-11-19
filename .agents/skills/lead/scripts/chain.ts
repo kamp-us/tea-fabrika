@@ -47,7 +47,7 @@
 // -> loosen -> queue. Every
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A quest runs no
-// mutation step: mutation runs hourly against main instead (.decisions/0066). `--start mutation`
+// mutation step: mutation runs hourly against main instead. `--start mutation`
 // stays for a quest parked inside its mutation step before 0066: it runs that one step, then goes on
 // to review, so nothing in flight is stranded. No move ever names mutation: a send to it, or to
 // plan, parks (only the lead approves a plan). A send goes to the quest step it names. A lockfile ask
@@ -64,7 +64,7 @@
 // queued, 20 parked (ask), 30 stuck, 2 usage. The lead runs `land.ts merged <pr>` later, which
 // closes the PR's tickets and starts the box cleanup once GitHub has merged it.
 //
-// The quest's budget (.decisions/0076). Every stuck step carries its fault, `tool` or `work`
+// The quest's budget. Every stuck step carries its fault, `tool` or `work`
 // (drive's `faultFrom`). The machine keeps the marks of the quest's last 5 steps; when 3 of them were
 // sent back or stuck on the work, it stops with an ask that holds the counts: redo, cut scope or
 // drop. A tool stuck is marked and never counted. The backstop is twice the estimate a line such
@@ -92,8 +92,8 @@
 // marks it ready (`Publish.ready`), through the typed PullRequests service.
 // The chain holds every right (the bot's push, the PR, the merge queue, the commit and its signature); a
 // box or the judgment agent holds only its model login
-// (.decisions/0028-the-parent-holds-every-right.md). The steps run the unmodified harness
-// (.decisions/0026-fabrika-never-owns-the-agent-loop.md).
+// (.kalfa/decisions/0031-parent-holds-every-right.md). The steps run the unmodified harness
+// (.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md).
 //
 // The quest brief is one Markdown file. Its text before the first `## ` heading goes to every step.
 // Then one section per step, `## tests`, `## build`, `## review`, and `## pr`, the pull request's
@@ -1192,7 +1192,7 @@ You are the lead's judgment for quest ${quest}, started by chain.ts because the 
 answered ${line.outcome}: ${line.reason}
 You read; you change no file and start nothing. Your row only reads this repo and nothing beside
 it, so the quest's state file and the step's report follow below. Read what you need in this repo.
-Before you park a question, search .decisions/, each GLOSSARY.md and docs/direction/ for its answer. Then
+Before you park a question, search .kalfa/decisions/, each GLOSSARY.md and docs/direction/ for its answer. Then
 answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build
 or review) and a note of one or two sentences for that step, or answer "park" with step null and
 why the lead has to look, in one sentence.

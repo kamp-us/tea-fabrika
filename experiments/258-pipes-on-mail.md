@@ -8,8 +8,7 @@ summary: "`next/`, PR 929 at `808e954eb`, node:sqlite on real files, five runs p
 
 Measured on 2026-11-11, on PR 929's branch (`fabrikalfa/p41-1`, at `808e954eb`, P41 slice 1). The
 script stays on the branch `fabrikalfa/exp-pipes-on-mail`; only this write-up and its index row go to
-main, and raw timings stayed under `runs/`
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). **Every claim is about
+main, and raw timings stayed under `runs/`. **Every claim is about
 `next/`** (`next/packages/libfabrika/src/processes` and `runtime`), never today's version. One agent
 read, wired and timed. No model was called beyond the agent, and no platform runtime was started:
 the store was `node:sqlite` (SQLite 3.54.0, Node 26.13.0) on real files, `effect` 4.1.2 and
@@ -184,8 +183,7 @@ GenStage's demand caps a producer.
   fixable reads, not in the save.
 - **What it costs:** the two lookups are small changes in `ProgramMailLedger.ts` and
   `RecoveryStore.ts`, each needing a law that n sends read O(1) rows (a pinned count, say). The chunk
-  size and the inbox bound are choices, so they are `fabrika.toml` settings with defaults
-  ([0069](../.decisions/0069-choices-are-settings.md)). The bound is a new state for a Send (a fourth
+  size and the inbox bound are choices, so they are `fabrika.toml` settings with defaults. The bound is a new state for a Send (a fourth
   answer next to `queued`), which is a design call for the owner.
 - **How sure:** about 75%. The node numbers are clear, and the scans are read in the code and counted
   in rows. The doubt is the cloud: one ledger object carries every pipe, it has a 1,000 requests a

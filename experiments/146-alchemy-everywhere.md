@@ -267,7 +267,7 @@ What picks laptop or cloud:
   is planned as a replacement, deleted by the provider of the mode that made it
   ([ProviderMode.ts](https://unpkg.com/alchemy@2.0.0-beta.84/src/ProviderMode.ts)).
   kamp-us/phoenix, the repo today's fabrika runs on, does this for its D1 database (its
-  `.decisions/0032-alchemy-beta45-and-dev-model.md`, amendment of 2026-09-10).
+  `libraries take effects file layout`, amendment of 2026-09-10).
 - **Only Cloudflare has a local variant here.** Workers, D1, Queues, KV, R2 and a few more do
   ([Local.ts](https://unpkg.com/@alchemy.run/cloudflare@2.0.0-beta.84/src/Local.ts)). Docker has
   one variant: it is already local. To put a box on another machine, a `Docker.Context` points it
@@ -474,8 +474,8 @@ Alchemy at `2.0.0-beta.84`, as published to npm (unpkg serves the package's `src
   [Workers/WorkerProvider.ts](https://unpkg.com/@alchemy.run/cloudflare@2.0.0-beta.84/src/Workers/WorkerProvider.ts)
   (`ProviderLayer.dual`)
 - Release dates: `npm view alchemy time`.
-- kamp-us/phoenix, read only: `.decisions/0026-adopt-alchemy-effect-infra.md`,
-  `.decisions/0032-alchemy-beta45-and-dev-model.md`, `pnpm-workspace.yaml`,
+- kamp-us/phoenix, read only: `.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md`,
+  `libraries take effects file layout`, `pnpm-workspace.yaml`,
   `patches/alchemy@2.0.0-beta.77.patch`.
 
 ## What it cannot tell us

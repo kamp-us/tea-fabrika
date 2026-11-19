@@ -1,6 +1,6 @@
 ---
-state: "decided 2026-11-10 ([0086](../../.decisions/0086-settings-are-declared-once.md))"
-summary: "Both versions, built in `next/` first by Tier 1's P38. How a person, a repo, a test and an agent set a choice. Seven principles: a choice is a setting, and a short list never is (0069); each is declared once with `Setting.make`, an Effect `Config` plus its words, a required `scope` (the files that may set it) and how it reloads, and the file reader, env name, flag, print, two editor schemas and error come from it; an empty file works; one order per key, flag then env then the repo's file then the person's then the default, and `fabrika settings` says where each value came from; a wrong value stops in words at the file, line and key, read through a `Toml` service on `toml-eslint-parser`; read at the edge, handed in through a `ConfigProvider`, and recorded with its hash beside `build`; what you can set comes from fabrika itself. Settings are per pack in `[pack.<name>.settings]`; the repo's `fabrika-version` names the oldest fabrika it works with. The design: TOML tables per area and per pack with a `#:schema` line, each change the hands see a ledger fact. A table of Tier 1's choices for P38's plan. From experiment 251."
+state: "decided 2026-11-10"
+summary: "Both versions, built in `next/` first by Tier 1's P38. How a person, a repo, a test and an agent set a choice. Seven principles: a choice is a setting, and a short list never is; each is declared once with `Setting.make`, an Effect `Config` plus its words, a required `scope` (the files that may set it) and how it reloads, and the file reader, env name, flag, print, two editor schemas and error come from it; an empty file works; one order per key, flag then env then the repo's file then the person's then the default, and `fabrika settings` says where each value came from; a wrong value stops in words at the file, line and key, read through a `Toml` service on `toml-eslint-parser`; read at the edge, handed in through a `ConfigProvider`, and recorded with its hash beside `build`; what you can set comes from fabrika itself. Settings are per pack in `[pack.<name>.settings]`; the repo's `fabrika-version` names the oldest fabrika it works with. The design: TOML tables per area and per pack with a `#:schema` line, each change the hands see a ledger fact. A table of Tier 1's choices for P38's plan. From experiment 251."
 ---
 
 # Settings
@@ -8,11 +8,9 @@ summary: "Both versions, built in `next/` first by Tier 1's P38. How a person, a
 **Decided 2026-11-10.** The owner approved the seven principles, the shape and the smaller calls below
 with their leans, after a walk of each part. The leans' confidence numbers stay as written.
 
-This note says how a person, a repo, a test and an agent set a choice in fabrika. It builds on
-[0069](../../.decisions/0069-choices-are-settings.md): a choice that makes sense as a `fabrika.toml`
+This note says how a person, a repo, a test and an agent set a choice in fabrika. It builds on: a choice that makes sense as a `fabrika.toml`
 value is one, declared once with its schema and default. Tier 1's P38 (tracker ticket 664) builds
-the first of it in `next/`. The decision record is
-[0086](../../.decisions/0086-settings-are-declared-once.md).
+the first of it in `next/`. The decision record is.
 
 The engine lives in `@kalfa/config` under `kalfa/config/`, named by the app that uses it.
 
@@ -23,18 +21,17 @@ probe. The reading is not a measurement. A tag such as [c5] points at that exper
 ## Words used here
 
 - **Instance.** One running copy of fabrika: one brain and its ledger, which clients dial. "The local
-  instance" runs on a laptop, "the cloud instance" on Cloudflare
-  ([0080](../../.decisions/0080-a-running-copy-is-an-instance.md)). Tracker ticket 681 renamed
+  instance" runs on a laptop, "the cloud instance" on Cloudflare. Tracker ticket 681 renamed
   the code to match (`localInstance`, `InstanceError`, `INSTANCE`, `instance.json`).
 - **The hands.** What runs on a person's computer and acts there: it reads files, starts processes
   and watches folders ([brain, hands, window, agent](./brain-hands-window-agent.md)).
 - **Pack.** One or more programs in a package, and the only place a program lives. It is listed by
   one `[pack.<name>]` table in a `fabrika.toml`, and it declares one settings schema that all its
-  programs read ([0083](../../.decisions/0083-every-program-in-a-pack.md)).
+  programs read ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)).
 - **The core pack.** The pack that ships with fabrika, named `fabrika` in every key: `fabrika/tracker`,
   `[pack.fabrika.settings]`. Every other pack sits beside it.
 - **Flow.** Steps written down as data, which fabrika checks and runs as one recorded process
-  ([0074](../../.decisions/0074-agent-hands-over-a-flow.md)). The order of a run's steps lives in a
+  ([0035](../../.kalfa/decisions/0035-agents-hand-over-flows.md)). The order of a run's steps lives in a
   flow, never in a settings file.
 - **Scope.** The files that may set a setting: the person's file, the repo's file, or both. Every
   setting declares it.
@@ -126,7 +123,7 @@ type Reload = "live" | "restart";
 interface Setting<A, const S extends ReadonlyArray<File>> extends Config.Config<A> {
   readonly path: string; // "instance.port": the TOML path, FABRIKA_INSTANCE_PORT, --instance.port
   readonly schema: Schema.Codec<A>;
-  readonly default: A; // exactly one, here (0069)
+  readonly default: A; // exactly one, here
   readonly doc: string; // required: the words every output shows
   readonly scope: S; // required, never empty: ["person"], ["repo"] or ["person", "repo"]
   readonly reload: Reload;
@@ -172,11 +169,11 @@ A probe on 4.1.2 for this note read `FABRIKA_INSTANCE_PORT=18800` through
 
 ### S1: a choice is a setting, and a few things never are
 
-**Decided 2026-11-10 (0069), for "is a setting". Confidence 75% for the list of what never is.**
+**Decided 2026-11-10, for "is a setting". Confidence 75% for the list of what never is.**
 
 - **The rule.** A number, a name or a pick between tested paths that two people or two repos could
   want differently is a setting. A plan asks of each new choice "is this a setting?", and a no costs
-  one line of why (0069). These never are, whatever their type:
+  one line of why. These never are, whatever their type:
 
 ```text
 never a setting            because                                     example
@@ -238,7 +235,7 @@ export const humanApprovals = Setting.make("review.human-approvals", {
   committed editor schema equals the generated one; a test per setting that the file, the
   environment, a flag and `fromUnknown` all reach it.
 - **The doubt.** Whether `Setting.make` stays ours or becomes a small patch to Effect's `Config`. P38
-  reads Effect's issues first ([0054](../../.decisions/0054-read-upstream-before-patching-it.md)).
+  reads Effect's issues first.
 - **Today.** Breaks: the record cap has three shapes and its default sits apart
   (`next/apps/fabrika/src/settings.ts:10`, `next/packages/libfabrika/src/cloudflare/record.ts:79`,
   `:29`); the port's default is in `next/apps/fabrika/dev.ts:71`; `BrainOptions` types it all again
@@ -434,7 +431,7 @@ const document = Schema.toJsonSchemaDocument(Setting.fileSchema(all, "person"), 
 ## Tier 1's choices, for P38's plan
 
 Every choice Tier 1 builds or changes in `next/`, marked setting or not. This is input for P38's plan,
-not a question for the owner (0069). Paths are under `next/apps/fabrika/` unless they say otherwise.
+not a question for the owner. Paths are under `next/apps/fabrika/` unless they say otherwise.
 
 | Choice | Today | Setting? | Because |
 |---|---|---|---|
@@ -559,7 +556,7 @@ const Remote = Schema.Struct({ from: Schema.String.check(Schema.isPattern(/^[^.]
 const Entry = Schema.Union([Local, Remote]); // plus settings, decoded at load with the pack's own group
 ```
 
-**Decided 2026-11-10 ([0083](../../.decisions/0083-every-program-in-a-pack.md), [0084](../../.decisions/0084-own-pack-listed-by-path.md), [0085](../../.decisions/0085-pack-cache-under-cache-folder.md)). Confidence 75% for what is new here.**
+**Decided 2026-11-10 ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)). Confidence 75% for what is new here.**
 
 - Settings are per pack, in `[pack.<name>.settings]`, declared by the pack as one `Setting.group`. A
   program reads its pack's settings through a provider scoped to its pack (S6), and sees no other
@@ -594,7 +591,7 @@ export class Toml extends Context.Service<
   is on [`toml-eslint-parser`](https://www.npmjs.com/package/toml-eslint-parser) 1.0.3, which gives
   values and each key's line, and it replaces smol-toml in `next/`. A write is a text splice at the
   value's span, so comments and spacing around it stay.
-- Looked at, per [0040](../../.decisions/0040-existing-tools-before-hand-written.md), on npm on
+- Looked at, per, on npm on
   2026-11-10:
   - [`@decimalturn/toml-patch`](https://www.npmjs.com/package/@decimalturn/toml-patch) 3.3.2: keeps
     comments on a patch, but its README offers no key positions, which S5's line needs.
@@ -611,8 +608,7 @@ export class Toml extends Context.Service<
 
 ### Who must approve a change
 
-**Decided by [0079](../../.decisions/0079-size-counts-governed-paths-name-who.md) (a trial) and
-[0082](../../.decisions/0082-approvals-is-a-floor-for-every-run.md). This note only shows the file.**
+**Decided by and. This note only shows the file.**
 
 ```toml
 # .fabrika/fabrika.toml, read at the change's base and at its head, joined
@@ -622,7 +618,7 @@ governed = [".github/", "next/packages/libfabrika/src/gateway/"]  # an owner of 
 ```
 
 - `review.human-approvals` is the floor for every run. A flow may ask for more review steps, never fewer;
-  one under the floor is refused before its first step runs (0082).
+  one under the floor is refused before its first step runs.
 - A change's size moves the count up from the floor, and its governed paths set who must be among
   the people, read from fabrika's own settings, never from the code host (0079, a trial until its
   false alarms are measured).
@@ -657,7 +653,7 @@ digits, so a count past 2^53 stays exact.
 lint   oxlint's own node/no-process-env in next/, so a value comes through Config   (0040: an existing tool)
 type   Setting.make requires doc, default and scope; entry functions take a Settings value
 law    each declared setting is reachable from the file, the env, a flag and fromUnknown
-review the plan's "is this a setting?" (0069)
+review the plan's "is this a setting?"
 ```
 
 **Decided 2026-11-10: all four. Confidence 70%.** oxlint 1.90.0 has `node/no-process-env`; it would
@@ -730,7 +726,7 @@ pack.fixtures           ./fixtures   ~/.fabrika/fabrika.toml:7
 ```
 
 - **The editor** underlines `70000` before a save, from `person.json`.
-- **A test** sets a value with `ConfigProvider.fromUnknown`, in the files' own shape (0069).
+- **A test** sets a value with `ConfigProvider.fromUnknown`, in the files' own shape.
 - **An agent** uses flags or its own home's file. It cannot write `.fabrika/`, and it never writes a
   person's file (principle 5).
 - **The record.** Each new hash of the person's file the hands see is a ledger fact, with `by`, the
@@ -770,14 +766,14 @@ Not filed. One small fix the owner may pick:
 
 ## Where this differs from settled notes
 
-- **0069's sketch** (`.decisions/0069-choices-are-settings.md:25`, `:30`) reads `programs` as a
+- **0069's sketch** (`choices are settings:25`, `:30`) reads `programs` as a
   record of name to path with `Config.schema` alone. Here a declaration wraps the `Config`, and
   programs come in packs. 0069 is not edited; its rule holds.
 - **Programs by path and program-level tables** (2026-10-31, A4 in
   [the cloud is one more host](./the-cloud-is-one-more-host.md#a4-packs-part-decided-2026-10-31)):
   walked back by 0083. No `[programs."..."]` tables, and a repo's own program is in a local pack.
 - **`~/.fabrika/packs`** as the cache in [one fabrika.toml per repo](./one-fabrika-toml-per-repo.md)
-  is now `~/.fabrika/cache/packs/`, keyed by commit ([0085](../../.decisions/0085-pack-cache-under-cache-folder.md)).
+  is now `~/.fabrika/cache/packs/`, keyed by commit.
 - **0082's sketch** writes `scope: "repo"` as a string. Here `scope` is a list, required and never
   empty, with no "both" and no default. Fixed by 0082's amendment of 2026-11-10, which also renames
   its setting `review.human-approvals`.

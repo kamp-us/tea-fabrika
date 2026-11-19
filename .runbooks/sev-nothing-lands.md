@@ -1,6 +1,5 @@
 ---
 summary: The owner called a sev0 because nothing lands; open it, land each fix and each ready pull request one at a time by admin merge, then close
-follows: ["0183", "0532", "0542", "0603", "0611"]
 ---
 
 # A sev0: nothing lands
@@ -14,8 +13,7 @@ the main checkout so they share one log, `runs/sev/log.jsonl`.
 
 ## Trigger
 
-The owner says "sev0". Nothing else opens one: not an agent, a reviewer, a red main or a cost you measured
-([0532](../.decisions/0532-a-sev0-freezes-ci.md)). When it looks like one, tell the owner in one line why a sev0 may
+The owner says "sev0". Nothing else opens one: not an agent, a reviewer, a red main or a cost you measured. When it looks like one, tell the owner in one line why a sev0 may
 fit, and do not argue the level while a sev is on.
 
 ## Roles
@@ -31,27 +29,23 @@ fit, and do not argue the level while a sev is on.
 
 - [ ] `sev.ts open 0 --reason "<why>" --allow <first fix>`, in the background: it runs the cancel loop until the
   close. It freezes CI: every unfinished run is canceled except the allowed branches' runs, the merge queue's, and
-  main's own `check` run on a push
-  ([0611](../.decisions/0611-sev-runbooks-fixes-reserve-priority.md)).
+  main's own `check` run on a push.
 - [ ] Tell every agent, session and cloud job not on a fix to save where it is and stop. Tell each again when it ends.
 - [ ] If entries are still queued, tell the owner which; he takes them out.
 - [ ] Size up: list the fixes and the ready pull requests. The order is the sev fixes first, then the format and
-  code-quality sweeps, then the rest in the order they became ready, a child right after its parent
-  ([0603](../.decisions/0603-no-stacks-and-sev0-admin-merges.md)). With no order from the owner, the fix the others
+  code-quality sweeps, then the rest in the order they became ready, a child right after its parent. With no order from the owner, the fix the others
   wait on goes first.
 - [ ] A fix: `sev.ts next <branch>` makes it the only allowed branch. Merge current main into its branch and push,
   wait for `ci-required` at the new head, then `land.ts merge <pr> --admin`. It refuses unless the branch is a fix
-  the log names, `ci-required` is a success at its head, origin/main is in its history and the leak gate is clean
-  (0611). Read the answer before the next fix.
+  the log names, `ci-required` is a success at its head, origin/main is in its history and the leak gate is clean. Read the answer before the next fix.
 - [ ] Any other ready pull request (its steps passed): `sev.ts allow <branch>`, then `land.ts merge <pr> --admin`
   once `ci-required` is green at its head and the leak grep is clean. It is not caught up with main first; one that
-  conflicts after an earlier merge gets main merged in as the bot and takes its place again once green (0603).
-- [ ] Decision and docs pull requests land at once, with no wait for the end
-  ([0183](../.decisions/0183-the-lead-admin-merges-docs-only.md)).
+  conflicts after an earlier merge gets main merged in as the bot and takes its place again once green.
+- [ ] Decision and docs pull requests land at once, with no wait for the end.
 - [ ] A check that is not required and already known red elsewhere does not hold an admin merge. Find its root cause
-  and ticket it the same turn (0532).
+  and ticket it the same turn.
 - [ ] An old native stack is removed once with `gh stack unstack <number>`; each layer lands on its own, bottom
-  first (0603).
+  first.
 - [ ] A fix that goes red: `sev-a-fix-is-red.md`. A second fix ready while one lands: `sev-two-fixes-at-once.md`.
   Main goes red: `sev-main-red-in-a-freeze.md`. GitHub's limit runs out: `sev-rate-limit-runs-out.md`.
 

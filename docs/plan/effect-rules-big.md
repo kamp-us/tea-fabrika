@@ -1,4 +1,4 @@
-Approved by the lead agent, builds effect-code-guidelines.md (0168); the owner answered its open questions on 2026-11-13; body ba9914c45546
+Approved by the lead agent, builds effect-code-guidelines.md; the owner answered its open questions on 2026-11-13; body ba9914c45546
 Plancheck-Version: 3
 
 # Plan B: the three big Effect rules, each closed folder by folder
@@ -39,7 +39,7 @@ whole `pnpm lint` fails until it does. The B2 words below are kept as written: r
 ## The answer first
 
 - **Three rules, none with a list file.** No list of known breaks and no `debt:` line is written
-  (decision 0168, [pull request 1137](https://github.com/kamp-us/tea-fabrika/pull/1137)).
+  (an earlier decision, [pull request 1137](https://github.com/kamp-us/tea-fabrika/pull/1137)).
 - **Each rule is on from its first pull request, for the folders that are at zero.** New code in
   those folders is held that day. Each later slice fixes one folder and adds it to the rule's list
   in the same pull request. The last slice replaces the list with the whole tree.
@@ -83,7 +83,7 @@ line ending in `*/` right above it. No model, no key, no network: $0.
 
 ## B1: `no-static-layer`
 
-E5 and [0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): a service file holds
+E5: a service file holds
 only its contract, and each layer is a sibling file.
 
 ### The count
@@ -193,7 +193,7 @@ is the type check: a leftover `SpanSink.layer` no longer exists on the class.
 The config is one block whose `files` list grows. A sketch:
 
 ```jsonc
-// .oxlintrc.json. E5 (0095): on where the count is zero. A slice adds its folder when it lands.
+// .oxlintrc.json. E5: on where the count is zero. A slice adds its folder when it lands.
 {
   "files": [
     "next/apps/**",
@@ -220,7 +220,7 @@ The config is one block whose `files` list grows. A sketch:
 8. **B1.7, `runtime`.** 6 layers and `Execution`'s `static make`, about 35 caller files. Last of the
    moves: `Runner.ts` is the file every other plan also changes.
 9. **B1.8, `cloudflare`.** The six `static make` leave with the Alchemy port
-   ([0041](../../.decisions/0041-object-classes-are-effect-objects.md), ticket 502), which deletes
+   ([0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md), ticket 502), which deletes
    `cloudflare/platform.ts`. The port's pull request adds `cloudflare/` and the list becomes
    `next/**`.
 
@@ -296,7 +296,7 @@ After, the same lines on pull request 1127's branch:
 ```ts
 /**
  * Repository trust: a person's saved answer on whether to open one clone, and the events that
- * record an opening. This file is the contract only (0095).
+ * record an opening. This file is the contract only.
  *
  * @stability unstable
  */
@@ -323,7 +323,7 @@ out, and the review reads each description against the code, which no rule can d
 ### The slices, and the gate
 
 ```jsonc
-// .oxlintrc.json. E6 (0023, 0120): on where the count is zero.
+// .oxlintrc.json. E6: on where the count is zero.
 {
   "files": ["next/packages/libfabrika/src/ci/**", "next/packages/libfabrika/src/codehost/**"],
   "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
@@ -363,7 +363,7 @@ side by side.
 
 ## B3: `preferNamespaceImport` for `next/packages/**`
 
-E7 and [0023](../../.decisions/0023-next-follows-effects-code-style.md): a library imports each
+E7: a library imports each
 Effect module by its path. Apps keep the barrel.
 
 ### The count
@@ -441,7 +441,7 @@ same pull request. How sure that the fix exists on the command line: 60%.
 ### The slices, and the gate
 
 ```jsonc
-// tsconfig.base.json, one more override. E7 (0023): on where the count is zero.
+// tsconfig.base.json, one more override. E7: on where the count is zero.
 {
   "include": [
     "next/packages/libfabrika/src/ci/**/*.ts",
@@ -536,13 +536,12 @@ nine laws are in the draft and are not repeated here.
 | 6. Each of the three lists only grows until it is replaced by the whole tree | test | pinned: the folders listed on the day a slice lands, kept as a saved list, since a folder dropped in a merge is silent | remove a listed folder |
 | 7. After a static-layer move, every law that ran before still passes with only the provider's name changed | test | scenario: the module's existing suites, which are the behavior's own answer sheet | change one moved layer's body |
 
-As [0093](../../.decisions/0093-laws-walk-plants-run-once.md) has it, each plant is run once and
+As has it, each plant is run once and
 recorded, not kept as a test.
 
 ## Is it a setting?
 
-A setting is a value in `fabrika.toml`
-([0069](../../.decisions/0069-choices-are-settings.md)). None of these is one. Which folders a rule
+A setting is a value in `fabrika.toml`. None of these is one. Which folders a rule
 holds is the repo's own exam, in the lint and type-check config, as every other rule's files are.
 The folder lists are config that exists to be deleted: each ends as one glob.
 

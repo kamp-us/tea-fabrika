@@ -9,8 +9,7 @@ summary: "A thing with a proper name in the industry keeps it; an obscure one ge
 
 - The rule: decided 2026-10-18, below.
 - The glossary: reset on 2026-11-18. The map is [`.glossary/TERMS.md`](../../.glossary/TERMS.md);
-  each context's terms live in its own `GLOSSARY.md`, with an `_Avoid_` line
-  ([0617](../../.decisions/0617-glossary-reset-to-a-map.md)).
+  each context's terms live in its own `GLOSSARY.md`, with an `_Avoid_` line.
 - The sweep's picks: made 2026-10-24 and 2026-10-28 (the naming sweep).
 - The two-domains rule: replaced 2026-11-03 by [we follow DDD](./we-follow-ddd.md).
 

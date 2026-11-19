@@ -257,8 +257,7 @@ this machine.
 - The 22 to 40 ms per deploy is for two trivial resources and says nothing about a real stack.
 
 The script `experiments/264-hands-resource/hands.ts` is on the branch
-`fabrikalfa/exp-hands-resource` only, not on main
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). To run it, link that
+`fabrikalfa/exp-hands-resource` only, not on main. To run it, link that
 folder's `node_modules` to `next/apps/fabrika/node_modules`, set `HANDS_HOME` to a temp folder, and
 pass `deploy`, `destroy`, `detect` or `repair`. The raw output of every step is under `runs/264/`
 on the owner's machine, not in git.

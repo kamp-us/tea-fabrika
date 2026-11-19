@@ -71,7 +71,7 @@ Rules:
 ## Where it applies
 
 Domain folds, rules and tea `update`s in `next/`, and synchronous ledger steps
-([0050](../.decisions/0050-a-ledger-step-is-a-plain-function.md)). Stops inside a SQLite
+([0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md)). Stops inside a SQLite
 transaction, where a throw is how the transaction rolls back
 ([effect-errors-keep-their-cause.md](./effect-errors-keep-their-cause.md), "Fail by yielding"), and
 at a load-time check of a declaration, where a throw is a defect on purpose.
@@ -102,6 +102,6 @@ refusal in the type, and fast-check can then state laws over every refusal.
 ## Decision
 
 [Elm first](../docs/direction/elm-first.md): `update` is a total function, as Elm's is, with a
-`Result` for what can be refused; [0037](../.decisions/0037-implicit-state-machines-made-explicit.md).
+`Result` for what can be refused.
 
 > Derived from `effect@4.1.2`; re-verify on pin bump.

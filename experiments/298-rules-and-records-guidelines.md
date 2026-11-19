@@ -40,7 +40,7 @@ was not tested here.
   `.github/ci/workflow-lint/issues.ts` hold what 0534 says, with the record numbers as their why.
   The record is the stale copy, not the code.
 - **The skill this study follows has a live case.** The guidelines skill's step 8 says to add an
-  index row to `docs/guidelines/README.md`; [0522](../.decisions/0522-no-folder-keeps-an-index-table.md)
+  index row to `docs/guidelines/README.md`
   says no folder keeps an index table. This study follows 0522.
 
 ```text
@@ -138,31 +138,26 @@ another team       rules moved out of records into the files agents read; 29% of
 The plain way they agree on: **a log of why and a living rule are two documents. The rule lives
 once, in the thing that holds it (a check, a config, the instruction read for the job), and is
 edited in place with version control as its history. The log is short and is never patched.** It
-clashes with one goal of ours in one line: [0115](../.decisions/0115-decided-rules-live-in-decision-files.md)
+clashes with one goal of ours in one line:
 put every decided rule in a decision file so a search finds it; moving rules to their homes means a
 search must find homes too.
 
 ## What is settled
 
-- **Decided:** decisions live in `.decisions/`, one per ruling, the turn it is made
-  ([0001](../.decisions/0001-decisions-live-in-the-repo.md)); a moved decision leaves one link,
-  never a copy ([0002](../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)); a
-  decision with a shape opens with a diagram ([0005](../.decisions/0005-patterns-and-decisions-are-visual.md));
-  discovery is the AGENTS.md contract with no index ([0008](../.decisions/0008-decision-discovery-is-the-agents-md-contract.md),
-  [0522](../.decisions/0522-no-folder-keeps-an-index-table.md)); a decided rule lives in a decision
-  file ([0115](../.decisions/0115-decided-rules-live-in-decision-files.md)); AGENTS.md is a short
-  map and each rule leaves it by one of three moves ([0129](../.decisions/0129-agents-md-becomes-a-short-map.md),
-  [0180](../.decisions/0180-instruction-files-take-quick-edits.md)); each kind of knowledge has one
-  home and no new direction note is written ([0130](../.decisions/0130-every-piece-of-knowledge-has-one-home.md));
-  a guideline is one page, and each law or lint principle gets a decision file
-  ([0136](../.decisions/0136-guidelines-live-in-their-own-pages.md)); a skill keeps only judgment
-  and a checked rule leaves it ([0408](../.decisions/0408-skills-keep-only-judgment.md)); no list
-  lets broken code pass ([0524](../.decisions/0524-no-list-lets-broken-code-pass.md)); record
+- **Decided:** decisions live in `.decisions/`, one per ruling, the turn it is made; a moved decision leaves one link,
+  never a copy; a
+  decision with a shape opens with a diagram;
+  discovery is the AGENTS.md contract with no index; a decided rule lives in a decision
+  file; AGENTS.md is a short
+  map and each rule leaves it by one of three moves; each kind of knowledge has one
+  home and no new direction note is written;
+  a guideline is one page, and each law or lint principle gets a decision file; a skill keeps only judgment
+  and a checked rule leaves it; no list
+  lets broken code pass; record
   tooling and each kind's frontmatter Schema live in `@kalfa/records`
-  ([0585](../.decisions/0585-kalfa-is-six-domain-packages.md)), and test, lint and format in
-  `@kalfa/quality` ([0600](../.decisions/0600-kalfa-quality-holds-test-lint-format.md)); a trusted
-  tool before a hand-written one ([0040](../.decisions/0040-existing-tools-before-hand-written.md),
-  [0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md)).
+  ([0054](../.kalfa/decisions/0054-tooling-is-domain-packages.md)), and test, lint and format in
+  `@kalfa/quality`; a trusted
+  tool before a hand-written one.
 - **Leaned:** [experiment 283](./283-context-audit.md) found 578 of 2,928 skill lines cut with
   proof, mostly copies of script headers, and that `skillscheck.sh` keeps three duplicates alive.
 - **Untouched:** the status "amended in part" (no decision defines it); a check on a record's
@@ -189,15 +184,15 @@ amended in part; main moved since. Each line is one command or one counting scri
 | amendments whose amending record is itself amended | 74 | status links, followed one step |
 | amended records patched by a superseded record | 3, by 4 links: 0012 by 0596, 0032 by 0034, 0049 by 0097 and 0146 | the same |
 | records patched by 2 or more others | 33; the most, 0023, by 7 | the same |
-| longest titles | 61 words (0076), 52 (0172 and 0586) | the `title:` line |
-| links to a superseded record | 1 in `docs/plan/README.md` (0146), 23 from other records, 0 in AGENTS.md, skills, `.patterns/` | `rg` over each folder |
+| longest titles | 61 words, 52 | the `title:` line |
+| links to a superseded record | 1 in `docs/plan/README.md`, 23 from other records, 0 in AGENTS.md, skills, `.patterns/` | `rg` over each folder |
 | links that land on an amended record | AGENTS.md 25 of 56, `next/AGENTS.md` 10 of 18, skills 77 of 147, `.patterns/` 21 of 39, plan 284 of 621 | the same |
 | root `AGENTS.md` | 480 lines, 39,103 bytes; with `next/AGENTS.md`, 49,516 | `wc -lc` |
 
 A link to an amended record is a link to half a rule: the reader must also open each record named
 in its status, and those in theirs. The one superseded link in the plan is a dated history entry
 that still says "a pull request now lands only when its checks ran on a head that holds main",
-which [0162](../.decisions/0162-no-friction-before-a-merge.md) reversed.
+which reversed.
 
 **A first sort of the 116, by this study alone.** Read from each title and, for the three examples,
 the whole record. The sort another agent is writing into `docs/plan/amended-decisions-sort.md` was
@@ -226,14 +221,14 @@ One from each of the three live classes.
 
 | Record | Class | Words | Patched by | What a reader meets |
 |---|---|---|---|---|
-| [0534](../.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md), which tests run where | check-held | 931 | 0539, 0541, 0581, 0590, 0595 | title and Decision say "every 3 hours"; an `## Amendments` section at the end says that line no longer holds. The rules are in `.github/workflows/scheduled.yaml`, `.github/ci/changes.mjs` and `.github/ci/workflow-lint/issues.ts` |
-| [0023](../.decisions/0023-next-follows-effects-code-style.md), next/ follows Effect's code style | checkable | 1,759 | 0021, 0029, 0032, 0039, 0095, 0118, 0574 | an italic line says 0029 settles format "and the rest of this file still holds"; its table still says indent "tabs", width "100", "open: owner picks", while `.oxfmtrc.json` says `"useTabs": false`, `"printWidth": 120`. It names `effect@4.1.2`; the lockfile has 4.1.3. AGENTS.md links it as the list of differences |
-| [0129](../.decisions/0129-agents-md-becomes-a-short-map.md), AGENTS.md becomes a short map | judgment | 680 | 0180 | its title still says the cut waits on "one test of long against short", which 0180 withdrew; a heading in its body says so. It aimed at "about 150 lines"; the map is 480 |
+|, which tests run where | check-held | 931 | 0539, 0541, 0581, 0590, 0595 | title and Decision say "every 3 hours"; an `## Amendments` section at the end says that line no longer holds. The rules are in `.github/workflows/scheduled.yaml`, `.github/ci/changes.mjs` and `.github/ci/workflow-lint/issues.ts` |
+|, next/ follows Effect's code style | checkable | 1,759 | 0021, 0029, 0032, 0039, 0095, 0118, 0574 | an italic line says 0029 settles format "and the rest of this file still holds"; its table still says indent "tabs", width "100", "open: owner picks", while `.oxfmtrc.json` says `"useTabs": false`, `"printWidth": 120`. It names `effect@4.1.2`; the lockfile has 4.1.3. AGENTS.md links it as the list of differences |
+|, AGENTS.md becomes a short map | judgment | 680 | 0180 | its title still says the cut waits on "one test of long against short", which 0180 withdrew; a heading in its body says so. It aimed at "about 150 lines"; the map is 480 |
 
 Two more live contradictions turned up while reading, both in this area:
 
 - AGENTS.md's "Where to read, where to write" table says to write a note under `docs/direction/`
-  "when a decision needs the long reasoning". [0130](../.decisions/0130-every-piece-of-knowledge-has-one-home.md)
+  "when a decision needs the long reasoning".
   says "No new note is written under `docs/direction/`", and the guidelines skill says the same.
   `docs/direction/` still holds 139 files.
 - The guidelines skill's step 8 asks for an index row; 0522 forbids one. [PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254)
@@ -256,10 +251,10 @@ first two can take it. A record that is not a rule's home holds no copy of it.
 
 **Lean, 80%.** Every source splits the why from the rule `[d1]`-`[d5]`, `[o1]`, and the other
 team's poison was mostly copies `[x1]`. The doubt: this walks back part of
-[0115](../.decisions/0115-decided-rules-live-in-decision-files.md) ("A rule the owner decided ...
-lives in a decision file"), of [0130](../.decisions/0130-every-piece-of-knowledge-has-one-home.md)
+ ("A rule the owner decided ...
+lives in a decision file"), of
 ("A rule the owner decided is a decision file"), of 0129's second move (a decided rule becomes "one
-line with a link to its decision file") and of [0136](../.decisions/0136-guidelines-live-in-their-own-pages.md)
+line with a link to its decision file") and of
 (one decision file per law or lint principle). That is the owner's call, and the one real design
 call in this study. What would settle it: one sweep of the 36 check-held records, then a count of
 review findings that cite a stale record, before and after.
@@ -284,7 +279,7 @@ Against the three records:
   of 15,057 machine-minutes, and the call that the merge line never runs the full suite.
 - **0023:** format values move nowhere, since `.oxfmtrc.json` already holds them; the "follow"
   rows (`no-console`, `array-type`, inline type imports) become lint rules from a trusted set
-  (0573) or tickets; each kept difference's reason goes beside its code as `.patterns/effect-differences-say-why.md`
+ or tickets; each kept difference's reason goes beside its code as `.patterns/effect-differences-say-why.md`
   already says. The record shrinks to its why: code in `next/` reads like Effect's for a reader who
   knows Effect, and each difference says why where it is.
 - **0129:** the three moves already sit at the top of AGENTS.md ("A rule lives where it is read");
@@ -314,7 +309,7 @@ of what changed; `git log` on the home and the new record's context keep it.
 
 Against the three records:
 
-- **0534:** [0581](../.decisions/0581-main-full-run-starts-on-push-and-hourly.md) would have edited
+- **0534:** would have edited
   `scheduled.yaml` (it did) and written its own why, with no section added to 0534. 0534's title
   stays true because it no longer names an interval: "the merge line runs only the tests a change
   reaches, and a schedule runs the rest".
@@ -326,7 +321,7 @@ Against the three records:
 
 ### R3: code holds what it can; prose names the command, the key and what its exit means
 
-Prose keeps only judgment ([0408](../.decisions/0408-skills-keep-only-judgment.md)). A fact a
+Prose keeps only judgment. A fact a
 config file or lockfile owns (a version, an interval, a cap, a width, a list of paths) is pointed
 to by file and key, never typed. A check's own message teaches its rule. An example an agent copies
 is code that runs or typechecks, as `@kalfa/records` calls once 0585 lands.
@@ -363,11 +358,11 @@ Against the three records:
 
 Two cases. A record whose why stands is `accepted`. A record whose why was reversed is `superseded`,
 naming one record. "Amended in part" goes: a partial change edits the rule's home (R2), and the new
-record says in its context what it changed. The status is a Schema in `@kalfa/records` (0585), not
+record says in its context what it changed. The status is a Schema in `@kalfa/records` (0054), not
 a Markdown link in a string.
 
 ```ts
-// A sketch, in @kalfa/records: frontmatter status as a tagged union (0214).
+// A sketch, in @kalfa/records: frontmatter status as a tagged union.
 const Status = Schema.Union([
   Schema.TaggedStruct("accepted", {}),
   Schema.TaggedStruct("superseded", { successor: DecisionId }),
@@ -388,7 +383,7 @@ agent's sort, checking how many amended records still need a pointer once their 
 - **Effect row:** no record statuses; a changeset's bump (`patch`, `minor`, `major`) is typed data
   a tool reads. No direct answer beyond that.
 - **Elm or OTP:** make invalid states unrepresentable. A tagged union with `_tag`, as
-  [0214](../.decisions/0214-unions-are-tagged-with-tag.md) asks; "amended in part by five records,
+ asks; "amended in part by five records,
   one of them superseded" is not a state the union can hold.
 - **Accessibility:** no fit.
 - **Cost:** one Schema and one migration: 116 status lines become `accepted`, each after its
@@ -396,7 +391,7 @@ agent's sort, checking how many amended records still need a pointer once their 
 
 Against the three records: **0534**, **0023** and **0129** each become `status: accepted`, since
 each one's why still stands; what changed them lives in their homes and in 0539 to 0595, 0021 to
-0574, and 0180's own context. The three records patched by a superseded record (0012, 0032, 0049)
+0574, and 0180's own context. The three records patched by a superseded record
 lose that dead link with the rest.
 
 ### R5: every link lands on a live home
@@ -463,7 +458,7 @@ quoted upstream lines). Anything else compares parsed values or formatter output
 names what it guards in its header.
 
 **Lean, 80%.** The other team kept exactly these three kinds and removed the rest `[x1]`; its own
-rule was to compare parsed values or formatted output. Here, [0600](../.decisions/0600-kalfa-quality-holds-test-lint-format.md)
+rule was to compare parsed values or formatted output. Here
 already removed the plant runner's sha256 pins after two blank lines changed 27 hashes. The doubt:
 whether a skill's required sentence counts as approved bytes. `skillscheck.sh` requires exact
 sentences in five skills; its source says an approved plan asked for them, and [experiment 283](./283-context-audit.md)
@@ -476,7 +471,7 @@ What this repo has, read 2026-11-17:
 keep    box.sh            plan-sha256: the lead approved this plan body; 0343 is the same idea in the product
 keep    leakgrep.sh       a pnpm patch quotes upstream lines byte for byte, so nobody rewords them
 keep    oxfmt --check     compares to the formatter's own output, not to a typed copy
-gone    plant runner      sha256 and commit pins on targets; replaced by Stryker (0600)
+gone    plant runner      sha256 and commit pins on targets; replaced by Stryker
 change  skillscheck.sh    exact sentences required in five skills; check a link to the home instead
 ```
 
@@ -493,7 +488,7 @@ no row blocks the merge") is a reviewer's read, not a byte check, and stays judg
 ### R8: a finding seen twice becomes a check, measured before it blocks
 
 When a review raises the same kind of finding a second time, the fix is a check, not a sentence in a
-skill: a trusted tool's rule first (0040, 0573), else ours, advising until its false alarms are
+skill: a trusted tool's rule first, else ours, advising until its false alarms are
 measured, blocking only at about zero `[c1]`.
 
 **Lean, 70%.** Tricorder's bar `[c1]` and AGENTS.md's own (0523, the 10% advise line) agree. The
@@ -508,7 +503,7 @@ finding seen twice, and the first move is a trusted rule.
 - **Cost:** a count of findings by kind, which `field/findings/` rows can give.
 
 Against the three records: **0534**'s issue rule became `issues.ts`, the model. **0023**'s "follow"
-rows are exactly review nits waiting for a rule. **0129**: [0180](../.decisions/0180-instruction-files-take-quick-edits.md)
+rows are exactly review nits waiting for a rule. **0129**:
 says a rule an agent missed after the cut "is put back, or given a better home, the day it is
 seen"; R8 adds that the second miss gets a check.
 
@@ -548,7 +543,7 @@ Sized in agent hours, a **guess** before the owner's yes on R1:
 2. the 36 check-held records cut to their why, in slices        about 4 h
 3. the 30 judgment records: rules into skills, AGENTS.md,
    pattern docs                                                 about 9 h
-4. the 41 checkable: each waits on its check (0408), then cuts  about 20 h, mostly next/ laws
+4. the 41 checkable: each waits on its check, then cuts  about 20 h, mostly next/ laws
 5. the 9 history records marked superseded or left as history   about 1 h
 6. skillscheck.sh's clause table becomes link checks (R7)        about 2 h
 ```

@@ -12,13 +12,13 @@ a window lives in `apps/`, `programs/` and `next/` alike.
   ([tiers](../../../../docs/plan/tiers.md)). Each person answers for their own agents, so a first slice does
   not defend against them; strangers on a public address are a different case. Tier size never
   pushes work out: split the tier, and say what a new idea changes now. Make it work, then better,
-  then secure ([0171](../../../../.decisions/0171-make-it-work-then-better-then-secure.md)).
+  then secure.
 - **Secure and simple.** For any security step, say when a person meets it and how often. No prompt
   on opening the app, nothing hourly. The protection goes in code, not in a chore.
 - **No new paid accounts** until fabrika is a product. Design for the free route and say what it
   can't do. Cloudflare is the exception: fabrika assumes its paid Workers plan, such as its Secrets
   Store.
-- **All in on Manti** ([0461](../../../../.decisions/0461-every-ui-part-is-on-manti.md)).
+- **All in on Manti** ([0052](../../../../.kalfa/decisions/0052-one-design-package-on-manti.md)).
 - **Keep the platform's defaults.** On a Mac, closing a window keeps the app running and Cmd-Q
   quits. Leaving a convention needs the owner's yes.
 - **Subtle, and accessible without apology.** Color is never the only cue (WCAG 1.4.1). Give sources
@@ -49,8 +49,7 @@ a window lives in `apps/`, `programs/` and `next/` alike.
   the owner picks one. That covers all work in flight: the ask desk, the inbox, the project window
   and typography. The keys editor already does it.
 - **Show it running.** A PR that adds or changes a program's window carries screenshots from the
-  real built app, attached and never committed
-  ([0160](../../../../.decisions/0160-pr-shots-are-never-committed.md)). The step that shoots writes them
+  real built app, attached and never committed. The step that shoots writes them
   under `runs/`, and the lead attaches them, each with alt text. Take them the way
   `apps/fabrika/e2e.ts` drives the app: Playwright on Electron, with `FABRIKA_HOME` set to a test
   home of its own in a temp folder, never your real one. Look at each shot, and say in the PR what

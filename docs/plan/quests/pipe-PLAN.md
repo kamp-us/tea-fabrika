@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is `next/`. It is the first pipe slice of Tier 1's step 4, and the first of three: the pipe in
 the library, with no shell. It builds the proposed note
-[how a pipe carries output](https://github.com/kamp-us/tea-fabrika/pull/1322) and decisions 0549,
+[how a pipe carries output](https://github.com/kamp-us/tea-fabrika/pull/1322) and decisions 0025,
 0550, 0551 and 0553. A program asks for a pipe with a new built-in Cmd, `pipe`. The brain checks the
 member behind it, checks that the pipe fits on the two programs' declared shapes, and records it
 with both shapes. Each program declares the shape it means: a ticket number is a ticket number, on
@@ -13,7 +13,7 @@ both ends. The writer's runner wraps the output value as items, a list as its it
 else as a list of one item, and sends them in chunk messages each time the value changes, newest
 wins. The reader's runner folds the chunk messages, unwraps them by the writer's declared shape, and
 hands the reader's program one message with the value in the shape the reader declares. No program
-sees a chunk (0553). The reader watches each life of the writer with the watch slice's monitor. One
+sees a chunk. The reader watches each life of the writer with the watch slice's monitor. One
 pull request, about 1,345 product lines.
 
 ```ts
@@ -39,16 +39,16 @@ inputs: { ...Piped.ports("ticket", TicketNumber, "The ticket to show.") },   // 
 
 A program declares an output as a selector of its model (0260, `Output.make`), and a reader declares
 a piped input and a `DOWN` input with one helper, `Piped.ports`. Both name the shape the program
-means, list or not, and neither names a chunk (0553). The loader puts each output's and each piped
+means, list or not, and neither names a chunk. The loader puts each output's and each piped
 input's shape into the program's declaration, as Effect's own `SchemaRepresentation` JSON, so the
 brain can read them without running the code. A new built-in Cmd, `pipe`, goes from the runner to a
-new brain-side service, `Pipes`, which checks the member behind the Cmd (0551), checks that the pipe
-fits on the two declared shapes (0550), and in one ledger turn writes the `piped` row with both
-shapes, the right to send messages as a relation row (0526) and the Cmd's answer. In the turn that
+new brain-side service, `Pipes`, which checks the member behind the Cmd, checks that the pipe
+fits on the two declared shapes, and in one ledger turn writes the `piped` row with both
+shapes, the right to send messages as a relation row (0029) and the Cmd's answer. In the turn that
 starts or restarts either end of a live pipe, the brain writes the watch for the reader's live life on the
 writer's live life, so a watch binds one life and the pipe follows the registered name. The writer's
 runner owes one `send_chunks` of the whole value, wrapped as items, each time an output with a live
-pipe changes; a newer value replaces one not yet started (0549). The reader's runner folds the chunk
+pipe changes; a newer value replaces one not yet started (0025). The reader's runner folds the chunk
 messages in its own checkpoint, and at the last one unwraps the items by the writer's declared shape
 and steps the reader's program once with the value. `exit` waits behind an owed send to a piped
 name. When the program that made a pipe stops either end with `stop_child`, the same turn writes
@@ -67,7 +67,7 @@ or tezgah.
 
 ## Current names
 
-Decision [0582](../../../.decisions/0582-mail-as-a-noun-goes-it-is-a-mailbox-and-messages.md)
+Decision
 names the settings `mailbox.chunk` and `mailbox.capacity`. This plan uses those names for the
 implementation, with the same values, bounds and refusal rules. The dated source readings below
 keep the keys they read then, `mail.chunk` and `mail.unread`. Source paths and type names such as
@@ -208,7 +208,7 @@ export const PipeInput = Schema.Struct({ from: Writer, to: Reader });
 /** The answer. `piped` made it; `unfit` made nothing, and says the first field that failed. */
 export const Piped = Schema.TaggedUnion({
   piped: { pipe: Schema.NonEmptyString },   // the pipe's id: this Cmd's own id, stable on a retry
-  unfit: { fit: Unfit },                     // does_not_fit or cannot_tell, with its path (0550)
+  unfit: { fit: Unfit },                     // does_not_fit or cannot_tell, with its path
 });
 
 /** Why a pipe is refused. Each is final, and a refusal writes nothing but its answer message. */
@@ -219,7 +219,7 @@ export const PipeRefusal = Schema.Literals([
   "forbidden",    // the member behind the Cmd may not pipe these two programs, or there is no member
   "no_output",    // the writer declares no such output
   "no_input",     // the reader declares no such piped input, or no DOWN input
-  "name_taken",   // a name already has a live process: a pipe is made before its ends start (0550)
+  "name_taken",   // a name already has a live process: a pipe is made before its ends start
   "taken",        // that input already has a live pipe: a pipe never fans in (G6)
 ]);
 
@@ -254,7 +254,7 @@ export const fits: (writer: SchemaRepresentation.Document, reader: SchemaReprese
 ```
 
 Both shapes are the two programs' declared shapes, as each one wrote it: the writer's output and
-the reader's input, list or not. The wrapping is never part of the check (0553). Both are the
+the reader's input, list or not. The wrapping is never part of the check. Both are the
 encoded side, which is what a message carries. v1 compares, reading the reader's node first:
 
 | The reader needs | It fits when the writer has | Else |
@@ -264,7 +264,7 @@ encoded side, which is what a message carries. v1 compares, reading the reader's
 | a `Literal` | that literal, or a union of only that literal | `does_not_fit` |
 | a union of only literals (`Schema.Literals`) | a literal of the set, or a union of only literals, each in the set | `does_not_fit` |
 | a list (`Arrays` with only a `rest` node) | a list whose item fits the reader's item | `does_not_fit` |
-| a struct (`Objects` with no index signature) | a struct with each field the reader requires, required, and each fitting; a field the reader makes optional may be missing; extra fields are fine (0550) | `does_not_fit`, `has: "missing"` or `"optional"` |
+| a struct (`Objects` with no index signature) | a struct with each field the reader requires, required, and each fitting; a field the reader makes optional may be missing; extra fields are fine | `does_not_fit`, `has: "missing"` or `"optional"` |
 | a check on any node above | the same check, same persistence id and payload; the writer may carry more | `cannot_tell` |
 
 Everything else on the reader's side is `cannot_tell`, and refused (the note's lean, which 0550's
@@ -303,7 +303,7 @@ layer every caller above it may import: the runtime, the client and the entry. A
 ### What a program declares
 
 ```ts
-// next/packages/libfabrika/src/runtime/Program.ts: an output is a schema and a selector (0260).
+// next/packages/libfabrika/src/runtime/Program.ts: an output is a schema and a selector.
 export const Output = { make: <S extends Declared>(schema: S, select: (model: never) => S["Type"] | null) => ({ schema, select }) };
 
 // Two writers, a sketch. Each declares the shape it means.
@@ -350,7 +350,7 @@ export const Declaration = Schema.Struct({
   the outputs whose encoded value changed between the model before and after that step. The box runs
   the selector, since on workerd only the box holds the code. tsc checks each selector against its
   schema (law T1). Today's one output, the checklist's `done`, becomes `Output.make(Done, finished)`.
-- **`null` is nothing to send (0260), at the top only.** A selector that returns `null` owes no
+- **`null` is nothing to send, at the top only.** A selector that returns `null` owes no
   send. So a top-level `null` is never a value a reader is handed, even when the output's schema
   allows it. A `null` inside a value is data: `{note: null}`, `[null]` and `[]` each travel and
   arrive as they are (law N1).
@@ -366,7 +366,7 @@ import type { Shape } from "../../processes/Fit.ts";
 /** Whether a declared shape is a list: its top node is `Arrays` with only a `rest` node. */
 export const listed: (shape: Shape) => boolean;
 
-/** On the way out: a list goes as its items, anything else as a list of one item (0553). */
+/** On the way out: a list goes as its items, anything else as a list of one item. */
 export const wrap = (writer: Shape, value: Schema.Json): ReadonlyArray<Schema.Json> =>
   listed(writer) ? (value as ReadonlyArray<Schema.Json>) : [value];
 
@@ -394,9 +394,9 @@ unwrap(TicketNumber, []);            // none        no single value has no item
 ```
 
 ```ts
-// next/packages/libfabrika/src/runtime/internal/pipeFold.ts (new): one tea machine (0046), stepped
+// next/packages/libfabrika/src/runtime/internal/pipeFold.ts (new): one tea machine, stepped
 // only by the reader's runner, one per piped input. Its three states are the whole control state of
-// a value on its way in (0037). A sketch: the cases are built with `.make`, never a hand-written tag.
+// a value on its way in. A sketch: the cases are built with `.make`, never a hand-written tag.
 export const machine = Machine.make({
   model: Schema.TaggedUnion({
     empty: {},                                                               // nothing is arriving
@@ -436,12 +436,12 @@ reader's program holds (law R1).
 export const PipeEvent = Schema.TaggedUnion({
   piped: {
     pipe: Text,                                   // the pipe Cmd's id
-    // Both declared shapes, as the loader wrote them (0553): the writer's output and the reader's input.
+    // Both declared shapes, as the loader wrote them: the writer's output and the reader's input.
     from: Schema.Struct({ name: ProcessName, program: ProgramName, output: Text, hash: Hash, shape: Schema.Json }),
     to: Schema.Struct({ name: ProcessName, program: ProgramName, input: Text, hash: Hash, shape: Schema.Json }),
     rule: Schema.Literal(RULE),                   // the rule that judged whether it fits
     requester: Schema.Struct({ name: ProcessName, process: ProcessId }),
-    member: Sender,                               // the member behind the Cmd, checked (0170, 0551)
+    member: Sender,                               // the member behind the Cmd, checked (0030)
   },
   unpiped: { pipe: Text, reason: Schema.Literals(["stopped"]) },
 });
@@ -462,7 +462,7 @@ export class Pipes extends Context.Service<Pipes, {
 ```
 
 `hash` is each program's code hash, and `shape` is the port's declared shape itself, the JSON the
-loader wrote, so the row holds both declared shapes (0553) and the two runners wrap and unwrap by
+loader wrote, so the row holds both declared shapes and the two runners wrap and unwrap by
 the writer's. Neither shape holds anything of the wrapping. Each row is a ledger line, so it also keeps `by` (the brain's key), `sentAt` on the writer's clock, `arrivedAt` on
 the ledger's, `parent` (the step whose message caused the Cmd, which leads to the member's own
 message and its clock) and `traceId`. In the same turn, the right to send messages goes on the
@@ -485,7 +485,7 @@ so a refused caller learns nothing it may not see:
 2. A saved `piped` under this id: answer it again, write nothing (a retry).
 3. `stale_sender`: the requester's life is not live, or `Senders` says the cause went to a life that
    ended.
-4. The member: the sender of `from.parent`, else the requester's recorded member (0531), through
+4. The member: the sender of `from.parent`, else the requester's recorded member (0030), through
    `processes/internal/member.ts`. `PipePrograms` on this fabrika, else `forbidden`. No member is
    `forbidden`: 0551 checks the member behind the pipe, and a pipe has no related-pair exception.
 5. `no_output`, then `no_input`: the writer's declaration has no such output, or the reader's has no
@@ -532,7 +532,7 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, M
 
 /** After a step: each changed output with a live pipe owes one whole send to that pipe's reader. */
 const owe = (cmds: ReadonlyArray<Dispatched>, out: Out): ReadonlyArray<Dispatched> => [
-  // Newest wins (0549): an owed send to this pipe that has not saved its seq 0 yet is dropped.
+  // Newest wins (0025): an owed send to this pipe that has not saved its seq 0 yet is dropped.
   ...cmds.filter((c) => !(c.out?.pipe === out.pipe && !started(c))),
   dispatched({ id: `${process.id}/${out.pos}/out/${out.output}`,
     cmd: { type: SEND_CHUNKS, to: out.to, as: out.input, items: PipeItems.wrap(out.shape, out.value) },
@@ -542,7 +542,7 @@ const owe = (cmds: ReadonlyArray<Dispatched>, out: Out): ReadonlyArray<Dispatche
 
 - The runner reads the pipes its name is an end of from `Pipes.list` at load, and again after a
   `piped` or `unpiped` row names it. As a writer it uses the live ones. `out.shape` is the writer's
-  shape on the `piped` row. A value of `null` owes nothing (0260).
+  shape on the `piped` row. A value of `null` owes nothing.
 - A send has started once its seq 0 message is saved. A started send always finishes, so the reader
   never gets two values mixed. `behind` already keeps sends to one name in order. A single value is
   one chunk message, seq 0 and last, so it is either saved whole or still replaceable.
@@ -552,8 +552,7 @@ const owe = (cmds: ReadonlyArray<Dispatched>, out: Out): ReadonlyArray<Dispatche
   supervision's stops do not wait.
 - `pipe` loads both programs by name, as `startChild` loads one today, answers `no_program` itself,
   and hands `Pipes.pipe` the hashes and shapes.
-- **An owed send's answer is recorded, never folded.** An output is not a Cmd and has no answer
-  (0260), and the writer's program has no case for one. The runner saves the answer with the
+- **An owed send's answer is recorded, never folded.** An output is not a Cmd and has no answer, and the writer's program has no case for one. The runner saves the answer with the
   runtime's own `cmd.answered` record in the writer life's stream, as it does today for a Cmd whose
   life ended, and drops the owed send.
 - **A value with an item too big gets `too_big`.** `Chunk.cut` fails with `TooBig` when one item's
@@ -711,10 +710,10 @@ above. The ticket number is `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))`
 
 | Piece | Elm's answer | OTP's answer | Where we leave them |
 |---|---|---|---|
-| The output | a port: a whole typed value out, as a Cmd | a message sent to a pid | an output is model state picked by a selector (0260), and the runner, never the program, sends it |
-| The reader's fold | none in the program: a port hands `update` one whole typed value | a `receive` loop that keeps state | we take Elm's for the program, which is handed one Msg per value; the fold of chunk messages is the runner's, one tea machine it steps (0553) |
+| The output | a port: a whole typed value out, as a Cmd | a message sent to a pid | an output is model state picked by a selector, and the runner, never the program, sends it |
+| The reader's fold | none in the program: a port hands `update` one whole typed value | a `receive` loop that keeps state | we take Elm's for the program, which is handed one Msg per value; the fold of chunk messages is the runner's, one tea machine it steps |
 | The order and the end | none: no processes | per-pair order, one `DOWN` after the last message | we take OTP's; a watch is written for each life by the brain, since OTP's monitor never follows a name and the pipe must |
-| Back pressure | none | none: an unbounded mailbox | we leave both for Unix: a capped inbox and a writer that waits (0109) |
+| Back pressure | none | none: an unbounded mailbox | we leave both for Unix: a capped inbox and a writer that waits (0024) |
 | Whether a pipe fits | the compiler checks a port's type | none: messages are untyped | a structural check on declared shapes, since two packs are built apart |
 
 ## Every line that ends, stops or signals a process
@@ -754,7 +753,7 @@ with no seq 0 saved), how long a writer waited on `full`, a pipe's throughput.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where | Runs |
 |---|---|---|---|---|---|
-| S1, the whole pipe with no shell: a parent test program pipes a writer and a reader test program and starts the reader, then the writer, once for a pair with a list output and once for a pair with a struct output whose reader needs part of it; the writer's value changes three times while the reader's inbox is full, and the reader's program is handed the newest whole value; the writer crashes mid-send and the reader keeps the value it had; supervision restarts the writer, and the reader is handed the new life's first whole value and exactly one `DOWN` per life; a pipe that does not fit and a pipe the member may not make are each refused, with nothing on the pipe or relation streams and no start | test | scenario: two pairs of test programs and a parent, the five moves in order | (a) send every value, not the newest; (b) hand the reader a value at the first chunk; (c) watch only the first writer life; (d) write the `piped` row before checking that the pipe fits; (e) hand the reader's program the items in place of the value: S1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests (0536) |
+| S1, the whole pipe with no shell: a parent test program pipes a writer and a reader test program and starts the reader, then the writer, once for a pair with a list output and once for a pair with a struct output whose reader needs part of it; the writer's value changes three times while the reader's inbox is full, and the reader's program is handed the newest whole value; the writer crashes mid-send and the reader keeps the value it had; supervision restarts the writer, and the reader is handed the new life's first whole value and exactly one `DOWN` per life; a pipe that does not fit and a pipe the member may not make are each refused, with nothing on the pipe or relation streams and no start | test | scenario: two pairs of test programs and a parent, the five moves in order | (a) send every value, not the newest; (b) hand the reader a value at the first chunk; (c) watch only the first writer life; (d) write the `piped` row before checking that the pipe fits; (e) hand the reader's program the items in place of the value: S1 red | next/packages/libfabrika/src/runtime/PipeTest.ts, run by next/packages/libfabrika/src/node/Pipe.integration.test.ts | laptop, narrow path; the schedule on pull requests |
 | F1, a pipe that fits is sound: for generated writer and reader shapes from v1's grammar where `fits` answers `fits`, every value Effect Arbitrary makes from the writer schema, encoded, decodes with the reader schema. 200 runs | test | fc.letrec: v1 shape pairs, structs, lists, literals, literal sets, primitives, optional fields | (a) let an extra reader field through as fine; (b) treat a literal set as fitting a smaller set: F1 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F2, a missing need: removing any one required field the reader needs from a fitting writer answers `does_not_fit` with that field's path and `has: "missing"`; making it optional answers `has: "optional"`. 200 runs | test | fc.letrec: v1 shape pairs and a field to drop | (a) skip nested structs; (b) report the parent's path: F2 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
 | F3, what v1 cannot tell: each reader shape outside v1 (`Declaration`, `Suspend`, tuple, `Record`, `NullOr`, a non-literal union, `TemplateLiteral`, `Enum`, a custom filter) answers `cannot_tell` at its path, even when the writer's shape is the same | test | scenario: one pair per shape, the plan's six examples | answer `fits` for two equal shapes: F3 red | next/packages/libfabrika/src/processes/Fit.test.ts | laptop |
@@ -797,7 +796,7 @@ with no seq 0 saved), how long a writer waited on `full`, a pipe's throughput.
 
 **Where they run.** S1 is the pull request's whole vehicle, end to end, with no shell. It and the
 other suites run through `node/*.integration.test.ts` on node:sqlite in a temp folder, so under
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) a pull request
+ a pull request
 leaves them to the schedule; the tests and build steps run those paths narrowly on the laptop, since
 they need no real machine, signal or socket. F1 to F5, R1, X1, T1 and T2 are plain tests and type
 checks that run on the laptop and in every CI run. H1 is the only host-only law (workerd): CI's full
@@ -806,7 +805,7 @@ waits on the owner's Mac under 0178.
 
 ## Is this a setting?
 
-Each new choice was asked (0069):
+Each new choice was asked:
 
 - **The rules for when a pipe fits,** "newest wins", one pipe per input, and a pipe ending at its requester's
   `stop_child`: no. Each is what a pipe is, decided in 0549 and 0550 or by the note's plumbing.
@@ -887,7 +886,7 @@ decision already says. The calls this revision added carry how sure I am.
 - **The check that a pipe fits lives in `processes/`,** a layer the runtime, the client and the entry may all import, so
   it needs no new line in `layer-rules.json`.
 - **Typed services only.** The runner reaches `Pipes` as a service; nothing calls a command-line tool
-  (0231).
+  (0018).
 - **A browser is always a client.** Every piece is JSON messages, Cmds and the Project's RPC.
 - **Both runners wrap and unwrap by the writer's shape on the `piped` row (90%).** 0553 says the
   unwrap follows what the writer declared. One recorded fact read by both ends cannot disagree with
@@ -925,7 +924,7 @@ decision already says. The calls this revision added carry how sure I am.
   telling a final end from a restart needs the name's `down` state, which no watcher gets today, so
   it is a ticket for the lead); how a small program with no window shows on screen in a line, and
   how a step is turned off so data skips it (both with the owner as a design talk); two brains
-  talking (0551); a pipe across lines; editing a pipe after the line runs; a writer rebuilt with a
+  talking; a pipe across lines; editing a pipe after the line runs; a writer rebuilt with a
   changed output shape while its pipe is live; telling a writer's program that its value was
   refused as too big.
 
@@ -975,14 +974,14 @@ below is decided by this plan.
 
 1. **This plan:** the pipe in the library.
 2. **Second: fabsh pipes its own built-ins,** with the last one's output printed in fabsh.
-   [0159](../../../.decisions/0159-fabsh-pipes-summon-join-first.md) says pipes work first for
+ says pipes work first for
    fabsh's built-ins, and that plan follows it as written. It waits on this plan and on fabsh v1's
    reader and job-control slices in [the current plan](https://github.com/kamp-us/tea-fabrika/pull/1434).
-   Decision 0586 keeps PRs 1232 and 1254 parked; this later slice builds neither branch.
+   an earlier decision keeps PRs 1232 and 1254 parked; this later slice builds neither branch.
    Following 0159 as written settles the question this plan's first draft asked about whether
    built-ins come first.
 3. **Third: programs with tiles in one line.** The job's scope and a `stop_job` Cmd, Ctrl-C from any
-   tile stopping the whole job reader first (0548), one mark per line in tezgah (0477, 0478), and the
+   tile stopping the whole job reader first, one mark per line in tezgah, and the
    six pipe hues as design tokens, written by the tests step since the design package's tokens are an
    exam path. It waits on the second slice and fabsh v1's foreground-program support in S3 of
    its current plan. The owner still chooses the look before its S2 opens. A question for the later
@@ -1026,7 +1025,7 @@ Estimate: 7 steps, $80
 - Ticket 1081, in the app's tracker.
 - `field/runs/` rows for each step, by the lead.
 - Glossary rows in this pull request: `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules
-  for when a pipe fits. Decision 0553's own pull request already wrote that every value travels one
+  for when a pipe fits. an earlier decision's own pull request already wrote that every value travels one
   way underneath, so this one adds no word for the wrapping.
 - `docs/direction/follows/otp.md`: a watch per life under a name, where we leave OTP's monitor.
 - No `.decisions/` file: every call here applies a decided note or decision. The note stays
@@ -1072,7 +1071,7 @@ here"; this plan settles neither.
 ## Findings
 
 ```json
-{"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package (0456), so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
+{"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package (0052), so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
 ```
 
 ## Amendment A-Fits, 2026-11-15
@@ -1209,7 +1208,7 @@ bounds Effect's ids imply.
 list: the reader's `items` is a list, and the runner sends `items: out.value`. Every pair above
 carries one value, a ticket number, a string or an integer, and the checklist's own `done` is a
 struct, so none of them could be piped as the plan stood; the check would answer `does_not_fit` at
-the top. The owner has since ruled on it, in decision 0553: see "Decision 0553 in this plan" below.
+the top. The owner has since ruled on it, in an earlier decision: see "an earlier decision in this plan" below.
 
 ### The added rules
 
@@ -1351,11 +1350,10 @@ Execution 30). The step count and the estimate in the Size section stay as they 
 added rules are pure functions beside the ones v1 already has, and the four new laws sit in two test
 files the tests step already writes.
 
-## Decision 0553 in this plan, 2026-11-15
+## an earlier decision in this plan, 2026-11-15
 
 This section takes the place of "Amendment A-Value, 2026-11-15". That amendment was the lead's call
-that a value that is not a list goes as one whole message. The owner then ruled, in
-[0553](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0553-a-pipe-sends-one-way.md), for one transport that stays out of
+that a value that is not a list goes as one whole message. The owner then ruled, in, for one transport that stays out of
 programs. The sections above Amendment A-Fits now build 0553 in their own words, so no part of the
 plan says what A-Value said.
 
@@ -1379,7 +1377,7 @@ plan says what A-Value said.
 - The laws X1, X2, N1, A1, B1, G1 and T2, and R1 moved to the runner's fold ("Laws").
 
 **Where Amendment A-Fits reads differently now.** A-Fits stays as it was written, and it still wins
-over the sections above it on the check that a pipe fits. Decision 0553 is newer than both, so for
+over the sections above it on the check that a pipe fits. an earlier decision is newer than both, so for
 these words of A-Fits, read the sections above:
 
 - A-Fits's loader block writes `inputs[k].items`. The key is `inputs[k].shape`, and it holds the
@@ -1403,19 +1401,19 @@ These instructions apply to all new laws above, including A-Fits, without changi
 range, run count, assertion or once-only fault. The table's older fast-check names describe the
 input domain, not permission for a hand-written runner.
 
-- Use `it.prop` or `it.effect.prop` and Schema inputs through the shared test package (0579).
+- Use `it.prop` or `it.effect.prop` and Schema inputs through the shared test package.
   Generate members, names, settings, values and shape descriptors from their domain Schemas.
   Build each actual Effect Schema from its generated descriptor, then use Effect Arbitrary
   for that schema's values. A recursive descriptor keeps every constructor listed by F1/F6/X1.
 - P4, O1 and R1 keep their state-aware command walks. Their next legal command depends on the
   current model, which a Schema for one command cannot generate. Generate command data from its
-  domain Schema and keep each original walk's ranges and count (0411, 0579).
+  domain Schema and keep each original walk's ranges and count.
 - Fixed pure examples use `vector:` with their reason, not `scenario:`. S1, X2, H1 and the
   scripted real-runner cases retain `scenario:` because they drive those outside resources.
   No example replaces a generated law. Keep all original examples and counts.
 - Set the shared seed once in package setup, and compare the first failing generated case when
   moving the older generator shape. No seed or hand `fc.assert` is added to a law.
-- Read each selected law and its cleanup before local execution (0594). The older blanket
+- Read each selected law and its cleanup before local execution. The older blanket
   statement that these files never signal is not execution clearance. Ordinary safe checks run
   directly; real process signals, launchd and real Electron run on eligible disposable CI.
   Keep real-resource isolation where needed and obtain required proof before first review.

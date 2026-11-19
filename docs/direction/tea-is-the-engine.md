@@ -1,5 +1,5 @@
 ---
-state: "decided 2026-11-02; amended in part 2026-11-18 by [0601](../../.decisions/0601-program-make-with-optional-pipes.md): a program decides in Effects run inside one tea Cmd, with tea underneath"
+state: "decided 2026-11-02; amended in part 2026-11-18 by [0018](../../.kalfa/decisions/0018-protocols-once-providers-apart.md): a program decides in Effects run inside one tea Cmd, with tea underneath"
 summary: "`next/`. Anything that replaces a tea machine is banned: no Effect `Workflow` for agent turns or anything else, no replay engine, no actor runtime that holds a machine's state. Effect stays as the engine under tea's Cmds, as services, and as ideas copied from cluster (dedup by request id). Cluster may come back later, with a written reason. From experiment 174."
 ---
 
@@ -7,7 +7,7 @@ summary: "`next/`. Anything that replaces a tea machine is banned: no Effect `Wo
 
 `next/`. Decided by the owner on 2026-11-02. From [experiment 174](../../experiments/174-effect-on-cloudflare.md).
 
-Its decided rules are in: [0254](../../.decisions/0254-tea-is-the-one-engine.md).
+Its decided rules are in: [0004](../../.kalfa/decisions/0004-tea-is-the-engine.md).
 
 ```ts
 // A sketch. An agent turn is a tea machine. It steps; Effect runs only inside its Cmds.

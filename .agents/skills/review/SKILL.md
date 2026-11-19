@@ -39,13 +39,11 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      Each blocker cites that source and shows the missed case.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided. Each
      call the builder or test writer took that the plan did not spell out is judged against the
-     notes, with your own percentage; a choice that should be a declared setting is a finding
-     ([0069](../../../.decisions/0069-choices-are-settings.md)).
+     notes, with your own percentage; a choice that should be a declared setting is a finding.
    - The data shape: name any fact this change loses forever (who, when on whose clock, what was
      seen, why something was refused).
    - "No rough first versions": no stub, dead button or "(not yet)".
-   - Existing tools first ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
-     [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)): each helper, function
+   - Existing tools first: each helper, function
      or tool the diff adds has its plan's `## Existing tools` line, and the line shows a real
      search, with what was found or why none fits. One with no line, a search that could not have
      found the one already in the repo, or a copy of one is sent back. `copies (advice)` in the
@@ -56,8 +54,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      [the names rule](../../../docs/direction/use-the-industrys-names.md): one word per idea, the
      glossary's word where it has one, and a plain gloss for an obscure one. A line whose source
      does not name the thing is a finding.
-   - Domain words are in the glossary ([domain-modeling skill](https://github.com/kamp-us/tea-fabrika/pull/1668),
-     [0617](../../../.decisions/0617-glossary-reset-to-a-map.md)). A domain word names a thing the
+   - Domain words are in the glossary ([domain-modeling skill](https://github.com/kamp-us/tea-fabrika/pull/1668)). A domain word names a thing the
      project is about, not a library or industry term the pull request's `## New names` cites.
      Every new domain word in the change (code names, plan text, examples) must be in its
      context's `GLOSSARY.md` with an `_Avoid_` line, or it is a finding. The plan lists these
@@ -65,7 +62,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      else a short everyday word. A context with no glossary yet gets the file in this pull request.
    - Names follow `AGENTS.md` for its version (`_tag`, no `xOf`, short everyday keys, no question
      words, "run" means an agent run in `next/`) and the context's `GLOSSARY.md`. Effect code follows
-     `node_modules/effect/AGENTS.md` and [0023](../../../.decisions/0023-next-follows-effects-code-style.md).
+     `node_modules/effect/AGENTS.md`.
      Readability and module shape count: say where the code is hard to read and why.
    - Every new law is a property test over generated inputs (fast-check, `@demlik/tea/pbt` or
      Effect's `Arbitrary`). A new law that is an example test with no generator is a defect. A
@@ -77,8 +74,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      check that each one fits, against the named spec, format, bug or run. Do not reopen each
      test's merits.
    - Each generator on a machine reads the state it is folding and picks the next move from what is
-     possible there. A hand-written list of cases is a defect
-     ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)).
+     possible there. A hand-written list of cases is a defect.
    - The tests report records a plant and its result for each new law. A law with no recorded plant
      run is not done. A committed plant test is a defect; a lint rule's own planted lines are not
      one. Plant a break yourself where a law looks weak, and in at least three laws you pick: in
@@ -94,10 +90,9 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - The docs rows the plan gives the lead (plan docs, glossary terms, follows rows): say which are
      owed and missing.
    - Shots on the pull request when the plan asks for them, at its layouts: the brief names the
-     comment that holds them. A shot committed only to show the pull request running is a defect
-     ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md)).
+     comment that holds them. A shot committed only to show the pull request running is a defect.
    - Each point the brief lists under "Look hardest at", answered one by one: holds or not, and why.
-     A quest has no mutation step ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)).
+     A quest has no mutation step.
 4. **Answer.** Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.
    n counts blocking classes. Each class lists every affected case. m counts the finding rows in
    this answer.
@@ -116,7 +111,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    End with exactly one answer: line, as the last line.
    It reads `answer: done <why>` when merge-ready, else `answer: send build <why>` (or `send tests`,
    `send plan`). The verdict is never the answer.
-   Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why, and
+   Decision says why, and
    [A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
    counts as proof. Other means it is wrong but blocks nothing by the rule in step 3, in this diff
    or beside it. Reading one function is not proof: run it, or show the two lines that disagree.
@@ -125,7 +120,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 ## Recheck
 
 The lead resumes you after a fix round, with a message that names the new head and the faults you
-named ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). This is not a new review of the
+named. This is not a new review of the
 whole diff.
 
 - Check the fix for the faults you named: read each line it changed and what calls it.

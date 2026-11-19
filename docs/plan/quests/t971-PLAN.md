@@ -1,10 +1,10 @@
 Approved by the lead agent, builds 0527 for ticket 971; body bd31f9db48db
 Plancheck-Version: 3
 
-# Plan: law-shape takes `type:` as a fifth label, on a body of type assertions only (decision 0527)
+# Plan: law-shape takes `type:` as a fifth label, on a body of type assertions only (an earlier decision)
 
 Today's lint tooling, the oxlint plugins folder, which reads `next/` and `.agents/` tests. It builds
-[0527](../../../.decisions/0527-type-laws-get-a-type-label.md) (owner, 2026-11-14, PR
+ (owner, 2026-11-14, PR
 https://github.com/kamp-us/tea-fabrika/pull/1233, merged). The PR stacks on
 https://github.com/kamp-us/tea-fabrika/pull/1199 and lands after it.
 
@@ -59,9 +59,9 @@ type Label = (typeof LABELS)[number];
 const CHECKS = new Set(["expectTypeOf", "assertType"]);
 const VITEST = new Set(["vitest", "@effect/vitest"]);
 
-const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${LABELS.map((l) => `${l}:`).join(", ")} and its reason (0093, 0527).`;
+const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a body that calls fc.assert, or a @demlik/tea/pbt runner) or an example whose title starts with ${LABELS.map((l) => `${l}:`).join(", ")} and its reason.`;
 const TYPE_MESSAGE =
-  "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels (0527).";
+  "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels.";
 
 /** The label a written title starts with, `"none"`, or `null` when the source does not say. */
 const labelOf = (title: Node | undefined): Label | "none" | null => {
@@ -178,8 +178,7 @@ The preamble imports `expectTypeOf` and `assertType` from `vitest`; `plain` is i
 `@effect/vitest` pass; `./helper.ts`, `fast-check`, `import type`, and a local
 `const expectTypeOf = () => ...` fire.
 
-Every plant is run once by the tests step and recorded in its report and run row, never committed
-(0093). A lint rule's own generated lines are its test inputs and stay. No host-only law: nothing
+Every plant is run once by the tests step and recorded in its report and run row, never committed. A lint rule's own generated lines are its test inputs and stay. No host-only law: nothing
 needs the real machine.
 
 ## The laws in `next/` that change
@@ -253,7 +252,7 @@ three in `runtime/`. No folder reaches zero, so no warn line goes, and none is a
 | `.oxlintrc.json` | tests | none | not changed: no warn line is added or removed (L5) |
 | `next/packages/libfabrika/src/Id.types.test.ts` | tests | none | not changed: cited for its module-scope `checkTypes` idiom |
 
-Decision 0527's own records (the `type (label)` glossary row and the label table row in
+an earlier decision's own records (the `type (label)` glossary row and the label table row in
 `docs/direction/five-steps-for-every-check.md`) landed with
 https://github.com/kamp-us/tea-fabrika/pull/1233.
 
@@ -331,5 +330,5 @@ None.
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-14-plancheck-refuses-type-label","date":"2026-11-14","by":"plan","model":"claude-opus-5-5","rule":"doc_drift","location":{"path":".agents/skills/plan/scripts/plancheck.sh","line":153},"says":"plancheck.sh's laws-table generator check accepts `vector:`, `format:`, `pinned:` and `scenario:` with a reason but not `type:` with one, and its head comment says fixed inputs need one of the four labels, while 0527 made `type:` a fifth label and law-shape will accept it.","proof":"`git show origin/main:.agents/skills/plan/scripts/plancheck.sh | sed -n 153p` prints `match = re.fullmatch(r\"(vector|format|pinned|scenario):\\s*(.+)\", text)`, and line 12 says `Fixed inputs need one of the four labels`; .decisions/0527-type-laws-get-a-type-label.md says the label is `type:` with its reason. A plan row whose generator cell is `type: <reason>` fails as `invalid generator`; only the bare word `type` passes.","cost":"A plan that writes a type law the way its test title will read is refused, and the writer must learn that only the bare `type` cell passes.","head":"b0b093defc22c3acd5acf7994db59434f9a60695","ticket":null,"pr":null}
+{"_tag":"finding","id":"2026-11-14-plancheck-refuses-type-label","date":"2026-11-14","by":"plan","model":"claude-opus-5-5","rule":"doc_drift","location":{"path":".agents/skills/plan/scripts/plancheck.sh","line":153},"says":"plancheck.sh's laws-table generator check accepts `vector:`, `format:`, `pinned:` and `scenario:` with a reason but not `type:` with one, and its head comment says fixed inputs need one of the four labels, while 0527 made `type:` a fifth label and law-shape will accept it.","proof":"`git show origin/main:.agents/skills/plan/scripts/plancheck.sh | sed -n 153p` prints `match = re.fullmatch(r\"(vector|format|pinned|scenario):\\s*(.+)\", text)`, and line 12 says `Fixed inputs need one of the four labels`; type laws get a type label says the label is `type:` with its reason. A plan row whose generator cell is `type: <reason>` fails as `invalid generator`; only the bare word `type` passes.","cost":"A plan that writes a type law the way its test title will read is refused, and the writer must learn that only the bare `type` cell passes.","head":"b0b093defc22c3acd5acf7994db59434f9a60695","ticket":null,"pr":null}
 ```

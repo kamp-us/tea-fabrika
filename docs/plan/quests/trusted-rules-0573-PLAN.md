@@ -1,14 +1,11 @@
 Approved by the lead agent, builds 0573, 0575, 0524, 0168; body b8d3c1248c16
 Plancheck-Version: 3
 
-# Plan: our lint rules give way to trusted ones (0573), in next/ and our tooling
+# Plan: our lint rules give way to trusted ones, in next/ and our tooling
 
 This is `next/` and our tooling (`.agents/`, `oxlint-plugins/`, `.github/ci/`, the root `scripts/`).
-Today's app is not changed. It is a named job of the sev0 the owner called on 2026-11-15. It builds
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md), as amended by
-[0575](../../../.decisions/0575-deterministic-keys-is-the-service-id-form.md), with
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) and
-[0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md).
+Today's app is not changed. It is a named job of the sev0 the owner called on 2026-11-15. It builds, as amended by, with
+ and.
 
 ```jsonc
 // The whole idea, as a sketch: one pull request turns the trusted rule on at zero where ours ran,
@@ -129,9 +126,9 @@ scratchpad, outside the repo, and were never committed. Round 2 read `origin/mai
     `.agents/**`, `.github/**`, `oxlint-plugins/**` Reflect block, and the `next/` Reflect block.
     Pull request 1494 (open, draft, `1e54b6e73`) adds `runtime/**` to one advice block and an 8th
     override for `next/packages/libfabrika/src/client/**` with the Reflect entries. Decision
-    [0592](../../../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md) adds a
+ adds a
     9th, for `next/packages/libfabrika/**`, with `process.stdout.write` and `process.stderr.write`;
-    its build lands with the mock sweep's one pull request (0589) and is not on main yet.
+    its build lands with the mock sweep's one pull request and is not on main yet.
 
 ## How others do it
 
@@ -141,7 +138,7 @@ scratchpad, outside the repo, and were never committed. Round 2 read `origin/mai
 - **Effect's own repo** relies on its checker and the type check, with no lint rule for v3 forms.
   It has no untyped scripts, so it has no gap to fill. Its `tsconfig.base.json` was read for 0565 at
   `d5f8bdf4f`; not read again here.
-- **This repo's own precedent** is the Reflect ban (0554): oxlint's `no-restricted-properties`, one
+- **This repo's own precedent** is the Reflect ban: oxlint's `no-restricted-properties`, one
   entry set in every override that holds the rule, a plant that runs in every folder a block lists,
   and documented misses written as `false` plant lines. Pull request 1 copies that shape for
   `Data.TaggedError`.
@@ -254,7 +251,7 @@ that lacks it matches.
   checker never run, and `interface I extends Context.Tag<A, B> {}` is caught by ours alone. It is
   the same wait as `no-implicit-effect-concurrency`.
 - **What must reach zero first:** the 68 type errors in 11 of those files, so each joins a project
-  at zero (0524).
+  at zero.
 - **Then its own pull request** names `outdatedApi` as `error` in `tsconfig.base.json`, which 0573
   ties to this swap; adds `Context.Tag`, `Context.GenericTag` and `Effect.Service` to the
   `no-restricted-properties` entries and `typescript/no-restricted-types` on `Context.Tag` and
@@ -275,7 +272,7 @@ Anti-slop is on main since pull request 1373. Both rules hold only in the folder
   `// oxlint-disable-next-line anti-slop-effect/no-manual-tagged-type -- <why>` reason, as `AGENTS.md`
   allows for right code where the rule does not fit. That is 0562's cleanup's call, not this plan's.
 - **`.agents/skills/lead/scripts/chain.ts:1345`** is waived for ours by `agents-ledger.json`; theirs
-  has no ledger entry and none may be added (0524), so the cleanup fixes the line.
+  has no ledger entry and none may be added, so the cleanup fixes the line.
 - **Then its pull request** turns nothing on (the blocks already hold) and deletes
   `no-hand-tag.ts`, its plants in `next/apps/fabrika/src/exam/`, its entry in `plants.test.ts`'s
   list, its `.oxlintrc.json` lines (the `next/**` block, its `.agents/` copy, and three test
@@ -320,7 +317,7 @@ Anti-slop is on main since pull request 1373. Both rules hold only in the folder
 - `no-redacted-value`, `no-secret-env`, `no-expect-in-if`, `no-wall-clock`, `no-clock-in-view`,
   `no-node-imports`, `no-cause-squash` and `no-effect-run-outside-edge` are each their own later
   pull request, by 0573. The "stay" lists are left alone: no rule there is turned off, and nothing
-  is listed to reach zero (0524).
+  is listed to reach zero.
 
 ## Files
 
@@ -342,7 +339,7 @@ tests step writes and deletes them. The build writes the prose that names the ru
 | oxlint-plugins/padding-superset.test.ts | tests | tests | new: L7. About 110 lines |
 | agents-ledger.json | tests | tests | the 8 `no-node-filesystem` entries pruned by a whole `pnpm lint` run, none added |
 | vitest.shards.json | tests | tests | drop the `one-id-module.test.ts` row; add rows for the two new tests as `shard-rows.ts` asks |
-| oxlint-plugins/README.md | tests | tests | drop the `one-id-module` and `no-node-filesystem` paragraphs and their mention in the `.agents/` paragraph, and the `no-data-taggederror` row; a section "Rules that gave way to trusted ones (0573)" with the table of the three swaps, the counts above and the documented misses, and one line that `no-context-tag` waits for ticket 486; and a line on L7 under `padding-line-between-statements` |
+| oxlint-plugins/README.md | tests | tests | drop the `one-id-module` and `no-node-filesystem` paragraphs and their mention in the `.agents/` paragraph, and the `no-data-taggederror` row; a section "Rules that gave way to trusted ones" with the table of the three swaps, the counts above and the documented misses, and one line that `no-context-tag` waits for ticket 486; and a line on L7 under `padding-line-between-statements` |
 | .agents/skills/lead/scripts/chain.ts | build | 1 | line 113's disable comment names only `fabrika/no-node-imports` |
 | next/AGENTS.md | build | 1 | the row at line 40 names only `fabrika/no-node-imports` |
 | .patterns/effect-errors-keep-their-cause.md | build | docs | line 142 names `preferSchemaTaggedError` and `no-restricted-properties` |
@@ -375,7 +372,7 @@ lines 86 and 219, and stays: that rule stays.
 - **`chain.ts`, `next/AGENTS.md` and the pattern doc go to the build. 85%.** They are prose or lead
   tooling, not the exam.
 - **None of this is a setting. 95%.** Each choice is a lint or checker level that holds code, not a
-  value a person sets in `fabrika.toml` (0069).
+  value a person sets in `fabrika.toml`.
 
 ## What this cannot tell us
 

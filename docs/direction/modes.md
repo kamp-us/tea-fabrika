@@ -14,7 +14,7 @@ refuses a mode with no way out (WCAG 2.1.2); and a command's field is called `mo
 as the program's `mode`. The shape, which the owner shaped and now approved: a program gets one
 new field, `commands`, and one `mode` read from state, and no mode is `null`.
 
-Its decided rules are in: [0267](../../.decisions/0267-commands-and-one-mode-field.md), [0268](../../.decisions/0268-a-mode-is-the-last-tool.md), [0269](../../.decisions/0269-a-mode-is-shown-in-words.md), [0270](../../.decisions/0270-escape-always-leaves-a-mode.md), [0271](../../.decisions/0271-one-mode-per-program.md), [0272](../../.decisions/0272-a-press-finds-its-command.md), [0273](../../.decisions/0273-mode-keys-live-in-their-section.md).
+Its decided rules are in:.
 
 Keys renamed 2026-11-03 (short words keep one meaning): the info Msg's `on` became `active`, the
 word Zed's key binding docs use for a context that holds.
@@ -55,8 +55,7 @@ escape   global, mode "info"        did {does: "desk.exit", ...}; info off; mode
 
 - **`next/`:** all of it. Tier 1 has one real mode, the notes tile's reading and editing
   ([Tier 1's detail](../plan/tier-1-detail.md)), and it is the first test. The desk, its info mode
-  and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11
-  ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): the notes tile left Tier 1
+  and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11: the notes tile left Tier 1
   with notes, Tier 2's first real app, so this first test moves to Tier 2; Tier 1's program is the
   checklist.*
 - **Today's version (`apps/fabrika`):** not changed by this note. Its info mode is the running
@@ -299,7 +298,7 @@ desk.exit = ["escape", "q"]      # in every mode exit works in
 - **B, why.** Shorter, and one row moves a command everywhere. **B, cost:** it gives up K8's reason,
   and a reader cannot see a mode's keys in one place.
 - **`enter` goes away.** With `commands`, entering is a command like any other, so it is a flat row,
-  `terminal.copy = "<prefix>["`, not `enter` in the section. A mode can then have several ways in,
+  `terminal.copy = "<prefix>"`, not `enter` in the section. A mode can then have several ways in,
   as tmux's copy mode does. 70%.
 
 ## Can the desk have a mode of its own?
@@ -307,7 +306,7 @@ desk.exit = ["escape", "q"]      # in every mode exit works in
 **Yes, lean 75%, and info mode is the test.**
 
 - **What it needs:** the desk as a program (Tier 2), a window-side machine that holds its mode
-  (Tier 1 already keeps focus in the window's machine; *2026-11-13: that stopgap ended with [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md), and focus is the desk process's, per [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md) and [0277](../../.decisions/0277-size-belongs-to-the-viewer.md)*), and step 3 above, so a window-wide mode
+  (Tier 1 already keeps focus in the window's machine; *2026-11-13: that stopgap ended with [0159, and focus is the desk process's, per [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md)*), and step 3 above, so a window-wide mode
   wins over the focused tile.
 - **Resize** fits i3's binding mode: `h j k l` and arrows move an edge, Escape and Enter leave. In
   the file it is `[mode.desk.resize.keys]`. While it is on, the prefix still works.

@@ -13,7 +13,7 @@ with all 135 of its checks on, once per `next/` project, in a scratch worktree t
 alone. Nothing in the real checkout changed. It feeds the note
 [Effect code guidelines](../docs/direction/effect-code-guidelines.md). No Design canvas: this study
 is about code, so the guidelines skill's design steps (step 5's looks and shots, step 9's canvas and
-page) do not apply ([0114](../.decisions/0114-effects-team-as-the-builder.md)). Steps 1 to 4, 6, 7
+page) do not apply. Steps 1 to 4, 6, 7
 and 8 ran. Dollars: no paid API call. The five agents' tokens were not recorded, so their list
 price is a hole.
 
@@ -62,19 +62,19 @@ Decided, each with its source, and never asked again here:
 
 | Point | Source |
 |---|---|
-| `next/` follows Effect's code style and doc comments; a kept difference names its reason | [0023](../.decisions/0023-next-follows-effects-code-style.md) |
-| Format, `Module.of`, plural service names, test tooling read through its module | [0029](../.decisions/0029-format-and-names-follow-effect.md), [0039](../.decisions/0039-keep-semicolons-and-es5-commas.md), [0094](../.decisions/0094-lines-are-100-columns.md) |
-| Lead tooling follows `next/`'s rules | [0033](../.decisions/0033-agents-code-follows-next-rules.md) |
-| Every implicit state machine is made explicit, as a tea machine, one per file | [0037](../.decisions/0037-implicit-state-machines-made-explicit.md), [0046](../.decisions/0046-one-tea-machine-per-file.md) |
-| Try an existing tool before writing a check | [0040](../.decisions/0040-existing-tools-before-hand-written.md) |
-| A ledger step is a plain synchronous function inside the transaction | [0050](../.decisions/0050-a-ledger-step-is-a-plain-function.md) |
-| Each service fails with its own error | [0055](../.decisions/0055-errors-named-by-their-service.md) |
-| A resource is acquired in a scope | [0061](../.decisions/0061-resources-are-acquired-in-a-scope.md) |
-| Tests keep the layers; a database suite is run by the module that owns the driver | [0062](../.decisions/0062-test-files-keep-the-floors.md) |
-| A folder is a module; its rank is a layer | [0091](../.decisions/0091-modules-and-layers.md) |
-| A service file holds only its contract; layers are sibling files; no static layer; platform code in its folder | [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) |
-| A Durable Object works inside a wake and sleeps | [0105](../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md) |
-| Effect's team is the builder we measure `next/` against | [0114](../.decisions/0114-effects-team-as-the-builder.md), accepted 2026-11-11, not on main yet |
+| `next/` follows Effect's code style and doc comments; a kept difference names its reason | |
+| Format, `Module.of`, plural service names, test tooling read through its module | |
+| Lead tooling follows `next/`'s rules | |
+| Every implicit state machine is made explicit, as a tea machine, one per file | |
+| Try an existing tool before writing a check | |
+| A ledger step is a plain synchronous function inside the transaction | [0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md) |
+| Each service fails with its own error | |
+| A resource is acquired in a scope | |
+| Tests keep the layers; a database suite is run by the module that owns the driver | |
+| A folder is a module; its rank is a layer | |
+| A service file holds only its contract; layers are sibling files; no static layer; platform code in its folder | |
+| A Durable Object works inside a wake and sleeps | [0022](../.kalfa/decisions/0022-objects-never-stay-awake.md) |
+| Effect's team is the builder we measure `next/` against |, accepted 2026-11-11, not on main yet |
 | Every exported function that returns an Effect is a named `Effect.fn` | [the `Effect.fn` note](../docs/direction/effect-fn-for-traced-functions.md) |
 | No Promises outside a marked edge | [no Promises](../docs/direction/no-promises.md) |
 | Effect's checker runs inside `tsc`; 65 of its checks block today | `tsconfig.base.json`'s `@effect/language-service` block |
@@ -405,7 +405,7 @@ are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as ab
   `flatMapConditionalToFilterOrFail` (0/2), `deterministicKeys` (40/2, 5 of 42 read). 75% sure.
 - **Leave off, 0 or 1 right of 5:** `preferEffectArray` (358/1,640), `unstableApiUsage` (112/1,314),
   `preferEffectString`, `preferEffectRecord`, `newSchemaClass`, `missingPipeableSignature`,
-  `strictBooleanExpressions`, `schemaSync` (0050), `schemaClassMissingBrand`, `preferSchemaOverJson`,
+  `strictBooleanExpressions`, `schemaSync` (0010), `schemaClassMissingBrand`, `preferSchemaOverJson`,
   `nodeBuiltinImport`, and the test-only Promise checks.
 - **Our rules against theirs:** replace `fabrika/no-data-taggederror` with `preferSchemaTaggedError`
   (90%) and `fabrika/no-raw-try-catch` with `tryCatchInEffectGen` (70%); `fabrika/no-context-tag`

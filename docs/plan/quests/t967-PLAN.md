@@ -98,7 +98,7 @@ What does not carry over from the per-file runs, on purpose:
 - **No bail.** A leg runs all its files, as every vitest leg does. That costs at most the rest of one leg, about 5 min, and a red run shows every failure.
 - **File order** is Vitest's own sort, not alphabetical. No file depends on another (above).
 
-Is any of this a setting (0069)? No. No person running fabrika picks a CI leg count or a test limit. It is test config, like `testTimeout` in `vitest.config.ts`.
+Is any of this a setting? No. No person running fabrika picks a CI leg count or a test limit. It is test config, like `testTimeout` in `vitest.config.ts`.
 
 ### 2. The runner passes its arguments through (`next/apps/fabrika/e2e.ts`)
 
@@ -281,7 +281,7 @@ So N = 2 today. The worst run seen was job 132468626169 (PR 1208's queue group).
 
 Nearly all of this is the exam's: `.github/**`, the runner, the config and the exam list. That matches 1104, where the build only filled rows. The build's job here is the 8 rows and their header line, transcribed from the three job logs.
 
-**No list lets broken code pass (0524).**
+**No list lets broken code pass.**
 
 - A row only places a file. A missing row never passes anything.
 - The new `exam-paths.json` row protects the config. It waives nothing.
@@ -332,7 +332,7 @@ No new word, so no glossary row. No decision file: this builds 0175, 1104's shar
 
 The lead answered both, overnight, as the lead's leans for the owner to read.
 
-1. **Vitest `--shard` through a root end-to-end config, not a CI script.** It reuses 1104's sequencer, rows, fallback and JSON advice unchanged, and decision 0040 says to try the existing tool first. The cost is one Vitest per leg in place of one per file, Vitest's file order, and no stop at the first failure. About 70% sure; the PR's first ready run settles it.
+1. **Vitest `--shard` through a root end-to-end config, not a CI script.** It reuses 1104's sequencer, rows, fallback and JSON advice unchanged, and an earlier decision says to try the existing tool first. The cost is one Vitest per leg in place of one per file, Vitest's file order, and no stop at the first failure. About 70% sure; the PR's first ready run settles it.
 2. **Leg count: the fewest legs that keep every leg's job under half the limit.** The plan's first draft leaned toward the fastest split. The lead picked fewest runners, because the free plan's 20 jobs at once is the measured bottleneck: a third e2e leg would hold one more runner on every run to save about 40 s. E4 and the trace above follow this rule. About 70% sure.
 
 ## Open questions

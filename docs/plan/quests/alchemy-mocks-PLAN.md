@@ -6,13 +6,13 @@ Plancheck-Version: 3
 All of this is in `next/`. Today's version is not touched. It finishes the part of the mock sweep
 (ticket 1067, plans in pull request 1491 on `fabrikalfa/mock-plans`) that the sweep left out: the
 `vi.mock` calls that stand in for Cloudflare's platform module or for Alchemy, in three folders. It
-builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock` or `vi.doMock`: a
+builds (no `vi.mock` or `vi.doMock`: a
 stand-in comes from the code's own design) and
-[0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) (the platform only through
+[0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) (the platform only through
 Alchemy, amended by 0050 and 0054), follows
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass,
+ (no list lets broken code pass,
 so each folder's lock lands whole) and
-[0054](../../../.decisions/0054-read-upstream-before-patching-it.md) (Alchemy's installed version
+ (Alchemy's installed version
 was read before any change to it is proposed). It resolves the finding
 `2026-11-15-cloudflare-workers-mocks-have-no-slice` (in the cloudflare plan's "Findings" on
 `fabrikalfa/mock-plans`).
@@ -36,7 +36,7 @@ was read before any change to it is proposed). It resolves the finding
   `Cloudflare.WorkerLoader`, but the brain still receives `env.LOADER` as a raw binding until
   0042's port moves it onto Alchemy's Worker. If Alchemy's service cannot be made from that binding
   today, the tests step first reads the installed package's decisions, patterns or docs and source
-  for its own answer (0054). A proved gap follows 0042: patch it locally and file the upstream
+  for its own answer. A proved gap follows 0042: patch it locally and file the upstream
   issue with its repro the same day. Building Alchemy's loader from this binding is not one of
   0042's six unreported gaps. Only if a patch cannot fit in reasonable size may a direct use stay,
   on one marked edge line with the reason and issue link. A needed patch or edge returns to the
@@ -168,7 +168,7 @@ export const programBox = (Base: EntrypointBase, declared: unknown, build: strin
 };
 ```
 
-`EntrypointBase` is a structural type of our own, so `box.ts` names no platform type (0042). The
+`EntrypointBase` is a structural type of our own, so `box.ts` names no platform type (0019). The
 platform's class has a two-argument constructor, and a class with none (the laws' `Stub.Base`) fits
 it too. It is not taken from `Parameters<typeof makeWorkerBridge>[0]`, which is a union with
 `typeof DurableObject` that a class cannot extend and that `Stub.Base` does not fit. Call, 75%; the
@@ -249,9 +249,9 @@ export const layers = (seen: Recorded) => ({ providers: Layer.mergeAll(worker(se
 The member names (`reconcile`, `delete`) and how the plugin is read from the context are as read
 in `src/Provider.ts`, not compiled; the tests step reads `ProviderServiceInput` (`src/Provider.ts:426`)
 and the control plugin's own module first. The recorded props are read with `Recorder` where
-`Provider(type)` fits it (0579), else a `Ref` the law owns. Call, 75%.
+`Provider(type)` fits it, else a `Ref` the law owns. Call, 75%.
 
-**Is this a setting (0069)?** No. `StackLayers` picks no value a person running fabrika chooses:
+**Is this a setting?** No. `StackLayers` picks no value a person running fabrika chooses:
 it is the code's seam to Alchemy, as `RuntimeLifecycle` is Alchemy's own. `Stub.Base` and
 `EntrypointBase` are types and test tooling.
 
@@ -287,7 +287,7 @@ generic, so a law that stubs Alchemy's stub meets the same typing problem. The g
 in the live layer and out of the law.
 
 ```ts
-// next/packages/libfabrika/src/cloudflare/Isolates.ts, a sketch: the contract only (0095).
+// next/packages/libfabrika/src/cloudflare/Isolates.ts, a sketch: the contract only.
 /** One program isolate's RPC, the calls a brain makes on it. Monomorphic: no type parameter. */
 export class Isolates extends Context.Service<Isolates, {
   readonly open: (key: string, code: () => IsolateCode) => Effect.Effect<IsolateCalls, ProgramDown>;
@@ -299,7 +299,7 @@ export const layer = (loader: Cloudflare.WorkerLoader) => Layer.succeed(Isolates
   open: (key, code) => loader.get(key, code).pipe(Effect.map((stub) => stub.getEntrypoint<IsolateCalls>())),
 });
 
-// the law: a test layer of the monomorphic contract, recorded with Recorder (0579). No spy, no cast.
+// the law: a test layer of the monomorphic contract, recorded with Recorder. No spy, no cast.
 const isolates = Recorder.layer(Isolates, { open: (_key, _code) => Effect.succeed(rpc) });
 // `rpc` is a plain IsolateCalls value; Recorder.calls(Isolates, "open") gives [key, config] per call.
 ```
@@ -344,7 +344,7 @@ plan counts them. With them moved, `index.ts` names no raw platform type.
 | W1 (slice 4). Law A5 keeps every check with no spy: the loader is asked for `<hash>/<process>` by the whole qualified name, with the recorded bytes and hash, an empty env and a null outbound, and an unknown name fails typed `no_program`; `Isolates.open` is recorded through `Recorder`, and no cast or spy is in the file | test | Effect Arbitrary: LoaderInput | the recorded `open` calls and the typed failure, with the law typed by the monomorphic `Isolates` contract, so no generic reaches the law | (a) `workerLoader` answers the bare short name: the `no_program` check is red; (b) `workerLoader` loads with `env: { CODE: source }`: the recorded config check is red; (c) `workerLoader` calls `open` twice for one load: `Recorder.calls` has two entries, red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | M11 (cloudflare), M1 (node/dev), A6 and A8 (app src). Each folder's `vi` lock, as its own plan writes it, lands whole the day the folder is at zero | lint | lint | the five-method block of `vitest/no-restricted-vi-methods` for the folder's glob, with node's `VI_METHODS` plants run in its paths (node's M1, ruling 2 of 2026-11-15); A8: `pnpm lint` passes with the lock an error and no disable line names it | each plan's own plant: drop `mock` from the block and the planted `vi.mock("x")` line in the folder is taken, red; put back one `vi.mock("cloudflare:workers")` and `pnpm lint` exits 1 | oxlint-plugins/plants.test.ts |
 
-- **Generated inputs (0411, 0579).** C1, S1 and W1 use `it.effect.prop` from the test package,
+- **Generated inputs.** C1, S1 and W1 use `it.effect.prop` from the test package,
   with Schemas as inputs. `ProgramBoxInput` is the law's Schema for a program name, state version
   and list of cmd types, keeping the existing generator's bounds and cases, with 6 runs fast and
   20 full. `StackSettingInput` is the law's Schema for an integer length from 1600 through 1800
@@ -354,17 +354,17 @@ plan counts them. With them moved, `index.ts` names no raw platform type.
   does not narrow a bound to make it pass. None of these inputs needs a fast-check exception.
 - **Lint, type or test?** C1 to C4, S1 and S2 are tests: they hold what code does. The locks are
   lint. That `box.ts` names no platform module is held by C1's plant (a) for now; a lint rule for it
-  is ticket 506's (0042), and this plan does not take it.
+  is ticket 506's (0019), and this plan does not take it.
 - **What the mocks checked, kept.** A `cloudflare:workers` mock checked nothing: it let `box.ts` load
   in Node. What it relied on, that the box reads nothing from its base, is now C1's. What it hid,
   that the real entry extends the real class, is C2 and C3. The Alchemy mocks checked the props the
   stack hands Cloudflare (S1) and that `startDev` copes with a deploy that starts a worker and its
   plugin (S2); both keep every check they had.
-- **Host-only and real-resource laws.** None is host-only (0178): nothing here needs launchd, the
+- **Host-only and real-resource laws.** None is host-only: nothing here needs launchd, the
   real Electron app or the owner's Mac. C2, C3, S1 and S2 are in `.integration.` files that exist
   today; their files keep the name. C3 needs a real worker, so it runs on Alchemy's local runtime
   in a cloud box, which the guard allows since PR 1508. S1 and S2 use no real resource after this
-  plan, but their files hold other real-resource laws, so they stay `.integration.` (0536, 0581).
+  plan, but their files hold other real-resource laws, so they stay `.integration.`.
   No new `.integration.` law is added.
 
 ## Files
@@ -449,7 +449,7 @@ share files with, so no folder's lock lands with a gap:
    the day its folder is at zero, and runs the plants; a review reads it. The cloudflare folder and
    node/dev are at zero after slice 1 and their own sweep slices. The app folder is at zero only
    after slices 2 and 4 and the two PR 1366 hits already assigned to app-src slice 5. No block lands
-   for a folder that is not at zero, and no block lists files (0524).
+   for a folder that is not at zero, and no block lists files.
 
 PR 1366 merged on 2026-11-16, so nothing here waits on it.
 

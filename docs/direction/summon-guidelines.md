@@ -483,7 +483,7 @@ not something an agent owns. This walks back parts of T2 to T5; each walked-back
 and marked, so the old meaning stays readable. These hold for both versions; what today's version
 can build is under R7.
 
-**Amended 2026-11-13** by [0158](../../.decisions/0158-no-dms-only-rooms.md): fabrika has no DMs.
+**Amended 2026-11-13** by [0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md): fabrika has no DMs.
 The word goes. The room of two stays, readable like any room. A line below that says DM is kept as
 it was decided, and now means the room of two with that agent.
 
@@ -508,7 +508,7 @@ tsh$
 - **Your DM.** Your default talk with an agent is a DM: a room with two members, you and that agent.
   `@scout <text>` typed outside any room still talks to scout, in your DM with it.
   **The word is walked back 2026-11-13**
-  ([0158](../../.decisions/0158-no-dms-only-rooms.md)): fabrika has no DMs. The room of two stays,
+  ([0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md)): fabrika has no DMs. The room of two stays,
   and what it is called on screen is not decided.
 - **Walks back.** T2's address `@<agent>[/<person>][#<thread>]`, `@scout#bug-17` and the default
   thread `scout#<person>`. A thread no longer belongs to an agent. The `@` line's own rule stays: the
@@ -653,7 +653,7 @@ record.
   channel, and the old glossary (git history at 52aebb8) already used "channel" loosely for a transport (its ephemeral lane row).
   "Room" covers both the named place and the DM with one word. Lean, 80%.
 - **`DM`** is Slack's, Discord's and Matrix's word for a room with two members.
-  **Walked back 2026-11-13** ([0158](../../.decisions/0158-no-dms-only-rooms.md)): fabrika does not
+  **Walked back 2026-11-13** ([0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md)): fabrika does not
   use the word. In those three a DM is read by its members only, and no room here is private.
 - **`mention`** is the word Slack, Discord, Matrix and Linear all use for `@name` in a message.
 - **The old glossary** (git history at 52aebb8) got rows for `room` and `DM`, and its `thread` row said what it was not: a

@@ -105,10 +105,9 @@ does not. A wrapper written once is the one place to fix.
 - No shipped check looks for a repeated wrapper shape. Review holds the rest.
 
 ## Decision
-
-[0061](../.decisions/0061-resources-are-acquired-in-a-scope.md): a raw handle from the platform is
+: a raw handle from the platform is
 wrapped once, at the edge; [no Promises](../docs/direction/no-promises.md);
-[0050](../.decisions/0050-a-ledger-step-is-a-plain-function.md) for why the SQLite edge is
+[0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md) for why the SQLite edge is
 synchronous.
 
 > Derived from `effect@4.1.2` and `@effect/platform-node-shared@4.1.2`; re-verify on pin bump.

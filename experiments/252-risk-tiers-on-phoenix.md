@@ -10,8 +10,7 @@ requests go through an agent pipeline (today's fabrika) with a review gate. **No
 this repo's own code, today's or `next/`.** It is read-only data work: `gh` reads, a shallow clone and
 three Python scripts. No model, no key, no agent ran, so the cost is $0 at any list price. Nothing was
 posted to any GitHub repo. The scripts and raw pulls sit under `runs/risk-tiers/` on the owner's
-machine, which git ignores; they are not on main or on any branch
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+machine, which git ignores; they are not on main or on any branch.
 
 **The answer: no, not on phoenix.** The cleanest outcome is a fix pull request merged within 7 days
 that touches the same files and links the same issue or the pull request. By that outcome the

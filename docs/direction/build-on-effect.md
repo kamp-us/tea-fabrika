@@ -7,7 +7,7 @@ summary: "Effect's own modules first; Node only at a thin edge, named in a comme
 
 Decided 2026-10-17. Type inference: 2026-10-13.
 
-Its decided rules are in: [0250](../../.decisions/0250-effect-modules-first-node-at-an-edge.md), [0251](../../.decisions/0251-types-are-inferred-except-contracts.md), [0254](../../.decisions/0254-tea-is-the-one-engine.md).
+Its decided rules are in:, [0004](../../.kalfa/decisions/0004-tea-is-the-engine.md).
 
 ```ts
 // Yes: Effect's platform, with Node at one named edge.

@@ -7,8 +7,8 @@ summary: "fabrika builds public repositories too, so every secret is an Effect `
 
 Decided 2026-10-26 by the owner.
 
-Its decided rules are in: [0320](../../.decisions/0320-every-secret-is-an-effect-redacted.md),
-[0321](../../.decisions/0321-a-state-holds-a-secrets-name.md).
+Its decided rules are in:,
+[0016](../../.kalfa/decisions/0016-state-holds-secret-names.md).
 
 ```ts
 import {Config, Effect, Redacted} from "effect";

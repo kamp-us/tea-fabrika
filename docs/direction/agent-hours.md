@@ -11,16 +11,14 @@ confidence. A ticket's size is an `estimate` in agent hours, written by the plan
 build, and the work's real size is `spent`, folded from the ticket's own run facts and never
 typed.
 
-Its decided rules are in: [0388](../../.decisions/0388-an-agent-hour-is-wall-clock.md),
-[0389](../../.decisions/0389-an-estimate-is-on-a-doubling-scale.md),
-[0390](../../.decisions/0390-a-run-records-ticket-and-pr-apart.md).
+Its decided rules are in:,,.
 
 The five open questions, as answered on the same day:
 
 | Question | Answer | Sure | Where |
 |---|---|---|---|
 | Wall clock with waits, or active time? | Wall clock with waits for now, and record active time beside it | 70% | [H3](#h3-wall-clock-waits-included-for-now) |
-| Cap the scale at 8? | Yes: cap at 8 agent hours, split anything larger (*changed: no split, [0139](../../.decisions/0139-no-split-at-8-agent-hours.md)*) | 75% | [H4](#h4-an-estimate-is-a-step-on-a-doubling-scale-and-too-big-means-split) |
+| Cap the scale at 8? | Yes: cap at 8 agent hours, split anything larger (*changed: no split*) | 75% | [H4](#h4-an-estimate-is-a-step-on-a-doubling-scale-and-too-big-means-split) |
 | Where does the rate come from? | The last ten merged tickets, one rate per model | 70% | [H7](#h7-the-rate-comes-from-what-merged-per-model) |
 | Restate Tier 1's size? | Yes: Tier 1 and the self-fix plan, at the measured rate | 80% | [Where this differs](#where-this-differs-from-settled-notes) |
 | Split the field log's `lane`? | Yes: `ticket` and `pr`, two fields | 85% | [What a run records](#what-a-run-records) |
@@ -35,7 +33,7 @@ This note does.
 // Ticket facts there use `type`; next/'s tracker takes the same shape with `_tag`.
 import {Schema} from "effect";
 
-/** Agent hours on a doubling scale, Linear's exponential shape. 8 is the top step; nothing splits at it (0139). */
+/** Agent hours on a doubling scale, Linear's exponential shape. 8 is the top step; nothing splits at it. */
 const Hours = Schema.Literals([0.25, 0.5, 1, 2, 4, 8]);
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
@@ -186,7 +184,7 @@ The rule is [use the industry's names](./use-the-industrys-names.md). The candid
 
 **Decided 2026-11-01, 75%: the cap is 8 agent hours, and anything larger splits.**
 
-*Changed 2026-11-11 (owner, [0139](../../.decisions/0139-no-split-at-8-agent-hours.md)): nothing
+*Changed 2026-11-11 (owner): nothing
 splits at 8. A plan cuts work by what lands whole, and 8 is only the scale's top step.*
 
 - **What it means.** `0.25`, `0.5`, `1`, `2`, `4` or `8` agent hours, nothing between. Over 8, the

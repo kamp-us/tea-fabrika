@@ -1,4 +1,4 @@
-Approved by the lead agent, builds slice C of the two-flakes plan (0036), approved by the lead (fabrikaa-merger, 2026-11-18); body f9bf1ea7ae5b
+Approved by the lead agent, builds slice C of the two-flakes plan, approved by the lead (fabrikaa-merger, 2026-11-18); body f9bf1ea7ae5b
 Plancheck-Version: 3
 
 # Plan: a knock that lands after a grant is woken by `granted` news, and L15 names the tab it waits on, in next/ (ticket 1163, slice C of the two-flakes plan)
@@ -66,10 +66,8 @@ knock may send `granted` news before its own reply, and no client change is need
 
 What was read, so a reader can check each claim.
 
-- Decisions: [0036](../../../.decisions/0036-a-flaky-test-is-fixed.md),
-  [0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md),
-  [0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) and
-  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md).
+- Decisions:,,
+ and.
 - The approved two-flakes plan, `0001-two-flakes-plan.md` at commit 7937a668 on the mail branch,
   its Flake 3 section, laws W1 to W3 and the Size section's slice C.
 - Code on main at 84f51f80: libfabrika's `gateway/Gateway.ts` (`initializeChecked`, `knock`, the
@@ -89,7 +87,7 @@ then look" (`gen:call` monitors before it sends). Standard texts, not fetched in
 ## Fix at the cause
 
 The fix builds the decided behavior "the person's grant brings both tabs online", which L14 and
-L15 already state. No timeout grows, nothing is retried, nothing is skipped (0036).
+L15 already state. No timeout grows, nothing is retried, nothing is skipped.
 
 1. The grant path's drain (lines 1066-1086) moves into one `release(members, at)` function, with
    no change in what it does.
@@ -118,8 +116,8 @@ Is this a setting? No. It is the order of two writes and two reads, with no valu
 
 Lint, type or test? Each of these is a behavior, so a test. W1 and W2 run on a stand-in. If the
 gateway world cannot be built on `":memory:"`, they go in `GatewayRevocation.integration.test.ts`
-beside its knock laws, and the PR says why. W3 lives in a `*.visual.test.ts` file (0536), so it runs
-only on eligible CI (0594), never here.
+beside its knock laws, and the PR says why. W3 lives in a `*.visual.test.ts` file, so it runs
+only on eligible CI, never here.
 
 ## Files
 
@@ -154,7 +152,7 @@ as a read of their diffs shows, so whichever lands second merges main in.
 ## Validation
 
 The tests step sees W1 and W2 fail on today's `Gateway.ts`, with the order that fails. The build
-makes them pass. W3 and L15 run only on eligible CI, with the `visual` label (0536, 0594). 0036's
+makes them pass. W3 and L15 run only on eligible CI, with the `visual` label. 0036's
 proof: L15 run many times in a row on CI, with the count in the PR.
 
 ## Size

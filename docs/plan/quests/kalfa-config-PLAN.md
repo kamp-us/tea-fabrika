@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is our tooling, in a new top-level folder, `kalfa/config/`, and in `next/`'s libfabrika, which
 then depends on it. Today's version is not touched. It builds
-[decision 0585](https://github.com/kamp-us/tea-fabrika/pull/1423), the first package in its build
+[decision 0054](https://github.com/kamp-us/tea-fabrika/pull/1423), the first package in its build
 order. Nothing a person sees in a window changes. Three pull requests: first generalize the engine
 in place, then move it, then add `kalfa config get|set`.
 
@@ -43,7 +43,7 @@ get|set`, and the `Kalfa` app other kalfa packages declare their settings with.
   "kalfa config package" and "leak words file path": 0086 (settings are declared once), 0069
   (choices are settings), the settings note, 0556, 0557 and the new 0585 are the records that
   govern this. No record names an app-scoped engine; 0585 is the first.
-- [0086](../../../.decisions/0086-settings-are-declared-once.md) and
+- and
   [the settings note](../../../docs/direction/settings.md): S1 to S7, the order flag, env, repo,
   person, default, the `scope` list and the `Toml` service. All hold unchanged; only who the names
   belong to changes.
@@ -51,19 +51,19 @@ get|set`, and the `Kalfa` app other kalfa packages declare their settings with.
   package, its file and env names, no `kalfa.config.ts`, the `./cli` export and the `kalfa config
   get|set` shape, `config` as a built-in of `kalfa`, and that tooling never takes a `FABRIKA_`
   name.
-- [0113](../../../.decisions/0113-no-shell-or-python-scripts.md),
-  [0231](../../../.decisions/0231-ledger-and-codehost-are-separate.md): nothing here is shell, and
+-,
+  [0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md): nothing here is shell, and
   nothing calls a command-line tool.
-- [0032](../../../.decisions/0032-libraries-take-effects-file-layout.md): a library is a flat
+-: a library is a flat
   `src/` of PascalCase modules with `internal/`. `kalfa/config/src/` keeps the settings room's
   layout as it is.
-- [0537](../../../.decisions/0537-infra-holds-our-own-small-services.md), read through 0556: a
+- [0043](../../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), read through 0556: a
   `kalfa/` package keeps `next/`'s standards, so every lint override that lists `next/**` lists
   `kalfa/**` too.
-- [0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md) and 0557: the moved
+- and 0557: the moved
   tests keep their `@effect/vitest` and `@kampus/vitest` imports. The move to `@kalfa/vitest` is its
   own plan, last in 0585's order.
-- [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md): every new law runs on
+-: every new law runs on
   an in-memory `FileSystem`, so none is `.integration.`.
 - The code, at commit `9201aeb02`: the 30 files in `next/packages/libfabrika/src/settings/`, the
   loader and command in `next/packages/libfabrika/src/node/settings/`, the 30 files outside the
@@ -190,7 +190,7 @@ export const make = <A>(options: { readonly group: Setting.Group<A>; readonly ve
 ```
 
 The `"kalfa": { "cli": "./cli" }` field is left out: `config` is a built-in of `kalfa`, never found
-by discovery (0585). `@kampus/libfabrika` gains `"@kalfa/config": "workspace:*"` and drops the two
+by discovery (0054). `@kampus/libfabrika` gains `"@kalfa/config": "workspace:*"` and drops the two
 TOML packages it no longer imports.
 
 ## One value traced: `leak.words`, a kalfa setting, beside fabrika's files
@@ -257,7 +257,7 @@ names any it finds that this count missed.
 Each law is a test except M2 and C5. M1 is the lead's tool, not a test file; it runs in the review.
 No law needs the real machine: K1 to K5 run on in-memory sources and a `FileSystem.layerNoop` with
 its file contents given, and C1 to C4 on the same. `Load.integration.test.ts` keeps its real files
-and stays on the schedule (0536).
+and stays on the schedule.
 
 **Amendment to F1, 2026-11-15 (Pacific), the lead's answer in tests round 2.** Besides import
 lines, an expected row gains a field the plan's own K-law requires. The one case is
@@ -360,15 +360,14 @@ Each picks how the code does what 0585 or 0086 already says, so each is mine to 
   takes `--location`. A setting whose scope holds one file needs no flag; the command uses that
   file. 80% sure.
 - **Is this a setting?** No, for each new choice: the app's name and its files are its identity and
-  its home, both in S1's list of things that are never settings
-  ([0069](../../../.decisions/0069-choices-are-settings.md)); the `list` words are what the app is
+  its home, both in S1's list of things that are never settings; the `list` words are what the app is
   called; the subcommand names are 0585's.
 - **A browser is always a client.** Every module but `Load` and `Cli` is pure: it takes text and
   records and needs no Node, no file and no socket. `Load` reaches files only through Effect's
   `FileSystem` service, so a browser could hand it a layer of its own. A person's settings command
   is a terminal program by its nature.
 - **Typed services only.** Nothing calls a command-line tool
-  ([0231](../../../.decisions/0231-ledger-and-codehost-are-separate.md)).
+  ([0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)).
 
 ## Who uses it first
 

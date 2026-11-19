@@ -1,15 +1,13 @@
 /**
- * The runbook check (decisions 0571 and 0611): every tracked `.runbooks/*.md` keeps a `summary` and a
- * `follows` list in its frontmatter, and each id in `follows` names an accepted record in `.decisions/`.
+ * The runbook check: every tracked `.runbooks/*.md` keeps a `summary` in its frontmatter.
  * A sev runbook, `.runbooks/sev-*.md`, also has the five level-two headings Trigger, Roles, Steps, Exit and
  * Comms, and the sev skill, `.agents/skills/sev/SKILL.md`, links every sev runbook and no sev runbook that
  * is not there.
  */
-import { Effect, Path, Predicate, Result, Schema } from "effect";
+import { Effect, Path, Predicate, Result } from "effect";
 import { Finding, type RunbookRule } from "./Finding.ts";
-import { decisions, parse } from "./Frontmatter.ts";
+import { parse } from "./Frontmatter.ts";
 import { markdown } from "./Markdown.ts";
-import { decodeStatus } from "./Status.ts";
 import { read, Tracked } from "./Tracked.ts";
 
 const RUNBOOK = /^\.runbooks\/[^/]+\.md$/;
@@ -18,15 +16,11 @@ const SEV = /^\.runbooks\/sev-[^/]+\.md$/;
 
 const SKILL = ".agents/skills/sev/SKILL.md";
 
-/** The parts every sev runbook has, as level-two headings (0571). */
+/** The parts every sev runbook has, as level-two headings. */
 const HEADINGS = ["Trigger", "Roles", "Steps", "Exit", "Comms"] as const;
 
 const found = (path: string, line: number, rule: typeof RunbookRule.Type, raw = "") =>
   Finding.cases.runbook.make({ path, line, rule, raw });
-
-/** The `follows` list as written: the ids in it, or `undefined` when it is no non-empty list of text. */
-const ids = (follows: unknown): ReadonlyArray<string> | undefined =>
-  Schema.is(Schema.NonEmptyArray(Schema.String))(follows) ? follows : undefined;
 
 /** The first line after a frontmatter block, counted from 0: where the prose begins. */
 const body = (text: string) => {
@@ -56,18 +50,6 @@ export const check = Effect.fnUntraced(function* (root: string) {
   const files = (yield* tracked.files).filter((entry) => !entry.symlink).map((entry) => entry.path);
   const runbooks = files.filter((file) => RUNBOOK.test(file));
 
-  // The records that are accepted, by number: a runbook follows only a rule that holds.
-  const accepted = new Set<string>();
-
-  for (const { number, text } of yield* decisions(root)) {
-    const parsed = parse(text);
-    const status = Result.isFailure(parsed) ? undefined : decodeStatus(parsed.success.values, { path: "", line: 1 });
-
-    if (status !== undefined && Result.isSuccess(status) && status.success._tag === "accepted") {
-      accepted.add(number);
-    }
-  }
-
   const pages = yield* read(root, [...runbooks, ...files.filter((file) => file === SKILL)]);
 
   const shape = pages
@@ -78,13 +60,9 @@ export const check = Effect.fnUntraced(function* (root: string) {
       const at = (key: string) => (Result.isSuccess(parsed) ? (parsed.success.lines.get(key) ?? 1) : 1);
       const written = (key: string) => (Predicate.hasProperty(values, key) ? values[key] : undefined);
       const summary = written("summary");
-      const list = ids(written("follows"));
 
       const rules = [
         ...(Predicate.isString(summary) && summary.trim() !== "" ? [] : [found(file, at("summary"), "summary")]),
-        ...(list === undefined
-          ? [found(file, at("follows"), "follows")]
-          : list.filter((id) => !accepted.has(id)).map((id) => found(file, at("follows"), "unresolved", id))),
       ];
 
       if (!SEV.test(file)) {

@@ -3,13 +3,13 @@
 **Tier 1 approved 2026-11-01. Tiers 2 to 7 proposed. Order of work set 2026-11-01.** Walked when
 Tier 2 starts (owner, 2026-11-08): the first proposed tier's plan.
 
-**Changed 2026-11-13 ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)): the next thing built is `fabsh`, pipes, `summon` and `join`, working
+**Changed 2026-11-13: the next thing built is `fabsh`, pipes, `summon` and `join`, working
 for real, with whatever they need, so fabrika is built inside fabrika.** The tiers below still show
 the order from before that day: `fabsh` and pipes in Tier 2, agents in Tier 5, rooms in no tier,
 and thin slices in Tier 1. The changed Tier 1 is written, and 0159 and that section win wherever
 this page differs.
 
-**Changed 2026-11-13 ([0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md)): the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2, which amends 0159's amendment of the same day.
+**Changed 2026-11-13: the changed Tier 1 is the milestone named "4 primitives", and Tier 2 then builds hands and an agent fabrika starts for real.** They move forward from Tiers 4 and 5. The Tier 2, Tier 4 and Tier 5 sections below still show the old sorting until the Tier 2 plan is written. Recovery and the other cloud rows (P26, P27, P28, P29, P36) wait behind Tier 2, which amends 0159's amendment of the same day.
 
 **Approved by the owner on 2026-11-13: what Tier 1 is now.** Tier 1 is the four primitives,
 `fabsh`, pipes, `summon` and `join`, working for real in `next/`, on the base its built rows
@@ -19,20 +19,18 @@ other tiers:
 
 - From Tier 2: `fabsh` as a program in a tile, pipes (first for `fabsh`'s built-ins), and the desk
   program with split, close and the prefix key
-  ([0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md), amended by 0159).
+  (amended by 0159).
 - From Tier 4: hands, only far enough to run an agent's turn (the lead's reading, from
   [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)).
-- From Tier 5: the link to the agent harnesses, `summon`, `@name` and the list of names
-  ([0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md)), with the
+- From Tier 5: the link to the agent harnesses, `summon`, `@name` and the list of names, with the
   [Tier 5 laws](#tier-5-laws-decided-2026-11-07) for any agent fabrika starts.
 - From the inbox's later tiers: the inbox past its thin row, so `@person` and an agent's message
-  reach it ([0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md),
-  [0521](../../.decisions/0521-an-agents-message-is-an-inbox-row.md)).
-- From no tier: rooms and `join` ([0158](../../.decisions/0158-no-dms-only-rooms.md), the
+  reach it.
+- From no tier: rooms and `join` ([0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md), the
   [summon guidelines](../direction/summon-guidelines.md#rooms-mentions-and-turns-in-order)).
 
 Three of Tier 1's own rows come with them (owner, 2026-11-13,
-[0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+0159's amendments):
 
 - The Electron app (P19), built beside the browser tab from the first piece that draws. This is
   the rule [below](#the-rules): a tier's demo works in a browser tab and an Electron window.
@@ -50,18 +48,15 @@ show the order from before 2026-11-13.
 All the work on `next/` is one plan of seven tiers. Each tier is one pass across all five layers
 and across fabrika's six core ideas, and each ends with something a person can use. No layer and no
 core idea gets finished alone, and none waits for the tier that finishes it: every core idea gets a
-thin working slice in Tier 1, and later tiers harden it
-([0068](../../.decisions/0068-tiers-carry-every-part.md),
-[0078](../../.decisions/0078-agent-and-flow-slices-start-early.md),
-[0088](../../.decisions/0088-six-slices-in-tier-1.md)).
+thin working slice in Tier 1, and later tiers harden it.
 
 ```text
 core idea                          thin slice   built for real in
-hands                              Tier 1 P39   Tier 2 (0185)
+hands                              Tier 1 P39   Tier 2
 programs written outside fabrika   Tier 1 P40   Tiers 5 and 7
 programs working together          Tier 1 P41   Tiers 2 and 4
 a person starting a program        Tier 1 P42   Tier 2
-an agent fabrika starts            Tier 1       Tier 2 (0185)   (no row yet)
+an agent fabrika starts            Tier 1       Tier 2   (no row yet)
 a flow fabrika runs                Tier 1 P43   Tier 6          (P43: the merge queue, for landing changes)
 
                 transport   data   coordination   app   desktop
@@ -88,11 +83,10 @@ So is splitting the old Tier 4 into hands and agents, which makes seven.
 
 Each tier carries and updates a working slice of every core idea. A tier plan names, for each core
 idea, what its slice gains in that tier, or says why it gains nothing. A slice works, with no stub
-and no dead path, and it records now every fact a later tier needs
-([0068](../../.decisions/0068-tiers-carry-every-part.md)). Each tier also checks its slice of
+and no dead path, and it records now every fact a later tier needs. Each tier also checks its slice of
 programs written outside fabrika's source with a cold agent as the author: every place the agent
 gets stuck is a gap, and each run is an experiment
-([0075](../../.decisions/0075-cold-author-checks-outside-programs.md), ticket 665).
+(ticket 665).
 
 ### Tier 1: it works
 
@@ -100,8 +94,7 @@ gets stuck is a gap, and each run is an experiment
 - **Data:** ledger behind a service; `granted` with `saw` and `as`; `denied`; revoke; each note's
   saved versions, with a check against stale saves; a backup sheet, recovery on a new Mac and
   `added`; email recovery on the cloud, which lets the device in at once and tells every live
-  device (decided 2026-11-06, the wait dropped 2026-11-11,
-  [0138](../../.decisions/0138-email-recovery-lets-in-at-once.md)); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health
+  device (decided 2026-11-06, the wait dropped 2026-11-11); full monitoring: each process's spans in a thin JobRecord, kept forever, raw health
   rows for about 2 weeks and hourly summaries forever, and nothing a chaos fault does left
   unexplained (owner, 2026-11-07).
 - **Coordination:** mailbox, who belongs, window and agent grants, every device a master with its
@@ -109,32 +102,29 @@ gets stuck is a gap, and each run is an experiment
   backoff, exit, info and monitors, each start a new process with its own id, who is online, and the
   brain restarted (decided by the owner, 2026-11-06).
 - **App:** sealed programs, a checklist a person fills and agents check with a note through MCP,
-  read from any window or a phone, each agent approved once, chaos monkey (2026-11-11,
-  [0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md); it said notes drawn as Markdown
+  read from any window or a phone, each agent approved once, chaos monkey (2026-11-11,; it said notes drawn as Markdown
   that agents write, and a counter as the test). The foundation for loading settings, P38,
-  moved here from Tier 5 ([0069](../../.decisions/0069-choices-are-settings.md)). Tier 1 only reads
+  moved here from Tier 5. Tier 1 only reads
   the keybindings and theme files; the programs for them are Tier 2's.
 - **Desktop (Tuval):** one core; Electron, browser and headless; menu bar with Approve and Remove.
 
 ### Tier 1's six thin slices
 
 All six core ideas get their thin slice in Tier 1, each as small as it can be and still work, with
-no stub ([0088](../../.decisions/0088-six-slices-in-tier-1.md),
-[0078](../../.decisions/0078-agent-and-flow-slices-start-early.md)). Each slice has its own plan
+no stub. Each slice has its own plan
 before any builder starts. The size of each, their order and whether Tier 1 splits are not decided.
 
 | Core idea | Row | What the slice must do | Hardened in |
 |---|---|---|---|
-| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects ([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). | Tier 4: competing claims, leases and moving a task to another host |
-| Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0083](../../.decisions/0083-every-program-in-a-pack.md), [0084](../../.decisions/0084-own-pack-listed-by-path.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
-| Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0103](../../.decisions/0103-a-program-may-mail-another-by-name.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
+| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects ([0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md)). | Tier 4: competing claims, leases and moving a task to another host |
+| Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
+| Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
 | A person starting a program | P42 | A person can start a program while the app runs. | Tier 2: `fabsh` |
 | An agent fabrika starts | no row yet | fabrika can start one agent run for one bounded job and record how it ended. Where the agent runs: the laptop, as today, until hands and the Tier 5 laws say otherwise. | Tier 5 |
-| A flow fabrika runs | P43, for landing changes | fabrika can run a saved list of typed steps handed to it as data ([0074](../../.decisions/0074-agent-hands-over-a-flow.md)), and stop at an ask. P43 is the pipeline's thin slice for landing changes: the merge queue's first stage, one queue program and one landing program per change, one landing at a time ([0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md), [0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md), [0110](../../.decisions/0110-merge-queue-is-fabrika-programs.md)). | Tier 6: the full pipeline and the merge queue's later stages |
+| A flow fabrika runs | P43, for landing changes | fabrika can run a saved list of typed steps handed to it as data ([0035](../../.kalfa/decisions/0035-agents-hand-over-flows.md)), and stop at an ask. P43 is the pipeline's thin slice for landing changes: the merge queue's first stage, one queue program and one landing program per change, one landing at a time ([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), [0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)). | Tier 6: the full pipeline and the merge queue's later stages |
 
 0078's two slices came with no row; theirs come with their plans. P43 is the first row under a flow
-fabrika runs. Rows that may already half-cover a slice are listed in
-[0088](../../.decisions/0088-six-slices-in-tier-1.md), as facts each plan checks.
+fabrika runs. Rows that may already half-cover a slice are listed in, as facts each plan checks.
 
 ### Tier 2: first programs
 
@@ -240,7 +230,7 @@ Decided by the owner from [experiment 229](../../experiments/229-browser-only-fr
 
 This tier builds hands for real. It hardens Tier 1's hands slice, P39, which runs on one host a
 person selects, with no competing claims or leases
-([0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)).
+([0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md)).
 
 - **Transport:** hands as a client; how a client says it takes tasks.
 - **Data:** the queue, claims, leases; every container job records its run seconds and who started
@@ -265,8 +255,7 @@ slices: an agent fabrika starts, and programs written outside fabrika's source (
 - **Coordination:** hands run agents.
 - **App:** `claude` and `codex` programs; repo programs, as a repo's own pack in the repo's
   `.fabrika/packs/<name>/` listed in `fabrika.toml` by its `./` path, lean about 60%
-  ([0083](../../.decisions/0083-every-program-in-a-pack.md),
-  [0084](../../.decisions/0084-own-pack-listed-by-path.md)); two laws and a restart rule
+  ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)); two laws and a restart rule
   ([below](#tier-5-laws-decided-2026-11-07)).
 - **Desktop (Tuval):** chat tile (not a copy of regular chat; several branches of a conversation at
   once stays possible), asks list; the agent box. *Noted 2026-11-05:*
@@ -294,8 +283,7 @@ Decided by the owner, for when agents run as programs:
 This tier builds the full pipeline for real. It hardens Tier 1's slice of a flow fabrika runs,
 including the merge queue's first stage, P43: Tier 6 adds batches, a cheap lane for docs and field
 rows, and a record of how long each change waited, with the signing stage after
-([0110](../../.decisions/0110-merge-queue-is-fabrika-programs.md),
-[0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)).
+([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)).
 
 - **Transport:** reconnect and offline, tested hard; D4's poke, the sync-engine note's T7 as a Sub.
 - **Data:** moving data, keeping history cheap, paging.
@@ -303,8 +291,7 @@ rows, and a record of how long each change waited, with the signing stage after
   the mutation queue, shaped like a merge queue: a pull request's leftover lines and a daily sweep
   in, survivors out as at most 3 tickets a day, Stryker on hands
   ([fast and daily mutation](../direction/fast-and-daily-mutation.md)). Today's lead tooling runs
-  mutation hourly against main instead, and leaves this program open
-  ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)).
+  mutation hourly against main instead, and leaves this program open.
 - **App:** pipeline and tracker views take jobs over one at a time; notes gain tabs, search and
   delete.
 - **Desktop (Tuval):** drag, zoom, workspaces, command palette, speed budgets; formatted typing in
@@ -356,14 +343,12 @@ or this moves up. That is the cost of placing it here.
 car, truck. Each one takes a person somewhere. Two wheels and an axle don't, however
 well they're built. So every tier has to do a real job for someone, and the job gets
 bigger. Tier 1 passes: nobody needs a counter, but a checklist a person fills and agents
-check with a note does a real job ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md);
-it said notes that agents write and a person reads drawn). The counter was the test until 2026-11-11; the checklist takes that job
-over, slice by slice, and the counter is removed
-([0125](../../.decisions/0125-the-example-program-is-a-checklist.md)).
+check with a note does a real job (it said notes that agents write and a person reads drawn). The counter was the test until 2026-11-11; the checklist takes that job
+over, slice by slice, and the counter is removed.
 
 - **A tier fills every layer and every core idea.**
   - If a layer or a core idea gets nothing new, the tier says so and says why. It never just skips
-    one ([0068](../../.decisions/0068-tiers-carry-every-part.md)).
+    one.
 - **A tier is done when its demo works everywhere.**
   - A browser tab and an Electron window, on the laptop and on Cloudflare.
 - **Chaos grows with each tier.**
@@ -418,31 +403,31 @@ Git history keeps the old wording.
   Tier 7; the Tier 5 laws; full monitoring in Tier 1.
 - 2026-11-08: a real domain moves from Tier 7 to install time; container jobs record run seconds
   from the first job.
-- 2026-11-10, [0068](../../.decisions/0068-tiers-carry-every-part.md): each tier carries a working
+- 2026-11-10: each tier carries a working
   slice of every core idea, and four start early.
-- 2026-11-10, [0069](../../.decisions/0069-choices-are-settings.md): loading settings moves from
+- 2026-11-10: loading settings moves from
   Tier 5 to Tier 1, as P38.
-- 2026-11-10, [0075](../../.decisions/0075-cold-author-checks-outside-programs.md): each tier checks
+- 2026-11-10: each tier checks
   the outside programs slice with a cold agent as the author.
-- 2026-11-10, [0078](../../.decisions/0078-agent-and-flow-slices-start-early.md): an agent fabrika
+- 2026-11-10: an agent fabrika
   starts and a flow fabrika runs join the core ideas, with slices from Tier 1.
-- 2026-11-10, [0083](../../.decisions/0083-every-program-in-a-pack.md): Tier 5's repo programs are
+- 2026-11-10, [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md): Tier 5's repo programs are
   a repo's own pack, not `.fabrika/programs`; no tier moves.
-- 2026-11-10, [0088](../../.decisions/0088-six-slices-in-tier-1.md): all six slices land in Tier 1,
+- 2026-11-10: all six slices land in Tier 1,
   and P39 to P42 are added.
-- 2026-11-11, [0102](../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md) and
-  [0103](../../.decisions/0103-a-program-may-mail-another-by-name.md): the shapes of the hands slice
+- 2026-11-11, [0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md) and
+  [0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md): the shapes of the hands slice
   and of programs working together.
-- 2026-11-11, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md): the merge
+- 2026-11-11: the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.
-- 2026-11-13, [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md): the next thing built is `fabsh`, pipes, `summon` and
+- 2026-11-13: the next thing built is `fabsh`, pipes, `summon` and
   `join`, working for real, with whatever they need. Tier 1 changes to put them first, in its own
   pull request; no tier table above is changed yet.
 - 2026-11-13, approved by the owner: the changed Tier 1, in
   [the four primitives first](./tier-1.md#the-four-primitives-first). Pieces come in from Tiers 2,
   4 and 5 and from no tier. The Electron app, the thin menu bar and the cloud instance are built
   beside them; 12 rows wait, and recovery is the first work after done.
-- 2026-11-13, [0185](../../.decisions/0185-tier-2-runs-agents-after-the-four-primitives.md): the
+- 2026-11-13: the
   changed Tier 1 is named "4 primitives", and hands and an agent fabrika starts move forward from
   Tiers 4 and 5 to Tier 2; the Tier 2, 4 and 5 sections are not resorted yet. Tier 2 comes right
   after the 4 primitives, and recovery and the other cloud rows wait behind it.

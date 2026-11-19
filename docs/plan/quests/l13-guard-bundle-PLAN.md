@@ -1,7 +1,7 @@
-Approved by the lead agent, builds slice B of the two-flakes plan (0036), as the lead (fabrikaa-merger) approved it on 2026-11-18, amended by fabrikaa's ruling on mail 0004; body 3e1433e0c577
+Approved by the lead agent, builds slice B of the two-flakes plan, as the lead (fabrikaa-merger) approved it on 2026-11-18, amended by fabrikaa's ruling on mail 0004; body 3e1433e0c577
 Plancheck-Version: 3
 
-# Slice B of the two-flakes plan: the L13 guard gets a bundle of its own with no compiler in it, and records `guardMs`, in next/ (ticket 1167, decision 0036)
+# Slice B of the two-flakes plan: the L13 guard gets a bundle of its own with no compiler in it, and records `guardMs`, in next/ (ticket 1167, an earlier decision)
 
 This is slice B of the two-flakes plan (`0001-two-flakes-plan.md` on branch
 `fabrikalfa/mail-session_01WuXcauHMQJS7qtW6UxMkzV`, commit 7937a668), copied here for this pull
@@ -27,10 +27,8 @@ The fix removes the cause. No timeout grows, nothing is retried, nothing is skip
 
 What was read, so a reader can check each claim.
 
-- Decisions: [0036](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0036-a-flaky-test-is-fixed.md),
-  [0052](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0052-tests-never-depend-on-the-machine.md),
-  [0178](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0178-host-only-laws-run-first.md)
-  and [0594](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0594-safe-checks-direct-mac-ci.md).
+- Decisions:,,
+.
 - Finding rows on main: `field/findings/2026-11-18-l13-launchd-brain-stop-flakes-on-host.json` and
   `field/findings/2026-11-18-p19-l13-times-out-once-after-the-settings-merge.json`.
 - Code on main at 1775071ca (after PRs 1562 and 1612): in the app's e2e folder,
@@ -120,7 +118,7 @@ which is what the runner loads.
 
 Host-only laws: G2 and G3 need launchd, real Electron and real signals. They run first, before the
 review, on eligible disposable macOS CI (`host.yaml`, started by hand on this branch), never on
-the owner's Mac and never locally (0178, 0594). The lead reads their signal and launchd lines
+the owner's Mac and never locally. The lead reads their signal and launchd lines
 before the review. G2's plant is one hand-started run on a scratch commit that is not kept, or it
 is read from the code, and the PR says which. G1 runs in the pinned law, which compiles the
 bundles and starts no launchd, Electron or signal.

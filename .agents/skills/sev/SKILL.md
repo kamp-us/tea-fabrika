@@ -7,10 +7,9 @@ description: How the lead acts when CI is the emergency, at one of two levels. U
 
 A sev is CI as the emergency, at one of two levels. A sev0 is the owner's call: nothing lands, so
 CI freezes and the fixes land one at a time. A sev1 is on by itself while one of two checks has its
-issue open: changes still land, and a fix goes ahead by admin merge, one at a time
-([0611](../../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md)). The lead is the incident
+issue open: changes still land, and a fix goes ahead by admin merge, one at a time. The lead is the incident
 commander at both levels. Each situation has its own runbook, below; the script does what code can;
-this page holds the judgment ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+this page holds the judgment.
 
 ```text
 none --(full run red, or a speed number over goal: its issue opens)--> sev1
@@ -21,18 +20,17 @@ sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue 
 
 | | sev0 | sev1 |
 |---|---|---|
-| What is broken | Nothing can land, or every run makes it worse | Changes land, but the full run is red or a speed number is over its goal ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)) |
-| Merge line | Stopped; the owner empties the queue | Runs as normal ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)) |
+| What is broken | Nothing can land, or every run makes it worse | Changes land, but the full run is red or a speed number is over its goal |
+| Merge line | Stopped; the owner empties the queue | Runs as normal |
 | CI runs | All canceled, except the allowed branches', the merge queue's and main's `check` run | All run |
 | How a fix lands | One at a time, by admin merge, on current main | One at a time, by admin merge, on current main; every other change stays on the merge line |
 | Other work | Stops; every agent saves and waits | Keeps going |
 | Who calls it | Only the owner | Nobody: the full run or the daily speed check opens its issue |
 | Ends when | Every fix has merged, or the owner calls it off; it then becomes a sev1 or ends | That issue closes, which the same check does when it is green or inside the goal again |
 
-The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md); the two levels are
-[0542](../../../.decisions/0542-two-sev-levels-one-skill.md); where each rule changed, 0611 says.
+The sev0 rule is; the two levels are; where each rule changed, 0611 says.
 Below a sev1 there is no level: a slow or odd run is a ticket, and a flaky test is fixed the day it
-is seen ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
+is seen.
 
 The cost of a sev1 with no caller: the two checks must stay worth trusting. A false alarm puts us in
 a sev1, so a check that cries wolf is itself a fix that goes first.
@@ -60,7 +58,7 @@ Open the one for what happened. Each has a trigger, roles, steps, an exit and co
   leg's limit stopped it, so read its report job's line first. On 2026-11-15 a red full run read as cut off, and its
   pull request merged with two red laws.
 - **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped cause as a ticket. A
-  loosened or removed law goes to the owner ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
+  loosened or removed law goes to the owner.
 
 ## When unsure which level
 
@@ -91,7 +89,7 @@ tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
 - **No agent waits on CI or on a reply.** It keeps building, reviews, and arms its own pull request
   when the checks are green and the leak grep is clean; in a sev0 it marks it ready instead, and the
   lead admin-merges it in order. Only what needs the lead's machine waits.
-- **No native stacks** ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)). Each layer is a plain pull request and lands on its own, bottom
+- **No native stacks**. Each layer is a plain pull request and lands on its own, bottom
   first: through the queue on a normal day, by admin merge in a sev0. On 2026-11-18 a three-layer
   stack waited because `land.ts stack` needed every layer in one merge while the queue built two
   entries at once. Children stay current by merging their parent's head in, never by a rebase.

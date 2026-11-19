@@ -63,7 +63,7 @@ span ended with an explicit older time.
 ## The numbers
 
 Each number is a count of rows from `count(*)`, or bytes from SQLite's own `dbstat` table (`payload`
-is the stored record, `pgsize` the pages). No clock was read (0065). The run: 1,000 spans of one
+is the stored record, `pgsize` the pages). No clock was read. The run: 1,000 spans of one
 piece over 10 hours, 100 an hour, the five verbs in turn; once without the tag, once with it.
 
 | Per 1,000 spans | Without the tag | With the tag |
@@ -121,7 +121,7 @@ otherwise.
 - **Traces: have it.** `SpanRow` in OTLP's field names (`telemetry/Trace.ts:40-55`), shipped to each
   process's record by `flush` (`telemetry/Sink.ts:358-387`).
 - **Logs: have it,** as span events: `Effect.log*` lands on its span, and the sink keeps the events
-  (`telemetry/Sink.ts:123-127`, decision 0024). There is no search over them.
+  (`telemetry/Sink.ts:123-127`, an earlier decision). There is no search over them.
 - **A count: have it** per piece and hour, with errors (`telemetry/internal/measurements.ts:107-108`).
   The split by a tag is a small change: this spike.
 - **A gauge: have two, fixed.** The object's size, at most once an hour (`writeSize`,
@@ -190,8 +190,7 @@ laptop, one SQLite file per job.
 - **One poll is nearly everything.** Of 2,047,223 saved spans, 2,046,647 are named `POST`: the
   ledger read poll, about 1.9 a second, traced by the HTTP client. One tracker window open for 62
   hours wrote 432,501 spans and a 173 MB record. The volume risk is a span per poll, not agents.
-- The owner decided the rule the same day:
-  [0124](../.decisions/0124-metrics-stay-rows-and-reading-comes-next.md), a poll with no news is
+- The owner decided the rule the same day:, a poll with no news is
   never a saved span.
 
 ## What it cannot tell us

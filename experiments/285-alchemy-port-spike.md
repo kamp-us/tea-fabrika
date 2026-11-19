@@ -7,8 +7,8 @@ summary: "`next/`, spike S0 of ticket 502's plan, on `@alchemy.run/cloudflare` 2
 
 Run 2026-11-13 on origin/main at `c0aaf4a24`. **All claims are about `next/`.** This is spike S0 of
 [the Alchemy port's plan](../docs/plan/ticket-502-alchemy-port.md), for decisions
-[0041](../.decisions/0041-object-classes-are-effect-objects.md) and
-[0042](../.decisions/0042-platform-pieces-go-through-alchemy.md). It answers the questions the plan
+[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) and
+[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md). It answers the questions the plan
 leaves to S0, so that slices S5, S7 and S8 can be planned.
 
 - **Versions, read from the lockfile:** `alchemy` 2.0.0-beta.85, `@alchemy.run/cloudflare`
@@ -19,7 +19,7 @@ leaves to S0, so that slices S5, S7 and S8 can be planned.
   `dev: true`. Nothing was deployed, no Cloudflare account, no key, no model. $0 at any list price.
 - **The code** is on the branch `fabrikalfa/t502-alchemy-spike`, in
   `experiments/285-alchemy-port-spike/`. It changes no product file. Raw output went to `runs/285/`,
-  which git ignores ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+  which git ignores.
   Every number here is from one last run of each script, from an empty `runs/285/`.
 
 ## The answer first
@@ -473,7 +473,7 @@ S8's plan, and it is not decided here.
 
 ```sh
 # One script a run; each starts and stops its own runtime. About 15 s each, `bundle` about 30 s.
-( ulimit -u 2000; nice -n 19 volta run --node 26.13.0 \
+(ulimit -u 2000; nice -n 19 volta run --node 26.13.0 \
     node experiments/285-alchemy-port-spike/launch.mjs fetch )   # or control, bundle, storage, timing, provider
 ```
 

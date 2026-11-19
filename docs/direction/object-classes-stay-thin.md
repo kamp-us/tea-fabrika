@@ -1,6 +1,6 @@
 ---
 state: "decided (2026-10-31), built as plain classes in Tier 1's P12; amended 2026-11-09 by 0041, whose port is ticket 502 and not built yet; from 0042 the same day, what a class holds from the platform comes from Alchemy's services"
-summary: "In `next/`, a Durable Object class holds only what the platform gives it and a one-line handoff into Effect. The logic is plain code that also runs on Node in tests, so the mutation step can reach it. The brain stays on workerd. From 2026-11-09 the class itself is an Alchemy Effect Durable Object, a class plus a `.make()` Layer ([0041](../../.decisions/0041-object-classes-are-effect-objects.md))."
+summary: "In `next/`, a Durable Object class holds only what the platform gives it and a one-line handoff into Effect. The logic is plain code that also runs on Node in tests, so the mutation step can reach it. The brain stays on workerd. From 2026-11-09 the class itself is an Alchemy Effect Durable Object, a class plus a `.make()` Layer ([0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md))."
 ---
 
 # An object class stays thin
@@ -9,7 +9,7 @@ summary: "In `next/`, a Durable Object class holds only what the platform gives 
 Today's version does not change.
 
 **Amended 2026-11-09 (owner,
-[0041](../../.decisions/0041-object-classes-are-effect-objects.md)):** the class itself is
+[0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)):** the class itself is
 written with Alchemy's Effect Durable Object model, a class that only names it plus a `.make()`
 Layer, not as a plain `cloudflare:workers` class. Only what the class is made of changes. The
 rule below stands: the logic is plain code behind a service, and it also runs on Node in tests.
@@ -46,12 +46,12 @@ behind a service.
 
 - **What stays in the class** (from 2026-11-09, in its `.make()` Layer):
   - its storage handle, its WebSocket, its alarm, its Worker Loader. *From 2026-11-09
-    ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): each of these comes
+    ([0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)): each of these comes
     from Alchemy's Effect service for it, such as `Cloudflare.DurableObjectState` and
     `Cloudflare.WorkerLoader`, never as a raw platform type. The services below take those, so
     they still run on Node in tests. Not built yet: today's services take the raw
     `DurableObjectState`;*
-  - the one line that hands a method to the service. *Changed 2026-11-09 (0041): the line
+  - the one line that hands a method to the service. *Changed 2026-11-09 (0019): the line
     returns the service's Effect, and Alchemy's bridge runs it. It said: the one line that runs
     an Effect ([no Promises](./no-promises.md) names this edge).*
 - **What moves out:**

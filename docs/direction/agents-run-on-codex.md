@@ -58,7 +58,7 @@ const DEFAULTS = {
   # -p is a profile in codex, not a prompt
   ```
 
-  *Changed 2026-11-09 (owner, [0022](../../.decisions/0022-codex-steps-run-on-astra-at-medium.md)):
+  *Changed 2026-11-09 (owner):
   the default is now `gpt-6-astra` at effort `medium`, set in the lead's `env.sh`; it was
   `gpt-6.1-sol` at `xhigh`, and the call above first said so.*
 
@@ -75,8 +75,7 @@ const DEFAULTS = {
   - Codex runs step work: plan, tests, build, mutation and review, each its own agent.
   - A Claude agent runs any step that needs Electron or a socket: laws or shots that start the
     app, or that bind a socket. A Codex box can start neither, so a Codex step there comes back
-    half checked. Still one agent per step. *Changed 2026-11-09
-    ([0045](../../.decisions/0045-test-steps-run-in-containers.md)): a tool that binds a socket
+    half checked. Still one agent per step. *Changed 2026-11-09: a tool that binds a socket
     runs in a container with its own network, on no agent's sandbox row, starting with the mutation
     step's Stryker run. Electron stays on a Claude agent.*
   - One active Claude driver per ticket carries it until a wait. It starts one agent per step on

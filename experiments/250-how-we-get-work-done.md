@@ -1,13 +1,13 @@
 ---
 date: "2026-11-10"
 scripts: "none"
-summary: "Reading, not a measurement; today's version as evidence, for `next/`'s pipeline (decision 0059). Redone on the teams that build coding agents and use them (Anthropic, OpenAI, Google, Cursor, Cognition), checked against Stripe, StrongDM, Ramp, single builders and METR, after the owner turned down the first draft's human-team lens (0059's ticket 645 amendment); that reading stays as background. Agents write most of the code at the labs (company claims), a person's attention is the scarce thing, reading moved to machines with people placed by risk (the biggest split), every miss becomes a check the same day, and the plumbing breaks next. Here, 236 step runs over 24 tickets on 11-09 and 11-10: 50% done, 22% sent back, 22% stuck; 16 of the test writer's 31 stuck runs were the tools' `fetch_failed`; no step asked the owner, and nothing records the owner's time. Ticket 574: about 100 minutes and $19.47, $8.81 on rounds that stalled. The draft's six principles tested, and seven proposed (F1 to F7); its path-based risk tier was wrong by experiment 252. No model, $0."
+summary: "Reading, not a measurement; today's version as evidence, for `next/`'s pipeline (an earlier decision). Redone on the teams that build coding agents and use them (Anthropic, OpenAI, Google, Cursor, Cognition), checked against Stripe, StrongDM, Ramp, single builders and METR, after the owner turned down the first draft's human-team lens (0059's ticket 645 amendment); that reading stays as background. Agents write most of the code at the labs (company claims), a person's attention is the scarce thing, reading moved to machines with people placed by risk (the biggest split), every miss becomes a check the same day, and the plumbing breaks next. Here, 236 step runs over 24 tickets on 11-09 and 11-10: 50% done, 22% sent back, 22% stuck; 16 of the test writer's 31 stuck runs were the tools' `fetch_failed`; no step asked the owner, and nothing records the owner's time. Ticket 574: about 100 minutes and $19.47, $8.81 on rounds that stalled. The draft's six principles tested, and seven proposed (F1 to F7); its path-based risk tier was wrong by experiment 252. No model, $0."
 ---
 
 # 250. How do we get work done, before any pipeline?
 
 Read 2026-11-10. **This is reading, not a measurement.** It is the study that decision
-[0059](../.decisions/0059-pipeline-starts-from-the-work.md) asks for, in the five parts its first
+ asks for, in the five parts its first
 amendment names, and it builds the proposed note
 [How we get work done](../docs/direction/how-we-get-work-done.md). Ticket 574 is the running
 example. The numbers about this repo come from `field/` as it stood on 2026-11-10 at `75c6fba8b`,
@@ -70,7 +70,7 @@ scarce    human attention, then CI and source control; not code
 7. **The labs are moving from steps to goals.** OpenAI says Symphony's early fixed transitions were
    too rigid and now hands agents objectives [o5, secondary]. Anthropic removed its sprint structure
    once Opus 4.6 could hold a longer build [a4]. This pulls against fabrika's bet that code holds
-   the loop as explicit state machines ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md)).
+   the loop as explicit state machines.
    Stripe's mix of fixed and agent steps is the counter-example that supports fabrika [s2].
 
 **Here (today's version), the loop works but stalls in the middle, mostly on the tools.** Of 236
@@ -451,7 +451,7 @@ never                 StrongDM [f1]
 
 What each would undo for fabrika: "every PR, a person" fits today's rule that the lead reads every
 diff (AGENTS.md); "by risk" would let low-risk pull requests land with no lead read; "never" would
-undo [0014](../.decisions/0014-the-lead-merges-when-every-step-passed.md)'s owner read for real
+undo's owner read for real
 loosening. Measured backing is thin on all sides: Anthropic's reverts fell 40% while volume doubled
 [a1] (company claim); METR says passing checks still leaves about half unmergeable [m2].
 
@@ -544,7 +544,7 @@ The verbs are mapped from the row's `outcome`: `pass` is done, `fail` is send, `
 
 ## Today's example: ticket 574
 
-Ticket 574 built decision [0052](../.decisions/0052-tests-never-depend-on-the-machine.md): tests
+Ticket 574 built decision: tests
 never read the home folder. It landed as [PR 787](https://github.com/usirin/tea-fabrika/pull/787).
 Times are Pacific, on 2026-11-10. The sources are the PR, its 25 run rows (`t574-*`), notes
 2026-11-10-24 and -25, and the lane's plan and chain files, which live outside the repo.
@@ -555,7 +555,7 @@ Times are Pacific, on 2026-11-10. The sources are the PR, its 25 run rows (`t574
 | Shape | A plan with laws L1 to L5, approved by the lead because it builds 0052. Amended twice: A1 at 11:52, when the test writer found the installed linter lacks the rule the plan named; A2 at about 12:38, when mutation got stuck twice because the code ran only at file load, so it had nothing to measure. | the lead | the plan file, signed again after each amendment | each amendment came from a later step |
 | Do | The chain ran 11:48 to 13:18 with no lead agent holding it. Tests: 8 rounds, 4 done. Build: 7 rounds, 5 done; two made no commit because every law was already green. | each step's own agent | signed commits on the lane's branch, a brief per round | tests stuck twice on `fetch_failed`; collecting a stuck step's commit moved the lane's branch, and the next box was refused until the lead moved it back |
 | Check | Mutation: 4 rounds, the last with 17 killed and no survivors. Review: round 1 sent back to tests (a law needed its `scenario:` label), round 2 done. The lead ran lint, typecheck and narrow tests outside the boxes, which cannot do some of it. `loosening.sh` flagged 2 removed laws; the lead's hand check found both rewritten stricter. | review's agent, then code; the lead for the hand check | review answers, `loosening.sh` output | the lead's own runs have no rows |
-| Ship | PR opened 13:18, `catchup.sh` landed it 13:28 on green CI. No owner read, since nothing loosened ([0014](../.decisions/0014-the-lead-merges-when-every-step-passed.md)). 6 files, +289 and -48. | code, under the lead | the merged change | none |
+| Ship | PR opened 13:18, `catchup.sh` landed it 13:28 on green CI. No owner read, since nothing loosened. 6 files, +289 and -48. | code, under the lead | the merged change | none |
 | Learn | PR 789 added the run rows and note 2026-11-10-25. The note names four causes and leaves "branch move and box limits" to look at. No ticket or finding names them. | the lead | a field note | the lesson did not reach a ticket, a finding or a skill |
 
 **Cost:** $18.31 for the steps and $1.16 for the judgments, $19.47 in all, at list price. 70 agent
@@ -645,8 +645,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
   and wait time).
 - **Disagreement:** how hard to push it (Branch E).
 - **Fabrika today (today's version):** the owner's time is not recorded anywhere (Part 5). The
-  12-agent cap is about the laptop, not about attention
-  ([0012](../.decisions/0012-twelve-agents-at-once.md)). An ask has one shape with a hash of what
+  12-agent cap is about the laptop, not about attention. An ask has one shape with a hash of what
   the person saw ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md), decided;
   `next/`).
 - **Lean, 85%:** record every look by a person (who, when, on what, how long) as an event from day
@@ -675,8 +674,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
 - **Sources:** [a1], [s1], [o2], [f1], [m2].
 - **Disagreement:** Branch A, the biggest one.
 - **Fabrika today:** plan, tests, build, mutation and one review per PR, each by its own agent; the
-  lead reads every diff, CI and the leak grep; the owner reads only real loosening (AGENTS.md;
-  [0014](../.decisions/0014-the-lead-merges-when-every-step-passed.md);
+  lead reads every diff, CI and the leak grep; the owner reads only real loosening (AGENTS.md;;
   `.agents/skills/lead/scripts/loosening.sh`). "Nobody writes their own exam"
   ([the note](../docs/direction/nobody-writes-their-own-exam.md)) already matches the frontier's
   split of builder and checker [a4, f1]. No holdout scenarios exist: a search of `docs/direction/`
@@ -687,7 +685,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
   [experiment 252](./252-risk-tiers-on-phoenix.md) replayed path tiers on 457 merged pull requests
   of kamp-us/phoenix: the high tier was not above the medium one in later fixes (7.4% against
   9.8%), while size alone separated them (1.3% at 50 lines or fewer, 11.6% over 400).
-  [0079](../.decisions/0079-size-counts-governed-paths-name-who.md) took its place: size sets how
+ took its place: size sets how
   many people look, governed paths set who.
 - **Doubt:** under 80% because the evidence is company claims plus one METR warning. **Settled by:**
   tagging a month of merged PRs by tier and counting reverts per tier.
@@ -699,8 +697,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
   a model change makes a rule useless, delete it.
 - **Sources:** [a1], [o3], [b1], [b2], [a4].
 - **Disagreement:** almost none on adding; only Anthropic writes about removing [a4].
-- **Fabrika today:** findings rows rated by a person
-  ([0035](../.decisions/0035-outside-work-becomes-finding-rows.md)); "a rule in a prompt that could
+- **Fabrika today:** findings rows rated by a person; "a rule in a prompt that could
   be code becomes code" (AGENTS.md); but a field note can name a cause and nothing picks it up
   (ticket 574, note 2026-11-10-25).
 - **Lean, 85%:** link each failure note to the check, ticket or "no change" it led to; add a
@@ -744,9 +741,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
 - **Sources:** [s2] (fixed nodes save tokens and errors), [o5] (secondary: fixed transitions too
   rigid), [a4] (remove structure as models improve), [c1].
 - **Disagreement:** Branch C. This is the place where the frontier pulls hardest against fabrika.
-- **Fabrika today:** every state machine is explicit and a tea machine
-  ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md),
-  [0046](../.decisions/0046-one-tea-machine-per-file.md)); the lane's moves are pure code in
+- **Fabrika today:** every state machine is explicit and a tea machine; the lane's moves are pure code in
   `chain.ts` (today's version); steps answer in five verbs.
 - **Lean, 70%:** keep explicit machines for the lane's edges, as Stripe does; do not script inside a
   step.
@@ -763,7 +758,7 @@ break before the work does. Here, 16 of 31 stuck test-writer runs were `fetch_fa
 failing (Part 5, today's version). W4's "whose defect" belongs in F3's layers as its own stop
 reason. The follow-up study, [experiment 254](./254-how-a-lane-should-stop.md), sorted about 35 of
 41 stuck steps on the five longest lanes as tool faults, and
-[0076](../.decisions/0076-a-lane-stops-at-its-budget.md) now has every stuck step say its fault,
+ now has every stuck step say its fault,
 `tool` or `work`.
 
 ## Part 8: the translation
@@ -774,12 +769,12 @@ Each name below was checked on main, in code or in a settled note. "Today" is to
 
 | Part | Who owns it today | In `next/`, by settled notes |
 |---|---|---|
-| Decide | The owner sets the order in `docs/plan/` (tiers). The lead picks lanes and files tickets in the tracker (`programs/tracker`, `programs/ticket`; `tracker_file`). A filed ticket is a `filed` fact (`packages/pipeline/src/stages/pipeline/lane-harness.ts:52`). The `triage` step exists in `STEPS` (`packages/pipeline/src/tickets/steps.ts:8`, which `routes.ts` re-exports) but is paused. | Not built. Settled: `ticket`, `tracker`, `triage` ([sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md), [triage asks when worth is unclear](../.decisions/0377-triage-asks-when-worth-is-unclear.md)), `area` and `label`, and a label never routes ([label guidelines](../docs/direction/label-guidelines.md)). fabrika has no priority (the `tier` row). |
+| Decide | The owner sets the order in `docs/plan/` (tiers). The lead picks lanes and files tickets in the tracker (`programs/tracker`, `programs/ticket`; `tracker_file`). A filed ticket is a `filed` fact (`packages/pipeline/src/stages/pipeline/lane-harness.ts:52`). The `triage` step exists in `STEPS` (`packages/pipeline/src/tickets/steps.ts:8`, which `routes.ts` re-exports) but is paused. | Not built. Settled: `ticket`, `tracker`, `triage` ([sort answers yes or no](../docs/direction/sort-answers-yes-or-no.md), triage asks when worth is unclear), `area` and `label`, and a label never routes ([label guidelines](../docs/direction/label-guidelines.md)). fabrika has no priority (the `tier` row). |
 | Shape | The plan step's file, approved on its line 1 by the lead when it builds a decided note, or by the owner for a new design call (AGENTS.md). A plan check can send a plan back (`.agents/skills/plan/scripts/plancheck.sh`). | A `plan` with criteria and properties, approved by version and a hash of the ticket's text ([the plan note](../docs/direction/the-plan-stage.md), decided). |
 | Do | `test_writer` and `build` steps, run by `drive.ts` and chained by `chain.ts`, which is a tea machine on the Effect engine (`.agents/skills/lead/scripts/chain.ts`, its header). Each step's agent runs in a box. A step signs its commit in a git note. | Steps are tea machines that answer in five verbs ([outcome names](../docs/direction/outcome-names.md)). A step's commit is an `attested` link, which `next/`'s exam already checks (`next/apps/fabrika/src/exam/commits.ts`), and a `committed` event is a settled name ([a unit of work is a commit](../docs/direction/a-unit-of-work-is-a-commit.md)). |
 | Check | `mutation` (Stryker), `review`, CI, `leakgrep.sh` and `loosening.sh`, then the lead's hand check on a hit. | `mutation`, `review` and the `exam` ([nobody writes their own exam](../docs/direction/nobody-writes-their-own-exam.md)). A person is asked only for a `judgment` ([jidoka and andon](../docs/direction/jidoka-and-andon.md)). |
-| Ship | `catchup.sh`, under the lead, once every step passed ([0014](../.decisions/0014-the-lead-merges-when-every-step-passed.md)). | `ship`, the one merge authority ([ship rules](../docs/direction/ship-stage-rules.md)). |
-| Learn | `field/notes/`, `field/runs/` and `field/findings/` (a person rates each finding `fix` or `noise`), with the older rows in the `.jsonl` files, and `.decisions/` through `/adr`. | A `finding` stays a row until Tier 6 ([0035](../.decisions/0035-outside-work-becomes-finding-rows.md)). An `ask` is `asked` and `answered` events, with `needed` marked by a person ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md)). |
+| Ship | `catchup.sh`, under the lead, once every step passed. | `ship`, the one merge authority ([ship rules](../docs/direction/ship-stage-rules.md)). |
+| Learn | `field/notes/`, `field/runs/` and `field/findings/` (a person rates each finding `fix` or `noise`), with the older rows in the `.jsonl` files, and `.decisions/` through `/adr`. | A `finding` stays a row until Tier 6. An `ask` is `asked` and `answered` events, with `needed` marked by a person ([one ask and one meter](../docs/direction/one-ask-and-one-meter.md)). |
 
 Where a person judges, in both versions: the owner sets the goals and the tier order, makes each
 new design call and reads real loosening of a law. The lead approves plans that build decided

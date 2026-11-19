@@ -179,7 +179,7 @@ hours for a first `next/` version, which fits Tier 2's desk better.
 - **`spans.read` at the door moved to P10,** and the record objects, the R2 binding and the
   wiring in `brain.ts` to P12.
 - **The three lost facts:** a throw's error class on `dead` and a failed Cmd's reason as a letter
-  are recorded. `down {until}` was dropped by [0016](../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md):
+  are recorded. `down {until}` was dropped by [0007](../.kalfa/decisions/0007-otp-supervision-per-program.md):
   past its brake a name is `failed` until a person restarts it.
 - **Error text:** a failure's class is the tag `error.type`, and its message is the record part's
   `content`, the one part a person can delete, in place of the study's 200-character cut.

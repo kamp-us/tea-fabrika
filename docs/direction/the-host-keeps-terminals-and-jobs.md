@@ -10,7 +10,7 @@ terminal and every job, each with its own id, and a tile only shows one. Any
 tile, in any window, can attach to a terminal or a job that is already running.
 The layout is the app's, the way i3 arranges windows it does not own.
 
-Its decided rules are in: [0448](../../.decisions/0448-the-host-keeps-terminals-and-jobs.md).
+Its decided rules are in: [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md).
 
 *See also [the desktop layer](./the-desktop-layer.md) (2026-10-31): the
 brain now keeps these, a tile shows one process, and focus stays per
