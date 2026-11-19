@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Five exist so
-far: Shared names, Ledger, Program, Identity and Transport. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Six exist so
+far: Shared names, Ledger, Program, Identity, Transport and Permissions. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -52,8 +52,8 @@ moves the line here if it does.
   keys, clients, and the humans and agents they act for.
 - **Transport** ([`kalfa/transport/GLOSSARY.md`](../../kalfa/transport/GLOSSARY.md)): how values
   move between two places: socket, connection, gateway and frame.
-- **Permissions** (no glossary yet): what a human or agent may do, and the roles owner, admin and
-  member.
+- **Permissions** ([`kalfa/permissions/GLOSSARY.md`](../../kalfa/permissions/GLOSSARY.md)): what a
+  human or agent may do: relations, permissions, checks and roles.
 - **Configuration** (`kalfa/config/GLOSSARY.md`): settings that should match a file, and drift.
 - **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in chat apps.
 - **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
@@ -94,6 +94,10 @@ its words are ours.
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/provider-github`.
 - A word that means two things in two contexts gets an entry in each glossary and a line here.
+- **Capability vs permission:** a capability (Identity) is what a client can do; a permission is what
+  someone may do. Permissions never says capability.
+- **A limit is a wall, not a permission:** spend, quota and CPU caps belong to Program, never to
+  Permissions.
 - **Recovery** means two things: in Program, a process getting back its saved state; in Identity, a
   human getting back in after losing every device.
 
