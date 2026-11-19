@@ -3,8 +3,7 @@ Plancheck-Version: 3
 
 # Ticket 955: the sink's frame cut holds with stray parentheses and CRLF stacks
 
-Everything here is about `next/`. Today's version is not changed. This plan builds
-[0186](../../.decisions/0186-stored-stack-frames-name-no-folder.md): a stored stack frame keeps its
+Everything here is about `next/`. Today's version is not changed. This plan builds: a stored stack frame keeps its
 name, file name, line and column, and never a folder. It fixes the cut in
 `next/packages/libfabrika/src/telemetry/Sink.ts` that pull request 1012 and ticket 502's slice S1
 (commits 680e334, tests, and 04d0415, build) brought in.
@@ -55,7 +54,7 @@ what Cause.pretty gives                         stored today                    
   `)` from it. So a name never holds ` (`. It drops `(definition)` from Effect's names and strips
   eval origins, which S2 and the eval shapes forbid, and it parses frames into fields where the
   sink must rebuild each line word for word. So it is not used
-  ([0040](../../.decisions/0040-existing-tools-before-hand-written.md) asks; this is why not).
+  (asks; this is why not).
   Its lesson is taken: when in doubt, the location starts at the leftmost ` (`.
 - **Sentry's V8 line parser** (`@sentry/core`, `node-stack-trace`, not installed, not fetched,
   from memory) also reads the name lazily up to the first ` (`, with special cases for `async` and
@@ -198,10 +197,10 @@ Error: inner\r\n    at fn (/sink-ab/x)y/private/nested/fn.ts:1:2)\r
 
 Every law is a test: each one reads stored content through the real sink, `flush` and
 `RecordManager.content`, as S1 and S2 do. None is a lint or type law, since the cut works on text
-at run time. No law computes what it expects by calling the sink's cutting code (0186): each
+at run time. No law computes what it expects by calling the sink's cutting code: each
 generated frame carries its own expected text, built from the same parts as its raw text, and the
 `Effect.fn` frame is read by the test's own regex, as S2 does. Each plant is run once and recorded,
-not kept ([0093](../../.decisions/0093-laws-walk-plants-run-once.md)). No law is host-only.
+not kept. No law is host-only.
 
 `StrayInput`, the new Effect Schema in `Sink.test.ts`:
 
@@ -260,7 +259,7 @@ on roots whose folder ends in ` (`.
 ## Is it a setting?
 
 No. Where a frame's location starts is how 0186's rule is carried out, not a choice a person makes
-when running fabrika ([0069](../../.decisions/0069-choices-are-settings.md)). The plan adds no
+when running fabrika. The plan adds no
 setting.
 
 ## What this records

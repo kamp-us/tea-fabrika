@@ -3,9 +3,6 @@
 # (node_modules, dist, runs, .claude/worktrees).
 !.agents/
 !.claude/
-!.decisions/
+!.kalfa/
 !.fabrika/
 !.github/
-!.glossary/
-!.patterns/
-!.runbooks/

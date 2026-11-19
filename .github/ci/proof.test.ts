@@ -83,7 +83,7 @@ const PLAIN = [
   "vitest.shards.json",
   "vitest.shards.ts",
   "docs/plan/README.md",
-  ".decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md",
+  ".kalfa/decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md",
 ];
 
 it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever Vitest would list", () => {

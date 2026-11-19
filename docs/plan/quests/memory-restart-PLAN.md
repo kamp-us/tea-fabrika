@@ -330,7 +330,7 @@ Notes on the laws:
   `rssLayer` shape.
 - **Where each runs.** L1 to L6 and L9 run in memory, on every pull request. L7 and L8 drive real
   temp folders (the outbox), and L10 and L11 real workerd and sockets, so all four are
-  `*.integration.test.ts` and run only on the 3-hour schedule (0536).
+  `*.integration.test.ts` and run only on the 3-hour schedule.
 - **Existing tests that change.** Every `startDev` caller passes `memory` and `grace`:
   `dev.laws.integration.test.ts`, `dev-secrets.laws.integration.test.ts`,
   `dev-control.laws.integration.test.ts`, `dev-errors.laws.integration.test.ts`, and
@@ -340,7 +340,7 @@ Notes on the laws:
 - Every plant is run once by the tests step and recorded in its report and run row, never committed.
 
 **Host-only laws: L10 and L11.** They need a real OS process, real signals and real sockets. They
-run before the first review, in the step's container (0045, 0178), never on the owner's Mac. Their
+run before the first review, in the step's container, never on the owner's Mac. Their
 only signal lines go to a workerd pid the law found under its own instance, as
 `next/apps/fabrika/src/workerd.test-support.ts` does; the lead reads those lines before the run.
 

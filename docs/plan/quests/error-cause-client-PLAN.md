@@ -1,11 +1,10 @@
-Approved by the lead agent, builds the JournalError row of slice 3 of the error-cause plan (0568), as the lead (fabrikaa-merger) approved it; body 428efbcbeb83
+Approved by the lead agent, builds the JournalError row of slice 3 of the error-cause plan, as the lead (fabrikaa-merger) approved it; body 428efbcbeb83
 Plancheck-Version: 3
 
 # Plan: `JournalError`'s cause is required, `cause: Schema.Defect()` (ticket 1062, slice 3, the client row)
 
 `next/` only, in `next/packages/libfabrika/src/client`. Today's app is not touched. This is the
-`JournalError` row of slice 3 of [the error-cause plan](./error-cause-PLAN.md), which builds
-[0568](../../../.decisions/0568-error-cause-follows-effect.md): a cause every caller always has is
+`JournalError` row of slice 3 of [the error-cause plan](./error-cause-PLAN.md), which builds: a cause every caller always has is
 `cause: Schema.Defect()`. The one product maker of `JournalError` always passes the store's failure,
 so its cause becomes required. The two cut fakes that make it with no cause gain one, and one type
 law, L3, holds the new shape. All line numbers here are read at `origin/main` `d524d4e6`.
@@ -37,7 +36,7 @@ not an open question.
 - **The product's call sites decide, and a test fake follows them** (75%, the parent plan's first
   doubt). 0568 says "every caller", and the two cut fakes are callers that pass no cause today. The
   lean holds because a fake that makes an error the product never makes shows an agent a shape that
-  cannot happen ([0562](../../../.decisions/0562-nothing-teaches-the-wrong-shape.md)). The cut's
+  cannot happen. The cut's
   cause is an `Error` whose message names the cut, as the brief takes it; the parent plan said "a
   generated cause", and a fixed `Error` per cut is the narrower reading of the same thing (a cut has
   no failure from below, so its own description is the truest cause it has). What would settle it:
@@ -114,7 +113,7 @@ export class JournalError extends Schema.TaggedError<JournalError, { readonly br
 ```
 
 The doc comment's "when there is one" goes: after this change there always is one, and a comment that
-says otherwise teaches the old shape (0562).
+says otherwise teaches the old shape.
 
 ```ts
 // next/packages/libfabrika/src/client/Commands.test-support.ts, inside `around`, a sketch: the
@@ -140,14 +139,14 @@ if (after === "fail") {
 // `import { JournalError, type Entry, type Journal } from "./Journal.ts";`, since L3 calls the maker.
 
 /**
- * T1062 slice 3, L3 (docs/plan/quests/error-cause-client-PLAN.md, decision 0568): the one product
+ * T1062 slice 3, L3 (docs/plan/quests/error-cause-client-PLAN.md, an earlier decision): the one product
  * maker of JournalError passes the store's failure (`JournalStore.ts:13-14`), so its cause is
  * required and no other site can leave it out. Never called.
  * Plant: make `Journal.ts:57` `Schema.optional(Schema.Defect())` again; the `@ts-expect-error` goes
  * unused and the typecheck fails.
  */
 const uncaused = (cause: unknown) => {
-  // @ts-expect-error every maker of JournalError has a cause, so the field is required (0568).
+  // @ts-expect-error every maker of JournalError has a cause, so the field is required.
   const bare = JournalError.make({ reason: "storage" });
   const kept = JournalError.make({ reason: "bad_entry", cause });
   return { bare, kept };
@@ -161,15 +160,13 @@ it("type: T1062 L3 a JournalError is never made without its cause, and its cause
 ```
 
 - The law's label is the `type:` title prefix, as the `fabrika/law-shape` lint rule reads it on today's
-  main and as slice 1 wrote it ([0527](../../../.decisions/0527-type-laws-get-a-type-label.md)). If
-  https://github.com/kamp-us/tea-fabrika/pull/1497 (decision
-  [0580](../../../.decisions/0580-law-options-carry-plant-and-label.md), labels and plants as options)
+  main and as slice 1 wrote it. If
+  https://github.com/kamp-us/tea-fabrika/pull/1497 (decision, labels and plants as options)
   merges before the tests step, the step writes the law the way that rule then asks. A call, 90%.
 - `make` and `new` take the same input type in Effect 4.1.3 (`S["~type.make.in"]`,
   `effect/src/Schema.ts:17433-17436` and `:17562`), so one maker call covers both. The product and the
   fakes both use `make`, so L3 does too.
-- **Is this a setting?** No. The form of a schema field is a code shape, the same on every install
-  ([0069](../../../.decisions/0069-choices-are-settings.md)). The cut's message is test text.
+- **Is this a setting?** No. The form of a schema field is a code shape, the same on every install. The cut's message is test text.
 - **Where it lives:** all three files exist in libfabrika's `client` module, the hands client's own
   contract, which a from-scratch client would need as is (`next/AGENTS.md`'s libfabrika test). No new
   file.
@@ -208,8 +205,7 @@ Notes on the laws:
 - The second row adds no law. It names what must stay green; the existing properties in
   `next/packages/libfabrika/src/client/HandsStart.laws.test.ts` and
   `next/apps/fabrika/src/hands-client.test.ts` keep their own plants.
-- The plant is run once by the tests step and recorded in its run row, never committed
-  ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)).
+- The plant is run once by the tests step and recorded in its run row, never committed.
 - **No host-only law.** Nothing needs launchd, the real app, a real process or a signal. No
   `.integration.` file changes.
 
@@ -268,7 +264,7 @@ Estimate: 4 steps, $9
 - `.patterns/effect-errors-keep-their-cause.md:121` still names `Journal.ts:58` as an `optionalKey`
   cause after this lands. The parent plan's slice 4 rewrites that section ("drops the 12 `optionalKey`
   lines, now zero"), so this plan leaves it alone.
-- This plan makes no new decision. It builds [0568](../../../.decisions/0568-error-cause-follows-effect.md)
+- This plan makes no new decision. It builds
   as the parent plan cuts it, with 0562 for the fakes.
 
 ## What this cannot tell us

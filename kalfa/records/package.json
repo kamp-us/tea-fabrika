@@ -3,13 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The checks on our records (decisions 0605 to 0607, and 0610 for the map): a decision has one of two statuses, no record patches another, no link lands on a superseded record, and the map of instruction files fits its readers' limit.",
+  "description": "The checks on our records: the map of instruction files fits its readers' limit, and each runbook has its shape.",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "exports": {
-    "./Status": "./src/Status.ts",
-    "./Frontmatter": "./src/Frontmatter.ts",
     "./Finding": "./src/Finding.ts",
     "./cli": "./src/cli.ts",
     "./package.json": "./package.json"
@@ -21,7 +19,6 @@
     "mdast-util-from-markdown": "catalog:",
     "mdast-util-gfm": "catalog:",
     "micromark-extension-gfm": "catalog:",
-    "oxc-parser": "catalog:",
     "yaml": "catalog:"
   },
   "peerDependencies": {

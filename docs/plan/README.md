@@ -28,8 +28,7 @@ from 2026-11-01: finish the pipeline, watch it build a real ticket, then switch 
    [37 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), each with the steps
    the pipeline enforces: a plan, tests written first and red, the build, one review by a
    separate agent, and the lead agent's read of the diff, green CI and a leak grep before merge.
-   Mutation runs hourly against main instead of in each pull request
-   ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)); *it said: the fast mutation
+   Mutation runs hourly against main instead of in each pull request; *it said: the fast mutation
    check, as a step.* Each step that goes by hand is logged in `field/`.
    [PR 223](https://github.com/usirin/tea-fabrika/pull/223) is read, and each layer lands
    already fixed.
@@ -57,19 +56,18 @@ request goes by hand, by its own agent, and is logged.
 
 *2026-11-18:* [The rules and records build](./quests/rules-and-records-build-PLAN.md), in today's
 tooling and the records both versions read, cleans the records up and then turns on its checks in
-`pnpm lint` (0605 to 0607). Slices 1 to 3 folded decisions 0001 to 0199 into their own text
+`pnpm lint` (0605 to 0607). Slices 1 to 3 folded an earlier decision to 0199 into their own text
 ([PR 1628](https://github.com/kamp-us/tea-fabrika/pull/1628),
 [PR 1629](https://github.com/kamp-us/tea-fabrika/pull/1629),
 [PR 1627](https://github.com/kamp-us/tea-fabrika/pull/1627)). Slice 6 could not fit 0608's
-32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with
-[0610](../../.decisions/0610-agents-md-follows-memory-guide.md): the root `AGENTS.md` stays under
+32,768 bytes by 0129's moves without dropping a rule, so the lead replaced both with: the root `AGENTS.md` stays under
 200 lines, and procedures move to the skill read for that job. Slice 6 makes that cut, and slice
 8's size check counts lines, as advice. The other slices remain.
 
 *2026-11-18:* [The leaf-script ports](https://github.com/kamp-us/tea-fabrika/pull/1517), ticket 766
 slices S1 to S4, in today's lead tooling: `governance.sh`, `fieldrow.py` and `keepruns.sh` become
 `governance.ts`, `fieldrow.ts` and `box/RunsFs.ts`, and `pnpm lint` refuses a new tracked shell or
-Python file outside a list that only shrinks (0113). The list now holds 16 scripts. S5 to S8, the
+Python file outside a list that only shrinks. The list now holds 16 scripts. S5 to S8, the
 commit-path ports, the box-runner port and the typecheck-wrapper port remain, so ticket 766 stays
 open. The review left three findings: the hold passes other shell extensions such as `.bash`, its
 "only shrinks" law lets a ported script come back, and `fieldrow.ts` differs from the old script
@@ -99,7 +97,7 @@ own binding. The engine stays inside libfabrika; moving it to `@kalfa/config` an
 `kalfa config get|set` remain later slices. The dependent
 [readable-spacing child](https://github.com/kamp-us/tea-fabrika/pull/1525), ticket 1057, applies the
 agreed rule scopes while keeping program code, comments and literal contents. The pair lands
-layer by layer, bottom first, with no native stack link (0603). The PRs link their independent reviews and CI evidence. This slice supplies
+layer by layer, bottom first, with no native stack link. The PRs link their independent reviews and CI evidence. This slice supplies
 neither the later package move nor the CLI.
 
 *2026-11-17, extraction source:* ticket 1076 slice 2 moves the engine into
@@ -117,7 +115,7 @@ After successful CI and landing, another project installs the tested archive wit
 The prerequisite settings and spacing pair lands first.
 
 Today's CI, serving both versions, adds automatic related tooling checks for ready pull requests
-and queue groups, ticket 1155. Since [decision 0602](../../.decisions/0602-integration-laws-leave-merge-line.md)
+and queue groups, ticket 1155. Since an earlier decision
 those checks run only the plain tooling laws a change reaches: no `.integration.` law, of next/
 or of tooling, runs on a pull request, a queue group or a branch's proof run, and main's full run
 runs them all ([PR 1613](https://github.com/kamp-us/tea-fabrika/pull/1613) and the follow-up on
@@ -152,7 +150,7 @@ snapshot, then check every expected message against that set. Its exact existenc
 40 generated histories, seed, calls, limits and timeout stay unchanged. Temporary proof from the
 actual source passed 40 generated inputs, 11 fixed cases and three deliberate faults. A separate
 build check verified the actual source and proof. Initial Linux Q18 passed; the final review then
-required the existing Effect tag guard under decision 0567. That correction preserves the same
+required the existing Effect tag guard under an earlier decision. That correction preserves the same
 predicate and workload. Corrected-head Linux proof and the same review remain due. Earlier timing
 observations remain tied to their original source; no controlled speedup is claimed.
 
@@ -195,8 +193,7 @@ Each accepted exercise passed before the deliberate break, failed at its intende
 Each product change records its own source-bound fault evidence separately from these tooling fixtures.
 These exercises supply neither whole-product review nor branch proof; the affected product tickets remain open.
 
-The plant runner moves onto Stryker, in [`@kalfa/quality/stryker`](../../kalfa/quality/README.md)
-([0600](../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)). A plant names a product file, a Stryker
+The plant runner moves onto Stryker, in [`@kalfa/quality/stryker`](../../kalfa/quality/README.md). A plant names a product file, a Stryker
 mutator, the node's text and Stryker's replacement, and the law that must kill it; the runner finds that one place by
 shape, runs Stryker against the law's file alone, and answers `killed` only when the law is among the tests that
 failed. No byte offset or commit is pinned, so a squash merge or a blank line leaves a plant as it was. The catalog is
@@ -218,7 +215,7 @@ before cleanup. The existing cases, seed, generator limits and test deadline sta
 It changes test support, not product behavior. The PR records source-bound CI, fault checks and
 independent review; a passing ordinary run does not stand in for those separate checks.
 
-*2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
+*2026-11-13:* the order of work changed. The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside
 fabrika. Tier 1's rows that this needs come first and the others wait. The changed Tier 1 is in
@@ -227,9 +224,7 @@ fabrika. Tier 1's rows that this needs come first and the others wait. The chang
 [Tier 1](./tier-1.md) where they differ. No row's count changes. *It said: the changed Tier 1 is
 not written yet.*
 
-*2026-11-13, later:* the Alchemy port ([0041](../../.decisions/0041-object-classes-are-effect-objects.md),
-ticket 502) is part of this plan and keeps a slot beside the four primitives
-([0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md)). One of its objects, `RecordPart`,
+*2026-11-13, later:* the Alchemy port (ticket 502) is part of this plan and keeps a slot beside the four primitives. One of its objects, `RecordPart`,
 landed on 2026-11-11, `Connection` in slice S1 and `Process` in slice S2 of
 [its plan](./ticket-502-alchemy-port.md); `Project` and `Control` are still plain classes.
 
@@ -237,17 +232,14 @@ landed on 2026-11-11, `Connection` in slice S1 and `Process` in slice S2 of
 help and 12 wait. The build order is the merge line, the window, a person starting a program and
 the desk, `fabsh` in a tile, pipes for its built-ins, hands far enough to run a turn, `summon` with
 the agent link, `@name` with the inbox past its thin row, then rooms and `join`. Three things the
-owner added that day ([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)):
+owner added that day (0159's amendments):
 done is seen in the Electron app and in a browser tab, built side by side (P19), with the thin
 menu bar right behind the app (P21 in part); the cloud instance (P24) is built alongside once the
 window works, and each piece is deployed there as it lands; recovery and the rest of the cloud
 rows (P26, P27, P28, P29, P36) are the first work after done, and until then daily work lives only
-on the laptop, which the owner accepts. The merge line is decided
-([0161](../../.decisions/0161-no-step-signing-by-hand.md),
-[0162](../../.decisions/0162-no-friction-before-a-merge.md),
-[0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
+on the laptop, which the owner accepts. The merge line is decided: what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
-and the bot's plain tooling. *2026-11-15:* main's full run now starts on a push when the last one is over an hour old, plus an hourly catch-up, and a gate that cannot answer fails loudly ([0581](../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md), [PR 1404](https://github.com/kamp-us/tea-fabrika/pull/1404)). A branch's proof run now runs only the tests its change reaches, the full set when it touches a rerun trigger, and `land.ts arm` takes either one at the head ([0590](../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)). Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+and the bot's plain tooling. *2026-11-15:* main's full run now starts on a push when the last one is over an hour old, plus an hourly catch-up, and a gate that cannot answer fails loudly ([PR 1404](https://github.com/kamp-us/tea-fabrika/pull/1404)). A branch's proof run now runs only the tests its change reaches, the full set when it touches a rerun trigger, and `land.ts arm` takes either one at the head. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
 requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
@@ -256,8 +248,7 @@ requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012)
 [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146)). *Changed 2026-11-15: PRs 1028 (P14),
 1044 (P13), 1054 (P38), 1074 (P39) and 1097 (P21) were closed on 2026-11-13 Pacific because they
 were folded into PR 1146, which merged that day, so their slices are on main. They stood in this
-list, and PR 1028 and PR 1044 had stopped past their budget with red laws (0162;
-[0076](../../.decisions/0076-a-lane-stops-at-its-budget.md)).* → the owner: walk the focus clash
+list, and PR 1028 and PR 1044 had stopped past their budget with red laws (0162).* → the owner: walk the focus clash
 between 0279 and 0274 before the desk is built, then S1 of the
 [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it)
 before `fabsh` is built, and S2 to S7 before `summon`; say yes after reading `alchemy plan` before
@@ -300,7 +291,7 @@ the Electron client and recovery with both windows.
 
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
-membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
+membership. [The storage pattern](../../.kalfa/patterns/durable-objects-sleep.md). This finishes no
 Tier 1 row; the count stays 21 of 44. P14's first-window quest next brings this fix into its branch
 and proves a real press after idle updates the window without reload. Socket absence checking is
 slice 2 and remains separate.
@@ -321,12 +312,11 @@ stays 21 of 44. *Changed 2026-11-15: slice 1 merged on 2026-11-13 Pacific throug
 
 *2026-11-12:* P17, Tier 1's chaos row, is done in `next/`: P17b's third slice, the checklist faults
 and the real local p90 revoke, merged as [PR 1058](https://github.com/usirin/tea-fabrika/pull/1058), and p90 passes on main. That makes
-21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day, [0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)). P34c's third slice, each isolate call's CPU and wall time recorded, merged
+21 of Tier 1's 43 rows (44 since P45, a thin inbox, joined the same day). P34c's third slice, each isolate call's CPU and wall time recorded, merged
 as [PR 1031](https://github.com/usirin/tea-fabrika/pull/1031); its fourth, quotas per program, has an approved plan. Main was red for 47
 minutes between the two: each pull request passed alone and they broke together, which is why a
 pull request now lands only when its checks ran on a head that holds main
-(GitHub's merge queue, [0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md);
-[0162](../../.decisions/0162-no-friction-before-a-merge.md)).
+(GitHub's merge queue).
 
 *2026-11-12, P40 slice 2, ticket 878, merged as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072):* `next/` has an explicit `dev --repo` route that checks one
 default-branch commit through P38 before building the shipped programs. Repository selections,
@@ -338,8 +328,8 @@ check. Slice 2's real Git and Alchemy law, L11, ran in CI on the merged head and
 *It said: real Git and Alchemy checks remain the lead's host checks before landing this slice.*
 
 *2026-11-12:* ticket 844 ([PR 1027](https://github.com/usirin/tea-fabrika/pull/1027)) changes
-P10's law p67 in `next/`, as [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md) and
-[0143](../../.decisions/0143-a-refused-write-is-counted-never-a-row.md) decided. The gateway refuses
+P10's law p67 in `next/`, as and
+ decided. The gateway refuses
 a write that stamps its own `id`, `by`, `for` or `arrivedAt` before it makes an input id, and keeps
 only a count per piece and hour: no ledger entry, no span row and no measurement row. It finishes
 no Tier 1 row, so the count stays 20.
@@ -365,7 +355,7 @@ and 79 kept modules, matching the approved plan's sketch.
 *2026-11-12:* P38's slice 3 is cut in three on tracker ticket 753. Slice 3a in `next/` is
 [PR 1039](https://github.com/usirin/tea-fabrika/pull/1039): a settings file and the saved snapshot
 take their encodings from the one declaration, and a snapshot is read back strictly, with its hash
-checked ([the pattern](../../.patterns/settings.md)). It adds no setting and starts no Worker read.
+checked ([the pattern](../../.kalfa/patterns/settings.md)). It adds no setting and starts no Worker read.
 It finishes no Tier 1 row, so the count stays 20. Slice 3b comes next: the Worker handoff, the start
 record and the first byte setting, `limits.record`. Slice 3c adds the remaining declarations. P38
 stays open until its whole settings stack lands
@@ -375,11 +365,9 @@ stays open until its whole settings stack lands
 are on main, P17 the newest (*it said, dated 2026-11-11: 20 rows, plus P17a, half of P17*), so `next/` is on main now: the exams (P1, P2, P8, P30, P32,
 P35), the spikes and the sheet's design pass (P3 to P5), the design package (P31), and the layers
 from P6 to P12, P16 and P17, with P33, P34 and P37. *It said, dated 2026-11-09: 19 rows.* *Changed 2026-11-11
-(owner, [0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)): P43, the merge queue's first
-stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner,
-[0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): P20 and P22 left for Tier 2 with
-notes and P44, the checklist, joined, so it has 43 rows; it said 44.* *Changed 2026-11-12 (owner,
-[0151](../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md)): P45, a thin inbox that shows the brain's notices, joined, so it has 44 rows; it said 43.* No Tier 1
+(owner): P43, the merge queue's first
+stage, joined Tier 1, so it has 44 rows; it said 43.* *Changed 2026-11-11 (owner): P20 and P22 left for Tier 2 with
+notes and P44, the checklist, joined, so it has 43 rows; it said 44.* *Changed 2026-11-12 (owner): P45, a thin inbox that shows the brain's notices, joined, so it has 44 rows; it said 43.* No Tier 1
 row finished on 2026-11-11, so the count stays 20, but slices of seven rows merged that day (see
 below). *It said: no Tier 1 row merged on 2026-11-11.*
 
@@ -410,40 +398,34 @@ P41's slice 2, then GitHub behind the contracts and the switch. It finishes no T
 ([PR 929](https://github.com/usirin/tea-fabrika/pull/929)) and P14's slice 1 of 9
 ([PR 912](https://github.com/usirin/tea-fabrika/pull/912)); P14's old
 [PR 810](https://github.com/usirin/tea-fabrika/pull/810) was closed. The checklist program's slice 1
-(ticket 806) merged as [PR 987](https://github.com/usirin/tea-fabrika/pull/987), on
-[0125](../../.decisions/0125-the-example-program-is-a-checklist.md): the checklist replaces the
+(ticket 806) merged as [PR 987](https://github.com/usirin/tea-fabrika/pull/987), on: the checklist replaces the
 counter as the example. In flight: P14's slice 2 (ticket 828) and P42's slice 1 (ticket 770) have
 tests on their branches; P41's slice 2 (ticket 764) is at its tests step, draft
-[PR 993](https://github.com/usirin/tea-fabrika/pull/993); and the scheduled job piece (ticket 762,
-[0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)) has a build on its
+[PR 993](https://github.com/usirin/tea-fabrika/pull/993); and the scheduled job piece (ticket 762) has a build on its
 branch, draft [PR 992](https://github.com/usirin/tea-fabrika/pull/992).
-[0132](../../.decisions/0132-a-path-pack-may-sit-anywhere.md) answers P40's question before its
+ answers P40's question before its
 slice 2. The 2026-11-11 entry below says what was being built earlier that day.
 
-*2026-11-11:* the checklist is Tier 1's program, and notes is Tier 2's first real app
-([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)). P44's first slice, the agent's
+*2026-11-11:* the checklist is Tier 1's program, and notes is Tier 2's first real app. P44's first slice, the agent's
 half (ticket 839), merged as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the
 `items` read port, an optional `note` of 1 to 256 characters on `check`, where a checked item keeps
 its first note, and ticket 847's three gaps in the laws closed. P13 keeps its two platform slices,
 and P25 hands the bridge `[checklist]`. *It said: the lead lands it once its steps pass.*
 
-*2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681,
-[0080](../../.decisions/0080-a-running-copy-is-an-instance.md)): `local-instance.ts`,
+*2026-11-11:* in `next/`, a running copy of fabrika is an instance in code too (ticket 681): `local-instance.ts`,
 `instance.json`, the `INSTANCE` binding and the `node/dev` subpaths, with a lint rule,
 `fabrika/no-stage-word`, that keeps the old word out. Alchemy's own `stage` keys and two saved quotes keep the word.
 
 *2026-11-11:* big rows are cut into stacks of slices, each landing whole
-([0087](../../.decisions/0087-a-pull-request-caps-product-lines.md); its 600-line cap is gone,
-[0099](../../.decisions/0099-no-number-caps-a-pull-request.md)). P13, notes (ticket 281), is
+(its 600-line cap is gone). P13, notes (ticket 281), is
 re-planned as 4 slices; slice 1, durable terminal replies, is being built on a fresh branch, and
-the old branch is not continued ([0072](../../.decisions/0072-a-churning-lane-is-redone.md)). P34c
+the old branch is not continued. P34c
 (ticket 404) has an approved plan cut into 10 slices; slice 1, structured exit reasons, is being
 built. P38, settings (ticket 664), is planned in 7 slices; slice 1, the local port as a declared
-setting, is being built, on [0086](../../.decisions/0086-settings-are-declared-once.md) and
+setting, is being built, on and
 [the settings note](../direction/settings.md), both on main. P14 (ticket 286) is
 [PR 810](https://github.com/usirin/tea-fabrika/pull/810), too large for the cap, so it is being cut
-into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of
-[0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md): `ledger/Ledger.ts` holds
+into slices, and its restack plan is being written. Outside Tier 1, ticket 702 builds slice 1 of: `ledger/Ledger.ts` holds
 only the `Ledger` contract, its layers are `LedgerSql.ts` and `LedgerRemote.ts`, and the Cloudflare
 `Sql` adapter moves to `cloudflare/`; slice 1 merged as
 [PR 891](https://github.com/usirin/tea-fabrika/pull/891). Its slice 3 (ticket 723) is being built:
@@ -460,43 +442,38 @@ lands each slice once its steps pass
 inside the brain, and the local bar did not get worse (experiment 241 (in the notes)).
 → next: P15, P17b, P18 to P20, P23 to
 P25, P27a and P36 have tests on their branches and wait for builds. P36's tests change first:
-email recovery now lets the device in at once, with no wait and no Cancel (2026-11-11,
-[0138](../../.decisions/0138-email-recovery-lets-in-at-once.md), tracker ticket 840). P28's tests are in, and its
+email recovery now lets the device in at once, with no wait and no Cancel (2026-11-11,, tracker ticket 840). P28's tests are in, and its
 build waits on P19, P21 and P26. Ticket 331 names both P24 and P28, a clash to fix
 ([P24's row](./tier-1.md#the-pull-requests-one-at-a-time)).
-P34c, new on 2026-11-09 ([0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)),
+P34c, new on 2026-11-09 ([0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)),
 turns P34 into OTP's top-level supervisor. *It said: its plan is drafted and waits on the owner's
 read; see 2026-11-11 above.*
 *2026-11-10:* the owner added P38 to Tier 1, the foundation for loading settings, so Tier 1 has
-39 rows ([0069](../../.decisions/0069-choices-are-settings.md)). *It said: its plan and ticket are
+39 rows. *It said: its plan and ticket are
 to come; see 2026-11-11 above.*
-*2026-11-10:* all six core ideas get their thin slice in Tier 1
-([0088](../../.decisions/0088-six-slices-in-tier-1.md)), so P39 to P42 were added, to be planned,
-and Tier 1 had 43 rows. *2026-11-11:* P43, the merge queue's first stage, made 44
-([0111](../../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)).
+*2026-11-10:* all six core ideas get their thin slice in Tier 1, so P39 to P42 were added, to be planned,
+and Tier 1 had 43 rows. *2026-11-11:* P43, the merge queue's first stage, made 44.
 *2026-11-10:* P34 now runs on the Worker path too (ticket 402,
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local instance saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
 *2026-11-10:* libfabrika's files move into rooms (ticket 477,
-[0043](../../.decisions/0043-rooms-on-floors.md) and [0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
+).
 PR 0's exam landed ([PR 732](https://github.com/usirin/tea-fabrika/pull/732)), and PR 1 gives the shared names
 `ProcessId`, `Sql` and `Rev` files of their own ([PR 773](https://github.com/usirin/tea-fabrika/pull/773)).
 → next: one move PR (every file to its room, then floors and fronts, then 0051's renames), then
 the runner and gateway splits side by side, then the error PRs.
 Its first open question is answered
-([0018](../../.decisions/0018-one-application-per-program.md)): each program is its own OTP
+([0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): each program is its own OTP
 application, so one program past its restart limit stops alone. Isolation gets hard walls
-([0020](../../.decisions/0020-programs-get-hard-walls.md)): quotas per program, each program's
+([0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): quotas per program, each program's
 supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
 *2026-11-13:* the layering debt has its plan, a draft ([the plan](./layering-debt.md), ticket 921).
 `runtime/`, `access/` and `gateway/` stop importing `ledger/`, as rule 11 of
-[0043](../../.decisions/0043-rooms-on-floors.md) asks, and the 71 import rows of `next-ledger.json`
-go to zero in seven slices ([0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). Nothing of
-it is on main yet. The lead approved slices 1 to 3, which only build 0043,
-[0055](../../.decisions/0055-errors-named-by-their-service.md),
-[0062](../../.decisions/0062-test-files-keep-the-floors.md) and
-[0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md). Slices 4 to 7 wait on the
+ asks, and the 71 import rows of `next-ledger.json`
+go to zero in seven slices. Nothing of
+it is on main yet. The lead approved slices 1 to 3, which only build 0043,,
+ and. Slices 4 to 7 wait on the
 plan's open question 1: may `processes/` get one small service for a named stream?
 → the owner answers question 1; slice 1, stores name their own faults, is in its steps.
 
@@ -506,7 +483,7 @@ must pass. 55 run green now; 25 wait, marked `not built`, until those rows add t
 build can start.
 
 `next/` naming sweep, ticket 688 (2026-11-11): libfabrika's folders are modules and their ranks
-are layers ([0091](../../.decisions/0091-modules-and-layers.md)). Each row of `layer-rules.json`
+are layers. Each row of `layer-rules.json`
 says `layer` where it said `floor`, with the same twelve ranks; the lint rule `fabrika/rooms` is
 `fabrika/modules`, with the same checks; and oxlint's `eslint/id-denylist` keeps the old words out
 of names in `next/`. No import permission, rank or runtime behavior changes, and no Tier 1 row is
@@ -520,7 +497,7 @@ storage for these saved shapes; this change does not migrate old lab stores. Tod
 keeps `why`. → lands once its steps pass
 
 Question-word sweep, ticket 682 (2026-11-11): `next/` and `.agents/` name no key, field, option or
-binding `where`, `why`, `what`, `who` or `how` ([0081](../../.decisions/0081-no-question-word-names.md)).
+binding `where`, `why`, `what`, `who` or `how`.
 oxlint's `eslint/id-denylist` holds every identifier, and `fabrika/no-question-word-key`, renamed from
 `fabrika/no-why-key`, holds quoted, computed and template keys. A saw says `location` and `method`, a
 socket's admitted client is `identity`, and a saved waiting row says `location`; no old-key reader is
@@ -552,10 +529,9 @@ keybindings, the inbox, the move to Manti) go to plan and build in parallel with
 work, so what is wrong shows early. Every "after ticket 117" below that holds one of them back no
 longer holds. A plan that only builds a decided note is approved by the lead agent; one that
 raises a new design call goes to the owner. Today's version is frozen now: these foundations are
-built in `next/`, and no agent slot goes to a today's-app lane
-([0525](../../.decisions/0525-todays-version-is-frozen.md)).
+built in `next/`, and no agent slot goes to a today's-app lane.
 
-- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`. *2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): the order is `fabsh` v1 as today's terminal, then pipe slice 1, then `summon` as today's `tsh` has it, then `join` as IRC has it.*
+- **The four primitives first, in `next/`.** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`. *2026-11-15: the order is `fabsh` v1 as today's terminal, then pipe slice 1, then `summon` as today's `tsh` has it, then `join` as IRC has it.*
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing
@@ -564,11 +540,11 @@ built in `next/`, and no agent slot goes to a today's-app lane
 - **[PR 267](https://github.com/usirin/tea-fabrika/pull/267), real answers.** Merged 2026-11-01. Its leftovers are ticket 125. → nothing
 - **First real run, ticket 117.** Ran, and ended `stuck:step_stuck` at the mutation step: one stale test outside the exam (`tsh.test.ts` still expects `takes("map")` to be `[]`) made the suite red. The builder's own checks had died in its Codex box (`spawnSync git EPERM`) and it still said `done`; nothing in code checks a build before `done`, every `stuck` ends the quest, and no test output was kept. Its working copy `lane/117` is still on the machine; nothing was pushed, and the claim is released. → PRs 1, 3, 4, 5 and 7 of [the self-fix plan](./pipeline-self-fix.md) landed, and ticket 117 restarted; it is saved at `exam_merge` until PR 10 lands, and pauses at any hole PR 11 fixes until that lands too (owner, 2026-11-03). It was planned before PR 7, so its plan's properties, interface and gaps are not in the ledger. It reruns plan, the owner's yes, the test writer and build on a fresh branch from main, and the old build is kept under a ref (owner's yes 2026-11-02, on the walk of [311](https://github.com/usirin/tea-fabrika/pull/311)). *Since:* PR 10 landed 2026-11-03 and its rule changes on 2026-11-04 ([313](https://github.com/usirin/tea-fabrika/pull/313)); it then stopped at the test writer twice with `bad_report`, since `git init` could not write into `.git/hooks` inside the box. The fix, [394](https://github.com/usirin/tea-fabrika/pull/394), landed late 2026-11-05. → paused with the pipeline (owner, 2026-11-05), saved at its ask with tickets 213 and 159
 - **The quest fixes itself, and a stuck quest restarts.** Decided 2026-11-01 ([jidoka and andon](../direction/jidoka-and-andon.md)): a person is asked only for a judgment, and a stuck or crashed quest restarts from the step that broke. The "after ticket 117" deferral is over. [The plan](./pipeline-self-fix.md) was nine by-hand pull requests, about 5 to 7 agent hours at the measured full-quest rate of 600 lines an agent hour (2 to 2.5 at this repo's 1,660), 4 to 5.5 of them before ticket 117 restarts ([agent hours](../direction/agent-hours.md), restated 2026-11-01; *old guess, wrong: 29 to 41.5, 22.5 to 32 before the restart*), with the rebase on restart from tracker ticket 130. It follows [the pipeline guidelines](../direction/pipeline-guidelines.md) ([PR 290](https://github.com/usirin/tea-fabrika/pull/290)): a restart that cannot prove a field goes back only to the step that writes it, every stop and every pick says where the quest goes on, a person's `stop` is a saved pause, a person may steer by a plain comment, red goes back by default, and the quest records wide from its first pull request. → approved 2026-11-01. Merged 2026-11-02: PR 1 ([301](https://github.com/usirin/tea-fabrika/pull/301)), PR 2 ([298](https://github.com/usirin/tea-fabrika/pull/298)) and PR 7 ([302](https://github.com/usirin/tea-fabrika/pull/302)). PR 3 merged 2026-11-02 ([304](https://github.com/usirin/tea-fabrika/pull/304)). PR 4 ([310](https://github.com/usirin/tea-fabrika/pull/310)) and PR 5 ([311](https://github.com/usirin/tea-fabrika/pull/311)) merged 2026-11-02. Ticket 117 restarted 2026-11-02 and is saved at `exam_merge`, where its exam pull request showed new holes. PRs 10 (the exam pull request, and a yes binds to the diff) and 11 (a route for every outcome, from experiment 193 (in the notes)) build every row of the jidoka table still open, about 6 to 8 more agent hours. It restarts again once PR 10 lands, without waiting for PR 11 (owner, 2026-11-03). PR 10 merged 2026-11-03 ([322](https://github.com/usirin/tea-fabrika/pull/322)) and PR 11a, the routes and their law, 2026-11-04 ([345](https://github.com/usirin/tea-fabrika/pull/345)). PR 11b, waits and records, is not built. → paused with the pipeline (owner, 2026-11-05)
-- **Tier 1 for `next/`, built now by hand.** What it builds was approved by the owner 2026-11-01. Refreshed 2026-11-05 and 2026-11-06: [36 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), 37 since 2026-11-07, in 15 waves, about 27.7 to 41.8 agent hours by their own sizes (sure 45%), against the approved 17 to 24 that left out hot reload, keys, the exams and the spikes (*old guess, wrong: 63 to 92*). P1 to P4 are done: [the exam on main](./tier-1.md#the-exam-on-main), and the browser key and the Mac app's four unknowns all answered yes. P5 is done for the sheet ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)). The owner's calls of 2026-11-05 are in: one bundler, Rolldown, from P12; tea's own hook is already installed, and P30 only removes the old exam allowance, with no release wait; the first method is `initialize`; a key per client and never GitHub as a way in; an entry's clocks are `arrivedAt` and `sentAt`; `cause` on the entry in P6; a tracker ticket per pull request; P14 imports the design package, which P31 builds first in today's version; and a unit of work is a commit: each exam change is the test writer's commit inside its build pull request, and P32 builds the check that walks the commits and verifies each step's own signing key; edges are opt-in comments at the line, which P35 builds; squash merges stay, with each step's signed link from tree to tree. The owner's calls of 2026-11-06, after an audit: Tier 1 builds a slice of coordination's C2 to C5 (P33, P34, a brain restart in P12 and P19); a wake that fails on a saved letter is a crash like any other, restarted with backoff inside the budget and `down` only at the brake, with every letter kept (changed owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)); *amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): restarted at once, and past the brake `failed` until a person restarts it*; every device the person owns is a master and an equal root, built in P9 and P10; a sheet belongs to the person; email recovery is decided and P36 builds it. The owner's calls of 2026-11-07: full monitoring from Tier 1, and "nothing is lost" is a Tier 1 goal ([monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1)). P37, the span sink, lands after P6 and before P10 and P11, and writes each process's spans to a thin JobRecord, kept forever; health keeps raw rows about 2 weeks and hourly summaries forever; `dead` keeps error classes, `down` gains `until`, and a failed Cmd comes back as a letter with a `why`; chaos proves it with p91; every plan lists what its piece records; and one alarm per object. The notes of 2026-11-03 to 2026-11-05 change little ([the list](./tier-1.md#what-the-notes-of-2026-11-03-to-2026-11-05-change)). The planner gap and how `next/` reaches the quest no longer block anything. Later tiers stay proposed. → where it stands is in the first paragraph of this section; the owner answers [questions 14 to 17 and 19](./tier-1.md#open-questions) before the pull requests that need them
+- **Tier 1 for `next/`, built now by hand.** What it builds was approved by the owner 2026-11-01. Refreshed 2026-11-05 and 2026-11-06: [36 small pull requests](./tier-1.md#the-pull-requests-one-at-a-time), 37 since 2026-11-07, in 15 waves, about 27.7 to 41.8 agent hours by their own sizes (sure 45%), against the approved 17 to 24 that left out hot reload, keys, the exams and the spikes (*old guess, wrong: 63 to 92*). P1 to P4 are done: [the exam on main](./tier-1.md#the-exam-on-main), and the browser key and the Mac app's four unknowns all answered yes. P5 is done for the sheet ([PR 404](https://github.com/usirin/tea-fabrika/pull/404)). The owner's calls of 2026-11-05 are in: one bundler, Rolldown, from P12; tea's own hook is already installed, and P30 only removes the old exam allowance, with no release wait; the first method is `initialize`; a key per client and never GitHub as a way in; an entry's clocks are `arrivedAt` and `sentAt`; `cause` on the entry in P6; a tracker ticket per pull request; P14 imports the design package, which P31 builds first in today's version; and a unit of work is a commit: each exam change is the test writer's commit inside its build pull request, and P32 builds the check that walks the commits and verifies each step's own signing key; edges are opt-in comments at the line, which P35 builds; squash merges stay, with each step's signed link from tree to tree. The owner's calls of 2026-11-06, after an audit: Tier 1 builds a slice of coordination's C2 to C5 (P33, P34, a brain restart in P12 and P19); a wake that fails on a saved letter is a crash like any other, restarted with backoff inside the budget and `down` only at the brake, with every letter kept (changed owner, 2026-11-08, following [OTP's supervisor restart intensity](https://www.erlang.org/doc/system/sup_princ.html)); *amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): restarted at once, and past the brake `failed` until a person restarts it*; every device the person owns is a master and an equal root, built in P9 and P10; a sheet belongs to the person; email recovery is decided and P36 builds it. The owner's calls of 2026-11-07: full monitoring from Tier 1, and "nothing is lost" is a Tier 1 goal ([monitoring is in Tier 1](./tier-1.md#monitoring-is-in-tier-1)). P37, the span sink, lands after P6 and before P10 and P11, and writes each process's spans to a thin JobRecord, kept forever; health keeps raw rows about 2 weeks and hourly summaries forever; `dead` keeps error classes, `down` gains `until`, and a failed Cmd comes back as a letter with a `why`; chaos proves it with p91; every plan lists what its piece records; and one alarm per object. The notes of 2026-11-03 to 2026-11-05 change little ([the list](./tier-1.md#what-the-notes-of-2026-11-03-to-2026-11-05-change)). The planner gap and how `next/` reaches the quest no longer block anything. Later tiers stay proposed. → where it stands is in the first paragraph of this section; the owner answers [questions 14 to 17 and 19](./tier-1.md#open-questions) before the pull requests that need them
 - **P33, processes, is built (2026-11-08, ticket 252), merged as [PR 507](https://github.com/usirin/tea-fabrika/pull/507).** Each start is a new process with its own ID, a name is reserved for good, a monitor gets one `DOWN` for its exact recipient, `demonitor` drops a queued one, an exit and its `DOWN`s land in one transaction, and who is online is worked out from pings, never written. Review sent it back three times for the same hole, a client writing what only the brain should; one rule closed it: only the brain writes `processes/` and signal ids, an inbox read never fails, and client text is capped at 256 characters (field note 2026-11-08-01 (in the notes)). [As built](./tier-1-detail.md#processes-as-p33-built-it). Experiment 231 (in the notes) found a woken object cannot tell sleep from a crash by its constructor; a saved marker can, if P11 calls `storage.sync()` after writing it. What it cannot tell us yet: the cost on workerd (P12), real cloud hibernation (P24), whether P11 writes the marker at the right point, and whether P34's restart policy recovers. → nothing; P11 and P34 built on it
 - **P11, programs, is built (2026-11-08, ticket 255), merged as [PR 508](https://github.com/usirin/tea-fabrika/pull/508).** A program is a pure tea machine with its declarations; the runner steps a fresh input first, appends it through P10's checked writer, and only then shows the view and runs its Cmds, each saved before it runs and answered as a letter with its `why`. Saved state climbs named upgrades, and `syncTest` and `senderTest` are in libfabrika's test kit. The runner writes the `stepping` marker and calls `storage.sync()` before each step, as experiment 231 (in the notes) asked. Review sent it back twice; the rulings are in [as built](./tier-1-detail.md#programs-as-p11-built-it). Left for later: no wake reads the marker yet, a `DOWN` never reaches a program, and Cmds from mail run only at the next load (P34). What it cannot tell us yet: any cost on workerd (P12). → nothing; P12 and P34 built on it
 - **The project window's build plan is approved (owner, 2026-11-09, ticket 276),** as written: a welcome page and a Cmd-O box of recent projects with Open Folder last, summon in the window's project, and no `FABRIKA_REPO`. Two pull requests: open and switch, then reopen on launch and from the Dock. [The plan](./project-window.md) lands with the first one. PR 1, open and switch, is in its last steps on `fabrikalfa/projectwin` (2026-11-09): tests, four builds and two mutation rounds ran, and all 100 captures pass. → the lint fixes, review 1, then the merge
-- **`Program.make` is built (2026-11-08, ticket 280), [PR 522](https://github.com/usirin/tea-fabrika/pull/522).** A program is one typed `Program.make` in `@kampus/libfabrika`, with every type from its machine ([Program.make](../../.decisions/0256-a-program-is-one-program-make.md), [the plan](./program-make.md)). tea's schemas come off the machine through a declaration-only patch in the shape of [demlik PR 899](https://github.com/kamp-us/demlik/pull/899); the bump to the release that has it deletes the patch. P14 builds on it. The owner's exam read of its type tests and the patch is still owed.
+- **`Program.make` is built (2026-11-08, ticket 280), [PR 522](https://github.com/usirin/tea-fabrika/pull/522).** A program is one typed `Program.make` in `@kampus/libfabrika`, with every type from its machine (Program.make, [the plan](./program-make.md)). tea's schemas come off the machine through a declaration-only patch in the shape of [demlik PR 899](https://github.com/kamp-us/demlik/pull/899); the bump to the release that has it deletes the patch. P14 builds on it. The owner's exam read of its type tests and the patch is still owed.
 - **[PR 223](https://github.com/usirin/tea-fabrika/pull/223), the first slice of `next/`.** Paused since 2026-10-31. Read, not landed: each layer landed already fixed, from P6 on ([PR 459](https://github.com/usirin/tea-fabrika/pull/459)), as [the lean](./tier-1.md#still-open-how-next-reaches-the-quest) said. → nothing
 - **[PR 258](https://github.com/usirin/tea-fabrika/pull/258), update everything.** Effect 4.1.1, pnpm 12. Merged 2026-11-01.
 - **Test windows.** Merged: [257](https://github.com/usirin/tea-fabrika/pull/257) made them see-through, then [271](https://github.com/usirin/tea-fabrika/pull/271) made them show again, without focus. → nothing
@@ -582,7 +558,7 @@ built in `next/`, and no agent slot goes to a today's-app lane
 - **Effect on Cloudflare, experiment 174 (in the notes).** Walked 2026-11-02, two rulings. [tea is the engine](../direction/tea-is-the-engine.md): no Effect `Workflow`, cluster not now. Tier 1 takes its one change: a wait is data on the socket, and a waiting tab stops knocking every 5 s ([Tier 1, Cloudflare](./tier-1-detail.md#cloudflare)). → nothing
 - **demlik.** Epics landed, no release yet. The three issues that waited have rulings as of 2026-11-01: [756](https://github.com/kamp-us/demlik/issues/756#issuecomment-6564399911), [782](https://github.com/kamp-us/demlik/issues/782#issuecomment-6564266885) and [777](https://github.com/kamp-us/demlik/issues/777#issuecomment-6564371162). → demlik's agents build them, and the release stays the owner's call
 - **Copying for the app and Tuval in `next/`.** Settled: rethink stays the default, with copies only where the owner names them. Tier 1 names three (styling, `programs/markdown`, the MCP tools; [Tier 1](./tier-1.md)). Tier 2's named copies come with its plan. → nothing now
-- **People before agents in `next/`.** Settled by [the tier order](./tiers.md): a few people is Tier 3 (it said two people until the owner widened it, 2026-11-07), agents Tier 5. An agent fabrika starts still gets a thin slice in Tier 1 ([0078](../../.decisions/0078-agent-and-flow-slices-start-early.md)). → nothing
+- **People before agents in `next/`.** Settled by [the tier order](./tiers.md): a few people is Tier 3 (it said two people until the owner widened it, 2026-11-07), agents Tier 5. An agent fabrika starts still gets a thin slice in Tier 1. → nothing
 - **Conversation branches.** Saved, not designed. → when the agents tier is next
 - **Left for later.** The third step of going through the two trackers with the owner, and whether popovers use the browser's own `<dialog>` or a library.
 
@@ -624,28 +600,28 @@ In a live run on a target repository, never, by anyone's agent: merge by hand, a
 ## How a change lands
 
 - **A live run on a target repository:** inside the run, nothing but ship merges. Once a quest is finished and stuck, what is left is a by-hand change, under the next rule.
-- **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent turns on GitHub's merge when ready ([0530](../../.decisions/0530-lead-turns-on-merge-when-ready.md)) after the leak grep on the change and on the title and description, and GitHub adds it to the queue when `ci-required` is green. Main takes changes only through that queue (squash, one pull request per group): GitHub tests the pull request on newest main and merges it, so nobody merges main in or runs the checks again by hand ([0162](../../.decisions/0162-no-friction-before-a-merge.md)). The squash commit's title and message are the pull request's title and description. After the merge, `land.ts merged <pr>` comments on each ticket it closes with the pull request and its merge commit (`.agents/skills/lead/scripts/pr/Queue.ts`). No row per merge is written in `field/` yet: that note's M1 is proposed. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead lands product code and exam changes the same way, through the queue, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md), owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
+- **A pull request that went by hand:** one review by a separate agent says merge-ready, CI is green for code, and the lead agent reads the diff and runs a leak grep. Then the lead agent turns on GitHub's merge when ready after the leak grep on the change and on the title and description, and GitHub adds it to the queue when `ci-required` is green. Main takes changes only through that queue (squash, one pull request per group): GitHub tests the pull request on newest main and merges it, so nobody merges main in or runs the checks again by hand. The squash commit's title and message are the pull request's title and description. After the merge, `land.ts merged <pr>` comments on each ticket it closes with the pull request and its merge commit (`.agents/skills/lead/scripts/pr/Queue.ts`). No row per merge is written in `field/` yet: that note's M1 is proposed. A merge never waits on the owner ([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), decided 2026-11-03). The lead lands product code and exam changes the same way, through the queue, once every step passed and `loosening.sh` shows no real loosening after its hand check; only real loosening of a law, or a new design call, waits on the owner (owner, 2026-11-09). The owner still says yes after `alchemy plan`. *It said: the owner's yes, with CI green for code.*
 - **Merge when ready on a hand pull request** (0530, 2026-11-14, in place of 0162's wait for green). Once the steps passed and the lead's final read is done, the lead turns on GitHub's merge when ready at once (`enablePullRequestAutoMerge`); GitHub queues it when `ci-required` goes green and never when red. A push after the final read means `disablePullRequestAutoMerge` and a new read. No `--admin` without the owner. `ask owner exam_read` stays a warning, so an agent's pull request that edits the exam can merge before the owner reads it. The owner accepts that, to test the pipeline's own limits. The lead agent never writes "owner read" unless the owner did, and each such merge gets a field note, so what slipped through can be counted.
-- **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md)). *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
+- **An exam change that is all proper property tests** (owner, 2026-11-08) merges without the owner's read. Proper means every new or changed law is a property, or an example labeled `vector:`, `format:`, `pinned:` or `scenario:` with its reason; nothing loosens. Zero hits from `loosening.sh` show that; the PR writes its removed/replacement mapping table and that output. Mutation is no step of a pull request: the hourly run against main files a narrowed law as a ticket marked loosening. *It said: mutation shows no law got narrower, with the mutation arm-a vs arm-b narrowing list as a second output.* The lead agent checks that and says so in the pull request. Measure the new check's false alarms on the last 20 merged `next/` PRs before it blocks. A change that loosens or removes a law still waits on the owner. The leak check fails closed: any hit goes to the lead agent's hand check.
 - **No number caps a pull request's size** (owner, 2026-11-11). Bigger work is a stack of
   slices the plan cuts by what lands whole, each its own pull request through every step, with its
   tests. Work a fix command makes whole is no stack: it takes
-  [the mechanical branch](../direction/next-is-a-pipeline-pre-run.md#the-mechanical-branch), one pull request per rule ([0615](../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). Size picks who looks, never whether it lands
-  ([0099](../../.decisions/0099-no-number-caps-a-pull-request.md), which drops
-  [0087](../../.decisions/0087-a-pull-request-caps-product-lines.md)'s 600-line cap). *It said: at
+  [the mechanical branch](../direction/next-is-a-pipeline-pre-run.md#the-mechanical-branch), one pull request per rule. Size picks who looks, never whether it lands
+  (which drops
+'s 600-line cap). *It said: at
   most 600 lines of product code, a trial that only advises (owner, 2026-11-10).*
 - **The tests step writes each law as a property that walks the machine** (owner, 2026-11-11, a
   trial). Its generator reads the state it folds. Each plant is run once to show the law can fail,
   recorded in the report and the run row, and not committed. A single example stays only with a
   `vector:`, `format:`, `pinned:` or `scenario:` label. A second check on another product file
-  ends the trial ([0093](../../.decisions/0093-laws-walk-plants-run-once.md)).
+  ends the trial.
 - **A docs-only pull request that writes down a decision** (owner, 2026-11-09) is opened the turn it is decided and merged when CI is green and the leak grep is clean, with no plan, tests, review or field rows. Code pull requests keep their steps.
 - **Rows that only record what happened (field logs, index rows):** they merge after the leak grep, with no yes.
 - **CI wastes no time** (owner, 2026-11-09). A pull request that changes only field rows runs a seconds-long row schema check instead of the full check job, and each quest carries its own field rows. Then every CI job's time is audited for more cuts. The build is in progress (tracker ticket 342). Ticket 375 (PR A) makes skill prose skip the heavy jobs and runs only the tests a skill script reaches; ticket 376 (PR B) puts next on six machines, built 2026-11-10 as [PR 653](https://github.com/usirin/tea-fabrika/pull/653). *It said: three machines. The approved plan chose six, as the `test` job has, and split the one 248 s test file in four so no machine is held by it.*
 - **Direction notes and plans:** a note that records an owner's decision, or a plan that only builds decided notes, merges as above. A new design call still gets the owner's yes ([the steps](../direction/next-is-a-pipeline-pre-run.md)). *It said: they still get the owner's yes.*
 - **A pull request that changes only Markdown or images:** no CI wait when no check reads them. Shared skill instructions are read by `skillscheck.sh`, so wait for that check. A broken relative link can slip through.
-- **To bring a branch up to date:** merge `main` in (`git merge origin/main`), never a rebase, a force-push or `gh pr update-branch` (GitHub makes that merge commit, so no step key signs it). In `next/`, the merge is a `lead` commit, signed like any step's ([P32](./tier-1.md#the-pull-requests-one-at-a-time)). For a stacked child, [0004](../../.decisions/0004-squash-merges-and-native-stacks.md), as amended by [0599](../../.decisions/0599-native-stack-upkeep.md), allows `gh pr update-branch <child>` after the parent head and source, queue and writer agree; the child's own step owner signs again only if its tree links changed. The commit check's up-to-date rule stays. One command merges `main` in as the bot, signs it as `lead`, and pushes the commit and its notes together, so CI starts on its own; a person's pull request gets its `lead` merge from the same command (owner, 2026-11-08). Checks still rerun on the final commit. *Changed 2026-11-07: it said "rebase and force-push with a lease, never a merge commit or `gh pr update-branch`", and that the diff's `git patch-id --stable` stays the same, so a review holds. That was wrong: it clashed with [done is per criterion](../direction/done-is-per-criterion.md) and [read fresh, run alone](../direction/read-fresh-run-alone.md), a rebase changes every tree a step signed, and a review binds to the diff by replay, not by patch-id ([a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md)).*
-- **Stacked work:** see [0004](../../.decisions/0004-squash-merges-and-native-stacks.md) and
+- **To bring a branch up to date:** merge `main` in (`git merge origin/main`), never a rebase, a force-push or `gh pr update-branch` (GitHub makes that merge commit, so no step key signs it). In `next/`, the merge is a `lead` commit, signed like any step's ([P32](./tier-1.md#the-pull-requests-one-at-a-time)). For a stacked child, as amended by, allows `gh pr update-branch <child>` after the parent head and source, queue and writer agree; the child's own step owner signs again only if its tree links changed. The commit check's up-to-date rule stays. One command merges `main` in as the bot, signs it as `lead`, and pushes the commit and its notes together, so CI starts on its own; a person's pull request gets its `lead` merge from the same command (owner, 2026-11-08). Checks still rerun on the final commit. *Changed 2026-11-07: it said "rebase and force-push with a lease, never a merge commit or `gh pr update-branch`", and that the diff's `git patch-id --stable` stays the same, so a review holds. That was wrong: it clashed with [done is per criterion](../direction/done-is-per-criterion.md) and [read fresh, run alone](../direction/read-fresh-run-alone.md), a rebase changes every tree a step signed, and a review binds to the diff by replay, not by patch-id ([a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md)).*
+- **Stacked work:** see and
   [lead](../../.agents/skills/lead/SKILL.md).
 - **After every merge:** fast-forward the main checkout (`git pull --ff-only origin main`). Never reset or stash there; your own work stays in worktrees.
 

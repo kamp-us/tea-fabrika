@@ -54,8 +54,8 @@ the span is written by the flush that follows it. Nothing in `cloudflare/mail.ts
   process sends, so a message sent while a trace token is set carries it. From the `seq_trace` docs,
   not fetched. Same idea: the cause travels with the message, not after it.
 - **This repo:** [`Effect.fn` for traced functions](../../direction/effect-fn-for-traced-functions.md)
-  ([0252](../../../.decisions/0252-effect-fn-for-exported-effects.md)) says a function that should
-  have a span is `Effect.fn("<piece>.<verb>")`, and [0024](../../../.decisions/0024-next-records-with-spans-and-log-lines.md)
+ says a function that should
+  have a span is `Effect.fn("<piece>.<verb>")`,
   says `next/` records with spans. Every other branch of `route` already has a `gateway.route` span.
 
 ## The shape
@@ -157,7 +157,7 @@ trace as an argument (see "Calls taken"), which this plan does not do.
 
 **Where W2 runs.** JobsTest's suite runs only through `node/gateway/Jobs.integration.test.ts`, on
 node:sqlite in a temp folder, so under
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) a pull request leaves
+ a pull request leaves
 it to the 3-hour schedule. The tests and build steps still run that one path narrowly on the laptop
 while they work: it needs no real machine, no signal and no socket. No host-only law is new.
 
@@ -199,7 +199,7 @@ it was, and stays as history.
   OpenTelemetry carry a trace; the span fix is the plain way. 85% sure; what would change it: a
   second caller of `wake` that also forgets its span.
 - **Is this a setting?** No new choice here is one. The span name is a code name that readers of
-  health rows match on, not a value a person flips ([0069](../../../.decisions/0069-choices-are-settings.md)).
+  health rows match on, not a value a person flips.
 
 ## Validation
 
@@ -247,7 +247,7 @@ Estimate: 4 steps, $10
 
 None.
 
-Searched first: `.decisions/` (0024, 0069, 0252, 0536), `docs/direction/effect-fn-for-traced-functions.md`,
+Searched first: `.decisions/`, `docs/direction/effect-fn-for-traced-functions.md`,
 `docs/direction/a-job-record-holds-its-trace.md`, and the settled-search tool for "wake trace",
 "span per request" and "trace id job finish", which found nothing more. The span's name and place
 follow what `route`'s other branches do and 0252; the wake's signature stays as pull request 1318

@@ -19,14 +19,7 @@ It builds on points the owner decided earlier, each named where it is used:
 - **2026-11-06:** a person is the assignee and their agent the delegate; whose turn it is is a fold
   of asks and answers ([a ticket runs from the app](./a-ticket-runs-from-the-app.md)).
 
-Its decided rules are in: [0364](../../.decisions/0364-nothing-decides-on-a-label.md),
-[0365](../../.decisions/0365-pick-one-groups-never-change.md),
-[0366](../../.decisions/0366-a-label-is-the-projects-number.md),
-[0367](../../.decisions/0367-a-label-that-acts-graduates.md),
-[0368](../../.decisions/0368-area-is-the-first-label-group.md),
-[0369](../../.decisions/0369-no-kind-label-ships-or-routes.md),
-[0370](../../.decisions/0370-a-follow-up-inherits-only-guesses.md),
-[0371](../../.decisions/0371-the-label-menu-comes-first.md).
+Its decided rules are in:,,,,,,,.
 
 Built from experiment 218 (in the notes), which read about 20
 makers and counted labels on the 3,000 newest issues of kamp-us/phoenix, and a Design canvas,
@@ -269,7 +262,7 @@ b  the first label group: group_made {name: "Area", pick: "one", guess: true}; t
 
 **Decided 2026-11-06: b, Area is the first label group** (lean was 65%). Labels are coming (`labeled` is in tracker views' sketch), and two systems would
 double make, rename, merge, pickers and filter doors for one act
-([reuse before special rules](../../.decisions/0421-reuse-before-special-rules.md)). Area's best parts (numbers,
+(reuse before special rules). Area's best parts (numbers,
 merge, the guess) are what phoenix's labels lacked, so every label gets them. Linear does it this
 way [l1]; Jira and Shortcut do not [j1] [s1]. The doubt: an area may need an owner or a strategy
 (L6), and the old glossary (git history at 52aebb8) already said an area has an owner, which no decided note gives it. Since

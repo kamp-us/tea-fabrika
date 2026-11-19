@@ -31,9 +31,9 @@ Installed versions read: Effect 4.1.3, tea 0.27.0, Vitest 5.0.5 and fast-check 4
 
 ## Settled rules and calls
 
-Decisions 0036 and 0052 require removing the source of a flaky wait. Decisions 0061 and 0093 require scoped resources and a recorded red plant. Decision 0069 adds no setting here: completion is a correctness condition, and no person would configure it. Keep the current test-depth settings and the 60000 ms test limit.
+an earlier decision and 0052 require removing the source of a flaky wait. an earlier decision and 0093 require scoped resources and a recorded red plant. an earlier decision adds no setting here: completion is a correctness condition, and no person would configure it. Keep the current test-depth settings and the 60000 ms test limit.
 
-The searches were `records.ts find` with `checklist view pid update timeout`, `checklist completion sleep`, and `property integration readiness`, followed by local searches of decisions, glossary, direction notes, experiments, plan rows and test helpers. Read the P14/P44 rows, the property-test rules, the Elm-first note and decisions 0584, 0590 and 0177.
+The searches were `records.ts find` with `checklist view pid update timeout`, `checklist completion sleep`, and `property integration readiness`, followed by local searches of decisions, glossary, direction notes, experiments, plan rows and test helpers. Read the P14/P44 rows, the property-test rules, the Elm-first note and an earlier decision, 0590 and 0177.
 
 - Await due and running alarms, including immediate alarms they schedule before finishing. Exclude a future alarm, such as tomorrow's late-item wake. Confidence 90%. This directly removes fixed waiting, but cancellation and rescheduling must be checked carefully.
 - Keep both L13 laws on one fixture and replace all three uses of `settle`. Confidence 95%. The first law checks that the immediate wake stamps an item before the next send; changing only the timed-out law would leave the same guessed wait next door.

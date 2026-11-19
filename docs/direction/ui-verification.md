@@ -14,14 +14,7 @@ change ships (2026-10-24), every pull request shows screenshots at five layouts 
 principles 1, 3 and 8 (2026-11-01), the tile guidelines (2026-11-01), record wide (2026-11-01), and
 a survivor advises and never blocks (2026-11-01).
 
-Its decided rules are in: [0469](../../.decisions/0469-a-ui-check-reads-data-first.md),
-[0470](../../.decisions/0470-a-ui-check-advises-until-measured.md),
-[0471](../../.decisions/0471-ui-shots-cover-eight-layouts.md),
-[0472](../../.decisions/0472-must-read-text-is-never-cut.md),
-[0473](../../.decisions/0473-a-ui-check-presses-real-input.md),
-[0474](../../.decisions/0474-ui-goldens-are-exam.md),
-[0475](../../.decisions/0475-a-model-judge-advises-one-row.md),
-[0476](../../.decisions/0476-the-owners-look-is-aimed.md).
+Its decided rules are in:,,,,,,,.
 
 Built from experiment 192 (in the notes), which checks the
 seven layers of experiment 191 (in the notes) against the
@@ -418,7 +411,7 @@ Why: the rule of three [s1, secondary] turns "none seen in n" into "under 3/n". 
 **C5. How is "real input only" held?** Lean, 75%: an oxlint rule on e2e and shot files.
 
 ```text
-A (lean)  a custom rule refuses .focus(, .dispatchEvent(, page-changing evaluate in e2e files
+A (lean)  a custom rule refuses .focus(, .dispatchEvent(page-changing evaluate in e2e files
 B         a review rule row only
 ```
 
@@ -435,7 +428,7 @@ B  aimed looks, plus one open look a week at the full grid of one program
 
 A is cheaper; B is how tonight's title bar was found. It clashes with Linear's way, so it is yours.
 
-Decided 2026-11-11: A, in [0142](../../.decisions/0142-no-weekly-open-look.md).
+Decided 2026-11-11: A, in.
 
 ## What the ledger records
 

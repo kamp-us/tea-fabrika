@@ -2,12 +2,12 @@ Approved by the lead agent, builds 0598-merge-line-leaves-scheduled-groups; body
 Plancheck-Version: 3
 
 ```yaml
-# A sketch: the whole idea, today's CI. Decision 0598, amending 0595.
+# A sketch: the whole idea, today's CI. an earlier decision, amending 0595.
 # check.yaml: next, select and related keep only the run's `check-<pr>` group; no job group.
 # scheduled.yaml:
 env:
   GAP_MINUTES: 60
-  MAIN_SLOTS: 5               # a setting (0069): main's full run, scheduled-main-1..5
+  MAIN_SLOTS: 5               # a setting: main's full run, scheduled-main-1..5
   PROOF_SLOTS: &proof-slots 4 # a setting: branch proofs, scheduled-proof-1..4; the two add up to 9
 jobs:
   gate/select/report: { concurrency: { group: scheduled-control } }  # unchanged
@@ -20,11 +20,8 @@ jobs:
 Today's version: CI tooling only (`.github/`), plus one glossary row. Ticket: to be filed (a ready
 title and body are in the report). Builds
 [0598](https://github.com/kamp-us/tea-fabrika/pull/1586) (on branch
-`fabrikalfa/decision-0598-merge-line-slots`, not on main yet), which amends
-[0595](../../../.decisions/0595-scheduled-runs-share-slots.md). Also follows
-[0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md),
-[0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md) and
-[0069](../../../.decisions/0069-choices-are-settings.md). 0595's status line
+`fabrikalfa/decision-0598-merge-line-slots`, not on main yet), which amends. Also follows,
+ and. 0595's status line
 (`amended-in-part by 0598`) is already in pull request 1586's diff, so this plan does not touch
 `.decisions/`.
 
@@ -139,7 +136,7 @@ that assignment, and line 395's copy of the real `next` job's group.
 ```yaml
 env:
   GAP_MINUTES: 60
-  # The ten-job budget (0595, 0598): MAIN_SLOTS groups for main's full run, PROOF_SLOTS for branch
+  # The ten-job budget: MAIN_SLOTS groups for main's full run, PROOF_SLOTS for branch
   # proofs, and scheduled-control. Change them here, keeping MAIN_SLOTS + PROOF_SLOTS = 9; then
   # re-pin `tests` (its two maps and max-parallel) to the new counts. workflow-lint.ts holds it
   # (SC16, SC19, SC20).
@@ -201,8 +198,7 @@ export const outputs = (proof: Proof, run: number, count: number): string[] => [
 ```
 
 `slots` loses its `export`: once related.ts stops importing it, nothing outside proof.ts reads it,
-and an unused export fails `pnpm lint:dead`
-([0006](../../../.decisions/0006-no-unused-exports.md)). The record keeps `slots`, as today.
+and an unused export fails `pnpm lint:dead`. The record keeps `slots`, as today.
 
 ### workflow-lint/scheduled.ts, the slot rules (a sketch)
 
@@ -290,7 +286,7 @@ Main's side: a push to main whose gate says `true` runs `tests` with `github.ref
 | S2: each slot plant on a generated valid schedule gives SC19's error, alone: the main map loses a leg, gains a leg, names group M+1, leaves a main group unused; the proof map names group P+1 or leaves one unused; a group gains a `-${{ github.run_id }}`, `-${{ github.ref }}` or `-${{ github.run_attempt }}` suffix; `tests` uses `scheduled-test-`; `tests`'s condition reads `github.event_name == 'push'`; `changed` uses `scheduled-main-`; the rotation runs over nine; `MOST` differs from `PROOF_SLOTS`; `changed`'s `max-parallel` differs from it; the counts add up to 10; a count is `"4"` as text; the workflow group is `SCHEDULED-MAIN-1`; plus today's control, queue, cancel, extra-job and rotation plants | test | fc.tuple: S1's generator, each plant applied alone; seed 119120, 100 runs | Drop the "value in 1..M" check: group M+1 passes | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
 | S3: SC16 admits exactly `GAP_MINUTES`, `MAIN_SLOTS` and `PROOF_SLOTS`; a fourth env value, a missing count, or a count of 0 fails | test | fc.tuple: S1's generator, and today's gap property kept; seed 119120, 100 runs | Admit any extra key: `FABRIKA_TEST_DEPTH` in env passes | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
 | S4: SC20: swapping a first leg with a later one (so a group gets two legs before another gets one), a leg listed twice, a next leg missing, or a tooling leg renamed gives SC20's or SC7/SC8's error | test | fc.tuple: S1's generator and a swap index drawn from 0..M-1 and M..8; seed 119120, 100 runs | Drop the "first legs in order" check: a swap of `tooling-1` and `e2e-2` passes | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
-| S5: the real scheduled.yaml's matrix order, both pin maps and both counts are exactly 0598's | test | vector: decision 0598's pins, measured from run 44155250216, and the proof pins this plan derives from it | Pin e2e-1 before tooling-1 in group 1 | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
+| S5: the real scheduled.yaml's matrix order, both pin maps and both counts are exactly 0598's | test | vector: an earlier decision's pins, measured from run 44155250216, and the proof pins this plan derives from it | Pin e2e-1 before tooling-1 in group 1 | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
 | S6: SC6: `tests`'s `max-parallel` as any number, or as the ref expression with the two numbers swapped, gives SC6's error; the per-run budget counts the larger count | test | fc.tuple: S1's generator, and today's SC6 plants kept; seed 119120, 100 runs | Accept any whole number for `tests`'s `max-parallel`: `max-parallel: 9` passes | `.github/ci/workflow-lint/scheduled.test.ts` | lint, the merge line, the full run |
 | S7: the stdin command line prints the success sentinel for any valid split, and refuses a private group, an extra job, a changed matrix past `PROOF_SLOTS`, and the old 0595 shape (main's scheduled.yaml at 955a82d), so a branch not yet on main's shape is refused at preflight | test | fc.record: split, case, workflow group, 100 runs; and one pinned case, the old shape, read from git at base 955a82d (a branch that never took this change) | Let `scheduled-test-` through `jobSlots`: the old shape prints the sentinel | `.github/ci/workflow-lint/scheduled.integration.test.ts` | the full run |
 | R1: on the real check.yaml, each plant alone fails lintWorkflow: `next`, `select` or `related` gains any job-level group (`scheduled-test-1`, `scheduled-proof-1`, `scheduled-control`, or `related-${{ github.run_id }}`); today's workload and selector plants kept | test | fc.constantFrom: the Fault literal union, each plant applied alone; seed 119120, 100 runs | Keep `held(next)` as the next rule's only check: a next job with a group passes | `.github/ci/workflow-lint/related.test.ts` | lint, the merge line, the full run |
@@ -322,7 +318,7 @@ Plant names below are the `%s` of `rejects the schedule's plant: %s` in schedule
 | `property: changed-leg rotation visits every shared slot and preserves all leg counts` | `property: changed-leg rotation visits every proof group, for any group count, and preserves all leg counts` (P1; count 9 is still one of its cases) |
 | `property: invalid or missing run numbers fail before any proof output` | the same title, with the count argument (P4), plus `property: an invalid group count fails before any proof output` (P2) |
 | `automatic related coverage rejects omitted workloads, unbounded pools and false-green selectors` (plants `next_pool`, `related_pool`, `private_group`, `cancel`) | `automatic related coverage rejects omitted workloads, merge-line job groups and false-green selectors` (plants `next_group`, `related_group`, `select_group`, `own_group`, `other_group`) (R1, R2) |
-| R1 "related jobs share only the existing nine test groups with a bounded fallback" and "existing next and visual jobs share the same nine test groups, with no independent pool" (rule text) | R1 "next, select and related take no job group (0598)" and R2 "no check.yaml job holds a scheduled- group" |
+| R1 "related jobs share only the existing nine test groups with a bounded fallback" and "existing next and visual jobs share the same nine test groups, with no independent pool" (rule text) | R1 "next, select and related take no job group" and R2 "no check.yaml job holds a scheduled- group" |
 | `related selection preserves both missing projects exactly once within the shared slots` | `related selection preserves both missing projects exactly once` (R3; needs the owning lane's yes) |
 | `related selection refuses ambiguous file lists and invalid run numbers` | `related selection refuses ambiguous file lists` (needs the owning lane's yes; the run number is no longer read) |
 | `property: the stdin CLI confirms shared job slots without requiring full-workflow conformance` (nine-slot generator) | the same title, with the split generator (S7) |
@@ -340,7 +336,7 @@ law, and SC20 adds a property the old order did not have (no group sits empty at
 
 | File | Change | Product lines expected | Owner | Slice | How judged |
 |---|---|---|---|---|---|
-| `.github/workflows/check.yaml` | Line 417's comment: "No test job takes a job group (0598)"; drop `next`'s `concurrency` (lines 419 to 422); line 528's comment loses "shares the schedule's one control group"; drop `select`'s `concurrency` (lines 530 to 533) and `related`'s (lines 576 to 579). Needs the owning lane's yes: drop `select`'s `slots:` output (line 543) and its `RUN_NUMBER:` env (line 558) | 14 | tests | 1 | 0598; R1, R2 |
+| `.github/workflows/check.yaml` | Line 417's comment: "No test job takes a job group"; drop `next`'s `concurrency` (lines 419 to 422); line 528's comment loses "shares the schedule's one control group"; drop `select`'s `concurrency` (lines 530 to 533) and `related`'s (lines 576 to 579). Needs the owning lane's yes: drop `select`'s `slots:` output (line 543) and its `RUN_NUMBER:` env (line 558) | 14 | tests | 1 | 0598; R1, R2 |
 | `.github/ci/workflow-lint/related.ts` | Line 1's comment; the `slots` constant, `lookup`, `held` and `mapped` (lines 15 to 39) give way to `ungrouped`; `selector` (lines 50 to 58): no group, no `slots` output, no `RUN_NUMBER`; `relatedWorkload` line 72: `ungrouped(job)`; line 106 and lines 170 to 180: R1 "takes no job group"; R2, new | 40 | tests | 1 | 0598's Lint bullet |
 | `.github/ci/workflow-lint/related.test.ts` | Plants `next_pool`, `related_pool`, `private_group`, `cancel` become `next_group`, `related_group`, `select_group`, `own_group`, and `other_group` is new; the title changes (mapping table) | tests | tests | 1 | R1, R2 |
 | `.github/ci/workflow-lint/wiring.test-support.ts` | Needs the owning lane's yes: `setLegs` (lines 158 to 168) stops writing a group on `next`; line 395 stops copying it | tests | tests | 1 | W1 |
@@ -352,7 +348,7 @@ law, and SC20 adds a property the old order did not have (no group sits empty at
 | `.github/ci/workflow-lint/scheduled.ts` | SC16, SC17, SC19 and SC6 as in the sketch; SC20, new; `pinsOf` in place of `slotsOf` and `rotationOf`; `BUDGET` in place of `RUNNERS` and `TEST_SLOTS`; the header says SC1 to SC20; `jobSlots` checks SC16's counts and SC20 too | 150 | tests | 2 | 0598's Lint bullet |
 | `.github/ci/workflow-lint/scheduled.test.ts` | The `scheduled` generator draws a split and its pins; `changedRotation` and `remap` follow it; S1 to S6; the plants in the mapping table | tests | tests | 2 | laws |
 | `.github/ci/workflow-lint/scheduled.integration.test.ts` | The `Workflow` schema draws a split, not nine slots; S7's pinned old shape | tests | tests | 2 | S7 |
-| `.glossary/TERMS.md` | The `full run` row: in place of "Runs wait in one line, the `scheduled` concurrency group, until 0595's verified cutover", say each ref's runs wait in their own `scheduled-<ref>` group; main's legs take `scheduled-main-1` to `MAIN_SLOTS`, a proof's legs `scheduled-proof-1` to `PROOF_SLOTS`, and the gate, select and report `scheduled-control`, ten jobs at most (0595, 0598) | docs | build | 3 | 0598's Consequences |
+| `.glossary/TERMS.md` | The `full run` row: in place of "Runs wait in one line, the `scheduled` concurrency group, until 0595's verified cutover", say each ref's runs wait in their own `scheduled-<ref>` group; main's legs take `scheduled-main-1` to `MAIN_SLOTS`, a proof's legs `scheduled-proof-1` to `PROOF_SLOTS`, and the gate, select and report `scheduled-control`, ten jobs at most | docs | build | 3 | 0598's Consequences |
 | `.github/ci/workflow-lint.test.ts` | Not changed: it runs the `wiring` generator, so W1 lives here | 0 | tests | none | W1 |
 | `.github/`, `.github/**`, `.github/ci/workflow-lint`, `.github/ci/workflow-lint/` | Named only: folders and globs the prose names; every file changed in them is its own row | 0 | tests | none | not files |
 | `.github/ci/workflow-lint/merge-line.ts`, `.github/ci/workflow-lint/merge-line.test.ts` | Not changed: no group rule there; T1 follows `relatedWorkload` | 0 | tests | none | read by hand |
@@ -395,7 +391,7 @@ The reverse order cannot land apart, for the reason in item 2.
 
 ## Is this a setting?
 
-- `MAIN_SLOTS` and `PROOF_SLOTS`: yes, 0598 makes them one (0069). Declared once in
+- `MAIN_SLOTS` and `PROOF_SLOTS`: yes, 0598 makes them one. Declared once in
   `scheduled.yaml`'s `env`. GitHub forbids `env` in `strategy` and job `concurrency`, so lint holds
   the copies equal: `MOST` and `changed`'s `max-parallel` alias `PROOF_SLOTS`, and `tests`'s
   `max-parallel` numbers and pin maps are checked against both counts (SC6, SC19, SC20).
@@ -487,7 +483,7 @@ Estimate: 5 steps, $20
 
 - Whether GitHub makes a matrix's jobs in list order under `max-parallel`. The first call rests on
   it, and only main's first full run after the merge shows it.
-- Whether 5 and 4 is the right split: one main run and one proof run measured it (0598).
+- Whether 5 and 4 is the right split: one main run and one proof run measured it.
 - How the merge line behaves at the organization's 20-runner limit at the busiest hour, now that
   its legs sit outside the ten. 0598's own doubt.
 - The proof pins for a full set on a branch rest on one run's leg times. They are not measured
@@ -504,5 +500,5 @@ coordination answer, not a design call: 0598 already decides that the related jo
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-18-related-guard-names-nine-groups","date":"2026-11-18","by":"plan","model":null,"rule":"doc_drift","location":{"path":".github/ci/related.ts","line":52},"says":"related.ts's leg guard still says the selection must fit 'the existing nine shared test groups', which 0598 removes from the merge line; the cap of nine is now check.yaml's related max-parallel.","proof":"related.ts:51-52 reads `if (Object.keys(legs).length > 9) { throw new Error(\"related: the existing nine shared test groups cannot hold this selection\")`; decision 0598 (pull request 1586) says next, select and related drop job-level concurrency, and check.yaml:586 keeps `max-parallel: 9`. The coordinator's grant for this lane covers only related.ts's import and use of proof.ts slots, so the plan leaves the line as it is.","cost":"A reader of a failed related selection is told about groups that no longer exist; the limit it enforces is still right.","head":"955a82d987cb8583a0a693681c756054e836bf33","ticket":"kamp-us/tea-fabrika#1333","pr":null}
+{"_tag":"finding","id":"2026-11-18-related-guard-names-nine-groups","date":"2026-11-18","by":"plan","model":null,"rule":"doc_drift","location":{"path":".github/ci/related.ts","line":52},"says":"related.ts's leg guard still says the selection must fit 'the existing nine shared test groups', which 0598 removes from the merge line; the cap of nine is now check.yaml's related max-parallel.","proof":"related.ts:51-52 reads `if (Object.keys(legs).length > 9) { throw new Error(\"related: the existing nine shared test groups cannot hold this selection\")`; an earlier decision (pull request 1586) says next, select and related drop job-level concurrency, and check.yaml:586 keeps `max-parallel: 9`. The coordinator's grant for this lane covers only related.ts's import and use of proof.ts slots, so the plan leaves the line as it is.","cost":"A reader of a failed related selection is told about groups that no longer exist; the limit it enforces is still right.","head":"955a82d987cb8583a0a693681c756054e836bf33","ticket":"kamp-us/tea-fabrika#1333","pr":null}
 ```

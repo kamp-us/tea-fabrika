@@ -8,7 +8,7 @@ on:
   schedule: [{ cron: "17 * * * *" }]  # the hourly catch-up, minute 17 as before
   workflow_dispatch:                  # by hand, on main or a branch: unchanged
 env:
-  GAP_MINUTES: 60                     # the setting (0581, 0069): no full run on main starts sooner
+  GAP_MINUTES: 60                     # the setting: no full run on main starts sooner
 concurrency: { group: scheduled, queue: max, cancel-in-progress: false }  # unchanged
 jobs:
   gate:   { steps: [checkout .github/ci, "node .github/ci/gate.mjs"] }   # says start=true or false
@@ -23,16 +23,12 @@ ticket: 1071
 Writer: the plan step. Version: today's CI tooling (`.github/`), serving both versions, plus the
 sev skill's words. `next/` product code is not touched.
 
-Base read: `origin/main` at `82296f5cf` (decision 0581 merged). Every line cited is read there.
+Base read: `origin/main` at `82296f5cf` (an earlier decision merged). Every line cited is read there.
 
-Builds [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md), which amends
-[0534](../../../.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md) and
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) in part. Reads
-[0175](../../../.decisions/0175-every-run-follows-its-paths.md),
-[0069](../../../.decisions/0069-choices-are-settings.md),
-[0539](../../../.decisions/0539-the-merge-line-runs-no-tooling-tests.md),
-[0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md) and
-[0542](../../../.decisions/0542-two-sev-levels-one-skill.md), and pull requests
+Builds, which amends
+ and
+ in part. Reads,,,
+ and, and pull requests
 https://github.com/kamp-us/tea-fabrika/pull/1380 (`queue: max`, and the missing schedule slots) and
 https://github.com/kamp-us/tea-fabrika/pull/1383 (one matrix, a red run ends `failure`).
 
@@ -201,13 +197,13 @@ other choice, starting the run when the gate cannot read, breaks 0581's bound du
 on:
   push:
     branches: [main]
-  # The hourly catch-up (0581), at minute 17: GitHub delays and drops runs queued at the top of the
+  # The hourly catch-up, at minute 17: GitHub delays and drops runs queued at the top of the
   # hour ("Events that trigger workflows", schedule). It starts a run only on a head that has had none.
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
 
-# The gap (0581, 0069): no full run on main starts within this many minutes of the last one, except
+# The gap: no full run on main starts within this many minutes of the last one, except
 # by hand. At least 60, 0581's binding constraint. The gate job reads it; change this line to change it.
 env:
   GAP_MINUTES: 60
@@ -328,7 +324,7 @@ starts it, and the build step writes the run ids into the workflow's comment.
 | `.github/ci/workflow-lint/scheduled.ts` | SC1, SC5, SC6 changed; SC14, SC15, SC16 new | 80 | tests |
 | `.github/ci/workflow-lint/scheduled.test.ts` | The generator's new varied parts; plants for SC1, SC5, SC6, SC14 to SC16 | tests | tests |
 | `.github/ci/workflow-lint/issues.ts` | Comment: "the 3-hour run's report" becomes the full run's | 1 | tests |
-| `.github/workflows/check.yaml` | Comments only, lines 31 and 403: the full run starts on a push or the hourly catch-up (0581) | 3 | tests |
+| `.github/workflows/check.yaml` | Comments only, lines 31 and 403: the full run starts on a push or the hourly catch-up | 3 | tests |
 | `.github/workflows/ci-speed.yaml` | Comment only, line 7 | 1 | tests |
 | `.github/ci/changes.mjs` | Comment only, line 241 | 1 | tests |
 | `.github/**` | The exam's folder: every file changed there is its own row above | 0 | tests |

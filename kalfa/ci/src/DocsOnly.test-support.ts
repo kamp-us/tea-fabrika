@@ -20,7 +20,7 @@ export const TABLE: readonly Row[] = [
       ".agents/skills/lead/SKILL.md",
       ".agents/skills/plan/SKILL.md",
       ".agents/skills/sev/SKILL.md",
-      ".decisions/0615-mechanical-tickets-take-a-fix-command-branch.md",
+      ".kalfa/decisions/0615-mechanical-tickets-take-a-fix-command-branch.md",
       "AGENTS.md",
       "docs/direction/next-is-a-pipeline-pre-run.md",
       "docs/plan/README.md",
@@ -32,8 +32,8 @@ export const TABLE: readonly Row[] = [
   {
     pr: "1650",
     paths: [
-      ".decisions/0601-program-make-with-optional-pipes.md",
-      ".decisions/0613-kalfa-package-imports-are-a-guideline.md",
+      ".kalfa/decisions/0601-program-make-with-optional-pipes.md",
+      ".kalfa/decisions/0613-kalfa-package-imports-are-a-guideline.md",
       "kalfa/AGENTS.md",
     ],
     docsOnly: true,
@@ -105,9 +105,9 @@ export const TABLE: readonly Row[] = [
     adminDocs: false,
   },
   // Markdown outside the admin merge's folders is docs for CI, and no admin docs.
-  { pr: ".patterns/x.md", paths: [".patterns/x.md"], docsOnly: true, adminDocs: false },
+  { pr: ".kalfa/patterns/x.md", paths: [".kalfa/patterns/x.md"], docsOnly: true, adminDocs: false },
   // Pull request 1671, an experiment's write-up alone, on 2026-11-19. It is docs only, so it is armed, but
-  // not admin docs: records.ts reads its frontmatter, and the lead ruled it lands through the queue.
+  // not admin docs: a tool reads its frontmatter, and the lead ruled it lands through the queue.
   {
     pr: "1671",
     paths: ["experiments/300-carry-approvals-across-merges.md"],

@@ -240,7 +240,7 @@ const plan = Ask.define("plan", {
   pick. It does not stop a hijacked session from faking a yes. What it gives
   is a visible mark that can be checked later against the session's own log.
 - In `next/`, a person's line in a quest's room is one more place to answer, with `via` naming the
-  room and the line ([0073](../../.decisions/0073-a-lane-has-a-room.md)).
+  room and the line.
 
 ### The one hash
 
@@ -413,7 +413,7 @@ One run on a Max login, traced (the run id and the numbers are made up):
   not money paid. Jev is still billed per token, so its dollars are real money.
 - Not changed here, and still open: whether an agent run on a subscription still needs a person's
   yes to a spend estimate before it starts. The rule above says it does; nobody has asked again.
-  *Settled 2026-11-11 in [0141](../../.decisions/0141-a-subscription-run-starts-with-no-spend-yes.md):
+  *Settled 2026-11-11 in:
   it does not; a run billed by the token still does.*
 
 ### 2. What every agent run records

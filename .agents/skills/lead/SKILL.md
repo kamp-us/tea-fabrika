@@ -8,11 +8,10 @@ description: Lead one ticket through the hand-run pipeline steps and land it. Us
 Today's pipeline programs are paused, so the lead session runs each pull request's steps by hand:
 plan, tests, build, one review, each by its own agent
 ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)). Mutation is no step of a pull
-request: it runs hourly against main and files tickets
-([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). The lead writes no step's
+request: it runs hourly against main and files tickets. The lead writes no step's
 work. It starts each step, reads what comes back, and lands the result.
 
-When staffing work, follow [0597](../../../.decisions/0597-eight-workers-before-twelve.md) for
+When staffing work, follow for
 actual productive worker counts, fresh verification and immediate replacements. The brief names
 the bounded task and the ticket it serves. Before starting lanes, group tickets that will touch the same files into one lane.
 
@@ -49,7 +48,7 @@ first step:
 Parent: ticket <id>, branch <branch>, signed build head <sha>, or none.
 Children: <ticket, branch and signed parent head for each child>, or none. Record before starting.
 Start a child at its parent's signed build head. Keep the child's tests until it lands.
-Each layer is a plain pull request with no native stack link, and lands on its own, bottom first (0603).
+Each layer is a plain pull request with no native stack link, and lands on its own, bottom first.
 After a parent head changes, update each open child with `gh pr update-branch <child>`,
 bottom-to-top. The child keeps its tests; its own step owner signs changed tree links again.
 Return plans unsigned, including reviews and revisions. Only the lead session approves them.
@@ -68,7 +67,7 @@ unless the runner reports it. The lines are fields, as in phoenix's
 the skill. What is special about this quest goes under `This quest:`, one bullet a fact, and nowhere
 else:
 
-- a call taken after the plan was approved, with its source (an experiment, a finding row);
+- a call taken after the plan was approved, with its source (an experiment, a finding);
 - a file or folder to stay out of, a law that waits on the owner, a clash with another open PR;
 - for a review, the points to look hardest at, each a question with its source.
 
@@ -171,12 +170,9 @@ it does not reopen every test's merits.
 
 ## When a review sends back
 
-A fix round is one agent and a recheck
-([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). From a quest's second sent-back review
+A fix round is one agent and a recheck. From a quest's second sent-back review
 on, you read the faults: you decide one more fix round yourself when every fault is named, located
-and inside the plan, and the quest stops when one is not
-([0176](../../../.decisions/0176-second-send-back-stops-lane.md),
-[0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)).
+and inside the plan, and the quest stops when one is not.
 
 ```mermaid
 flowchart TD
@@ -211,7 +207,7 @@ flowchart TD
    file the rest as a tracker ticket (`tracker_file`), and write the quest's note in the notes.
    Take it to the owner only if what is left breaks the slice's main job.
 
-The same test holds for any approval you would ask the owner for ([0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)):
+The same test holds for any approval you would ask the owner for:
 when the answer is surely yes, and nothing in it is a new design call, a loosened law, something a
 person sees or presses, or a decision walked back, act and put one line on your status page. A
 decision that keeps an act or a call for the owner still holds.
@@ -295,11 +291,11 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   Still one agent per step.
 - **Check execution:** ordinary safe checks run directly in parallel under the existing resource
   caps. Launchd, real Electron and process-signal laws use eligible disposable CI off the owner's laptop. Read
-  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) for the split; checks that still need
-  network isolation keep [0045](../../../.decisions/0045-test-steps-run-in-containers.md)'s fence.
+ for the split; checks that still need
+  network isolation keep's fence.
   Inspect the actual selected tests and cleanup before a direct run. A plain filename is not
   clearance; narrow a `--changed` selection that reaches these laws to verified-safe local paths.
-  Mutation still runs through `mutbox.ts` on its hourly schedule (0066).
+  Mutation still runs through `mutbox.ts` on its hourly schedule.
 - **One fresh Claude agent per step, not one long driver per ticket** (owner, 2026-11-09). Each
   step gets a new agent with a short brief. It reads the quest's state file
   (`BOXES/state/<quest>.md`), does its one step, and writes the state file back for the next agent:
@@ -312,7 +308,7 @@ Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-cod
   agent only where judgment is needed ([below](#run-a-whole-quest-with-chaints)). *It said (owner, 2026-11-08): one driver per ticket, start
   to finish. One driver ran for 11 hours, which was wasteful.*
 - **A step agent never writes another step's code or tests** (owner, 2026-11-08), except the fix
-  agent of a fix round (0177). The agent
+  agent of a fix round. The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
   screenshots.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
@@ -328,24 +324,22 @@ Read the header before you run one; this table only says what each is for.
 |---|---|
 | `box.sh new`, `run`, `fetch` | one box's start, Codex run and fetch; a quest's boxes are made by `drive.ts`, never by hand |
 | `box.sh gc` | remove boxes and landed worktrees whose work is safe elsewhere (`gc.ts` says when); `gcloop.ts` runs it ([below](#box-cleanup-on-a-timer)) |
-| `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, and `status` ([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)) |
+| `gcloop.ts` | the box cleanup's loop: a timer sweep, a sweep after each merge, and `status` |
 | `drive.ts` | one step end to end, with no agent waiting ([below](#use-drivets-for-any-step)) |
 | `chain.ts` | a whole quest end to end, to the merge queue ([below](#run-a-whole-quest-with-chaints)) |
 | `quests.ts` | what each quest is doing now, read-only |
-| `flow/run.ts` | run one flow of typed steps with no agent holding the loop ([0064](../../../.decisions/0064-the-lead-drives-with-flows.md)); `flow/flows/land-decision.ts` lands a docs-only decision PR |
-| `mutbox.ts` | the mutation run's Stryker sample in a container ([0045](../../../.decisions/0045-test-steps-run-in-containers.md), 0066) |
+| `flow/run.ts` | run one flow of typed steps with no agent holding the loop; `flow/flows/land-decision.ts` lands a docs-only decision PR |
+| `mutbox.ts` | the mutation run's Stryker sample in a container (0066) |
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
-| `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none ([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)); `stepcommit.sh` runs it |
+| `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
-| `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
-| `governance.ts` | list the `.decisions/` files a diff touches; advice only |
-| `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
+| `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
+| `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
-Cleanup is the tooling's job: never ask the owner to free disk
-([0019](../../../.decisions/0019-nothing-stale.md)).
+Cleanup is the tooling's job: never ask the owner to free disk.
 
 box.sh run and runplan.sh strip secret settings and redact saved output.
 fetch --sign checks owners and signs missing notes in MAIN.
@@ -407,16 +401,15 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
   and `## pr`: the pull request's description, its first line the title, with the
   `fabrika close ticket <N>` line when the PR finishes the ticket, written as
   [the pr skill](../pr/SKILL.md#a-quests-description-is-written-twice) says. Every section is
-  required. A quest has no `## mutation` section (0066).
+  required. A quest has no `## mutation` section.
 - **Which steps need Claude:** `--claude` names the steps with Electron or socket work, and
   `--electron` the ones that run the app.
-- **The quest's budget** ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)): when the
+- **The quest's budget**: when the
   chain ends `ask` with the counts, you answer redo, cut scope or drop. Put
   `Estimate: <n> steps, $<d>` in the plan or the quest brief, so the quest has a backstop. Never put
   these numbers in a step's brief.
-  Since [0176](../../../.decisions/0176-second-send-back-stops-lane.md) a quest stops at its second
-  sent-back review, whatever this window says, unless you decide one more fix round
-  ([0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md)). The chain does not count that
+  Since a quest stops at its second
+  sent-back review, whatever this window says, unless you decide one more fix round. The chain does not count that
   yet, so [the lead does](#when-a-review-sends-back).
 - **A parked quest** (`ask`, exit 20) is yours: a loosening hit for your hand check, a lockfile
   ask, a send to plan, or what the judgment agent parked. The why is in the line's `reason`.
@@ -433,16 +426,14 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
 
 ## Box cleanup on a timer
 
-`box.sh gc` runs on a launchd timer and once after each merge, never on a step's start
-([0101](../../../.decisions/0101-box-cleanup-runs-on-a-timer.md)). `gcloop.ts`'s header says how to
+`box.sh gc` runs on a launchd timer and once after each merge, never on a step's start. `gcloop.ts`'s header says how to
 install and remove the timer, once per laptop. At each check, read
 `node .agents/skills/lead/scripts/gcloop.ts status`: a `LATE` line
 means the timer is dead or every sweep was skipped behind a hung one. Fix the cause the same turn.
 
 ## Pushes and protected refs
 
-Every commit leaves the laptop when it is made
-([0134](../../../.decisions/0134-no-code-stays-only-on-a-local-branch.md)). `stepcommit.sh` (signed)
+Every commit leaves the laptop when it is made. `stepcommit.sh` (signed)
 runs `publish.ts` itself, and a quest's box commit is pushed by drive's pushing phase, so neither
 step nor lead pushes by hand. A commit step that cannot push exits 6 and names the command to run
 where the push can. Run `node .agents/skills/lead/scripts/unlisted.ts` in the main checkout every round and fix each
@@ -454,8 +445,7 @@ bot and branch-only as the person are two intended writes. A refusal stops the s
 When the session's permission check refuses a step agent its lead sign (`pnpm commits sign --step
 lead` through the repo's scripts), its normal push (`botpush.mjs`, or a plain non-force push of its
 own branch), or its merge of a passing test-only fix or a rows-only PR, the lead session runs that
-same command itself, without asking the owner again
-([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md)). Only the script reads the key.
+same command itself, without asking the owner again. Only the script reads the key.
 Report every other refused action to the owner with the exact command and worktree; never route
 around it. A quest agent does not meet this for its landing: it stops at `land.ts ready` (step 8). A rows-only PR lands with `land.ts queue <pr>` on green CI with a clean leak grep; a test-only
 fix still runs every step first.
@@ -483,8 +473,7 @@ visible, and never weaken the rules to hide this message.
    including an amendment, needs the same read and checks again. A new design call goes to the owner as one
    yes or no. Answer, in the plan, any open question a decided note already answers.
    A plan that patches or changes a package (tea, demlik, Manti, Effect, Alchemy) names what it
-   read of that package's decisions, patterns and source; else send it back
-   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
+   read of that package's decisions, patterns and source; else send it back.
 4. **Start the quest** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
    parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
@@ -494,28 +483,27 @@ visible, and never weaken the rules to hide this message.
 5. **Run the steps in order,** in the background: tests, build, review (no mutation step, 0066). Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
-   Never start a review while a host-only law the plan names has not passed on a real machine
-   ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). The build runs it, or you run it right after
+   Never start a review while a host-only law the plan names has not passed on a real machine. The build runs it, or you run it right after
    the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
-   never on the owner's laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
+   never on the owner's laptop.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff. Anything that
    broke, cost too much, needed a person or worked well goes in the notes. Send a fix to the step that owns the file;
    when a review sent the quest back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
-   the dependency, never to catch the error ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
+   the dependency, never to catch the error.
    Step-commit checks file owners.
    Each correction the owner makes, and each slip of the lead's own, gets a note too, with the code
    that would have caught it. Running the steps by hand is how `next/`'s pipeline learns.
-7. **Obtain proof the box cannot supply** before the first review (0178). Use eligible CI for each
+7. **Obtain proof the box cannot supply** before the first review. Use eligible CI for each
    law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
-   laptop ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)). A workflow's green result
+   laptop. A workflow's green result
    proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
    No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
-   ([0056](../../../.decisions/0056-lead-runs-a-refused-step-itself.md), ticket 652). Its last act
+   (ticket 652). Its last act
    is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
    this repo's steps, what ran each one, and the dollars, in the order
    [the pr skill](../pr/SKILL.md) gives.
@@ -525,30 +513,29 @@ visible, and never weaken the rules to hide this message.
    Zero hits from loosening.sh mean no owner read is needed.
    The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
-   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR ([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
-   Then the lead merges, product code included; a new design call is the only other wait ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)).
+   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR.
+   Then the lead merges, product code included; a new design call is the only other wait.
    Apply the labels rule and the zero-hit check together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
    diff. The PR writes a mapping table with `Removed` and `Replacement` columns for every renamed
    or replaced law, using exact test titles. Save that table as `mapping.md` for the command.
    A pure addition needs no replacement row. `loosening.sh`'s header says what counts as a hit;
    it fails closed, so every hit is yours to check by hand. A law narrowed with no changed
-   `expect` is found by the hourly mutation run instead, as a ticket marked loosening ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)).
+   `expect` is found by the hourly mutation run instead, as a ticket marked loosening.
    Before this new check blocks anything, measure false alarms on the last 20 merged `next/`
    PRs and record the count. Do not claim that measure from generated tests alone.
-   Never write "owner read" unless the owner did. Log each required owner read in the notes.
+   Never write "owner read" unless the owner did. Log each required owner read in a field note.
    An exam change that is all proper property tests merges without the owner's read (owner,
    2026-11-08). A change that loosens or removes a law still stays `ask owner exam_read`.
-   Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI
-   ([0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md)), only with
+   Then the lead session turns on GitHub's "merge when ready" at once, without waiting for CI, only with
    `land.ts arm <pr>`, never by hand: it takes a green proof run at the head, the full set or the
-   changed set ([0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md)),
+   changed set,
    refuses one that is red or not ended, and a changed-set run at an older head, and
    prints each red job's failed steps and tests; with none at the head it arms, as
-   [0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md) allows. GitHub puts it in the merge queue
+ allows. GitHub puts it in the merge queue
    when `ci-required` goes green, never when red. If anything is pushed after the final read, run
    `disablePullRequestAutoMerge` and read again. Main takes changes only
-   through that queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)). For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
+   through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
    are green. Both leak-check the change, each commit and the title and description, then add it to
@@ -561,22 +548,17 @@ visible, and never weaken the rules to hide this message.
    pass `--auto`. Three exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev
    fix at either level, on a branch `sev.ts fix` named in a sev1 or `open --allow` or `next` named in a
    sev0, with current main in its head
-   ([0611](../../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md), the [sev skill](../sev/SKILL.md)); a
-   ready pull request in a sev0
-   ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)); and a docs-only pull request
-   ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
+   (the [sev skill](../sev/SKILL.md)); a
+   ready pull request in a sev0; and a docs-only pull request.
    A pull request the queue puts back out stays open: the
-   quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack
-   ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)): GitHub refuses `gh pr merge` and merge when ready on a stack member
+   quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack: GitHub refuses `gh pr merge` and merge when ready on a stack member
    (github/gh-stack#591), so a chain is plain pull requests. A child targets its parent's branch.
    When the parent lands, GitHub moves the child onto main, and the child is armed next with
    `land.ts arm`. Unstack an old native stack once with `gh stack unstack <number>`
-   (`gh api repos/<repo>/stacks` lists them). Every PR squash-merges, a parent too
-   ([0004](../../../.decisions/0004-squash-merges-and-native-stacks.md)). An open child stays
-   current by merging its parent's head with `gh pr update-branch <child>`
-   ([0599](../../../.decisions/0599-native-stack-upkeep.md)), never a rebase or a force push; if its
+   (`gh api repos/<repo>/stacks` lists them). Every PR squash-merges, a parent too. An open child stays
+   current by merging its parent's head with `gh pr update-branch <child>`, never a rebase or a force push; if its
    signed tree links changed, only its own step owner signs them again. In a sev0 the lead lands
-   every ready pull request by admin merge, in order, as [the sev0 runbook](../../../.runbooks/sev-nothing-lands.md) says.
+   every ready pull request by admin merge, in order, as [the sev0 runbook](../../../.kalfa/runbooks/sev-nothing-lands.md) says.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.
@@ -590,8 +572,7 @@ visible, and never weaken the rules to hide this message.
 10. **After the merge:** GitHub's queue merges later than the command that queued, so this is its
     own act: `land.ts merged <pr>` reads the pull request once. When it has merged, it closes each
     ticket the description names on a line of its own, `fabrika close ticket <N>`, so put that line
-    in when the PR finishes the ticket
-    ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). Each close gets a comment
+    in when the PR finishes the ticket. Each close gets a comment
     naming the PR and its merge commit (`scripts/pr/Queue.ts`). When it has not merged yet, it says
     so and does nothing; run it again later. No row per merge is written: that measure is proposed
     ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
@@ -612,37 +593,36 @@ visible, and never weaken the rules to hide this message.
   law must be, and [the lead skill's "Land it" step](#steps) what a
   loosening.sh hit on one means.
 - **The decisions that shape the steps,** each read when you are at that point:
-  [0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md) (mutation),
-  [0064](../../../.decisions/0064-the-lead-drives-with-flows.md) and
+ (mutation),
+ and
   [the lead skill](#run-a-whole-quest-with-chaints) (one agent per
-  step), [0177](../../../.decisions/0177-fix-round-is-one-agent.md) (a fix round),
-  [0178](../../../.decisions/0178-host-only-laws-run-first.md) and
-  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) (laws that need the real machine),
-  [0176](../../../.decisions/0176-second-send-back-stops-lane.md) and
-  [0564](../../../.decisions/0564-lead-decides-further-fix-rounds.md) (a second sent-back review),
-  [0099](../../../.decisions/0099-no-number-caps-a-pull-request.md) (no cap on size),
-  [0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md) (the lead merges) and
-  [0166](../../../.decisions/0166-owed-work-needs-no-owner-read.md) (owed work).
+  step) (a fix round),
+ and
+ (laws that need the real machine),
+ and
+ (a second sent-back review),
+ (no cap on size),
+ (the lead merges) and
+ (owed work).
 - **Who approves a plan, and what skips the steps:** the lead skill's
   [Steps](#steps) and
   [the open questions test](../plan/SKILL.md#the-open-questions-test) say who approves
   a plan. A docs-only pull request that writes down a decision skips the steps
   ([decisions land at once](#decisions-land-at-once)), and so does lead
   tooling ([fast-tracked](#lead-tooling-is-fast-tracked)), whose code
-  still follows `next/`'s rules ([0033](../../../.decisions/0033-agents-code-follows-next-rules.md)) and
-  no new shell or Python script enters the repo ([0113](../../../.decisions/0113-no-shell-or-python-scripts.md)),
+  still follows `next/`'s rules and
+  no new shell or Python script enters the repo,
   which `oxlint-plugins/tracked-scripts.ts` holds. Product code keeps its steps.
 - **No agent approves a pull request, and no agent answers a question the machine put to a
   person.**
 - **A step is a program,** and a prompt you would have typed is its first source. A v0 has no
   missing parts: quick means each part is small, never absent. A rule that code checks leaves the
-  prose, a rule that code could check becomes a check, and only judgment stays in prose
-  ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+  prose, a rule that code could check becomes a check, and only judgment stays in prose.
 
 ### The mechanical branch
 
 A ticket for which a fix command exists (a lint rule with an autofix, a format change, a rename, a
-codemod) skips the plan and the test writer ([0615](../../../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). By hand, the lead runs
+codemod) skips the plan and the test writer. By hand, the lead runs
 the branch's four primitives:
 
 1. **Judge:** is there a command? A rule with no fixer first gets its fixer written into the rule
@@ -675,15 +655,13 @@ are for other people's repos only.
 
 Something wrong that your task does not cover is one finding row with proof, then keep going:
 never a fix, a ticket or only a mention, and never a security hole.
-Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why. The
-notes live outside this repo.
+Decision says why. The notes live outside this repo.
 
 - **Every brief says it in one line,** for an agent that reads no skill: outside work goes in your
   report as a finding with proof.
 - **A step hands its findings over** in its report or answer. The lead records each one in the
   notes the same day. Never drop a finding because you disagree with it.
-- **A `flaky_test` does not wait:** it gets a ticket and a fix the same day
-  ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
+- **A `flaky_test` does not wait:** it gets a ticket and a fix the same day.
 
 ## Lead tooling is fast-tracked
 
@@ -694,11 +672,11 @@ Product code (`next/` and today's app) keeps its steps.
 
 ## Decisions land at once
 
-Decisions live in `.decisions/`, one file per decision
-([0001](../../../.decisions/0001-decisions-live-in-the-repo.md), owner, 2026-11-09). The whole path:
+Decisions live in `.kalfa/decisions/`, one file per decision
+(owner, 2026-11-09). The whole path:
 
 ```text
-owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on green
+owner decides -> write .kalfa/decisions/NNNN-slug.md (only if hard to reverse, surprising and a real trade-off) -> its own docs PR -> merge on green
 ```
 
 - **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
@@ -707,25 +685,23 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
 - **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
-  leak grep is clean, with no plan, tests or review rows. Code PRs keep their steps.
+  leak grep is clean, with no plan, tests, review or review rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
-  searches `.decisions/`, each context's `GLOSSARY.md` and `docs/direction/` for the topic.
+  searches `.kalfa/decisions/`, each context's `GLOSSARY.md` and `docs/direction/` for the topic.
 - **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
-  and that package's decisions, as [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
+  and that package's decisions, as
   asks of upstream. Then say what the code does, what breaks, each option with its cost, and your
   lean with how sure you are. An abstract question comes back to be asked again.
-- **Read what a diff touches.** Before a review and before a merge, run
-  `node .agents/skills/lead/scripts/governance.ts` on the branch. It lists the decision files the
-  diff's words touch. The review step and the lead read each one and say whether the diff walks it
-  back. It only lists for now; it blocks later, once its false alarms are measured.
+- **Read what a diff touches.** Before a review and before a merge, search `.kalfa/decisions/` by hand for
+  the words the diff touches. The review step and the lead read each hit and say whether the diff walks it
+  back.
 
 The lead owns the count of decisions still missing from the repo. Its status gives that count and
 the open docs PRs carrying them. The owner does not keep the list. Code cannot count decisions
 nobody recorded.
 
 The leak check fails closed: any hit stops the push or merge for the lead's hand check. A later
-commit does not clear a hit in an earlier one
-([0048](../../../.decisions/0048-leak-check-reads-each-commit.md)); `leakgrep.sh`'s header says
+commit does not clear a hit in an earlier one; `leakgrep.sh`'s header says
 what counts as a hit.
 
 ## Go easy on the machine
@@ -737,17 +713,15 @@ these caps. Each one came from a laptop that became unusable. The caps in
 [`AGENTS.md`](../../../AGENTS.md#go-easy-on-the-machine) are the short form. The full caps, moved from there word for word:
 
 - **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, then
-  `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it
-  ([0410](../../../.decisions/0410-the-machine-caps-live-in-code.md)). When a change makes `--changed` the
+  `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it. When a change makes `--changed` the
   full suite (a `package.json`, the lockfile, a tsconfig), run the narrow paths of the tests you
   touched and of the tests that read that file. A run that needs what CI lacks (Electron shots, a
   stage with workerd) still runs here.
 - **With two or more code agents running:** `nice -n 19`, `--maxWorkers=1`, one `pnpm typecheck` at
   the very end. `tsgo` takes about 8 cores, so small jobs add up.
-- **Count actual productive workers** under
-  [0597](../../../.decisions/0597-eight-workers-before-twelve.md).
+- **Count actual productive workers** under.
 - **Shared resources stay capped:** one `pnpm typecheck` at a time, one Electron test app and one
-  Docker box ([0012](../../../.decisions/0012-twelve-agents-at-once.md)). Wait while
+  Docker box. Wait while
   `pgrep -x tsgo` finds one (`pgrep -f tsgo` also matches the waiting shell, so that loop never
   ends); in a step's box, skip the wait, since `pnpm typecheck` takes its own lock. Two type checks
   at once froze the laptop before; reduce demand if it feels slow.
@@ -763,8 +737,7 @@ these caps. Each one came from a laptop that became unusable. The caps in
   header says how it stays out of the person's way. Shots come only from `page.screenshot`.
 - A wait or poll loop runs in the background.
 - Ordinary safe checks run directly in parallel, under the caps above. Launchd, real Electron and
-  real process-signal laws run on eligible disposable CI off the owner's laptop
-  ([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)).
+  real process-signal laws run on eligible disposable CI off the owner's laptop.
 
 ## Money
 
@@ -780,7 +753,7 @@ these caps. Each one came from a laptop that became unusable. The caps in
 - `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
 - In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
   the agent keeps a shell and can read what you meant to hide, git history included.
-- A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.decisions/` and
+- A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.kalfa/decisions/` and
   `.agents/` included, because the root `.ignore` lists them; a new dot folder needs its line
   there. It still skips `node_modules`, `dist` and `runs`. `.claude/skills/` holds links into
   `.agents/skills/`, which rg does not follow, so each skill is searched once.
@@ -791,11 +764,11 @@ these caps. Each one came from a laptop that became unusable. The caps in
 
 - Write a step's work, run git inside a box, or reset a branch to take a step's work over.
 - Rebase or force-push a stacked child for upkeep. Use `gh pr update-branch <child>` only after the
-  parent head and source, queue and writer agree (0599); it adds a merge commit. For an ordinary
+  parent head and source, queue and writer agree; it adds a merge commit. For an ordinary
   branch, bring main in with a merge.
 - Read, print or copy a key. Leave a box, a claim or a half-open pull request behind without saying so.
 
 ## When a run teaches something
 
-Update the skill it teaches, in the same pull request as the note in the notes. A rule that lives only in
+Update the skill it teaches, in the same pull request as the field note. A rule that lives only in
 one brief is lost with that brief.

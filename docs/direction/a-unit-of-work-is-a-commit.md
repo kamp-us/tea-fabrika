@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-11-05; fetch signing changed 2026-11-08; hand-run signing dropped 2026-11-13"
-summary: "Both versions, `next/` first. An exam change is its own commit by an agent that is not the builder, inside the same pull request. Each step's agent signs its commits with its own key, into a git note on `refs/notes/fabrika` so GitHub shows no \"Unverified\", and CI decides from that signature: no valid signature from a known step key is `stuck: unsigned_commit`, a `build` commit on an exam path `stuck: build_touched_exam`; a trailer is for people only. Each step still records its commit as a `committed` entry (in Tier 1, its `field/` row). Any exam path touched gets the lead's check, and only real loosening asks the owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md); it said: asks the owner to read it). Replaces the CI half of nobody writes their own exam. *Changed 2026-11-07: a step signs the link (step, ticket, version, tree before, tree after), not the commit (experiment 221 (in the notes)).* *Changed 2026-11-08 (owner): today's tooling signs missing links at fetch in MAIN after checking run bounds and owners; agents still commit, and keys stay out of boxes. A catch-up conflict on exam paths goes through a tests run and is signed tests; other catch-up merges stay lead links (lead).* *Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's hand-run tooling stops signing; this stays the design for `next/`'s own pipeline.*"
+summary: "Both versions, `next/` first. An exam change is its own commit by an agent that is not the builder, inside the same pull request. Each step's agent signs its commits with its own key, into a git note on `refs/notes/fabrika` so GitHub shows no \"Unverified\", and CI decides from that signature: no valid signature from a known step key is `stuck: unsigned_commit`, a `build` commit on an exam path `stuck: build_touched_exam`; a trailer is for people only. Each step still records its commit as a `committed` entry (in Tier 1, its `field/` row). Any exam path touched gets the lead's check, and only real loosening asks the owner (it said: asks the owner to read it). Replaces the CI half of nobody writes their own exam. *Changed 2026-11-07: a step signs the link (step, ticket, version, tree before, tree after), not the commit (experiment 221 (in the notes)).* *Changed 2026-11-08 (owner): today's tooling signs missing links at fetch in MAIN after checking run bounds and owners; agents still commit, and keys stay out of boxes. A catch-up conflict on exam paths goes through a tests run and is signed tests; other catch-up merges stay lead links (lead).* *Changed 2026-11-13 (owner): today's hand-run tooling stops signing; this stays the design for `next/`'s own pipeline.*"
 ---
 
 # A unit of work is a commit
@@ -14,7 +14,7 @@ step signs a link from tree to tree that survives the squash. Changed by the own
 today's tooling signs at fetch in MAIN, after checking the recorded run and file owners. Agents
 still commit. This replaces the 2026-11-05 agent-signs call.
 
-*Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's
+*Changed 2026-11-13 (owner): today's
 hand-run tooling stops signing. A step's commit is a plain commit, and CI no longer decides from a
 signature there. The builder still never touches the exam. This note stays the design for `next/`'s
 own pipeline.*
@@ -114,8 +114,7 @@ person:<id> namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
   ([a key per client](./a-key-per-client-and-no-github-trust.md)). Added by hand for now; from
   Tier 3, from the ledger's members.
 - **Exam files get the lead's check,** and a person's commit is never `build_touched_exam`. Only
-  real loosening of a law waits on the owner
-  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed 2026-11-09
+  real loosening of a law waits on the owner. *Changed 2026-11-09
   (owner): it said exam files still need the owner's read.*
 - Ticket 251 builds it.
 
@@ -150,7 +149,7 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
   (experiment 221 (in the notes)).*
   Lead, 2026-11-08: a catch-up merge of main whose conflict touches exam paths is resolved by a
   tests run and signed tests, not lead; every other catch-up merge stays a lead link.
-  *Changed 2026-11-11 by [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md):
+  *Changed 2026-11-11 by:
   the chain runs from the tree where the branch left `main` to the head's tree, so a pull request
   behind `main` is not refused and may land without the merge; a merge that is made stays a link.*
 - **No transparency-log server.** in-toto's links often go to a Sigstore Rekor server. Ours go to the
@@ -216,7 +215,7 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
 - **A key on the laptop is only as private as the agent's reach.** In Tier 1 every agent of the
   session runs as the same user, so a builder with a shell could read the test writer's key and sign
   as it. The signature proves which key, not which agent, until each step runs in its own box
-  (Tier 5). The lead's hand check and `loosening.sh` hold the gap meanwhile (0014). *It said: the
+  (Tier 5). The lead's hand check and `loosening.sh` hold the gap meanwhile. *It said: the
   owner's read of every exam path.*
 - **A rebase breaks every proof.** Tested 2026-11-06: a plain rebase drops the note; git's
   `notes.rewriteRef` carries it over, but the signature still names the old commit, so the step
@@ -232,5 +231,5 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
   that also names the checks it ran is a later field, and adding it later loses those runs.
   *Squash merges were a doubt here; the owner kept them on 2026-11-05, with the links above.*
 - **Gaming in the test writer's commit.** The test writer may now change the exam in the same
-  pull request it writes tests for. The lead's hand check and `loosening.sh` hold that (0014). *It
+  pull request it writes tests for. The lead's hand check and `loosening.sh` hold that. *It
   said: the owner's read of every exam path.*

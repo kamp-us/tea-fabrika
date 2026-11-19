@@ -9,7 +9,7 @@ yield* complete(
   SupervisorMsg.cases.swap_prepared.make({ change: { /* ...12 fields... */ wake: next.wake, ran: upgraded.ran } }), // throws
 );
 
-// After: decode the change with its own schema, read off the Msg case, as decision 0215 says for
+// After: decode the change with its own schema, read off the Msg case, as an earlier decision says for
 // untrusted input. A change that does not decode is the new code's answer, so the swap is refused
 // `shape`, the word the same block already answers when the new build's upgrade or init fails.
 const change = yield* Effect.result(
@@ -27,7 +27,7 @@ yield* complete(SupervisorMsg.cases.swap_prepared.make({ change: change.success 
 
 `next/` only: `next/packages/libfabrika/src/runtime/`. Ticket 1181, branch
 `fabrikalfa/t1181-runner-swap-wake` from origin/main at c3dac8a. It builds
-[0215](../../../.decisions/0215-untrusted-input-never-throws.md) for the one `swap_prepared` make
+ for the one `swap_prepared` make
 in `Runner.ts`, the bug in `field/findings/2026-11-18-make-on-untrusted-runner-swap-prepared.json`.
 Ticket 1182 owns the Runner's other 17 makes; this plan does not touch them, because this call is
 fixed alone (its decoded value feeds the later `swap_completed` make, so nothing else changes). It
@@ -49,7 +49,7 @@ No call here is under 80%. The two nearest to the line, both 80%:
 
 - **The law lives in `RunnerRecovery.laws.test.ts`, not in the reload suite.** The reload suite
   (`ReloadTest.ts`) is the swap's home, but it runs only through `Reload.integration.test.ts`, so
-  under [0602](../../../.decisions/0602-integration-laws-leave-merge-line.md) no pull request runs
+  under no pull request runs
   it, and this bug class merged green once already (PR 1619). What would settle it: the lead
   preferring the reload suite. Then the law is a new L-row in `ReloadTest.ts`, and it runs only in
   main's full run.
@@ -107,9 +107,9 @@ No call here is under 80%. The two nearest to the line, both 80%:
    checked more strictly. `load` means the loader failed or the declaration names another program
    (`:2738` to `:2748`); `newer` means a lower declared `v` (`:2751`). Both are wrong here.
    [Hot reload, H3 and H4](../../../docs/direction/hot-reload.md) and
-   [0291](../../../.decisions/0291-hot-reload-swaps-one-program.md) say a new build the process
+   [0006](../../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md) say a new build the process
    cannot take refuses the swap for that one process, which keeps its old code, with a
-   `code.refused` ([0293](../../../.decisions/0293-every-record-names-its-build.md)). No new word.
+   `code.refused` ([0013](../../../.kalfa/decisions/0013-records-carry-their-build.md)). No new word.
 3. **The decode sits after `kept` and before `complete`** (90%). Nothing is journaled yet, so a
    refusal there leaves the supervision journal `idle` and the old build in place, and `refuse`
    writes its one `code.refused:<load>`. `finishSwap(next)` keeps taking `next`, whose wake now
@@ -124,7 +124,7 @@ No call here is under 80%. The two nearest to the line, both 80%:
    ledger on `node:sqlite` at `:memory:`, with the program's box doubled by `workerExecution`, so
    the test can hand back any `init` or `upgrade` answer. It is a `next` project file, not
    `.integration.`, so a pull request whose change reaches it runs it, as
-   [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md) asks of a law that
+ asks of a law that
    can run on a stand-in. The two existing laws there stay as they are; the tests step writes a
    local rig function for the new one rather than reshaping theirs.
 6. **No plan doc row changes** (85%). This is a fix inside P15's existing swap; no tier row's status
@@ -164,7 +164,7 @@ const kept = yield* Schema.decodeUnknownEffect(Checkpoint)({
 }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
 
 // The new build's own answers (its init's wake and view, its upgrade's names and v) are untrusted
-// (0215): a change they make that the journal cannot keep is refused as the new code's.
+//: a change they make that the journal cannot keep is refused as the new code's.
 const change = yield* Effect.result(
   Schema.decodeUnknownEffect(SupervisorMsg.cases.swap_prepared.fields.change)({
     process: process.id,
@@ -232,7 +232,7 @@ it("ticket 1181: a swap whose new build answers a wake or an upgrade the journal
 ```
 
 A tagged answer is matched with `Match`, never by comparing `kind` by hand
-([0567](../../../.decisions/0567-a-tagged-value-is-matched.md)) where lint asks for it. The rig reads
+ where lint asks for it. The rig reads
 the ledger rows the way `Reload.integration.test.ts`'s `rows` does, or through the store it already
 holds; the tests step picks.
 

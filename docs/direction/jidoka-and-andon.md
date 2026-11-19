@@ -258,7 +258,7 @@ restart: (s, m) =>
 Decided 2026-11-01 (the guidelines' clash 2). A person who wants to steer a running quest writes a
 plain comment on its ticket. Linear lets a person "steer the approach" of a running session; here
 the ticket is the one way in, so nothing new opens a door into a running agent. In `next/`, a quest's
-room is a second way in ([0073](../../.decisions/0073-a-lane-has-a-room.md)); the rest of this
+room is a second way in; the rest of this
 section still holds.
 
 ```ts

@@ -43,7 +43,7 @@ export class RecordedStart extends Context.Service</* ... */>()("...") {} // fir
 - **Old misses.** 833 findings on main today. Each is named in `next-ledger.json`, which only
   shrinks. A new export, or a changed line, is not in the ledger, so it must comply.
 - **The owner's one yes.** Adding those entries. Nothing adds a ledger entry but the owner
-  ([0033](../../.decisions/0033-agents-code-follows-next-rules.md), and the lint notes on
+  (and the lint notes on
   `next-ledger.json`). The ledger file exists already, so no new ledger is made.
 - **Then the fills.** Eight small pull requests add the missing blocks, by module. Each one makes
   the ledger shorter.
@@ -52,11 +52,10 @@ export class RecordedStart extends Context.Service</* ... */>()("...") {} // fir
 
 ## How others do it
 
-Existing tools first ([0040](../../.decisions/0040-existing-tools-before-hand-written.md)). Our
-shape is in [the doc comments pattern](../../.patterns/doc-comments.md): a module block, one
+Existing tools first. Our
+shape is in [the doc comments pattern](../../.kalfa/patterns/doc-comments.md): a module block, one
 description paragraph, three optional sections in order, `**Example** (Title)` sections, tags in
-a fixed order with `@stability` and `@category`, no `@since` yet
-([0118](../../.decisions/0118-no-since-tag-before-a-release.md)), and `@internal` in `internal/`
+a fixed order with `@stability` and `@category`, no `@since` yet, and `@internal` in `internal/`
 files.
 
 | Tool | What it can hold | What it cannot | Proof |
@@ -128,13 +127,13 @@ files, 797 exports.
 - No file holds a `@since` tag.
 
 **False alarms.** A rule blocks at about 0% (AGENTS.md, "Checks"), and all its hits are counted,
-not a sample ([0120](../../.decisions/0120-effect-code-guidelines.md)).
+not a sample.
 
 - **On a tree known to be right.** Effect 4.1.2's own source, 432 files outside `internal/`, 9,536
   exports, with `@since` asked for as Effect asks. The prototype fired 12 times, all in
   `StandardSchema.ts`. That is the one file Effect's own config leaves out, and its exports do lack
   the tags. **0 false alarms in 9,536 exports.**
-  [0023](../../.decisions/0023-next-follows-effects-code-style.md) records the same answer from
+ records the same answer from
   Effect's checker on its own modules: one file, `StandardSchema.ts`.
 - **On our tree.** All 833 hits are counted above. A hand read of 30, seed 119120: 30 real. 17 had
   no block (4 of them names in a barrel list), 9 had a one-line block with no tags, 2 had no blank
@@ -155,7 +154,7 @@ rules are. A sketch, to be checked against oxlint 1.90.0's plugin types before i
 import type { CreateRule, ESTree } from "@oxlint/plugins";
 import { buildTags, parseJSDocBlock, parseLooseJSDocBlock } from "./effect-jsdocs.ts";
 
-/** The one option. `absent` until libfabrika ships a version (0118), then `required`. */
+/** The one option. `absent` until libfabrika ships a version, then `required`. */
 type Options = { readonly since: "absent" | "required" };
 
 /** What a block stands above. It picks the tags Effect's grammar allows and asks for. */
@@ -185,7 +184,7 @@ export declare const buildTags: (scope: Scope, tags: ReadonlyArray<JSDocTag>, st
 ```jsonc
 // .oxlintrc.json, two new blocks
 {
-  // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block.
+  // E6: every public export of a next/ library has an Effect-shaped doc block.
   "files": ["next/packages/*/src/**"],
   "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
 },
@@ -206,7 +205,7 @@ names by file, rule and line of code, and prunes an entry whose finding is gone.
 
 ## Edge cases, listed before the code
 
-Each one gets a test (0040). The rule follows Effect's checker case by case, except where a line
+Each one gets a test. The rule follows Effect's checker case by case, except where a line
 says "ours".
 
 **Which files**
@@ -311,7 +310,7 @@ An old miss, `settings/Sources.ts` line 10, `export const Origin`:
    without the entry, and CI fails until that shorter file is committed.
 3. If someone edits that line before the fill, the key no longer matches and the finding blocks.
    The change adds the block then
-   ([0033](../../.decisions/0033-agents-code-follows-next-rules.md): a change that touches a
+   (: a change that touches a
    ledgered line fixes it).
 
 ## Laws
@@ -331,15 +330,14 @@ tests of the rule, on generated code through oxlint's `RuleTester`, as the other
 | 8. On Effect 4.1.2's own source, with `since` set to `required`, the rule fires on the exports of `StandardSchema.ts`, on the four files with no module block, and nowhere else | test | vector: Effect's checker passes this tree at the pin, so Effect's source is the grammar's own answer sheet | make the copied grammar refuse a `**Gotchas**` section |
 | 9. The real config turns the rule on for a library's public files only, and off for each kind in cases 2 to 4 | test | scenario: one real lint run over one planted file per kind, since only the real config holds the list | remove `internal/` from the off block |
 
-As [0093](../../.decisions/0093-laws-walk-plants-run-once.md) has it for `next/`'s laws, each
+As has it for `next/`'s laws, each
 plant is run once and recorded, not kept as a test. Law 8 reads the installed `effect` package, so it needs no network.
 The four files in law 8 are `encoding/Ini.ts`, `encoding/Yaml.ts`, `http/HttpStatus.ts` and
 `index.ts`.
 
 ## Is it a setting?
 
-A setting here means a value in `fabrika.toml`
-([0069](../../.decisions/0069-choices-are-settings.md)). None of these is one: they are the
+A setting here means a value in `fabrika.toml`. None of these is one: they are the
 repo's own exam, not a choice a person makes when running fabrika.
 
 - **`since`, `absent` or `required`.** A rule option in the lint config. 0118 names the day it
@@ -365,7 +363,7 @@ change comments in product files, so the build step writes them. The lead alone 
 | `oxlint-plugins/README.md` | tests | 1 | docs | the rule, the tools looked at, the first-day count by module |
 | `.oxlintrc.json` | tests | 1 | 20 | the two blocks in The shape |
 | `next-ledger.json` | lead | 1 to 9 | 4200 | slice 1: the 833 entries, written by one whole-repo lint run, after the owner's yes. Slices 2 to 9: only as `pnpm lint` pruned it |
-| `.patterns/doc-comments.md` | build | 1 | docs | "What can hold it" becomes what holds it |
+| `.kalfa/patterns/doc-comments.md` | build | 1 | docs | "What can hold it" becomes what holds it |
 | `docs/direction/effect-code-guidelines.md` | build | 1 | docs | E6: the measured counts beside the guess, which stays, marked wrong |
 | `next/packages/libfabrika/src/runtime/Runner.ts` `next/packages/libfabrika/src/gateway/Gateway.ts` `next/packages/libfabrika/src/cloudflare/runtime.ts` | build | 2 | 215 | doc blocks only |
 | `next/packages/libfabrika/src/presence/` `next/packages/libfabrika/src/schedules/` `next/packages/libfabrika/src/gateway/` `next/packages/libfabrika/src/repositories/` `next/packages/libfabrika/src/packs/` `next/packages/libfabrika/src/jobs/` | build | 3 | 390 | doc blocks only |
@@ -418,7 +416,7 @@ Nothing at run time: a lint rule keeps no data. Three facts are written down the
   Effect's.
 - **The first-day count,** by module and by kind, in the lint notes, as each rule that joined with
   findings has.
-- **The plants' results,** in the tests step's field row (0093).
+- **The plants' results,** in the tests step's field row.
 
 `@since` is not recorded. 0118 accepted that loss: the first release stamps one version on
 everything that exists then.
@@ -495,7 +493,7 @@ Estimate: 5 steps, $10
 ## Open questions
 
 1. May `next-ledger.json` take the rule's first-day findings, 833 today, so the rule blocks every new export now, ahead of step 5 of 0120's fix order? Lean: yes, 90%. It is the same deal as the four rules that joined on 2026-11-11, and it is the only way new code is held from day one. A no means the rule turns on module by module as each fill lands, and a new export in an unfilled module is not held until then.
-2. May a type that directly follows its same-name schema share the schema's block, as `export const Sent = ...` then `export type Sent = typeof Sent.Type;`? Lean: yes, 70%. Effect's checker asks for a block on both, and Effect writes both. Ours would differ, with the reason at the rule: the pair is one declaration to a reader, as the blank-line rule already treats it (0021), and a second block repeats the first. It removes 65 entries today and one block from every schema written later. Slice 1 is built Effect's way; a yes adds one edge case and lint prunes the 65.
+2. May a type that directly follows its same-name schema share the schema's block, as `export const Sent = ...` then `export type Sent = typeof Sent.Type;`? Lean: yes, 70%. Effect's checker asks for a block on both, and Effect writes both. Ours would differ, with the reason at the rule: the pair is one declaration to a reader, as the blank-line rule already treats it, and a second block repeats the first. It removes 65 entries today and one block from every schema written later. Slice 1 is built Effect's way; a yes adds one edge case and lint prunes the 65.
 
 ## Findings
 

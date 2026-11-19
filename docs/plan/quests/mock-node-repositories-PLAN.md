@@ -4,8 +4,8 @@ Plancheck-Version: 3
 # Plan: the mock sweep in `next/packages/libfabrika/src/node/repositories`, in next/
 
 This is `next/` only. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock`, `vi.doMock`, `vi.spyOn`
-or `vi.stubEnv`) and [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (calls are
+ (no `vi.mock`, `vi.doMock`, `vi.spyOn`
+or `vi.stubEnv`) (calls are
 watched with a `Recorder`, property laws are `it.effect.prop`), for one folder of the sweep the
 [recorder plan](./recorder-PLAN.md#size) lists. Ticket 1067.
 
@@ -32,7 +32,7 @@ const layer = Recorder.layer(Digest.Digest, {
   planted bypass still turns it red. That `read` refuses a snapshot with missing values is `read`'s
   own laws, `next/packages/libfabrika/src/settings/Snapshot.test.ts:187` (L5, "every declared
   value and origin is required") and `:234` (L6, "corrupt values or hashes fail"), which stay. 85% sure. The lead's read settles it; if the lead calls it a
-  loosening, it goes to the owner (0014).
+  loosening, it goes to the owner.
 - **The `vi as v` alias.** 0555 says the lint rule may miss a renamed import. The tests step plants
   it and records what oxlint does. See the laws.
 
@@ -147,7 +147,7 @@ it.effect.prop(
 );
 ```
 
-- **Inputs are Schemas** (0579): `wrong` is `Schema.Boolean`, and the seed is the package's. The
+- **Inputs are Schemas**: `wrong` is `Schema.Boolean`, and the seed is the package's. The
   old law's `fc.array(fc.nat())` only picked which of two faults to plant, so it has no input of
   its own to keep. The tests step may add the repo document text as a second input, drawn from the
   `docs` list the first L3 law uses (`OpenRepository.test.ts:120`), so the fault is tried on more
@@ -180,7 +180,7 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 
 ```jsonc
 // .oxlintrc.json, a new override block, a sketch. No other block sets this rule, so where it
-// sits does not change which options win. The entries follow 0555's sketch, plus `fn` (0579).
+// sits does not change which options win. The entries follow 0555's sketch, plus `fn`.
 {
   // 0555, 0579: no vi mock in next/; each folder joins this list the day it reaches zero.
   "files": ["next/packages/libfabrika/src/node/repositories/**"],
@@ -188,11 +188,11 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555).",
-        "fn": "Watch the call with a Recorder over its service (0579)."
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with a Recorder.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer.",
+        "fn": "Watch the call with a Recorder over its service."
       }
     ]
   }
@@ -200,7 +200,7 @@ nothing), so this slice adds it, on for this folder, which reaches zero in this 
 ```
 
 - **This is 0168's form:** a rule turns on for each folder when it reaches zero. It is not a list
-  of leftovers (0524). No block turns it off for a dirty folder.
+  of leftovers. No block turns it off for a dirty folder.
 - **`fn` is in the list** because 0579 says the Recorder replaces the `vi.fn` uses too, and this
   folder has none. 85% sure; the doubt is only whether later slices want one shared message.
 - **If another mock slice lands its block first,** this slice adds its folder to that block's
@@ -225,7 +225,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -240,11 +240,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -286,7 +286,7 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -301,7 +301,7 @@ that moving a runner keeps the same first failing case.
 
 No law here needs a real resource: `Digest.layerWebCrypto` is in-process, and the `reader` stub and
 `FileSystem.layerNoop` stand in for git and the disk. So L3 runs on every pull request and is not
-an `.integration.` file (0536, 0581). No host-only law.
+an `.integration.` file. No host-only law.
 
 The other laws in `OpenRepository.test.ts` keep their bodies. The source read found raw
 `fc.assert` and a hand seed in the first L3 law and L9. Those untouched laws wait for the
@@ -351,7 +351,7 @@ own. It lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, in it
   doubts. 85%.
 - **The lock covers this folder only,** plus `fn`. 85%.
 - **Is anything here a setting?** No: a law's fault and a lint block are not choices a person
-  makes (0069).
+  makes.
 - **What fact is lost if not recorded now?** None: this changes tests and lint only. The run rows
   record each plant's result the day it runs.
 
@@ -361,7 +361,7 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - `plancheck.sh --draft` on this file.

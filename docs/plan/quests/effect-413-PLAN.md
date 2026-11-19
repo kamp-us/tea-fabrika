@@ -23,7 +23,7 @@ const wrong = ExitReason.isAnyOf(["typo"]);
 - **Our one Effect patch is carried, not deleted.** 4.1.3 does not hold its fix. The file is renamed
   to the new version and its bytes do not change.
 - **The checker `@effect/tsgo` stays at 0.63.0.** It names no Effect version, and a bump of it
-  belongs to decision 0565.
+  belongs to an earlier decision.
 - **No product file changes.** Every file in this change is an exam path, so the tests step writes
   all of it, and there is no build step unless 4.1.3 breaks product code (see calls).
 - **One new law:** a type law that `isAnyOf` with a tag the union lacks does not compile.
@@ -77,7 +77,7 @@ All of this is in the repo the installed package manifest names in `repository`,
   4.1.3. `@effect/platform-node` 4.1.3 asks for `undici ^8.12.4` (was `^8.12.3`), so the lockfile's
   `undici` may move one patch.
 - **Effect's packaged agent guide** (`AGENTS.md` inside the package) is the same file in 4.1.2 and
-  4.1.3. Decision 0023's list of differences needs no change.
+  4.1.3. an earlier decision's list of differences needs no change.
 - **Effect's jsdocs tool,** which `oxlint-plugins/effect-jsdocs.ts` was ported from, has not changed
   since 2026-10-07. The port stays as it is.
 
@@ -97,13 +97,11 @@ MCP protocol 2026-07-28, RPC, SQL drivers, CSV, XML, `Rational`, AG-UI) has no c
 | `Scheduler.MaxOpsBeforeYield` 1 or 2 no longer hangs ([10463](https://github.com/Effect-TS/effect/pull/10463)) | `next/`: three integration tests set it to 3 as a workaround | Nothing breaks. The workaround can go later; not this plan |
 | `SchemaRepresentation.fromJsonSchemaDocument` drops `contentSchema` notes that hold references ([10426](https://github.com/Effect-TS/effect/pull/10426)) | `next/`: the oracle in `settings/JsonSchema.test.ts` | Our settings schema has no `contentSchema`. Its test runs in the narrow list |
 | Tool call parameters and results go through their JSON codec, and `Toolkit.handle` stops recording arguments on the span ([10332](https://github.com/Effect-TS/effect/pull/10332), [10362](https://github.com/Effect-TS/effect/pull/10362), [10304](https://github.com/Effect-TS/effect/pull/10304)) | today's version: `packages/pipeline/src/stages/build/report.ts`, one tool that returns a string | A string is JSON already. Its test runs on the laptop |
-| `RcMap` idle time uses the clock of the context the map was made in ([10324](https://github.com/Effect-TS/effect/pull/10324)) | today's version: `apps/fabrika/src/host/agent-session.ts`, `packages/fabrika/src/program/refs.ts` | Neither sets an idle time I could find. No CI test covers today's version (0533) |
+| `RcMap` idle time uses the clock of the context the map was made in ([10324](https://github.com/Effect-TS/effect/pull/10324)) | today's version: `apps/fabrika/src/host/agent-session.ts`, `packages/fabrika/src/program/refs.ts` | Neither sets an idle time I could find. No CI test covers today's version |
 | `Match` handler maps and exhaustiveness ([10455](https://github.com/Effect-TS/effect/pull/10455)) | nowhere: no file calls `Match.` | Nothing |
 | A struct field named like an `Object.prototype` member needs an own property ([9612](https://github.com/Effect-TS/effect/pull/9612)) | nowhere: no schema field is named `toString`, `valueOf` or `constructor` | Nothing |
 
-Today's version is frozen and CI runs none of its tests
-([0525](../../../.decisions/0525-todays-version-is-frozen.md),
-[0533](../../../.decisions/0533-today-keeps-its-tests-off-ci.md)). It shares the catalog, so the
+Today's version is frozen and CI runs none of its tests. It shares the catalog, so the
 bump reaches it. CI still type-checks it. Its five tests that read the changed behavior run on the
 laptop, listed under "Checks to run".
 
@@ -120,12 +118,12 @@ laptop, listed under "Checks to run".
 - **Our own rule** ([patch upstream locally](../../direction/patch-upstream-locally.md)): the bump
   that takes the release with the fix deletes the patch. This release does not have the fix, so
   the patch stays, and the next bump past commit `d021cee` deletes it.
-- **Reading before patching** ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)):
+- **Reading before patching**:
   this plan adds no patch and changes none. It carries one whose read is in its own pull request
   (ticket 618).
 - **Type tests for a library's types:** Effect's own pull request tests this fix in
   `packages/effect/typetest/schema/Union.tst.ts`. Ours is the same idea in the form
-  [0527](../../../.decisions/0527-type-laws-get-a-type-label.md) decided: a `type:` law of
+ decided: a `type:` law of
   `expectTypeOf` lines in a `*.types.test.ts` file, judged by CI's typecheck.
 
 ## The shape
@@ -258,7 +256,7 @@ The owner is away, so each is a call with how sure I am.
    code, and the patch applies clean.
 4. **`@effect/tsgo` does not move** (90%). It is a compiled checker with no peer on `effect`. Its
    newer versions add checks, and which checks are on is
-   [0565](../../../.decisions/0565-effects-own-checks-block.md)'s work, one check at a time.
+'s work, one check at a time.
 5. **No build step** (85%). Every file here is an exam path, so the tests step owns all of it and a
    builder would have nothing to write. If CI's typecheck or a narrow test shows product code that
    4.1.3 breaks, that is build work: the lead amends this plan with the files and starts a build
@@ -268,7 +266,7 @@ The owner is away, so each is a call with how sure I am.
    as a fact about our code, and `next/`'s own typecheck judges it.
 7. **No new lint rule or lockfile check** (90%). The lead already reads the lockfile diff for exact,
    planned versions. A new check is a cost, and nothing has drifted yet.
-8. **Is any of this a setting?** No ([0069](../../../.decisions/0069-choices-are-settings.md)). A
+8. **Is any of this a setting?** No. A
    dependency's version is already declared once, in the catalog. No person sets it at run time.
 
 ## Checks to run
@@ -294,7 +292,7 @@ nice -n 15 pnpm exec vitest run --maxWorkers=3 \
   next/packages/libfabrika/src/node/settings/Command.test.ts
 ```
 
-Today's version, on the laptop only, since CI runs none of its tests (0533):
+Today's version, on the laptop only, since CI runs none of its tests:
 
 ```sh
 nice -n 15 pnpm exec vitest run --maxWorkers=3 \

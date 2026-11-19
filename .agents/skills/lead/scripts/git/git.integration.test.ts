@@ -1,7 +1,7 @@
 // S2 of docs/plan/quests/port-scripts-0113-PLAN.md: the real-layer set for the shared Git service.
 // GitProcess.layer runs real git; GitTest.layer answers from a model in memory. Each law builds a
 // small real repository in a temp folder from a generated history, gives the same history to the
-// model, and sees both layers answer alike, and governance.ts print the same lines on each.
+// model, and and sees both layers answer alike.
 //
 // A history is built step by step (0093): a first base, work and main commit, then a walk whose
 // next move is read against the history built so far: a commit on work, on main or on a side
@@ -12,13 +12,12 @@
 // refuses with GitError: an answer that differs from git's is the one thing it may not give.
 //
 // It starts git and node and writes a temp folder, so it is an `.integration.` file (0584): no
-// stand-in can show that real git writes the diff the model writes, or that the process exits with
-// the code governance.ts maps. The model's diff carries no hunk positions, so "alike" is read where
+// stand-in can show that real git writes the diff the model writes. The model's diff carries no hunk positions, so "alike" is read where
 // the ports read it: the file header lines, and the changed lines as a sorted list.
 //
 // The repository's own config pins what a person's global git config could change (a diff prefix,
 // color), so the law does not lean on the machine (0052). Rename detection stays git's default, as
-// governance.sh ran it; every line of a file carries the file's own name, so no two files are alike
+// the lead tooling ran it; every line of a file carries the file's own name, so no two files are alike
 // enough for git to call one a rename of the other. Each branch edits only the files it made, so no
 // merge conflicts, and a merge's files are read back from git, so the model holds git's merge.
 //
@@ -27,11 +26,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, FileSystem, Layer, Path, type Scope } from "effect";
-import { Command } from "effect/cli";
-import { TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { governance } from "../governance.ts";
 import { run } from "../pr/command.ts";
 import { Git } from "./Git.ts";
 import * as GitProcess from "./GitProcess.ts";
@@ -471,28 +467,6 @@ const alike = (dir: string, model: GitTest.Model) =>
     return { real, fake };
   });
 
-/** governance.ts's lines on one pair of layers. */
-const governed = (layers: Layer.Layer<Git | FileSystem.FileSystem>) =>
-  Effect.gen(function* () {
-    const exit = yield* Command.runWith(governance, { version: "0.0.0" })(["main"]).pipe(Effect.exit);
-    const out = (yield* TestConsole.logLines).map(String).join("\n");
-
-    return { ok: Exit.isSuccess(exit), out };
-  }).pipe(Effect.provide(Layer.merge(layers, TestConsole.layer)));
-
-/** governance.ts's lines on the model, or its refusal when the model refuses a git call. */
-const governedOrRefused = (layers: Layer.Layer<Git | FileSystem.FileSystem>) =>
-  Effect.gen(function* () {
-    const refused = yield* Command.runWith(governance, { version: "0.0.0" })(["main"]).pipe(
-      Effect.as(undefined),
-      Effect.catchTag("GitError", (e) => Effect.succeed(e._tag)),
-    );
-
-    const out = (yield* TestConsole.logLines).map(String).join("\n");
-
-    return refused === undefined ? { ok: true, out } : { refused };
-  }).pipe(Effect.provide(Layer.merge(layers, TestConsole.layer)));
-
 /** A first history whose every file has two or more lines, for the pinned walks below. */
 const PINNED_HISTORY: History = {
   files: [
@@ -614,80 +588,4 @@ describe("the Git service's two layers", () => {
       },
     );
   });
-
-  // Plant, run once: GitTest's work tree read the merge base's files in place of HEAD's. Red: a
-  // decision HEAD added was listed on the real layers and not on the model.
-  it("property: governance.ts prints the same lines on the real layers and on the model of the same history", () =>
-    fc.assert(
-      fc.asyncProperty(walk, (wk) =>
-        ran(
-          Effect.gen(function* () {
-            const { dir, model, now, take } = yield* build(wk.history);
-
-            const real = yield* governed(
-              Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
-            );
-
-            const fake = yield* governed(Layer.merge(GitTest.layer(model), GitTest.workTree(model)));
-            expect(real.ok).toBe(true);
-            expect(fake).toEqual(real);
-            // The decision HEAD added is listed in every run, so no run compares two empty answers.
-            const added = wk.history.files.slice(0, 1).map((f) => `${filePath(f)}: edited`);
-            expect(added).toHaveLength(1);
-            expect(real.out.split("\n")).toEqual(expect.arrayContaining(added));
-
-            // After the walk: the same lines again, or the model's refusal of a git call.
-            for (const [n, s] of wk.steps.entries()) {
-              yield* take(s, n + 1);
-            }
-
-            const after = now();
-
-            const walked = yield* governedOrRefused(
-              Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
-            );
-
-            const modeled = yield* governedOrRefused(Layer.merge(GitTest.layer(after), GitTest.workTree(after)));
-            expect(walked).toEqual({ ok: true, out: expect.any(String) });
-            expect(modeled).toEqual("refused" in modeled ? { refused: "GitError" } : walked);
-          }),
-        ),
-      ),
-      { ...runs, examples: [[ANCESTOR_MERGE], [SWAPPED_LINES]] },
-    ));
-
-  // Plant, run once: governance.ts's edge mapped a clean run to exit 1 (`Effect.as(1)`). Red: the
-  // process exited 1 where the law asks 0. Plant, run once: a bad command line mapped to exit 1. Red:
-  // the process exited 1 where the law asks 2.
-  it("property: node governance.ts exits 0 with the in-process lines, 1 when git cannot answer and 2 on a bad command line", () =>
-    fc.assert(
-      fc.asyncProperty(
-        walk,
-        fc.constantFrom<ReadonlyArray<string>>(["main", "extra"], ["--no-such-flag"], ["main", "--no-such-flag"]),
-        (wk, bad) =>
-          ran(
-            Effect.gen(function* () {
-              const path = yield* Path.Path;
-              const script = path.join(import.meta.dirname, "..", "governance.ts");
-              const { dir, take } = yield* build(wk.history);
-
-              for (const [n, s] of wk.steps.entries()) {
-                yield* take(s, n + 1);
-              }
-
-              const real = yield* governed(
-                Layer.merge(GitProcess.layer(dir).pipe(Layer.provide(NodeServices.layer)), NodeServices.layer),
-              );
-
-              const clean = yield* run(process.execPath, [script, "main"], dir, { env: CLEAN });
-              expect({ code: clean.code, out: clean.out }).toEqual({ code: 0, out: `${real.out}\n` });
-              const unknown = yield* run(process.execPath, [script, "no-such-ref"], dir, { env: CLEAN });
-              expect(unknown.code).toBe(1);
-              const usage = yield* run(process.execPath, [script, ...bad], dir, { env: CLEAN });
-              expect(usage.code).toBe(2);
-            }),
-          ),
-      ),
-      { ...runs, numRuns: runsFor({ fast: 3, full: 10 }) },
-    ));
 });

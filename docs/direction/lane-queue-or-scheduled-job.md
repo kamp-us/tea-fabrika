@@ -1,14 +1,13 @@
 ---
 state: "decided 2026-11-11; four unclear cases are the lead's leans, not ruled on"
-summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The quest: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the quest. The picture: a thin quest, one merge queue fabrika provides (0107), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner (0101) and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next (0105), with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes (0106). From experiment 260; [0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md)."
+summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The quest: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the quest. The picture: a thin quest, one merge queue fabrika provides (0034), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next, with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes. From experiment 260."
 ---
 
 # Quest, queue or scheduled job: where each piece of work in a change lives
 
 **Decided 2026-11-11.** The owner decided the rule, the tie-breaker and the picture after a walk of
 experiment 260 (in the notes), and corrected two of its
-guesses. The binding part is
-[0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md). A scheduled job
+guesses. The binding part is. A scheduled job
 is the repo's existing word:
 [a program on the host that listens to the clock](./scheduled-jobs-on-the-host.md).
 The unclear cases in [The families of work](#the-families-of-work) marked "the lead's lean, not
@@ -43,14 +42,14 @@ home({ judges: "shared", neededNext: false, stopsLastingHarm: false, ourEventMov
 
 ```mermaid
 flowchart LR
-  quest["quest: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0107)"]
+  quest["quest: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0034)"]
   quest --> desk["lead's hand work, a queue the quest waits on"]
   desk --> quest
   mq --> merged["merge event"]
   merged --> checkout["bring the tool checkout up to date, once per burst"]
   merged --> close["close the merge's tickets"]
   merged --> cleaner
-  timer1["timer"] --> cleaner["laptop cleaner: box.sh gc (0101)"]
+  timer1["timer"] --> cleaner["laptop cleaner: box.sh gc"]
   timer2["timer"] --> watcher["main watcher: one ticket when main goes red"]
   cleaner --> lastRan["a last ran fact; late after two periods"]
   watcher --> lastRan
@@ -59,14 +58,13 @@ flowchart LR
 - **A thin quest.** Plan, tests, build, host, one review, typecheck, open, loosening, then into the
   merge queue. Every piece of work in it judges this change and is needed by the next step.
 - **One merge queue.** fabrika provides it as its own primitive, in its official pipeline pack
-  ([0107](../../.decisions/0107-fabrika-provides-the-merge-queue.md)). What it runs before a merge
-  is 0107's and, until its first stage, [0146](../../.decisions/0146-a-pull-request-lands-only-on-ci-that-saw-main.md)'s:
+  ([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)). What it runs before a merge
+  is 0107's and, until its first stage's:
   every check on a head that holds main.
 - **Work on the merge event.** The merge queue raises it. Bringing the tool checkout up to date
-  hangs here, and so does a cleanup run ([0101](../../.decisions/0101-box-cleanup-runs-on-a-timer.md)).
-- **Two scheduled jobs.** The laptop cleaner (0101) and a main watcher that files one ticket when
-  main goes red. The hourly mutation run keeps its own schedule
-  ([0066](../../.decisions/0066-mutation-runs-on-a-schedule.md), as amended).
+  hangs here, and so does a cleanup run.
+- **Two scheduled jobs.** The laptop cleaner and a main watcher that files one ticket when
+  main goes red. The hourly mutation run keeps its own schedule.
 
 ## The rule
 
@@ -111,13 +109,12 @@ the budget, the check gets faster.
 - **A scheduled job is shown late once its last run is older than two periods.** One that died
   quietly then looks like a stuck quest, not like silence. 0101 set this for the cleaner; here it
   holds for every scheduled job.
-- **Two runs never overlap.** A run that finds one going ends at once (0101), as OTP warns that
+- **Two runs never overlap.** A run that finds one going ends at once, as OTP warns that
   `apply_interval` starts a new run "irrespective of whether a previously spawned process has
   finished" ([timer](https://www.erlang.org/doc/apps/stdlib/timer.html)).
 - **In `next/`, a scheduled job on Cloudflare is an alarm that sets the next alarm.** The object
   works inside a wake and sleeps; it never stays awake with a timer of its own
-  ([0105](../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md),
-  [scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)).
+  ([scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)).
 - **A scheduled job piece for `next/` is planned in three stages** under tracker ticket 762: first
   it works, then better, then secure.
 
@@ -144,8 +141,7 @@ Lead tooling today. Where a home is a lean, it says so.
   or a stuck, the budget, and the field run row each step writes: the quest. A field row is written
   once, by the step; a scheduled job cannot rebuild a lost fact.
 - **Checks on this change.** The leak grep, `loosening.sh`, push, PR CI and `commits`: the quest.
-  **Tests stay on the pull request, and its checks finish in five minutes at most**
-  ([0106](../../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md)).
+  **Tests stay on the pull request, and its checks finish in five minutes at most**.
 - **Typecheck twice.** The quest typechecks the head merged with main, and CI typechecks again. Both
   stay: cheap insurance against a 40-minute CI round (the lead's lean, not ruled on).
 - **The lead's hand work.** The hand check of loosening hits, signing a refused commit, amending a
@@ -155,17 +151,15 @@ Lead tooling today. Where a home is a lean, it says so.
   the 20-minute check (the lead's lean, not ruled on). Last night that check cost 6 quest-hours over
   33 parks.
 - **Merging.** Lint on the true merge, the squash, a retry after an outside fault, a conflict sent
-  back to the quest: the merge queue (0107).
+  back to the quest: the merge queue (0034).
 - **On the merge event.** Bring the tool checkout up to date, once for a burst of merges, at a
   moment when no step is starting (decided). Close the tickets the merge finished, with a scheduled
-  job as the backstop for a close the event missed (the lead's lean, not ruled on). A cleanup run
-  (0101).
-- **The laptop.** Box cleanup, stale processes, Docker health: the laptop cleaner, a scheduled job
-  (0101).
+  job as the backstop for a close the event missed (the lead's lean, not ruled on). A cleanup run.
+- **The laptop.** Box cleanup, stale processes, Docker health: the laptop cleaner, a scheduled job.
 - **Main.** The full suite still runs on every push to main. The main watcher, a scheduled job, reads its
   result and files one ticket when main goes red, so "fix it the same turn" has an owner (0097 relied
   on it; 0146 superseded 0097 and catches a clash before the merge). Hourly mutation stays as 0066 and
-  [0067](../../.decisions/0067-hourly-mutation-runs-in-ci.md) have it.
+ have it.
 
 ## The guesses the owner corrected
 
@@ -175,7 +169,7 @@ Lead tooling today. Where a home is a lean, it says so.
   moment when no step is starting.
 - **Wrong: about 12 minutes of checks is fine.** The research took the 12.5-minute median of a
   pull request's checks as an acceptable price for keeping tests on it. Decided: tests stay, and the
-  checks finish in five minutes at most (0106).
+  checks finish in five minutes at most.
 
 ## What it costs
 
@@ -188,7 +182,7 @@ Lead tooling today. Where a home is a lean, it says so.
 - **The five-minute cap moves work into CI** (sharding, splitting slow files, caching); 0106 holds
   that work.
 - **A new timer is the owner's call**
-  ([0096](../../.decisions/0096-the-lead-fixes-forward-while-the-owner-is-away.md) lists a new
+  (lists a new
   cron). The two scheduled jobs here are that call; any third one needs its own.
 
 What it undoes: nothing settled. The never-moves list stands. AGENTS.md's line that `drive.ts` runs
@@ -196,7 +190,7 @@ What it undoes: nothing settled. The never-moves list stands. AGENTS.md's line t
 
 ## What it cannot tell us
 
-- How often main goes red after a lint-only landing (0097). The main watcher's tickets will count
+- How often main goes red after a lint-only landing. The main watcher's tickets will count
   it; if it is common, the merge queue may need tests on the true merge (0107's call).
 - Whether a scheduled job on the laptop stays alive through sleep. The late mark shows it within
   two periods.

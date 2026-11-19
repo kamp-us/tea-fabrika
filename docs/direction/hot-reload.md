@@ -12,7 +12,7 @@ layer does, the facts on the ledger, where it is off, and the laws, each with it
 swap, the least sure at 60%, was approved on its own. Each lean keeps its number: a lean under 80%
 is decided but still names what would settle it.
 
-Its decided rules are in: [0291](../../.decisions/0291-hot-reload-swaps-one-program.md), [0292](../../.decisions/0292-a-bad-save-never-runs.md), [0293](../../.decisions/0293-every-record-names-its-build.md), [0294](../../.decisions/0294-a-window-swaps-its-view-by-hash.md), [0295](../../.decisions/0295-where-hot-reload-is-off.md).
+Its decided rules are in: [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md), [0013](../../.kalfa/decisions/0013-records-carry-their-build.md), [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md).
 
 Built from experiment 183 (in the notes), which swapped a program's code under a
 running process in Miniflare and read how about ten tools do it, and a clickable page, "Hot reload
@@ -98,7 +98,7 @@ const swap = (to: Hash) =>
 
 *Replaced 2026-11-01:* the shape-guess upcast in the sketch below gives way to a version number and
 a chain of named upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
-The sketch stays as it was written. *Set aside 2026-11-15 until the first release:* a saved-shape change wipes the stored data instead ([0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md)).
+The sketch stays as it was written. *Set aside 2026-11-15 until the first release:* a saved-shape change wipes the stored data instead.
 
 ```ts
 // A sketch, in the program: a version may carry an upcast from the shape before it.
@@ -142,7 +142,7 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
   restarts after its backoff on the same build. It does not roll back. Which comes first when a
   step throws after a swap, H4's rollback or P34's crash and restart, is open on P15's row in
   [Tier 1](../plan/tier-1.md).
-  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): P34c makes the restart at once, with no backoff, and past
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): P34c makes the restart at once, with no backoff, and past
   the brake the name is `failed` until a person restarts it. The H4 question stays open.*
 
 ### H5: running work keeps running

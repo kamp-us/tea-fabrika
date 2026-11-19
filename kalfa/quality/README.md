@@ -1,14 +1,12 @@
 # @kalfa/quality
 
-Our testing, linting and formatting tooling, one subpath per tool
-([0600](../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)). So far one subpath exists:
+Our testing, linting and formatting tooling, one subpath per tool. So far one subpath exists:
 `@kalfa/quality/stryker`, the plant runner. It is private, imports no product code and no path
 into the repo (lint holds that), and reads every repo-specific value as data from its edge.
 
 ## A plant
 
-A plant is a break put once into product code to show a law can fail
-([0093](../../.decisions/0093-laws-walk-plants-run-once.md)). Here it is a mutant Stryker makes,
+A plant is a break put once into product code to show a law can fail. Here it is a mutant Stryker makes,
 named by its code shape, with the law that must kill it.
 
 ```ts
@@ -82,12 +80,11 @@ service about the test files it is about to run, right before it runs them, and 
 
 On disposable CI, `gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path`. The package's
 `./cli` export is an `effect/cli` command named `quality`, which a future `kalfa` finds through the
-`kalfa.cli` field of this `package.json` (0585).
+`kalfa.cli` field of this `package.json`.
 
 ## Settings
 
-Each setting is one Effect `Config` with its default, under `quality.stryker`
-([0069](../../.decisions/0069-choices-are-settings.md)). The environment wins, then the values the
+Each setting is one Effect `Config` with its default, under `quality.stryker`. The environment wins, then the values the
 edge hands in, then the default. Only `KALFA_` names are read.
 
 | Setting | Variable | Type, default | What it does |

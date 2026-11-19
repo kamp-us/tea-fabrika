@@ -11,7 +11,7 @@ The desktop is layer 5, on top of the app. It places tiles, owns focus and
 routes keys: the part KDE or GNOME plays on Linux. Its codename is Tuval;
 users only ever see "fabrika".
 
-Its decided rules are in: [0274](../../.decisions/0274-the-desktop-is-a-platform-free-core.md), [0275](../../.decisions/0275-the-shell-is-a-regular-program.md), [0276](../../.decisions/0276-a-tile-shows-one-process.md), [0277](../../.decisions/0277-size-belongs-to-the-viewer.md), [0278](../../.decisions/0278-each-window-runs-its-own-prefix.md), [0279](../../.decisions/0279-tuval-is-a-package-desk-in-tier-2.md), [0280](../../.decisions/0280-the-app-starts-a-launchd-brain.md).
+Its decided rules are in: [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md), [0036](../../.kalfa/decisions/0036-shell-is-a-regular-program.md).
 
 *Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
 day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
@@ -20,7 +20,7 @@ a program, `next/programs/desk`, built in as `fabrika/desk`, and it arrives in T
 split, close and prefix keys. Tier 1 has one fixed layout at wiring, each window keeps its
 own focus, and it has no desk process. See [the app and its menu bar](#the-app-and-its-menu-bar).*
 
-*2026-11-13: [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md) overtook this stopgap. The desk program comes now, and W1 and W4 hold again from it on: the desk's state is a process in the brain, with one focus per workspace.*
+*2026-11-13: overtook this stopgap. The desk program comes now, and W1 and W4 hold again from it on: the desk's state is a process in the brain, with one focus per workspace.*
 
 ```ts
 // A sketch. The desktop's own state is one more process in the brain, like a tmux server.
@@ -201,7 +201,7 @@ export const menuView: (m: MenuModel) => ReadonlyArray<MenuItem>;
   holds, since focus is per workspace (W4).
 - [The GUI is an Electron app first](./the-gui-is-electron-first.md): the
   Electron window is one backend of three, and it dials the brain itself (T3).
-- [tsh, a shell for tea programs](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md): tsh is
+- tsh, a shell for tea programs: tsh is
   a regular program in the brain (W2).
 
 ## What it costs

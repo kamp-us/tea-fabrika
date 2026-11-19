@@ -14,7 +14,7 @@ plan, the run row's path, and what is special about this quest
 [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going.
 
 A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
-with no tests step first ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)). Its brief is
+with no tests step first. Its brief is
 [the lead skill's template](../lead/SKILL.md#when-a-review-sends-back), and it follows this skill
 for the product code.
 
@@ -22,7 +22,7 @@ for the product code.
 
 1. **Look around first.** Read `AGENTS.md` whole, `next/AGENTS.md` for `next/` work, the approved
    plan whole (an amendment section overrides the body where they differ), then the decided notes
-   it builds. Before any edit, open the files the plan cites, their neighbors and `.patterns/`, so
+   it builds. Before any edit, open the files the plan cites, their neighbors and `.kalfa/patterns/`, so
    the new code reads like the code beside it. Read `node_modules/effect/AGENTS.md` in full before
    you write Effect code. Say which version you are in. In `next/`: Effect all the way, no
    Promises, an object class stays thin.
@@ -31,9 +31,9 @@ for the product code.
    tables say which paths are yours: never change a test file, a `*Test.ts` suite or a test-support
    file. A law that looks wrong is not edited: finish everything else and report it with file and
    line. A patch to a package (tea, demlik, Manti, Effect, Alchemy) the plan does not name, after
-   the read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back
+   the read asks for, goes back
    to plan, never into the build. A `GLOSSARY.md` the plan's files table names gets the terms the plan
-   lists, each as a `**Term**:` entry with its meaning and an `_Avoid_:` line ([0617](../../../.decisions/0617-glossary-reset-to-a-map.md)).
+   lists, each as a `**Term**:` entry with its meaning and an `_Avoid_:` line.
 4. **Write it to be read:** plain names by the repo's rules (no `makeThing`, no `thingLayer`, no
    question-word names, short everyday data keys, `_tag` for unions, Effect Schema), small modules
    with one job each, and invalid states made unrepresentable. A generated file the plan lists
@@ -63,8 +63,7 @@ The test config and typecheck.ts hold worker, home and typecheck limits.
   `tsgo` runs (`pgrep -x tsgo`). It must pass whole, type laws included.
 - **Never run a test here that sends a real signal** (`kill`, `process.kill`, SIGTERM or SIGKILL),
   calls `launchctl`, starts Electron or needs the real machine. A host-only law the plan names runs
-  on the real machine before any review, and the build is not done until it has passed there
-  ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). You do not start it on the
+  on the real machine before any review, and the build is not done until it has passed there. You do not start it on the
   owner's Mac yourself. In your report, list each line the test can reach that signals a process or
   calls launchd (`kill`, `process.kill`, `launchctl bootout`, `launchctl kill`), and for each one
   what makes a wrong target impossible. The lead reads those lines, asks the owner, and then runs
@@ -85,8 +84,7 @@ These hold in every build round, so the brief does not repeat them.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
 - **Fix it properly.** No skip, no weaker assertion, no raised timeout, no `as` cast to quiet a
   type. No allow-list or ledger row added, no lint rule turned down, no `oxlint-disable` on wrong
-  code ([0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md),
-  [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). An import line a list
+  code. An import line a list
   already holds stays byte for byte as main has it. Only a secret, a paid account or a person's Mac
   stops you.
 - **Checks, in this order:** every law green, one file at a time; `pnpm format`; `pnpm lint` once;
@@ -95,11 +93,9 @@ These hold in every build round, so the brief does not repeat them.
   one `pnpm typecheck`; then `sh .agents/skills/lead/scripts/loosening.sh <the brief's head> HEAD`,
   with your reading of each hit.
 - **Commit and push:** commit your own paths by name with plain `git commit`, in a few commits that
-  each read whole, plain-word subjects, no trailer naming a chat tool and no session link
-  ([0161](../../../.decisions/0161-no-step-signing-by-hand.md)). Then
+  each read whole, plain-word subjects, no trailer naming a chat tool and no session link. Then
   `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/<branch>..HEAD` (never with no
-  arguments), and push with `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`
-  ([0164](../../../.decisions/0164-the-bot-stays-without-signing.md)). No force push. A refused push
+  arguments), and push with `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`. No force push. A refused push
   is reported with its exact command, never worked around. When `drive.ts` runs you in a box,
   commit nothing: drive commits.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in
@@ -120,12 +116,11 @@ The two lint rules that `AGENTS.md`, "Checks", points here for, moved from there
   line where the code is right and the rule does not fit, and its reason says why in plain words.
   The rules are in `.oxlintrc.json` and `oxlint-plugins/`
   ([its README](../../../oxlint-plugins/README.md)), the format settings in `.oxfmtrc.json`.
-- **An unused export fails lint** (`pnpm lint:dead` runs that part alone,
-  [0006](../../../.decisions/0006-no-unused-exports.md)). Check each finding
+- **An unused export fails lint** (`pnpm lint:dead` runs that part alone). Check each finding
   by hand. If it is right, delete the code or drop its `export`. If it is wrong, stop and tell the
   owner: that is a code-graph bug to file. `unreachable-ledger.json` only shrinks, the run prunes
   it, and CI fails until that is committed. No entry is added: its last ones are fixed, then the
-  file is deleted ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
+  file is deleted.
 
 ## Never
 

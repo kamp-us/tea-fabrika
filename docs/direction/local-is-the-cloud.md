@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-10-25; the lint check that enforces it is planned in Tier 1's P12; walked 2026-11-08; 0042 added 2026-11-09, its lint rule is ticket 506"
-summary: "Everything on Cloudflare also runs on the laptop from the same code and Alchemy stack: ledger server, a project's host, the key relay, the key store. One command moves a project. A cloud piece lands with its local twin in the same pull request, and tests run on the local one. In `next/`, whatever starts or talks to the local runtime goes through Alchemy, never Miniflare or workerd directly ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md))."
+summary: "Everything on Cloudflare also runs on the laptop from the same code and Alchemy stack: ledger server, a project's host, the key relay, the key store. One command moves a project. A cloud piece lands with its local twin in the same pull request, and tests run on the local one. In `next/`, whatever starts or talks to the local runtime goes through Alchemy, never Miniflare or workerd directly ([0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md))."
 ---
 
 # The laptop runs the same setup as Cloudflare, one command apart
@@ -18,7 +18,7 @@ limits), then check that Cloudflare does the same. Never design for a Cloudflare
 feature and back-fill local. Never `Alchemy.remote()`.
 
 **Added 2026-11-09 (owner,
-[0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)):** in `next/`, the local
+[0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)):** in `next/`, the local
 side goes through Alchemy just as the cloud side does. Everything that starts or talks to the
 local runtime (the local instance in `next/apps/fabrika/src/local-instance.ts` and
 `next/packages/libfabrika/src/node/dev/dev.ts`, and any test helper that boots an instance) uses

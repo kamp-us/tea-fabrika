@@ -4,11 +4,11 @@
 //
 //   // BOXES/flows/adr-0065.ts, importing landDecision from this module by its path
 //   export default landDecision({ ticket: "660", dir: "<worktree>", branch: "fabrikalfa/adr-0065",
-//     paths: [".decisions/0065-x.md"], subject: "T660 lead: 0065, ...", title: "...", body: "..." });
+//     paths: [".kalfa/decisions/0065-x.md"], subject: "T660 lead: 0065, ...", title: "...", body: "..." });
 //
 // and runs that file with the flow runner and `--lead` (its usage is in the runner's header).
 //
-// Without `--lead` it formats, lints and reads governance, then parks on the lead sign with `ask`.
+// Without `--lead` it formats and lints, then parks on the lead sign with `ask`.
 
 import { String as Str, pipe } from "effect";
 import * as Flow from "../Flow.ts";
@@ -31,7 +31,6 @@ export const landDecision = (d: Decision): Flow.Flow =>
   Flow.make(`land-${pipe(d.branch, Str.replace(/^fabrikalfa\//, ""))}`, [
     Step.act("format", { dir: d.dir }),
     Step.check("lint", { dir: d.dir }),
-    Step.gather("governance", { dir: d.dir }),
     Step.act("lead-commit", { dir: d.dir, ticket: d.ticket, subject: d.subject, paths: d.paths }, { lead: true }),
     Step.check("leak-grep", { dir: d.dir }),
     Step.act("bot-push", { dir: d.dir, branch: d.branch }),

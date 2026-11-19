@@ -35,9 +35,7 @@ touched, and keeps its 5 hits in 4 files.
 
 - One pull request. It turns the rule on as an error for `next/` and our three tooling folders (the
   four globs above), adds its plant, and rewrites every hit. It ends at zero hits, with no list of
-  leftovers, no warn line and no `oxlint-disable` line
-  ([0559](../../../.decisions/0559-no-accumulating-spread-is-on.md),
-  [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
+  leftovers, no warn line and no `oxlint-disable` line.
 - **The count is 11, not 8.** The ticket's title says 8. Those are the 8 copies of a record with
   fixed keys that an earlier read called fine. The other 3 are lists or records that really grow.
   0559 counts all 11 as hits, and zero needs all 11 gone, so this plan rewrites all 11.
@@ -63,7 +61,7 @@ touched, and keeps its 5 hits in 4 files.
   a config with only `"perf": "error"` fires it in oxlint 1.90.0). They turn its neighbor
   `oxc/no-map-spread` off by name and leave this one on. Run alone over the 585 files of the
   installed `effect/src`, the rule finds 0 hits. So by
-  [0560](../../../.decisions/0560-an-order-for-effect-code.md)'s first step, the rule and a tree at
+'s first step, the rule and a tree at
   zero are what the Effect team does.
 - **How the Effect team writes the loop.** A list that grows is a `const` array and a `push`:
   `node_modules/effect/src/Array.ts:2647` (`out.push(a)` inside a `for`). This plan's three growing
@@ -86,16 +84,15 @@ touched, and keeps its 5 hits in 4 files.
 
 ## What is decided, in one place
 
-- [0559](../../../.decisions/0559-no-accumulating-spread-is-on.md), on main since 2026-11-15: the
+-, on main since 2026-11-15: the
   rule is on as an error in `next/` and our tooling; all 11 hits are rewritten; no inline ignore,
   no list, no warn level; a fix does not move the same copy where the rule does not look; a rewrite
   that reads plainly worse goes to the owner with both versions; the plant lands with the config
   line. It leaves to this plan where the line goes in `.oxlintrc.json`.
-- [0560](../../../.decisions/0560-an-order-for-effect-code.md): the Effect team's way first.
-- [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) and
-  [0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md): old breaks are fixed, never
+-: the Effect team's way first.
+- and: old breaks are fixed, never
   listed.
-- [0093](../../../.decisions/0093-laws-walk-plants-run-once.md): a planted line is the rule's test
+-: a planted line is the rule's test
   input and stays.
 
 Choices this plan makes, each with how sure it is:
@@ -108,12 +105,12 @@ Choices this plan makes, each with how sure it is:
   change `.oxlintrc.json` between lines 735 and 1271. The start of `overrides` (line 422) is far
   from every one of them.
 - **`kalfa/` is not in `files` yet (80%).** 0559 names three tooling folders. `kalfa/`
-  ([0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md)) does not exist on main, so a glob for
+ does not exist on main, so a glob for
   it could not be planted, and a line with no plant has shown nothing. The pull request that makes
   the folder adds `kalfa/**` here and a row to law L2. The ticket body says so.
 - **All 11 land with the config line, in one pull request (90%).** 0559 allows "before or with".
   One pull request means the rule never sits half on.
-- **Is this a setting ([0069](../../../.decisions/0069-choices-are-settings.md))?** No. It is a lint
+- **Is this a setting?** No. It is a lint
   rule on our own source, not a choice a person makes for their fabrika, so nothing goes in
   `fabrika.toml`.
 
@@ -533,7 +530,7 @@ Three hits sit in folders the brief calls busy: `runtime` (hit 3), `processes` (
 | `.oxlintrc.json` | tests | none | the one override, first in `overrides` |
 | `oxlint-plugins/builtin-plants.ts` | tests | tests | the plant entry, in the `oxc` list (L1) |
 | `oxlint-plugins/plants.test.ts` | tests | tests | L2: seven rows in the "rules that apply by path" block, about 20 lines |
-| `oxlint-plugins/README.md` | tests | docs | in the `builtin-plants.ts` paragraph: the rule went on 2026-11-15 with 11 hits rewritten (0559), scoped by an override, and the Effect team has it on |
+| `oxlint-plugins/README.md` | tests | docs | in the `builtin-plants.ts` paragraph: the rule went on 2026-11-15 with 11 hits rewritten, scoped by an override, and the Effect team has it on |
 | `next/programs/pipeline/src/Merger.laws.test.ts` | tests | tests | hit 1, 3 lines |
 | `next/packages/libfabrika/src/settings/TomlEdit.test.ts` | tests | tests | hit 2, 3 lines |
 | `next/packages/libfabrika/src/runtime/Built.test.ts` | tests | tests | hit 3, 2 lines |
@@ -541,7 +538,7 @@ Three hits sit in folders the brief calls busy: `runtime` (hit 3), `processes` (
 | `next/packages/libfabrika/src/processes/internal/processTable.laws.test.ts` | tests | tests | hit 11, about 45 lines |
 | `.github/ci/**`, `.github/ci/`, `.github/ci` | tests | none | not changed: named by the override's `files`, and L2 plants a temp file there that it removes |
 | `oxlint-plugins/**`, `oxlint-plugins/` | tests | none | not changed beyond the three files above: named by the override's `files` |
-| `next/AGENTS.md` | build | docs | one row in "What lint holds", after the `fabrika/no-hand-tag` row: "No loop or `reduce` callback spreads its running result back into itself (0559)", check `oxc/no-accumulating-spread` |
+| `next/AGENTS.md` | build | docs | one row in "What lint holds", after the `fabrika/no-hand-tag` row: "No loop or `reduce` callback spreads its running result back into itself", check `oxc/no-accumulating-spread` |
 
 Every changed file but `next/AGENTS.md` is an exam path, so the tests step owns it. The build step
 has one row of docs and the checks. That is thin on purpose: there is no product code to write.

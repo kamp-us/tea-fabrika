@@ -7,12 +7,11 @@ summary: "`next/`. How Effect's own team would build each file, as eight princip
 
 **Decided 2026-11-11.** The owner approved the eight principles, the shape and the smaller calls
 below with their leans, after a walk of each part. The leans' confidence numbers stay as written.
-The rules are in [0120](../../.decisions/0120-effect-code-guidelines.md).
+The rules are in.
 
 Decided in the walk itself: the ninth principle of the draft (wrap a platform once) is folded into
-E1, and the Alchemy port goes first in the fix order; doc comments carry no `@since` yet
-([0118](../../.decisions/0118-no-since-tag-before-a-release.md)); an error's reason is a tagged
-error ([0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md)).
+E1, and the Alchemy port goes first in the fix order; doc comments carry no `@since` yet; an error's reason is a tagged
+error.
 
 Built from experiment 262 (in the notes): four reads of
 every `next/` file beside Effect 4.1.2's source, and one run of Effect's own checker,
@@ -20,8 +19,7 @@ every `next/` file beside Effect 4.1.2's source, and one run of Effect's own che
 this study is about code, so the guidelines skill's design steps do not apply. The experiment
 numbers nine principles; its E7, E8 and E9 are E6, E7 and E8 here.
 
-The question every plan and review in `next/` asks
-([0114](../../.decisions/0114-effects-team-as-the-builder.md)): **how would Effect's team write
+The question every plan and review in `next/` asks: **how would Effect's team write
 this file if they were building fabrika?**
 
 Every "before" block is real code, at commit `5eb5fd0ee`, with its path. Every "after" block is a
@@ -84,8 +82,7 @@ One `msg` call whose write is refused, step by step:
 
 ## The shape
 
-No new stored types or fields. One shape changes in code: an error's `reason`
-([0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md)).
+No new stored types or fields. One shape changes in code: an error's `reason`.
 
 ## The eight principles
 
@@ -141,7 +138,7 @@ export const recordStub = (env: Env, project: string, name: string) =>
 - **Why.** Effect's guide: "**NEVER** write your own helper functions like `isRecord` or
   `isString`" (`node_modules/effect/AGENTS.md:321`). kamp-us/phoenix writes every Durable Object
   with Effect-returning methods and calls it through Alchemy's stub
-  ([its pattern doc](https://github.com/kamp-us/phoenix/blob/main/.patterns/alchemy-durable-objects.md)).
+  ([its pattern doc](https://github.com/kamp-us/phoenix/blob/main/.kalfa/patterns/alchemy-durable-objects.md)).
 - **Effect's team as the builder.** They would delete `Patch.ts` for `JsonPatch.get`
   (`effect/src/JsonPatch.ts:184`) and move the 7 hand WebCrypto edges to `effect/crypto`.
 - **Elm or OTP.** OTP reaches for its standard library (`crypto`, `gen_*`) before a hand module.
@@ -150,14 +147,14 @@ export const recordStub = (env: Env, project: string, name: string) =>
 - **The Alchemy port.** `cloudflare/objects.ts` defines the four classes Alchemy's way already.
   `Project`, `Process` and `Connection` are still called through the hand-typed Promise shapes of
   `cloudflare/bindings.ts`: the unfinished half of
-  [0041](../../.decisions/0041-object-classes-are-effect-objects.md) (ticket 502). The stub's type
+ (ticket 502). The stub's type
   says a call cannot fail, and at run time it can, so each call is still wrapped once at the
   caller, with the cause kept.
 - **What is left for a hand wrapper.** An edge neither Alchemy nor Effect covers, such as the Node
   SQLite driver: wrapped once, cause kept.
 - **What holds it.** Shipped checks at `error`: `globalFetchInEffect`, `globalDateInEffect`,
   `globalRandom`, `cryptoRandomUUID` and three more. Ours, new: `fabrika/no-hand-guard` (11 sites)
-  and `fabrika/no-raw-crypto` (7 files). The plan names the nearest Effect module (0114).
+  and `fabrika/no-raw-crypto` (7 files). The plan names the nearest Effect module.
 - **The doubt.** `JsonPatch.get` sorts keys, and a law may pin our order. `Signature` may not take
   our passkey point. Not checked that all 57 calls fit the stub's `errors` option.
 - **Cost.** About 20 files and 300 lines, plus the port: `platform.ts` and `bindings.ts` go, about
@@ -193,7 +190,7 @@ const answer = yield* attempt.pipe(
 After:
 
 ```ts
-// the cause rides along, inside a tagged reason (0119)
+// the cause rides along, inside a tagged reason
 catch: (cause) => new LedgerError({ reason: new Unreachable({ cause }) }),
 
 // caught by tag
@@ -215,7 +212,7 @@ channel. Effect does the same at its own edges: `Effect.result` (`effect/src/Eff
   (`effect/src/sql/SqlError.ts:20`). Their cluster code has 0 `instanceof`.
 - **Effect's team as the builder.** `LedgerError` stops being borrowed for crypto and control
   failures; each service gets its own, as
-  [0055](../../.decisions/0055-errors-named-by-their-service.md) says.
+ says.
 - **Elm or OTP.** Elm: `Result` with a custom error, no exceptions. OTP: an exit reason is a term
   the supervisor reads.
 - **What holds it.** Shipped `instanceOfSchema` at `error` after a sweep of 20 sites. Ours, new:
@@ -230,7 +227,7 @@ channel. Effect does the same at its own edges: `Effect.result` (`effect/src/Eff
 
 ### E3: a long body is a `make` with a shelf of named pieces
 
-**Lean, 80%.** The split is decided (0043 rule 9), and the written service type is decided (0095).
+**Lean, 80%.** The split is decided (0043 rule 9), and the written service type is decided.
 Kind: **pattern** (new), **lint** for the type, **taste** for the cut.
 
 Before, `runtime/Runner.ts:213-240`, the top of one closure that ends at `:1733`:
@@ -271,8 +268,7 @@ After: the sketch that opens this note. A `make`, `// --- X ---` sections, each 
 
 ### E4: control state is a saved tea machine
 
-**Decided 2026-11-09** ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md),
-[0046](../../.decisions/0046-one-tea-machine-per-file.md)). Applied here. Kind: **law** and
+**Decided 2026-11-09**. Applied here. Kind: **law** and
 **review**, with the lint rule of ticket 509.
 
 Before, `runtime/Runner.ts:237` and `:371`:
@@ -311,7 +307,7 @@ yield* holder.send({ type: "exited", action });
 
 ### E5: a service file is its contract, and a layer asks for what it needs
 
-**Decided 2026-11-11** ([0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md))
+**Decided 2026-11-11**
 for the contract file and sibling layers. **Lean, 85%** for "never built inside". Kind: **lint** and
 a **pattern** that exists (`effect-services-and-layers.md`).
 
@@ -366,7 +362,7 @@ RunnerLive.layer(initial, options).pipe(
 
 ### E6: a public export has a doc, and a comment says why
 
-**Decided 2026-11-09** ([0023](../../.decisions/0023-next-follows-effects-code-style.md)) for docs.
+**Decided 2026-11-09** for docs.
 **Lean, 80%** for "no plan codes, no history, one doc block per export". Kind: **lint**, then
 **taste**.
 
@@ -399,18 +395,16 @@ export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError"
 - **Elm or OTP.** OTP 27's `-doc` attributes and Elm's documented packages (both secondary).
 - **What holds it.** The lint rule `fabrika/jsdocs` (`oxlint-plugins/jsdocs.ts`, ticket 913),
   which judges each block with Effect's own block grammar, copied from Effect's checker at
-  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since` (0118). Since
+  `effect@4.1.2` into `oxlint-plugins/effect-jsdocs.ts`, and asks for no `@since`. Since
   ticket 948 it blocks in every folder of `next/packages/*/src/**` that is at zero. A folder with
   fires left has one warn line, where they only advise, until the fill that deletes it
-  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md),
-  [Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
+  ([Plan B, B2](../plan/effect-rules-big.md#b2-the-docs-rule)). The guess was a copy of Effect's
   rule with 0 false alarms, as 0023 ran it on Effect's 144 modules; measured on 2026-11-14 on
   Effect 4.1.2's 432 public files, it fires only where Effect's own checker reports, so 0 false
   alarms. Still to come: a plan-code rule on comments (`P\d+`, `law p\d+`, `flag \d+`), once its
   false alarms are counted.
 - **One difference from Effect.** A type directly under its same-name schema shares the schema's
-  block (the owner, 2026-11-13), and the rule reads the pair as one; a kept difference in
-  [0023](../../.decisions/0023-next-follows-effects-code-style.md#amendments).
+  block (the owner, 2026-11-13), and the rule reads the pair as one; a kept difference in.
 - **Cost.** The guess: about 240 exports with no doc block (an upper bound) and about 28 plan codes,
   about 60 files and 2,000 lines of comments. Measured by the rule on 2026-11-14 on main
   `c0aaf4a24`, across `libfabrika`'s 136 public files: 346 exports with no block, 232 with a block
@@ -459,7 +453,7 @@ import * as Context from "effect/Context";
 
 ### E8: where we differ from Effect, the file says why
 
-**Decided 2026-11-09** as a rule (0023, 0114). **Lean, 85%** for the keep list. Kind: **taste**.
+**Decided 2026-11-09** as a rule. **Lean, 85%** for the keep list. Kind: **taste**.
 
 A good one, `gateway/GatewayNonce.ts:6`:
 
@@ -471,31 +465,31 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
 A missing one, as it would read on `runtime/internal/supervisor.ts`:
 
 ```ts
-// Not a Schedule: a Schedule cannot be saved, and this backoff must survive a sleeping object (0046).
+// Not a Schedule: a Schedule cannot be saved, and this backoff must survive a sleeping object.
 export const supervisor = Machine.make({
 ```
 
 | We do | Effect does | Why we keep ours |
 |---|---|---|
-| Contract-only service files (0095) | contract and layers in one file | one platform's bundle holds no other's code |
-| The supervisor as a saved tea machine (0046) | a `Schedule` | a `Schedule` cannot be saved |
+| Contract-only service files | contract and layers in one file | one platform's bundle holds no other's code |
+| The supervisor as a saved tea machine | a `Schedule` | a `Schedule` cannot be saved |
 | Every span written to SQLite (`telemetry/Sink.ts:282`) | an in-memory buffer | a sleeping object loses the buffer |
 | A stateless signed nonce | the challenge kept in memory | the same |
-| Synchronous SQL and ledger steps (0050) | an async transaction | nothing runs between the number and the write |
+| Synchronous SQL and ledger steps (0011) | an async transaction | nothing runs between the number and the write |
 | A named `Effect.fn` span on every export | `fnUntraced` in library code | we want the trace; its run-time cost is not measured |
 
 - **Why.** Effect explains its own choices in place: "D1 batches execute on the binding directly
   and intentionally cannot participate in SqlClient transactions"
   (`@effect/sql-d1/src/D1Client.ts:184`).
 - **Elm or OTP.** [Where we follow OTP](./follows/otp.md) does the same for OTP.
-- **What holds it.** Review, with the plan's "nearest Effect module" line (0114).
+- **What holds it.** Review, with the plan's "nearest Effect module" line.
 - **Cost.** About 8 one-line reasons.
 - **Today's example.** Half: `Runner.ts:1-5` says what a turn does, not why it is not Effect's
   `entityManager`.
 
 ## Smaller calls
 
-- **Two of our rules give way to Effect's** ([0040](../../.decisions/0040-existing-tools-before-hand-written.md)).
+- **Two of our rules give way to Effect's**.
   **Lean, 75%.** `fabrika/no-data-taggederror` to `preferSchemaTaggedError`, and
   `fabrika/no-raw-try-catch` to `tryCatchInEffectGen`. We lose the try/catch advice outside
   generators.
@@ -503,9 +497,9 @@ export const supervisor = Machine.make({
   `preferEffectRecord`, `newSchemaClass`, `unstableApiUsage`, `missingPipeableSignature`,
   `strictBooleanExpressions`, `schemaSync`, `schemaClassMissingBrand`: 0 or 1 of 5 sampled hits was
   right, and `schemaSync` would flag 0050's synchronous steps.
-  [0565](../../.decisions/0565-effects-own-checks-block.md) (2026-11-15) replaces this call: all
+ (2026-11-15) replaces this call: all
   nine go on as errors, and `unstableApiUsage` and `schemaSync` wait there for the owner.
-- **An error's reason is a tagged error.** Decided 2026-11-11 (0119).
+- **An error's reason is a tagged error.** Decided 2026-11-11.
 - **The gateway's dispatch** stays the open 72% call in experiment 174. E3's cut makes either
   answer easy.
 

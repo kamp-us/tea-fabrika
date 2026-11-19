@@ -4,17 +4,17 @@ Plancheck-Version: 3
 # Plan: the mock sweep in `cloudflare`, in next/ (ticket 1067)
 
 All of this is in `next/`, in `next/packages/libfabrika/src/cloudflare`. Today's version is not
-touched. It builds [0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.spyOn`, a
-stand-in comes from the code's own design), [0579](../../../.decisions/0579-property-laws-use-it-prop.md)
+touched. It builds (no `vi.spyOn`, a
+stand-in comes from the code's own design)
 (the Recorder is our one way to watch a service's calls),
-[0554](../../../.decisions/0554-no-reflect-get-set-has.md) and
-[0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md) (a fake of a Cloudflare
+ and
+ (a fake of a Cloudflare
 object comes from the test package, never by hand), and the recorder plan's row for this folder
 ([`recorder-PLAN.md`](./recorder-PLAN.md), "Size"). Amendment 2026-11-15: it also builds
-[0592](../../../.decisions/0592-libfabrika-writes-output-only-through-effects-console.md)
+
 (libfabrika writes output only through Effect's `Console`, law M13) and follows
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
-and [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) (platform pieces go
+ (no list lets broken code pass)
+and [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) (platform pieces go
 through Alchemy).
 
 ```ts
@@ -54,7 +54,7 @@ expect(sent.map((text) => JSON.parse(text))).toContainEqual(/* ... */);
   Open question 1 is closed (see "Answered questions").
 - **The lock stays out of this sweep (amendment 2026-11-15, the laptop lead's ruling; this closes
   open question 2).** The folder keeps 7 `cloudflare:workers` mocks that wait on 0042's Alchemy
-  work, so it cannot reach zero in this sweep, and no narrower interim lock is allowed (0524). See
+  work, so it cannot reach zero in this sweep, and no narrower interim lock is allowed. See
   "The other `vi` hits 0555 bans".
 - **The t863 span law reads its spans from the span sink's records (70%).** Today it wraps
   `ProjectClient.make` to catch the current span at each `route`. The lean reads the ended
@@ -91,7 +91,7 @@ through Effect's `WebCrypto` reference. With those, the last 10 spies go, along 
 way than first planned. They watched an inner call through the `effect` barrel, and they go blind
 the day the folder imports `effect/Effect` as a namespace, as the Effect fold just found in
 `transport/Connection.ts`. So the watched call goes through a typed service, and the law records it
-with a `Recorder` (0555, 0579); see "The watched calls, through services". Every slice also lands
+with a `Recorder`; see "The watched calls, through services". Every slice also lands
 on the sweep's one fold branch (see "Size"), and the lock refuses all five methods (see "The lock"
 and open question 2).
 
@@ -148,7 +148,7 @@ Counted on `origin/main` at `f7169af` with
 - **Left in the folder, and not this quest's:** `vi.mock` 13 (`cloudflare:workers` 8, `./objects.ts`
   4, `effect` 1), `vi.hoisted` 4 and `vi.stubGlobal` 1 (`WebSocketPair`, `readers.laws.test.ts:658`).
   Slice 2 removes the `vi.mock("effect")` at `readers.laws.test.ts:62`, since it is there only so
-  `Effect.result` could be swapped. The `cloudflare:workers` mocks wait on Alchemy (0042), and the
+  `Effect.result` could be swapped. The `cloudflare:workers` mocks wait on Alchemy (0018), and the
   `./objects.ts` mocks wait on the object implementations being exported (0555, "Consequences").
   `WebSocketPair` is a platform global that `connection.ts` makes, so it goes with the Alchemy
   slice. None of these is counted by the recorder plan's row, and the lock does not name them.
@@ -158,7 +158,7 @@ Counted on `origin/main` at `f7169af` with
 The laptop lead ruled that `vi.mock`, `vi.doMock` and `vi.stubEnv` are 0555's own targets, so this
 sweep fixes those hits too, and that a folder's lock lands whole in the one fold pull request only
 once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass,
-which [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) forbids. Counted on main at
+which forbids. Counted on main at
 `0683861` with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 12 `vi.mock`, 0 `vi.doMock`,
 0 `vi.stubEnv`.
 
@@ -166,7 +166,7 @@ which [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) forbids.
 |---|---|---|---|
 | `effect` | 1 | `readers.laws.test.ts` | yes, slice 2: it was there only so `Effect.result` could be spied on, and those spies go |
 | `./objects.ts` | 4 | `readers.laws.test.ts`, `entry-flows.laws.test.ts`, `alarm.laws.test.ts`, `ObjectService.test.ts` | yes, slice 2: the object implementations are exported from `objects.ts`, so each law imports the one it needs (0555, "Consequences"), about 8 product lines |
-| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and is covered by the approved Alchemy mocks plan, [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511) |
+| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and is covered by the approved Alchemy mocks plan, [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511) |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The block in "The lock"
 is the shape it lands with on the day the folder's last `cloudflare:workers` mock goes, whole, for
@@ -212,12 +212,11 @@ Slice 2's product changes, all sketches:
 **The watched calls, through services (amendment 2026-11-15).** The first sketch exported
 `dispatch` and `ready` and had each law run them on its own. That kept the typed exit but dropped
 what the spy also held: that the request path asked exactly once, with exactly the value the law
-sent. The merge session ruled the call goes through a typed service with a `Recorder` in the law
-(0555). The service names are a sketch; the build may rename them, and a glossary row follows if
+sent. The merge session ruled the call goes through a typed service with a `Recorder` in the law. The service names are a sketch; the build may rename them, and a glossary row follows if
 they stay.
 
 ```ts
-// next/packages/libfabrika/src/cloudflare/Dispatcher.ts, the contract only (0095). A sketch.
+// next/packages/libfabrika/src/cloudflare/Dispatcher.ts, the contract only. A sketch.
 export class Dispatcher extends Context.Service<
   Dispatcher,
   {
@@ -249,7 +248,7 @@ export class Waits extends Context.Service<
 ```
 
 **Amendment (2026-11-16 Pacific, the lead's ruling, after slice 2's tests step):** the
-`static readonly layer` lines above are wrong. [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md)
+`static readonly layer` lines above are wrong.
 is in force and covers this case: a service file holds only its contract, and each layer is its own
 sibling file, read through its module as `LedgerSql.layer` is. So `Dispatcher.ts` and `Waits.ts`
 hold the contract and nothing that runs, and their live layers go in `DispatcherLive.ts` and
@@ -262,7 +261,7 @@ so the code's names win: `recordPartImplementation` and `ProcessObject.implement
 ("implementation" is Alchemy's word for what `.make()` takes).
 
 ```ts
-// next/packages/libfabrika/src/cloudflare/Waits.ts: the contract only (0095). A sketch.
+// next/packages/libfabrika/src/cloudflare/Waits.ts: the contract only. A sketch.
 export class Waits extends Context.Service<Waits, {
   readonly ready: (raw: unknown) => Effect.Effect<typeof Waited.cases.ready.Type, LedgerError>;
 }>()("@kampus/libfabrika/cloudflare/Waits") {}
@@ -337,22 +336,21 @@ const error = yield* Effect.flip(checkedPut(bucket, key, body, "00")).pipe(
 );
 ```
 
-- The References and the exports are placed by
-  [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md): if the layer check
+- The References and the exports are placed by: if the layer check
   or `fabrika/modules` wants the two References in a front file of their own, the build puts them
-  in `cloudflare/ProcessParts.ts` and says so. An unused export fails lint (0006). `Dispatcher` and
+  in `cloudflare/ProcessParts.ts` and says so. An unused export fails lint. `Dispatcher` and
   `Waits` are front files of the `cloudflare` module, each used by its product caller
   (`control.ts`, `connection.ts`) and provided by `runtime.ts`, so neither is an export only a law
   reads (amendment 2026-11-15; the first sketch exported `dispatch` and `ready` instead).
 - **Is this a setting?** No, for each choice. The References, the exports and the fakes are how
-  code and laws are put together. Nothing here is a value a person running fabrika picks (0069).
+  code and laws are put together. Nothing here is a value a person running fabrika picks.
 
 The lock (amendment 2026-11-15: it does not land in this sweep, see "The other `vi` hits 0555
 bans"; this is the shape it lands with, whole, the day the folder is at zero):
 
 ```jsonc
 // .oxlintrc.json, a new override block, a sketch. Amendment 2026-11-15: the whole folder, on the
-// day it is at zero for all five; no file list in between (0524).
+// day it is at zero for all five; no file list in between.
 {
   "files": ["next/packages/libfabrika/src/cloudflare/**"],
   "rules": {
@@ -360,21 +358,21 @@ bans"; this is the shape it lands with, whole, the day the folder is at zero):
       "error",
       {
         // Amendment 2026-11-15, ruling 2: all five methods, with node's five messages.
-        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder.",
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with a Recorder.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer."
       }
     ],
     "vitest/no-restricted-matchers": [
       "error",
       {
-        "toHaveBeenCalled": "Read Recorder.calls inside the provide (0579).",
-        "toHaveBeenCalledTimes": "Read Recorder.calls inside the provide (0579).",
-        "toHaveBeenCalledWith": "Read Recorder.calls inside the provide (0579).",
-        "toHaveBeenLastCalledWith": "Read Recorder.calls inside the provide (0579).",
-        "toHaveBeenNthCalledWith": "Read Recorder.calls inside the provide (0579)."
+        "toHaveBeenCalled": "Read Recorder.calls inside the provide.",
+        "toHaveBeenCalledTimes": "Read Recorder.calls inside the provide.",
+        "toHaveBeenCalledWith": "Read Recorder.calls inside the provide.",
+        "toHaveBeenLastCalledWith": "Read Recorder.calls inside the provide.",
+        "toHaveBeenNthCalledWith": "Read Recorder.calls inside the provide."
       }
     ]
   }
@@ -410,7 +408,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -427,11 +425,11 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry, and on the folder's files but `*.test.ts` the two `process` entries of M13, the way M13's own block leaves test files out.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -478,7 +476,7 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -626,10 +624,10 @@ and its own changes, including the removed spies. The lead picks the order on th
 
 ## Existing tools
 
-Amendment 2026-11-16: these searches confirm the services and sibling layers already chosen above (0095).
+Amendment 2026-11-16: these searches confirm the services and sibling layers already chosen above.
 
 - `next/packages/libfabrika/src/cloudflare/Dispatcher.ts`: searched `cloudflare/control.ts`, the cloudflare service definitions and Effect 4.1.3's `Layer.mock`; found the private `dispatch` function, not a service a law can provide. The planned contract exposes that same call to `Recorder.layer`; it adds no second dispatch implementation.
-- `next/packages/libfabrika/src/cloudflare/DispatcherLive.ts`: searched `cloudflare/control.ts` for the dispatch implementation; reuse its existing body in this sibling layer, keeping the contract file free of code that runs (0095). Effect's Layer builds the provider; no replacement dispatcher is written.
+- `next/packages/libfabrika/src/cloudflare/DispatcherLive.ts`: searched `cloudflare/control.ts` for the dispatch implementation; reuse its existing body in this sibling layer, keeping the contract file free of code that runs. Effect's Layer builds the provider; no replacement dispatcher is written.
 - `next/packages/libfabrika/src/cloudflare/Waits.ts`: searched `cloudflare/connection.ts` and its `GatewayWaits` service; found `waitOn`'s ready-answer decode inside the larger RPC wait. `GatewayWaits.wait` also calls the Project, so it does not provide the decode-only member the planned law records. Reuse that decode behind the already-planned `Waits.ready` contract.
 - `next/packages/libfabrika/src/cloudflare/WaitsLive.ts`: searched `cloudflare/connection.ts` for the ready-answer decode and its typed `LedgerError` mapping; move that existing body into this sibling layer, as the plan already requires. Effect's `Layer.succeed` provides it; the decode and its failure stay the same.
 
@@ -655,13 +653,13 @@ Amendment 2026-11-16: these searches confirm the services and sibling layers alr
 - **Raw `console` in libfabrika's product code is held by oxlint's built-in `no-console`** (amendment
   2026-11-16, merge session ruling, no longer a call): no rule of ours is written for it.
 - **Is the `no-console` block a setting?** No. It is lint config for code, nothing a person running
-  fabrika picks (0069).
+  fabrika picks.
 
 ## Validation
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step, each slice: `pnpm format`, then `pnpm lint` with
@@ -774,7 +772,7 @@ as it was asked.
    yes, 80%: `eslint/no-console` and a `no-restricted-properties` entry for `process.stdout` and
    `process.stderr`, on for libfabrika's non-test files at zero, held by a plant in `VI_BAN`'s
    style, in slice 1. It is the owner's because it adds a rule over the whole package, beyond this
-   folder. If the answer is no, the three spies still go (0555), and the review records that M6 no
+   folder. If the answer is no, the three spies still go, and the review records that M6 no
    longer sees a raw write.
 
    **Amendment (2026-11-16, merge session ruling):** the `console` half is answered: oxlint's
@@ -808,7 +806,7 @@ only on how the same Exit is observed; no assertion, input, count or failure edg
 The moved dispatch contract must retain its full existing error channel, including its other
 refusals; the sketch's LedgerError-only annotation does not authorize changing those values.
 
-Read every selected law, helper and cleanup before local execution (0594). The earlier blanket
+Read every selected law, helper and cleanup before local execution. The earlier blanket
 statement that none needs a real machine is not clearance. Any selected law reaching real
 process signals, launchd or real Electron runs on eligible disposable CI, before first review.
 Keep other real-resource isolation where needed. A changed selection that reaches such a law

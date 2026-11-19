@@ -16,7 +16,7 @@ run row's path, and what is special about this quest
 [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going.
 
 A fix round after a review is one agent doing both jobs: it writes the law and the fix together,
-so there the fixer does write its own law ([0177](../../../.decisions/0177-fix-round-is-one-agent.md)).
+so there the fixer does write its own law.
 Its brief is [the lead skill's template](../lead/SKILL.md#when-a-review-sends-back), and it follows
 this skill for the law. The reviewer reads that law on its recheck.
 
@@ -25,7 +25,7 @@ this skill for the law. The reviewer reads that law on its recheck.
 1. **Look around first.** Read `AGENTS.md` whole, `next/AGENTS.md` for `next/` work, the approved
    plan whole (an amendment section overrides the body where they differ), then the code and rows
    it points to. Open the neighbors of each test file you will write (the suites, drivers and
-   test-support beside it) and `.patterns/` for a law, a suite and a test layer, so your laws read
+   test-support beside it) and `.kalfa/patterns/` for a law, a suite and a test layer, so your laws read
    like theirs. Read `node_modules/effect/AGENTS.md` before you write Effect code. Say which
    version you are in: `next/` or today's.
 2. **Write each law and plant a break for it once.** Every law uses generated inputs on the real
@@ -37,13 +37,11 @@ this skill for the law. The reviewer reads that law on its recheck.
    - **A law walks the machine.** Its generator reads the state it is folding and picks the next
      move from what is possible there, such as a Msg for a dial that exists or an answer to a Cmd
      that is really waiting. No hand-written lists of cases. The known ways are fast-check's
-     `fc.commands` and tea's `arbGuidedSequence`
-     ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)).
+     `fc.commands` and tea's `arbGuidedSequence`.
    - For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema,
      or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has
      nothing or to push edge cases. Effect's own tools come first, `effect/testing` (`TestClock`,
-     `TestConsole`, `TestSchema`) included. Case counts use `runsFor`, as the neighbors do
-     ([0535](../../../.decisions/0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md)).
+     `TestConsole`, `TestSchema`) included. Case counts use `runsFor`, as the neighbors do.
    - A property states its coverage and fails loudly when a required case is never reached.
    - When moving a law onto a schema's Arbitrary, keep its old reach: set size and run counts at
      least as large as the old generator, and test the real limit, not the schema's cap.
@@ -54,16 +52,14 @@ this skill for the law. The reviewer reads that law on its recheck.
      and the plan's reason beside the check. `fabrika/law-shape` in `pnpm lint` flags a `next/` or
      `.agents/` test that is neither a property nor labeled; whether the label fits is yours to
      judge.
-   - A test's kind follows what it uses, never its name
-     ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)). A law that starts or
+   - A test's kind follows what it uses, never its name. A law that starts or
      reaches a real thing (a real instance, workerd, Electron or a browser, a child process, a real
      signal, a port, the network) or writes to local disk (a SQLite file, a temp folder) is a
      `*.integration.test.ts` file and runs only in the full run. A law that reads the repository's
      files or runs on in-memory stand-ins is plain, in next/ and in tooling alike, and runs on every
      pull request its change reaches. `fabrika/integration-test-name` holds the name. Open a real SQLite file only through
      `TestDatabase` in `@kampus/vitest`. A law that can run on a stand-in runs on every pull
-     request, and the plan names why a new `.integration.` law has no stand-in
-     ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
+     request, and the plan names why a new `.integration.` law has no stand-in.
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
      law, record the plant and its result, then undo the plant. Commit no plant test. A plant
      may break any product file its law covers, whoever owns that file in the plan: it is never
@@ -71,8 +67,7 @@ this skill for the law. The reviewer reads that law on its recheck.
      copy, break one thing, run the one law, restore by copy, and see `git status --short` show no
      product file before you commit. A plant that was not run or not recorded counts as not run,
      and its law is not done. An old plant test may go, since it is not a law; removing or
-     narrowing a law still waits on the owner
-     ([0014](../../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). A lint rule's own
+     narrowing a law still waits on the owner. A lint rule's own
      planted lines (`oxlint-plugins/plants.test.ts`, `oxlint-plugins/plant.ts`) are its
      test inputs and stay. Each law names its plant in a comment, as the neighbors do.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
@@ -139,8 +134,7 @@ The test config and typecheck.ts hold worker, home and typecheck limits.
   file that sends no signal and starts nothing outside its own temp home may run here, one at a
   time.
 - A law never reads the person's home folder or app data, not even to guard against it. A law that
-  breaks on one machine is fixed by removing what it leaned on, never by catching the error
-  ([0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md)).
+  breaks on one machine is fixed by removing what it leaned on, never by catching the error.
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
   that hits, and do not count it as red or green.
 - Before you end, see that no test process from your runs is left. Check each one's path is this
@@ -156,20 +150,16 @@ These hold in every tests round, so the brief does not repeat them.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
 - **Fix it properly.** No skip, no `.only`, no raised timeout, no sleep-and-hope, no placeholder or
   weaker assertion, no `as` cast to quiet a type. No allow-list or ledger row added, no lint rule
-  turned down, no `oxlint-disable` on wrong code
-  ([0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md),
-  [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). A law you cannot write as
+  turned down, no `oxlint-disable` on wrong code. A law you cannot write as
   planned is not weakened: stop that law and say exactly why, with file and line. A red lint caused
   only by product names that do not exist yet is reported, not hidden.
 - **Checks before the commit:** `pnpm format`, `pnpm lint` once, and the list ratchet CI runs that
   local lint does not:
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"` exits 0.
 - **Commit and push:** commit your own paths by name with plain `git commit`, a plain-word subject,
-  no trailer naming a chat tool and no session link
-  ([0161](../../../.decisions/0161-no-step-signing-by-hand.md)). Then
+  no trailer naming a chat tool and no session link. Then
   `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/<branch>..HEAD` (never with no
-  arguments), and push with `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`
-  ([0164](../../../.decisions/0164-the-bot-stays-without-signing.md)). No force push. A refused push
+  arguments), and push with `node .agents/skills/lead/scripts/botpush.mjs "$PWD" <branch>`. No force push. A refused push
   is reported with its exact command, never worked around. When `drive.ts` runs you in a box,
   commit nothing: drive commits.
 - **Public repo:** no secrets, no absolute paths from anyone's machine, no personal names in

@@ -12,9 +12,9 @@ by invite and approval ([a key per client](./a-key-per-client-and-no-github-trus
 the owner 2026-11-05; this said GitHub as a keys source came in Tier 3). Tier 1 has one person: a new client comes in by the menu bar's
 Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
 
-Its decided rules are in: [0283](../../.decisions/0283-two-people-share-one-fabrika.md), [0284](../../.decisions/0284-sign-in-asks-a-keys-service.md), [0285](../../.decisions/0285-one-ledger-server-per-project.md), [0286](../../.decisions/0286-one-worker-per-project-via-alchemy.md), [0287](../../.decisions/0287-a-fence-holds-until-a-newer-claim.md), [0288](../../.decisions/0288-sharing-copies-tickets-once.md), [0289](../../.decisions/0289-talk-to-an-agent-never-start-it.md), [0290](../../.decisions/0290-one-owner-admins-and-members.md).
+Its decided rules are in: [0010](../../.kalfa/decisions/0010-each-place-keeps-a-copy.md).
 
-*Renamed 2026-11-10 for `next/`: the door is the gateway, and one client's object is a connection ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).*
+*Renamed 2026-11-10 for `next/`: the door is the gateway, and one client's object is a connection.*
 
 **Decided 2026-10-25: two people share one fabrika.** They work the same
 tickets, and their agents talk to each other across the two machines. This is
@@ -143,7 +143,7 @@ name = "acme-ledger"   # the project's Worker. A new name is a new, empty server
   Its connect example, `…/acme`, is further down and is to be redrawn.
 
 **Decided 2026-10-25: the server is declared and deployed with Alchemy,** the
-same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
+same setup kamp-us/phoenix uses (`.kalfa/patterns/alchemy-overview.md` there), on
 Alchemy's latest version rather than phoenix's pinned one. Experiment 144
 deploys with it, and says how today's Durable Object ledger fits Alchemy's
 shape. The owner wants Alchemy to deploy a host and the storage layer from
@@ -1017,7 +1017,7 @@ const Talk = Schema.Struct({
   hosts, clients and servers, with tools, resources and prompts
   ([spec](https://modelcontextprotocol.io/specification/2025-11-25)). It is
   agent to tool, not agent to agent. An agent here already gets its tools
-  through tsh ([tsh](../../.decisions/0430-tsh-is-a-unix-shell-for-tea-programs.md)).
+  through tsh (tsh).
 
 **What exists here.**
 

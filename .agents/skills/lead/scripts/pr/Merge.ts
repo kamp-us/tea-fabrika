@@ -29,7 +29,7 @@ export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { re
  * Whether a changed file keeps a pull request docs only for the admin merge, as 0183 has it: a docs file
  * in one of the admin merge's folders, by the shared classifier's `isAdminDocs` (@kalfa/ci/DocsOnly).
  * Instruction text is not docs (0183, 0180): skill prose, AGENTS.md, CLAUDE.md and an agent's definition.
- * A README and `.patterns/` Markdown are not docs for it either, so a pull request that changes one is
+ * A README and `.kalfa/patterns/` Markdown are not docs for it either, so a pull request that changes one is
  * armed, not admin-merged.
  */
 export const isDocsFile = (path: string): boolean => DocsOnly.isAdminDocs(path);
