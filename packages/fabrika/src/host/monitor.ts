@@ -1,5 +1,5 @@
 // A watcher's monitors, as an Elm module like ./call.ts: a parent program keeps `Monitors` in its
-// own state and hands its Msgs to `update` (docs/direction/elm-first.md).
+// own state and hands its Msgs to `update`.
 //
 //   watch "c:1"                     monitor c:1 under ref "c:1#1"
 //   monitored c:1#1 on, incarnation 3

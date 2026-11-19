@@ -62,7 +62,7 @@ it.effect.prop(
       const files: Record<string, string> = {
         // Not a runbook, and not read as one: a file that is not Markdown, and a page outside the folder.
         ".kalfa/runbooks/notes.txt": "no frontmatter here\n",
-        "docs/direction/README.md": "---\nid: 7\n---\n\nA plan.\n",
+        "docs/guide/README.md": "---\nid: 7\n---\n\nA plan.\n",
         "AGENTS.md": "# Working here\n",
       };
 
@@ -108,7 +108,7 @@ it.effect.prop(
         ...padding.map((w) => `${w}.`),
         ...linked.map((path, i) => `- [runbook ${i}](../../../${path})`),
         ...(dangling ? ["- [gone](../../../.kalfa/runbooks/sev-gone.md)"] : []),
-        "- [a page](../../../docs/direction/README.md)",
+        "- [a page](../../../docs/guide/README.md)",
       ];
 
       files[SKILL] = `${lines.join("\n")}\n`;

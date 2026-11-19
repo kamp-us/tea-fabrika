@@ -362,7 +362,7 @@ describe("the person-only rule on an agent's session", () => {
         return out;
       }),
     );
-    // Areas PR 1: the three area facts are a person's too (docs/direction/areas.md).
+    // Areas PR 1: the three area facts are a person's too.
     expect(seen.map((s) => s.kind)).toEqual([
       "answered",
       "duplicate_rated",

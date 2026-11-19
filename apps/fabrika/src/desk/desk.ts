@@ -61,7 +61,7 @@ import {
 //                            of their inputs. When its tsh has ended (`ended`), t2 goes
 //   Ctrl-B x on a closing t2 asks "stop t2 now? (y/n)": y and t2 goes, stop {tile: "t2"}
 //
-// Any tile folds into a strip in its place (docs/direction/fold-not-tabs.md). Focus is always on
+// Any tile folds into a strip in its place. Focus is always on
 // an open tile:
 //
 //   Ctrl-B f, or a double-click on t2's title bar  t2 folds, and focus goes to the next open tile
@@ -1042,7 +1042,7 @@ const covered = (s: Open, tile: TileId, runs: readonly [Shown, ...Shown[]]): Ste
   }
 
   const more = runs.length - 1;
-  // Colors and letters are counted per workspace (docs/direction/pipe-colors.md), so a repeat
+  // Colors and letters are counted per workspace, so a repeat
   // needs seven pipes in one.
   const layout = openLine(ws.layout, tile, {
     runs,

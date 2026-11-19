@@ -1,12 +1,11 @@
-// Every machine has laws (docs/direction/every-machine-has-laws.md), in `next/`: a file that makes a
+// Every machine has laws, in `next/`: a file that makes a
 // machine with `defineMachine(` has a laws file beside it that uses tea's `@demlik/tea/pbt`. The
 // laws file is `<name>.laws.test.ts`, or `<name>.<more>.laws.test.ts`, since a later law goes in a
 // new file rather than a bigger old one. Machines made inline count too, so the scan reads text,
 // not a named `const`. Item 7 of the detail's exam; written by the exam (Tier 1, P1). It reads all
 // of `next/`, not `next/src`, which goes away.
 //
-// Every machine also passes the sync test (docs/direction/saved-state.md, S2; detail p88; Tier 1,
-// P35): one of its laws files calls `syncTest(`, or says `// sync test left out: <why>` with a reason,
+// Every machine also passes the sync test: one of its laws files calls `syncTest(`, or says `// sync test left out: <why>` with a reason,
 // since a machine leaves it "only by name, with a reason". The scan reads text, so where `syncTest`
 // is imported from is not checked; P11 gives it its home. The two checks answer as two lists, so a
 // missing laws file and a missing sync test read apart.

@@ -15,8 +15,8 @@ import { describe, expect, it } from "vitest";
 import { call, defineProgram, kind, type MsgOf } from "./program.ts";
 import { type Handle, StateRefused, type Storage, storageOf } from "./storage.ts";
 
-// The laws of a kept state read through its machine's schema
-// (docs/direction/an-old-host-is-named-then-restarted.md, section 1), on fast-check and tea's pbt.
+// The laws of a kept state read through its machine's schema,
+// on fast-check and tea's pbt.
 // They are written from the rule, not from the code:
 //
 //   a save    is encoded by the schema, strictly: a key the schema does not name fails it, and

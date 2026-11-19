@@ -1,5 +1,4 @@
-// Who wrote a ledger row, typed: a user, or an agent working for a user
-// (docs/direction/the-ticket-is-the-lane-view.md: each fact says who wrote it).
+// Who wrote a ledger row, typed: a user, or an agent working for a user.
 //
 //   user:owner                    {kind: "user", id: "owner"}
 //   agent:triage for:github:42    {kind: "agent", id: "triage", for: "github:42"}

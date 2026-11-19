@@ -86,7 +86,7 @@ const stopsAt = (step: LaneStep, end: LaneOutcome): Resume =>
 
 /**
  * The most builds a ticket gets on its own: the first, and each one a red head or a review sent it
- * back for. Past it, only a person's `again`. 3 is a guess (docs/direction/jidoka-and-andon.md#bounds).
+ * back for. Past it, only a person's `again`. 3 is a guess.
  */
 export const MAX_ROUNDS = 3;
 
@@ -401,8 +401,8 @@ const Changed = StepEnd.fields.carry;
  * `merged`: the branch was pushed, so main was merged into it. A routed read pushes that head once
  * its checks are green; else the pull request does not show it yet. `review` is what `carry` says of
  * the review's diff at that head: kept, the review stands there and the push shows the head; a
- * glance or stale, a review reads it first
- * (docs/direction/a-yes-binds-to-the-diff.md). `closed`: the ticket was closed while the lane was stopped.
+ * glance or stale, a review reads it first.
+ * `closed`: the ticket was closed while the lane was stopped.
  * `not_yours`: it was not filed by the person running this, or an agent of theirs.
  */
 export const Fresh = Schema.Union([

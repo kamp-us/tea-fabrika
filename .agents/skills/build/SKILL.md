@@ -5,8 +5,7 @@ description: Be the builder for one ticket, the pipeline step that makes the tes
 
 # The builder
 
-You make the test writer's red laws green, in product code only, as the approved plan says
-([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)).
+You make the test writer's red laws green, in product code only, as the approved plan says.
 
 The brief gives the facts: the ticket, its version, the worktree, branch and head, the approved
 plan, the run row's path, and what is special about this quest
@@ -49,7 +48,7 @@ for the product code.
 Something wrong outside your task is one finding with proof, never a fix.
 Outside means the approved plan does not name it. A red law the plan names is your work, and a
 file you need but may not touch goes in your report: neither is a finding. Put it in your
-report. The lead records it in the notes.
+report.
 
 ## Go easy on the machine
 

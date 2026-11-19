@@ -27,7 +27,7 @@ prompt = "One file per operation done by hand, such as a sev or a wipe of the de
 [[records]]
 name = "quests"
 path = ".kalfa/quests/"
-prompt = "One signed plan per ticket, approved by the owner before its tests are written. The test writer, the builder and the review read it as the contract. When its pull request lands, the quest moves to the notes repo."
+prompt = "One signed plan per ticket, approved by the owner before its tests are written. The test writer, the builder and the review read it as the contract."
 
 [[records]]
 name = "research"

@@ -8,7 +8,7 @@ import { Author, loadCell, saveCell } from "./ledger.ts";
 import type { load, save } from "./machine.ts";
 import type { Write } from "./ticket.ts";
 
-// Areas PR 1, today's version (docs/direction/areas.md, the plan's a3 and a4): the tracker's save
+// Areas PR 1, today's version: the tracker's save
 // puts a person's area facts on `tracker/areas`, refuses them from an agent on a ledger with no
 // door, and gives two people who make an area at once two numbers, n and n+1. On a ledger in
 // memory, with no window.

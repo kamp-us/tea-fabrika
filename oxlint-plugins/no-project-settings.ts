@@ -8,7 +8,7 @@
 // its `apiKeyHelper`. Agents write the repository too, so a hook added by
 // mistake, or by text injected into an agent, would run on the next agent's run.
 // The owner's ruling of 2026-10-26 keeps that out even where only trusted people
-// work (docs/direction/agents-read-rules-the-normal-way.md).
+// work.
 //
 // So, anywhere but rules.ts and tests (`.oxlintrc.json`'s overrides leave those
 // out: a test writes the options' shape to check it, and starts no live run),

@@ -1,4 +1,4 @@
-// No Promise in `next/`: it is Effect all the way (docs/direction/no-promises.md). Tier 1's exam,
+// No Promise in `next/`: it is Effect all the way. Tier 1's exam,
 // item 1 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // It refuses `async`, `await` (and `for await`), `new Promise(...)`, any `Promise.x(...)` call,
@@ -37,7 +37,7 @@ const PROMISE_CALLS: ReadonlySet<string> = new Set([
 /** The modules those calls live on, as written when the file does not import them by name. */
 const MODULES: ReadonlySet<string> = new Set(["Effect", "Schema", "Stream"]);
 
-const WHY = "next/ is Effect all the way (docs/direction/no-promises.md)";
+const WHY = "next/ is Effect all the way";
 
 export const noPromises: CreateRule = {
   create(context) {

@@ -22,16 +22,14 @@ triage -> plan -> the person approves -> exam, when rules change -> the exam's r
 The exam's review (`exam_review`) is code first, then one agent: it formats the rule files, runs the
 checks, and runs the review step over the exam's own pull request, against one criterion per rule
 change the plan lists. A failed review or red checks go back to the exam writer, at most 3 rounds.
-A yes said at one head counts at a later one only when the diff it judged replays there
-([a yes binds to the diff](../../docs/direction/a-yes-binds-to-the-diff.md)).
+A yes said at one head counts at a later one only when the diff it judged replays there.
 
 ## What it needs
 
 A checkout of the repository, where the app and its host were started. `pnpm fabrika` starts them in
 this one. When a lane starts it reads that checkout's `origin`, as written in git's config, the way
 `gh` reads the folder it runs in. No file names the repository: its address is the repository's own
-fact, and the app's home holds only the person's things
-([one fabrika.toml per repo](../../docs/direction/one-fabrika-toml-per-repo.md)).
+fact, and the app's home holds only the person's things.
 
 ```text
 https://github.com/acme/web.git    acme/web, on the GitHub host
@@ -203,8 +201,7 @@ PR 11b.
 | | `briefs/` | One plain file per step that runs an agent. The app's build copies them beside its bundle. |
 | | `docs/` | Real shots from the built app, taken by `apps/fabrika/lane-e2e.ts`. |
 
-The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
-experiment 175 (in the notes).
+The lane's logic is in `packages/pipeline/src/stages/pipeline/`. 
 
 ## Shots
 

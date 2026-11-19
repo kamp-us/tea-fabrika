@@ -1,4 +1,4 @@
-// An Effect runs only at an edge the platform demands (docs/direction/no-promises.md). Tier 1's
+// An Effect runs only at an edge the platform demands. Tier 1's
 // exam, item 2 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // It refuses a call to any of Effect's run functions, `Effect.runPromise(...)`, `runFork(...)` or
@@ -54,7 +54,7 @@ export const noEffectRunOutsideEdge: CreateRule = {
 
         context.report({
           node,
-          message: `\`${name}\` runs an Effect (docs/direction/no-promises.md). Hand the Effect back to your caller. Where the platform demands it, mark that one line with \`// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: <why>\`, which the owner reads.`,
+          message: `\`${name}\` runs an Effect. Hand the Effect back to your caller. Where the platform demands it, mark that one line with \`// oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: <why>\`, which the owner reads.`,
         });
       },
     };

@@ -72,7 +72,7 @@ import { PROJECTS_BOX, Projects } from "./projects.tsx";
 // them out. Every item is a button with a tooltip (its name, keys and tsh word, pop.tsx) and, in info mode,
 // a line of plain words (`data-info`). No item has a background: plain words, ` · ` between them.
 // The bars stay monospace, as a terminal's status line; what opens over the desk is drawn by
-// pop.tsx, in the program windows' own font (docs/direction/popovers.md).
+// pop.tsx, in the program windows' own font.
 
 /** The element id of each thing that opens over the desk: its opener names it in `aria-controls`. */
 const POP = {
@@ -461,7 +461,7 @@ export function TopBar(props: FrameProps): ReactNode {
   );
 }
 
-/** The app's icon as a small size draws it, on its 16 grid (docs/direction/app-icon.md). */
+/** The app's icon as a small size draws it, on its 16 grid. */
 function Mark(): ReactNode {
   return (
     <svg className="mark" viewBox="0 0 16 16" width="16" height="16">
@@ -1310,8 +1310,7 @@ export function BottomLine(props: FrameProps): ReactNode {
 
 /**
  * The window's one status region for its mode: it says "Info mode on. Escape leaves." when info
- * mode comes on and "Info mode off." when it goes, and nothing on each part explained (WCAG 4.1.3,
- * docs/direction/modes.md, M3). `status` is polite and atomic, so it waits for a pause and reads
+ * mode comes on and "Info mode off." when it goes, and nothing on each part explained (WCAG 4.1.3). `status` is polite and atomic, so it waits for a pause and reads
  * the whole line. Out of sight: the bottom line says the same where the eye is. It is drawn
  * whatever the bars, before it has anything to say, so a screen reader is listening when it
  * changes, and "off" is heard with the bars hidden.

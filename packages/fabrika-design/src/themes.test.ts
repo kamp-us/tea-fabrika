@@ -3,15 +3,15 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-// The design package's laws (docs/direction/fabrika-design-package.md, decided 2026-11-02): the
-// built-in `fabrika` and `fabrika-light` themes (docs/direction/themes.md, decided 2026-11-01),
+// The design package's laws: the
+// built-in `fabrika` and `fabrika-light` themes,
 // Radix 3.0.0, gray slate, accent indigo, and the one stylesheet of tokens, tokens.css, with Manti's
-// --manti-* tokens set from them (docs/direction/ui-on-manti.md). Every value below is a Radix
+// --manti-* tokens set from them. Every value below is a Radix
 // step, read from experiments/177-themes/schemes/radix-colors-3.0.0.json, and named beside it; the
 // bends color principles records are named where they stand. Laws 1 to 14 and 16 of the P31 plan;
 // law 15 is in themes.frame.test.ts. The laws about the app's own rules stay in the app
 // (apps/fabrika/src/window/colors.test.ts): a package does not read its app.
-// Ask desk's decided look (docs/direction/ask-desk.md:203,212) adds a slate 3 card in both looks.
+// Ask desk's decided look adds a slate 3 card in both looks.
 // Color principles' step 3 is a component background; the card joins the contrast checks below.
 //
 // tokens.css is read, not drawn. A token's value in a look is found as the browser finds it:

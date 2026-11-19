@@ -1,4 +1,4 @@
-// Ticket 907, next/. A failure is a typed value (docs/direction/effect-code-guidelines.md, E2).
+// Ticket 907, next/. A failure is a typed value.
 // `Cause.squash` turns a typed cause into one unknown value, and the next line then asks what it
 // is. This rule refuses every use of Effect's `squash`. Read the typed failure with
 // `Cause.findErrorOption` or `Exit.findErrorOption`, and a thrown value with `Cause.findDefect`.

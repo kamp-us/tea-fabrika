@@ -30,7 +30,7 @@ import {
 } from "./pop.ts";
 
 // What opens over the desk, drawn: one raised box of rows for every popover, in the program
-// windows' own font and sizes (docs/direction/popovers.md). Its rules are pop.ts's; this file
+// windows' own font and sizes. Its rules are pop.ts's; this file
 // lays them out and wires the keys, focus and pointer.
 //
 //   <Menu id="pop-asks" label="Asks" from="top" count={2} sections={...} foot={...} empty={...}

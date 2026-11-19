@@ -1,5 +1,5 @@
 // One project's ledger server, as config: what both the deploy (`stack.ts`) and the twin
-// (`twin.ts`) are made from. docs/direction/the-ledger-goes-to-cloudflare.md decided one Worker per
+// (`twin.ts`) are made from. It is one Worker per
 // project, its name the project's pick, and the founder set by whoever makes the ledger.
 //
 //   const config = decodeConfig({name: "acme-ledger", founder: "github:7"})

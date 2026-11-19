@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Areas PR 1, today's version (docs/direction/areas.md, A1 and fix 2; the plan's a7): the tracker
+// Areas PR 1, today's version: the tracker
 // holds no list of areas. Every name comes from the ledger's `tracker/areas` stream, folded. This
 // reads the tracker's own source, tests left out. Importing the stream's name, `AREAS` from
 // `@kampus/pipeline/tickets/area`, is fine: declaring an `AREAS` here, or a list of names, is not.

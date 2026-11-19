@@ -2,7 +2,7 @@ import { type Row, Writer, type Writes, writerOf } from "@kampus/fabrika-old";
 import { Option, Schema, SchemaTransformation } from "effect";
 import type { Ticket } from "./ticket.ts";
 
-// The project's areas (docs/direction/areas.md): a person's data on the ledger, on one stream of
+// The project's areas: a person's data on the ledger, on one stream of
 // their own, `tracker/areas`. A person makes, renames and merges them. A ticket holds an area's
 // number, so a rename touches no ticket and a merge moves every ticket at once. The program holds
 // no list of areas: every name is folded from the stream. This file is pure; the tracker's

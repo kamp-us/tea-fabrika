@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 
 // What the mutation step reads before it runs anything, and the pure Checks
-// on it (docs/direction/promises-in-the-pipeline.md, step 5):
+// on it:
 //
 //   spansOf     which lines Stryker mutates: the source lines the build
 //               added, and the lines each kept Property covers

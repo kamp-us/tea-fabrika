@@ -11,8 +11,7 @@ ledgerBindings({door: serverDoor(config)});
 ```
 
 The deploy and the twin are built from those same two things: the Worker fabrika ships
-(`LEDGER_ENTRY`) and these bindings. See
-[`docs/direction/the-ledger-goes-to-cloudflare.md`](../../docs/direction/the-ledger-goes-to-cloudflare.md).
+(`LEDGER_ENTRY`) and these bindings.
 
 ## Files
 

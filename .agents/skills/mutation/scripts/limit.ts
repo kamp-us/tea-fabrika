@@ -5,7 +5,7 @@
  *
  *   node .agents/skills/mutation/scripts/limit.ts /out/baseline.json    # prints 30000
  *
- * The decided fast check keeps a 10 s test limit (docs/direction/fast-and-daily-mutation.md), and
+ * The decided fast check keeps a 10 s test limit, and
  * that stays the floor. A fixed 10 s stopped Stryker's dry run whenever one related law took longer
  * on its own, and then no mutant ran at all: three of the first five hourly runs on 2026-11-11, on
  * laws that took 9.8 s, 12.7 s and 25 s in the box's plain run. So the limit is three times the

@@ -6,7 +6,7 @@ import { Plan } from "../stages/plan/plan.ts";
 
 // What the core asks the owner, and what it takes back. The core's own words:
 // it emits an `Ask` and takes an `Answer`, and never knows who shows the one
-// or gets the other (docs/direction/packs-are-programs.md). Elm's ports work
+// or gets the other. Elm's ports work
 // the same way: the app owns the value types on both sides of a port.
 //
 //   {id: "plan:o/r#7@1", at: 3, for: "plan", plan: "o/r#7", version: 1, data: {...}, since: null, ...}
@@ -30,7 +30,7 @@ export type Approved = typeof Approved.Type;
 /** Its place in the ledger: the fact that raised it. Oldest first is smallest first. */
 const at = Schema.Int;
 
-/** The owner approves building a plan (docs/direction/sort-answers-yes-or-no.md, "Who approves building"). */
+/** The owner approves building a plan. */
 export const PlanAsk = entity(AskId, {
   at,
   for: Schema.Literal("plan"),
@@ -47,7 +47,7 @@ export const PlanAsk = entity(AskId, {
 });
 export type PlanAsk = typeof PlanAsk.Type;
 
-/** A task the stall rule ran out on (docs/direction/done-is-per-criterion.md, "A stuck task"). */
+/** A task the stall rule ran out on. */
 export const StuckAsk = entity(AskId, {
   at,
   for: Schema.Literal("stuck"),

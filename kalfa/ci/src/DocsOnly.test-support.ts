@@ -22,8 +22,8 @@ export const TABLE: readonly Row[] = [
       ".agents/skills/sev/SKILL.md",
       ".kalfa/decisions/0615-mechanical-tickets-take-a-fix-command-branch.md",
       "AGENTS.md",
-      "docs/direction/next-is-a-pipeline-pre-run.md",
-      "docs/direction/README.md",
+      "docs/guide/next-is-a-pipeline-pre-run.md",
+      "docs/guide/README.md",
       "oxlint-plugins/README.md",
     ],
     docsOnly: true,
@@ -72,7 +72,7 @@ export const TABLE: readonly Row[] = [
     adminDocs: false,
   },
   { pr: "kalfa/config/README.md", paths: ["kalfa/config/README.md"], docsOnly: false, adminDocs: false },
-  { pr: "docs/direction/briefs/x.md", paths: ["docs/direction/briefs/x.md"], docsOnly: false, adminDocs: false },
+  { pr: "docs/guide/briefs/x.md", paths: ["docs/guide/briefs/x.md"], docsOnly: false, adminDocs: false },
   // Skill prose in a brief folder is an input, as changes.mjs read it before 810.
   {
     pr: ".agents/skills/lead/briefs/x.md",

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 
 // A mutant, as the mutation step hands it on and the test writer's mutants
-// job reads it (docs/direction/the-test-writer.md). Both import it from here.
+// job reads it. Both import it from here.
 
 /**
  * A mutant by where it is and what it does: `file:line:column:tag`, line and

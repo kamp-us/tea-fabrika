@@ -469,7 +469,7 @@ export type AnyProgram = Program<any, any, any, any, any, any>;
 
 /**
  * What a program's window is shown, as data: one of its machines' state, picked by a pure
- * function, with a schema for what it picks (docs/direction/tea-program.md, changed 2026-10-22).
+ * function, with a schema for what it picks.
  * Elm's `view`, less the HTML. There is no renderer here and no React: the window is a React
  * component in the program's own package, on `<package>/window`, drawing this data. It reaches
  * the program only through its declared inputs (./view.ts reads what it sends).

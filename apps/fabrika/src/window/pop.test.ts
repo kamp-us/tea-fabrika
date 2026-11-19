@@ -18,7 +18,7 @@ import {
 } from "./pop.ts";
 import { Menu, type MenuProps, Palette, type PaletteProps, Panel } from "./pop.tsx";
 
-// The popover rule (docs/direction/popovers.md): keys as the Mac draws them, what each key does
+// The popover rule: keys as the Mac draws them, what each key does
 // in a menu, the palette's bold letters, the tooltip's wait, and the roles each one draws.
 
 const row = (id: string, title: string, second: Row["second"] = { name: "Later", cap: "H" }): Row => ({

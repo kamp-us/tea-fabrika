@@ -2,7 +2,7 @@ import { ATTR, type JobTrace, runTraceId } from "@kampus/fabrika-old";
 
 // The record `seq --to 3 | tally` leaves, in the record's own read shape
 // (packages/fabrika/src/host/traces.ts): the example of
-// docs/direction/a-job-record-holds-its-trace.md, "Every step is kept, and the tile opens it".
+// "every step is kept, and the tile opens it".
 // Both programs are in packages/fabrika/src/shell/small.ts. Made by hand, as the host would
 // write it, until a host writes real ones: for the tests and the app's shots.
 //

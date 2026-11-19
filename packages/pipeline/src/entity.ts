@@ -1,8 +1,7 @@
 import { Schema, SchemaAST } from "effect";
 
 // One base for everything the ledger keeps that stays the same thing through
-// change (docs/direction/smallest-ledger-proof-to-grow.md, "Every ledger
-// entity has an id"): an id of its own kind, then its fields.
+// change: an id of its own kind, then its fields.
 //
 //   const CriterionId = Id("CriterionId", /^c[1-9][0-9]*$/);
 //   const Entry = entity(CriterionId, {task: TaskId, wordings: Schema.Array(Wording)});

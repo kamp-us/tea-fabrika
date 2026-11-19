@@ -1,7 +1,7 @@
 type = "background"
 tier = "global"
 owner = "design"
-description = "a card on a tile: one ask on the ask desk (docs/direction/ask-desk.md)"
+description = "a card on a tile: one ask on the ask desk"
 theme = "card"
 
 [colors]

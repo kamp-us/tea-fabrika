@@ -35,8 +35,7 @@ how to report. What every step shares is in
 that need no approval, and a report a reader with no context can follow.
 
 An agent that meets something wrong outside its task writes one finding, with proof, and
-keeps going: never a fix, a ticket or only a mention. The step hands it over in its report, and the
-lead records it in the notes, which live outside this repo.
+keeps going: never a fix, a ticket or only a mention. The step hands it over in its report.
 
 ## Changing a skill
 

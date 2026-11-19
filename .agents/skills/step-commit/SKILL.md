@@ -15,8 +15,6 @@ sh .agents/skills/step-commit/scripts/stepcommit.sh --commit-only <step> <ticket
 sh .agents/skills/step-commit/scripts/stepcommit.sh build 277 "T277 build: one refusal per request" next/apps/fabrika/src/door.ts
 ```
 
-Why one command:
-[code commits and signs each step](../../../docs/direction/code-commits-and-signs-each-step.md).
 
 ## The rules
 

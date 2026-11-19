@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
-// What a stage machine hands back, in the one shape every stage uses
-// (docs/direction/outcome-names.md). Five verbs:
+// What a stage machine hands back, in the one shape every stage uses.
+// Five verbs:
 //
 //   done   the job is finished, wholly or in part        nobody is next
 //   send   another stage has to do something             that stage

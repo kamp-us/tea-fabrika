@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { checkRun } from "./primitives.ts";
 
 // Controls: a check is trusted only when it is red where it must fail and
-// green where it must pass (docs/direction/new-combos.md, "Controls"). Labs
+// green where it must pass. Labs
 // call the two negative and positive controls.
 //
 //   on the bad input   on the good input   the answer

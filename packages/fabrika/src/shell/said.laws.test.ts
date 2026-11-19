@@ -4,8 +4,7 @@ import { BUILTINS, parse, type Statement } from "./grammar.ts";
 
 // The summon tryout, PR 1 (ticket 237), today's version: a said line in tsh's grammar. A line
 // whose first non-space character is `@` is said: its mention is read, and the rest of the line
-// is the agent's, as typed. `words` never reads it, so `#`, quotes, `|`, `&` and `;` are text
-// (docs/direction/summon-guidelines.md, S2 and S6).
+// is the agent's, as typed. `words` never reads it, so `#`, quotes, `|`, `&` and `;` are text.
 //
 //   parse("@scout why does post print #7 twice?")
 //   // one statement: {kind: "said", room: null, mentions: [scout at [1,6)],

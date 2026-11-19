@@ -6,8 +6,7 @@ import type { Ran } from "../build/form.ts";
 import { Pushed } from "../build/services.ts";
 import type { CatchupOutcome } from "./outcome.ts";
 
-// A plan's one branch, kept up with main (docs/direction/done-is-per-criterion.md, "One PR per
-// plan"). Every task lands on `plan/<n>` while main moves on; before a round builds, and before the
+// A plan's one branch, kept up with main. Every task lands on `plan/<n>` while main moves on; before a round builds, and before the
 // last review, the branch takes main in by a merge. Never a rebase: the commits the reviews judged
 // stay the commits they judged, and the branch is only ever pushed forward.
 //

@@ -10,7 +10,7 @@ import { memoryStorage, type Storage } from "../program/storage.ts";
 import { Programs, programList } from "./programs.ts";
 import { type Printed, type Ready, tsh } from "./shell.ts";
 
-// The doubt of docs/direction/an-old-host-is-named-then-restarted.md: when the old host stops
+// The doubt: when the old host stops
 // with a job's call half done, and the new host's tsh attaches the job back, is that call sent
 // again? A fake job here, never a paid call: one kept machine that makes one call, and counts
 // each call it makes and each start of its `main`.

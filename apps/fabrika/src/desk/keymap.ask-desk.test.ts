@@ -46,7 +46,7 @@ describe("ask desk P14: scoped and configurable keys", () => {
       }
     },
   );
-  // docs/direction/ask-desk.md, A3 (line 319, traced at line 52): `y` takes the rec. The default
+  // `y` takes the rec. The default
   // lives in ASK_COMMANDS (packages/pipeline/src/tickets/ask.ts); the table is keymap.ts's.
   it("vector: with no keys file, the default rec key is y, and only y", () => {
     const keys = decodeKeys("", true);

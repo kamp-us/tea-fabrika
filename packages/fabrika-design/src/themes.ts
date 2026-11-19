@@ -1,4 +1,4 @@
-// The two built-in themes, `fabrika` and `fabrika-light` (docs/direction/themes.md): Radix 3.0.0,
+// The two built-in themes, `fabrika` and `fabrika-light`: Radix 3.0.0,
 // gray slate, accent indigo. Every value is a Radix step, used for that step's job (color
 // principles, principle 5), but for four bends, each written down with its reason:
 // - the dark desk, `#0c0d0e`, is no step: nothing in slate is darker than 1;

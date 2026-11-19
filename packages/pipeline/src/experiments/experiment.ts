@@ -2,8 +2,8 @@ import { type Row, sha256Hex, TraceId, Writer, writerOf } from "@kampus/fabrika-
 import { Equal, Option, Schema } from "effect";
 import { Title } from "../tickets/ticket.ts";
 
-// An experiment: one stream of facts on the ledger, with its own fold, apart from the tracker's
-// (docs/direction/experiments-behind-a-service.md). Experiment 170 is the registered name
+// An experiment: one stream of facts on the ledger, with its own fold, apart from the tracker's.
+// Experiment 170 is the registered name
 // `experiments/170`, and its facts are the messages in that name's inbox, oldest first. The words
 // are MLflow's (experiment, run, params, metrics, tags, artifacts) and Langfuse's (item, score):
 //
@@ -380,7 +380,7 @@ export class ExperimentPage extends Schema.Opaque<ExperimentPage>()(
   /**
    * The page as markdown: the title, a line of what it is (number, day, runs), the write-up's
    * answer first, its sections, then a table of its runs. A view made from the data, never read
-   * back (docs/direction/data-first-markdown-is-a-view.md).
+   * back.
    *
    *   # The experiments program
    *

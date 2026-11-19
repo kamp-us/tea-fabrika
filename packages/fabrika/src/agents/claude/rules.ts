@@ -1,8 +1,7 @@
 import { accessSync, constants, readdirSync, type Stats, statSync } from "node:fs";
 
 // How a Claude run reads the rule files of the folder it works in: the way
-// Claude Code ships it, and nothing else of the project (experiment 155,
-// docs/direction/agents-read-rules-the-normal-way.md).
+// Claude Code ships it, and nothing else of the project (experiment 155).
 //
 // `settingSources: ["project"]` is what turns on Claude Code's own loading of
 // CLAUDE.md: the top file, its `@file` imports, `.claude/rules`, and a nested

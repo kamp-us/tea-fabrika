@@ -10,8 +10,7 @@ import type { Direction, Orientation, TileId } from "./layout/index.ts";
 //   keyName({key: "Shift", ...})                                null: a modifier alone is no key
 //   BINDINGS[0]          {key: "|", command: "tezgah.split", does: {kind: "split", ...}, ...}
 //
-// Each command has its word in the keys file, `<program>.<word>` (docs/direction/keybindings-
-// are-configurable.md, K9). The desk is tezgah, and its word is its tsh word, quoted after the
+// Each command has its word in the keys file, `<program>.<word>`. The desk is tezgah, and its word is its tsh word, quoted after the
 // dot when it has spaces: `tezgah.zoom`, `tezgah."split --to down"`. Two differ, as the note names
 // them: the tile's close is `tezgah.close` (tsh's word is `close-tile`), and C-b ? is
 // `keys.open`. The table the desk reads is keymap.ts's: these, with keybindings.toml laid over.
@@ -295,8 +294,7 @@ type KeyOwner = "system" | "app" | "nobody";
 
 /**
  * The Mac's own keys, which no file can take: Cmd-Q quits, Cmd-H hides, Cmd-Tab and Cmd-Space
- * are the system's, and Option-Cmd-Esc force quits (docs/direction/keybindings-are-configurable.md,
- * "Keys that cannot be taken away"). The keys file refuses them (keymap.ts); `keyOwner` checks
+ * are the system's, and Option-Cmd-Esc force quits. The keys file refuses them (keymap.ts); `keyOwner` checks
  * them first all the same, so no table can give one to the app.
  */
 export const THE_MACS: ReadonlySet<string> = new Set(["<m-q>", "<m-h>", "<m-tab>", "<m- >", "<a-m-escape>"]);

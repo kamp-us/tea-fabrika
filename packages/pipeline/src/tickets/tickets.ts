@@ -25,8 +25,8 @@ type TicketNumber = number;
  */
 type WriteId = string;
 
-// The services the pipeline reads and writes tickets through
-// (docs/direction/a-ticket-runs-from-the-app.md, section 3). A lane writes its facts here, on the
+// The services the pipeline reads and writes tickets through.
+// A lane writes its facts here, on the
 // stream the tracker already reads once a second, so its window shows them with no new code:
 //
 //   const tickets = yield* Tickets;

@@ -2,9 +2,7 @@
 
 The fabrika app, as a walking skeleton: the whole flow, thin. It is one window, tiled like
 tmux. Every tile runs its own tsh, with the programs `counter`, `tracker`, `ticket`, `map`,
-`pipeline` and `trace` loaded. A program with a view runs inside a tile. The design is
-[The GUI is an Electron app first](../../docs/direction/the-gui-is-electron-first.md), section
-"Decided 2026-10-25: tiles, like tmux".
+`pipeline` and `trace` loaded. A program with a view runs inside a tile. The design is tiles, like tmux, decided 2026-10-25.
 
 ```text
 pnpm fabrika                 one tile, running tsh
@@ -29,8 +27,8 @@ app. The next start attaches to the same host.
 
 ## Projects
 
-A window is one project: one git working tree, with a host of its own
-([project window](../../docs/direction/project-window.md), ticket 276). Cmd-O, File > Open
+A window is one project: one git working tree, with a host of its own.
+Cmd-O, File > Open
 Project… and the top bar's project button open the projects box: recent projects by name, their
 place in faint text, when each was last opened, and Open Folder… last. A project already open
 comes to the front; any other opens in a new window. A window with no project yet shows the
@@ -152,13 +150,13 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
 | `src/bridge.ts` | Those names, as the page sees them, the port names it takes, and the IPC channel. |
 | `src/tiles.ts` | One tsh per tile, each in its own scope. It tells the desk (`TileNews`) when a run covers a tile, when it is over, the tile's jobs, and when a closing tile has ended. `close` ends the inputs of the tile's tsh and its runs; `stop` ends its scope and drops its folder. `end` and `kill` do the same for one process of a line, by its pid: a window of the line closed. |
 | `src/tsh.ts` | One tile's tsh: starts it with the app's programs, runs the line editor between tsh and the terminal, and says whether each run is in the foreground or the background. Each screen shows to every page that asks, starting with a terminal reset, so a page that still holds the screen draws it once. It tells its tile its jobs (`src/tile-jobs.ts`): each job of the host's table it started that still runs, with when it began by the host's clock, and the last to end, with how (`done`, `failed`, `stopped`, read off its runs' ends). The table keeps neither. It is handed the `Ledger` and gives it to the tracker, which writes as `user:owner`, and the tracker's `PullRequests`, which the host makes on the pipeline's `CodeHost` and the person's own `gh` login (`src/host/main.ts`). |
-| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the shipped table and who owns a press (`keyOwner`); `keymap.ts` reads the keys file and lays it over that table (see [Your keys](#your-keys-keybindingstoml)). `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`) ([fold, not tabs](../../docs/direction/fold-not-tabs.md)). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
+| `src/desk/` | The desk, a tea machine (`desk.ts`): `deskMachine`, Model `Desk`, Msg `DeskMsg`, Cmds `DeskCmd`; `DeskSchema` sends it to a page, and `takenNow` says which keys it takes now. `hold.ts` is the page's key holder: `holdMachine`, Model `Hold`, Msg `HoldMsg`, Cmds `HoldCmd`. `keys.ts` is the shipped table and who owns a press (`keyOwner`); `keymap.ts` reads the keys file and lays it over that table (see [Your keys](#your-keys-keybindingstoml)). `layout/` is Tuval's layout tree, ported with its tests, the leaf named "tile". A container runs `horizontal` or `vertical`, and nested containers alternate; any tile can fold into a strip, and a container whose tiles are all folded counts as folded (`isFolded`). `layout/line.ts` opens a tsh line's windows in place (`openLine`), folds them past `MIN_WINDOW`, and drops them from a kept desk (`quiet`). |
 | `src/keys/` | The keys editor. `machine.ts` is the window's tea machine: search, selection, recording and the unsaved key (`editorMachine`). `program.ts` is the `keys` program, one run per open editor, which sends checked edits to the `KeybindingManager`, and the tsh `keys` word that waits on it. `window.tsx` draws it in the palette layer with Manti's parts. |
 | `src/editor/` | The line editor, a tea machine: keys in, screen bytes out (`editor.ts`). `keys.ts` names each key, `screen.ts` draws, `cells.ts` lays text out in cells as ghostty-web does, from a table of its wasm's answers (`cells.table.ts`), `history.ts` keeps the history in a file, shared by every tile, `grid.ts` reads bytes back as rows for the tests. |
 | `src/messages.ts` | The seven message types as Effect Schemas, and their strict readers. |
 | `src/files.ts` | What the app's own scheme serves: one page, its script and one stylesheet, with a Content Security Policy. |
 | `src/asks.ts` | The one count of asks, a tea machine in the host (`asksMachine`): it reads the ledger's facts once a second when there is news and folds what waits on the person. Main reads the same value off the desk port for the Dock badge and the notification. The person's later and seen (`Marks`) come in as its flags from `asks.json`, and the host writes them back on each change (`src/host/serve.ts`). |
-| `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `pop.ts` and `pop.tsx`, what opens over the desk: one raised box of rows for every popover (`Menu`, `Palette`, `Panel`, `useTip`), its keys as one pure function (`menuKey`), by [the popover rule](../../docs/direction/popovers.md). `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. The colors, type scale and spacing are [`@kampus/fabrika-design`'s](../../packages/fabrika-design/README.md) tokens; `window.css` keeps the app's own names for them at its top, and a program's view uses them and has no theme of its own. The UI's parts are [Manti UI's](../../docs/direction/ui-on-manti.md): the package sets Manti's tokens from ours, and `manti-reset.css` keeps Manti's reset to Manti's own parts. |
+| `src/window/` | `desk.tsx`, the page: the tiles, their title bars and borders, the strips of folded tiles. `frame.ts` and `frame.tsx`, the window's frame: the top bar, the bottom line, the asks list and the palette (see [The window's frame](#the-windows-frame)). `pop.ts` and `pop.tsx`, what opens over the desk: one raised box of rows for every popover (`Menu`, `Palette`, `Panel`, `useTip`), its keys as one pure function (`menuKey`), by the popover rule. `terminal.ts`, a tile's terminal: ghostty-web, made once and moved between slots. `windows.tsx` lists each program view the app knows. The colors, type scale and spacing are [`@kampus/fabrika-design`'s](../../packages/fabrika-design/README.md) tokens; `window.css` keeps the app's own names for them at its top, and a program's view uses them and has no theme of its own. The UI's parts are Manti UI's: the package sets Manti's tokens from ours, and `manti-reset.css` keeps Manti's reset to Manti's own parts. |
 | `build.ts` | Bundles `dist/` with esbuild: `main.mjs`, `host.mjs`, `preload.cjs`, `desk.js`, and the page's plain files. Its one stylesheet, `window.css`, is Manti's, then React Flow's base rules, then `@kampus/fabrika-design/tokens.css`, then `src/window/manti-reset.css`, then `src/window/window.css`. |
 | `table.ts` | Writes `src/editor/cells.table.ts`: asks ghostty-web's wasm the width and grapheme class of every code point (`cells.probe.ts`). Run it with `pnpm table` after a new ghostty-web; `cells.test.ts` fails until then. |
 | `shots.ts` | The page alone in headless Chromium, with no Electron and no host: the built `dist/`, handed a desk and the tracker, ticket and map views of the stand-in ticket #7, the trace of that ticket's lanes, and the trace of `seq --to 3 | tally` (as it opens, and opened down to the step add 2), as the host would send them. Two of its desks come from the desk machine's own steps: `tracker | ticket | trace` opened beside the map, and in a spot too tight, its extra windows folded. Writes `docs/round-6/*.png`. No window, no network. Not in `pnpm test`. |
@@ -228,8 +226,8 @@ ours opens with Cmd-K, as Linear's does.
 
 ### Your keys: keybindings.toml
 
-Every key above can be changed in `~/.fabrika/keybindings.toml`
-([keybindings are configurable](../../docs/direction/keybindings-are-configurable.md)). The file
+Every key above can be changed in `~/.fabrika/keybindings.toml`.
+The file
 holds only what you changed; the rest stays as shipped. A save is heard at once, with no restart.
 A start on a home of its own (a test or an agent, `FABRIKA_HOME` set) reads `keybindings.toml` in
 that home instead, so a test never reads your real file.
@@ -448,15 +446,14 @@ When something is wrong, its word says so, in red where it is broken:
   its `stop` tool, with a why, stops a job of yours.
 - **A run in the foreground covers its tile.** tsh waits behind it. Ctrl-C stops it, and tsh is
   back. The other tiles stay as they were.
-- **A line with several windows opens in place,** in the tile it was typed in
-  ([a line opens in place](../../docs/direction/fold-not-tabs.md#a-line-opens-in-place)).
+- **A line with several windows opens in place,** in the tile it was typed in.
   `tracker | ticket | trace` in t2: the tracker covers t2, and the ticket and the trace open as
   new tiles beside it, in t2's place, each with a third of its space. In a row they become
   siblings; in a column they nest as a row. Past 220 by 120 px a window, all but the first open
   folded. Unfolding one takes space only from the line's other windows.
 - **The line carries the ticket picked.** Pick #7 in the tracker, and the ticket and the trace
   both show #7; pick another, and both follow. Each sends the ticket it is on, by its number,
-  each time that changes ([the pipe the line carries](../../docs/direction/fold-not-tabs.md#the-pipe-the-line-carries)).
+  each time that changes.
   In the trace, a step of #7 opens to its job's spans in place.
 - **A line's tiles and strips share one faint tint,** one of six, the first no other line has.
   A run alone has none.
@@ -799,8 +796,7 @@ Left for later, from Tuval's keys and the build:
   and names the lock.
 - **A host of another version or build is stopped only when the person confirms,** and its running
   jobs stop with it. They come back with `attach %n`. A job whose kind's `recovered` sends a
-  call that was out sends it again
-  ([an old host is named, then restarted](../../docs/direction/an-old-host-is-named-then-restarted.md)).
+  call that was out sends it again.
 - **An old app that meets a newer host** reads the build in its hello as a bad line, and closes
   the link.
 - **The link's version counts the message shapes, not what they mean.** A change in behaviour

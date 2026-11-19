@@ -10,7 +10,7 @@ import type { Criterion } from "../review/pack.ts";
 import type { TaskOutcome } from "./outcome.ts";
 import { TaskView, taskGate } from "./view.ts";
 
-// One task of a plan, built (docs/direction/done-is-per-criterion.md, "One PR per plan"): a fresh
+// One task of a plan, built: a fresh
 // builder per task, its commit on the plan's one branch, no pull request. One agent sits inside
 // it, the builder; the machine decides everything around it:
 //

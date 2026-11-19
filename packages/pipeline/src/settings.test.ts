@@ -19,7 +19,7 @@ import {
 } from "./settings.ts";
 
 // One repository's .fabrika/fabrika.toml, the load rules, and the review rules
-// read from it (docs/direction/one-fabrika-toml-per-repo.md).
+// read from it.
 
 /** The settings `text` makes, or why it is refused. */
 const read = (text: string): Promise<Settings | string> =>

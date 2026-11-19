@@ -2,8 +2,7 @@
 // step its event happened in (WindowMachine.laws.test.ts, S8), and an end only for a tile that has no
 // focus then (S9, where focus is known); this holds that the page says exactly the current burst as
 // one line, whatever the tiles show, so a tile that stays ended is never said again. An end is said in
-// the tile guideline's words (docs/direction/tile-guidelines.md, "What a screen reader is told",
-// 0543): `tracker in t2 ended`, the program's own name and the tile's short handle, the same two the
+// the tile guideline's words: `tracker in t2 ended`, the program's own name and the tile's short handle, the same two the
 // tile's own name gives, and no exit reason, which the guideline did not study.
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";

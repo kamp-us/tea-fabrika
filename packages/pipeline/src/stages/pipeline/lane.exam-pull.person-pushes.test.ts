@@ -63,7 +63,7 @@ describe("the exam's pull request", () => {
 
   // Option A is for a commit a person pushed to the exam branch. The lane's own head is never at
   // risk: it is in the lane's carry. So what is kept is the branch as the remote holds it when the
-  // redo's push replaces it (docs/direction/read-fresh-run-alone.md), and it is kept on the remote,
+  // redo's push replaces it, and it is kept on the remote,
   // where a person can fetch it and a lost clone does not lose it.
   /** A person's change, on a file no step of the lane writes. */
   const PERSONS = { path: "docs/person.md", text: "A person's note on the rule changes.\n" };
@@ -157,7 +157,7 @@ describe("the exam's pull request", () => {
     keptOnRemote(ran, pushed, old, said);
   });
 
-  // The owner's rule (docs/direction/read-fresh-run-alone.md): a stage that must replace a branch
+  // The owner's rule: a stage that must replace a branch
   // keeps the old head under a kept ref first, and says so on the ticket. A redo on the exam head
   // may instead push on top of a person's commit. These tests do not pick which: they pin that the
   // person's commit is not lost, and that a replace is named on the ticket.

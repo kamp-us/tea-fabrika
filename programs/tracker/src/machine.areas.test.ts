@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { folders, load, save, shownOf, statusOf, type Tracker, tracker } from "./machine.ts";
 import type { Write } from "./ticket.ts";
 
-// Areas PR 1, today's version (docs/direction/areas.md, call 7; the plan's a6): the tracker's
+// Areas PR 1, today's version: the tracker's
 // first open asks for the first areas. While the ledger has no area and the person has not
 // skipped, the list page shows the suggestions; making them writes one `make_area` each, in the
 // order ticked; a skip is the machine's own state, not a fact, and the step does not come back.

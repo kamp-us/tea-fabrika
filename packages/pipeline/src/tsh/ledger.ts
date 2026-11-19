@@ -7,7 +7,7 @@
 // One tsh per fabrika home at a time. A second one, while the first runs, is refused and says so:
 // it does not share the first one's ledger, which would stop under it when the first closes.
 //
-// node:sqlite stays the way out (docs/direction/a-local-first-sync-engine.md): `sqliteLedger` is
+// node:sqlite stays the way out: `sqliteLedger` is
 // the same `Ledger` on a file, kept for when the Durable Object fails us. Which one tsh uses is
 // the repository's pick, `[ledger] at` in its fabrika.toml (`local`, this one, when left out),
 // printed at start (../setup.ts); never tsh.toml's, so two machines on one repository pick alike.

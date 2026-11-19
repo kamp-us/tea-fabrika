@@ -25,8 +25,8 @@ export { AskFor, askedFor, askedStep, LaneStep, STEPS };
 //   ROUTES.mutation["stuck:run_failed"]       // {_tag: "once"}: mutation again; twice in a row, stop
 //
 // A row a step's own run can fix goes to a step, a service's wait, or once: never to a stop. Only the
-// rows a person decides ask, and only `done`, a reason in `FINAL` or a closed ticket ends a lane
-// (docs/direction/jidoka-and-andon.md, experiment 193). The lane reads a row in `after` (./machine.ts).
+// rows a person decides ask, and only `done`, a reason in `FINAL` or a closed ticket ends a lane.
+// The lane reads a row in `after` (./machine.ts).
 
 /**
  * What a step sent back is handed, besides its plan: the reason it runs again. `names`: the failing

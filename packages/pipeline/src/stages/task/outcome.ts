@@ -3,7 +3,7 @@ import { type Name, outcomesOf } from "../outcome.ts";
 
 // What one task's build hands back (./machine.ts): one typed answer, in the shape every stage uses
 // (`../outcome.ts`). A task build ends in a commit on the plan's one branch, never in a pull request:
-// the plan opens one pull request once every task is in (docs/direction/done-is-per-criterion.md).
+// the plan opens one pull request once every task is in.
 
 const task = outcomesOf({
   /** `head`: the plan's branch after the push. `changed`: this round added a commit. */

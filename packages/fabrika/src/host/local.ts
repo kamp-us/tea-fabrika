@@ -1,5 +1,5 @@
 // The local ledger: the Durable Object, in Miniflare, in a child process on this machine. The shape
-// docs/direction/a-local-first-sync-engine.md decided, from experiments 93 and 94:
+// decided from experiments 93 and 94:
 //
 //   - workerd's own socket (`direct`), on a fixed port, so a restart keeps the same URL;
 //   - the child in its own process group, and every signal to the whole group: a kill to the Node

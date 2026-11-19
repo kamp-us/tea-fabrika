@@ -1847,7 +1847,7 @@ describe("a stopped lane goes on, case by case", () => {
     expect(first?.carry).toMatchObject(moved);
   });
 
-  // Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). A pushed branch takes main in
+  // Self-fix PR 10, Part 4. A pushed branch takes main in
   // by a merge, so its head moves. The fresh read runs `carry` from what the review judged to the
   // merged head, and says so in `review`. Only a review that does not stand there sends the lane back
   // to review. One that stands goes to the push, so the pull request shows the merged head, then on.

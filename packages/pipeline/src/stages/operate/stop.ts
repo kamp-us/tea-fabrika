@@ -22,7 +22,7 @@ import { LoopOutcome } from "./outcome.ts";
 //     with no new lowest (the stall rule)
 //   open, otherwise                       build again, told what is open
 //
-// There is no cap on rounds (docs/direction/done-is-per-criterion.md): a list
+// There is no cap on rounds: a list
 // that keeps getting shorter keeps going back to the builder, however long it
 // was. Only the stall rule stops a loop that still has work.
 //

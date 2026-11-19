@@ -2,7 +2,7 @@ import { hash } from "@kampus/fabrika-old";
 import { Effect, Schema } from "effect";
 import { answerRefused, factsOf, Body, type Entry, type FactOf, type Hash, type Ticket, Title } from "./ticket.ts";
 
-// What an approval covers, and what takes it back (docs/direction/tickets-start-in-our-tracker.md).
+// What an approval covers, and what takes it back.
 //
 //   a person clicks approve, having read {title: "Login fails", body: "On main."}
 //   tracker/ticket/3/inbox  {type: "answered", ask: "a-1", pick: "approve", note: "", text: "sha256:…"}

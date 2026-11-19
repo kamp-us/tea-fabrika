@@ -56,7 +56,7 @@ import { type Cap, capOf, capsOf, type Icon, type Piece, type Row, type Section,
 // model and an update with no Cmd, Elm's `Browser.sandbox`: `frameUpdate` below. The desk's own
 // state stays the host's.
 //
-// Info mode follows the modes guidelines (docs/direction/modes.md, M2 to M4): its state is one
+// Info mode follows the modes guidelines: its state is one
 // value (`InfoMode`); it is said in words on the bottom line, which stays with the bars hidden; one
 // status region tells a screen reader it came on or went off, and nothing on each part explained;
 // it explains what keyboard focus is on, from the moment it comes on, as well as what the pointer
@@ -836,8 +836,7 @@ type PaletteSource =
   | { readonly _tag: "projects"; readonly press: Press };
 
 /**
- * What showed the projects box, kept through the opening it starts (docs/direction/project-window.md,
- * "What the ledger records"): `box` for the opening binding or the `show projects` word, `button`
+ * What showed the projects box, kept through the opening it starts: `box` for the opening binding or the `show projects` word, `button`
  * for the top bar's project button, `menu` for File > Open Project….
  */
 export type Press = "box" | "button" | "menu";
@@ -901,7 +900,7 @@ export const middleFree = (name: Span, items: readonly Span[]): boolean =>
   items.every((at) => at.right + NAME_ROOM <= name.left || name.right + NAME_ROOM <= at.left);
 
 /**
- * Info mode, as one value (docs/direction/modes.md, M2). `never`: it has not come on, so the status
+ * Info mode, as one value. `never`: it has not come on, so the status
  * region says nothing, since no mode is not news. `on`: the bottom line explains whatever the
  * pointer is over or keyboard focus is on; `explained` is what it says now, or `null` when nothing
  * there has words. `off`: it was on and was left, so the region says it is off until it comes on
@@ -965,7 +964,7 @@ export const EXPLAIN_ON = ["pointerover", "focusin"] as const;
 /**
  * Whether the bottom line shows. With both bars hidden it still does while you are mid-key (the
  * prefix armed, or the desk's own question waiting), while a note is up, and in info mode, whose
- * word is said there: a mode is always seen (docs/direction/modes.md, M3).
+ * word is said there: a mode is always seen.
  */
 export const bottomLineShows = (f: Frame, desk: MidKey): boolean =>
   !f.bare || desk.armed || desk.asking || f.note !== null || f.info.kind === "on";

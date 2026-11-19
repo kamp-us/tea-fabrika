@@ -223,7 +223,7 @@ describe("the ship gate, line by line", () => {
   });
 });
 
-// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). The facts read names each head
+// Self-fix PR 10, Part 4. The facts read names each head
 // the rows were carried from to this one: code found the diff they judged still stands here (a
 // `carried` fact). Those rows count at this head, and `other_head` now means "no row carried here".
 // On ticket 117 a format-only commit moved the exam's head, and this line sent it to a reviewer.

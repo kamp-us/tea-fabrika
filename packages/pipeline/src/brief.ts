@@ -1,9 +1,8 @@
 import { Schema } from "effect";
 
 // Brief: one schema per role, filled by code, and turned into the agent's
-// first message by a render function (docs/direction/new-combos.md). The
-// markdown is a view made from the data and is never read back
-// (docs/direction/data-first-markdown-is-a-view.md).
+// first message by a render function. The
+// markdown is a view made from the data and is never read back.
 //
 // The point is poka-yoke: what a role's schema has no field for cannot reach
 // that agent. A reviewer's brief with no field for the chat cannot carry the

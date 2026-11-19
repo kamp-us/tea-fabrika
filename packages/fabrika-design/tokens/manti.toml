@@ -1,5 +1,5 @@
 # Manti's tokens, each set from one of ours by its custom property's name, or to a plain value
-# with its reason (docs/direction/ui-on-manti.md). The build writes them into tokens.css's
+# with its reason. The build writes them into tokens.css's
 # manti region, in this order. A plain value is never a color: law 11 holds the list to shrink.
 
 # Manti's type, from our scale.

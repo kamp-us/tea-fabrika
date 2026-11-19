@@ -424,7 +424,7 @@ describe("the test writer's run on the base, when it fails", () => {
 
 // The push stage's push, on real git over a bare remote, and its ticket on a ledger in memory. A push
 // that replaces the lane's branch keeps the head it replaces and says so on the ticket: one line a
-// replace, each naming its own head (docs/direction/read-fresh-run-alone.md).
+// replace, each naming its own head.
 describe("the push stage's push of the lane's branch", () => {
   let dir: string;
   beforeEach(() => {

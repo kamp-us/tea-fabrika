@@ -182,8 +182,8 @@ export const byReview = (e: Entry): boolean => e.wordings[0].by === "review";
 
 /**
  * A review round, folded in: its rows, then what it found that no criterion
- * covers. Each such finding is a criterion of the book
- * (docs/direction/done-is-per-criterion.md), under an id from the same
+ * covers. Each such finding is a criterion of the book,
+ * under an id from the same
  * counter as the plan's, and blocks a merge like any other:
  *
  *   found, and no live criterion of a review's says it   added, and failed at this head

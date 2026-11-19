@@ -9,8 +9,7 @@ is linked; the others have no other home yet.
   you give a lean; a guess comes after, marked as a guess. If the plain way clashes with a stated
   goal, say so in one line, and let the owner pick. Never hide it behind a custom design.
 - **Name the Elm answer first.** `@demlik/tea` is the Elm architecture in TypeScript. Parents are
-  written by hand and step their children. Exceptions are named in
-  [Elm first](../../../../docs/direction/elm-first.md) with their reason; the first is tsh lines. The same
+  written by hand and step their children. The one exception so far is tsh lines. The same
   goes for coordination (registry, mailbox, links, monitors, supervisors): do what Erlang/OTP does
   unless a written reason says otherwise.
 - **tea stays small.** A host composes tea and Effect; tea does not grow to fit a host, and it does
@@ -19,8 +18,8 @@ is linked; the others have no other home yet.
   it, so use it, and do not work around it. What these experiments decide wins over an older demlik
   issue or ruling. Real tea bugs stay their own tickets.
 - **Never wait on upstream.** Patch a package we do not own with `pnpm patch`, file the upstream
-  issue the same day, and keep building; the bump that takes the release deletes the patch
-  ([patch upstream locally](../../../../docs/direction/patch-upstream-locally.md)). Read the package first and
+  issue the same day, and keep building; the bump that takes the release deletes the patch.
+Read the package first and
   patch only a gap or bug that read proved. An upstream issue reports one bug
   we proved, with its repro; a list of missing features found by reading is patched locally and not
   reported in bulk.
@@ -49,7 +48,6 @@ is linked; the others have no other home yet.
 - **Protocols first, and a browser is always a client.** Name the protocol a boundary speaks before
   its implementation. A protocol may not need what a browser lacks: no Node, no Unix socket, no
   files, no WebSocket-level frames. Ask of every design: could a browser tab be this client?
-  ([a browser is always a client](../../../../docs/direction/a-browser-is-always-a-client.md)).
 - **The data shape comes first.** Ask of every design: what fact is lost forever if we don't record
   it now? A fact that exists only when something is written (who, when on their own clock, what they
   saw, why) goes in now, even if nothing reads it yet: a field can be added later, but the entries
@@ -58,17 +56,17 @@ is linked; the others have no other home yet.
   recorded but must not be trusted, keep it out of the deciding code's types.
 - **Record wide, read later.** Record every measure we can, even if nothing reads it yet. The
   limits: it must not slow the work in a way we can measure, and it never holds a secret. Content a
-  person may want gone stays deletable
-  ([an agent run keeps its content](../../../../docs/direction/an-agent-run-keeps-its-content.md)). The
+  person may want gone stays deletable.
+The
   industry's name is wide events (Honeycomb; Stripe's canonical log lines).
-- **Names.** Use the industry's word for a thing
-  ([use the industry's names](../../../../docs/direction/use-the-industrys-names.md)), checked on every pull
+- **Names.** Use the industry's word for a thing,
+checked on every pull
   request, prose included.
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not `reasonCode`. A key
   does not say again what its parent already says: inside an outcome, the reason is `reason`, not
   `outcomeReason`. If a short word could mean two things, pick a clearer short word before you reach
   for a long one. A short word keeps its one meaning inside its
-  [bounded context](../../../../docs/direction/we-follow-ddd.md): `at` is a time, `by` is who wrote it, `_tag`
+  bounded context: `at` is a time, `by` is who wrote it, `_tag`
   is the case. Today's code keeps `why` and `kind` until that code goes.
 
   ```ts
@@ -103,7 +101,7 @@ is linked; the others have no other home yet.
 ## Check what is settled first
 
 Before any question to the owner, design question, recommendation
-or plan, search `.kalfa/decisions/`, each context's `GLOSSARY.md`, `docs/direction/`, `experiments/` and the plan for the
+or plan, search `.kalfa/decisions/`, each context's `GLOSSARY.md`, `experiments/` and the plan for the
 topic. Start with `rg -il "<words>"` over those folders (and `.kalfa/patterns/`, `.kalfa/runbooks/`),
 in two or three wordings, then read every hit and look for what a word search cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
 shape with the note it says it builds, and name any place it walks a decision back. A claim about
