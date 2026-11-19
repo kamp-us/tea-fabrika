@@ -1,811 +1,864 @@
 
 Plancheck-Version: 3
 
-# Plan: ticket 1003, fabrikalfa's first feature, our own merge queue, in `infra/fabrikalfa`
-
-This is a new top-level folder, `infra/`, beside both versions. It is neither `next/` nor today's
-version. It follows `next/`'s standards ([0537](../../../.decisions/0537-infra-holds-our-own-small-services.md)),
-and it imports nothing from either. It builds 0537 and the scope in tracker ticket 1003. One small
-change touches today's CI files, named where it comes up.
-
 ```ts
-// The whole idea. One Durable Object per repository holds the queue as a log of Msgs.
-// Its state is the fold of that log through one tea machine; every wait is an alarm.
-const step = (model: Model, msg: Msg) => applyCell(queue(settings), model, msg); // pure, from @demlik/tea
+// The whole idea, a sketch. fabrikalfa is one Worker: one host, many clients (0616). Each day-one
+// job is a program (0601), each program is one Durable Object process with one journal on the
+// ledger, and every GitHub call goes through a kalfa protocol, never straight to GitHub.
+const programs = { merger, checks, freeze, settings, tokens }; // each is Program.make(name)(init).pipe(...)
 
-// A webhook appends a Msg and sets the alarm. The alarm does every GitHub call.
-// The slow path, for PR 1280 at head h1 while main is m1:
-//   entered  { pr: 1280, head: h1, by: "owner", fix: false, kind: "code", green: true }
-//   stage_ok { main: m1, head: h1, commit: s1, tree: t1 }      // queue/staging = merge(m1, h1)
-//   checked  { commit: s1, name: "ci-required", result: "pass" }
-//   merge_ok { commit: c1 }                                      // squash of 1280, pinned to h1
-//   verify_ok{ commit: c1, tree: t1, parent: m1 }               // main's tree is the tree we tested
-// Model after the fold: { _tag: "idle", main: c1, line: [], red: null, blockers: { _tag: "known", issues: [] } }
+// A client asks over HTTPS. The door checks who asks (the WritePolicy) before the ask reaches an inbox.
+//   POST /ask   { to: "merger", input: { _tag: "arm", pr: 1280, head: "h1", leaks: "clean" } }
+//   -> the door: Authorization names identity { _tag: "agent", environment: "laptop" }; may it arm? yes
+//   -> merger's inbox -> one step: gates pass, Merges.enqueue(1280, h1) through @kalfa/codehost
+//   -> journal: message { id, at, msg: arm { by: agent laptop } }, applied { state: armed 1280 at h1 }
+//   -> answer   { _tag: "armed", pr: 1280, head: "h1" }
+// GitHub's own merge queue still merges. merger only arms into it, in shadow first.
 ```
+
+# Plan: ticket 1003, fabrikalfa's day-one programs, `merger`, `checks`, `freeze`, `settings` and `tokens`, on today's stack
+
+**Which version:** neither `next/` nor today's version. This is `kalfa/`, which follows `next/`'s
+rules ([0537](../../../.decisions/0537-infra-holds-our-own-small-services.md),
+[0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md)). It imports nothing from
+`next/` or from today's `packages/`, `programs/` and `apps/`. One slice changes two of today's lead
+scripts, named where they come up. This plan replaces the plan of
+[pull request 1279](https://github.com/kamp-us/tea-fabrika/pull/1279), which the owner held on
+2026-11-14 and which the review of it sent back.
+
+**Today's stack, read in the lockfile:** `effect` 4.1.3 with the repo's patch, `@demlik/tea` 0.29.0
+(the `catalog:` version that `next/` and the root use) with the repo's tea patch (named under `patchedDependencies` in `pnpm-workspace.yaml`),
+which adds `owed()` and `dispatch(msg, { answerTo })`, and `alchemy` 2.0.0-beta.85. tea 0.25.0 and
+0.23.0 are still in the lockfile for today's version only (`catalog:old`). This plan uses none of
+the older ones.
+
+## Doubt first
+
+Three calls are under 80%. Each is taken, with the branch it would undo.
+
+- **Where the app lives: `kalfa/fabrikalfa`, named `@kalfa/fabrikalfa` (65%).** 0616 makes
+  fabrikalfa an app, "the same tier as fabrika", and the glossary row says it is not a kalfa package.
+  0556 says every package that is our infra takes the `@kalfa` scope and lives in `kalfa/`, its
+  consequences name this very package, and 0537 puts its services in `kalfa/`. 0601 lets a
+  `Program.make` program live in `next/` or `kalfa/` only. So the plan reads 0616 as "an app, not a
+  protocol, provider or tooling library": it sits at the top of the kalfa import graph, joins
+  Layers, and nothing imports it. The other branch is `next/apps/fabrikalfa` as
+  `@kampus/fabrikalfa`; it would undo 0556's scope rule and put a tool we use to ship beside the
+  product it ships. A rename later is one `git mv` and one name.
+- **Long work through tea's `owed()` (70%).** 0601 says long work uses `owed()` and
+  `dispatch(msg, { answerTo })`, read in the patch. It leaves open the name of the piece a program
+  uses for it and how private answers work. The plan uses it in one place, merger's wait for
+  GitHub's queue, and says what it falls back to if `@kalfa/program`'s busy flag holds the whole
+  program while one landing is owed.
+- **The packages it builds on do not exist on main yet (75% they land as named).** On main today:
+  `kalfa/config`, `kalfa/quality` and `kalfa/records`. `@kalfa/ci` is on ticket 810's branch
+  (`fabrikalfa/t810-docs-only-classifier`, `kalfa/ci/src/DocsOnly.ts`). The rest come from other
+  tickets, in the table under [Builds on](#builds-on). Slice 1 waits for all of them.
 
 ## What changes, in one paragraph
 
-A new pnpm package, `@kampus/fabrikalfa`, at `infra/fabrikalfa`, named for the existing fabrikalfa
-GitHub App it runs as (owner, 2026-11-14). The merge queue is its first feature; the `sev0`
-issue, `/merge` and later chat commands are fabrikalfa features too. It holds one Cloudflare Worker deployed with
-Alchemy to the owner's account. The Worker takes GitHub's webhooks at `POST /github`, checks the
-`X-Hub-Signature-256` header, turns each event into one Msg, and hands it to the `Fabrikalfa`
-Durable Object. The object appends the Msg to its log in SQLite, steps one root tea machine,
-`Fabrikalfa`, which steps its children by hand (`Blockers`, the open `sev0` issues; `Queue`, the
-line, main and a red main; and `Queue`'s child `Merger`, which lands one change), caches the
-result, and sets one alarm. The alarm does every GitHub call through two services, `CodeHost` and
-`Ci`, each with a REST layer and an in-memory layer. A change enters with a `/merge` comment
-and lands by the fast path (its head already holds main and its checks are green) or the slow path
-(a staging branch of main plus the change, built through GitHub's API, its checks run there, then a
-squash pinned to the head, then a check that main's new tree is the tested tree). It runs in
-shadow mode first, beside GitHub's merge queue, at no CI cost, then live.
+A new app package, `@kalfa/fabrikalfa` at `kalfa/fabrikalfa`: one Cloudflare Worker deployed with
+Alchemy, which hosts five programs, each written as `Program.make(name)(fn)` with its pipes (0601).
+The Worker takes GitHub's webhooks at `POST /github`, asks from clients at `POST /ask`, views at
+`GET /view/<program>`, and Cloudflare's cron triggers. It turns each into one input for one
+program's inbox. Each program's state and every step are in that program's journal, the `Journal`
+of `@kalfa/program` built by `@kalfa/ledger`'s `journal` Layer on `@kalfa/provider-cloudflare`'s
+Durable Object Ledger; tests use the memory Ledger. Every GitHub call goes through
+`@kalfa/codehost` and `@kalfa/ci`, whose GitHub Layers are in `@kalfa/provider-github` (0612,
+0614, 0616). Pure rules (is it green, is it docs only, is a path a leftover, does the freeze keep a
+run) are functions in `@kalfa/ci`, not programs. `merger` arms pull requests into GitHub's own merge
+queue and admin-merges only in a sev, one fix at a time on current main. `checks` flags a ready
+pull request's missing or stuck required check. `freeze` cancels CI runs in a sev0 and spares
+main's own `check` runs. `settings` applies the repo and queue settings from a file and reports
+drift every hour. `tokens` vends one-hour push tokens for `fabrikalfa/*` branches, so the App's
+private key leaves the laptop. GitHub's queue stays in charge until merger passes the code host's
+conformance laws and its shadow run.
+
+## Builds on
+
+| Package | What fabrikalfa uses | On main? | Brought by |
+|---|---|---|---|
+| `@kalfa/quality/vitest` | `it.effect.prop`, `runsFor`, `lawsOn(memory, real)` (0538) | no | ticket 1189 |
+| `@kalfa/codehost` | pull requests, merges (enqueue, admin), comments, labels, the conformance suites (0614) | no | ticket 1190 |
+| `@kalfa/ci` | `Runs` (0612), `DocsOnly` (ticket 810), the gates this plan adds | branch only | tickets 810 and 1191 |
+| `@kalfa/provider-github` | the GitHub Layers for codehost and ci, the App's credentials (0616) | no | ticket 1192 |
+| `@kalfa/program` | `Program.make`, `Journal`, `Errors`, `Machine`, `Supervisor` (0601) | no | no ticket found; 0601's build order |
+| `@kalfa/ledger` | `Ledger`, its memory Layer, the `journal` Layer, `WritePolicy` (0601, 0616) | no | no ticket found; 0601's build order |
+| `@kalfa/provider-cloudflare` | the Durable Object Ledger and program hosting on Workers (0616) | no | no ticket found |
+
+The tracker was not readable from this step, so the ticket numbers are the brief's, in its order.
+`@kalfa/provider-github` is the new name for `@kalfa/github` (pull request 1662). The three without
+a ticket are 0601's build order: tea's logged store, `@kalfa/program`'s v0, `@kalfa/ledger`, then
+the provider. The lead files those tickets if they are missing.
 
 ## How others do it
 
-Read from memory unless marked; nothing below was fetched this session. The tests step records a
-real response for each GitHub endpoint as a `vector:` fixture before the build relies on it.
+Read this session unless marked. `docs.github.com` was not reachable from this step, so every
+GitHub API fact below is from memory, marked so; the tests step records a real response for each
+as a `vector:` fixture before the build relies on it.
 
-- **Rust's bors** ([design doc](https://github.com/rust-lang/bors/blob/main/docs/design.md), read
-  in [experiment 266](../../../experiments/266-what-a-merge-queue-must-do.md)): merges the PR with
-  the latest main on `automation/bors/auto-merge`, pushes that commit to `automation/bors/auto`
-  where CI runs, and lands only what passed. Two branches, "because GitHub cannot set a branch and
-  merge into it in one call." One build at a time. It reads the workflow-completed event, never
-  check-suite-completed, which can arrive early. A refresh every few minutes resyncs with GitHub.
-- **bors-ng** ([docs](https://bors.tech/documentation/)): the same staging shape (`staging.tmp`
-  then `staging`), all through GitHub's API, never a clone. `r+` pins the head that was approved.
-- **GitHub's REST API**, the calls this plan uses:
-  - `PATCH /repos/{o}/{r}/git/refs/heads/{ref}` with `force: true`, and `POST .../git/refs` to
-    create one ([refs](https://docs.github.com/en/rest/git/refs)).
-  - `POST /repos/{o}/{r}/merges` with `base` (a branch) and `head` (a sha): 201 with the merge
-    commit, 204 when there is nothing to merge, 409 on a conflict
-    ([merge a branch](https://docs.github.com/en/rest/branches/branches#merge-a-branch)).
-  - `PUT /repos/{o}/{r}/pulls/{n}/merge` with `merge_method: "squash"` and `sha`: 200 merged, 405
-    not mergeable, 409 when `sha` is not the head
-    ([merge a pull request](https://docs.github.com/en/rest/pulls/pulls#merge-a-pull-request)).
-    It pins the head only, never the base; the tree check covers that gap.
-  - `GET /repos/{o}/{r}/compare/{base}...{head}` gives `behind_by`
-    ([compare](https://docs.github.com/en/rest/commits/commits#compare-two-commits)).
-  - `GET /repos/{o}/{r}/commits/{sha}/check-runs?check_name=...`
-    ([check runs](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference)).
-  - `GET /repos/{o}/{r}/pulls/{n}` and `/pulls/{n}/files`, and `POST /repos/{o}/{r}/issues/{n}/comments`.
-  - A GitHub App signs a JWT with RS256, then trades it at
-    `POST /app/installations/{id}/access_tokens` for a one-hour token
-    ([installation tokens](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app)).
-  - Webhooks carry `X-Hub-Signature-256: sha256=<hex HMAC-SHA256 of the raw body>`, checked in
-    constant time, and `X-GitHub-Delivery`, a unique id per delivery
-    ([validating deliveries](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)).
-  - `GET /repos/{o}/{r}/issues?labels=sev0&state=open` lists the open issues with a label, and the
-    `issues` and `pull_request` webhooks carry `labeled`, `unlabeled`, `opened`, `closed` and
-    `reopened` ([issues](https://docs.github.com/en/rest/issues/issues#list-repository-issues)).
-- **Kubernetes' Tide** ([Tide](https://docs.prow.k8s.io/docs/components/core/tide/)): while an open
-  issue carries the configured merge-blocker label, Tide merges only PRs that carry the matching
-  exception label. The issue says why, so it is the incident's record too. The owner picked this
-  shape for the sev0 freeze (2026-11-14).
-- **Elm and OTP.** A parent is written by hand and steps its child, so `Queue` steps `Merger`, the
-  same split as 0110's queue program and merger, inside one object. The log is Akka's event
-  sourcing, which `@demlik/tea/do`'s own docs name; the "owed effect" rule is its
-  `AtLeastOnceDelivery`. In this plan an owed call is part of the Model, so it rebuilds with the fold.
-- **A large merge queue's lessons**, which this plan keeps: land only the tree you tested; three
-  outcomes, pass, fail and infra, and "unsure is infra"; git is the record of what landed and the
-  database is a cache you can rebuild; a red main freezes product changes and lets fixes through;
-  a send with no answer is its own state, settled by checking what happened.
+- **Elm and OTP.** Each program is one process with private state and a mailbox, as an OTP
+  `gen_server` is, and a supervisor restarts it (0601's `Program.supervise`). Programs talk by
+  Sends into each other's inboxes, never by shared state. `settings`' output is piped into `checks`
+  and `merger`, and `freeze`'s into `merger`, as a parent passes a child's out-message on in Elm.
+- **tea's logged store, read in the 0.29.0 patch.** A step is confirmed only after it ends cleanly;
+  a crash hands it out again on boot under the same delivery id. A Cmd handler may return `owed()`
+  (`dist/core-PxoTxrNB.d.ts`: "A logged Cmd handed to an external owner without completing its
+  delivery"), and the answer comes later as `dispatch(msg, { answerTo: id })`, which the store
+  refuses with `unknown_answer` when that id is not owed. The journal is ordered opaque text, one
+  writer per stream (`dist/index-_evnHmXt.d.ts`, `Journal` and `FencedJournal`). The old plan's
+  hand-kept `owed`/`sent` call state is this, done by tea.
+- **Octo STS** ([github.com/octo-sts/app](https://github.com/octo-sts/app), read this session): a
+  GitHub App that trades an OIDC token for a short-lived GitHub token. Trust policies are files in
+  the target repository, `<name>.sts.yaml` in a `chainguard` folder of its GitHub folder, with
+  `issuer`, `subject` or `subject_pattern`, `claim_pattern` and `permissions`. A workload calls
+  `GET /sts/exchange?scope=<repo>&identity=<name>` with its OIDC token as the bearer; the App checks
+  the token against that policy and mints an installation token with only the policy's
+  `permissions`. The App asks GitHub for a superset of permissions and narrows each token. Octo STS
+  runs as an App of its own, apart from any App that merges.
+- **GitHub App installation tokens, from memory:** `POST /app/installations/{id}/access_tokens`
+  with `repositories` and `permissions` narrows a token to those; it lasts one hour; no permission
+  narrows it to a branch. A branch limit is a ruleset, and a ruleset's bypass list names who may
+  pass it, per actor, not per token.
+- **GitHub Actions OIDC, from memory:** with `id-token: write`, a job gets a JWT from issuer
+  `https://token.actions.githubusercontent.com`, with `sub` like `repo:<owner>/<repo>:ref:<ref>`
+  and claims such as `repository_id` and `job_workflow_ref`, verified against the issuer's JWKS.
+  No workflow in this repo asks for one today: a search of the workflow files for `id-token` finds none.
+- **GitHub's safe-settings**
+  ([README](https://raw.githubusercontent.com/github/safe-settings/main-enterprise/README.md), read
+  this session): settings as code in an admin repo, applied from the default branch on `push`, run
+  as a dry run (`nop`) on other branches, synced on a schedule (`CRON`), and drift is reverted.
+  `settings` follows it except for the revert: drift is reported, never reverted, because in a sev
+  the owner changes settings by hand on purpose (0532: he empties the queue).
+- **Kubernetes Tide** ([Tide](https://docs.prow.k8s.io/docs/components/core/tide/)): an open issue
+  with the merge-blocker label blocks merges, and the issue is the incident's record. The owner
+  picked this shape for a sev0 on 2026-11-14.
+- **Kubernetes priority and preemption**
+  ([PriorityClass](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)):
+  0612's model for which run may displace which. The freeze's keep-or-cancel rule is that kind of
+  admission rule, so it is a pure function in `@kalfa/ci`.
+- **bors and GitHub's merge queue:** pin the head that was approved, and land only what passed
+  (from experiment 266, read for the old plan). Day one does not build a queue; it arms GitHub's,
+  pinned to the head it checked, as `land.ts arm` does today.
 
-## Decided here
+## Calls taken
 
-Each in one line, with the note that decides it.
+Each decides how the code does what a note already says. A percentage is how sure.
 
-- **`infra/` imports nothing from `next/` or today's version.** The queue lands every change to
-  libfabrika, so it must keep working when libfabrika is broken. And its staging contract
-  (`stage(main, head)`) is not libfabrika's `CodeHost.update`. It reads `next/programs/pipeline`'s
-  `Merger.ts` and `Queue.ts` as its shape, rethought (0537: "a tryout home"). The one import is the
-  CI path classifier below, which is a pure function and the repo's one rule for docs-only.
-- **fabrikalfa is one tea machine tree, Elm's shape** (owner, 2026-11-14): the root `Fabrikalfa`
-  steps its children `Blockers` and `Queue` by hand, and `Queue` steps `Merger`. Below.
-- **The root's state is folded from a log in the object's own SQLite, stepped with `applyCell`,**
-  as `next/`'s `WatchersSql.ts` steps its machine inside a synchronous transaction (0050: the step
-  inside is a plain function). `@demlik/tea/do`'s `doEventSourcedStore` was read and not taken: it
-  takes the raw `DurableObjectStorage` and a Promise store, both of which 0042 keeps out.
-- **Every GitHub call is a Cmd an `update` returns, and the host runs it in the alarm.** No
-  `update` runs an effect. An input Msg changes state and sets the alarm to now; it returns no Cmd.
-  Only `timer` and Cmd answers return Cmds. So every owed call can be read from the Model, and a
-  crash between deciding and calling loses nothing (0105: every wait is an alarm).
-- **Each GitHub write is safe to repeat.** `stage` first reads the staging branch and answers it
-  when it already is `merge(main, head)`. `merge` answers the merge commit when the PR is already
-  merged. So "a send with no answer" is a `sent` call, and the next alarm sends it again.
-- **The fast path is: the head already holds main** (`compare` says `behind_by: 0`) **and
-  `ci-required` is green on the head.** Then the squash's tree is the head's own tree, and the
-  tested tree is known exactly. The wider form ("the green run tested the main we have now") needs
-  the base sha a `pull_request` run used, which no API field read here gives for sure. It is later.
-- **Pass, fail, infra** are read from the `ci-required` check run on the staging commit:
-  `success` is pass, `failure` is fail, and every other conclusion (`cancelled`, `timed_out`,
-  `startup_failure`, `stale`, `skipped`, `neutral`, `action_required`) or no run by the deadline is
-  infra. The ticket says timed-out is infra; that departs from `next/`'s `Change.verdict`, which
-  calls it red.
-- **Infra is retried once by staging again,** which makes a new commit and a new run, with no
-  `actions: write` permission. A second infra pauses the line for `pause` minutes with the same
-  change first, then it tries again. It is never charged to the change: no "failed" comment.
-- **Docs-only uses CI's own rule.** The pure part of `.github/ci/changes.mjs` (`classify` and its
-  path helpers, no `node:` import) moves to `.github/ci/paths.mjs`. A change is docs-only when
-  `classify(paths, "merge_group")` starts no job but `field`. That is 0183's "docs only" as CI
-  computes it, so the two cannot drift.
-- **Docs-only still takes the slow path when it is behind main.** 0537's binding constraint is
-  that the queue never lands a tree it did not test. CI runs only lint on such a staging commit, so
-  it is cheap. What docs-only changes is the freeze: a docs-only change goes through a red main.
-- **A red main freezes code changes.** When `ci-required` on main's head is `failure`, only a
-  change entered with `/merge fix`, or a docs-only change, may land. Green on a later main head
-  opens it again.
-- **A sev0 freeze is an open issue labeled `sev0`,** as Tide's merge blockers (owner, 2026-11-14).
-  Its body says why, so it is the sev log too. While one is open, only a PR labeled `sev0-fix`
-  lands; labels need write access. Closing the last open `sev0` issue ends the freeze. The queue
-  learns all of it from the `issues` and `pull_request` label webhooks, and on start (an empty log,
-  or a cache it had to drop) it reads the open `sev0` issues before it lands anything. This is how
-  the queue keeps 0532's "only the fix lands"; who calls a sev0 stays 0532's rule, not code's.
-- **A tree that does not match stops the line** until a person resumes it. It never reverts main
-  on its own. 0110 says the same, and that this is not a setting. The stop takes the same shape as
-  the freeze: the queue opens one issue labeled `queue-stopped` with the tested and landed trees in
-  its body, and closing it resumes the line. It is not labeled `sev0`: only the owner calls a sev0
-  (0532). **This waits on the owner:** 0534 lets automation open only `ci-scheduled` issues, and
-  the lead has asked him to widen it. Until he does, the build ships the stop without the issue:
-  the line stops, the queue comments on the PR that drifted, and the issue part stays out of the
-  product, behind the owner's answer, with Q7's issue half.
-- **`/merge` pins the head GitHub reports when the comment arrives.** The Worker reads the PR's
-  head, its `ci-required` at that head and its files before it hands the Msg on, as bors pins at
-  `r+`. A later push to the PR takes it out of the line (`pull_request` `synchronize`).
-- **A change whose checks are not green at `/merge` is refused** with a comment, as the ticket
-  says. Waiting for running checks is later.
-- **Only an App installation token calls GitHub.** The private key and the webhook secret live in
-  Cloudflare's Secrets Store, read through Alchemy's `Cloudflare.SecretsStore.ReadSecret`, and
-  never stored in the log, the Model or the view (0537's binding constraint).
-- **Alchemy's state goes to `Cloudflare.state()`, not `Alchemy.localState()`.** Read in
-  `alchemy` 2.0.0-beta.85, `src/State/StateEncoding.ts`: a `Redacted` value is written to state
-  as its plain text. With local state, the two secrets would sit in `.alchemy/` on the laptop, a
-  key outside the Secrets Store. The Cloudflare state store encrypts state with a key that lives in
-  the account's Secrets Store (`@alchemy.run/cloudflare` 2.0.0-beta.85, `src/StateStore/Store.ts`).
-- **The RSA key is read as GitHub gives it.** Effect 4.1.2's `KeyFormat.pem(KeyFormat.pkcs1)`
-  imports a PKCS#1 PEM (`effect/dist/crypto/KeyFormat.d.ts:156`), and `Signature` signs with
-  `rsaPkcs1v15Sha256`. The HMAC is `Mac.verify`, which compares in constant time
-  ([the crypto pattern](../../../.patterns/effect-crypto-through-services.md)).
-- **Tests use `@kampus/vitest`** (`next/packages/vitest`) from the first commit: its depth
-  setting (`runsFor({ fast, full })`), its three test groups (`*.integration.test.ts`,
-  `*.visual.test.ts`), and its runner for the same laws on a memory layer and a real layer. This
-  plan does not build that package; slice 1 waits for it to land. Each service's `layerMemory`
-  stays beside its service.
+- **The app is `kalfa/fabrikalfa`, `@kalfa/fabrikalfa` (65%).** See [Doubt first](#doubt-first).
+- **One Worker, one Durable Object process per program,** each found by its name, with one journal
+  stream and one inbox stream (0601, "Durable Objects as the model"; 0537, "one Worker"). 95%.
+- **A program's input function does the deciding and the GitHub call in one step.** A crash
+  hands the step out again, so every write is safe to repeat: enqueue answers "already armed",
+  an admin merge of a merged pull request answers its commit, a cancel of an ended run is a no-op.
+  This replaces the old plan's `owed`/`sent` state (0601: "A step handed out again after a crash
+  writes again"). 90%.
+- **Long work only where the answer comes from outside, later:** merger's arm waits for GitHub's
+  queue to merge or drop the pull request. The step returns owed, and the webhook's `merged` or
+  `dequeued` is dispatched with `answerTo` that delivery. 70%: 0601 leaves the piece's name and
+  private answers to `@kalfa/program`'s plan. If its busy flag holds the program while a landing is
+  owed, merger takes the webhook as a plain input from the `github` identity instead, which the
+  door already admits only with a good signature.
+- **Every action is a step, so it is in the journal.** A step's input message (with `by`, both
+  clocks and its id) and its applied state are tea's journal records; the state holds the action's
+  answer. No program writes to a second log. 90%.
+- **Cron triggers are the clock.** The Worker's `scheduled` handler sends `tick` inputs: every 5
+  minutes to `checks` and `freeze`, every hour to `settings`. No program keeps its own timer. A
+  Durable Object alarm per program would need a timer piece `@kalfa/program` has not named. 85%.
+- **The pure rules live in `@kalfa/ci`:** `docsOnly` (ticket 810), and two new files,
+  `Gates.ts` (`green`, `leftovers`) and `Freeze.ts` (`verdict`). A program calls them; none is a
+  program (the brief, 0612's "admission is ours and pure"). 90%.
+- **merger arms; it does not run a queue of its own.** GitHub's queue merges until merger, as a
+  `Merges` Layer of its own, passes `@kalfa/codehost`'s conformance laws and a shadow run. That is a
+  later slice (below). 95%.
+- **merger refuses a pull request that adds or keeps a `.rej` or `.orig` file,** at arm and at
+  admin merge. Both are what `patch` and `git merge` leave behind. 95%.
+- **The leak gate stays in the client for day one.** The private word list stays off the server
+  (0585: no agent reads or prints it). `land.ts` runs the leak check in the same run and asks with
+  `leaks: "clean"`; merger refuses an ask without it. Moving the words into the Secrets Store is a
+  later slice for the owner. 80%.
+- **A sev0 reaches fabrikalfa as an open issue labeled `sev0`** (owner, 2026-11-14), rebuilt from
+  the open issues on start. **The one fix landing now is named by the lead's `next` ask**, not by a
+  label: 0611 says the `sev` label grants nothing alone and one fix lands at a time. 85%.
+- **The freeze spares main's `check` runs on a push to main, and still cancels main's full run**
+  (`scheduled`), exactly 0611's rule. It also keeps a `merge_group` run and the named fix's runs,
+  as `Freeze.ts` in the sev skill does today. 95%.
+- **settings applies the file's settings on a push to main that changes the file, and the hourly
+  run only reports.** It never writes a bypass list: 0603, "never ... a change to the bypass list by
+  an agent". 85%.
+- **The settings file is `.fabrikalfa/fabrikalfa.toml`,** `@kalfa/config`'s repo file for the app
+  `fabrikalfa` (0585: `.<app>/<app>.toml`), read at main's head through the code host. One file
+  holds the programs' own settings and the repo's wanted state. 80%.
+- **tokens vends from the existing App** (owner, 2026-11-14), narrowed to this repository and
+  `contents: write` and `pull_requests: write`, what `botpush.mjs` needs to push and open a draft.
+  The branch limit is a ruleset, `agents`, that blocks branch writes outside `fabrikalfa/**` for any
+  actor not on its bypass list. 80%.
+- **tokens refuses while the App holds any bypass.** A token carries its App's bypass, so a push
+  token from an App that may pass main's rules could merge past them. merger's admin merge needs
+  that bypass, so it runs live only after the owner's bypass step, and at that step tokens moves to
+  an App of its own, as Octo STS is (below, "Waits on the owner"). 90%.
+- **CI by OIDC is part of the policy, and its code waits for its first user.** No workflow asks
+  fabrikalfa for anything today, so the trust-policy reader is a later slice; the WritePolicy
+  question settles its shape now. 80%.
 
 ## The shape
 
 ### Package layout
 
 ```text
-infra/
-  AGENTS.md           a short map: next/'s rules hold here, and what differs
-  fabrikalfa/         @kampus/fabrikalfa, the one package so far; one Worker
-    package.json        scripts: typecheck, deploy (alchemy deploy), dev
-    tsconfig.json       extends tsconfig.base.json, like next/'s packages
-    vitest.config.ts    @kampus/vitest's shared config
-    alchemy.run.ts      the stack: Worker, Fabrikalfa object, two secrets, settings
-    README.md
-    src/
-      Fabrikalfa.ts     the root machine and its wake; Host.ts runs it in the alarm
-      blockers/         Blockers.ts, the sev0 child machine
-      queue/            Queue.ts (child), Merger.ts (Queue's child), Outcome.ts, Settings.ts, View.ts
-      store/            EventStore.ts (contract), EventStoreMemory.ts
-      github/           CodeHost.ts, Ci.ts (contracts), CodeHostMemory.ts, CiMemory.ts,
-                        CodeHostRest.ts, CiRest.ts, AppToken.ts, Webhook.ts, internal/rest.ts
-      cloudflare/       FabrikalfaObject.ts, EventStoreSql.ts, Worker.ts (the Effect Worker)
+kalfa/fabrikalfa/            @kalfa/fabrikalfa: the app; nothing imports it
+  package.json                 private; scripts typecheck, deploy (alchemy deploy), dev
+  tsconfig.json
+  alchemy.run.ts               the Worker, one Durable Object class per program, cron triggers, secrets
+  README.md
+  src/
+    Worker.ts                  fetch (POST /github, POST /ask, GET /view/<program>) and scheduled
+    Webhook.ts                 verify the signature, decode one event into one program input
+    Ask.ts                     the ask protocol: the request, the answer, the error, as schemas
+    Policy.ts                  fabrikalfa's WritePolicy Layer: who may ask which program for what
+    Callers.ts                 the caller-token check: an environment's token to an identity
+    App.ts                     joins the Layers: provider-github, provider-cloudflare, ledger, program
+    merger/Merger.ts           the merger program
+    checks/Checks.ts           the checks program
+    freeze/Freeze.ts           the freeze program
+    settings/Settings.ts       the settings program
+    settings/Desired.ts        the file's schema: programs' settings and the repo's wanted state
+    settings/Drift.ts          wanted against live, pure
+    tokens/Tokens.ts           the tokens program
+  test/vectors/                recorded webhook payloads and GitHub answers, each labeled vector:
+kalfa/ci/src/Gates.ts          green, leftovers (pure)
+kalfa/ci/src/Freeze.ts         verdict (pure)
 ```
 
-`pnpm-workspace.yaml` gets one line, `- infra/*`. `pnpm -r typecheck` then covers it with no other
-change. `.oxlintrc.json`'s `next/**` overrides gain `infra/**`, so `next/`'s lint rules hold here.
-`layer-rules.json` gets three layers: `infra-queue` below `infra-github` below `infra-cloudflare`.
-`exam-paths.json` gets `infra/**/*.test.ts` and `infra/**/*Test.ts`. CI: `changes.mjs` learns that
-an `infra/` path runs check, typecheck and test but no `next/` job, and the root
-`vitest.config.ts` includes `infra/*/src/**/*.test.ts` outside the integration group. Every test on
-a pull request uses memory layers only (0536); the SQL store's suite runs in local workerd as an
-integration test on the 3-hour schedule.
+`pnpm-workspace.yaml` already lists `kalfa/*`, the root `vitest.config.ts` already runs
+each kalfa package's `src` tests, and `.oxlintrc.json` already holds `kalfa/**` to `next/`'s rules. None
+of the three changes. `boundary-rules.json` gets one library type, `kalfa-app`, for
+`kalfa/fabrikalfa`, which may import the kalfa protocol and provider packages and is imported by
+none. `exam-paths.json` gets `kalfa/fabrikalfa/test/**`.
 
-### Settings
+### The ask protocol
 
-Each new choice, asked "is this a setting?" (0069). All live in one Schema with defaults, set once
-in `alchemy.run.ts`, and passed to the Worker as one JSON env value, as `ledger-server`'s
-`alchemy.run.ts` passes `INSTANCE`.
+Protocols first: every client speaks the same tagged JSON over HTTPS, so a browser tab, `land.ts`
+and a CI job are the same kind of client.
 
 ```ts
-// infra/fabrikalfa/src/queue/Settings.ts, a sketch.
-export const Settings = Schema.Struct({
-  repo: Schema.String,                                  // "kamp-us/tea-fabrika"
-  main: Schema.String,                                  // "main"
-  staging: Schema.String,                               // "queue/staging": CI runs here (live)
-  scratch: Schema.String,                               // "queue/tmp": no CI, where the merge is made
-  mode: Schema.Literals(["shadow", "live"]),            // "shadow" until the owner's bypass
-  shadow: Schema.Struct({                               // when shadow is done (owner, 2026-11-14)
-    matches: Count,                                     // 10 landings in a row whose tree matched
-    slow: Count,                                        // 1: at least one of them by the slow path
-  }),
-  checks: Schema.NonEmptyArray(Schema.NonEmptyString),  // ["ci-required"], the check that decides
-  associations: Schema.Array(Schema.Literals(["OWNER", "MEMBER", "COLLABORATOR"])), // may /merge
-  labels: Schema.Struct({                               // the label names, as Tide's config holds them
-    blocker: Schema.NonEmptyString,                     // "sev0", on an issue (Tide's blocker_label)
-    fix: Schema.NonEmptyString,                         // "sev0-fix", on a PR
-    stopped: Schema.NonEmptyString,                     // "queue-stopped", the issue a drift opens
-  }),
-  fast: Schema.Boolean,                                 // true: take the fast path when it holds
-  wait: Minutes,                                        // 60: no ci-required by then is infra
-  retries: Count,                                       // 1: infra retries before a pause
-  pause: Minutes,                                       // 30
-  rounds: Count,                                        // 3: re-stages when main moves first
-  timeout: Seconds,                                     // 30: an unanswered GitHub call is "sent"
+// kalfa/fabrikalfa/src/Ask.ts, a sketch.
+export const Ask = Schema.TaggedUnion({
+  merger: { input: Merger.Asks },   // arm, admin
+  freeze: { input: Freeze.Asks },   // next
+  tokens: { input: Tokens.Asks },   // push
+});
+// POST /ask, body { _tag: "merger", input: { _tag: "arm", pr: 1280, head: "h1", leaks: "clean" } },
+// header Authorization: Bearer <a caller token>. The door answers 401 with nothing appended when the
+// caller is unknown, 403 when the WritePolicy says no, else the program's answer or its Err.
+
+export const Caller = Schema.TaggedUnion({
+  github: { delivery: Schema.String },                         // a webhook with a good signature
+  clock: { cron: Schema.String },                              // a cron trigger
+  agent: { environment: Schema.String },                       // a caller token, one per environment
+  lead: { environment: Schema.String },                        // the lead's own caller token
+  ci: { repository: Schema.String, workflow: Schema.String, ref: Schema.String }, // OIDC, later slice
 });
 ```
 
-- `wait` 60 is about 4.8 times the 12.5 minutes one full run took in
-  [0106](../../../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md), plus the
-  start wait 0112 measured (up to 256 s). `rounds` 3 is `next/`'s merger default. `pause` 30 and
-  `timeout` 30 are guesses with no data yet; the log records every wait, so the first week gives one.
-- **Not settings:** the tree check and the stop on drift (0110 says so), and "never land an
-  untested tree" (0537's binding constraint).
+### The WritePolicy
 
-### The two services
+0601 puts the `WritePolicy` service in `@kalfa/ledger`; 0616 says who may ask the bot for what is
+fabrikalfa's own rule. So the interface is the ledger's, and the rule is this Layer. An ask is a
+Send into a program's inbox, which is a ledger append, so the policy is asked before every append.
 
 ```ts
-// infra/fabrikalfa/src/github/CodeHost.ts: the contract only (0095). Ids reuse next/'s shapes, rewritten here.
-export const Staged = Schema.TaggedUnion({
-  staged: { main: Commit, head: Commit, commit: Commit, tree: Tree },
-  conflict: { main: Commit, head: Commit },
-  moved: { head: Commit },                         // the PR's head is not the pinned one
-});
-export const Merged = Schema.TaggedUnion({
-  merged: { commit: Commit },
-  moved: { head: Commit },
-  main_moved: { main: Commit },                    // main is not the main this was tested on
-  refused: { status: Schema.Int },                 // 405: not mergeable, ruleset included
-});
-export class CodeHost extends Context.Service<CodeHost, {
-  readonly change: (pr: Pr) => Effect.Effect<Change, CodeHostError>;          // head, state, paths, behind
-  readonly main: () => Effect.Effect<Commit, CodeHostError>;
-  /** Repeating with the same main and head answers the same commit while staging still holds it. */
-  readonly stage: (to: Branch, main: Commit, head: Commit) => Effect.Effect<Staged, CodeHostError>;
-  /** Squash pinned to head, after checking main. Repeating a done merge answers the same commit. */
-  readonly merge: (pr: Pr, head: Commit, main: Commit) => Effect.Effect<Merged, CodeHostError>;
-  readonly commit: (sha: Commit) => Effect.Effect<{ tree: Tree; parents: ReadonlyArray<Commit> }, CodeHostError>;
-  readonly comment: (pr: Pr, body: string) => Effect.Effect<void, CodeHostError>;
-  /** The open issues with this label: the rebuild of the freeze on start. */
-  readonly blockers: (label: string) => Effect.Effect<ReadonlyArray<Issue>, CodeHostError>;
-  /** Opens the drift issue. Repeating answers the open issue it already made for this commit. */
-  readonly stop: (label: string, title: string, body: string) => Effect.Effect<Issue, CodeHostError>;
-}>()("@kampus/fabrikalfa/github/CodeHost") {}
-// Change also carries the PR's labels, so the line knows each entry's `sev0-fix` from /merge on.
+// kalfa/fabrikalfa/src/Policy.ts, a sketch. The table is the open owner question below.
+const may = {
+  github: ["merger.event", "checks.event", "freeze.event", "settings.event"],
+  clock: ["checks.tick", "freeze.tick", "settings.tick"],
+  agent: ["merger.arm", "tokens.push"],
+  lead: ["merger.arm", "merger.admin", "freeze.next", "tokens.push"],
+  ci: ["tokens.push"],
+} as const satisfies Record<Caller["_tag"], ReadonlyArray<string>>;
 
-// infra/fabrikalfa/src/github/Ci.ts: next/'s word for the service that says how checks went at a commit.
-export class Ci extends Context.Service<Ci, {
-  readonly at: (commit: Commit, name: string) => Effect.Effect<ReadonlyArray<CheckRun>, CiError>;
-}>()("@kampus/fabrikalfa/github/Ci") {}
+export const layer = Layer.succeed(WritePolicy, WritePolicy.of({
+  allows: (caller, stream, input) => Effect.succeed(may[caller._tag].includes(`${stream}.${input._tag}`)),
+}));
+// merger.admin is also refused by merger itself outside a sev0: the policy says who, the program says when.
 ```
 
-`CodeHostError` and `CiError` carry a tagged `reason` (`unavailable`, `rate_limited`,
-`refused`) with the cause kept, as `next/`'s do. Every answer also carries `took` (ms) and
-`remaining` (GitHub's `x-ratelimit-remaining`), so the log records both.
+Caller tokens: one random token per environment (the laptop's boxes, a cloud session, the lead
+session). The Worker keeps only each token's SHA-256, in the Secrets Store, and compares in
+constant time. The token itself stays in that environment: on the laptop, a file under
+`~/.kalfa/fabrikalfa/` that is never mounted into a box for the lead's.
 
-| Layer | What it is | Runs on |
-|---|---|---|
-| `CodeHostMemory.layer(world)` | A small git model: commits with trees as path maps, refs, PRs, a three-way merge on paths | every PR |
-| `CodeHostRest.layer` | GitHub's REST API through Effect's `HttpClient`, with an `AppToken` | every PR, against recorded responses on a test `HttpClient`; the live run is later (Records) |
-| `CiMemory.layer(world)` and `CiRest.layer` | the same pair for check runs | the same |
-
-The laws: one suite per service, written once, run on both layers with `@kampus/vitest`'s runner.
-
-### The machines: one tree, Elm's shape
-
-fabrikalfa is one state machine. One root tea machine, `Fabrikalfa`, owns the Durable Object's
-whole state. Every webhook and every alarm is a Msg to it. Each feature is a child machine the root
-steps by hand with the child's own `update` ([Elm first](../../../docs/direction/elm-first.md):
-"parents are written by hand"). Every GitHub call is a Cmd an `update` returns, and the host runs
-it in the alarm; no `update` runs an effect. The event log stores the root's Msgs only, and the
-fold of that log through the root rebuilds the whole tree.
-
-```text
-Fabrikalfa (root)          infra/fabrikalfa/src/Fabrikalfa.ts
-  blockers: Blockers       infra/fabrikalfa/src/blockers/Blockers.ts   the sev0 issues
-  queue:    Queue          infra/fabrikalfa/src/queue/Queue.ts         the line, main, red main
-    current: Merger        infra/fabrikalfa/src/queue/Merger.ts        one change
-```
-
-**The sev0 blocker is its own child, `Blockers`, not a part of the root's model.** It has its own
-states (`unread` until the open `sev0` issues are read, then `known`), its own Cmd (the read), its
-own Msgs (the `issues` events) and its own rule (rebuild on start). In the root it would be control
-state with transitions outside any machine, which 0037 and 0046 rule out. And it is a fabrikalfa
-feature of its own: later features (chat commands) read it too, and `Queue` stays free of issue
-events. The cost: `Queue` keeps a copy of what it needs, `sev0`, which the root forwards each time
-`Blockers` changes. That is Elm's out-message: the parent turns one child's change into a Msg for
-another. Law R2 holds the copy equal to the source after every step.
+### merger
 
 ```ts
-// infra/fabrikalfa/src/Fabrikalfa.ts, the root. A sketch on @demlik/tea 0.25.0.
-import { applyCell } from "@demlik/tea";
-import { Machine } from "@demlik/tea/effect";
-import * as Blockers from "./blockers/Blockers.ts";
-import * as Queue from "./queue/Queue.ts";
+// kalfa/fabrikalfa/src/merger/Merger.ts, a sketch on 0601's API.
+export const Asks = Schema.TaggedUnion({
+  arm: { pr: Pr, head: Sha, leaks: Schema.Literal("clean") },  // land.ts ran the leak gate this run
+  admin: { pr: Pr, head: Sha },                                // the lead, in a sev0, the named fix
+});
+export const In = Schema.TaggedUnion({
+  ...Asks.cases,
+  settings: { mode: Mode, shadow: Count, required: Names },     // piped from settings' output
+  sev: { open: Schema.Boolean, fix: Schema.NullOr(Pr) },        // piped from freeze's output
+  armed: { pr: Pr, head: Sha },                                 // GitHub: auto-merge on (shadow compares)
+  merged: { pr: Pr, commit: Sha },                              // GitHub: closed and merged
+  dequeued: { pr: Pr, reason: Schema.String },                  // GitHub: the queue dropped it
+});
+const Landing = Schema.Struct({ pr: Pr, head: Sha, by: Caller, at: Schema.Number });
+const State = Schema.Struct({
+  mode: Mode,                                         // "shadow" | "live", from settings
+  line: Schema.Array(Landing),                        // armed in GitHub's queue, not yet merged
+  sev: Sev,                                           // from freeze
+  shadow: Schema.Struct({ run: Count, needed: Count, last: Schema.NullOr(Verdict) }),
+});
+export class Refused extends Schema.TaggedError<Refused>()("Refused", {
+  pr: Pr,
+  reason: Schema.Literals(["frozen", "red", "leftovers", "moved", "draft", "base", "not_sev", "not_fix", "behind", "pending"]),
+}) {}
 
-export const Model = Schema.Struct({ blockers: Blockers.Model, queue: Queue.Model });
+export const merger = Program.make("merger")((flags: Flags) =>
+  Effect.succeed(empty(flags)),
+).pipe(
+  Program.inputs(In, (state, input) =>
+    In.match(input, {
+      arm: (ask) => arm(state, ask),
+      admin: (ask) => admin(state, ask),
+      settings: (s) => Effect.succeed({ ...state, mode: s.mode, shadow: { ...state.shadow, needed: s.shadow } }),
+      sev: (s) => Effect.succeed({ ...state, sev: s }),
+      armed: (a) => Effect.succeed(compare(state, a)),        // shadow: would merger have armed this?
+      merged: (m) => Effect.succeed(landed(state, m)),
+      dequeued: (d) => Effect.succeed(dropped(state, d)),
+    }),
+  ),
+  Program.outputs(View, (state) => Effect.succeed(view(state))),
+  Program.errors(Refused),
+);
 
-// The root's Msgs are the log's entries: what GitHub sent, the alarm, and each Cmd's answer.
-export const Msg = Schema.Union([
-  ...Queue.Inputs,      // entered, left, main_moved, checked, labels, resumed, enqueued
-  ...Blockers.Inputs,   // blocker
-  Timer,                // { type: "timer", at }
-  ...Queue.Answers,     // change_ok/_err, stage_, checks_, merge_, commit_, comment_, stop_
-  ...Blockers.Answers,  // blockers_ok/_err
-]);
+const arm = Effect.fnUntraced(function* (state: State, ask: typeof Asks.cases.arm.Type) {
+  if (state.sev.open) return yield* new Refused({ pr: ask.pr, reason: "frozen" });
+  const pr = yield* PullRequests.read(ask.pr);                    // @kalfa/codehost
+  if (pr.head !== ask.head) return yield* new Refused({ pr: ask.pr, reason: "moved" });
+  if (pr.draft) return yield* new Refused({ pr: ask.pr, reason: "draft" });
+  if (pr.base !== "main") return yield* new Refused({ pr: ask.pr, reason: "base" });
+  if (Gates.leftovers(pr.paths).length > 0) return yield* new Refused({ pr: ask.pr, reason: "leftovers" });
+  const checks = yield* Checks.at(pr.head);                       // @kalfa/ci
+  if (Gates.isRed(Gates.green(checks, required(state)))) return yield* new Refused({ pr: ask.pr, reason: "red" }); // matched, not compared (0567)
+  if (state.mode === "shadow") return record(state, ask);        // shadow: no write
+  yield* Merges.enqueue({ pr: ask.pr, head: ask.head });          // pinned to the checked head; safe to repeat
+  return yield* (yield* Machine).owe(withLanding(state, ask));    // long work until GitHub answers (0601)
+});
+// admin: refused unless state.sev.open and state.sev.fix === ask.pr; green (not only "not red") at head;
+// main's head an ancestor of head (Commits.compare, behind 0); no leftovers. Then Merges.admin, a squash
+// pinned to head. One at a time is the freeze's one named fix (0611).
+```
 
-export const fabrikalfa = (settings: Settings) => {
-  const queue = Queue.queue(settings);
-  const toQueue = (s: Model, m: Queue.Msg): Cell => {
-    const [next, cmds] = applyCell(queue, s.queue, m);
-    return [{ ...s, queue: next }, cmds];
-  };
-  const toBlockers = (s: Model, m: Blockers.Msg): Cell => {
-    const [blockers, cmds] = applyCell(Blockers.blockers(settings), s.blockers, m);
-    if (Blockers.same(s.blockers, blockers)) return [{ ...s, blockers }, cmds];
-    // The out-message: Queue learns the new freeze. Made here, so never logged; the fold makes it again.
-    const [next, more] = applyCell(queue, s.queue, { type: "sev0", view: Blockers.view(blockers) });
-    return [{ blockers, queue: next }, [...cmds, ...more]];
-  };
-  const both = (s: Model, m: Timer): Cell => {
-    const [b, bc] = toBlockers(s, m);
-    const [q, qc] = toQueue(b, m);
-    return [q, [...bc, ...qc]];
-  };
-  return Machine.make({
-    model: Model,
-    msg: Msg,
-    cmds: [...Queue.cmds, ...Blockers.cmds],   // names are distinct across children (law T1)
-    init: (saved) => [saved ?? { blockers: Blockers.empty, queue: Queue.empty }, []],
-    update: {
-      timer: both,
-      blocker: toBlockers, blockers_ok: toBlockers, blockers_err: toBlockers,
-      entered: toQueue, left: toQueue, main_moved: toQueue, checked: toQueue, labels: toQueue,
-      resumed: toQueue, enqueued: toQueue,
-      change_ok: toQueue, change_err: toQueue, stage_ok: toQueue, stage_err: toQueue,
-      checks_ok: toQueue, checks_err: toQueue, merge_ok: toQueue, merge_err: toQueue,
-      commit_ok: toQueue, commit_err: toQueue, comment_ok: toQueue, comment_err: toQueue,
-      stop_ok: toQueue, stop_err: toQueue,
-    },
-  });
-};
+`Gates.green` answers a `Schema.TaggedUnion` of `green`, `pending` and `red { failed }`, with
+`isRed` as its guard. It takes GitHub's view of a required check, from memory: a success, neutral or skipped
+latest run per name passes; no run is `pending` (or `missing`, for `checks`); any other conclusion
+is `red`. Arm refuses only `red`, since GitHub's queue waits for green itself (0530, 0544); admin
+needs `green`.
 
-/** When the alarm should fire next: the earliest wait anywhere in the tree, or null. */
-export const wake = (s: Model) => earliest(Blockers.wake(s.blockers), Queue.wake(s.queue));
+**merger's journal entries,** as tea writes them, for one arm in live mode:
+
+```ts
+// The records of merger's journal stream, a sketch of their decoded form.
+{ _tag: "message", id: "ask:7c1e", at: 1763600000000,
+  msg: { _tag: "arm", pr: 1280, head: "h1", leaks: "clean", by: { _tag: "agent", environment: "laptop" }, sentAt: 1763599999800 } }
+{ _tag: "applied", sourceId: "ask:7c1e",
+  state: { mode: "live", line: [{ pr: 1280, head: "h1", by: { _tag: "agent", environment: "laptop" }, at: 1763600000000 }], ... },
+  owed: [{ _tag: "effect_owed", id: "d:41", effect: { _tag: "landing", pr: 1280, head: "h1" } }] }
+{ _tag: "message", id: "gh:8f2a-delivery", at: 1763600400000, answerTo: "d:41",
+  msg: { _tag: "merged", pr: 1280, commit: "c1", by: { _tag: "github", delivery: "8f2a" } } }
+{ _tag: "applied", sourceId: "gh:8f2a-delivery", state: { mode: "live", line: [], ... }, owed: [] }
+```
+
+A refusal is a confirmed step with the state unchanged and the `Refused` on `errors` (0601: "An
+Err goes to errors, and the program keeps going"). Its input message is still in the journal, so
+every refused ask is recorded with who asked and why it was refused.
+
+### checks
+
+```ts
+// kalfa/fabrikalfa/src/checks/Checks.ts, a sketch.
+export const In = Schema.TaggedUnion({
+  settings: { required: Names, missing: Minutes, stuck: Minutes },
+  ready: { pr: Pr, head: Sha, at: Schema.Number },         // opened, ready_for_review, synchronize
+  gone: { pr: Pr },                                        // closed, converted to draft
+  run: { pr: Pr, head: Sha, name: Schema.String, status: Status, at: Schema.Number }, // check_run
+  tick: { at: Schema.Number },
+});
+const Watched = Schema.Struct({
+  head: Sha, since: Schema.Number,
+  runs: Schema.Record(Schema.String, Schema.Struct({ status: Status, since: Schema.Number })),
+  flagged: Schema.Array(Schema.Struct({ name: Schema.String, reason: Schema.Literals(["missing", "stuck"]) })),
+});
+const State = Schema.Struct({ required: Names, missing: Minutes, stuck: Minutes, prs: Schema.Record(PrKey, Watched) });
+// tick: for each watched pull request, a required name with no run `missing` minutes after `since` is
+// missing; a run queued or in progress for `stuck` minutes is stuck. Each (pr, head, name, reason) is
+// flagged once, with one comment through @kalfa/codehost's Comments, and the flag is in the new state.
+// A new head starts the pull request again; a completed run clears its stuck flag.
+```
+
+### freeze
+
+```ts
+// kalfa/fabrikalfa/src/freeze/Freeze.ts, a sketch.
+export const Asks = Schema.TaggedUnion({ next: { pr: Pr, branch: Schema.String } }); // the lead only
+export const In = Schema.TaggedUnion({
+  ...Asks.cases,
+  issue: { number: Schema.Number, open: Schema.Boolean, sev0: Schema.Boolean, at: Schema.Number }, // issues events
+  issues: { open: Schema.Array(Schema.Number) },                // the read of open sev0 issues, on start
+  run: { run: Run },                                            // workflow_run requested or in progress
+  tick: { at: Schema.Number },                                  // sweep the unfinished runs
+});
+const State = Schema.TaggedUnion({
+  unread: {},                                                   // on start: nothing is kept or canceled yet
+  calm: {},
+  sev0: { issues: Schema.NonEmptyArray(Schema.Number), since: Schema.Number, fix: Schema.NullOr(Fix) },
+});
+// run and tick: while sev0, each unfinished run gets @kalfa/ci's Freeze.verdict(run, fix); a cancel goes
+// through Runs.cancel (0612) and its answer is in the new state's `canceled` count. next is refused
+// unless sev0, and replaces the fix (one at a time, 0611). Its output, { open, fix }, is piped to merger.
 ```
 
 ```ts
-// infra/fabrikalfa/src/blockers/Blockers.ts, the sev0 child.
-const Model = Schema.TaggedUnion({
-  unread: { call: Call },                        // on start: read the open sev0 issues first
-  known: { issues: Schema.Array(Issue) },        // empty means no sev0 freeze
-});
-// blocker { issue, open: boolean } adds or removes one issue. blockers_ok sets the whole list.
-// view(model) is what Queue needs: { _tag: "unread" } or { _tag: "known", issues }.
-
-// infra/fabrikalfa/src/queue/Queue.ts, the queue child: the line, main, a red main, and Merger.
-const Red = Schema.NullOr(Schema.Struct({ main: Commit, since: Ms }));  // ci-required red on main's head
-const shared = { line: Line, red: Red, sev0: Blockers.View, late: Count };  // sev0: the root's copy
-const Model = Schema.TaggedUnion({
-  idle:    { ...shared, main: Schema.NullOr(Commit) },
-  landing: { ...shared, main: Commit, current: Merger.Model },
-  stopped: { ...shared, main: Commit, reason: Stop, issue: Schema.NullOr(Issue) }, // closing the issue resumes
-});
-// Line is unique by pr, each entry keeps its labels, and the current entry is never also in
-// the line (a Schema filter). Which entry may go next is one pure function of line, red, sev0:
-//   sev0 unread              -> none
-//   a sev0 issue open        -> the first entry labeled sev0-fix
-//   red                      -> the first entry entered with /merge fix, or docs-only
-//   otherwise                -> the first entry
-// Queue steps Merger by hand the same way: it passes each Merger Msg to Merger's update, and
-// turns Merger's Reply (landed, failed, conflict, moved, closed, behind, drift, shadowed) into its
-// own next state. A Reply is made in the step, never logged.
-
-// infra/fabrikalfa/src/queue/Merger.ts, the merger child: one change, from reading to verified.
-const Call = Schema.TaggedUnion({                  // one GitHub call a state owes
-  owed: { due: Ms },                               // decided; the next alarm sends it
-  sent: { attempt: Count, due: Ms },               // may have left; an answer by due, or send again
-});
-const Model = Schema.TaggedUnion({
-  reading:   { entry: Entry, call: Call },                                 // change(): open, head, behind
-  staging:   { entry: Entry, main: Commit, round: Count, infra: Count, call: Call },
-  checking:  { entry: Entry, main: Commit, commit: Commit, tree: Tree, round: Count, infra: Count, until: Ms },
-  merging:   { entry: Entry, main: Commit, tree: Tree, path: Schema.Literals(["fast", "slow"]), call: Call },
-  verifying: { entry: Entry, main: Commit, tree: Tree, commit: Commit, call: Call },
-  paused:    { entry: Entry, until: Ms },                                  // second infra
-});
-```
-
-**Elm's Sub, here.** A wait in Elm is a Sub. In a Durable Object nothing stays awake (0105), so the
-one time Sub is `wake(model)`: the host turns it into the object's single alarm, and the alarm comes
-back as a `timer` Msg. Webhooks are the other way in, like Elm's ports. Neither is an effect inside
-`update`.
-
-**One Msg traced through the tree.** PR 1280's checks have passed on staging commit `s1`, so
-`Merger` is `merging { main: m1, tree: t1, path: "slow", call: owed(due: 10:00) }`. The alarm fires
-at 10:00.
-
-1. The host appends `{ type: "timer", at: 10:00 }` and steps the root.
-2. Root `update.timer` is `both`: it steps `Blockers` first. `Blockers` is `known { issues: [] }`
-   and owes nothing, so it returns itself and no Cmd.
-3. Then the root steps `Queue` with the same `timer`. `Queue` is `landing`, so it passes the
-   `timer` to `Merger`'s `update`.
-4. `Merger` is `merging` with `call: owed`, due now. It returns `merging { call: sent { attempt: 1,
-   due: 10:00:30 } }` and one Cmd:
-   `merge({ attempt: 1, pr: 1280, head: h1, main: m1 })`.
-5. `Queue` wraps the new `Merger` model in `landing { current }` and hands the Cmd up. The root
-   puts the new `queue` in its model and returns `[model, [merge(...)]]`.
-6. The host caches the model in the same transaction as the log entry, then runs the Cmd:
-   `CodeHost.merge(1280, h1, m1)`. Its answer becomes the next root Msg,
-   `merge_ok { cmd: { attempt: 1, ... }, value: { _tag: "merged", commit: c1 } }`, which the root
-   routes to `Queue`, and `Queue` to `Merger`: `verifying { commit: c1, call: owed }`.
-
-| Msg | From | What it does |
-|---|---|---|
-| `entered` | `/merge` comment, enriched | Queue: joins the line, or is refused (not green, not allowed, already in) |
-| `left` | `pull_request` `synchronize` or `closed` | Queue: takes the change out; the current one ends as `moved` or `closed` |
-| `main_moved` | `push` to main | Queue: records main; a merger in `checking` stages again next round |
-| `checked` | `check_run` `completed` for a name in `checks` | Queue: pass, fail or infra for that commit; on main's head it sets or lifts `red` |
-| `blocker` | `issues` `opened`, `labeled`, `reopened` with `sev0`; `closed`, `unlabeled` | Blockers: adds or removes that issue; the root forwards the change to Queue |
-| `resumed` | `issues` `closed` on the open `queue-stopped` issue | Queue: leaves `stopped`; the line goes on |
-| `labels` | `pull_request` `labeled`, `unlabeled` | Queue: updates that entry's labels, `sev0-fix` among them |
-| `enqueued` | `pull_request` `enqueued` (shadow only) | Queue: enters the change as GitHub's queue took it |
-| `timer` | the alarm | both children: each sends its `owed` calls, sends again each `sent` call past due, ends `until` waits |
-| `<cmd>_ok`, `<cmd>_err` | the host, for `change`, `main`, `stage`, `checks`, `merge`, `commit`, `comment`, `stop` (Queue) and `blockers` (Blockers) | tea's settled answers, with the `attempt` they answer, routed to the child that made the Cmd |
-
-Inputs carry both clocks, `sentAt` (GitHub's time) and `arrivedAt` (the Worker's), and the
-`delivery` id. 0537's sketch names map onto these: `entered` is `entered`, `staged` is `stage_ok`,
-`checked` is `checked` (or `checks_ok` from a poll), and `landed` is the `commit_ok` that matched
-the tree.
-
-### The host, one wake
-
-```ts
-// infra/fabrikalfa/src/Host.ts, a sketch. EventStore.step steps the root inside one storage transaction.
-export const alarm = Effect.fnUntraced(function* (now: number) {
-  const store = yield* EventStore;
-  let cell = yield* store.step({ type: "timer", at: now });     // append, fold, cache, in one go
-  for (let turn = 0; turn < 8 && cell.cmds.length > 0; turn++) {
-    const answers = yield* Effect.forEach(cell.cmds, interpret, { concurrency: 1 });
-    for (const answer of answers) cell = yield* store.step(answer);
+// kalfa/ci/src/Freeze.ts, a sketch. Pure: no clock, no network (0612).
+export const verdict = (run: Run, fix: string | null): Verdict => {
+  if (run.event === "merge_group") {
+    return Verdict.cases.keep.make({ reason: "queue" });
   }
-  yield* store.alarm(Fabrikalfa.wake(cell.model));              // null deletes it
+  if (fix !== null && run.branch === fix) {
+    return Verdict.cases.keep.make({ reason: "fix" });
+  }
+  if (run.event === "push" && run.branch === "main" && run.workflow === "check") {
+    return Verdict.cases.keep.make({ reason: "main" }); // 0611: main's own check runs are spared
+  }
+  return Verdict.cases.cancel.make({}); // main's scheduled full run included
+};
+```
+
+### settings
+
+```toml
+# .fabrikalfa/fabrikalfa.toml, a sketch of the file settings reads. Keys are Desired.ts's.
+[merger]
+mode = "shadow"             # "shadow" or "live"
+shadow = 10                 # matching arms in a row before live may be set (owner, 2026-11-14)
+
+[checks]
+missing = 10                # minutes
+stuck = 30                  # minutes
+
+[repo]
+merge = ["squash"]          # 0004
+delete_branch_on_merge = true
+
+[rulesets.main]
+target = "refs/heads/main"
+required = ["ci-required"]
+queue = true
+
+[rulesets.agents]
+target = "~ALL"
+exclude = ["refs/heads/fabrikalfa/**", "refs/heads/main"]
+restrict = ["creation", "update", "deletion"]
+# no bypass key: a bypass list is the owner's, by hand (0603). settings reads it and reports it.
+```
+
+```ts
+// kalfa/fabrikalfa/src/settings/Settings.ts, a sketch.
+export const In = Schema.TaggedUnion({
+  pushed: { commit: Sha, paths: Schema.Array(Schema.String) },  // push to main
+  tick: { at: Schema.Number },                                   // hourly
 });
+const State = Schema.Struct({
+  wanted: Schema.NullOr(Desired),   // the file at the last main commit that changed it
+  live: Schema.NullOr(Live),        // what GitHub had at the last read, bypass lists included
+  drift: Schema.Array(Diff),        // Drift.diff(wanted, live), [] when they match
+  applied: Schema.NullOr(Schema.Struct({ commit: Sha, at: Schema.Number, writes: Count })),
+  read: Schema.NullOr(Schema.Number),
+});
+// pushed, when paths has the file: read it at commit, read live, write each Diff that is not a bypass
+// list, read live again, store all of it. tick: read live, store the drift, write nothing.
+// Output: { wanted, live, drift, read }, piped to merger and checks, and shown at GET /view/settings.
 ```
 
-`interpret` maps each Cmd to its service call with `timeout` seconds, and a failure becomes the
-`_err` Msg, never a thrown error. `EventStore.step` skips an input whose `delivery` id it has
-already logged, so a webhook GitHub sends twice is one entry.
+`Drift.diff` compares field by field and names each difference by its path, such as
+`rulesets.main.required`. A bypass list is compared and reported, and its `Diff` is marked
+`write: false`, so the apply step cannot write it.
+
+### tokens
 
 ```ts
-// infra/fabrikalfa/src/store/EventStore.ts: the contract.
-export class EventStore extends Context.Service<EventStore, {
-  readonly step: (msg: Msg) => Effect.Effect<Cell, EventStoreError>;   // [model, cmds] after the msg
-  readonly entries: (from?: number) => Effect.Effect<ReadonlyArray<Logged>, EventStoreError>;
-  readonly alarm: (at: number | null) => Effect.Effect<void, EventStoreError>;
-}>()("@kampus/fabrikalfa/store/EventStore") {}
-// EventStoreSql: tables `entries (seq INTEGER PRIMARY KEY, delivery TEXT UNIQUE, at INTEGER, body TEXT)`
-// and `model (id INTEGER PRIMARY KEY CHECK (id = 1), seq INTEGER, body TEXT)`. A cached model that
-// does not decode is dropped and the log folded again: the cache is rebuildable, the log is not.
+// kalfa/fabrikalfa/src/tokens/Tokens.ts, a sketch.
+export const Asks = Schema.TaggedUnion({ push: {} });
+export const In = Schema.TaggedUnion({ ...Asks.cases, settings: { live: Live } });
+const State = Schema.Struct({
+  ruleset: Schema.Literals(["ok", "missing", "drifted"]),   // the agents ruleset, from settings
+  bypass: Schema.Boolean,                                   // the App is on any bypass list
+  vended: Count,
+});
+// push: refused unless ruleset is "ok" and bypass is false. Mints one installation token through
+// @kalfa/provider-github's credentials (this repo; contents: write, pull_requests: write; one hour).
+// The step's new state holds { vended: n + 1 } and the vend record below; the token goes back to the
+// asker only in the HTTP answer, never in state, output, errors or a span. If the step fails, no token
+// leaves.
 ```
 
-### The Worker and the object
+The vend record in the journal names `by`, `at`, `expires` and the token's fingerprint (the first
+12 hex of its SHA-256), never the token. A record of who held push rights when cannot be rebuilt
+later, so it is written from the first vend.
+
+### The Worker
 
 ```ts
-// infra/fabrikalfa/src/cloudflare/FabrikalfaObject.ts: thin (0041), modular form.
-export class FabrikalfaObject extends Cloudflare.DurableObject<FabrikalfaObject, {
-  readonly send: (msg: Msg) => Effect.Effect<void>;   // step, set the alarm to now if anything is owed
-  readonly view: () => Effect.Effect<View>;
-}>()("Fabrikalfa") {}
-// FabrikalfaLive = FabrikalfaObject.make(...): takes Cloudflare.DurableObjectState, builds
-// EventStoreSql over state.storage, and hands `alarm` to Host.alarm. One instance, named by repo.
-
-// infra/fabrikalfa/src/cloudflare/Worker.ts: the Effect Worker's fetch.
-//   POST /github  read the raw body; Webhook.verify(secret, body, header) or 401 with nothing kept;
-//                 Webhook.decode(event, payload) -> Msg | null; enrich /merge; queue.send(msg); 202
-//   GET  /queue   the view as JSON: the line, the current state, red, the sev0 issues, main. No secret.
+// kalfa/fabrikalfa/src/Worker.ts, a sketch of what each route does.
+// POST /github     verify X-Hub-Signature-256 with Mac.verify (constant time) or 401 with nothing kept;
+//                  Webhook.decode(event, body) -> [program, input] | null; Send with id = X-GitHub-Delivery,
+//                  so a delivery GitHub sends twice is one message (tea's logged admission keeps the first).
+// POST /ask        Callers.identify(Authorization) or 401; WritePolicy.allows or 403; Send; await the answer.
+// GET /view/<p>    the program's latest output as JSON. No secret is in any output (law X1).
+// scheduled        cron "*/5 * * * *": tick to checks and freeze; cron "17 * * * *": tick to settings.
 ```
-
-GitHub gives a webhook 10 seconds. `send` only appends and arms; the GitHub calls run in the alarm.
-The `/merge` enrichment is three reads (PR, its `ci-required`, its files), about a second.
-
-### Shadow and live
-
-| Mode | Enters on | Builds | CI runs | Merges | Records |
-|---|---|---|---|---|---|
-| shadow | `/merge`, and GitHub's queue taking a PR (`enqueued`) | `merge(main, head)` on `queue/tmp` only | none | never | `shadowed`: its path (fast or slow), its tree, and GitHub's landed tree when that push comes, equal or not |
-| live | `/merge` | `queue/tmp`, then moves `queue/staging` to that commit | on `queue/staging` only | squash pinned to head | every step above |
-
-Shadow costs $0 in CI: no branch it writes starts a run. It proves the webhook path, the
-signature, the App token, the fold, the staging call and the tree prediction against what GitHub's
-queue landed. Live needs one CI change: `.github/workflows/check.yaml` runs on `push` to
-`queue/staging`, takes `BASE` as the commit's first parent (main), and scopes jobs as for
-`merge_group`.
 
 ## One value traced
 
-PR 1280 changes `next/` code. Main is `m1`. Mode is live, main is green, no `sev0` issue is open, and the line is empty.
+PR 1280 changes `next/` code. Mode is `live`, no sev0 is open, `ci-required` is still running at
+head `h1`.
 
-1. The owner comments `/merge`. GitHub sends `issue_comment` with delivery `d1`. The Worker checks
-   the signature, reads the PR (head `h1`, behind main by 2), `ci-required` at `h1` (success) and
-   the files (code). It sends `entered { pr: 1280, head: h1, by, fix: false, kind: "code",
-   green: true, behind: 2, delivery: d1, sentAt, arrivedAt }`.
-2. The object steps it: `Queue` was `idle`, so the entry starts `Merger.reading { call: owed(now) }`.
-   No Cmd. The log has one entry. The alarm is set to now.
-3. The alarm steps `timer`: the owed read is sent as `change(1280)`, call becomes `sent { attempt: 1 }`.
-   The answer `change_ok { head: h1, open, behind: 2 }`: behind is not 0, so the fast path does not
-   hold. `staging { main: m1, round: 0, infra: 0, call: owed }`. The same wake sends `stage(queue/staging, m1, h1)`.
-4. `stage_ok { commit: s1, tree: t1 }`: `checking { commit: s1, tree: t1, until: now + 60 min }`.
-   No Cmd is owed, so the wake ends with the alarm at `until`.
-5. GitHub Actions runs `check` on `s1`. Its `ci-required` completes with `success`; the webhook gives
-   `checked { commit: s1, result: pass }`. `merging { main: m1, tree: t1, path: "slow", call: owed }`.
-6. The alarm sends `merge(1280, h1, m1)`: main is still `m1`, so it squashes pinned to `h1` and
-   answers `merge_ok { commit: c1 }`. `verifying { commit: c1, call: owed }`.
-7. `commit(c1)` answers `{ tree: t1, parents: [m1] }`: the tree is the tested tree. The child
-   replies `landed`; the parent sets main to `c1`, posts one comment, and goes `idle`.
+1. The lead runs `land.ts arm 1280` (slice 6). It runs the leak gate, then POSTs
+   `{ _tag: "merger", input: { _tag: "arm", pr: 1280, head: "h1", leaks: "clean" } }` with the
+   lead's caller token.
+2. The door hashes the token, finds `{ _tag: "lead", environment: "laptop" }`, and asks the
+   WritePolicy: `lead` may `merger.arm`. It Sends the input, with `by` and `sentAt`, to merger's
+   inbox with the ask's id.
+3. merger's step: `sev.open` is false; the pull request's head is `h1`, ready, into `main`; its
+   paths hold no `.rej` or `.orig`; `green` answers `pending`, which is not `red`. It calls
+   `Merges.enqueue(1280, h1)`, which turns on merge when ready, pinned to `h1`. It returns owed,
+   with 1280 in `line`.
+4. tea commits the step: the journal holds the `message` and the `applied` record with the owed
+   delivery `d:41`. The door answers `{ _tag: "armed", pr: 1280, head: "h1" }`.
+5. `ci-required` goes green; GitHub's queue tests and merges 1280 as `c1`. GitHub sends
+   `pull_request` `closed` with `merged: true`. The door verifies the signature and dispatches
+   `{ _tag: "merged", pr: 1280, commit: "c1" }` with `answerTo: "d:41"`.
+6. merger's step takes 1280 out of `line`. The journal holds that answer and the new state; the
+   delivery is confirmed in the same write.
 
-If step 6's answer is lost, the Model still says `merging { call: sent { attempt: 1 } }`. The next
-alarm sends `merge` again; the PR is merged, so the REST layer answers the same `c1`. If step 5 had
-been `cancelled`, the change is staged again with `infra: 1`; a second infra pauses the line 30
-minutes. If step 7 found tree `t2`, the parent goes `stopped { drift }`, opens a `queue-stopped`
-issue with both trees, and waits for that issue to close.
+If the Worker died between step 3's enqueue and step 4's commit, the step is handed out again on
+the next wake, `enqueue` answers "already armed", and the journal has one arm. If the push in step
+3 had moved the head to `h2`, the step refuses `moved`, and the journal holds the ask and the
+refusal.
 
 ## Laws
 
-| Law | Kind (lint, type or test?) | Generator | Plant | Where |
+| Law | Kind | Generator | Plant | Where |
 |---|---|---|---|---|
-| Q1, the fold: folding the log of root Msgs from empty gives the cached root Model, the whole tree, for any Msg sequence, default runs | test | @demlik/tea/pbt.arbMsgSequence: the root's Msgs, answers with any attempt | save the cache before the step: Q1 red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| Q2, no effect in update: at the root, every Msg but `timer` and a Cmd answer returns no Cmd, default runs | test | @demlik/tea/pbt.arbMsgSequence: the root's Msgs | send `change` straight from `entered`: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| Q3, never an untested tree: across generated GitHub worlds, every `merge` Cmd follows a pass on a staging commit of that main and head, or the fast path's proof, and every `landed` has the tested tree, 200 runs | test | fc.record: PR heads, main moves, check conclusions, lost answers, in fc.shuffledSubarray order | merge from `checking` before the pass: red; skip the tree compare: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| Q4, three outcomes: only `success` is pass, only `failure` is fail, every other conclusion and no run by `until` is infra, default runs | test | fc.constantFrom: every check conclusion and no run | map `timed_out` to fail: red | infra/fabrikalfa/src/queue/Outcome.test.ts |
-| Q5, infra is retried once and never charged: one infra stages again, two pause the line, and no comment says failed, default runs | test | @demlik/tea/pbt.arbMsgSequence: infra answers among others | pause on the first infra: red; comment "failed" on infra: red | infra/fabrikalfa/src/queue/Merger.laws.test.ts |
-| Q6, the freeze: with no `sev0` issue open and main green, the line lands in order; while any `sev0` issue is open only `sev0-fix` PRs land; with main red only `/merge fix` or docs-only changes land; the rest keep their order, default runs | test | fc.record: a line of entries with kind, fix and labels, open and closed sev0 issues, main red or green | let an unlabeled PR through an open `sev0` issue: red; end the freeze when one of two issues closes: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| B1, the freeze rebuilds from GitHub: from an empty log, or after the cache is dropped, nothing lands until the open `sev0` issues are read, and the rebuilt freeze equals the one the label events built live, default runs | test | @demlik/tea/pbt.arbMsgSequence: issue and label events, then a cleared log and a `blockers_ok` | land before `blockers_ok`: red | infra/fabrikalfa/src/blockers/Blockers.laws.test.ts |
-| R1, the root routes: each root Msg reaches exactly the child that owns it, `timer` reaches both, and each Cmd answer reaches the child that made the Cmd, default runs | test | @demlik/tea/pbt.arbMsgSequence: the root's Msgs | route `stage_ok` to Blockers: red | infra/fabrikalfa/src/Fabrikalfa.laws.test.ts |
-| R2, the copy holds: after every root step, Queue's `sev0` equals `Blockers.view` of the root's `blockers`, and the forwarded `sev0` Msg is never in the log, default runs | test | @demlik/tea/pbt.arbMsgSequence: the root's Msgs, issue events among them | skip the forward when an issue closes: red; log the forwarded Msg: Q1 and R2 red | infra/fabrikalfa/src/Fabrikalfa.laws.test.ts |
-| Q7, drift stops the line: a landed tree that is not the tested tree stops the queue and opens one `queue-stopped` issue, and no landing Cmd follows until that issue closes, default runs | test | fc.record: tested and landed trees, later Msgs | answer `landed` on a tree mismatch: red; resume on another issue's close: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| Q8, a send with no answer: a `sent` call past `due` is sent again, a late answer only counts `late`, default runs | test | @demlik/tea/pbt.arbMsgSequence: answers dropped, delayed and doubled | apply a late answer: red | infra/fabrikalfa/src/queue/Merger.laws.test.ts |
-| Q9, `wake` is the earliest `due` or `until`, and null when nothing waits, default runs | test | @demlik/tea/pbt.arbMsgSequence: Queue's Msgs | return the latest due: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| Q10, shadow never merges: in shadow mode no `merge` Cmd is made and no `stage` names `queue/staging`; shadow is done only after `matches` matching landings in a row with at least `slow` by the slow path, and a mismatch resets the count, default runs | test | @demlik/tea/pbt.arbMsgSequence: Queue's Msgs with settings mode shadow | stage on `staging` in shadow: red | infra/fabrikalfa/src/queue/Queue.laws.test.ts |
-| S1, the store: steps append in order, the cache equals the fold, a repeated delivery id is one entry, a failed step writes nothing, and a cache that does not decode is rebuilt, 50 runs | test | fc.array: Msgs with delivery ids drawn from a small set | append outside the transaction: red | infra/fabrikalfa/src/store/EventStoreTest.ts, run in EventStoreMemory.test.ts on PRs and in infra/fabrikalfa/src/cloudflare/EventStoreSql.integration.test.ts on the schedule |
-| G1, CodeHost's contract: stage and merge are safe to repeat, merge pins the head and checks main, a conflict answers `conflict`, `behind` matches the commit graph, on the memory layer and on the REST layer, 50 runs | test | fc.record: small commit graphs and PRs on the memory layer | merge without the main check: red | infra/fabrikalfa/src/github/CodeHostTest.ts, run in infra/fabrikalfa/src/github/CodeHost.laws.test.ts |
-| G2, the REST layer reads GitHub's real answers: each endpoint's recorded response decodes to the contract's answer, 201, 204, 405 and 409 included | test | vector: one recorded response per endpoint and status, from a real call | read `merge` 405 as merged: red | infra/fabrikalfa/src/github/CodeHostRest.test.ts |
-| G3, the signature: a body signed with the secret passes; any changed byte in body or header, a missing header, or another secret fails with 401 and nothing appended, 200 runs | test | fc.uint8Array: bodies and secrets, with one byte flipped | compare with `===` on strings: the timing law of Mac does not hold, and the flipped-header case passes: red | infra/fabrikalfa/src/github/Webhook.laws.test.ts |
-| G4, `/merge` is read only from its first line, `/merge` or `/merge fix`, on a PR, by an association in `associations`, 200 runs | test | fc.string: comment bodies around the two commands | accept `/merge` on an issue: red | infra/fabrikalfa/src/github/Webhook.laws.test.ts |
-| G5, events decode: each recorded payload gives its Msg, `issues` and label events included, and an event this queue does not use gives null | test | vector: one recorded payload per event and action | drop `synchronize`: red | infra/fabrikalfa/src/github/Webhook.test.ts |
-| W1, the Worker: a bad signature answers 401 and sends nothing, a good one answers 202 and sends one Msg, `GET /queue` answers the view, on memory layers | test | scenario: the Worker's fetch with memory layers and a recorded payload | send before the check: red | infra/fabrikalfa/src/cloudflare/Worker.test.ts |
-| X1, [secrets] the private key, the webhook secret and the installation token never appear in a log entry, the Model, the view, a comment body, a span attribute or an error message, 100 runs | test | fc.string: generated secrets planted in every call and failure path | put the token in a `CodeHostError` message: red | infra/fabrikalfa/src/Secrets.laws.test.ts |
-| K1, docs-only is CI's own rule: `kind` is docs exactly when `classify(paths, "merge_group")` starts no job but `field`, and changes.mjs's tests still pass on the moved helpers, 200 runs | test | fc.array: repo paths from the classifier's own path tables | call a hand list of globs: red | infra/fabrikalfa/src/queue/Outcome.test.ts and .github/ci/changes.test.ts |
-| C1, live CI: a push to `queue/staging` runs check with `BASE` as the first parent and the `merge_group` scope; no other `queue/` branch starts a run | test | scenario: workflow-lint.ts over check.yaml | drop the first-parent `BASE`: red | .github/ci/workflow-lint.test.ts |
-| C2, an `infra/` path runs check, typecheck and test, and no `next/` job, 200 runs | test | fc.array: infra/ paths mixed with docs | classify infra/ as unknown: every job runs: red | .github/ci/changes.test.ts |
-| L1, `infra/**` keeps `next/`'s lint rules and its layers | lint | lint | add a Promise in infra/fabrikalfa/src/queue: `pnpm lint` fails | .oxlintrc.json and layer-rules.json |
-| T1, a Msg's `type` names its handler: the root, `Blockers`, `Queue` and `Merger` handle every Msg type, and Cmd names are distinct across children, checked by `Machine.make`'s types | type | type | drop a handler: typecheck fails | infra/fabrikalfa/src/queue/Queue.ts |
+| G1, `green` answers green exactly when every required name's latest run at the head is a success, neutral or skipped; `red` when any is another conclusion; `pending` when one has none, default runs | test | fc.record: required names and runs with every conclusion, out of order | count an older run over the latest: red | kalfa/ci/src/Gates.test.ts |
+| G2, `leftovers` keeps exactly the paths ending `.rej` or `.orig`, at any depth, default runs | test | fc.array: repo paths with and without the two endings | match `.orig` anywhere in the name: red | kalfa/ci/src/Gates.test.ts |
+| F1, `verdict` keeps a `merge_group` run, the named fix's runs and `check` push runs on main, and cancels every other run, main's `scheduled` run included, default runs | test | fc.record: runs with every event, branch and workflow, a fix or none | keep main's scheduled run: red; cancel main's check push run: red | kalfa/ci/src/Freeze.test.ts |
+| M1, merger arms only an open, ready, into-main pull request at the asked head, with no leftovers, not red, outside a sev0; every refusal is a `Refused` with its reason and the state unchanged, 200 runs | test | fc.record: pull requests, heads, paths, check runs and sev states on the memory layers | arm a red pull request: red; change state on a refusal: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
+| M2, merger admin-merges only in a sev0, only the named fix, only green at the head, only when main's head is an ancestor of the head, as a squash pinned to the head, 200 runs | test | fc.record: sev states, fixes, commit graphs and checks on the memory layers | skip the ancestor check: red; merge a second fix while one is named: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
+| M3, in shadow mode merger makes no `Merges` write; its count of matching arms in a row resets on a mismatch; live needs both `shadow` matches and the file's `mode = "live"`, default runs | test | fc.array: arm asks, GitHub armed events and settings inputs in fc.shuffledSubarray order | enqueue in shadow: red; keep the count on a mismatch: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
+| M4, every write a fake protocol Layer records has one journal message with the same id, its `by` and both clocks, and an applied state that holds its answer, for every program, 100 runs | test | fc.array: inputs to all five programs on memory layers and the memory Ledger | call `Comments.post` from the Worker, outside a step: red | kalfa/fabrikalfa/src/Journal.test.ts |
+| M5, a step that dies after its write is handed out again and makes the same write once more, which the protocol answers as done: one arm, one admin merge, one cancel, one comment, default runs | test | fc.record: the step and the point it dies at, on memory layers | an enqueue that arms twice: red | kalfa/fabrikalfa/src/Journal.test.ts |
+| M6, an answer dispatched with `answerTo` an id that is not owed is refused and changes no state; a merged event for a pull request merger never armed is a plain input, default runs | test | fc.record: answers with owed and unknown ids | apply an unknown answer: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
+| C1, checks flags a required check missing `missing` minutes after the head, never before, once per pull request, head and name; a new head starts again, default runs | test | fc.array: ready, run and tick inputs with times | flag at once: red; flag twice: red | kalfa/fabrikalfa/src/checks/Checks.test.ts |
+| C2, checks flags a run queued or in progress for `stuck` minutes once, and a completed run is never flagged stuck, default runs | test | fc.array: run status changes and ticks | flag a completed run: red | kalfa/fabrikalfa/src/checks/Checks.test.ts |
+| Z1, freeze is in sev0 exactly while an open issue carries `sev0`, rebuilt from the open issues on start; from `unread` it cancels nothing, default runs | test | fc.array: issue events, then a cleared journal and an issues read | cancel before the read: red; end on one of two issues closing: red | kalfa/fabrikalfa/src/freeze/Freeze.test.ts |
+| Z2, freeze cancels through `Runs.cancel` exactly the runs `verdict` cancels, and `next` is refused outside a sev0 and replaces the one fix, default runs | test | fc.array: runs, next asks and ticks in a sev0 and out | keep two fixes: red; cancel a kept run: red | kalfa/fabrikalfa/src/freeze/Freeze.test.ts |
+| S1, `diff(wanted, live)` is empty exactly when they match, and names each difference by its path, default runs | test | fc.record: wanted and live settings, one field changed at a time | ignore the order of required checks only one way: red | kalfa/fabrikalfa/src/settings/Settings.test.ts |
+| S2, settings writes only on a push to main that changed its file, the hourly tick never writes, and no write ever holds a bypass list, 200 runs | test | fc.array: pushes, ticks and files with bypass lists that differ | write on a tick: red; write a bypass list: red | kalfa/fabrikalfa/src/settings/Settings.test.ts |
+| T1, tokens vends only while the agents ruleset is ok and the App is on no bypass list, and every vend's record is in the journal before the answer leaves, default runs | test | fc.record: settings outputs and push asks | vend with a bypass: red; answer before the step commits: red | kalfa/fabrikalfa/src/tokens/Tokens.test.ts |
+| P1, the door admits an ask exactly as the policy table says, for each caller kind and each program input, and a refused ask appends nothing, default runs | test | fc.record: caller kinds crossed with every input tag | let an agent ask `merger.admin`: red | kalfa/fabrikalfa/src/Policy.test.ts |
+| P2, a caller token is found by its hash, compared in constant time; an unknown, short or changed token answers 401 and appends nothing, 200 runs | test | fc.uint8Array: tokens with one byte flipped | compare with `===` on strings: red | kalfa/fabrikalfa/src/Policy.test.ts |
+| W1, a body signed with the webhook secret passes; a changed byte in body or header, a missing header or another secret answers 401 with nothing appended, 200 runs | test | fc.uint8Array: bodies and secrets with one byte flipped | skip the check on an empty body: red | kalfa/fabrikalfa/src/Webhook.test.ts |
+| W2, each recorded payload decodes to its program and input, and an event no program uses gives null | test | vector: one recorded payload per event and action, from a real delivery to the App | drop `closed` with `merged: true`: red | kalfa/fabrikalfa/src/Webhook.test.ts |
+| W3, a delivery id seen twice is one journal message, default runs | test | fc.array: deliveries with ids from a small set | append before the id check: red | kalfa/fabrikalfa/src/Worker.test.ts |
+| X1, [secrets] the App's private key, the webhook secret, caller tokens and minted tokens never appear in a journal record, an output, an error, a view, a comment body or a span attribute, 100 runs | test | fc.string: generated secrets planted in every input, answer and failure path | put the minted token in the vend record: red | kalfa/fabrikalfa/src/Secrets.test.ts |
+| K1, every law above runs on `@kalfa/codehost`'s and `@kalfa/ci`'s test Layers, which pass those packages' own conformance suites, through `@kalfa/quality/vitest`'s `lawsOn` | test | scenario: the protocols' test Layers, composed in the test support | hand-write a fake that skips a conformance law: red | kalfa/fabrikalfa/src/Fabrikalfa.test-support.ts |
+| L1, only `App.ts`, `Worker.ts` and `alchemy.run.ts` import a provider package; every program imports protocols only (0616) | lint | lint | import `@kalfa/provider-github` in Merger.ts: `pnpm lint` fails | boundary-rules.json |
+| Y1, each program's input function takes only its `In` union's members; an input with an unknown `_tag` fails to compile | type | type | add an untyped input to `match`: typecheck fails | kalfa/fabrikalfa/src/merger/Merger.ts |
 
-Every plant is run once by the tests step and recorded in its report and run row, never committed.
-The fixed vectors in G2 and G5 come from real calls: the build records them once from the owner's
-App on a throwaway branch, labeled `vector:` with the call and date, before it relies on them.
+The tests step runs each plant once and records it in its report and run row, never committed. The
+`vector:` payloads in W2 come from real deliveries to the App, recorded once with the event, action
+and date, before the build relies on them.
 
-**No host-only law.** Nothing here needs the owner's Mac. Two checks need the owner's account and
-come after his settings, outside the laws: the first deploy, and the first shadow day's
-`shadowed` rows read by the lead.
+**No host-only law.** Nothing needs the owner's Mac. Every law runs on memory layers and the memory
+Ledger on every pull request (0536, 0581). The deploy, the shadow run and the live Ledger are the
+owner's and the lead's, under [Rollout](#rollout-in-the-order-the-owner-sees-it), not laws.
 
 ## Files
 
-| File | Owner | Product lines expected | Change |
-|---|---|---|---|
-| `pnpm-workspace.yaml` | tests | 1 | `- infra/*` |
-| `infra/fabrikalfa/package.json` | build | 30 | the package, its catalog dependencies and `@kampus/vitest` |
-| `infra/fabrikalfa/tsconfig.json` | build | 10 | as `next/`'s packages |
-| `infra/fabrikalfa/vitest.config.ts` | tests | tests | `@kampus/vitest`'s shared config |
-| `infra/AGENTS.md` | build | docs | short map: `next/`'s rules hold, imports nothing from either version, secrets rule |
-| `infra/fabrikalfa/README.md` | build | docs | what runs, how to deploy, the two owner settings |
-| `infra/fabrikalfa/alchemy.run.ts` | build | 70 | Worker, `Fabrikalfa` object, two secrets, `Cloudflare.state()`, settings |
-| `infra/fabrikalfa/src/Fabrikalfa.ts` | build | 90 | the root machine: routing, the `sev0` forward, `wake` |
-| `infra/fabrikalfa/src/blockers/Blockers.ts` | build | 70 | the sev0 child machine and its `view` |
-| `infra/fabrikalfa/src/queue/Settings.ts` | build | 40 | the Schema and defaults |
-| `infra/fabrikalfa/src/queue/Queue.ts` | build | 200 | the queue child machine and its `wake` |
-| `infra/fabrikalfa/src/queue/Merger.ts` | build | 220 | the child machine |
-| `infra/fabrikalfa/src/queue/Outcome.ts` | build | 40 | pass, fail, infra; `kind` through `paths.mjs` |
-| `infra/fabrikalfa/src/queue/View.ts` | build | 30 | what `GET /queue` shows |
-| `infra/fabrikalfa/src/store/EventStore.ts` | build | 40 | the contract |
-| `infra/fabrikalfa/src/store/EventStoreMemory.ts` | build | 50 | the memory layer |
-| `infra/fabrikalfa/src/Host.ts` | build | 80 | one wake: step, interpret, arm |
-| `infra/fabrikalfa/src/github/CodeHost.ts` | build | 90 | the contract |
-| `infra/fabrikalfa/src/github/Ci.ts` | build | 40 | the contract |
-| `infra/fabrikalfa/src/github/CodeHostMemory.ts` | build | 150 | the small git model |
-| `infra/fabrikalfa/src/github/CiMemory.ts` | build | 30 | check runs in memory |
-| `infra/fabrikalfa/src/github/CodeHostRest.ts` | build | 180 | REST calls, safe to repeat |
-| `infra/fabrikalfa/src/github/CiRest.ts` | build | 40 | REST check runs |
-| `infra/fabrikalfa/src/github/AppToken.ts` | build | 60 | JWT with `Signature`, the installation token, cached for the wake |
-| `infra/fabrikalfa/src/github/Webhook.ts` | build | 120 | `verify` with `Mac`, `decode` with Schema, the `/merge` grammar |
-| `infra/fabrikalfa/src/github/internal/rest.ts` | build | 50 | one request helper: auth, status, `took`, `remaining` |
-| `infra/fabrikalfa/src/cloudflare/FabrikalfaObject.ts` | build | 50 | the object class and its `.make()` |
-| `infra/fabrikalfa/src/cloudflare/EventStoreSql.ts` | build | 90 | the SQL layer over `state.storage` with its Effect `transaction` |
-| `infra/fabrikalfa/src/cloudflare/Worker.ts` | build | 90 | the Effect Worker's fetch, enrichment, secrets |
-| `infra/fabrikalfa/src/Fabrikalfa.laws.test.ts` | tests | tests | Q1, Q2, R1, R2 |
-| `infra/fabrikalfa/src/blockers/Blockers.laws.test.ts` | tests | tests | B1 |
-| `infra/fabrikalfa/src/queue/Queue.laws.test.ts` | tests | tests | Q3, Q6, Q7, Q9, Q10 |
-| `infra/fabrikalfa/src/queue/Merger.laws.test.ts` | tests | tests | Q5, Q8 |
-| `infra/fabrikalfa/src/queue/Outcome.test.ts` | tests | tests | Q4, K1 |
-| `infra/fabrikalfa/src/store/EventStoreTest.ts` | tests | tests | S1, the shared suite |
-| `infra/fabrikalfa/src/store/EventStoreMemory.test.ts` | tests | tests | S1 on memory |
-| `infra/fabrikalfa/src/cloudflare/EventStoreSql.integration.test.ts` | tests | tests | S1 in local workerd, schedule only |
-| `infra/fabrikalfa/src/github/CodeHostTest.ts` | tests | tests | G1, the shared suite |
-| `infra/fabrikalfa/src/github/CodeHost.laws.test.ts` | tests | tests | G1 on both layers |
-| `infra/fabrikalfa/src/github/CodeHostRest.test.ts` | tests | tests | G2 |
-| `infra/fabrikalfa/src/github/Webhook.laws.test.ts` | tests | tests | G3, G4 |
-| `infra/fabrikalfa/src/github/Webhook.test.ts` | tests | tests | G5 |
-| `infra/fabrikalfa/src/github/vectors/` | tests | tests | recorded responses and payloads, labeled with call and date |
-| `infra/fabrikalfa/src/cloudflare/Worker.test.ts` | tests | tests | W1 |
-| `infra/fabrikalfa/src/Secrets.laws.test.ts` | tests | tests | X1 |
-| `.github/ci/paths.mjs` | tests | 120 | moved, unchanged: `classify` and its pure helpers, no `node:` import |
-| `.github/ci/changes.mjs` | tests | 15 | imports `paths.mjs`; `infra/` paths run check, typecheck and test |
-| `.github/ci/changes.test.ts` | tests | tests | C2, K1's CI half |
-| `.github/ci/package.json` | tests | 3 | exports `./paths.mjs` |
-| `.github/workflows/check.yaml` | tests | 15 | slice 4: `push` to `queue/staging`, first-parent `BASE`, `merge_group` scope |
-| `.github/ci/workflow-lint.ts` | tests | 15 | slice 4: holds the new trigger and `BASE` |
-| `.github/ci/workflow-lint.test.ts` | tests | tests | C1 |
-| `vitest.config.ts` | tests | 2 | includes `infra/*/src/**/*.test.ts`, minus the integration group |
-| `exam-paths.json` | tests | 2 | `infra/**/*.test.ts`, `infra/**/*Test.ts` |
-| `.oxlintrc.json` | tests | 4 | `next/**` overrides also cover `infra/**` |
-| `layer-rules.json` | tests | 12 | three `infra-` layers |
-| `.glossary/TERMS.md` | build | docs | staging branch, shadow mode, infra (the outcome), fast path, merge blocker (Tide's word), a new `infra/` section |
-| `docs/plan/README.md` | build | docs | where we are: `infra/` and its slices (0013) |
-| `package.json` | tests | none | not changed: `pnpm -r typecheck` and `pnpm lint` already reach a new workspace package |
-| `tsconfig.base.json` | tests | none | not changed: `infra/fabrikalfa/tsconfig.json` extends it |
+| File | Change | Product lines expected | Owner | Slice |
+|---|---|---|---|---|
+| `kalfa/fabrikalfa/package.json` | the app: private, its kalfa dependencies, scripts | 30 | build | 1 |
+| `kalfa/fabrikalfa/tsconfig.json` | as `kalfa/config`'s | tests | tests | 1 |
+| `kalfa/fabrikalfa/README.md` | what runs, how to deploy, the owner's steps | docs | build | 1 |
+| `kalfa/fabrikalfa/alchemy.run.ts` | the Worker, the program objects, cron triggers, secrets | 70 | build | 1 |
+| `kalfa/fabrikalfa/src/Worker.ts` | the four routes | 90 | build | 1 |
+| `kalfa/fabrikalfa/src/Webhook.ts` | verify, decode | 110 | build | 1 |
+| `kalfa/fabrikalfa/src/Ask.ts` | the ask protocol schemas | 40 | build | 1 |
+| `kalfa/fabrikalfa/src/App.ts` | the Layers joined | 60 | build | 1 |
+| `kalfa/fabrikalfa/src/settings/Settings.ts` | the settings program | 120 | build | 1 |
+| `kalfa/fabrikalfa/src/settings/Desired.ts` | the file's schema | 60 | build | 1 |
+| `kalfa/fabrikalfa/src/settings/Drift.ts` | the pure diff | 50 | build | 1 |
+| `.fabrikalfa/fabrikalfa.toml` | the first file, in shadow mode | 30 | build | 1 |
+| `kalfa/fabrikalfa/src/Fabrikalfa.test-support.ts` | the memory world: protocol test Layers, memory Ledger | tests | tests | 1 |
+| `kalfa/fabrikalfa/src/settings/Settings.test.ts` | S1, S2 | tests | tests | 1 |
+| `kalfa/fabrikalfa/src/Webhook.test.ts` | W1, W2 | tests | tests | 1 |
+| `kalfa/fabrikalfa/src/Worker.test.ts` | W3 | tests | tests | 1 |
+| `kalfa/fabrikalfa/src/Journal.test.ts` | M4, M5, grown each slice | tests | tests | 1 |
+| `kalfa/fabrikalfa/src/Secrets.test.ts` | X1, grown each slice | tests | tests | 1 |
+| `kalfa/fabrikalfa/test/vectors/README.md` | how each vector was recorded | tests | tests | 1 |
+| `exam-paths.json` | `kalfa/fabrikalfa/test/**` | 1 | tests | 1 |
+| `boundary-rules.json` | the `kalfa-app` type and its row, L1 | 8 | tests | 1 |
+| `pnpm-lock.yaml` | the new package's links | tests | tests | 1 |
+| `pnpm-workspace.yaml` | not changed: it already lists `kalfa/*` | none | tests | 1 |
+| `vitest.config.ts` | not changed: it already runs each kalfa package's `src` tests | none | tests | 1 |
+| `.oxlintrc.json` | not changed: `kalfa/**` already has `next/`'s rules | none | tests | 1 |
+| `package.json` | not changed: `pnpm -r typecheck` reaches a new workspace package | none | tests | 1 |
+| `kalfa/ci/src/Gates.ts` | `green`, `leftovers` | 40 | build | 2 |
+| `kalfa/ci/package.json` | exports `./Gates` and `./Freeze` | 2 | build | 2 |
+| `kalfa/ci/src/Gates.test.ts` | G1, G2 | tests | tests | 2 |
+| `kalfa/fabrikalfa/src/checks/Checks.ts` | the checks program | 160 | build | 2 |
+| `kalfa/fabrikalfa/src/checks/Checks.test.ts` | C1, C2 | tests | tests | 2 |
+| `kalfa/fabrikalfa/src/Policy.ts` | the WritePolicy Layer | 60 | build | 3 |
+| `kalfa/fabrikalfa/src/Callers.ts` | caller tokens to identities | 50 | build | 3 |
+| `kalfa/fabrikalfa/src/Policy.test.ts` | P1, P2 | tests | tests | 3 |
+| `kalfa/ci/src/Freeze.ts` | `verdict` | 40 | build | 3 |
+| `kalfa/ci/src/Freeze.test.ts` | F1 | tests | tests | 3 |
+| `kalfa/fabrikalfa/src/freeze/Freeze.ts` | the freeze program | 110 | build | 3 |
+| `kalfa/fabrikalfa/src/freeze/Freeze.test.ts` | Z1, Z2 | tests | tests | 3 |
+| `kalfa/fabrikalfa/src/merger/Merger.ts` | the merger program, shadow and live, Y1 | 230 | build | 4 |
+| `kalfa/fabrikalfa/src/merger/Merger.test.ts` | M1, M2, M3, M6 | tests | tests | 4 |
+| `kalfa/fabrikalfa/src/tokens/Tokens.ts` | the tokens program | 110 | build | 5 |
+| `kalfa/fabrikalfa/src/tokens/Tokens.test.ts` | T1 | tests | tests | 5 |
+| `.agents/skills/lead/scripts/botpush.mjs` | asks tokens for its push token; the keychain path goes | 40 | build | 5 |
+| `.agents/skills/lead/scripts/botpush.test.ts` | its laws on a fake tokens answer | tests | tests | 5 |
+| `.agents/skills/lead/scripts/pr/Arm.ts` | asks merger to arm, in live mode | 40 | build | 6 |
+| `.agents/skills/lead/scripts/pr/Arm.test.ts` | its laws on a fake merger answer | tests | tests | 6 |
+| `.glossary/TERMS.md` | rows: caller token, trust policy, the five programs; the fabrikalfa row names its folder | docs | build | 1 |
+| `docs/plan/README.md` | where we are: fabrikalfa and its slices (0013) | docs | build | 1 |
 
-## Validation
+## Existing tools
 
-- The tests step: `pnpm format`, then `nice -n 15 pnpm exec vitest run --maxWorkers=3` on the
-  `infra/` test files and `.github/ci/changes.test.ts` and `workflow-lint.test.ts`, then
-  `pnpm lint`. Each plant, run once, recorded. No live GitHub and no Cloudflare call.
-- The lead: one `pnpm typecheck` and the leak grep, outside any box.
-- After slice 3 lands, the deploy and the shadow day are the owner's and the lead's, as below.
+- `kalfa/fabrikalfa/alchemy.run.ts`: searched `rg -l "alchemy.run" packages next` and found
+  `packages/ledger-server`'s stack, which passes settings as one JSON env value. It is today's
+  version, so it is read, not imported; the new stack follows its shape on `@kalfa/provider-cloudflare`.
+- `kalfa/fabrikalfa/src/Worker.ts`: searched `@kalfa/provider-cloudflare`'s planned exports (0616:
+  program hosting on Workers) and `@alchemy.run/cloudflare` beta.85's Worker form; none routes
+  webhooks or asks. This file is the four routes only.
+- `kalfa/fabrikalfa/src/Webhook.ts`: searched npm for `@octokit/webhooks`, which verifies and types
+  GitHub events but brings its own Promise API and types; searched the repo
+  (`rg -n "X-Hub-Signature" .`), none. Effect's `Mac.verify` does the check
+  ([the crypto pattern](../../../.patterns/effect-crypto-through-services.md)), and Schema decodes
+  the few events used.
+- `kalfa/fabrikalfa/src/Ask.ts`: searched `@kalfa/transport` (0601, not built) and Effect's `Rpc`.
+  `Rpc` fits a typed client; the ask stays plain tagged JSON so a browser tab and `botpush.mjs`
+  speak it without an Effect client. Moving it onto `Rpc` later changes no program.
+- `kalfa/fabrikalfa/src/App.ts`: searched for a composer in the kalfa packages; kalfa/AGENTS.md
+  says Layers are joined at the top, which is this app. None exists.
+- `kalfa/fabrikalfa/src/Policy.ts`: searched `@kalfa/ledger`'s `WritePolicy` (0601, the
+  interface, not built) and `next/`'s person-only rules
+  (`rg -n "personOnly" next/packages/libfabrika/src`), which are fabrika's. This is fabrikalfa's
+  Layer of the ledger's interface.
+- `kalfa/fabrikalfa/src/Callers.ts`: searched Effect's `Mac` and `Hash` and the repo
+  (`rg -n "constantTime" .`), which finds tea's `constantTimeEqual` in `@demlik/tea/do`; Effect's
+  `Mac.verify` compares in constant time and is used instead, through the crypto pattern.
+- `kalfa/fabrikalfa/src/settings/Settings.ts`: searched github/safe-settings, whose shape it
+  follows; its code is Node and Probot, so none is taken.
+- `kalfa/fabrikalfa/src/settings/Desired.ts`: searched `@kalfa/config` (`kalfa/config/src/Toml.ts`,
+  `Codec.ts`), which parses and decodes the file; this is only the file's schema.
+- `kalfa/fabrikalfa/src/settings/Drift.ts`: searched npm's `deep-diff` and Effect's `Equal`;
+  `Equal` compares, and a field-by-field walk on the decoded values names each path, so no package.
+- `kalfa/fabrikalfa/src/checks/Checks.ts`: searched `.agents/skills/lead/scripts/pr/Queue.ts`
+  (reads `ci-required` once) and `ci-speed.ts` (speed numbers, not stuck runs); neither watches a
+  pull request over time.
+- `kalfa/fabrikalfa/src/freeze/Freeze.ts`: searched the sev skill's `Freeze.ts` and `Level.ts`
+  (today's laptop loop and log). Its rule is rethought as `kalfa/ci/src/Freeze.ts`'s `verdict`, its
+  loop becomes cron ticks and webhooks; nothing is imported from `.agents/`.
+- `kalfa/fabrikalfa/src/merger/Merger.ts`: searched `pr/Arm.ts`, `pr/Merge.ts` and `pr/Queue.ts`
+  (today's arm and admin merge) and `next/programs/pipeline`'s merger (0110). The gates are read
+  from them and rethought; none is imported.
+- `kalfa/fabrikalfa/src/tokens/Tokens.ts`: searched Octo STS (its own Go service, the shape
+  followed) and `botpush.mjs` (mints with `createSign` from the keychain key on the laptop). The
+  minting call is `@kalfa/provider-github`'s credentials Layer; this program decides and records.
+- `kalfa/ci/src/Gates.ts`: searched `kalfa/ci/src/DocsOnly.ts` on ticket 810's branch and
+  `pr/Queue.ts`'s inline `ci-required` read; no shared `green` or leftover check exists.
+- `kalfa/ci/src/Freeze.ts`: searched the sev skill's `Freeze.ts` `verdict`, which keeps the queue's
+  and the allowed branch's runs and cancels main's push runs. 0611 changed that rule; the new one is
+  pure and lives where 0612 puts admission.
 
-## Rollout, in the order the owner sees it
+## Is this a setting?
 
-1. **Slices 1 and 2 land.** Nothing runs anywhere yet.
-2. **Slice 3 lands, and the owner deploys from his Mac:** `pnpm --filter @kampus/fabrikalfa deploy`
-   with the App's private key and a new webhook secret in the shell's environment for that one
-   command. Alchemy writes both into the Secrets Store. Mode is `shadow`.
-3. **Waits on the owner: the App's webhook URL** set to the Worker's `/github`, with the same
-   webhook secret, and the events `issue_comment`, `pull_request`, `push`, `check_run` and
-   `issues`.
-4. **Shadow beside GitHub's queue.** People keep landing through GitHub's queue. For every PR it
-   takes, the queue predicts its path and tree and records whether GitHub's landed tree matched.
-   The lead reads the `shadowed` rows and writes a field note. Shadow is done after `matches`
-   (10) landings in a row whose predicted tree matched, at least `slow` (1) of them by the slow
-   path; if none of the ten is slow, it waits for one more that is. One mismatch starts the count
-   again. The view shows the count, so nobody counts by hand (owner, 2026-11-14).
-5. **Slice 4 lands:** the CI trigger on `queue/staging`, live merging, comments, and the
-   `queue-stopped` issue if the owner has widened 0534 by then. Still in shadow until the next step. The `sev0` freeze works from slice 3
-   on, since shadow reads it too; the lead creates the `sev0`, `sev0-fix` and `queue-stopped`
-   labels once.
-   **Waits on the owner:** widening 0534 so the queue may open its `queue-stopped` issue.
-6. **Waits on the owner: the App bypassing the ruleset** on main, so its squash is accepted while
-   GitHub's queue is still on. Then `mode` goes to `live` in `alchemy.run.ts`, one deploy, and
-   people use `/merge`. A PR that still goes through GitHub's queue while live may race; the tree
-   check stops the line if it does.
-7. **Not decided here:** when GitHub's queue is turned off (0537).
+Each new choice, asked (0069):
 
-## Size
-
-Four pull requests, each lands whole, in the order above. About 1,700 product lines in all.
-
-1. The package and the machines: `infra/` wiring, `Settings`, the root `Fabrikalfa`, `Blockers`, `Queue`, `Merger`, `Outcome`,
-   `EventStore` with its memory layer, `Host`, Q1 to Q10, R1, R2, B1, S1 on memory, the lint, layer, exam,
-   vitest and CI path rows, and `paths.mjs`: about 750 lines. Waits for `@kampus/vitest`.
-2. The GitHub services: both contracts, memory and REST layers, `AppToken`, `Webhook`, the recorded
-   vectors, G1 to G5 and X1 for these files: about 500 lines.
-3. The Worker, the object, the SQL store, the Alchemy stack, shadow mode, `GET /queue`, W1, S1 on
-   workerd, and the README: about 300 lines.
-4. Live: `check.yaml`'s trigger, the live merge path and its comments, the `queue-stopped` issue, C1:
-   about 150 lines.
-
-Priced from ticket 290's lane, the nearest in size (tests $11.79 and $14.45, build $27.95, review
-$5.97, a fix round $6.62, list dollars, `field/runs/`), and ticket 502's pull requests (tests $1.51 to
-$3.84, build $0.66 to $7.65, review $4.37 to $5.09). Slices 1 and 2 are like 290; 3 and 4 are like
-ticket 502's. Expected: about $45 each for 1 and 2, $18 each for 3 and 4, and three fix rounds at $7.
-Confidence 70%: the doubts are the Alchemy object and Worker shapes (named below, not yet run here
-on this exact form) and how big the memory git model gets.
-
-Estimate: 15 steps, $147
+- `merger.mode`, `merger.shadow`, `checks.missing`, `checks.stuck`: settings, in
+  `.fabrikalfa/fabrikalfa.toml`. `missing` 10 is about twice the 256 s start wait 0112 measured;
+  `stuck` 30 is about 2.4 times the 12.5 minutes one full run took in
+  [0106](../../../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md). `shadow` 10 is
+  the owner's.
+- The repo's wanted state (merge methods, rulesets, required checks): settings, in the same file.
+- The cron times (5 minutes, hourly): set once in `alchemy.run.ts`, not in the file, because a cron
+  trigger is deployed, not read. The hourly drift run is the ticket's word.
+- The token's permissions and its one hour: not settings. The permissions are what `botpush.mjs`
+  needs, and one hour is GitHub's fixed lifetime.
+- The freeze's keep rule, the bypass rule and "never land an untested tree": not settings. 0611,
+  0603 and 0537 fix them.
 
 ## Records
 
-- **What is lost if not written now:** for every entry, who entered it, both clocks, GitHub's
-  delivery id, the pinned head, the main and staging commit it was tested on, the check run's id,
-  URL and conclusion, every infra retry and pause, the landed commit and tree, and in shadow the
-  predicted path and tree beside what GitHub landed. Each is in the log from its first day; none
-  can be rebuilt later. Every GitHub answer also records `took` and `remaining`.
-- Derived later from the log: time in each state, the line's length over time, fast-path share.
-- `field/runs/` rows for each step, written by the lead; a field note for the shadow day.
+- **What is lost if not written now:** for every ask, who asked, both clocks, its id, and the
+  answer or the refusal and its reason; for every webhook, its delivery id; for every arm, the head
+  it was pinned to and the checks it saw; for every admin merge, the sev, the fix, main's head and
+  the head; for every cancel, the run and its verdict; for every settings read, the live state with
+  its bypass lists; for every token, who held it, when and until when. Each is in a journal from its
+  first day, and none can be rebuilt later.
+- Derived later from the journals: time from arm to merge, how often checks go missing or stuck,
+  the drift history.
+- `field/runs/` rows for each step, by the lead, and a field note for the shadow run.
 - `.glossary/TERMS.md` and `docs/plan/README.md`, as in the files table.
-- No `.decisions/` file: 0537 is the decision. The owner's answers to the open questions are
-  written as decisions the turn he gives them.
-- Follow-up tickets the lead files: the live GitHub suite on the schedule (needs a throwaway repo
-  and the App installed there); waiting for running checks at `/merge`; the wider fast path; two
-  Alchemy stacks so a deploy needs no secret values (below).
+- No `.decisions/` file: 0537, 0601, 0611, 0612, 0614 and 0616 hold the rulings. The owner's answer
+  to the open question is written as a decision the turn he gives it.
 
-## What this cannot tell us
+## Validation
 
-- **Alchemy's forms are read, not run, in this exact shape.** The modular object with an `alarm`
-  slot, `state.storage.sql` with its Effect `transaction`, `ReadSecret`, and `Cloudflare.state()`
-  are names in beta.85's source. 0041 binds a claim to a run; slice 3 runs them in local workerd
-  first, and a gap is patched with its issue (0042).
-- **Every deploy needs the two secret values.** Alchemy's `SecretsStore.Secret` takes its `value` on
-  each deploy and compares it with state. So only a machine that holds both can deploy. Two stacks
-  (secrets once, the Worker binding them by reference) may remove that; not read far enough to say.
-- **The memory git model's three-way merge is simpler than git's.** It merges by path. A conflict
-  git resolves inside a file, or one it finds that a path merge does not, is not modeled. The
-  recorded REST answers and the shadow day are where real merges show.
-- **The race in the merge call.** GitHub pins the head, not the base. Between reading main and the
-  squash, another writer can land. The tree check catches it after the fact, and the line stops;
-  it cannot prevent it. After the switch the queue is main's only writer, except the lead's
-  docs-only admin merges under 0183, which should then go through `/merge` too.
-- **The head pinned at `/merge`.** A push in the second between the comment and the Worker's read
-  pins the newer head. The commenter has write access anyway, but it is not what bors guarantees.
-- **The defaults** `pause` and `timeout` have no data behind them yet.
-- **"Labels need write access" is close, not exact.** GitHub's triage role can also label issues
-  and PRs, from memory, not fetched. Today nobody here holds triage, so it does not bite; a later
-  check of the labeler's permission is a small read if it ever does.
-- **A missed label webhook** leaves the freeze wrong until the next rebuild. v1 rebuilds only on
-  start; a read of the open `sev0` issues on each alarm before a merge would close that, at one
-  call per landing. Not in this plan.
+- The tests step: `pnpm format`, `nice -n 15 pnpm exec vitest run --maxWorkers=3` on the slice's
+  test files, `pnpm lint`. Each plant run once and recorded. No GitHub call and no Cloudflare call.
+- The lead runs one typecheck and the leak grep, outside any box.
+
+## Rollout, in the order the owner sees it
+
+1. **Slice 1 lands, and the owner deploys from his Mac:** `pnpm --filter @kalfa/fabrikalfa deploy`
+   with the App's private key and a new webhook secret in the shell for that one command; Alchemy
+   writes them into the Secrets Store (0537). **Waits on the owner:** the App's webhook URL set to
+   the Worker's `/github` with that secret, the events `pull_request`, `check_run`, `workflow_run`,
+   `issues` and `push`, and the App's permissions `administration: write`, `actions: write`,
+   `checks: read`, `contents: write`, `issues: read` and `pull_requests: write`. settings reports
+   drift from the first hour and writes nothing until the file changes on main.
+2. **Slice 2 lands:** checks starts flagging missing and stuck checks on ready pull requests.
+3. **Slice 3 lands:** the lead gets the first caller tokens, and freeze cancels runs in the next
+   sev0 beside `sev.ts`'s loop. A second cancel of a run is a no-op, so the two do not fight. The
+   loop retires in a later lead-tooling change, once one sev0 ran with both and their cancels
+   matched.
+4. **Slice 4 lands, in shadow.** For each pull request GitHub's queue takes, merger records whether
+   it would have armed it at that head. Shadow is done after 10 matches in a row; the view shows the
+   count, so nobody counts by hand.
+5. **Slice 5 lands.** **Waits on the owner:** the `agents` ruleset made once by hand with its bypass
+   list (the people's roles; the App is not on it), since only he edits a bypass list (0603). Then
+   `botpush.mjs` asks tokens, and the App's key can leave the laptop's keychain.
+6. **Slice 6, after shadow:** the file's `mode = "live"` lands as a reviewed change, and `land.ts
+   arm` asks merger. GitHub's queue still merges.
+7. **Waits on the owner, later:** the App's bypass on main, for merger's admin merge in a sev. A
+   token carries its App's bypass, so at that step tokens moves to an App of its own with no bypass,
+   as Octo STS runs as its own App. Until then T1 keeps tokens refusing, and admin merges stay with
+   `land.ts merge --admin`. That is a new App, so it comes to the owner as a yes or no then; his
+   2026-11-14 answer was about the queue.
+
+## Later slices, not built now
+
+- **Our own queue,** batching and skipping a change already tested on the same tree (0537):
+  merger becomes a `Merges` Layer of its own and must pass `@kalfa/codehost`'s merges conformance
+  suite, the one `@kalfa/provider-github`'s Layer passes, then a shadow run beside GitHub's queue.
+  Only then is GitHub's queue turned off, which 0537 leaves open.
+- **CI by OIDC:** the trust-policy reader, files `.fabrikalfa/trust/<identity>.toml` with Octo
+  STS's fields, the JWKS check, when the first workflow needs to ask.
+- **The leak gate on the server,** with the word list in the Secrets Store, on the owner's word.
+- **Chat:** asks from a comment that mentions the bot, through `@kalfa/chat` (0616).
+
+## Earlier owner answers, kept and dropped
+
+- **Kept:** the existing fabrikalfa App (2026-11-14), for every program day one. The step that
+  needs a second App is named in Rollout step 7, not taken.
+- **Kept:** a sev0 is an open issue labeled `sev0`, closing it ends it, rebuilt from the open
+  issues on start (2026-11-14, Tide's shape).
+- **Dropped:** a PR labeled `sev0-fix` lands in a freeze. 0611 (2026-11-18) replaced it: the label
+  is `sev`, it grants nothing alone, and the one fix landing now is named. Here the lead names it
+  with `freeze.next`.
+- **Kept, narrowed:** shadow ends after 10 matches in a row, a setting (2026-11-14). Its "at least
+  one by the slow path" falls away, since day one has no staging path; it comes back with our own
+  queue.
+- **Dropped with the old design:** `/merge` comments, the staging branch and the tree check. Day one
+  arms GitHub's queue, which tests the tree it lands; they come back with our own queue.
+
+## What the review of the old plan flagged, and what changed
+
+- **The `infra/` folder and `@kampus` names:** the app is `kalfa/fabrikalfa`, `@kalfa/fabrikalfa`
+  (0556, 0537); tests use `@kalfa/quality/vitest`, not `@kampus/vitest` (0538). No path is named
+  `infra/`.
+- **A hand-written tea 0.25 machine tree:** each job is a `Program.make` program (0601), on tea
+  0.29.0 and its patch, which the plan never names in a program's API. Only `Machine` reaches tea,
+  for the owed landing.
+- **`type` keys:** every union is a `Schema.TaggedUnion` or `TaggedError`, keyed `_tag` (0214).
+- **Its own EventStoreSql:** gone. Each program's journal is `@kalfa/program`'s `Journal` through
+  `@kalfa/ledger`'s `journal` Layer on `@kalfa/provider-cloudflare`'s Durable Object Ledger; tests
+  use the memory Ledger.
+- **Owed calls kept in its own state:** gone. A crash hands a step out again (tea's logged store),
+  writes are safe to repeat, and the one wait on GitHub uses tea's `owed()` and `answerTo`.
 
 ## Names checked
 
-Each name the plan coins, checked against the industry's word and the glossary
-([use the industry's names](../../direction/use-the-industrys-names.md)). "Open" marks a name kept
-for now that waits on the owner's pick.
-
 | Our word | Industry word | Source | Kept or renamed |
 |---|---|---|---|
-| merge queue | merge queue | [GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) | kept |
-| `Merger`, the child that lands one change | merger, next/'s word for the same job | [glossary](../../../.glossary/TERMS.md), [0110](../../../.decisions/0110-merge-queue-is-fabrika-programs.md) | renamed from `Landing` |
-| `Ci`, the service that reads check runs at a commit | `Ci`, next/'s word; GitHub's Checks API | [glossary](../../../.glossary/TERMS.md), [check runs](https://docs.github.com/en/rest/checks/runs) | renamed from `Checks` |
-| `Call`, a GitHub call a state owes | a pending message in an outbox; "ask" is only a person's ask here | [glossary](../../../.glossary/TERMS.md), [transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html) | renamed from `Ask` |
-| `owed`, `sent` | pending, sent (outbox) | [transactional outbox](https://microservices.io/patterns/data/transactional-outbox.html) | kept, plain words |
-| `associations` setting | `author_association` | [GitHub](https://docs.github.com/en/graphql/reference/enums#commentauthorassociation), [0081](../../../.decisions/0081-no-question-word-names.md) | renamed from `who` |
-| `remaining` on an answer | `x-ratelimit-remaining`; `limit` is the cap | [GitHub rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api) | renamed from `limit` |
-| `labels.blocker` | `blocker_label` | [Tide config](https://docs.prow.k8s.io/docs/components/core/tide/config/) | renamed from `labels.freeze` |
-| `enqueued` Msg | `pull_request` action `enqueued` | [GitHub webhooks](https://docs.github.com/en/webhooks/webhook-events-and-payloads#pull_request) | renamed from `queued` |
-| `Blockers`, merge blocker | merge blocker issue | [Tide](https://docs.prow.k8s.io/docs/components/core/tide/) | kept |
-| freeze | merge freeze | [Mergify](https://docs.mergify.com/merge-protections/freeze/), [0532](../../../.decisions/0532-a-sev0-freezes-ci.md) | kept |
-| sev0, the Queue's `sev0` copy | severity 0 incident | [0532](../../../.decisions/0532-a-sev0-freezes-ci.md) | kept, open |
-| staging branch, `staging` | `staging` | [bors-ng](https://bors.tech/documentation/getting-started/) | kept |
-| `scratch` (`queue/tmp`), where the merge is made | `staging.tmp` | [bors-ng](https://bors.tech/documentation/getting-started/) | kept, plain word |
-| pass, fail, infra | SUCCESS, FAILURE, INFRA_FAILURE | [LUCI Buildbucket](https://chromium.googlesource.com/infra/luci/luci-go/+/master/buildbucket/proto/common.proto) | kept |
-| shadow mode, `shadow`, `live` | shadow deployment | [Codefresh](https://codefresh.io/learn/software-deployment/shadow-deployments-benefits-process-and-4-tips-for-success) | kept |
-| fast path, slow path | fast path | [Wikipedia](https://en.wikipedia.org/wiki/Fast_path) | kept, glossed |
-| land, `landed` | land, as in 0537's `landed` entry | [0537](../../../.decisions/0537-infra-holds-our-own-small-services.md) | kept |
-| line, `Entry` (queue) | the queue's entries | [GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue), next/'s `Queue.ts` | kept, open |
-| drift, the stop on a tree mismatch | `tree_drift`, next/'s stop | next/'s `Queue.ts` | kept |
-| stop the line, `stopped`, `resumed` | andon | [jidoka and andon](../../direction/jidoka-and-andon.md) | kept |
-| event log, fold, cache | event sourcing | [Fowler](https://martinfowler.com/eaaDev/EventSourcing.html) | kept |
-| Model, Msg, Cmd, Sub, `update`, `init`, ports | the same | [Elm guide](https://guide.elm-lang.org/architecture/) | kept |
-| `Reply`, the out-message | OutMsg | [Elm Discourse](https://discourse.elm-lang.org/t/what-is-the-advantage-of-a-translationdictionary-in-the-translator-pattern/4111) | kept |
-| alarm, `wake` | Durable Object alarm | [Cloudflare](https://developers.cloudflare.com/durable-objects/api/alarms/), [glossary](../../../.glossary/TERMS.md) | kept |
-| host, `Host.ts` | tea's host adapter, not the glossary's Clients host | [@demlik/tea](https://github.com/kamp-us/demlik) | kept |
-| enrich | Content Enricher | [EIP](https://www.enterpriseintegrationpatterns.com/patterns/messaging/DataEnricher.html) | kept |
-| `delivery`, `sentAt`, `arrivedAt` | `X-GitHub-Delivery`; the glossary's two clocks | [GitHub](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries), [glossary](../../../.glossary/TERMS.md) | kept |
-| `took` | `took`, in ms | [Elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/current/search-search.html) | kept |
-| `checks` setting | required status checks | [GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) | kept |
-| `wait` setting | status check timeout | [GitHub](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue) | kept, open |
-| `round`, `rounds`, `behind`, `moved`, `conflict` | next/'s merger words | next/'s `Merger.ts` | kept |
-| `CodeHost`, change kind (`kind`) | the glossary's words | [glossary](../../../.glossary/TERMS.md) | kept |
+| merger | merger, 0110's word | [0110](../../../.decisions/0110-merge-queue-is-fabrika-programs.md) | kept |
+| arm | merge when ready, auto-merge | [0530](../../../.decisions/0530-lead-turns-on-merge-when-ready.md) | kept, the repo's word |
+| admin merge | bypass merge | [0611](../../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md) | kept |
+| freeze | merge freeze | [0532](../../../.decisions/0532-a-sev0-freezes-ci.md) | kept |
+| drift | configuration drift | safe-settings, Terraform | kept |
+| trust policy | trust policy | [Octo STS](https://github.com/octo-sts/app) | kept |
+| caller token | API token, bearer token | RFC 6750 | kept, a new glossary row |
+| leftovers | reject and backup files (`.rej`, `.orig`) | GNU patch | kept, plain word |
+| shadow | shadow deployment | the old plan's row | kept |
+| `missing`, `stuck` | not reported, hung check | GitHub required checks | kept, plain words |
+| `Refused`, `reason` | the repo's refusal word | `.agents/skills/sev/scripts/Level.ts` | kept |
 
-## Answered questions
+## What this cannot tell us
 
-1. Shadow ends after 10 matching landings in a row, a setting, with at least one by the slow path; if none of the ten is, shadow waits for one more. The owner's answer, 2026-11-14.
-2. The App is the existing fabrikalfa App, no new one. The package is `@kampus/fabrikalfa` at `infra/fabrikalfa`, and the queue is its first feature. The owner's answer, 2026-11-14.
-3. How a sev0 reaches the queue: an open issue labeled `sev0`, PRs labeled `sev0-fix`, closing the issue ends it, rebuilt on start from the open issues. The owner's answer, 2026-11-14, Tide's merge-blocker shape. No `repository_dispatch`.
+- **Whether `@kalfa/program`'s shape fits these sketches.** It is not built. The names `Machine`,
+  the owed piece and how an ask gets its answer back are its plan's. A change there changes every
+  program's sketch here, not what each program decides.
+- **Whether one landing owed holds the whole merger** under `@kalfa/program`'s one-input-at-a-time
+  busy flag. If it does, merger takes GitHub's answer as a plain input, as the call says.
+- **Whether `@kalfa/codehost` covers rulesets and repo settings.** 0614 lists "repo labels and
+  variables"; settings needs rulesets too. If ticket 1190's plan leaves them out, slice 1 adds them
+  to `@kalfa/codehost` and `@kalfa/provider-github`, which adds files to it.
+- **GitHub's facts are from memory,** since its docs were not reachable here: which conclusions
+  pass a required check, the token request's fields, that a ruleset bypass is per actor. The
+  vectors check the answers; the bypass point is checked once by reading the API before slice 5.
+- **The cost of a Durable Object per program and a cron every 5 minutes** is not measured. It is
+  far inside the Workers Paid plan by a guess (about 12 wakes an hour per program), not by data.
+- **Per-environment tokens cannot tell two agents in one environment apart.** The journal names
+  the environment. An identity per agent run is later, if the owner wants it.
+- **The ticket numbers 1189 to 1192 are the brief's.** The tracker was not readable from this step.
 
 ## Open questions
 
-None.
+1. **Who may ask fabrikalfa for what: the `WritePolicy` of 0601.** The plan's table: GitHub itself, known by its webhook signature, sends events only; CI, known by a GitHub Actions OIDC token that matches a trust policy file in the repo (Octo STS style), may ask only for a push token; an agent, known by its environment's caller token (one token per environment: the laptop's boxes, a cloud session), may ask merger to arm and tokens for a push token; the lead, known by a caller token of its own that is never mounted into a box, may also name the sev fix and ask merger for an admin merge, which merger takes only while a sev0 is open. Yes, or say which line changes. Lean: yes, 70% sure. Why: it is the least each caller needs today, every ask is checked at the door before it reaches a journal, and no person meets a prompt in the daily flow. What it costs: a per-environment token cannot tell two agents in one environment apart, so the journal names the environment, not the agent; the lead's power rests on one file on the laptop staying out of every box; and the CI half is built only when a workflow first asks. What would settle the doubt: a read of the box mounts in `drive.ts` and `box.sh` showing no box can read the lead's file, and the owner's word on whether an agent run should have its own identity later.
+
+## Size
+
+Six pull requests, each lands whole, in the order the owner sees them. About 1,800 product lines
+and about 14 agent hours across the steps, 60% sure; the doubts are at the end of this section.
+
+1. Slice 1, the app and settings: the package, the stack, the Worker's routes, the webhook check,
+   the ask schemas, the Layers, the settings program with its file, schema and diff, and the first
+   laws (S1, S2, W1 to W3, M4, M5, X1, K1, L1): about 760 lines. Waits for the packages listed
+   under Builds on.
+2. Slice 2, checks and the gates: about 200 lines, with G1, G2, C1, C2.
+3. Slice 3, the policy and freeze: about 260 lines, with P1, P2, F1, Z1, Z2.
+4. Slice 4, merger in shadow, its live and admin paths on memory layers: about 230 lines, with M1
+   to M3, M6, Y1.
+5. Slice 5, tokens and `botpush.mjs`: about 150 lines, with T1.
+6. Slice 6, merger live through `land.ts arm`: about 40 lines. Starts after shadow's 10 matches.
+
+Priced from the `@kalfa/quality/stryker` quest, a new kalfa package of about this slice size
+(`field/runs/2026-11-18-kalfa-quality-stryker-*.json`: tests $6.92, build $3.80, review $5.55, a
+fix $2.20 and its recheck $7.74, list dollars), and the old plan's basis, ticket 290's lane. Slices
+1 and 4 are larger, about $30 each for tests, build and review; slices 2, 3 and 5 about $20 each;
+slice 6 about $10; four send-backs at about $10 each. 60% sure: the doubts are `@kalfa/program`'s
+API, which every program sketch leans on, and how much of `@kalfa/codehost` slice 1 must add.
+
+Estimate: 22 steps, $170
 
 ## Findings
 
