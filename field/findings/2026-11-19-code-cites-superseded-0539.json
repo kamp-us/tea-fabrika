@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-19-code-cites-superseded-0539",
+  "date": "2026-11-19",
+  "by": "review",
+  "model": "sonnet",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/ci/workflow-lint/merge-line.ts",
+    "line": 115
+  },
+  "says": "About 30 comments, tests and lint messages under .github/ci and in .github/workflows/scheduled.yaml cite 0539 as the live rule for no tooling test on the merge line, for example the T1 message `runs no tooling test (0539)`. Slice 7 of the rules and records build marks 0539 superseded by 0584, which puts plain tooling laws back on the pull request, so these messages point a reader at history. The link check reads only `.decisions/NNNN-slug.md` paths, so a bare number is not flagged.",
+  "proof": "`grep -c 0539` gives changes.mjs 3, merge-line.ts 6, merge-line.test.ts 9, changes.test.ts 7, record.ts 1, shared.ts 1, time-tables.ts 1, required.test.ts 1 and scheduled.yaml 1. check.yaml:32-34 already runs the plain tooling laws their change reaches, as 0584 says.",
+  "cost": "A person who hits the T1 message is sent to a superseded record, and 0539's old rule reads as the current one.",
+  "head": "f153b2642dd6ff34b41533d0015b96ee5bc1c301",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1658"
+}
