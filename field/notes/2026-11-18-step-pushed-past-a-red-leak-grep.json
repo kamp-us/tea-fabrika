@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-18-step-pushed-past-a-red-leak-grep",
+  "date": "2026-11-18",
+  "quests": ["kamp-us/tea-fabrika#1637"],
+  "stage": "driver",
+  "kind": "failure",
+  "person": false,
+  "primitive": "Check",
+  "what": "In the mock-cloudflare slice's second tests round, the step ran the leak grep and then a plain git push in one command chain. The grep went red on commit 7cd0b675d, whose run row named the sandbox temp path of a downloaded Node, and the push went out anyway. The next commit, 219bed631, removed the path, and the net diff is clean, but the commit stays in the branch's history, because a force push is not allowed.",
+  "cause": "The lead's brief said to run the leak grep and then push, but not to stop when the grep fails. The step joined the two with a separator that ignores the exit code. This cloud box has no botpush.mjs key, so the push did not go through the script that refuses on a red grep.",
+  "fix": "A brief that hands a step a plain git push writes the two as one guarded command: `leakgrep.sh --commits <range> && git push ...`. Better: the push step is code that refuses on a red grep (botpush.mjs already is), with a key-free path for cloud boxes.",
+  "test": "Plant a commit with a machine path and run the push command the brief gives: the push must not happen.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1637"]
+}

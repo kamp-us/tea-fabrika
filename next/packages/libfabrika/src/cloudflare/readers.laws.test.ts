@@ -1,105 +1,97 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
-import { createHash, generateKeyPairSync } from "node:crypto";
+// The settings entry flows (L10, L16) are in entry-flows.laws.test.ts, split out unchanged so each
+// file stays under about 60 s on a CI leg.
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Cause, Context, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Tracer } from "effect";
-import { Digest } from "effect/crypto";
+import { Recorder, runsFor, Stub } from "@kampus/vitest";
+import { Cause, Effect, Exit, Layer, Match, Redacted, Schema } from "effect";
+
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Signature from "effect/crypto/Signature";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
-import { Start } from "../processes/Process.ts";
+import { News } from "../runtime/News.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
-import type { Sql } from "../Sql.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
-import type { GatewayCalls } from "./bindings.ts";
-import { ConnectionService, connectionRuntime } from "./connection.ts";
+import type { ProjectBinding, RecordBinding } from "./bindings.ts";
+import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
+import { Dispatcher } from "./Dispatcher.ts";
+import * as DispatcherLive from "./DispatcherLive.ts";
 import { fetch } from "./fetch.ts";
-import type { RecordShape } from "./objects.ts";
-import { recordRead, recordWrite } from "./record.ts";
+import { recordPartImplementation, recordRead, recordWrite } from "./record.ts";
 import {
   ProcessService,
   ProjectService,
   processDescriptor,
   processRuntime,
   projectRuntime,
-  settingsReply,
+  recordedLayer,
+  SettingsRuntime,
   type Env,
 } from "./runtime.ts";
-import * as SettingsTest from "./SettingsTest.ts";
+import { Waits } from "./Waits.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
-class EntryFailure extends Schema.TaggedError<EntryFailure>()("EntryFailure", {
-  cause: Schema.Defect(),
-}) {}
+const config = await Effect.runPromise(
+  StartsTest.fixture({
+    name: "parse-test",
+    person: "person-test",
+    founder: "public-test",
+    window: null,
+    port: 18787,
+    build: "test",
+  }),
+);
 
-const recordConstructor = vi.hoisted(() => {
-  const slot: {
-    value?: Effect.Effect<
-      Effect.Effect<RecordShape, unknown, Scope.Scope>,
-      unknown,
-      ObjectState | WorkerEnvironment | Scope.Scope
-    >;
-  } = {};
-  return slot;
-});
+/** A fresh Ed25519 public key in JWK's `x` form (base64url), from Effect's Signature on WebCrypto. */
+const freshPublicKey = Signature.Signature.use((signature) => signature.generateKeyPair(Signature.ed25519)).pipe(
+  Effect.flatMap(({ publicKey }) => Signature.toBytes(publicKey)),
+  Effect.map(Base64Url.encode),
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+);
 
-// SQL drivers throw at the synchronous platform boundary, before the service translates them.
-const settingsExec =
-  (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
-  (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
-
-    if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
-      counted("read");
-
-      if (failed()) {
-        throw cause;
-      }
-    }
-
-    if (settings && /INSERT INTO entries/i.test(query)) {
-      counted("append");
-    }
-
-    return base.exec(query, ...args);
-  };
-
-// Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-  return {
-    ...actual,
-    RecordPart: {
-      make: (implementation: NonNullable<typeof recordConstructor.value>) => {
-        recordConstructor.value = implementation;
-        return Layer.empty;
-      },
-    },
-  };
-});
-
-vi.mock("effect", async (original) => {
-  const actual = await original<typeof import("effect")>();
-  return { ...actual, Effect: { ...actual.Effect } };
-});
-
-const config = instanceFixture({
-  name: "parse-test",
-  person: "person-test",
-  founder: "public-test",
-  window: null,
-  port: 18787,
-  build: "test",
-});
+/** SHA-256 of no bytes (FIPS 180-2's empty-message digest). */
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
+
+/** A platform member any call to which fails the law: the world gives only what the readers use. */
+const unexpected = (member: string): never => {
+  throw new Error(`the world gives no platform member ${member}`);
+};
+
+/** The one member Alchemy's `fromDurableObjectState` reads as it wraps an object, which these objects lack:
+ *  `container` answers nothing, and any other member the world did not give fails the law. */
+const absent = (member: string) => (member === "container" ? undefined : unexpected(member));
+
+/** A platform member built from plain parts, as workerd's type promises it. */
+// SAFETY: each caller hands `fake` the one part the readers use, and the readers use nothing else of it.
+const fake = <A>(value: object): A => value as A;
+
+/** A saved value a law has damaged on purpose: workerd's type promises better, so the readers check it. */
+// SAFETY: the damage is the law's point. Every reader decodes the value before it uses it.
+const saved = <A>(value: unknown): A => value as A;
+
+/** The world's bindings with another `INSTANCE` text, the one binding a law changes. */
+const withInstance = (env: Env, instance: string) =>
+  Stub.make<Env>(unexpected, {
+    INSTANCE: instance,
+    PROJECT: env.PROJECT,
+    RECORD: env.RECORD,
+    MEASUREMENTS: env.MEASUREMENTS,
+  });
 
 const entryPaths = ["Project", "Process", "Connection", "HTTP", "RecordPart"] as const;
 
@@ -130,82 +122,79 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               continue;
             }
 
-            const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
             let consumers = 0;
             let settingsCalls = 0;
+
+            const w = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                world(async (wire) => {
+                  settingsCalls++;
+
+                  return StartsTest.reply(wire);
+                }),
+              ),
+              (value) => Effect.sync(() => value.db.close()),
+            );
+
             const bad =
               origin === undefined
                 ? StartsTest.corrupt(deployment, Math.floor(choice / moves.length))
                 : StartsTest.changeOrigin(deployment, origin);
+
             const sql = w.ctx.storage.sql;
-            const ctx = {
-              ...w.ctx,
-              id: {
-                ...w.ctx.id,
-                name:
-                  path === "Process"
-                    ? JSON.stringify(["settings-law", "worker"])
-                    : path === "RecordPart"
-                      ? JSON.stringify(["settings-law", "spans/0"])
-                      : "settings-law",
-              },
+
+            const ctx = Stub.make<DurableObjectState>(absent, {
+              id: Stub.make<DurableObjectId>(unexpected, {
+                name: Match.value(path).pipe(
+                  Match.when("Process", () => Formatter.formatJson(["settings-law", "worker"])),
+                  Match.when("RecordPart", () => Formatter.formatJson(["settings-law", "spans/0"])),
+                  Match.orElse(() => "settings-law"),
+                ),
+              }),
               getWebSockets: () => {
                 consumers++;
+
                 return [];
               },
-              storage: new Proxy(w.ctx.storage, {
-                get: (target, key) => {
-                  if (key === "get") {
-                    return (...args: unknown[]) => {
-                      consumers++;
-                      return Reflect.apply(target.get, target, args);
-                    };
-                  }
+              getTags: w.ctx.getTags,
+              getWebSocketAutoResponseTimestamp: w.ctx.getWebSocketAutoResponseTimestamp,
+              acceptWebSocket: w.ctx.acceptWebSocket,
+              setWebSocketAutoResponse: w.ctx.setWebSocketAutoResponse,
+              // The storage, with each read a consumer could make counted: `get`, and `sql.exec`.
+              storage: Stub.make<DurableObjectStorage>(unexpected, {
+                // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+                kv: Stub.make<SyncKvStorage>(unexpected),
+                get: fake<DurableObjectStorage["get"]>((...args: ReadonlyArray<unknown>) => {
+                  consumers++;
 
-                  if (key === "sql") {
-                    return new Proxy(sql, {
-                      get: (target, key) =>
-                        key === "exec"
-                          ? (...args: unknown[]) => {
-                              consumers++;
-                              return Reflect.apply(target.exec, target, args);
-                            }
-                          : Reflect.get(target, key),
-                    });
-                  }
+                  return Reflect.apply(w.ctx.storage.get, w.ctx.storage, args);
+                }),
+                transactionSync: w.ctx.storage.transactionSync,
+                sql: Stub.make<SqlStorage>(unexpected, {
+                  exec: fake<SqlStorage["exec"]>((...args: ReadonlyArray<unknown>) => {
+                    consumers++;
 
-                  return Reflect.get(target, key);
-                },
+                    return Reflect.apply(sql.exec, sql, args);
+                  }),
+                  get databaseSize() {
+                    return sql.databaseSize;
+                  },
+                }),
               }),
-            };
-            const env = {
-              ...w.env,
-              INSTANCE: JSON.stringify(bad),
-              PROJECT: new Proxy(w.env.PROJECT, {
-                get: (target, key) =>
-                  key === "getByName"
-                    ? () =>
-                        new Proxy(target.getByName("settings-law"), {
-                          get: (stub, method) =>
-                            method === "settingsStart"
-                              ? async (wire: StartsTest.Input) => {
-                                  settingsCalls++;
-                                  return StartsTest.reply(wire);
-                                }
-                              : Reflect.get(stub, method),
-                        })
-                    : Reflect.get(target, key),
-              }),
-            };
-            const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
+            });
+
+            // The world's Project stub counts each `settingsStart` and answers the start it is given.
+            const env = withInstance(w.env, Formatter.formatJson(bad));
+
             const local = {
               ...config,
               name: "settings-law",
               port: recipe.port,
               person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-              founder: publicKey ?? "missing-public-key",
+              founder: yield* freshPublicKey,
               window: config.founding.window,
             };
+
             let exit: Exit.Exit<unknown, unknown>;
 
             if (path === "HTTP") {
@@ -220,16 +209,17 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ),
               );
             } else if (path === "RecordPart") {
-              const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
               exit = yield* Effect.exit(
                 Effect.gen(function* () {
-                  const build = yield* constructor;
+                  const build = yield* recordPartImplementation;
                   const part = yield* build;
+
                   return yield* part.read(Chain.cases.spans.make({}), 0, 0);
                 }).pipe(
                   Effect.provideService(WorkerEnvironment, env),
                   Effect.provideService(
                     ObjectState,
+                    // SAFETY: `ctx` holds the handles `fromDurableObjectState` reads; only the Request brands of the two types differ.
                     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
                     fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
                   ),
@@ -250,6 +240,7 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 bootstrap: [{ id: "boot", name: "boot", program: "missing" }],
                 door: () => Effect.die("consumer before start"),
               });
+
               yield* Effect.addFinalizer(() => runtime.disposeEffect);
               exit = yield* Effect.promise(() => runtime.runPromiseExit(ProjectService));
             }
@@ -284,6 +275,7 @@ const parserControl = (request: Request, env: Env) =>
       Redacted.make("test"),
       {},
     ]);
+
     const response = yield* secure;
 
     if (response.status !== 403) {
@@ -291,6 +283,7 @@ const parserControl = (request: Request, env: Env) =>
     }
 
     const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [request, env, "test", {}]);
+
     return yield* legacy;
   });
 
@@ -305,9 +298,20 @@ const typed = (exit: Exit.Exit<unknown, unknown>, tag = "LedgerError") => {
   });
 };
 
-const world = () => {
+// M4 (mock sweep slice 1). Every platform object here is a `Stub.make` fake, so a call the world does
+// not give fails the law. Plants, each run once: the fake socket's `send` drops its frame (the ready
+// law is red: no `bad_row` reply in `sent`); `gatewayLogic` calls `ctx.storage.list()` (`unexpected`
+// throws, and the laws that build a connection are red).
+/** In-memory platform handles over one SQLite database. The Project stub's `settingsStart` answers
+ *  as `settingsStart` says, the good start by default, its `route` answers what `answer` last set, and
+ *  the object state's `storage.get` answers `read` says. `sent` holds each frame the socket was sent. */
+const world = (
+  settingsStart: (wire: StartsTest.Input) => Promise<unknown> = async () => StartsTest.reply(config),
+  read?: (key: string) => Promise<unknown>,
+) => {
   const db = new DatabaseSync(":memory:"),
     sql = nodeSql(db);
+
   let attached: unknown = Attached.cases.online.make({
     client: "client",
     identity: { key: "public", person: "person", as: "agent" },
@@ -316,64 +320,81 @@ const world = () => {
     watching: false,
     busy: false,
   });
+
   let tags: unknown = ["session", "tab", "key"],
-    name: unknown = "gateway";
-  const ws = {
+    name: unknown = "gateway",
+    answered: unknown = { _tag: "parked", stream: "stream", after: 0 };
+
+  const sent: Array<string> = [];
+
+  const socket = Stub.make<WebSocket>(unexpected, {
     deserializeAttachment: () => attached,
     serializeAttachment: (value: unknown) => {
       attached = value;
     },
-    send: vi.fn(),
-    close: vi.fn(),
-  };
-  // oxlint-disable-next-line fabrika/no-type-assertions -- the socket double supplies attachment, send and close; workerd owns the complete WebSocket
-  const socket = ws as unknown as WebSocket;
-  // oxlint-disable-next-line fabrika/no-type-assertions -- only workerd constructs a complete DurableObjectState; these are the handles the real readers use
-  const ctx = {
-    id: {
-      get name() {
-        return name;
-      },
+    send: (text) => {
+      sent.push(String(text));
     },
-    storage: {
-      sql: {
-        exec: sql.exec,
+    close: () => {},
+  });
+
+  const ctx = Stub.make<DurableObjectState>(absent, {
+    id: Stub.make<DurableObjectId>(unexpected, {
+      get name() {
+        return saved<string>(name);
+      },
+    }),
+    storage: Stub.make<DurableObjectStorage>(unexpected, {
+      // Alchemy's `fromDurableObjectStorage` hands `kv` on as it wraps the storage, and these objects keep nothing in it.
+      kv: Stub.make<SyncKvStorage>(unexpected),
+      sql: Stub.make<SqlStorage>(unexpected, {
+        // workerd answers a cursor, which the readers take with `Array.from`, as they take these rows.
+        exec: fake<SqlStorage["exec"]>(sql.exec),
         get databaseSize() {
           return sql.size();
         },
-      },
-      transactionSync: sql.transaction,
-    },
-    getWebSockets: () => [socket],
-    getTags: () => tags,
-    getWebSocketAutoResponseTimestamp: () => null,
-    acceptWebSocket: vi.fn(),
-    setWebSocketAutoResponse: vi.fn(),
-  } as unknown as DurableObjectState;
-  const route = vi.fn(async (): Promise<unknown> => ({ _tag: "parked", stream: "stream", after: 0 }));
-  // oxlint-disable-next-line fabrika/no-type-assertions -- in-memory platform stubs supply just the RPCs these readers reach
-  const env = {
-    INSTANCE: JSON.stringify(config),
-    PROJECT: {
-      getByName: () => ({
-        settingsStart: async () => StartsTest.reply(config),
-        route,
-        leave: async () => {},
-        disconnect: async () => {},
-        clientConnect: async () => "client",
-        challenge: async () => "nonce",
       }),
-    },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
-    MEASUREMENTS: {},
-  } as unknown as Env;
+      transactionSync: sql.transaction,
+      ...(read === undefined ? {} : { get: fake<DurableObjectStorage["get"]>(read) }),
+    }),
+    getWebSockets: () => [socket],
+    getTags: () => saved<Array<string>>(tags),
+    getWebSocketAutoResponseTimestamp: () => null,
+    acceptWebSocket: () => {},
+    setWebSocketAutoResponse: () => {},
+  });
+
+  const project = Stub.make<DurableObjectStub<ProjectBinding>>(unexpected, {
+    settingsStart: fake<DurableObjectStub<ProjectBinding>["settingsStart"]>(settingsStart),
+    route: fake<DurableObjectStub<ProjectBinding>["route"]>(async () => answered),
+    leave: fake<DurableObjectStub<ProjectBinding>["leave"]>(async () => {}),
+    disconnect: fake<DurableObjectStub<ProjectBinding>["disconnect"]>(async () => {}),
+    clientConnect: fake<DurableObjectStub<ProjectBinding>["clientConnect"]>(async () => "client"),
+    challenge: fake<DurableObjectStub<ProjectBinding>["challenge"]>(async () => "nonce"),
+  });
+
+  const env = Stub.make<Env>(unexpected, {
+    INSTANCE: JSON.stringify(config),
+    PROJECT: Stub.make<Env["PROJECT"]>(unexpected, { getByName: () => project }),
+    RECORD: Stub.make<Env["RECORD"]>(unexpected, {
+      getByName: () =>
+        Stub.make<DurableObjectStub<RecordBinding>>(unexpected, {
+          write: fake<DurableObjectStub<RecordBinding>["write"]>(async () => ({ _tag: "written" })),
+        }),
+    }),
+    MEASUREMENTS: Stub.make<R2Bucket>(unexpected),
+  });
+
   return {
     ctx,
     env,
-    ws,
     socket,
+    sent,
     db,
-    route,
+    /** What the Project's `route` answers from now on. */
+    answer: (value: unknown) => {
+      answered = value;
+    },
     attached: (value: unknown) => {
       attached = value;
     },
@@ -393,6 +414,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
       tags: Schema.Tuple([Schema.String, Schema.String, Schema.String]),
       name: Schema.String,
     }[source];
+
     await fc.assert(
       fc.asyncProperty(malformed(schema), async (raw) => {
         const w = world();
@@ -406,7 +428,7 @@ for (const source of ["attachment", "tags", "name"] as const) {
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
     );
   });
 }
@@ -421,47 +443,89 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
         try {
           const gateway = await runtime.runPromise(ConnectionService);
           w.attached(raw);
+
           const work = () =>
             ({
               message: () => gateway.message(w.socket, '{"jsonrpc":"2.0","id":1,"method":"view.open","params":{}}'),
               close: () => gateway.close(w.socket),
               ring: () => gateway.ring("stream", 1),
               probe: () => gateway.probe("session"),
-              notify: () => gateway.notify("client", {}),
+              notify: () => gateway.notify("client", News.cases.granted.make({ nonce: "nonce-1" })),
             })[method]();
+
           typed(await runtime.runPromiseExit(Effect.suspend(work)));
         } finally {
           await runtime.dispose();
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], [{}]] },
+      { seed: 119120, numRuns: runsFor({ fast: 4, full: 20 }), examples: [[null], [{}]] },
     );
   });
 }
 
+// The live members the two Recorder laws below wrap, read once from each service's live layer, the
+// sibling file 0095 keeps apart from the contract.
+const liveWaits = Effect.runSync(Waits.pipe(Effect.provide(WaitsLive.layer)));
+
+const liveDispatcher = Effect.runSync(Dispatcher.pipe(Effect.provide(DispatcherLive.layer)));
+
+// M1 (mock sweep slice 2). The wait asks the `Waits` service for the ready decode once, with the
+// raw answer the project gave, and the live decode fails in the typed channel. The Recorder holds
+// the call; the live member run on the recorded value holds the typed exit.
+// Plants: in `WaitsLive.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`
+// (red on the typed exit); `wait` decodes the answer inline, past `Waits` (red: no recorded call).
 it("Connection ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        runtime = connectionRuntime(w.ctx, w.env, config);
-      const original = Effect.result;
-      const attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
+        attempts: Array<Exit.Exit<unknown, unknown>> = [],
+        decodes: Array<Exit.Exit<unknown, unknown>> = [];
+
+      // The real waits, watched: each run is recorded, and its exit is kept to read its error.
+      const waits = Layer.unwrap(
+        Effect.gen(function* () {
+          const real = yield* GatewayWaits;
+
+          return Recorder.layer(GatewayWaits, {
+            wait: (...args) =>
+              real.wait(...args).pipe(
+                Effect.onExit((exit) =>
+                  Effect.sync(() => {
+                    attempts.push(exit);
+                  }),
+                ),
+              ),
+          });
+        }),
+      ).pipe(Layer.provide(GatewayWaits.layer));
+
+      // The ready decode's own seam (mock sweep slice 2, 0095): the live `Waits` member behind a
+      // Recorder, with its own exit kept. The request path must ask it, so the recorded call holds the
+      // exact raw answer the project gave, beside the exit of the whole wait above.
+      const decoding = Recorder.layer(Waits, {
+        ready: (answer) =>
+          liveWaits.ready(answer).pipe(
             Effect.onExit((exit) =>
               Effect.sync(() => {
-                attempts.push(exit);
+                decodes.push(exit);
               }),
             ),
           ),
+      });
+
+      const runtime = SettingsRuntime.runtime(
+        gatewayLayer(w.ctx, w.env).pipe(
+          Layer.provideMerge(waits),
+          Layer.provide(gatewayProject(w.env)),
+          Layer.provide(recordedLayer(w.env)),
+          Layer.provideMerge(decoding),
         ),
       );
 
       try {
         const gateway = await runtime.runPromise(ConnectionService);
-        w.route.mockResolvedValue({ _tag: "ok", result: raw });
+        w.answer({ _tag: "ok", result: raw });
         await runtime.runPromise(
           gateway
             .message(
@@ -475,93 +539,123 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
             )
             .pipe(Effect.exit),
         );
+        expect(await runtime.runPromise(Recorder.calls(GatewayWaits, "wait"))).toHaveLength(1);
         expect(attempts).toHaveLength(1);
         typed(attempts[0]!);
-        expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
+        expect(
+          await runtime.runPromise(Recorder.calls(Waits, "ready")),
+          "the wait asks for the decode once, with exactly the project's raw answer",
+        ).toEqual([[raw]]);
+        expect(decodes, "the one decode ran once and failed").toHaveLength(1);
+        typed(decodes[0]!);
+        expect(w.sent.map((text) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
             error: expect.objectContaining({ data: { reason: "bad_row" } }),
           }),
         );
       } finally {
-        inspect.mockRestore();
         await runtime.dispose();
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
+    { seed: 119120, numRuns: runsFor({ fast: 6, full: 20 }), examples: [[null], [{}], [{ rev: "1" }], [{ rev: 1.5 }]] },
   );
 });
 
+/**
+ * Sends one control request with the `Dispatcher` recorded, and answers the response with the
+ * dispatch calls the request path made and the exit of each. The recorded member is the live one
+ * with `Effect.onExit` on it, so the exit read is the first, actual call's, never a second run.
+ */
+const recordedControl = (body: unknown, headers: Record<string, string>, env: Env) => {
+  const exits: Array<Exit.Exit<unknown, unknown>> = [];
+
+  const watched = Recorder.layer(Dispatcher, {
+    dispatch: (...args) =>
+      liveDispatcher.dispatch(...args).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            exits.push(exit);
+          }),
+        ),
+      ),
+  });
+
+  return Effect.gen(function* () {
+    const request = new Request("http://local/", {
+      method: "POST",
+      headers: { authorization: "Bearer test", ...headers },
+      body: JSON.stringify(body),
+    });
+
+    const response = yield* parserControl(request, env);
+
+    return { response, calls: yield* Recorder.calls(Dispatcher, "dispatch"), exits };
+  }).pipe(Effect.provide(watched));
+};
+
+/** The one recorded dispatch is the law's own request, and its actual exit fails typed. */
+const dispatchedOnce = (
+  calls: ReadonlyArray<Recorder.Args<Dispatcher["Service"], "dispatch">>,
+  exits: ReadonlyArray<Exit.Exit<unknown, unknown>>,
+  body: unknown,
+  env: Env,
+) => {
+  expect(calls, "the request path dispatches once").toHaveLength(1);
+  const [call] = calls;
+  expect(call?.[0], "with the Worker's own bindings").toBe(env);
+  expect(call?.[2], "and exactly the request the law sent").toEqual(JSON.parse(JSON.stringify(body)));
+  expect(exits, "the one dispatch ran once").toHaveLength(1);
+  typed(exits[0]!);
+};
+
+// M2 (mock sweep slice 2). Plants: in the live `dispatch`, decode the bucket bytes with
+// `Schema.decodeUnknownSync`, so a bad value dies (red); `control.ts` calls the dispatch body
+// inline, past `Dispatcher` (red: no recorded call).
 it("control bucket bytes fail as a typed parse error before its HTTP error response", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
-      const w = world(),
-        attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const original = Effect.result;
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
-        ),
-      );
+      const w = world();
 
       try {
-        const request = new Request("http://local/", {
-          method: "POST",
-          headers: { authorization: "Bearer test", "content-type": "application/json" },
-          body: JSON.stringify({
-            target: "bucket",
-            project: "parse-test",
-            name: "",
-            method: "put",
-            args: ["key", raw, "checksum"],
-          }),
-        });
-        const exit = await Effect.runPromiseExit(parserControl(request, w.env));
+        const body = {
+          target: "bucket",
+          project: "parse-test",
+          name: "",
+          method: "put",
+          args: ["key", raw, "checksum"],
+        };
+
+        const exit = await Effect.runPromiseExit(recordedControl(body, { "content-type": "application/json" }, w.env));
         expect(Exit.isSuccess(exit)).toBe(true);
-        expect(attempts).toHaveLength(1);
-        typed(attempts[0]!);
-        const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+
+        const { response, calls, exits } = Exit.isSuccess(exit)
+          ? exit.value
+          : { response: new Response(null), calls: [], exits: [] };
+
+        dispatchedOnce(calls, exits, body, w.env);
         expect(response.status).toBe(500);
         expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
       } finally {
-        inspect.mockRestore();
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [["byte"]]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [["byte"]]] },
   );
 });
 
+// M2, per field. Plant: coerce the field with `String(raw)` before the check (red: the dispatch
+// succeeds); `control.ts` calls the dispatch body inline, past `Dispatcher` (red: no recorded call).
 for (const field of ["put key", "put checksum", "head key"] as const) {
   it(`control checks outside ${field} as text instead of coercing it or throwing`, async () => {
     const input: fc.Arbitrary<unknown> = fc.oneof(malformed(Schema.String), fc.record({ toString: fc.jsonValue() }));
     await fc.assert(
       fc.asyncProperty(input, async (raw) => {
-        const w = world(),
-          attempts: Array<Exit.Exit<unknown, unknown>> = [];
-        const original = Effect.result;
-        const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-          original(
-            work.pipe(
-              Effect.onExit((exit) =>
-                Effect.sync(() => {
-                  attempts.push(exit);
-                }),
-              ),
-            ),
-          ),
-        );
+        const w = world();
 
         try {
-          const args: Array<unknown> =
-            field === "head key" ? [raw] : ["key", [], createHash("sha256").update("").digest("hex")];
+          const args: Array<unknown> = field === "head key" ? [raw] : ["key", [], EMPTY_SHA256];
 
           if (field === "put key") {
             args[0] = raw;
@@ -571,30 +665,29 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
             args[2] = raw;
           }
 
-          const request = new Request("http://local/", {
-            method: "POST",
-            headers: { authorization: "Bearer test" },
-            body: JSON.stringify({
-              target: "bucket",
-              project: "parse-test",
-              name: "",
-              method: field === "head key" ? "head" : "put",
-              args,
-            }),
-          });
-          const exit = await Effect.runPromiseExit(parserControl(request, w.env));
-          expect(attempts).toHaveLength(1);
-          typed(attempts[0]!);
+          const body = {
+            target: "bucket",
+            project: "parse-test",
+            name: "",
+            method: field === "head key" ? "head" : "put",
+            args,
+          };
+
+          const exit = await Effect.runPromiseExit(recordedControl(body, {}, w.env));
           expect(exit).toMatchObject({ _tag: "Success" });
-          const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+
+          const { response, calls, exits } = Exit.isSuccess(exit)
+            ? exit.value
+            : { response: new Response(null), calls: [], exits: [] };
+
+          dispatchedOnce(calls, exits, body, w.env);
           expect(response.status).toBe(500);
           expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
         } finally {
-          inspect.mockRestore();
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[{ toString: 0 }], [null], [17]] },
+      { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[{ toString: 0 }], [null], [17]] },
     );
   });
 }
@@ -614,17 +707,24 @@ for (const service of ["process", "record"] as const) {
             service === "process"
               ? await runtime.runPromiseExit(ProcessService)
               : await Effect.runPromiseExit(recordRead(w.ctx, undefined, { _tag: "spans" }, 0, 0));
+
           typed(exit, service === "record" ? "SinkError" : "LedgerError");
         } finally {
           await runtime.dispose();
           w.db.close();
         }
       }),
-      { seed: 119120, numRuns: 20, examples: [[null], ["{"], ['["project"]'], ['["project",17]']] },
+      {
+        seed: 119120,
+        numRuns: runsFor({ fast: 6, full: 20 }),
+        examples: [[null], ["{"], ['["project"]'], ['["project",17]']],
+      },
     );
   });
 }
 
+// M3 (mock sweep slice 1). Plant, run once: `processDescriptor` returns `storage.get`'s value without its
+// decode (red: a malformed descriptor is no typed `bad_row` failure).
 it("processDescriptor checks the saved value before returning it to a caller", async () => {
   const descriptor = Schema.Struct({
     id: Schema.String,
@@ -633,11 +733,10 @@ it("processDescriptor checks the saved value before returning it to a caller", a
     build: Schema.String,
     owner: Writer,
   });
+
   await fc.assert(
     fc.asyncProperty(malformed(descriptor), async (raw) => {
-      const w = world();
-      const get = vi.fn(async () => raw);
-      Object.assign(w.ctx.storage, { get });
+      const w = world(undefined, async () => raw);
 
       try {
         typed(await Effect.runPromiseExit(processDescriptor(w.ctx)));
@@ -645,7 +744,7 @@ it("processDescriptor checks the saved value before returning it to a caller", a
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -664,7 +763,7 @@ it("Connection close checks saved tags again after startup", async () => {
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [[null], [{}], [17]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [17]] },
   );
 });
 
@@ -673,10 +772,12 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
     fc.constantFrom("/ws", "/ws/key", "/ws/%/tab", "/ws/key/%"),
     fc.string().map((text) => `/ws/${encodeURIComponent(text)}%/tab`),
   );
+
   await fc.assert(
     fc.asyncProperty(invalid, async (path) => {
       const w = world(),
         runtime = connectionRuntime(w.ctx, w.env, config);
+
       vi.stubGlobal(
         "WebSocketPair",
         class {
@@ -698,15 +799,9 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
         w.db.close();
       }
     }),
-    { seed: 119120, numRuns: 20, examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
+    { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
   );
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}
 
 StartsTest.law(
   "T753 L19 the legacy cap, fallback, resend and rollover behavior remain intact",
@@ -719,19 +814,26 @@ StartsTest.law(
       const w = yield* Effect.acquireRelease(Effect.sync(world), (value) => Effect.sync(() => value.db.close()));
       let size = 0;
       const raw = w.ctx.storage.sql;
-      const ctx = {
-        ...w.ctx,
-        id: { ...w.ctx.id, name: JSON.stringify(["settings-law", "spans/0"]) },
-        storage: {
-          ...w.ctx.storage,
-          sql: new Proxy(raw, { get: (target, key) => (key === "databaseSize" ? size : Reflect.get(target, key)) }),
-        },
-      };
+
+      const ctx = Stub.make<DurableObjectState>(unexpected, {
+        id: Stub.make<DurableObjectId>(unexpected, { name: Formatter.formatJson(["settings-law", "spans/0"]) }),
+        storage: Stub.make<DurableObjectStorage>(unexpected, {
+          transactionSync: w.ctx.storage.transactionSync,
+          sql: Stub.make<SqlStorage>(unexpected, {
+            exec: raw.exec,
+            get databaseSize() {
+              return size;
+            },
+          }),
+        }),
+      });
+
       const chain = Chain.cases.spans.make({});
+
       const row = (n: number) => ({
         span: {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-          spanId: n.toString(16).padStart(16, "0"),
+          spanId: Str.padStart(16, "0")(n.toString(16)),
           parentSpanId: null,
           name: "settings-cap-fixture",
           kind: "internal" as const,
@@ -745,6 +847,7 @@ StartsTest.law(
         },
         content: null,
       });
+
       const old = row(id);
       const next = row(id + 1);
       const fresh = row(id + 2);
@@ -759,394 +862,4 @@ StartsTest.law(
         had: [old.span.spanId],
       });
     }),
-);
-
-// The suite owns the moves and assertions; this caller owns SQLite and the platform handles.
-SettingsTest.suite((recipe, secret) =>
-  Effect.gen(function* () {
-    const Starts = yield* Effect.promise(() => import("../settings/Starts.ts"));
-    const SettingsStartsLedger = yield* Effect.promise(() => import("./SettingsStartsLedger.ts"));
-    const captured: Record<SettingsTest.Channel, unknown[]> = {
-      transport: [],
-      ledger: [],
-      descriptors: [],
-      "record RPC": [],
-      spans: [],
-      content: [],
-      archives: [],
-      "HTTP replies": [],
-      "RPC failures": [],
-      stdout: [],
-      stderr: [],
-      logs: [],
-      "span attributes": [],
-    };
-    let fault: SettingsTest.Fault = "none";
-    let calls = 0;
-    let reads = 0;
-    let appends = 0;
-    let consumers = 0;
-    const databases: DatabaseSync[] = [];
-    const key = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
-    let input = {
-      ...(yield* StartsTest.input(recipe)),
-      founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
-    };
-    captured.transport.push(JSON.stringify(input));
-    const lower = new Error(secret, { cause: { password: secret } });
-    const database = Effect.acquireRelease(
-      Effect.sync(() => {
-        const db = new DatabaseSync(":memory:");
-        databases.push(db);
-        return db;
-      }),
-      (db) => Effect.sync(() => db.close()),
-    );
-    const local = yield* database;
-    const rawSql = nodeSql(local);
-    const settingsSql = {
-      ...rawSql,
-      exec: settingsExec(
-        rawSql,
-        () => fault === "storage",
-        lower,
-        (kind) => {
-          if (kind === "read") {
-            reads++;
-          } else {
-            appends++;
-          }
-        },
-      ),
-    };
-    const startsContext = yield* Layer.build(SettingsStartsLedger.layer(settingsSql));
-    const starts = Context.get(startsContext, Starts.Starts);
-    const gate = Effect.fnUntraced(function* (wire: unknown) {
-      calls++;
-      captured.transport.push(wire);
-
-      if (fault === "unreachable") {
-        return yield* Effect.fail(lower);
-      }
-
-      if (fault === "malformed") {
-        return { placed: true };
-      }
-
-      const work =
-        fault === "refused"
-          ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
-          : starts.record(wire as StartsTest.Input);
-      const reply = yield* settingsReply(work);
-      captured[reply._tag === "ok" ? "transport" : "RPC failures"].push(reply);
-
-      if (fault === "lost") {
-        return yield* Effect.fail(lower);
-      }
-
-      return reply;
-    });
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const attribute = Tracer.NativeSpan.prototype.attribute;
-        const spies = [
-          vi.spyOn(Tracer.NativeSpan.prototype, "attribute").mockImplementation(function (
-            this: Tracer.NativeSpan,
-            key,
-            value,
-          ) {
-            captured["span attributes"].push({ key, value });
-            return Reflect.apply(attribute, this, [key, value]);
-          }),
-          vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
-            captured.stdout.push(String(chunk));
-            return true;
-          }),
-          vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
-            captured.stderr.push(String(chunk));
-            return true;
-          }),
-          ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
-            vi.spyOn(console, method).mockImplementation((...args) => {
-              captured.logs.push(args);
-            }),
-          ),
-        ];
-        return spies;
-      }),
-      (spies) =>
-        Effect.sync(() => {
-          for (const spy of spies) {
-            spy.mockRestore();
-          }
-        }),
-    );
-    const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
-      const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
-      const db = path === "Project" ? local : yield* database;
-      const sql = path === "Project" ? settingsSql : nodeSql(db);
-      const values = new Map<string, unknown>();
-      values.set("descriptor", {
-        id: "process-fixture",
-        name: "worker",
-        program: "fixture",
-        build: input.build,
-        owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
-      });
-      const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
-      let attached = Attached.cases.online.make({
-        client: "fixture-client",
-        identity: { key: "fixture-public", person: input.founding.person, as: "window" },
-        version: 1,
-        waits: [],
-        watching: false,
-        busy: false,
-      });
-      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies hibernating socket methods without workerd's nominal brand
-      const socket = {
-        deserializeAttachment: () => attached,
-        serializeAttachment: (next: typeof attached) => {
-          attached = next;
-        },
-        send: (frame: string) => {
-          captured.transport.push(frame);
-        },
-        close: () => {},
-      } as unknown as WebSocket;
-      // Only platform handles are doubled. The five consumer implementations run unchanged.
-      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Node supplies only the storage and socket members these entries call
-      const ctx = {
-        id: {
-          name:
-            path === "Process"
-              ? JSON.stringify([input.name, "worker"])
-              : path === "RecordPart"
-                ? JSON.stringify([input.name, "spans/0"])
-                : input.name,
-        },
-        storage: {
-          sql: {
-            exec: (query: string, ...args: Parameters<typeof sql.exec> extends [string, ...infer A] ? A : never) => {
-              if (/CREATE TABLE IF NOT EXISTS (unsent|spans|content|process_state)/i.test(query)) {
-                consumers++;
-              }
-
-              return sql.exec(query, ...args);
-            },
-            get databaseSize() {
-              return sql.size();
-            },
-          },
-          transactionSync: sql.transaction,
-          get: async (name: string) => {
-            consumers++;
-            return values.get(name);
-          },
-          put: async (name: string, value: unknown) => {
-            captured.descriptors.push({ name, value });
-            values.set(name, value);
-          },
-          delete: async (name: string) => values.delete(name),
-          getAlarm: async () => null,
-          setAlarm: async () => {},
-          deleteAlarm: async () => {},
-        },
-        getWebSockets: () => {
-          consumers++;
-          return path === "Connection" ? [socket] : [];
-        },
-        getTags: () => ["fixture-session", "fixture-tab", "fixture-public"],
-        getWebSocketAutoResponseTimestamp: () => null,
-        setWebSocketAutoResponse: () => {},
-        // T852: a reopened Project binds each process load to its tail.
-        exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
-      } as unknown as DurableObjectState;
-      // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy owns the complete binding brands; these doubles implement the observed calls
-      const env = {
-        INSTANCE: encoded,
-        UNRELATED_PASSWORD: secret,
-        PROJECT: {
-          getByName: () => ({
-            settingsStart: (wire: unknown) => Effect.runPromise(gate(wire)),
-            route: async () => ({ _tag: "ok", result: {} }),
-          }),
-        },
-        PROCESS: {
-          getByName: () => ({
-            configure: async (descriptor: unknown) => {
-              captured.descriptors.push(descriptor);
-            },
-          }),
-        },
-        CONNECTION: { getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 0 }) },
-        RECORD: {
-          getByName: () => ({
-            write: async (...args: unknown[]) => {
-              captured["record RPC"].push(args);
-              captured["span attributes"].push(args);
-              return { _tag: "written" };
-            },
-          }),
-        },
-        MEASUREMENTS: {
-          put: async (...args: unknown[]) => {
-            captured.archives.push(args);
-            return {};
-          },
-          head: async () => null,
-        },
-        LOADER: {
-          get: () => {
-            consumers++;
-            return {
-              getEntrypoint: () => ({
-                describe: async () => ({ name: "fixture", v: 1, writes: {}, inputs: {}, cmds: [] }),
-              }),
-            };
-          },
-        },
-      } as unknown as Env;
-      let close = Effect.void;
-      let enter: SettingsTest.Entry["enter"];
-
-      if (path === "HTTP") {
-        enter = Effect.fnUntraced(function* (choice) {
-          const route = ["/window.js", "/", "/missing", "/window.js"][choice % 4] ?? "/";
-          const response = yield* fetch(
-            new Request(`http://127.0.0.1:${config.port}${route}`, {
-              headers: { host: choice % 4 === 3 ? "wrong.invalid" : `127.0.0.1:${config.port}` },
-            }),
-            env,
-            config,
-            { "/window.js": { body: "fixture", hash: "fixture", type: "text/javascript" } },
-          );
-          captured["HTTP replies"].push({
-            status: response.status,
-            headers: [...response.headers],
-            body: yield* Effect.promise(() => response.text()),
-          });
-          return response.status;
-        });
-      } else if (path === "RecordPart") {
-        const scope = yield* Effect.acquireRelease(Scope.make(), (owned) => Scope.close(owned, Exit.void));
-        close = Scope.close(scope, Exit.void);
-        const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
-        // Construct only the stable holder here. The operation must perform the fallible gate.
-        const build = yield* constructor.pipe(
-          Effect.provideService(WorkerEnvironment, env),
-          Effect.provideService(
-            ObjectState,
-            // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy and the global Worker types disagree on raw Request brands; this double supplies the same storage handles
-            fromDurableObjectState(ctx as unknown as Parameters<typeof fromDurableObjectState>[0]),
-          ),
-          Effect.provideService(Scope.Scope, scope),
-        );
-        enter = Effect.fnUntraced(function* (choice) {
-          const part = yield* build.pipe(Effect.provideService(Scope.Scope, scope));
-          const chain = Chain.cases.spans.make({});
-          const method = choice % 4;
-          return yield* method === 0
-            ? part.write(chain, 0, [])
-            : method === 1
-              ? part.read(chain, 0, 0)
-              : method === 2
-                ? part.content(chain, 0, "absent")
-                : part.deleteContent(chain, 0, "absent", { by: "fixture-writer", at: 0, reason: "requested" });
-        });
-      } else {
-        const runtime =
-          path === "Connection"
-            ? connectionRuntime(ctx, env, config)
-            : path === "Process"
-              ? processRuntime(ctx, env, {})
-              : projectRuntime(ctx, env, {
-                  config,
-                  programs: { fixture: { hash: "fixture", source: "fixture" } },
-                  bootstrap: [{ id: "bootstrap-fixture", name: "bootstrap", program: "fixture" }],
-                  door: () => Effect.succeed({} as GatewayCalls),
-                });
-        close = Effect.promise(() => runtime.dispose());
-        yield* Effect.addFinalizer(() => close);
-        enter = (choice: number) =>
-          Effect.tryPromise({
-            try: () => {
-              const work =
-                path === "Connection"
-                  ? ConnectionService.use((service) =>
-                      choice % 2 === 0
-                        ? service.message(socket, JSON.stringify({ jsonrpc: "2.0", method: "ping", id: choice }))
-                        : service.probe("fixture-session"),
-                    )
-                  : path === "Process"
-                    ? ProcessService.use((service) => service.alarm())
-                    : ProjectService.use((service) =>
-                        choice % 3 === 0
-                          ? service.info.pipe(Effect.asVoid)
-                          : service
-                              .processStart(
-                                Start.cases.first.make({
-                                  id: choice % 2 === 0 ? `birth-${config.start}` : `birth-${config.start}-${choice}`,
-                                  name: choice % 2 === 0 ? "child" : `child-${choice}`,
-                                  code: { program: "fixture", hash: "fixture" },
-                                }),
-                                {
-                                  by: "fixture-writer",
-                                  for: config.person,
-                                  sentAt: "2026-11-08T04:00:00.000Z",
-                                  seen: 0,
-                                  parent: null,
-                                  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-                                  build: config.build,
-                                },
-                              )
-                              .pipe(Effect.asVoid),
-                      );
-              return Reflect.apply(runtime.runPromise, runtime, [work]);
-            },
-            catch: (cause: unknown) => new EntryFailure({ cause }),
-          });
-      }
-
-      return { enter, close };
-    });
-    return {
-      deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
-        input = { ...(yield* StartsTest.input(next)), founding: input.founding };
-        captured.transport.push(JSON.stringify(input));
-      }, Effect.provide(Digest.layerWebCrypto)),
-      open,
-      fault: (next) => {
-        fault = next;
-      },
-      counts: () => ({ calls, reads, appends, consumers }),
-      outputs: Effect.sync(() => {
-        const tables = ["entries", "dev_descriptors", "unsent", "spans", "content"] as const;
-        const output = { ...captured };
-
-        // Each captured output is checked once; saved rows below are read again for changes.
-        for (const channel of SettingsTest.channels) {
-          output[channel] = captured[channel].splice(0);
-        }
-
-        for (const table of tables) {
-          const rows = databases.flatMap((db) =>
-            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
-              ? []
-              : db.prepare(`SELECT * FROM ${table}`).all(),
-          );
-          const channel =
-            table === "entries"
-              ? "ledger"
-              : table === "dev_descriptors"
-                ? "descriptors"
-                : table === "content"
-                  ? "content"
-                  : "spans";
-          output[channel] = [...output[channel], ...rows];
-        }
-
-        return output;
-      }),
-    } satisfies SettingsTest.Driver;
-  }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );

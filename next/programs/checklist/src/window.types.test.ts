@@ -16,24 +16,36 @@ import { checklist, type checklistMachine, checklistView } from "./program.ts";
 import { tile } from "./tile.ts";
 import { checklistWindow } from "./window.tsx";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  plus: {},
+  submit: {},
+  toggle: {},
+});
+
 type Msg = typeof checklistMachine.msg.Type;
+
 type Props = Parameters<typeof checklistWindow.View>[0];
+
 type TileMsg = typeof tile.msg.Type;
 
 /** A tile machine whose press carries a Msg the checklist does not have. */
 const wrongPress = Cmd.make("press", {
-  input: Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("plus") }) }),
+  input: Schema.Struct({ m: Schema.TaggedStruct("plus", {}) }),
   ok: Schema.Null,
   err: [],
 });
 
 const wrongTile = Machine.make({
   model: Schema.Struct({ draft: Schema.String }),
-  msg: Schema.Struct({ type: Schema.Literal("submit") }),
+  msg: Schema.TaggedStruct("submit", {}),
   cmds: [wrongPress],
   init: () => [{ draft: "" }, []],
   update: {
-    submit: (s) => [s, [wrongPress({ m: { type: "plus" } })]],
+    submit: (s) => [s, [wrongPress({ m: Tag.cases.plus.make({}) })]],
     press_ok: (s) => [s, []],
     press_err: (s) => [s, []],
   },
@@ -50,16 +62,18 @@ describe("L20: the checklist window's contract", () => {
     expectTypeOf<unknown>().not.toMatchTypeOf<Parameters<Props["send"]>[0]>();
     expectTypeOf<NonNullable<typeof checklistWindow.refused>>().parameter(0).toEqualTypeOf<Msg>();
     expectTypeOf<unknown>().not.toMatchTypeOf<Parameters<NonNullable<typeof checklistWindow.refused>>[0]>();
+
     const use = (props: Props) => {
-      props.press({ type: "check", name: "milk" });
-      props.send({ type: "submit" });
+      props.press({ ...Tag.cases.check.make({}), name: "milk" });
+      props.send(Tag.cases.submit.make({}));
       // @ts-expect-error a press is one of the checklist's Msgs: it has no `toggle`
-      props.press({ type: "toggle", name: "milk" });
+      props.press({ ...Tag.cases.toggle.make({}), name: "milk" });
       // @ts-expect-error `add` needs its `name`
-      props.press({ type: "add" });
+      props.press(Tag.cases.add.make({}));
       // @ts-expect-error `send` takes the tile's Msgs, not the program's
-      props.send({ type: "check", name: "milk" });
+      props.send({ ...Tag.cases.check.make({}), name: "milk" });
     };
+
     expect(use).toBeTypeOf("function");
   });
 
@@ -75,7 +89,7 @@ describe("L20: the checklist window's contract", () => {
     defineWindow(checklist, {
       ...checklistWindow,
       // @ts-expect-error a refusal's words are for the checklist's own Msgs
-      refused: (m: { readonly type: "plus" }, reason: string) => `${m.type} ${reason}`,
+      refused: (m: { readonly _tag: "plus" }, reason: string) => `${m._tag} ${reason}`,
     });
     // @ts-expect-error a key row for an input the checklist does not have
     defineWindow(checklist, { ...checklistWindow, keys: { "checklist.toggle": ["t"] } });

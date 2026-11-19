@@ -1,0 +1,206 @@
+// P36, next/. Scoped Alchemy runtime and real Electron. No live sender or account.
+import { Effect, FileSystem, Path, Schema } from "effect";
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
+import type { Page } from "playwright";
+import { launch as launchWindow, type TestWindow } from "../test-window.ts";
+import { startWorker, type EmailFixture } from "./email-worker.test-support.ts";
+
+class PromiseFailed extends Schema.TaggedError<PromiseFailed, { readonly brand: unique symbol }>()("PromiseFailed", {
+  cause: Schema.Defect(),
+}) {}
+
+class ExamFailed extends Schema.TaggedError<ExamFailed, { readonly brand: unique symbol }>()("ExamFailed", {
+  message: Schema.String,
+}) {}
+
+export const EPOCH = 1_800_000_000_000;
+
+export const IntegrationFlow = Schema.Struct({
+  live: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })),
+  requests: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 4 })),
+  reopen: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
+  offset: Schema.Literals([-1, 0, 1]),
+  old: Schema.Literals(["lost", "kept"]),
+  label: Schema.String.check(Schema.isMaxLength(64)),
+});
+
+export const INTEGRATION = {
+  arbitrary: { seed: 119120, runs: 30, size: 40, maxDiscards: 500, maxShrinks: 200, concurrency: 1 },
+};
+
+export type IntegrationFlow = typeof IntegrationFlow.Type;
+
+type Mail = { readonly to: string; readonly raw: string };
+
+type Snapshot = {
+  readonly founding: unknown;
+  readonly person: string;
+  readonly name: string;
+  readonly notes: unknown;
+  readonly rev: number;
+  readonly members: ReadonlyArray<string>;
+  readonly added: ReadonlyArray<{
+    readonly id: string;
+    readonly arrivedAt: number;
+    readonly label: string;
+    readonly location: string;
+  }>;
+  readonly outputs: Record<string, ReadonlyArray<unknown>>;
+};
+
+type Session = { readonly id: string; readonly key: string; readonly token: string };
+
+interface Instance {
+  readonly home: string;
+  readonly url: string;
+  readonly call: <A>(path: string, body?: unknown) => Effect.Effect<A, unknown>;
+  readonly outputs: { readonly urls: unknown[]; readonly replies: unknown[]; readonly errors: unknown[] };
+}
+
+// The response boundary is private to this exam; the law checks every observed result.
+const request = Effect.fn("emailExam.request")(function* <A>(
+  url: string,
+  path: string,
+  outputs: Instance["outputs"],
+  body?: unknown,
+) {
+  const target = new URL(path, url);
+  // Mail and private-store reads belong to the exam, not a client-visible reply.
+  const publicReply = !target.pathname.startsWith("/__test/");
+
+  if (publicReply) {
+    outputs.urls.push(target.href);
+  }
+
+  const response = yield* (
+    body === undefined
+      ? HttpClient.get(target)
+      : HttpClientRequest.post(target).pipe(HttpClientRequest.bodyJson(body), Effect.flatMap(HttpClient.execute))
+  ).pipe(Effect.provide(FetchHttpClient.layer));
+
+  // Inspect bytes before decoding or refusing, so a raw error body cannot escape the law.
+  const raw = yield* response.text;
+
+  if (publicReply) {
+    outputs.replies.push(raw);
+  }
+
+  if (response.status < 200 || response.status >= 300) {
+    if (publicReply) {
+      outputs.errors.push(raw);
+    }
+
+    return yield* ExamFailed.make({ message: "P36 instance refused request" });
+  }
+
+  const value = yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(raw);
+
+  // SAFETY: the P36 test instance answers each `/__test/*` path with the shape its caller names in `A`.
+  return value as A;
+});
+
+export const openInstance = Effect.fn("emailExam.openInstance")(function* (fixture?: EmailFixture) {
+  const fs = yield* FileSystem.FileSystem;
+  const home = yield* fs.makeTempDirectoryScoped({ directory: "/tmp", prefix: "fh." });
+  const url = yield* startWorker(home, fixture);
+  const outputs: Instance["outputs"] = { urls: [], replies: [], errors: [] };
+
+  return {
+    home,
+    url,
+    outputs,
+    call: <A>(path: string, body?: unknown) => request<A>(url, path, outputs, body),
+  } satisfies Instance;
+});
+
+export const mailCode = Effect.fn("emailExam.mailCode")(function* (instance: Instance) {
+  const mails = yield* instance.call<ReadonlyArray<Mail>>("/__test/mail");
+  const mail = mails.at(-1);
+
+  if (mail === undefined) {
+    return yield* ExamFailed.make({ message: "Stand-in sender received no mail" });
+  }
+
+  const match = /(?:^|\D)(\d{6})(?:\D|$)/.exec(mail.raw);
+
+  if (match === null || match[1] === undefined) {
+    return yield* ExamFailed.make({ message: "Stand-in sender received no six-digit code" });
+  }
+
+  return match[1];
+});
+
+export const device = (instance: Instance, label: string) => instance.call<Session>("/__test/device", { label });
+
+export const snapshot = (instance: Instance) => instance.call<Snapshot>("/__test/snapshot");
+
+export const clock = (instance: Instance, at: number) => instance.call("/__test/clock", { at });
+
+export const checkedAddress = Effect.fn("emailExam.checkedAddress")(function* (
+  instance: Instance,
+  session: Session,
+  address = "p36@example.test",
+) {
+  const challenge = yield* instance.call<{ id: string }>("/email/setup", {
+    device: session,
+    address,
+  });
+
+  return yield* instance.call("/email/verify", {
+    device: session,
+    challenge: challenge.id,
+    code: yield* mailCode(instance),
+  });
+});
+
+export const redeem = Effect.fn("emailExam.redeem")(function* (
+  instance: Instance,
+  session: Session,
+  old: "lost" | "kept",
+) {
+  const challenge = yield* instance.call<{ id: string }>("/email/recovery", { device: session });
+
+  return yield* instance.call<{ id: string; added: string }>("/email/redeem", {
+    device: session,
+    challenge: challenge.id,
+    code: yield* mailCode(instance),
+    old,
+    check: "touch",
+  });
+});
+
+export const launch = (instance: Instance, label: string) => launchWindow({ instance: instance.url, label });
+
+type Window = TestWindow;
+
+export const play = <A>(action: () => PromiseLike<A>) =>
+  // oxlint-disable-next-line fabrika/no-promises -- edge: Playwright exposes renderer operations through Promise APIs
+  Effect.tryPromise({ try: () => action(), catch: (cause) => PromiseFailed.make({ cause }) });
+
+export const visible = (page: Page, text: string) =>
+  play(() => page.getByText(text, { exact: false }).waitFor({ state: "visible" }));
+
+export const shots = Effect.fn("emailExam.shots")(function* (window: Window, state: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const folder = path.join(window.home, "email-shots");
+  yield* fs.makeDirectory(folder, { recursive: true });
+
+  for (const layout of ["full", "side-by-side", "stacked", "grid", "small"]) {
+    yield* play(() =>
+      window.page.setViewportSize(layout === "small" ? { width: 1024, height: 700 } : { width: 1440, height: 900 }),
+    );
+
+    if (layout === "side-by-side" || layout === "grid") {
+      yield* play(() => window.page.keyboard.press("Control+b"));
+      yield* play(() => window.page.keyboard.press("|"));
+    }
+
+    if (layout === "stacked" || layout === "grid") {
+      yield* play(() => window.page.keyboard.press("Control+b"));
+      yield* play(() => window.page.keyboard.press("-"));
+    }
+
+    yield* play(() => window.page.screenshot({ path: path.join(folder, `${state}-${layout}.png`) }));
+  }
+});

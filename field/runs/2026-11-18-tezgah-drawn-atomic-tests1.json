@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-tezgah-drawn-atomic-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1612",
+  "started": "2026-11-18T01:45:00-08:00",
+  "ended": "2026-11-18T02:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/, wrote T1 of docs/plan/quests/tezgah-drawn-atomic-PLAN.md in next/apps/fabrika/e2e/tezgah-drawn.visual.test.ts: for regions and strips that leave a static Chromium page at generated moments during a read, drawn and foldDrawn return within 2 s, name only parts the page held, and give each name a box. Against today's per-name boundingBox read it was red for the plan's reason (foldDrawn did not return within 2000 ms after 2 reads: the region left after the snapshot). Then changed drawn and foldDrawn in tezgah.test-support.ts to read names and boxes in one non-waiting evaluateAll per list, and T1 is green over 100 runs in about 12 s. No product file was touched.",
+  "note": "Started time is approximate (first observed container clock); usage and cost are not recorded. Model and effort are the requested values; the effective context is unknown. The container has Chromium build 1243 where the installed Playwright wants 1248, so the runs used a symlinked browsers folder outside the repo and CI=1 for the local-limit guard (this container has Node 22, the pin is Node 26). T2 (30 CI runs of the focus and fold laws) and the three tezgah laws are not run here: they need dev.ts with workerd.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "b9fb105409685912fb61dc83cf89c637df1c20a6",
+  "plants": [
+    { "law": "T1 the tezgah helpers' reads never wait", "plant": "Today's per-name boundingBox read in drawn and foldDrawn (the code before the fix)", "result": "red" },
+    { "law": "T1 the tezgah helpers' reads never wait", "plant": "foldDrawn reads each strip's box with a per-name boundingBox again, drawn unchanged", "result": "red" },
+    { "law": "T1 the tezgah helpers' reads never wait", "plant": "drawn reads each region's box with a per-name boundingBox again, foldDrawn's strips unchanged", "result": "red" }
+  ]
+}

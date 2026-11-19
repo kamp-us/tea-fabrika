@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-leakgrep-patch-blob-quotes-build",
+  "ticket": "leakgrep",
+  "pr": null,
+  "started": "2026-11-16T01:30:48-08:00",
+  "ended": "2026-11-16T01:50:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "blocked",
+  "why": "Build step for the leakgrep-patch-blob-quotes slice, today's lead tooling. In --commits mode, leakgrep.sh now decides whether an added line of a pnpm patch under patches/ is quoted from the patch file as the commit holds it: a new quoted_lines(commit, path) reads the blob with git cat-file blob, marks every line inside one of its hunks (after a @@ line, before the next diff line, starting with -, space or +; the @@ line itself is not quoted) by its line number, and scan looks each added outer line up by its new-file number and needs the same text there. It does not depend on where git cuts its --unified=0 hunks and does not read the @@ counts. When the blob cannot be read or is not UTF-8 it quotes nothing, so every shape reads the line. A diff on stdin (no commit known) and --text keep their old reading; the comment that named the mid-hunk limit now says it holds only for a diff on stdin.",
+  "laws": [
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when git's hunk starts mid-hunk",
+      "red": "red at 9863ba719 (leak em_dash), green after the build"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit renumbers its @@ line",
+      "red": "red at 9863ba719 (leak em_dash), green after the build"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: an em dash a commit adds inside a patches/ file's hunk passes when the commit removes its @@ line",
+      "red": "red at 9863ba719 (leak em_dash), green after the build"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/leakgrep.patches.test.ts: the fifteen fail-closed guards of the commits describe",
+      "red": "green before and after the build"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Blocked at commit: exam-paths.json lists .agents/skills/lead/scripts/leakgrep.sh as an exam path ('the added-text check before push'), so stepcommit.sh --commit-only build refused it with 'a build may not commit exam paths; answer send to tests'. The step obeyed that refusal: this commit holds only this row, and the script change stays uncommitted in the build's worktree and in the step's report, for the tests step or the lead to commit. The five leakgrep test files ran 97 passed of 97. The other tests that read leakgrep.sh (exam/commits, plancheck.draft, skillscheck, pr/Arm, pr/Merge, botpush, stepcommit) ran 113 passed of 113. vitest --changed origin/main selects the whole tooling project for a change to a .sh file and was killed in the box before it printed a result, so those narrow paths stand in for it. By hand, leakgrep.sh --commits on the six commits on origin/main that modify a file under patches/ (ba15f13ba, 6f04d13ac, d6129dd5d, 287891451, 3a0b7fc53, f733b8c8b) printed '1 commits read, added text clean' before and after the change; none of them adds an em dash inside a patch hunk. The branch is checked out in the tests step's worktree, so this step committed on a local branch at the same head and pushed to the same remote branch. One tightening: a @@ line whose +start git did not write now quotes nothing in stdin mode too. No typecheck: no TypeScript changed.",
+  "step": "build"
+}

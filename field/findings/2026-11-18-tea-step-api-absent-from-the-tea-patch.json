@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-tea-step-api-absent-from-the-tea-patch",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "pnpm-workspace.yaml",
+    "line": 205
+  },
+  "says": "Decision 0578 says our local tea patch carries a pipeable Step (Step.stay, Step.to, Step.run) that Machine.make turns into tea's tuple, and 0569 says the same patch carries it, but the installed patch has no such names and nothing in next/ uses them, so the code lags the decision. Ticket text: add the Step change to the tea patch under patchedDependencies (or take a tea release that carries demlik issue 962's Step), then sweep the cells' return sites as 0578 orders; the plan for the sweep is not written.",
+  "proof": "`grep -rn 'Step\\.\\(stay\\|to\\|run\\)' next patches` prints nothing; `patches/@demlik__tea@0.29.0.patch` (named at pnpm-workspace.yaml line 205) holds no `Step.stay`, `Step.to` or `Step.run`, only internal `enqueueStep` names; `docs/plan/quests/tea-msg-tag-PLAN.md` line 77 says the Step sweep is not in that plan.",
+  "cost": "Every cell in next/ still answers the [model, cmds] tuple that 0578 bans for new cells, so the examples in 0046 and 0567 and the pattern docs cannot move to the Step form.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

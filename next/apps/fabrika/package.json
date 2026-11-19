@@ -9,6 +9,7 @@
     "dev": "node dev.ts",
     "build": "node build.ts",
     "grant": "node grant.ts",
+    "hands": "node hands.ts",
     "settings": "node cli.ts settings",
     "settings:generate": "node settings-generate.ts",
     "typecheck": "tsc --noEmit -p ."
@@ -22,7 +23,8 @@
     "@kampus/fabrika-design": "workspace:*",
     "@manti-ui/styles": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "@kalfa/config": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261027.1",
@@ -30,6 +32,7 @@
     "@demlik/tea": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
+    "electron": "catalog:",
     "rolldown": "catalog:",
     "fast-check": "catalog:",
     "playwright": "catalog:",
@@ -37,6 +40,8 @@
     "@kampus/inbox": "workspace:*",
     "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
+    "@kampus/tezgah": "workspace:*",
+    "@kampus/vitest": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",
     "typescript": "catalog:",

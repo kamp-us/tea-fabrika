@@ -5,7 +5,8 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type { Effect } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import type { Activity } from "../processes/Process.ts";
-import type { Descriptor, Opened, Sent } from "../runtime/Runner.ts";
+import type { News } from "../runtime/News.ts";
+import type { Descriptor, Opened, Sent, Swapped } from "../runtime/Runner.ts";
 import type { Failure } from "../settings/Start.ts";
 import type { ProjectBinding } from "./bindings.ts";
 import type { recordWrite } from "./record.ts";
@@ -36,9 +37,14 @@ export type ProcessShape = {
   readonly alarm: () => Effect.Effect<void>;
   readonly usage: (rows: unknown) => Effect.Effect<void, LedgerError>;
   readonly configure: (descriptor: Descriptor, drain?: boolean) => Effect.Effect<void, LedgerError>;
-  readonly descriptor: () => Effect.Effect<Descriptor, LedgerError>;
+  readonly descriptor: (process?: string) => Effect.Effect<Descriptor, LedgerError>;
   readonly msg: (input: unknown) => Effect.Effect<Sent, LedgerError>;
   readonly open: (client: string) => Effect.Effect<Opened, LedgerError>;
+  readonly swap: (request: {
+    readonly load: string;
+    readonly program: string;
+    readonly hash: string;
+  }) => Effect.Effect<Swapped, LedgerError>;
   readonly mailed: (trace?: { readonly traceId: string; readonly spanId: string }) => Effect.Effect<void, LedgerError>;
   readonly due: (at: number) => Effect.Effect<void, LedgerError>;
   readonly restart: (request: { readonly id: string; readonly build: string }) => Effect.Effect<void, LedgerError>;
@@ -59,12 +65,16 @@ export type ConnectionShape = {
   readonly webSocketClose: (socket: Cloudflare.WebSocket, code: number) => Effect.Effect<void>;
   readonly webSocketError: (socket: Cloudflare.WebSocket) => Effect.Effect<void>;
   readonly ring: (stream: string, rev: number) => Effect.Effect<void, LedgerError>;
-  readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError>;
+  readonly notify: (client: string, news: News) => Effect.Effect<void, LedgerError>;
   readonly probe: (session: string) => Effect.Effect<number | null, LedgerError>;
 };
 
 export class Project extends DurableObject<Project, ProjectShape>()("Project") {}
+
 export class Process extends DurableObject<Process, ProcessShape>()("Process") {}
+
 export class Connection extends DurableObject<Connection, ConnectionShape>()("Connection") {}
+
 export class RecordPart extends DurableObject<RecordPart, RecordShape>()("RecordPart") {}
+
 export class Brain extends Worker<Brain, Record<never, never>, RecordPart | Connection | Process>()("Brain") {}

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e2-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T19:20:00-08:00",
+  "ended": "2026-11-15T19:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E2 of the Effect-check sweep (preferNamespaceImport), in next/ and our tooling. Wrote the lock only: libfabrika's own tsconfig gets an overrides entry for the 13 folders of E2 (src/*.ts and access, client, desktop, node, packs, permissions, presence, repositories, schedules, tasks, tezgah, transport), and tuval's tsconfig gets the package-wide namespace block (all its 18 hits are E2). The law is the check at error, a type law: libfabrika's typecheck is red with 974 effect(preferNamespaceImport) errors and tuval's with 18, 992 in all, matching the plan (667 in 146 exam-path files, 325 in 85 product files). No hit was fixed: the checker has no fix on its command line (effect-tsgo diagnostics only reads), and its oxlint rule needs oxlint-tsgolint, which the lockfile lacks and which this run was refused permission to download and run. The two base entries for ci and codehost stay in tsconfig.base.json and the LOCKED row waits, both for E0 (PR 1417) to land, because it renames and rewrites the law that reads the base file.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig and from tsc via pnpm typecheck per package. A whole pnpm typecheck was killed (SIGKILL) partway in this sandbox after libfabrika reported, so the per-package runs are the evidence. oxlint-plugins/namespace-imports.test.ts still passes.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "tuval's namespace block removed: tuval typecheck reports 0 preferNamespaceImport errors, so the block is what makes its 18 hits fail",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node/**/*.ts dropped from libfabrika's override: libfabrika typecheck falls from 974 to 413 errors, the 561 node hits gone, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

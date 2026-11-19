@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-decision-0081-holds-a-stray-files-table",
+  "date": "2026-11-18",
+  "by": "tests",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0081-no-question-word-names.md",
+    "line": 124
+  },
+  "says": "Decision 0081 holds a 76-row Files table that belongs to an ask-desk plan, not to this decision, between its Consequences and its Amendments section.",
+  "proof": "Lines 124 to 199 of .decisions/0081-no-question-word-names.md are table rows with no header, from `apps/fabrika/src/asks.ask-desk.test.ts` to `programs/tracker/src/ticket.ts`, each with a Tests or Build owner column; the sentence before it (line 123) ends the Consequences list and the heading `## Amendments` follows at line 201; nothing in 0081 mentions the ask desk.",
+  "cost": "A reader or the slice 2 builder folding 0081 meets 76 rows of another plan inside a record about question-word names, and the patch check must read around it.",
+  "head": "65edf5c27a8c2f5cc24cbded287695da91f57edd",
+  "ticket": null,
+  "pr": null
+}

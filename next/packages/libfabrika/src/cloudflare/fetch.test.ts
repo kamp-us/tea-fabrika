@@ -1,31 +1,14 @@
-import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
+
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
-import type { BrainOptions, Env } from "./runtime.ts";
+import * as Route from "./fetch.ts";
+import type { Env } from "./runtime.ts";
 
-type Fetch = (request: Request, env: Env, config: BrainOptions) => Effect.Effect<Response, unknown>;
-const moduleURL = new URL("./fetch.ts", import.meta.url).href;
-
-const load = async (): Promise<Fetch> => {
-  const module: { fetch?: Fetch } = await import(/* @vite-ignore */ moduleURL).catch((error: unknown) => {
-    if (error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND") {
-      return {};
-    }
-
-    throw error;
-  });
-  expect(module.fetch, "P12 requires the public fetch function in libfabrika/workers/fetch.ts").toBeTypeOf("function");
-
-  if (module.fetch === undefined) {
-    throw new Error("Missing public fetch function");
-  }
-
-  return module.fetch;
-};
+type Fetch = typeof Route.fetch;
 
 const generated = fc.record({
   port: fc.integer({ min: 1024, max: 65535 }),
@@ -40,7 +23,7 @@ const law = (
   check: (input: ReturnType<typeof generated.generate>["value"], fetch: Fetch) => Promise<void>,
 ) =>
   it(name, async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     await fc.assert(
       fc.asyncProperty(generated, (input) => check(input, fetch)),
       { seed: 119120, numRuns: 20 },
@@ -48,21 +31,28 @@ const law = (
   });
 
 // `settingsStart` answers the Project's good reply by default; a law may hold each answer back.
-const world = (
+const world = async (
   port: number,
   name: string,
-  settingsStart: (reply: unknown) => Promise<unknown> = async (reply) => reply,
+  settingsStart: (reply: ReturnType<typeof StartsTest.reply>) => Promise<ReturnType<typeof StartsTest.reply>> = async (
+    reply,
+  ) => reply,
 ) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
-  const config = instanceFixture({
-    name,
-    port,
-    person: "person-test",
-    founder: "public-test",
-    window: null,
-    build: "build-test",
-  });
+
+  const config = await Effect.runPromise(
+    StartsTest.fixture({
+      name,
+      port,
+      person: "person-test",
+      founder: "public-test",
+      window: null,
+      build: "build-test",
+    }),
+  );
+
+  // SAFETY: the public routes call only INSTANCE, CONNECTION's `fetch` and PROJECT's settings, grant and target, as doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members the public routes call
   const env = {
     INSTANCE: JSON.stringify(config),
@@ -70,6 +60,7 @@ const world = (
       getByName: (to: string) => ({
         fetch: async (request: Request) => {
           calls.push({ to, method: "fetch", args: [request] });
+
           return response;
         },
       }),
@@ -79,16 +70,20 @@ const world = (
         settingsStart: () => settingsStart(StartsTest.reply(config)),
         grant: async (body: unknown) => {
           calls.push({ to, method: "grant", args: [body] });
+
           return { granted: body };
         },
         target: async (target: string, code: string) => {
           calls.push({ to, method: "target", args: [target, code] });
+
           return { target, code };
         },
       }),
     },
   } as unknown as Env;
+
   const origin = `http://127.0.0.1:${port}`;
+
   const request = (
     path: string,
     method = "GET",
@@ -101,18 +96,21 @@ const world = (
       headers: { host, ...(originHeader === null ? {} : { origin: originHeader }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+
   return { calls, response, env, config, origin, request };
 };
 
 describe("P12 public Worker fetch", () => {
   it("malformed grant target escapes fail typed before any Project call", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
+
     const bad = fc
       .tuple(fc.string(), fc.constantFrom("%", "%G0", "%0G", "%C0%AF", "%E0%A4", "%ED%A0%80", "%F4%90%80%80"))
       .map(([prefix, suffix]) => encodeURIComponent(prefix) + suffix);
+
     await fc.assert(
       fc.asyncProperty(bad, async (target) => {
-        const w = world(18787, "parse-test");
+        const w = await world(18787, "parse-test");
         const exit = await Effect.runPromiseExit(fetch(w.request(`/grant/client/${target}`), w.env, w.config));
         expect(Exit.isFailure(exit)).toBe(true);
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -124,17 +122,19 @@ describe("P12 public Worker fetch", () => {
     );
   });
   it("malformed JSON grant bodies fail typed before any Project call", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
     await fc.assert(
       fc.asyncProperty(
         fc.jsonValue().map((v) => `${JSON.stringify(v)}!`),
         async (body) => {
-          const w = world(18787, "parse-test");
+          const w = await world(18787, "parse-test");
+
           const request = new Request(`${w.origin}/grant`, {
             method: "POST",
             headers: { host: "127.0.0.1:18787" },
             body,
           });
+
           const exit = await Effect.runPromiseExit(fetch(request, w.env, w.config));
           expect(Exit.isFailure(exit)).toBe(true);
           const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
@@ -147,7 +147,7 @@ describe("P12 public Worker fetch", () => {
     );
   });
   law("wrong hosts refuse every route before RPC or body work", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const host of [
       `localhost:${port}`,
@@ -164,13 +164,14 @@ describe("P12 public Worker fetch", () => {
     expect(w.calls).toEqual([]);
   });
   law("foreign origins refuse every route before RPC", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const origin of [`https://127.0.0.1:${port}`, `http://localhost:${port}`, "null", "https://other.invalid"]) {
       for (const path of ["/client/a", "/grant", "/grant/client/a", "/"]) {
         const result = await Effect.runPromise(
           fetch(w.request(path, "POST", origin, undefined, body), w.env, w.config),
         );
+
         expect(result.status).toBe(403);
       }
     }
@@ -179,8 +180,9 @@ describe("P12 public Worker fetch", () => {
   });
   law("a matching or absent origin forwards the exact client request and path", async ({ port, name, id }, fetch) => {
     for (const originHeader of [null, `http://127.0.0.1:${port}`]) {
-      const w = world(port, name),
+      const w = await world(port, name),
         path = `/client/${encodeURIComponent(id)}`;
+
       const request = w.request(path, "GET", originHeader);
       const answer = await Effect.runPromise(fetch(request, w.env, w.config));
       // T502 S1: the request crosses through Alchemy's typed stub, whose fetcher sends the object a
@@ -198,10 +200,12 @@ describe("P12 public Worker fetch", () => {
     }
   });
   law("POST grant forwards parsed JSON only to the configured project", async ({ port, name, body }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
+
     const result = await Effect.runPromise(
       fetch(w.request("/grant", "POST", w.origin, undefined, body), w.env, w.config),
     );
+
     expect(result.status).toBe(200);
     expect(await result.json()).toEqual({ granted: body });
     expect(w.calls).toEqual([{ to: name, method: "grant", args: [body] }]);
@@ -210,10 +214,12 @@ describe("P12 public Worker fetch", () => {
     "GET grant client decodes its name and code, with empty code as the default",
     async ({ port, name, id, code }, fetch) => {
       for (const query of ["", `?code=${encodeURIComponent(code)}`]) {
-        const w = world(port, name);
+        const w = await world(port, name);
+
         const result = await Effect.runPromise(
           fetch(w.request(`/grant/client/${encodeURIComponent(id)}${query}`), w.env, w.config),
         );
+
         const expected = query === "" ? "" : code;
         expect(await result.json()).toEqual({ target: id, code: expected });
         expect(w.calls).toEqual([{ to: name, method: "target", args: [id, expected] }]);
@@ -223,24 +229,37 @@ describe("P12 public Worker fetch", () => {
   // The platform gives each request to a Worker its own I/O context and cancels as hung a request
   // that waits on work another request started. So a request never waits on another's read.
   it("requests that arrive before any read of the recorded start has finished each read for themselves, and a finished read serves the later ones", async () => {
-    const fetch = await load();
+    const fetch = Route.fetch;
+
     const arrivals = fc.integer({ min: 2, max: 8 }).chain((n) =>
       fc.shuffledSubarray(
         Array.from({ length: n }, (_, at) => at),
         { minLength: n },
       ),
     );
+
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
-        const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
+
+        const w = await world(port, name, (reply) =>
+          Effect.runPromise(
+            Effect.callback<ReturnType<typeof StartsTest.reply>>((resume) => {
+              held.push(() => resume(Effect.succeed(reply)));
+            }),
+          ),
+        );
+
         const answered: Array<number> = [];
+
         const first = order.map(() =>
           Effect.runPromise(fetch(w.request("/"), w.env, w.config)).then((response) => {
             answered.push(response.status);
+
             return response;
           }),
         );
+
         // With no read finished, every request has asked the Project for itself.
         await vi.waitFor(() => expect(held).toHaveLength(order.length));
 
@@ -250,7 +269,9 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await new Promise((settle) => setTimeout(settle, 0));
+          // One timer turn, as the old `setTimeout(0)` was (Node runs a 0 ms timer at 1 ms), so a stray
+          // second answer has time to land. `Effect.sleep(0)` would be only `Effect.yieldNow`.
+          await Effect.runPromise(Effect.sleep("1 millis"));
           expect(answered).toHaveLength(done + 1);
         }
 
@@ -265,7 +286,7 @@ describe("P12 public Worker fetch", () => {
     );
   });
   law("unmatched routes and grant methods return the text response without RPC", async ({ port, name }, fetch) => {
-    const w = world(port, name);
+    const w = await world(port, name);
 
     for (const [path, method] of [
       ["/", "GET"],
@@ -283,9 +304,3 @@ describe("P12 public Worker fetch", () => {
     expect(w.calls).toEqual([]);
   });
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

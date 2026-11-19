@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-tests2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T06:49:27-08:00",
+  "ended": "2026-11-15T07:18:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "tests step, second round for P39 slice 4a (the hands client) in next/, on the build at 3f987e8d9. Every law is green on the build and every plant that can be planted in product code is red. Changes: H4 gains a case where one process has two open jobs: the client takes neither, sends no jobs.take that cannot succeed, and waits on jobs.wait; the walk asks a new job only for a process with no open job (0093), so the wedge shows in that one case alone. H2 arms a pause at each journal boundary, as H5 does, cuts there, and fails unless each of the five journal cuts was reached at least once. The H3 walk now drops a held result when its link leaves online (the per-link rule the close move already used) and keeps a lost finish's call live. Seven legacy Jobs stubs gain forTarget. hands-client.test.ts types its connection id as ConnectionId, held until connect answers, gives its string store keys, writes its wait as one Effect.gen, and asks a new job only for a free process.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "note": "S1's plant, the private key's armored text in the hello's build, cannot be planted in product code: the client is given only the key's sign function, line and public raw form, never the private half, so no product line can reach it; S1's scanner was not proven by a plant this round. T1's plant ran in the typecheck window, then a clean typecheck passed whole. lint:layers stays red only on the six client imports of jobs/Job.ts, which wait for the owner's layer-rules.json line. Plants were each run once and undone with git checkout, with git status clean of product files after each.",
+  "driver_caused": false,
+  "step": "tests",
+  "plants": [
+    {
+      "law": "client/HandsMachine.laws.test.ts H1",
+      "plant": "client/HandsMachine.ts answered starting: execute at once instead of saving executing first",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsStart.laws.test.ts H2",
+      "plant": "client/HandsMachine.ts recover: an executing entry without a result is read as nothing, so the command runs again",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H3",
+      "plant": "client/HandsMachine.ts answered reporting: unavailable counted as done and acknowledged saved",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H4",
+      "plant": "client/HandsMachine.ts assignment: any assigned answer is run, whoever it names",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H4, two open jobs of one process",
+      "plant": "client/HandsMachine.ts takeable: a process listed twice may be taken",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H4, two open jobs of one process",
+      "plant": "client/HandsMachine.ts answered listing: list again instead of waiting when no job can be taken",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsStart.laws.test.ts H5",
+      "plant": "client/HandsMachine.ts moved: every work state goes offline on a drop, losing the result",
+      "result": "red"
+    },
+    {
+      "law": "jobs/JobsTest.ts and gateway/JobsTest.ts G1",
+      "plant": "jobs/JobsLedger.ts call: a target: line is appended on a repeated request too",
+      "result": "red"
+    },
+    {
+      "law": "jobs/JobsTest.ts and gateway/JobsTest.ts G1",
+      "plant": "jobs/JobsLedger.ts forTarget: answers the jobs of every target: stream, not only the key's",
+      "result": "red"
+    },
+    {
+      "law": "gateway/JobsTest.ts G2",
+      "plant": "gateway/Jobs.ts waitOn: the stream or key is taken from the params when given",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/hands-client.test.ts E1",
+      "plant": "gateway/Jobs.ts route: jobs.list answers an empty list",
+      "result": "red"
+    },
+    {
+      "law": "client/WindowStart.laws.test.ts W1",
+      "plant": "client/internal/dial.ts dialWait: the jitter is dropped",
+      "result": "red"
+    },
+    {
+      "law": "fabrika/no-node-imports B1",
+      "plant": "client/JournalStore.ts imports node:fs",
+      "result": "red"
+    },
+    {
+      "law": "pnpm lint:layers K1",
+      "plant": "client/HandsMachine.ts imports gateway/Jobs.ts",
+      "result": "red"
+    },
+    {
+      "law": "client/Hands.types.test.ts T1",
+      "plant": "client/Journal.ts write's error channel gains PlatformError",
+      "result": "red"
+    }
+  ]
+}

@@ -1,26 +1,40 @@
 // p26/p82. Hello echoes the issued nonce, bound by the existing signature with the URL and tab.
-// checkHello takes trusted upgrade values, an atomic nonce consumer and admission.
-// It answers online {who,version,ping} or refused {reason}; capability claims grant no rank.
+// checkHello takes trusted upgrade values and asks the `Admissions` service to admit the key and
+// spend the nonce. It answers online {who,version,ping} or refused {reason}; capability claims
+// grant no rank. Each law that reads which admission calls ran watches `Admissions` with a Recorder
+// (0579); one that only reads the answer provides `Layer.mock(Admissions, ...)` (ticket 1067 slice 2).
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
-import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { assert, describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
+import { AdmissionError, Admissions } from "./Admissions.ts";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const SPACE = "fabrika-client";
 
 const u32 = (n: number) => {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n);
+
   return b;
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
+
   return Buffer.concat([u32(b.length), b]);
 };
 
@@ -31,7 +45,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -55,13 +69,18 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
     ]),
   );
 
-const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: call, catch: () => WebCryptoError.make({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -78,9 +97,36 @@ const url = "https://fabrika.test/project-a",
   tab = "tab-a",
   nonce = "nonce-a";
 
+/**
+ * `Admissions` that answers every admit with `answer` and spends its nonce once, watched by a
+ * Recorder. `consume` answers true the first time and false after, as the door's nonce does.
+ */
+const admissions = (answer: typeof Admission.Type) => {
+  let used = false;
+
+  return Recorder.layer(Admissions, {
+    admit: () => Effect.succeed(answer),
+    consume: Effect.sync(() => {
+      if (used) {
+        return false;
+      }
+
+      used = true;
+
+      return true;
+    }),
+  });
+};
+
+/** The record of one admit call with this key fingerprint, and of one nonce spend. */
+const admit = (key: string) => ({ method: "admit", args: [key] });
+
+const consume = { method: "consume", args: [] };
+
 const setup = Effect.fnUntraced(function* () {
   const k = yield* key();
   const signed = yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`);
+
   const hello = {
     versions: [1, 2],
     has: ["verify", "seal"],
@@ -93,21 +139,13 @@ const setup = Effect.fnUntraced(function* () {
     sentAt: SENT,
     signed,
   };
+
   const identity = {
     key: k.fingerprint,
     person: PERSON,
     as: "window",
   } satisfies typeof Who.Type;
-  let used = false;
-  const consume = vi.fn(() => {
-    if (used) {
-      return false;
-    }
 
-    used = true;
-    return true;
-  });
-  const admit = vi.fn(() => Effect.succeed(Admission.cases.admitted.make({ identity })));
   const trusted = {
     url,
     tab,
@@ -115,63 +153,68 @@ const setup = Effect.fnUntraced(function* () {
     name: k.fingerprint,
     versions: [2, 1],
     ping: { min: 10_000, max: 60_000 },
-    consume,
-    admit,
   };
-  return { hello, trusted, identity, consume, admit };
+
+  return {
+    hello,
+    trusted,
+    identity,
+    fingerprint: k.fingerprint,
+    admissions: admissions(Admission.cases.admitted.make({ identity })),
+  };
 });
 
 describe("P10 hello", () => {
-  // d2: for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
-  // (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint and spends no nonce.
-  // Plant: return the refusal without the fingerprint.
-  it("d2: any refused signed hello names its own checked fingerprint", async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.webUrl(), fc.string(), fc.string(), (url, tab, nonce) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const k = yield* key();
-            const hello = {
-              versions: [1, 2],
-              has: [],
-              ping: "30s",
-              key: k.raw,
-              tab,
-              nonce,
-              platform: "browser",
-              os: "ios",
-              sentAt: SENT,
-              signed: yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
-            };
-            const consume = vi.fn(() => true);
-            const admit = vi.fn((_key: string) =>
-              Effect.succeed(Admission.cases.refused.make({ reason: "not_granted" })),
-            );
-            const result = yield* checkHello({
-              hello,
-              url,
-              tab,
-              nonce,
-              name: k.fingerprint,
-              versions: [2, 1],
-              ping: { min: 10_000, max: 60_000 },
-              consume,
-              admit,
-            });
-            expect(admit.mock.calls).toEqual([[k.fingerprint]]);
-            expect(result).toEqual({
-              _tag: "refused",
-              reason: "not_granted",
-              fingerprint: k.fingerprint,
-            });
-            expect(consume).not.toHaveBeenCalled();
-          }),
-        ),
-      ),
-      { seed: 119120, endOnFailure: true, numRuns: 40 },
-    );
-  });
+  // H1 (d2): for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
+  // (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint, and
+  // the record is exactly one admit with that fingerprint: no nonce is spent. Schema.URL's Arbitrary
+  // stands in for the old `fc.webUrl()`; 40 runs, and no shrinking, as before.
+  // Plants: return the refusal without the fingerprint; consume before admitting.
+  it.effect.prop(
+    "d2: any refused signed hello names its own checked fingerprint",
+    { url: Schema.URL, tab: Schema.String, nonce: Schema.String },
+    ({ url: generated, tab, nonce }) =>
+      Effect.gen(function* () {
+        const url = generated.href;
+        const k = yield* key();
 
+        const hello = {
+          versions: [1, 2],
+          has: [],
+          ping: "30s",
+          key: k.raw,
+          tab,
+          nonce,
+          platform: "browser",
+          os: "ios",
+          sentAt: SENT,
+          signed: yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+        };
+
+        yield* Effect.gen(function* () {
+          const result = yield* checkHello({
+            hello,
+            url,
+            tab,
+            nonce,
+            name: k.fingerprint,
+            versions: [2, 1],
+            ping: { min: 10_000, max: 60_000 },
+          });
+
+          expect(result).toEqual({
+            _tag: "refused",
+            reason: "not_granted",
+            fingerprint: k.fingerprint,
+          });
+          expect(yield* Recorder.calls(Admissions)).toEqual([admit(k.fingerprint)]);
+        }).pipe(Effect.provide(admissions(Admission.cases.refused.make({ reason: "not_granted" }))));
+      }),
+    { arbitrary: { runs: 40, maxShrinks: 0 } },
+  );
+
+  // H2: a hello whose unsigned tab or nonce differs from what the proof bound records no admission
+  // call. Plant: admit before the signature check.
   for (const binding of ["tab", "nonce"] as const) {
     it.effect.prop(
       `p26: an unsigned ${binding} claim cannot differ from the ${binding} bound by the proof`,
@@ -182,48 +225,81 @@ describe("P10 hello", () => {
           (value) =>
             Effect.gen(function* () {
               const x = yield* setup();
-              expect(
-                yield* checkHello({
-                  hello: {
-                    ...x.hello,
-                    [binding]: value === x.hello[binding] ? `another-${value}` : value,
-                  },
-                  ...x.trusted,
-                }),
-              ).toMatchObject({ _tag: "refused", reason: "bad_signature" });
-              expect(x.admit).not.toHaveBeenCalled();
-              expect(x.consume).not.toHaveBeenCalled();
+              yield* Effect.gen(function* () {
+                expect(
+                  yield* checkHello({
+                    hello: {
+                      ...x.hello,
+                      [binding]: value === x.hello[binding] ? `another-${value}` : value,
+                    },
+                    ...x.trusted,
+                  }),
+                ).toMatchObject({ _tag: "refused", reason: "bad_signature" });
+                expect(yield* Recorder.calls(Admissions)).toEqual([]);
+              }).pipe(Effect.provide(x.admissions));
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { runs: 12 } },
     );
   }
 
   it.effect("p82: a client with an unknown OS can still initialize", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      expect(yield* checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted })).toMatchObject({
+      expect(
+        yield* checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted }).pipe(Effect.provide(x.admissions)),
+      ).toMatchObject({
         _tag: "online",
         hello: { os: "unknown" },
       });
     }),
   );
+  // H3, scenario: the `setup` hello, checked, goes online, and the record is admit with its
+  // fingerprint, then consume, in that order. Plant: consume before admitting.
   it.effect("p26: a checked window goes online with the fold's identity and chosen version", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const checked = checkHello({ hello: x.hello, ...x.trusted });
-      const result = yield* checked;
-      expect(result).toMatchObject({
-        _tag: "online",
-        identity: x.identity,
-        version: 2,
-        ping: 30_000,
-        hello: { nonce },
-      });
-      expect(x.admit).toHaveBeenCalledOnce();
-      expect(x.consume).toHaveBeenCalledOnce();
+      yield* Effect.gen(function* () {
+        const result = yield* checkHello({ hello: x.hello, ...x.trusted });
+        expect(result).toMatchObject({
+          _tag: "online",
+          identity: x.identity,
+          version: 2,
+          ping: 30_000,
+          hello: { nonce },
+        });
+        expect(yield* Recorder.calls(Admissions)).toEqual([admit(x.fingerprint), consume]);
+      }).pipe(Effect.provide(x.admissions));
     }),
+  );
+  // H4: an admission that fails fails `checkHello` with that very `AdmissionError`, after one admit
+  // with the hello's fingerprint, and consume is never run. Plant: catch the admission error and
+  // answer `refused`.
+  it.effect.prop(
+    "H4: a failing admission fails checkHello with that very AdmissionError, and consume is never run",
+    { cause: Schema.String },
+    ({ cause }) =>
+      Effect.gen(function* () {
+        const x = yield* setup();
+        const failure = AdmissionError.make({ cause });
+
+        const failing = Recorder.layer(
+          Admissions,
+          {
+            admit: () => Effect.succeed(Admission.cases.admitted.make({ identity: x.identity })),
+            consume: Effect.succeed(true),
+          },
+          { fails: { admit: failure } },
+        );
+
+        yield* Effect.gen(function* () {
+          const error = yield* Effect.flip(checkHello({ hello: x.hello, ...x.trusted }));
+          expect(error).toBe(failure);
+          expect(yield* Recorder.calls(Admissions)).toEqual([admit(x.fingerprint)]);
+        }).pipe(Effect.provide(failing));
+      }),
+    { arbitrary: { runs: 12 } },
   );
   it("p82: agreement is the maximum intersection, independent of order and duplicates", () => {
     fc.assert(
@@ -231,27 +307,31 @@ describe("P10 hello", () => {
         fc.array(fc.integer({ min: 1, max: 9 })),
         fc.array(fc.integer({ min: 1, max: 9 })),
         (client, server) => {
-          const common = [...new Set(client)].filter((v) => server.includes(v));
-          expect(selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
+          const common = Arr.filter([...new Set(client)], (v) => server.includes(v));
+          expect(selectVersion(client, server)).toEqual(common.length > 0 ? Math.max(...common) : null);
         },
       ),
       { seed: 119120, numRuns: 100 },
     );
   });
 
+  // H2: a changed trusted value refuses with no admission call recorded. Plant: admit before the
+  // signature check.
   for (const binding of ["nonce", "url", "tab", "name"] as const) {
     it.effect(`p26: changed trusted ${binding} refuses before admission`, () =>
       Effect.gen(function* () {
         const x = yield* setup();
-        const checked = checkHello({
-          hello: x.hello,
-          ...x.trusted,
-          [binding]: "changed",
-        });
-        const result = yield* checked;
-        expect(result._tag).toBe("refused");
-        expect(x.admit).not.toHaveBeenCalled();
-        expect(x.consume).not.toHaveBeenCalled();
+
+        yield* Effect.gen(function* () {
+          const result = yield* checkHello({
+            hello: x.hello,
+            ...x.trusted,
+            [binding]: "changed",
+          });
+
+          expect(result._tag).toBe("refused");
+          expect(yield* Recorder.calls(Admissions)).toEqual([]);
+        }).pipe(Effect.provide(x.admissions));
       }),
     );
   }
@@ -259,13 +339,16 @@ describe("P10 hello", () => {
   it.effect("p26: a consumed nonce cannot initialize again", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const first = checkHello({ hello: x.hello, ...x.trusted });
-      expect((yield* first)._tag).toBe("online");
-      const repeated = checkHello({ hello: x.hello, ...x.trusted });
-      expect((yield* repeated)._tag).toBe("refused");
+      yield* Effect.gen(function* () {
+        expect((yield* checkHello({ hello: x.hello, ...x.trusted }))._tag).toBe("online");
+        expect((yield* checkHello({ hello: x.hello, ...x.trusted }))._tag).toBe("refused");
+      }).pipe(Effect.provide(x.admissions));
     }),
   );
 
+  // H2: a bad signature, key or version records no admission call; an admission's own refusal
+  // records exactly one admit with the fingerprint, and never consume. Plant: admit before the
+  // signature check.
   for (const kind of ["signature", "key", "version", "unknown"] as const) {
     it.effect.prop(
       `p26/p82: ${kind} refusal has no nonce write or successful admission`,
@@ -276,40 +359,46 @@ describe("P10 hello", () => {
           (value) =>
             Effect.gen(function* () {
               const x = yield* setup();
+
               const hello = {
                 ...x.hello,
-                ...(kind === "signature"
-                  ? { signed: "broken" }
-                  : kind === "key"
-                    ? { key: `${x.hello.key}=` }
-                    : kind === "version"
-                      ? { versions: [8] }
-                      : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("signature", () => ({ signed: "broken" })),
+                  Match.when("key", () => ({ key: `${x.hello.key}=` })),
+                  Match.when("version", () => ({ versions: [8] })),
+                  Match.orElse(() => ({})),
+                ),
               };
-              const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
-              const checked = checkHello({ hello, ...x.trusted, admit });
-              const result = yield* checked;
-              expect(result).toMatchObject({
-                _tag: "refused",
-                ...(kind === "version" ? { reason: "no_version" } : kind === "unknown" ? { reason: value.reason } : {}),
-              });
-              expect(x.consume).not.toHaveBeenCalled();
-              expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);
+
+              yield* Effect.gen(function* () {
+                const result = yield* checkHello({ hello, ...x.trusted });
+
+                expect(result).toMatchObject({
+                  _tag: "refused",
+                  ...Match.value(kind).pipe(
+                    Match.when("version", () => ({ reason: "no_version" })),
+                    Match.when("unknown", () => ({ reason: value.reason })),
+                    Match.orElse(() => ({})),
+                  ),
+                });
+                expect(yield* Recorder.calls(Admissions)).toEqual(kind === "unknown" ? [admit(x.fingerprint)] : []);
+              }).pipe(Effect.provide(kind === "unknown" ? admissions(value) : x.admissions));
             }),
           { concurrency: 1, discard: true },
         ),
-      { arbitrary: { seed: 119120, runs: 12 } },
+      { arbitrary: { runs: 12 } },
     );
   }
 
   it.effect("p82/p66: additive hello fields are ignored, has/os preserved, ping clamped", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      const checked = checkHello({
+
+      const result = yield* checkHello({
         ...x.trusted,
         hello: { ...x.hello, future: { rank: "person" }, ping: "1ms" },
-      });
-      const result = yield* checked;
+      }).pipe(Effect.provide(x.admissions));
+
       expect(result).toMatchObject({ _tag: "online", identity: x.identity, version: 2, ping: 10_000 });
       assert(result._tag === "online");
       expect(result.hello).toMatchObject({ os: "ios", has: ["verify", "seal"] });
@@ -356,6 +445,7 @@ const oldSameOrigin = (a: Parameters<typeof sameOrigin>[0]): boolean => {
   }
 
   const url = new URL(a.origin);
+
   return (
     (url.protocol === "https:" || url.protocol === "http:") && url.origin === a.origin && a.origins.includes(url.origin)
   );
@@ -379,9 +469,9 @@ const Origin = fc.oneof(
   fc
     .tuple(Canonical, fc.constantFrom("/", "/path", "?q", "#h", ":80", ":443", ":", " ", "\n", "%2e"))
     .map(([origin, tail]) => `${origin}${tail}`),
-  Canonical.map((origin) => origin.toUpperCase()),
-  Canonical.map((origin) => origin.replace("://", "://user:pass@")),
-  Canonical.map((origin) => origin.replace("://", ":")),
+  Canonical.map((origin) => Str.toUpperCase(origin)),
+  Canonical.map((origin) => Str.replace("://", "://user:pass@")(origin)),
+  Canonical.map((origin) => Str.replace("://", ":")(origin)),
   Canonical.map((origin) => ` ${origin}`),
   fc.constantFrom("", "null", "/", "/relative", "//fabrika.test", "fabrika.test", "https:", "https://", "not a URL"),
   fc.string(),
@@ -404,11 +494,13 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
       fc.property(Origins, ({ origin, others, allow, host, localHost, forwardedHost }) => {
         const given = origin === null ? [] : [origin];
         const norm = origin === null ? [] : [normalized(origin)];
+
         const origins = [
           ...others,
           ...(allow === "given" || allow === "both" ? given : []),
           ...(allow === "normalized" || allow === "both" ? norm : []),
         ];
+
         const a = {
           origin,
           host,
@@ -416,6 +508,7 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
           ...(localHost === undefined ? {} : { localHost }),
           ...(forwardedHost === undefined ? {} : { forwardedHost }),
         };
+
         const expected = oldSameOrigin(a);
         expect(sameOrigin(a)).toBe(expected);
         seen.add(
@@ -445,18 +538,30 @@ it.effect.prop(
     Effect.gen(function* () {
       const x = yield* setup();
       const identity = { ...x.identity, as: "hands" as const };
+
       const result = yield* checkHello({
         ...x.trusted,
         hello: { ...x.hello, has, build },
-        admit: () => Effect.succeed(Admission.cases.admitted.make({ identity })),
-      });
+      }).pipe(
+        Effect.provide(
+          Layer.mock(Admissions, {
+            admit: () => Effect.succeed(Admission.cases.admitted.make({ identity })),
+            consume: Effect.succeed(true),
+          }),
+        ),
+      );
+
       expect(result).toMatchObject({ _tag: "online", identity, hello: { has, build } });
       const old = yield* setup();
-      expect(yield* checkHello({ ...old.trusted, hello: old.hello })).toMatchObject({ _tag: "online" });
+      expect(
+        yield* checkHello({ ...old.trusted, hello: old.hello }).pipe(Effect.provide(old.admissions)),
+      ).toMatchObject({ _tag: "online" });
       const bad = yield* setup();
-      expect(yield* checkHello({ ...bad.trusted, hello: { ...bad.hello, build: 42 } })).toMatchObject({
+      expect(
+        yield* checkHello({ ...bad.trusted, hello: { ...bad.hello, build: 42 } }).pipe(Effect.provide(bad.admissions)),
+      ).toMatchObject({
         _tag: "refused",
       });
     }),
-  { arbitrary: { seed: 119120, runs: 100 } },
+  { arbitrary: { runs: 100 } },
 );

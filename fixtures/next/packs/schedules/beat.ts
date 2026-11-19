@@ -15,7 +15,7 @@ const scheduled = Result.getOrThrow(ScheduledJob.make({
   cmd: write,
   work: (due, period) => write({ stream: "beats", write: Own.make({ event: BeatEvent.make({ due, period }) }) }),
 }));
-export const beat = Program.make({
+const beat = Program.make({
   name: "schedules/beat",
   machine: scheduled.machine,
   state: { v: 1, upgrades: [] },

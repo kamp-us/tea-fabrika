@@ -18,18 +18,16 @@ both tools.
 | [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
 | [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
+| [sev](./sev/SKILL.md) | CI as the emergency: on the owner's sev0, freeze CI and land the fixes one at a time; while a `ci-scheduled` issue is open (a sev1), fixes go first |
 
 ## How a brief uses them
 
-A brief names the skill and the ticket's facts, nothing more:
+A brief is the step's template in [the lead skill](./lead/SKILL.md#step-briefs), filled in: the
+ticket's facts as fields, then only what is special about this quest.
 
-```text
-Use the tests skill for ticket 277, door fixes, next/. Plan at ../door-PLAN.md. Box door.
-This round: laws d1 to d3, and d4 yourself, since commits.ts is an exam path.
-```
-
-The skill holds what every brief used to repeat: what to read, the caps, how to commit and sign,
-what never to do, and how to report. What every step shares is in
+The skill holds what every brief used to repeat, in its "Standing rules" section: what to read
+first, the caps, signal tests, fix properly, the checks, how to commit and push, the run row, and
+how to report. What every step shares is in
 [`AGENTS.md`, "Finish your task"](../../AGENTS.md#finish-your-task): finish the whole task, the routine steps
 that need no approval, and a report a reader with no context can follow.
 

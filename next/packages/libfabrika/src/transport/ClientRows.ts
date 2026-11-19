@@ -1,4 +1,6 @@
-import { Context, type Effect, Schema } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /** The class of a failure, from a fixed list of words. Never a message, a stack or a value. */
 export const ErrorClass = Schema.Literals([
@@ -18,10 +20,18 @@ export const ErrorClass = Schema.Literals([
   "UnknownError",
   "other",
 ]);
+
 export type ErrorClass = typeof ErrorClass.Type;
 
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+/** A fixed word, such as a door's reason or an exit's tag: never free text. */
+const Word = Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/));
+
+/** A length in CSS pixels, as a window measures its own area: never a duration (0212). */
+export const Pixels = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 /**
  * One checked observation. Ids, counts, durations and fixed words only: no program body, no key
@@ -36,11 +46,11 @@ export const ClientRecord = Schema.TaggedUnion({
     /** On a `closed` or `removed` row only: the close code the socket saw. */
     code: Schema.optionalKey(Count),
     /** On a `refused` row only: the door's reason for refusing the hello, or `other`. */
-    reason: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/))),
+    reason: Schema.optionalKey(Word),
   },
   press: {
     command: Schema.String,
-    via: Schema.Literals(["button", "key"]),
+    via: Schema.Literals(["button", "key", "click"]),
     pid: Schema.String,
     viewRev: Count,
     seen: Count,
@@ -52,7 +62,7 @@ export const ClientRecord = Schema.TaggedUnion({
     result: Schema.Literals(["accepted", "refused", "unreachable", "unknown"]),
     attempts: Count,
     ms: Ms,
-    reason: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^[a-z_]{1,40}$/))),
+    reason: Schema.optionalKey(Word),
   },
   /** A view's start and end (plan A8): a `whole` view installed, an `asked` for one, and one `patch`
    *  row for a run of installed patches when it ends, never one per patch. */
@@ -63,12 +73,26 @@ export const ClientRecord = Schema.TaggedUnion({
     /** On a `patch` row only: how many patches the run installed. */
     patches: Schema.optionalKey(Count),
   },
+  /** A command reached through the prefix key: which, and how long after the prefix it came. */
+  prefix: { does: Schema.String, ms: Ms },
+  /** A focus move the window drew, dropped once tezgah answered it: `kept` when tezgah's focus is
+   *  the move's tile, `overridden` when tezgah refused it or another move won, so the drawn focus
+   *  jumped back. A jump back is recorded here and never announced. `ms` is how long its answer took. */
+  focus: { letter: Schema.String, result: Schema.Literals(["kept", "overridden"]), ms: Ms },
+  /** The tiles a window draws as strips changed: how many it draws now, and the size it folded at.
+   *  Which tiles folded is not written: tezgah's view, the window's size and its focus rebuild it. */
+  fold: { strips: Count, width: Pixels, height: Pixels },
   persist: { result: Schema.Literals(["granted", "refused", "failed"]) },
+  /** A tile's monitor answered: the door keeps the watch, or refused it. */
+  monitor: { name: Schema.String, pid: Schema.String, result: Schema.Literals(["watching", "refused"]) },
+  /** A tile took a DOWN for its watch: the DOWN reason's tag and the letter's rev. */
+  down: { name: Schema.String, pid: Schema.String, reason: Word, rev: Count },
   failure: {
     op: Schema.Literals(["key", "connect", "request", "view", "persist", "record"]),
     error: ErrorClass,
   },
 });
+
 export type ClientRecord = typeof ClientRecord.Type;
 
 /** A record as a client keeps and sends it: a stable row id, the tab, the build and its own time. */
@@ -79,12 +103,16 @@ export const ClientRow = Schema.Struct({
   sentAt: Schema.String,
   record: ClientRecord,
 });
+
 export type ClientRow = typeof ClientRow.Type;
 
-export class ClientRowsError extends Schema.TaggedError<ClientRowsError>()("ClientRowsError", {
-  op: Schema.Literals(["open", "write"]),
-  error: ErrorClass,
-}) {}
+export class ClientRowsError extends Schema.TaggedError<ClientRowsError, { readonly brand: unique symbol }>()(
+  "ClientRowsError",
+  {
+    op: Schema.Literals(["open", "write"]),
+    error: ErrorClass,
+  },
+) {}
 
 export class ClientRows extends Context.Service<
   ClientRows,

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-kept-summon-cut-after-keep-has-no-summon-record",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "packages/fabrika/src/agents/summon/manager.ts",
+    "line": 675
+  },
+  "says": "In today's version, a summon interrupted just after its keep leaves the name kept and listed, but its `summoned` log line and its `record(\"summon\")` row are never written.",
+  "proof": "manager.ts:675 keeps the name on an interrupt when `live.get(name)?.scope === own`; the log and the record are at lines 686 to 709, after the acquireUseRelease, which an interrupted call never reaches. Main has the same window between `put` and `record`.",
+  "cost": "A kept name's turns have no summon row saying what model, effort and person it was summoned with.",
+  "head": "5fcc56dbca9c7e184324b0c6b81da93893b25d74",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1339"
+}

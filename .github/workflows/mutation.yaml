@@ -48,22 +48,17 @@ jobs:
           # mutbox.ts fetches the base and the head from this checkout, so it must hold both.
           fetch-depth: 0
 
-      # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      # pnpm and Node, with no store cache: restoring one did not pay, and even a save on main
+      # holds about half a gigabyte of the repository's 10 GB (.github/actions/pnpm).
+      - uses: ./.github/actions/pnpm
 
       # For mutbox.ts itself (Effect and oxc-parser); the container installs its own copy offline.
       - run: pnpm install --frozen-lockfile
 
       # The tests beside the changed files (0066): for each changed product file, its own
-      # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Of the lead tooling,
-      # only lane code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
+      # `name.test.ts` or `name.test.tsx` at head and each `name.<kind>.test.ts` sibling (decision
+      # 0600's slice 2), and each changed test file. Of the lead tooling,
+      # only quest code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
       # out.
       - id: range
@@ -77,7 +72,10 @@ jobs:
           # Each in its own line, so a broken diff or scope.ts fails the job and is never read as
           # "no tests".
           git diff --name-only --diff-filter=d "$base" "$head" > "$RUNNER_TEMP/changed.txt"
-          node .agents/skills/mutation/scripts/scope.ts < "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/tests.txt"
+          # The head's file list, so scope.ts can pick each changed file's `name.<kind>.test.ts` siblings
+          # (`name.laws.test.ts`, `name.integration.test.ts`) that exist at head, not only `name.test.ts`.
+          git ls-tree -r --name-only "$head" > "$RUNNER_TEMP/tracked.txt"
+          node .agents/skills/mutation/scripts/scope.ts --tracked "$RUNNER_TEMP/tracked.txt" < "$RUNNER_TEMP/changed.txt" > "$RUNNER_TEMP/tests.txt"
           grep -E "$plain" "$RUNNER_TEMP/tests.txt" | grep -v '/\.\./' |
             while IFS= read -r t; do
               if git cat-file -e "$head:$t" 2> /dev/null; then printf '%s\n' "$t"; fi

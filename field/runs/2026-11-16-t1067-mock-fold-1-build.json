@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-build",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T00:45:29-08:00",
+  "ended": "2026-11-16T00:49:27-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Mock sweep fold 1, stack layer 7 (decision 0555), merges only, on fabrikalfa/mock-fold-1 from the head of fabrikalfa/test-sqlite-store (eeb8ecdbb). Merge 1, fabrikalfa/mock-plans at c2810962, was clean (12 plans and 16 plan rows, no exam file). Merge 2, fabrikalfa/mock-app-src-s1 at d821377b, had two conflicts, each resolved by keeping both sides. door.integration.test.ts imports: the stack's TestDatabase, Exit and Scope imports and its RateLimiter import from effect/persistence, plus the slice's Recorder. door.integration.test.ts P10 wrong-ledger law: the slice's Recorder.layer over the real ClientManager in place of the vi.fn wrapper, since the stack's side of that block changed only blank lines. grant-readers.laws.test.ts grant mode law: the slice's fetches stand-in in place of the fetch spy, since the stack's side changed only blank lines there too. file-services.laws.integration.test.ts merged on its own.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "loosening.sh over merge 1: 0 hits. Over merge 2: 9 hits (3 unrecognized import lines, 6 removed expects), the same 9 that loosening.sh prints over the slice alone (b510ed2e to d821377b), so each is the slice's own: a spy expect replaced by a stronger one (Recorder.calls toEqual [], the law's sent list toEqual [], the whole TestConsole log toEqual a list), none dropped. pnpm install --frozen-lockfile passed. pnpm format changed no file. Not run by this step, as briefed: pnpm lint, pnpm typecheck and every test, which the coordinator runs after review. The slice's new helpers in grant-readers.laws.test.ts have no blank lines before their returns, unlike the stack's padded style; format did not change them, and lint will say if a rule holds them.",
+  "step": "build"
+}

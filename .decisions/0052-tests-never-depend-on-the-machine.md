@@ -43,7 +43,7 @@ the fix; tracker ticket 575 is this decision.
 - [0036](0036-a-flaky-test-is-fixed.md) is amended in part. It lets a wait, a retry or a skip stay
   when a flaky test's cause is proven to be outside our code. The machine a test runs on is never
   that cause: a test that passes on one laptop and fails on another, or in a box, leans on
-  something it should not, and the fix removes it. The rest of 0036 stands.
+  something it should not, and the fix removes it.
 - [0011](0011-leak-check-allows-plain-tmp-paths.md) lets short test homes such as `fh.abc` under
   `/tmp` into laws and docs. This decision makes such a home the only one a test sees.
 - [0045](0045-test-steps-run-in-containers.md) already mounts nothing from the home folder into a

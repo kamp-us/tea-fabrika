@@ -28,9 +28,10 @@ decided with the first live use, the duplicate hint ([experiment 167](../experim
 **A question asked only because a call is cheap has no agent answer to agree with.**
 
 - It is measured against hand labels written before the run, for the hits, and controls, for the
-  false alarms. The rest of [0412](0412-jev-is-measured-by-agreement.md) and
-  [0413](0413-a-jev-question-is-narrow.md) holds: a floor per question, advice not an action, never
-  a person removed.
+  false alarms.
+- A floor per question, an answer that is advice and not an action, and never removing a person
+  are decided in [0412](0412-jev-is-measured-by-agreement.md) and
+  [0413](0413-a-jev-question-is-narrow.md).
 - Each person runs agents on their own plan, so a saved agent turn counts twice: the dollars, and
   the turns left in that person's plan quota.
 

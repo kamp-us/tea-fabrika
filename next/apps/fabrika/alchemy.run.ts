@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import type { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import * as Alchemy from "alchemy";
-import { Config, Context, Effect, Layer, Schema } from "effect";
+import { Config, Context, Effect, Formatter, Layer, Schema } from "effect";
 import type { Built } from "./src/build.ts";
 
 /** Cloudflare's limit on one environment variable, in encoded bytes (Workers platform limits). */
@@ -13,7 +13,7 @@ const Setting = Schema.String.check(
 );
 
 const setting = (value: string) =>
-  Schema.decodeUnknownEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
+  Schema.decodeEffect(Setting)(value).pipe(Effect.mapError((error) => new Config.ConfigError(error)));
 
 // The stack runs the completed brain file as it is (`bundle: false`); no code rides in its env.
 export const stack = (
@@ -29,12 +29,14 @@ export const stack = (
     },
     Effect.gen(function* () {
       const settings = checked.input;
-      const instance = yield* setting(JSON.stringify(settings));
+      const instance = yield* setting(Formatter.formatJson(settings));
+
       const measurements = yield* Cloudflare.R2.Bucket("Measurements", {
         name: "fabrika-measurements",
         lifecycleRules: [],
         locks: [],
       });
+
       const brain = yield* Cloudflare.Workers.Worker("Brain", {
         name: settings.name,
         main: built.brain,
@@ -55,6 +57,7 @@ export const stack = (
           INSTANCE: instance,
         },
       });
+
       return { url: brain.url };
     }),
   );

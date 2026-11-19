@@ -2,19 +2,43 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: unique symbol }>()("TestFailure", {
+  cause: Schema.Unknown,
+}) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
+
 const SEED = 119120;
+
 const RUNS = 100;
+
 const READER = "gateway/session-1";
+
 const SESSION = "session-1";
+
 const PING = 42;
 
 type Saved = typeof Attached.Type;
+
 type W = typeof Wait.Type;
+
 type Waited = { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" };
 
 type Frame = {
@@ -36,8 +60,10 @@ type Event =
     }
   | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
+
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
+
 const restored = (saved: Saved) => Schema.decodeUnknownSync(Attached)(JSON.parse(JSON.stringify(saved)));
 
 const online = (busy = false, waits: ReadonlyArray<W> = []) =>
@@ -50,7 +76,7 @@ const online = (busy = false, waits: ReadonlyArray<W> = []) =>
     busy,
   });
 
-const waitFrame = (id: string | number, params: unknown) =>
+const waitFrame = (id: string | number, params: Schema.Json) =>
   JSON.stringify({ jsonrpc: "2.0", id, method: "ledger.wait", params });
 
 const callFrame = (id: string | number, method: string) => JSON.stringify({ jsonrpc: "2.0", id, method, params: {} });
@@ -75,6 +101,7 @@ const harness = (first: Saved) => {
   const calls: Array<Pending<typeof Answer.Type>> = [];
   const reentrant = new Set<string>();
   let ring: ReturnType<typeof connection>["ring"] = () => Effect.void;
+
   const c = connection<unknown>({
     reader: READER,
     session: SESSION,
@@ -98,11 +125,13 @@ const harness = (first: Saved) => {
         if (reentrant.delete(key)) {
           // A ring that arrives over RPC before registration returns.
           yield* ring(stream, after + 1);
+
           return { _tag: "parked" } as const;
         }
 
         const reply = yield* Deferred.make<Waited, unknown>();
         waits.push({ label: key, stream, after, reply });
+
         return yield* Deferred.await(reply);
       }),
     call: (method, params) =>
@@ -114,15 +143,19 @@ const harness = (first: Saved) => {
         calls.push({ label: method, reply });
         const answer = yield* Deferred.await(reply);
         calling -= 1;
+
         return answer;
       }),
   });
+
   ring = c.ring;
+
   const run = (effect: Effect.Effect<unknown, unknown>) =>
     Effect.gen(function* () {
       yield* Effect.forkChild(effect);
       yield* settle;
     });
+
   return { c, log, waits, calls, reentrant, run, saved: () => saved, most: () => most };
 };
 
@@ -137,7 +170,9 @@ const Choice = fc.record({
   rev: fc.integer({ min: 1, max: 9 }),
   reason: fc.option(fc.constantFrom("unreachable", "closed", "bad_stream"), { nil: undefined }),
 });
+
 type Choice = typeof Choice extends fc.Arbitrary<infer A> ? A : never;
+
 const Walk = fc.array(Choice, { minLength: 1, maxLength: 60, size: "max" });
 
 /** Did a saved attachment admit this wait, by the limits the driver had before the machine. */
@@ -147,11 +182,12 @@ const admits = (saved: Saved, wait: W) => {
   }
 
   const next = { ...saved, waits: [...saved.waits, wait] };
-  return !saved.waits.some((w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
+
+  return !Arr.some(saved.waits, (w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
 };
 
 const answers = (log: ReadonlyArray<Event>, from: number) =>
-  log.slice(from).flatMap((e) => (e._tag === "send" ? [e.frame] : []));
+  Arr.flatMap(log.slice(from), (e) => (e._tag === "send" ? [e.frame] : []));
 
 it.effect.prop(
   "T843 frame: ordinary and parked-read replies retain the delay, tag their ended frame, and keep the socket online (50 runs)",
@@ -162,13 +198,16 @@ it.effect.prop(
   ({ retryAfter, picks }) =>
     Effect.gen(function* () {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       const h = harness(online());
 
       for (const [id, pick] of picks.entries()) {
@@ -176,7 +215,7 @@ it.effect.prop(
         expect(now._tag).toBe("online");
         const method = now._tag === "online" && !now.busy && pick ? "ledger.wait" : "process.send";
         yield* h
-          .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
+          .run(h.c.frame(Formatter.formatJson({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
           .pipe(Effect.withTracer(tracer));
 
         if (method === "ledger.wait") {
@@ -194,8 +233,8 @@ it.effect.prop(
         const reply = answers(h.log, 0).at(-1)!;
         expect(reply.error).toMatchObject({ message: "rate_limited", data: { reason: "rate_limited", retryAfter } });
         expect(h.saved()._tag).toBe("online");
-        expect(h.log.filter((e) => e._tag === "close")).toEqual([]);
-        const frame = spans.filter((span) => span.name === "connection.frame").at(-1)!;
+        expect(Arr.filter(h.log, (e) => e._tag === "close")).toEqual([]);
+        const frame = Arr.filter(spans, (span) => span.name === "connection.frame").at(-1)!;
         expect(frame.status._tag).toBe("Ended");
         expect(frame.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }
@@ -213,25 +252,30 @@ it.effect.prop(
   ({ kind, id, params }) =>
     Effect.gen(function* () {
       const spans: Array<Tracer.NativeSpan> = [];
+
       const tracer = Tracer.make({
         span: (options) => {
           const span = new Tracer.NativeSpan(options);
           spans.push(span);
+
           return span;
         },
       });
+
       const h = harness(online());
       yield* h
-        .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params })))
+        .run(h.c.frame(Formatter.formatJson({ jsonrpc: "2.0", id, method: "process.send", params })))
         .pipe(Effect.withTracer(tracer));
       expect(h.calls).toHaveLength(1);
+
       const answer =
         kind === "ok" ? Answer.cases.ok.make({ result: params }) : Answer.cases.refused.make({ reason: kind });
+
       yield* Deferred.succeed(h.calls[0]!.reply, answer);
       yield* settle;
       expect(answers(h.log, 0)).toEqual([kind === "ok" ? { jsonrpc: "2.0", id, result: params } : no(id, kind).frame]);
       expect(h.saved()).toEqual(online());
-      const frames = spans.filter((span) => span.name === "connection.frame");
+      const frames = Arr.filter(spans, (span) => span.name === "connection.frame");
       expect(frames).toHaveLength(1);
       expect(frames[0]!.status._tag).toBe("Ended");
       expect(frames[0]!.attributes.has("fab.gateway.refused")).toBe(kind === "reserved");
@@ -244,286 +288,317 @@ it.effect.prop(
 );
 
 describe("T703 connection driver laws", () => {
-  it("save and callback order survives reentrant rings and delayed ordinary calls", async () => {
-    const seen = new Set<string>();
-    await fc.assert(
-      fc.asyncProperty(Walk, (choices) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const h = harness(online());
+  it.live("save and callback order survives reentrant rings and delayed ordinary calls", () =>
+    Effect.gen(function* () {
+      const seen = new Set<string>();
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(Walk, (choices) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const h = harness(online());
 
-            for (const choice of choices) {
-              const now = h.saved();
-              const held = now._tag === "online" ? now.waits : [];
-              const { move, pick } = choice;
-              const from = h.log.length;
+                for (const choice of choices) {
+                  const now = h.saved();
+                  const held = now._tag === "online" ? now.waits : [];
+                  const { move, pick } = choice;
+                  const from = h.log.length;
 
-              if (move < 30) {
-                // A wait: a fresh id, a saved id again, or one already answered.
-                const id = move < 8 && held.length > 0 ? at(held, pick).id : choice.id;
-                const wait = Wait.make({ id, stream: choice.stream, after: choice.after });
-                const ok = admits(now, wait);
+                  if (move < 30) {
+                    // A wait: a fresh id, a saved id again, or one already answered.
+                    const id = move < 8 && held.length > 0 ? at(held, pick).id : choice.id;
+                    const wait = Wait.make({ id, stream: choice.stream, after: choice.after });
+                    const ok = admits(now, wait);
 
-                if (ok && move % 3 === 0) {
-                  h.reentrant.add(`${wait.stream}|${wait.after}`);
-                  seen.add("reentrant");
+                    if (ok && move % 3 === 0) {
+                      h.reentrant.add(`${wait.stream}|${wait.after}`);
+                      seen.add("reentrant");
+                    }
+
+                    yield* h.run(h.c.frame(waitFrame(id, { stream: wait.stream, after: wait.after })));
+
+                    const refused = Arr.filter(
+                      answers(h.log, from),
+                      (f) => f.id === id && f.error?.message === "too_many_waits",
+                    );
+
+                    expect(refused).toHaveLength(ok ? 0 : 1);
+
+                    const registered = Option.getOrUndefined(
+                      Arr.findFirst(h.log.slice(from), (e) => e._tag === "wait"),
+                    );
+
+                    if (ok) {
+                      seen.add("admitted");
+                      // Saved before registration: the callback already reads the new wait.
+                      expect(registered).toMatchObject({
+                        _tag: "wait",
+                        reader: READER,
+                        stream: wait.stream,
+                        after: wait.after,
+                      });
+                      expect(
+                        registered?._tag === "wait" && registered.saved._tag === "online" && registered.saved.waits,
+                      ).toContainEqual(wait);
+                    } else {
+                      seen.add("refused");
+                      expect(registered).toBeUndefined();
+                    }
+                  } else if (move < 45) {
+                    // An ordinary call, delayed until the walk releases it.
+                    yield* h.run(h.c.frame(callFrame(`call:${choice.id}`, "process.send")));
+                    seen.add("call");
+                  } else if (move < 60 && h.calls.length > 0) {
+                    const [call] = h.calls.splice(pick % h.calls.length, 1);
+
+                    const answer =
+                      move % 2 === 0
+                        ? Answer.cases.ok.make({ result: null })
+                        : Answer.cases.refused.make({ reason: "x" });
+
+                    yield* Deferred.succeed(call!.reply, answer);
+                    yield* settle;
+                    const after = h.log.slice(from);
+
+                    const sent = Option.getOrElse(
+                      Arr.findFirstIndex(after, (e) => e._tag === "send"),
+                      () => -1,
+                    );
+
+                    const idle = Option.getOrElse(
+                      Arr.findFirstIndex(after, (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy),
+                      () => -1,
+                    );
+
+                    // The response goes out first; only then is busy cleared.
+                    expect(sent).toBeGreaterThanOrEqual(0);
+                    expect(idle).toBeGreaterThan(sent);
+                    seen.add("released");
+                  } else if (move < 78 && h.waits.length > 0) {
+                    const [wait] = h.waits.splice(pick % h.waits.length, 1);
+
+                    if (move < 64) {
+                      yield* Deferred.fail(wait!.reply, choice.reason === undefined ? {} : { reason: choice.reason });
+                      seen.add("failed");
+                    } else if (move < 71) {
+                      yield* Deferred.succeed(wait!.reply, { _tag: "ready", rev: wait!.after + choice.rev });
+                      seen.add("ready");
+                    } else {
+                      yield* Deferred.succeed(wait!.reply, { _tag: "parked" });
+                    }
+
+                    yield* settle;
+                  } else {
+                    const stream = held.length > 0 && move % 2 === 0 ? at(held, pick).stream : choice.stream;
+                    const rev = choice.rev;
+                    yield* h.run(h.c.ring(stream, rev));
+                    const left = h.saved();
+                    // Every wait the ring could answer is answered.
+                    expect(
+                      left._tag === "online" && Arr.filter(left.waits, (w) => w.stream === stream && rev > w.after),
+                    ).toEqual([]);
+                    seen.add("ring");
+                  }
+
+                  // Ordinary calls never overlap; a call starts only after busy is saved.
+                  expect(h.most()).toBeLessThanOrEqual(1);
+
+                  for (const e of h.log.slice(from)) {
+                    if (e._tag === "call") {
+                      expect(e.saved).toMatchObject({ _tag: "online", busy: true });
+                    }
+                  }
                 }
 
-                yield* h.run(h.c.frame(waitFrame(id, { stream: wait.stream, after: wait.after })));
-                const refused = answers(h.log, from).filter(
-                  (f) => f.id === id && f.error?.message === "too_many_waits",
-                );
-                expect(refused).toHaveLength(ok ? 0 : 1);
-                const registered = h.log.slice(from).find((e) => e._tag === "wait");
-
-                if (ok) {
-                  seen.add("admitted");
-                  // Saved before registration: the callback already reads the new wait.
-                  expect(registered).toMatchObject({
-                    _tag: "wait",
-                    reader: READER,
-                    stream: wait.stream,
-                    after: wait.after,
-                  });
-                  expect(
-                    registered?._tag === "wait" && registered.saved._tag === "online" && registered.saved.waits,
-                  ).toContainEqual(wait);
-                } else {
-                  seen.add("refused");
-                  expect(registered).toBeUndefined();
-                }
-              } else if (move < 45) {
-                // An ordinary call, delayed until the walk releases it.
-                yield* h.run(h.c.frame(callFrame(`call:${choice.id}`, "process.send")));
-                seen.add("call");
-              } else if (move < 60 && h.calls.length > 0) {
-                const [call] = h.calls.splice(pick % h.calls.length, 1);
-                const answer =
-                  move % 2 === 0 ? Answer.cases.ok.make({ result: null }) : Answer.cases.refused.make({ reason: "x" });
-                yield* Deferred.succeed(call!.reply, answer);
-                yield* settle;
-                const after = h.log.slice(from);
-                const sent = after.findIndex((e) => e._tag === "send");
-                const idle = after.findIndex((e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy);
-                // The response goes out first; only then is busy cleared.
-                expect(sent).toBeGreaterThanOrEqual(0);
-                expect(idle).toBeGreaterThan(sent);
-                seen.add("released");
-              } else if (move < 78 && h.waits.length > 0) {
-                const [wait] = h.waits.splice(pick % h.waits.length, 1);
-
-                if (move < 64) {
-                  yield* Deferred.fail(wait!.reply, choice.reason === undefined ? {} : { reason: choice.reason });
-                  seen.add("failed");
-                } else if (move < 71) {
-                  yield* Deferred.succeed(wait!.reply, { _tag: "ready", rev: wait!.after + choice.rev });
-                  seen.add("ready");
-                } else {
-                  yield* Deferred.succeed(wait!.reply, { _tag: "parked" });
-                }
-
-                yield* settle;
-              } else {
-                const stream = held.length > 0 && move % 2 === 0 ? at(held, pick).stream : choice.stream;
-                const rev = choice.rev;
-                yield* h.run(h.c.ring(stream, rev));
-                const left = h.saved();
-                // Every wait the ring could answer is answered.
-                expect(
-                  left._tag === "online" && left.waits.filter((w) => w.stream === stream && rev > w.after),
-                ).toEqual([]);
-                seen.add("ring");
-              }
-
-              // Ordinary calls never overlap; a call starts only after busy is saved.
-              expect(h.most()).toBeLessThanOrEqual(1);
-
-              for (const e of h.log.slice(from)) {
-                if (e._tag === "call") {
-                  expect(e.saved).toMatchObject({ _tag: "online", busy: true });
-                }
-              }
-            }
-
-            // Park every registration left, then check that no admitted wait was lost or answered twice.
-            for (const wait of h.waits.splice(0)) {
-              yield* Deferred.succeed(wait.reply, { _tag: "parked" });
-            }
-
-            while (h.calls.length > 0) {
-              yield* Deferred.succeed(h.calls.shift()!.reply, Answer.cases.ok.make({ result: null }));
-              yield* settle;
-            }
-
-            const end = h.saved();
-            const replies = new Map<string | number, number>();
-
-            for (const e of h.log) {
-              if (
-                e._tag === "send" &&
-                e.frame.error?.message !== "too_many_waits" &&
-                (e.frame.error !== undefined || isRev(e.frame.result))
-              ) {
-                replies.set(e.frame.id, (replies.get(e.frame.id) ?? 0) + 1);
-              }
-            }
-
-            const waiting = new Map<string | number, number>();
-
-            for (const w of end._tag === "online" ? end.waits : []) {
-              waiting.set(w.id, (waiting.get(w.id) ?? 0) + 1);
-            }
-
-            for (const [id, n] of admittedTotals(h.log)) {
-              expect((replies.get(id) ?? 0) + (waiting.get(id) ?? 0), `wait ${String(id)}`).toBe(n);
-            }
-
-            expect(end).toMatchObject({ busy: false });
-          }),
-        ),
-      ),
-      { seed: SEED, numRuns: RUNS },
-    );
-
-    for (const side of ["admitted", "refused", "reentrant", "call", "released", "failed", "ready", "ring"]) {
-      expect(seen, side).toContain(side);
-    }
-  });
-
-  it("wake, probe and pre-hello frames keep their results on every observed attachment", async () => {
-    const seen = new Set<string>();
-    const observation = fc.oneof(
-      fc.constant(Attached.cases.new.make({ client: READER, nonce: "fresh" })),
-      fc.constant(
-        Attached.cases.waiting.make({
-          client: READER,
-          key: "SHA256:test",
-          nonce: "fresh",
-          hello: {
-            versions: [1],
-            has: [],
-            ping: "p",
-            key: "SHA256:test",
-            tab: "t",
-            nonce: "fresh",
-            platform: "browser",
-            os: "macos",
-            sentAt: "2026-11-11T00:00:00Z",
-            signed: "s",
-          },
-        }),
-      ),
-      fc.boolean().map((busy) => online(busy, [Wait.make({ id: "w", stream: "events", after: 1 })])),
-    );
-    const Step = fc.record({
-      move: fc.nat({ max: 99 }),
-      observation,
-      other: fc.uuid(),
-      id: fc.oneof(fc.string(), fc.integer()),
-    });
-    await fc.assert(
-      fc.asyncProperty(fc.array(Step, { minLength: 1, maxLength: 40, size: "max" }), (steps) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            let h = harness(online());
-
-            for (const { move, observation, other, id } of steps) {
-              const now = h.saved();
-              const from = h.log.length;
-
-              if (move < 20) {
-                // A restart: the saved attachment, through JSON, read by a new connection.
-                h = harness(restored(move < 10 ? observation : now));
-                seen.add(`restored:${h.saved()._tag}`);
-              } else if (move < 35) {
-                yield* h.c.wake();
-                const closed = h.log.slice(from).filter((e) => e._tag === "close");
-                expect(closed).toEqual(now._tag === "online" && now.busy ? [{ _tag: "close", code: 1012 }] : []);
-                seen.add(`wake:${closed.length}`);
-              } else if (move < 50) {
-                const session = move % 2 === 0 ? SESSION : other;
-                const ping = yield* h.c.probe(session);
-                expect(ping).toBe(session === SESSION && now._tag === "online" ? PING : null);
-                seen.add(`probe:${ping}`);
-              } else if (move < 65) {
-                const method = at(["initialize", "gateway.knock", "process.send"], move);
-                yield* h.run(h.c.frame(callFrame(id, method)));
-
-                for (const call of h.calls.splice(0)) {
-                  yield* Deferred.succeed(call.reply, Answer.cases.ok.make({ result: { method } }));
-                }
-
-                yield* settle;
-                const after = h.log.slice(from);
-                const handshake = method !== "process.send";
-
-                if (now._tag === "online") {
-                  expect(after.map((e) => e._tag)).toEqual(["save", "call", "send", "save"]);
-                  expect(h.saved()).toEqual({ ...now, busy: false });
-                } else if (handshake) {
-                  // Before hello only the handshake reaches the call, and nothing is saved.
-                  expect(after).toEqual([
-                    { _tag: "call", method, params: {}, saved: now },
-                    { _tag: "send", frame: { jsonrpc: "2.0", id, result: { method } } },
-                  ]);
-                } else {
-                  expect(after).toEqual([no(id, "no_hello")]);
-                }
-
-                seen.add(`call:${now._tag}:${handshake}`);
-              } else if (move < 80) {
-                const bad = move % 3 === 0;
-                yield* h.run(h.c.frame(waitFrame(id, bad ? { stream: 1, after: -1 } : { stream: "s", after: 0 })));
-
-                if (now._tag !== "online") {
-                  expect(h.log.slice(from)).toEqual([no(id, "no_hello")]);
-                } else if (bad) {
-                  expect(h.log.slice(from)).toEqual([no(id, "bad_input")]);
-                }
-
+                // Park every registration left, then check that no admitted wait was lost or answered twice.
                 for (const wait of h.waits.splice(0)) {
                   yield* Deferred.succeed(wait.reply, { _tag: "parked" });
                 }
 
-                yield* settle;
-                seen.add(`wait:${now._tag}:${bad}`);
-              } else {
-                // Frames that are not requests are dropped without a reply.
-                yield* h.run(h.c.frame(move % 2 === 0 ? "{" : JSON.stringify({ id, method: 7 })));
-                expect(h.log.slice(from)).toEqual([]);
-                seen.add("junk");
-              }
+                while (h.calls.length > 0) {
+                  yield* Deferred.succeed(h.calls.shift()!.reply, Answer.cases.ok.make({ result: null }));
+                  yield* settle;
+                }
 
-              // Only a restart changes which state the attachment is in.
-              expect(move < 20 || h.saved()._tag === now._tag).toBe(true);
-            }
+                const end = h.saved();
+                const replies = new Map<string | number, number>();
+
+                for (const e of h.log) {
+                  if (
+                    e._tag === "send" &&
+                    e.frame.error?.message !== "too_many_waits" &&
+                    (e.frame.error !== undefined || isRev(e.frame.result))
+                  ) {
+                    replies.set(e.frame.id, (replies.get(e.frame.id) ?? 0) + 1);
+                  }
+                }
+
+                const waiting = new Map<string | number, number>();
+
+                for (const w of end._tag === "online" ? end.waits : []) {
+                  waiting.set(w.id, (waiting.get(w.id) ?? 0) + 1);
+                }
+
+                for (const [id, n] of admittedTotals(h.log)) {
+                  expect((replies.get(id) ?? 0) + (waiting.get(id) ?? 0), `wait ${String(id)}`).toBe(n);
+                }
+
+                expect(end).toMatchObject({ busy: false });
+              }),
+            ),
+          ),
+          { seed: SEED, numRuns: RUNS },
+        ),
+      );
+
+      for (const side of ["admitted", "refused", "reentrant", "call", "released", "failed", "ready", "ring"]) {
+        expect(seen, side).toContain(side);
+      }
+    }),
+  );
+
+  it.live("wake, probe and pre-hello frames keep their results on every observed attachment", () =>
+    Effect.gen(function* () {
+      const seen = new Set<string>();
+
+      const observation = fc.oneof(
+        fc.constant(Attached.cases.new.make({ client: READER, nonce: "fresh" })),
+        fc.constant(
+          Attached.cases.waiting.make({
+            client: READER,
+            key: "SHA256:test",
+            nonce: "fresh",
+            hello: {
+              versions: [1],
+              has: [],
+              ping: "p",
+              key: "SHA256:test",
+              tab: "t",
+              nonce: "fresh",
+              platform: "browser",
+              os: "macos",
+              sentAt: "2026-11-11T00:00:00Z",
+              signed: "s",
+            },
           }),
         ),
-      ),
-      { seed: SEED, numRuns: RUNS },
-    );
+        fc.boolean().map((busy) => online(busy, [Wait.make({ id: "w", stream: "events", after: 1 })])),
+      );
 
-    for (const side of [
-      "restored:new",
-      "restored:waiting",
-      "restored:online",
-      "wake:0",
-      "wake:1",
-      "probe:42",
-      "probe:null",
-      "call:online:false",
-      "call:new:true",
-      "call:waiting:false",
-      "wait:new:false",
-      "wait:online:true",
-      "junk",
-    ]) {
-      expect(seen, side).toContain(side);
-    }
-  });
+      const Step = fc.record({
+        move: fc.nat({ max: 99 }),
+        observation,
+        other: fc.uuid(),
+        id: fc.oneof(fc.string(), fc.integer()),
+      });
+
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(fc.array(Step, { minLength: 1, maxLength: 40, size: "max" }), (steps) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                let h = harness(online());
+
+                for (const { move, observation, other, id } of steps) {
+                  const now = h.saved();
+                  const from = h.log.length;
+
+                  if (move < 20) {
+                    // A restart: the saved attachment, through JSON, read by a new connection.
+                    h = harness(restored(move < 10 ? observation : now));
+                    seen.add(`restored:${h.saved()._tag}`);
+                  } else if (move < 35) {
+                    yield* h.c.wake();
+                    const closed = Arr.filter(h.log.slice(from), (e) => e._tag === "close");
+                    expect(closed).toEqual(now._tag === "online" && now.busy ? [{ _tag: "close", code: 1012 }] : []);
+                    seen.add(`wake:${closed.length}`);
+                  } else if (move < 50) {
+                    const session = move % 2 === 0 ? SESSION : other;
+                    const ping = yield* h.c.probe(session);
+                    expect(ping).toBe(session === SESSION && now._tag === "online" ? PING : null);
+                    seen.add(`probe:${ping}`);
+                  } else if (move < 65) {
+                    const method = at(["initialize", "gateway.knock", "process.send"], move);
+                    yield* h.run(h.c.frame(callFrame(id, method)));
+
+                    for (const call of h.calls.splice(0)) {
+                      yield* Deferred.succeed(call.reply, Answer.cases.ok.make({ result: { method } }));
+                    }
+
+                    yield* settle;
+                    const after = h.log.slice(from);
+                    const handshake = method !== "process.send";
+
+                    if (now._tag === "online") {
+                      expect(Arr.map(after, (e) => e._tag)).toEqual(["save", "call", "send", "save"]);
+                      expect(h.saved()).toEqual({ ...now, busy: false });
+                    } else if (handshake) {
+                      // Before hello only the handshake reaches the call, and nothing is saved.
+                      expect(after).toEqual([
+                        { _tag: "call", method, params: {}, saved: now },
+                        { _tag: "send", frame: { jsonrpc: "2.0", id, result: { method } } },
+                      ]);
+                    } else {
+                      expect(after).toEqual([no(id, "no_hello")]);
+                    }
+
+                    seen.add(`call:${now._tag}:${handshake}`);
+                  } else if (move < 80) {
+                    const bad = move % 3 === 0;
+                    yield* h.run(h.c.frame(waitFrame(id, bad ? { stream: 1, after: -1 } : { stream: "s", after: 0 })));
+
+                    if (now._tag !== "online") {
+                      expect(h.log.slice(from)).toEqual([no(id, "no_hello")]);
+                    } else if (bad) {
+                      expect(h.log.slice(from)).toEqual([no(id, "bad_input")]);
+                    }
+
+                    for (const wait of h.waits.splice(0)) {
+                      yield* Deferred.succeed(wait.reply, { _tag: "parked" });
+                    }
+
+                    yield* settle;
+                    seen.add(`wait:${now._tag}:${bad}`);
+                  } else {
+                    // Frames that are not requests are dropped without a reply.
+                    yield* h.run(h.c.frame(move % 2 === 0 ? "{" : Formatter.formatJson({ id, method: 7 })));
+                    expect(h.log.slice(from)).toEqual([]);
+                    seen.add("junk");
+                  }
+
+                  // Only a restart changes which state the attachment is in.
+                  expect(move < 20 || h.saved()._tag === now._tag).toBe(true);
+                }
+              }),
+            ),
+          ),
+          { seed: SEED, numRuns: RUNS },
+        ),
+      );
+
+      for (const side of [
+        "restored:new",
+        "restored:waiting",
+        "restored:online",
+        "wake:0",
+        "wake:1",
+        "probe:42",
+        "probe:null",
+        "call:online:false",
+        "call:new:true",
+        "call:waiting:false",
+        "wait:new:false",
+        "wait:online:true",
+        "junk",
+      ]) {
+        expect(seen, side).toContain(side);
+      }
+    }),
+  );
 });
 
-const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
+const isRev = (result: unknown): result is { readonly rev: unknown } =>
+  Predicate.isObjectOrArray(result) && "rev" in result;
 
 const no = (id: string | number, reason: string) => ({
   _tag: "send",
@@ -558,7 +633,7 @@ const admittedTotals = (log: ReadonlyArray<Event>) => {
 // parse, then the Request schema; and the old object, `in` and string checks for the reason.
 const OldRequest = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   method: Schema.String,
   params: Schema.Unknown,
 });
@@ -568,7 +643,7 @@ const OldRead = Schema.Struct({ stream: Schema.String, after: Schema.Int.check(S
 const oldFrame = (text: string) =>
   Result.flatMap(
     // oxlint-disable-next-line eslint/no-restricted-properties -- oracle: the old parse this law compares against
-    Result.try({ try: (): unknown => JSON.parse(text), catch: () => null }),
+    Result.try({ try: (): Schema.Json => JSON.parse(text), catch: () => null }),
     (parsed) => Result.mapError(Schema.decodeUnknownResult(OldRequest)(parsed), () => null),
   );
 
@@ -624,6 +699,7 @@ const FrameRecipe = fc.record({
     { arbitrary: fc.constantFrom(...mutations), weight: 1 },
   ),
 });
+
 type FrameRecipe = typeof FrameRecipe extends fc.Arbitrary<infer A> ? A : never;
 
 /** A frame's text: a Request, maybe with extras, then one mutation of it. */
@@ -632,10 +708,12 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
   const reuse = r.method === "ledger.wait" && state.held.length > 0 && state.pick % 2 === 0;
   const held = reuse ? at(state.held, state.pick) : undefined;
   const id = held?.id ?? r.id;
+
   const params =
     held !== undefined && Math.floor(state.pick / 2) % 2 === 0
       ? { stream: held.stream, after: held.after + 1 }
       : r.params;
+
   const base: Record<string, unknown> = {
     ...r.extra,
     jsonrpc: "2.0",
@@ -643,7 +721,8 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
-  const [change, value] = r.mutation.split(":");
+
+  const [change, value] = Str.split(r.mutation, ":");
 
   if (change === "drop") {
     delete base[value!];
@@ -659,7 +738,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
 
   switch (r.mutation) {
     case "truncate":
-      return text.slice(0, -1);
+      return Str.slice(0, -1)(text);
     case "garbage":
       return `${text}}`;
     case "empty":
@@ -698,6 +777,7 @@ const Failure = fc.record({
   proxy: fc.boolean(),
   throwOn: fc.constantFrom("none", "none", "has", "get"),
 });
+
 type Failure = typeof Failure extends fc.Arbitrary<infer A> ? A : never;
 
 class Refused {
@@ -708,6 +788,7 @@ class Refused {
 const failure = (f: Failure, trace: Array<string>): unknown => {
   const fields: Record<string, unknown> = f.reason === "absent" ? {} : { reason: f.reason };
   const extra = f.extra === undefined ? {} : { extra: f.extra };
+
   const target: unknown = (() => {
     switch (f.kind) {
       case "plain":
@@ -737,7 +818,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!f.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!f.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 
@@ -751,6 +832,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.has(t, key);
     },
     get: (t, key, receiver) => {
@@ -762,6 +844,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
         }
       }
 
+      // oxlint-disable-next-line eslint/no-restricted-properties -- the Proxy is the hostile value this law feeds in; the trap forwards every other key
       return Reflect.get(t, key, receiver);
     },
   });
@@ -771,6 +854,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
 const oldAnswer = (f: Failure) => {
   const trace: Array<string> = [];
   const answer = Result.try({ try: () => oldReason(failure(f, trace)), catch: () => "thrown" as const });
+
   return { reason: Result.isSuccess(answer) ? answer.success : ("thrown" as const), trace };
 };
 
@@ -783,146 +867,169 @@ const Move737 = fc.record({
 });
 
 describe("T737 decodes keep the connection's acceptance, refusals and order, next/", () => {
-  it("D2 D3: frames act as parse-then-decode did, and a failed wait keeps the old guard's reason and reads", async () => {
-    const seen = new Set<string>();
-    await fc.assert(
-      fc.asyncProperty(fc.array(Move737, { minLength: 1, maxLength: 50, size: "max" }), (moves) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const h = harness(online());
-            // Ordinary calls the old decode accepted, in the order they must reach `call`.
-            const queued: Array<{ readonly id: string | number; readonly method: string; readonly params: unknown }> =
-              [];
-            const check = (from: number) => {
-              const calls = h.log
-                .slice(from)
-                .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
-              // The calls the old decode accepted, in order, and no other.
-              expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
-            };
+  it.live("D2 D3: frames act as parse-then-decode did, and a failed wait keeps the old guard's reason and reads", () =>
+    Effect.gen(function* () {
+      const seen = new Set<string>();
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(fc.array(Move737, { minLength: 1, maxLength: 50, size: "max" }), (moves) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const h = harness(online());
 
-            for (const { move, pick, frame, failure: f, rev } of moves) {
-              const now = h.saved();
-              const held = now._tag === "online" ? now.waits : [];
-              const from = h.log.length;
+                // Ordinary calls the old decode accepted, in the order they must reach `call`.
+                const queued: Array<{
+                  readonly id: string | number;
+                  readonly method: string;
+                  readonly params: unknown;
+                }> = [];
 
-              if (move < 50 || (h.calls.length === 0 && h.waits.length === 0)) {
-                const text = frameText(frame, { held, pick });
-                const old = oldFrame(text);
-                yield* h.run(h.c.frame(text));
-                const after = h.log.slice(from);
+                const check = (from: number) => {
+                  const calls = Arr.flatMap(h.log.slice(from), (e) =>
+                    e._tag === "call" ? [{ method: e.method, params: e.params }] : [],
+                  );
 
-                if (Result.isFailure(old)) {
-                  // Ignored: no call, no wait, no send and no save.
-                  expect(after).toEqual([]);
-                  seen.add(`ignored:${frame.mutation}${frame.mutation === "none" ? `:${frame.presence}` : ""}`);
-                } else if (old.success.method === "ledger.wait") {
-                  const request = old.success;
-                  const read = Schema.decodeUnknownResult(OldRead)(request.params);
+                  // The calls the old decode accepted, in order, and no other.
+                  expect(calls).toEqual(
+                    Arr.map(queued.splice(0, calls.length), ({ method, params }) => ({ method, params })),
+                  );
+                };
 
-                  if (Result.isFailure(read)) {
-                    expect(after).toEqual([no(request.id, "bad_input")]);
-                    seen.add("wait:bad_input");
-                  } else {
-                    const wait = Wait.make({ id: request.id, ...read.success });
+                for (const { move, pick, frame, failure: f, rev } of moves) {
+                  const now = h.saved();
+                  const held = now._tag === "online" ? now.waits : [];
+                  const from = h.log.length;
 
-                    if (admits(now, wait)) {
-                      expect(after[0]).toMatchObject({ _tag: "save" });
-                      expect(after[1]).toMatchObject({ _tag: "wait", stream: wait.stream, after: wait.after });
-                      seen.add("wait:admitted");
+                  if (move < 50 || (h.calls.length === 0 && h.waits.length === 0)) {
+                    const text = frameText(frame, { held, pick });
+                    const old = oldFrame(text);
+                    yield* h.run(h.c.frame(text));
+                    const after = h.log.slice(from);
+
+                    if (Result.isFailure(old)) {
+                      // Ignored: no call, no wait, no send and no save.
+                      expect(after).toEqual([]);
+                      seen.add(`ignored:${frame.mutation}${frame.mutation === "none" ? `:${frame.presence}` : ""}`);
+                    } else if (old.success.method === "ledger.wait") {
+                      const request = old.success;
+                      const read = Schema.decodeUnknownResult(OldRead)(request.params);
+
+                      if (Result.isFailure(read)) {
+                        expect(after).toEqual([no(request.id, "bad_input")]);
+                        seen.add("wait:bad_input");
+                      } else {
+                        const wait = Wait.make({ id: request.id, ...read.success });
+
+                        if (admits(now, wait)) {
+                          expect(after[0]).toMatchObject({ _tag: "save" });
+                          expect(after[1]).toMatchObject({ _tag: "wait", stream: wait.stream, after: wait.after });
+                          seen.add("wait:admitted");
+                        } else {
+                          expect(after).toEqual([no(request.id, "too_many_waits")]);
+                          seen.add("wait:too_many_waits");
+                        }
+                      }
                     } else {
-                      expect(after).toEqual([no(request.id, "too_many_waits")]);
-                      seen.add("wait:too_many_waits");
+                      queued.push({ id: old.success.id, method: old.success.method, params: old.success.params });
+                      seen.add(`call:${frame.presence}:${frame.extra === undefined ? "exact" : "extra"}`);
                     }
+                  } else if (move < 70 && h.calls.length > 0) {
+                    const [call] = h.calls.splice(pick % h.calls.length, 1);
+                    yield* Deferred.succeed(call!.reply, Answer.cases.ok.make({ result: null }));
+                    yield* settle;
+                  } else if (move < 92 && h.waits.length > 0) {
+                    const [pending] = h.waits.splice(pick % h.waits.length, 1);
+                    const trace: Array<string> = [];
+                    const value = failure(f, trace);
+                    const before = h.saved();
+
+                    const id = Arr.findFirst(
+                      before._tag === "online" ? before.waits : [],
+                      (w) => `${w.stream}|${w.after}` === pending!.label,
+                    ).pipe(
+                      Option.map((w) => w.id),
+                      Option.getOrUndefined,
+                    );
+
+                    yield* Deferred.fail(pending!.reply, value);
+                    yield* settle;
+                    const old = oldAnswer(f);
+                    const sent = answers(h.log, from);
+                    // The same reads of `reason`, in the same order, as the old guard made.
+                    expect(trace).toEqual(old.trace);
+
+                    if (old.reason === "thrown") {
+                      // The read threw: the enclosing fiber fails before anything is sent or saved.
+                      expect(h.log.slice(from)).toEqual([]);
+                      seen.add("failed:thrown");
+                    } else if (id !== undefined) {
+                      expect(
+                        Arr.map(
+                          Arr.filter(sent, (s) => s.id === id),
+                          (s) => s.error?.data?.reason,
+                        ),
+                      ).toEqual([old.reason]);
+                      seen.add(`failed:${f.kind}:${old.reason === "unreachable" ? "fallback" : "reason"}`);
+
+                      if (old.reason === "") {
+                        seen.add("failed:empty");
+                      }
+                    }
+                  } else if (h.waits.length > 0) {
+                    const [pending] = h.waits.splice(pick % h.waits.length, 1);
+                    yield* Deferred.succeed(pending!.reply, { _tag: "ready", rev: pending!.after + rev });
+                    yield* settle;
                   }
-                } else {
-                  queued.push({ id: old.success.id, method: old.success.method, params: old.success.params });
-                  seen.add(`call:${frame.presence}:${frame.extra === undefined ? "exact" : "extra"}`);
+
+                  check(from);
                 }
-              } else if (move < 70 && h.calls.length > 0) {
-                const [call] = h.calls.splice(pick % h.calls.length, 1);
-                yield* Deferred.succeed(call!.reply, Answer.cases.ok.make({ result: null }));
-                yield* settle;
-              } else if (move < 92 && h.waits.length > 0) {
-                const [pending] = h.waits.splice(pick % h.waits.length, 1);
-                const trace: Array<string> = [];
-                const value = failure(f, trace);
-                const before = h.saved();
-                const id = (before._tag === "online" ? before.waits : []).find(
-                  (w) => `${w.stream}|${w.after}` === pending!.label,
-                )?.id;
-                yield* Deferred.fail(pending!.reply, value);
-                yield* settle;
-                const old = oldAnswer(f);
-                const sent = answers(h.log, from);
-                // The same reads of `reason`, in the same order, as the old guard made.
-                expect(trace).toEqual(old.trace);
 
-                if (old.reason === "thrown") {
-                  // The read threw: the enclosing fiber fails before anything is sent or saved.
-                  expect(h.log.slice(from)).toEqual([]);
-                  seen.add("failed:thrown");
-                } else if (id !== undefined) {
-                  expect(sent.filter((s) => s.id === id).map((s) => s.error?.data?.reason)).toEqual([old.reason]);
-                  seen.add(`failed:${f.kind}:${old.reason === "unreachable" ? "fallback" : "reason"}`);
-
-                  if (old.reason === "") {
-                    seen.add("failed:empty");
-                  }
+                for (const wait of h.waits.splice(0)) {
+                  yield* Deferred.succeed(wait.reply, { _tag: "parked" });
                 }
-              } else if (h.waits.length > 0) {
-                const [pending] = h.waits.splice(pick % h.waits.length, 1);
-                yield* Deferred.succeed(pending!.reply, { _tag: "ready", rev: pending!.after + rev });
-                yield* settle;
-              }
 
-              check(from);
-            }
+                while (h.calls.length > 0) {
+                  const from = h.log.length;
+                  yield* Deferred.succeed(h.calls.shift()!.reply, Answer.cases.ok.make({ result: null }));
+                  yield* settle;
+                  check(from);
+                }
 
-            for (const wait of h.waits.splice(0)) {
-              yield* Deferred.succeed(wait.reply, { _tag: "parked" });
-            }
-
-            while (h.calls.length > 0) {
-              const from = h.log.length;
-              yield* Deferred.succeed(h.calls.shift()!.reply, Answer.cases.ok.make({ result: null }));
-              yield* settle;
-              check(from);
-            }
-
-            // Every call the old decode accepted was made, and no other.
-            expect(queued).toEqual([]);
-          }),
+                // Every call the old decode accepted was made, and no other.
+                expect(queued).toEqual([]);
+              }),
+            ),
+          ),
+          { seed: SEED, numRuns: RUNS },
         ),
-      ),
-      { seed: SEED, numRuns: RUNS },
-    );
+      );
 
-    for (const side of [
-      "ignored:none:missing",
-      "ignored:truncate",
-      "ignored:empty",
-      "ignored:drop:id",
-      "wait:bad_input",
-      "wait:admitted",
-      "wait:too_many_waits",
-      "call:given:extra",
-      "call:given:exact",
-      "call:null:exact",
-      "failed:thrown",
-      "failed:array:reason",
-      "failed:inherited:reason",
-      "failed:function:fallback",
-      "failed:plain:reason",
-      "failed:empty",
-    ]) {
-      expect(seen, side).toContain(side);
-    }
-  });
+      for (const side of [
+        "ignored:none:missing",
+        "ignored:truncate",
+        "ignored:empty",
+        "ignored:drop:id",
+        "wait:bad_input",
+        "wait:admitted",
+        "wait:too_many_waits",
+        "call:given:extra",
+        "call:given:exact",
+        "call:null:exact",
+        "failed:thrown",
+        "failed:array:reason",
+        "failed:inherited:reason",
+        "failed:function:fallback",
+        "failed:plain:reason",
+        "failed:empty",
+      ]) {
+        expect(seen, side).toContain(side);
+      }
+    }),
+  );
 });
 
 it.effect.prop(
-  "A3: hands job frames save checked hello facts through busy and idle",
+  "A3: hands task frames save checked hello facts through busy and idle",
   { has: Schema.Array(Schema.String), build: Schema.NonEmptyString },
   ({ has, build }) =>
     Effect.gen(function* () {
@@ -936,7 +1043,9 @@ it.effect.prop(
         has,
         build,
       });
+
       const copies: Array<Saved> = [];
+
       const c = connection({
         reader: READER,
         session: SESSION,
@@ -951,8 +1060,9 @@ it.effect.prop(
         wait: () => Effect.succeed({ _tag: "parked" as const }),
         call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
       });
-      yield* c.frame(callFrame("take", "jobs.take"));
-      expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
+
+      yield* c.frame(callFrame("take", "tasks.take"));
+      expect(Arr.map(copies, (a) => a._tag === "online" && a.busy)).toEqual([true, false]);
 
       for (const copy of copies) {
         expect(copy).toMatchObject({ identity: { as: "hands" }, has, build });

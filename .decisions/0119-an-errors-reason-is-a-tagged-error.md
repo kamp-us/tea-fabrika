@@ -82,8 +82,10 @@ The owner picked Effect's way.
 
 **A service error's `reason` is a union of tagged errors, one class per reason.**
 
-- Each reason is a `Schema.TaggedError` with `cause: Schema.Defect()` and whatever data that
-  reason alone needs.
+- Each reason is a `Schema.TaggedError` with a cause and whatever data that reason alone needs. The
+  cause is `cause: Schema.Defect()` when every caller has one, else
+  `cause: Schema.optional(Schema.Defect())`
+  ([0568](0568-error-cause-follows-effect.md)).
 - The service's error holds `reason: Schema.Union([...])`. It stays one error per service (0055).
 - A caller recovers with `Effect.catchReason` or `Effect.catchReasons`, never by comparing
   `e.reason` to a string.

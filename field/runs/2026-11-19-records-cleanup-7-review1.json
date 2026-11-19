@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-records-cleanup-7-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1658",
+  "started": "2026-11-18T16:03:00-08:00",
+  "ended": "2026-11-18T16:21:00-08:00",
+  "parent": "2026-11-18-records-cleanup-7-build1",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "One review of slice 7 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling and records, at f153b2642. Merge-ready with four findings, none blocking. The 15 superseded records each name the record that directly replaced it, and 0063 against 0525 and 0539 against 0584 hold: 0525 says there are no more today's-app lanes, and 0584 puts plain tooling laws back on the pull request. The patch-line removals in 0034, 0063, 0156, 0518 and 0588 drop no rule. The adr skill teaches 0605 and 0606 with no route left to an amendment and passes skillscheck. records.ts reads the two cases and the 34 tests pass. Findings: L9's generator never reaches near-miss statuses, so two plants of mine stayed green; 0097:56, 0146:84 and 0600:62 keep still-holds clauses of the form the build removed from 0156 and 0034; the loop test now guards a state the reader cannot make while a successor-less superseded record in a chain has no test; and about 30 comments and messages under .github/ci cite 0539 as the live rule. The four links the check still flags and the four YAML errors are out of this slice's reach.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node here is v22, so the vitest run used CI=1. Plants ran in a scratch copy of records.ts and records.test.ts outside the repo, with node_modules linked; none touched the branch. pnpm lint was started once and one part (lint:promise-types) was killed for memory, so it did not finish; skillscheck.sh and the records check were run on their own.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "costUsd": null,
+  "billed": null,
+  "base": "c3dac8ab55806e6f29b8a5a91961fbdadb92f665",
+  "plants": [
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus no longer checks the successor is four digits",
+      "result": "red"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus reads any status that starts with accepted as accepted",
+      "result": "green"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus reads amended-in-part by as accepted again",
+      "result": "red"
+    },
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, the successor's four digits are matched anywhere in the key, not anchored",
+      "result": "green"
+    }
+  ]
+}

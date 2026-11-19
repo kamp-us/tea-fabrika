@@ -1,19 +1,20 @@
 ---
 id: 0537
-title: A top-level infra/ folder holds the small services we run to ship fabrika, in one Cloudflare Worker deployed with Alchemy, and our own merge queue comes first, its event log the first ledger
+title: A top-level kalfa/ folder holds the small services we run to ship fabrika, in one Cloudflare Worker deployed with Alchemy, and our own merge queue comes first, its event log the first ledger
 status: accepted
 date: 2026-11-14
 tags: [infra, merge-queue, cloudflare, alchemy, ledger, ci, github]
 ---
 
-# 0537: A top-level infra/ folder holds the small services we run to ship fabrika, in one Cloudflare Worker deployed with Alchemy, and our own merge queue comes first, its event log the first ledger
+# 0537: A top-level kalfa/ folder holds the small services we run to ship fabrika, in one Cloudflare Worker deployed with Alchemy, and our own merge queue comes first, its event log the first ledger
 
 **What this decides:** where the services that keep our own shipping flow working live, how they
-deploy, and which one is built first.
+deploy, and which one is built first. The folder was first decided as `infra/`;
+[0556](0556-kalfa-holds-our-tooling-packages.md) named it `kalfa/` before any file carried the name.
 
 ```mermaid
 flowchart LR
-  gh["GitHub: comments, check runs"] -- webhook --> worker["infra/ Worker"]
+  gh["GitHub: comments, check runs"] -- webhook --> worker["kalfa/ Worker"]
   worker --> queue["merge queue Durable Object: an event log, state folded from it"]
   queue -- "staging branch, squash merge pinned to a head" --> gh
   gh -- "push starts the checks" --> actions["GitHub Actions"]
@@ -40,11 +41,12 @@ his Cloudflare account, as tryouts of what fabrika will later offer as programs
 
 ## Decision
 
-**A top-level `infra/` folder, in the pnpm workspace, holds small services that keep our shipping
-flow working. They run in one Cloudflare Worker, deployed with Alchemy. The merge queue is built
-first, and its event log is the first ledger.**
+**A top-level `kalfa/` folder, in the pnpm workspace, holds small services that keep our shipping
+flow working, beside the other `@kalfa` packages it holds
+([0556](0556-kalfa-holds-our-tooling-packages.md)). The services run in one Cloudflare Worker,
+deployed with Alchemy. The merge queue is built first, and its event log is the first ledger.**
 
-- **A tryout home.** `infra/` is not the fabrika product. What it teaches goes into fabrika's
+- **A tryout home.** The services in `kalfa/` are not the fabrika product. What it teaches goes into fabrika's
   programs later, rethought, the way today's app feeds `next/`. 0107 and 0110 stay the product's
   design.
 - **Same standards as `next/`.** Effect, tea machines, in-memory layers for tests
@@ -68,7 +70,8 @@ first, and its event log is the first ledger.**
 **Binding constraints:**
 
 - The queue never lands a tree it did not test.
-- No service in `infra/` holds a key outside the Secrets Store.
+- No service in `kalfa/` holds a key outside the Secrets Store.
+- No new folder or path is named `infra/`.
 
 ## Consequences
 

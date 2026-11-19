@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s4-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315",
+  "started": "2026-11-15T07:35:18-08:00",
+  "ended": "2026-11-15T07:58:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round 1 of P39 slice 4a (the hands client), in next/, after the review sent it back. Both blockers fixed. (A) On the Worker both paths that route jobs.wait now name this connection object as the reader, so the ring reaches the object the hands socket lives on; new law W2 in cloudflare/connection.test.ts, and E1's door now rings only the object a ring names and its gateway waits through the referee. (B) A finish refused for good is saved as a held journal entry with the brain's reason; result, acknowledged and held keep startedAt. Two findings fixed: a hold no longer stops other work (the client lists again and never sends or takes a held job), and a take refused idle, ambiguous, not_allowed, lacks_capability or bad_input, or a bad_entry journal read, skips that job on the link until the list rev moves, waiting on jobs.wait when nothing is takeable. t863 L1 in connection.test.ts was red on the branch before this round (the slice's driver now registers a parked answer again); it now states that second call exactly.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "costUsd": null,
+  "billed": null,
+  "note": "Merged origin/main first: clean, no conflict. Each plant run once on one law file and undone by copying the saved file back; git status showed no stray product edit after each. Ran green: HandsMachine.laws, HandsStart.laws, Hands.types, hands-client (E1, S1), connection.test, WindowStart.laws, WindowMachine.laws, Job.test, job.test, cloudflare/hands.test, RunnerHands.test, handsDelivery.test, and with --project next-integration gateway/Jobs, JobsLedger, JobsDiscovery, jobs-wire. pnpm lint red only on lint:layers, the six client/ imports of jobs/Job.ts. ratchet exit 0, no list row. pnpm typecheck passed whole. The started time is the first test run's clock; the reading before it has no clock reading.",
+  "driver_caused": false,
+  "step": "fix",
+  "plants": [
+    {
+      "law": "cloudflare/connection.test.ts W2",
+      "plant": "cloudflare/connection.ts: the wait path routes jobs.wait with no reader (the old line 81)",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/connection.test.ts W2",
+      "plant": "cloudflare/connection.ts: the call path routes with no reader (the old line 167)",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/hands-client.test.ts E1",
+      "plant": "the test door copy of the Worker routes jobs.wait with no reader, as before this round (E1 seen red before the door fix)",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H3",
+      "plant": "client/HandsMachine.ts answered reporting: a refusal for good goes straight to listing, saving no held entry",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H1",
+      "plant": "client/HandsMachine.ts execute_ok: the result entry drops startedAt",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H3",
+      "plant": "client/HandsMachine.ts saved held: stays offline after the held entry, the job marked held (the old holding wedge)",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H3",
+      "plant": "client/HandsMachine.ts recover: a held entry is reported again",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H4",
+      "plant": "client/HandsMachine.ts answered taking: every failed take relists after backoff, never skips",
+      "result": "red"
+    },
+    {
+      "law": "client/HandsMachine.laws.test.ts H4",
+      "plant": "client/HandsMachine.ts journal_read_err: bad_entry relists like a storage error",
+      "result": "red"
+    }
+  ]
+}

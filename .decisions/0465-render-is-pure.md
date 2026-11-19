@@ -1,7 +1,7 @@
 ---
 id: 0465
 title: Render is pure, so a view never reads the clock, never touches a ref's current and never changes what it was given
-status: amended-in-part by [0525](0525-todays-version-is-frozen.md)
+status: accepted
 date: 2026-11-03
 tags: [react, compiler, render, purity, next]
 ---
@@ -16,8 +16,7 @@ export const useTip = (tip: Tip, quiet: boolean) => {
 };
 ```
 
-**What this decides:** what a component may do while it draws, in `next/` and in today's app's
-tryout.
+**What this decides:** what a component may do while it draws, in `next/`.
 
 ## Context
 
@@ -30,7 +29,8 @@ C1 to C3.
 **Render reads only its props and its model.**
 
 - A view never reads the clock. The time comes through a `now` Cmd, held by the Compiler's purity
-  check and `fabrika/no-clock-in-view`.
+  check and `fabrika/no-clock-in-view`, which stands beside the Effect checker's clock checks
+  ([0573](0573-trusted-lint-rule-replaces-ours.md)).
 - Render never reads or writes a ref's `current`. Refs are for effects and handlers, and an id
   comes from `useId`.
 - Nothing changes after render: props, the model, a hook's value and what JSX was given stay as

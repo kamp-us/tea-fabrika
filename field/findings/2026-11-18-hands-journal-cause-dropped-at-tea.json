@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-hands-journal-cause-dropped-at-tea",
+  "date": "2026-11-18",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/HandsStart.ts",
+    "line": 84
+  },
+  "says": "In next/ (found while planning ticket 1062's client row), the hands client turns a JournalError into tea's Cmd failure with `({ ...error })`, whose comment says 'field for field', but a spread drops the cause: Effect keeps a truthy cause as a non-enumerable own key, so the store's failure (`JournalStore.ts:14`) never reaches the tea record or the `Journal.read` and `Journal.write` spans (`HandsStart.ts:131-137`), which end with that record.",
+  "proof": "At d524d4e6, in next/packages/libfabrika, `node --input-type=module -e` making `JournalError`'s schema with `Schema.optionalKey(Schema.Defect())` and `JournalError.make({ reason: \"storage\", cause: new Error(\"store down\") })` printed `false [ '_tag', 'reason' ]` for `Object.getOwnPropertyDescriptor(e, \"cause\").enumerable` and `Object.keys({ ...e })`. Effect 4.1.3's `effect/src/internal/core.ts:692` passes the cause to the platform Error, and `effect/src/internal/record.ts:19-20` assigns over it. .patterns/effect-errors-keep-their-cause.md says an error keeps the failure under it.",
+  "cost": "A journal failure on a hands client shows only `storage` or `bad_entry` in the machine's messages and the spans, never the store error under it, so a live journal fault cannot be told apart from another without a debugger.",
+  "head": "d524d4e69b0e9d74a077ac2cb235bc6cc41573c1",
+  "ticket": null,
+  "pr": null
+}

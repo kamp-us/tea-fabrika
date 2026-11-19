@@ -60,8 +60,12 @@ after code for each, is in
   service file holds only its contract (0095).
 - **E6. A public export has a doc, and a comment says why.** No plan codes and no history in
   comments.
-- **E7. Imports and service ids read like Effect's.** Namespace imports in libraries, and an id
-  with its package and folder.
+- **E7. Imports and service ids read like Effect's.** Libraries use namespace imports, held by the
+  Effect checker's `preferNamespaceImport`; programs and apps use the barrel, held by
+  `preferBarrelImport`; each is an error in the package's own tsconfig
+  ([0577](0577-libraries-namespace-programs-barrel-imports.md)). A service id has its package and
+  folder, and its form is whatever the checker's `deterministicKeys` holds, with no rule of ours
+  ([0575](0575-deterministic-keys-is-the-service-id-form.md)).
 - **E8. Where we differ from Effect, the file says why,** at the code, with the record that decided
   it.
 

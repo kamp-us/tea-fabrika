@@ -7,13 +7,13 @@ when: "Adding or changing a public export of a library, or its module file"
 
 ```mermaid
 flowchart TD
-  file["a library module file, such as Deferred.ts"] --> moduleBlock["module block: prose, @stability, @since"]
+  file["a library module file, such as Deferred.ts"] --> moduleBlock["module block: prose, @since"]
   file --> exports["each public export"]
   exports --> pair["a type right under its same-name schema: shares that block"]
   exports --> desc["one description paragraph"]
   desc --> sections["optional, in order: When to use, Details, Gotchas"]
   sections --> example["optional: Example (title), one ts fence"]
-  example --> tags["tags, in order: @deprecated, @default, @see, @stability, @category, @since"]
+  example --> tags["tags, in order: @deprecated, @default, @see, @category, @since"]
   file --> internal["internal/ file: /** @internal */, no public doc"]
   barrel["index.ts"] --> reexport["export * as Deferred, with a tag-only block"]
 ```
@@ -41,7 +41,6 @@ flowchart TD
  * await Effect.runPromise(program) // => 42
  * ```
  *
- * @stability stable
  * @category constructors
  * @since 2.0.0
  */
@@ -55,7 +54,7 @@ Effect's own doc skill at the tag (`.agents/skills/jsdocs/declarations.md`, `cat
 and each one is visible in the installed source:
 
 - **The module block comes first, above the imports.** Prose about the whole module, then
-  `@stability` and `@since`, no `@category` (`node_modules/effect/src/Deferred.ts:1-10`).
+  `@since`, no `@category` (`node_modules/effect/src/Deferred.ts:1-10`).
   When a file's first statement is not an import (an `export { a }` list, a `const`), one block
   above it is that statement's own, as Effect's checker reads it, so such a file puts two blocks
   there and the first is the module's (`oxlint-plugins/jsdocs.ts:29-35`).
@@ -70,18 +69,19 @@ and each one is visible in the installed source:
   a title unique in the block (`node_modules/effect/src/Deferred.ts:160`). A runnable fence says
   `ts import.meta.vitest` and asserts with `// =>`. An example is kept only when the signature does
   not already say it.
-- **Tags close the block, in this order:** `@deprecated`, `@default`, `@see`, `@stability`,
+- **Tags close the block, in this order:** `@deprecated`, `@default`, `@see`,
   `@category`, `@since`. `@see {@link name}` only for a real neighbour API, with a reason
   (`node_modules/effect/src/Deferred.ts:224-229`).
-- **`@stability` is `stable`, `unstable` or `experimental`.** `unstable` may break in a minor
-  release, `experimental` in a patch. An export that exposes a third-party type is `unstable`.
+- **There is no `@stability` tag here.** Effect's own checker tags it, but the Effect language
+  service reads `@stability unstable` as a use of an unstable API, so `fabrika/no-stability-tag`
+  deletes it.
 - **`@category` is a lowercase plural or gerund** reused from nearby: `constructors`, `models`,
   `guards`, `getters`, `services`, `layers`, `errors`, `error handling`, `combinators`
   (`node_modules/effect/src/Deferred.ts:57`, `:74`, `:175`).
 - **Exactly one blank line** between the description, each section, each example and the tag group.
 - **Internal code gets `/** @internal */` and no public doc.** It lives in `src/internal/`
   (`node_modules/effect/src/internal/core.ts:18`), and the checker skips it.
-- **A barrel re-export gets a tag-only block:** `@stability` and `@since` above
+- **A barrel re-export gets a tag-only block:** `@since` above
   `export * as Duration from "./Duration.ts"` (`node_modules/effect/src/index.ts:190-195`).
 - **A member's doc is optional.** When present it takes `@since` and `@default`, never
   `@category`.
@@ -95,7 +95,6 @@ and each one is visible in the installed source:
   /**
    * Schema for ...
    *
-   * @stability unstable
    * @category schemas
    */
   export const Sent = Schema.Struct({ /* ... */ });
@@ -123,29 +122,36 @@ and each one is visible in the installed source:
 
 ## Where it applies
 
-Every public export of a library under `next/packages/` (today `libfabrika`), and its module
-files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
+Every public export of a library under `next/packages/` (today `libfabrika` and `tuval`), and its
+module files ([0023](../.decisions/0023-next-follows-effects-code-style.md),
 [0120](../.decisions/0120-effect-code-guidelines.md)). `fabrika/jsdocs` is on at `error` for
-`next/packages/libfabrika/src/ci/**` and `codehost/**` (`.oxlintrc.json:1535-1536`). Each folder
-joins that list in the pull request that fills it, and the list ends as `next/packages/*/src/**`
-([Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until a folder is listed, the
-shape is asked of it by review alone.
+`next/packages/*/src/**` (`.oxlintrc.json:2028-2029`), so a new folder or package blocks from its
+first file. A folder not yet at zero has one line in the `warn` override right after it
+(`.oxlintrc.json:2036-2047`), where its fires print as advice and do not fail. The pull request that
+fills a folder deletes its line, and a whole `pnpm lint` fails until it does
+([0523](../.decisions/0523-advice-rules-block-where-clean.md), ticket 948,
+[Plan B, B2](../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until then, review holds the
+shape in that folder.
 
 It stops at what is not public: `internal/`, tests, test support (`*.test-support.ts`), shared
 suites (`*Test.ts`), fixtures and declaration files, where the rule is off
-(`.oxlintrc.json:1541-1550`). App code in `next/apps/` is not asked either. `@since` carries the
-library's own version, `0.0.0` while it is unpublished, so a block leaves the tag out until a first
-release, and the rule's `since: "absent"` fires on one
+(`.oxlintrc.json:2052-2061`). That override comes last, so a warn line never turns the rule on
+there. App code in `next/apps/` is not asked either. `@since` carries the library's own version,
+`0.0.0` while it is unpublished, so a block leaves the tag out until a first release, and the
+rule's `since: "absent"` fires on one
 ([0118](../.decisions/0118-no-since-tag-before-a-release.md), `oxlint-plugins/jsdocs.ts:114-115`).
 
 How far it is, counted by the rule on 2026-11-14 on main `c0aaf4a24`
 (`oxlint-plugins/README.md`, "The docs rule, E6"), beside the counts made before it:
 
-- **On:** `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks: 0 fires, as
-  the plan's prototype found.
-- **Not on yet:** the other public files of `libfabrika`, 136 in all, fire 666 times: 346 exports
-  with no block, 232 with a block out of shape (most lack `@stability` and `@category`) and 88
-  files with no module block or a wrong one. The README has the count by module.
+- **At zero then:** `ci` 9 of 9 exports pass and `codehost` 12 of 12, with both module blocks: 0
+  fires, as the plan's prototype found.
+- **Not at zero then:** the other public files of `libfabrika`, 136 in all, fire 666 times: 346
+  exports with no block, 232 with a block out of shape (most lack `@stability` and `@category`)
+  and 88 files with no module block or a wrong one. The README has the count by module.
+- **On 2026-11-13, ticket 948, at `cf03efb9f`:** 316 fires, all in the 9 folders that still
+  advise. The other 14 `libfabrika` folders block. The README has the count by folder
+  (`oxlint-plugins/README.md`, "Where a rule still advises").
 - **The counts before the rule:** Effect's checker run by hand found 92 places (2026-11-09); the
   plan's grep found 333 exports with no block and 114 files with no module block. Neither read a
   name in an `export { a }` list or a block out of shape, which is why the rule finds more.

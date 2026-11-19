@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-tests2",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T00:08:34-08:00",
+  "ended": "2026-11-16T00:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "A tests-step fix round for porting scripts/typecheck.sh to scripts/typecheck.ts, in today's tooling. Effect's checker reported TS377021 unknownInEffectCatch in the two property tests the tests step wrote: N1 in scripts/typecheck.test.ts and N3 in scripts/typecheck-lock.test.ts, each `catch: (cause) => cause` around fast-check's assert. Each now wraps fast-check's report in a PropertyFailed tagged error with the report as its cause, the shape next/apps/fabrika/src/hands-client.test.ts uses, and Effect.orDie still turns it into the test's failure. No law changed: the same runs, the same assertion and the same coverage check. The .agents program's tsc now prints only the 18 TS377051 duplicatePackage warnings on scripts/ files, which wait on a lead ruling. The round also commits the build step's finding row on law T1, with its rule set to doc_drift and its ticket to null, because the finding schema accepts neither plan_conflict nor a bare tracker number.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "No new law, so no plant ran; the change only types the error that carries fast-check's report. Both files passed (8 tests) under vitest in this Linux box. No pnpm typecheck ran, as the brief asks; the narrow tsc over .agents ran instead.",
+  "step": "tests"
+}

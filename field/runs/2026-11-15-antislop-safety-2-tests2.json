@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-safety-2-tests2",
+  "ticket": "1057",
+  "pr": null,
+  "branch": "fabrikalfa/antislop-require-safety-comment-2",
+  "started": "2026-11-15T22:32:59-08:00",
+  "ended": "2026-11-15T22:48:24-08:00",
+  "parent": "2026-11-15-antislop-safety-2-review1",
+  "active": null,
+  "role": "tests",
+  "step": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round for anti-slop judgment slice AS-require-safety-comment-2 (decisions 0561 and 0563) after review1 sent it back for SAFETY comments that state a false fact about their cast. Both named faults are fixed: next/packages/libfabrika/src/runtime/Client.laws.test.ts:549 now says a `foreign: \"whole\"` notice is built in the walk with `rev: b.rev`, the brain's own rev, which Brain types as a number; next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts:1056 now names the five Journal cases that hold an `origin` (an Origin) and says the other seven read `undefined`, which is why the next line reads `origin?._tag`. The cast there was not widened with `| undefined`: the waiting_start branch below reads `origin._tag` without `?.`, so widening needs a code change this round may not make. Then every SAFETY comment the slice added (242 marker lines in 82 files of git diff origin/main..HEAD) was read against the code it sits over. 46 comment lines in 30 files were rewritten: besides the two named faults, these were false or did not fit their cast, among them: a dev.process call said to be a ping fixture (it is dev.ts's proxy, which turns any method name into a Promise call); a Rolldown `on` wrapper said to hand other calls on unchanged (it has only the `event` overload, the one watch.ts calls); three `update ... as never` comments saying tea's update type lists only the Msg schema's cases (it also lists declared Cmds' answers; the handlers are typed by hand); a runner `Cause.squash` said to fail only with RepliesError (msg fails with RunnerFailure, and the next expect checks the tag); a restarted row's `after` called a start (it is the process it came after); a watcher answer called the instance's info answer; two mocked tables and two CLI layers said to be filled by the mock (the laws fill them); a Patch helper said to follow read() (it follows paths()); a saved ask input said to come from a decoded letter (the walk's only ask input is `{ type: \"ping\" }`). The rest were made specific: four `failure as never` reasons now say the made-up failure stands in for the disk method's PlatformError, five BrainError reasons cite its optional `cause` in local-dev.ts. Edits are comments only: no assertion deleted, narrowed or widened, no lock line, no .oxlintrc.json change, no file of pull request 1366 touched.",
+  "hits": {
+    "safetyLinesRead": 242,
+    "filesRead": 82,
+    "commentLinesRewritten": 46,
+    "filesChanged": 30,
+    "namedFaultsFixed": [
+      "next/packages/libfabrika/src/runtime/Client.laws.test.ts:549",
+      "next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts:1056"
+    ],
+    "castsRemovedCorrected": 22,
+    "castsRemovedNote": "tests1 says 23 casts went away; the true count outside pull request 1366's files is 22: 21 empty-array casts became Array.of<T>() and one `\"\" as string` became `\"\"`. tests1 is left as it was written; this row carries the right count.",
+    "left": [],
+    "waitingOn1366": 29
+  },
+  "plants": [
+    {
+      "law": "anti-slop/require-safety-comment-for-type-assertion, forced to error in a scratch oxlint config outside the repo",
+      "plant": "next/packages/libfabrika/src/runtime/Client.laws.test.ts:549: the rewritten SAFETY line removed, restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "The scratch rule run over next/apps/fabrika, next/packages/libfabrika/src/runtime, next/packages/libfabrika/src/node and the files directly in next/packages/libfabrika/src counts 29 hits, all in the five files of pull request 1366. Checks at the pre-commit tree: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 16 of 17 parts pass and the one failure is the expected ratchet ask to add next/packages/libfabrika/src/* and next/packages/libfabrika/src/node/** to the rule's block (0563; locks come later in one small PR); the list ratchet exits 0. Tests run one file at a time with Node v26.13.0 on the pre-commit tree over 41d38be1d: the 9 plain test files touched and the 5 plain tests that import a touched suite, listed in RESULT. Not run here: the touched .integration. and .visual. files, which the 0178 guard refuses in this box; pull request 1508 is not on this branch. No pull request was opened, as the owner ruled for slices. Tests that passed: apps/fabrika error-cause (2), exam/commits (39), exam/ratchet (5), grant-readers.laws (14); libfabrika node/dev/error-cause (5), runtime Client.laws (10), Patch (14), Program (44), internal/supervisor.laws (9), Audit (2), internal/watchers (2), cloudflare platform (9), Watchers (1), mail (8). One pnpm typecheck, exit 0. Tried next/packages/libfabrika/src/node/Monitor.integration.test.ts: refused by the 0178 guard."
+}

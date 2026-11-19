@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-14-type-label-passes-callless-runtime-work",
+  "date": "2026-11-14",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "oxlint-plugins/law-shape.ts",
+    "line": 197
+  },
+  "says": "Under a type: title, typeOnly refuses only calls and five node kinds, so a body that assigns (`expectTypeOf(n = 2)`), updates (`n++`), deletes (`delete o.a`), spreads an iterable, stringifies through a template argument, or calls a test parameter named expectTypeOf passes, though each runs code at run time; the README and plan name only getters, iterators and template strings as known gaps.",
+  "proof": "In a scratch git checkout under next/, `node oxlint-plugins/lint.ts next/s` on 26719df3d with `it(\"type: e02\", () => { expectTypeOf(n = 2).toBeNumber(); })`, `expectTypeOf(n++)`, `expectTypeOf(delete (obj as any).a)`, `expectTypeOf([...iter])` and `it(\"type: e05\", (expectTypeOf: any) => { expectTypeOf(1).toBeNumber(); })` printed no law-shape fire for those lines, while the same file's `function f(){}` and `expectTypeOf(obj)?.toBeObject()` lines fired.",
+  "cost": "A mislabeled law with a side effect or a shadowed check passes the blocking rule; adding AssignmentExpression, UpdateExpression, delete and SpreadElement to RUNS and refusing a body parameter that shadows a check name closes the cheap part.",
+  "head": "26719df3d2ca99fd0a9ca24697e84dc1660817da",
+  "ticket": "kamp-us/tea-fabrika#971",
+  "pr": "kamp-us/tea-fabrika#1237"
+}

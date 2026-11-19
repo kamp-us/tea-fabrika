@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-ci-red-failure-recheck1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1383",
+  "started": "2026-11-15T16:56:37-08:00",
+  "ended": "2026-11-15T17:02:51-08:00",
+  "parent": "2026-11-15-ci-red-failure-fix1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of fix round 1 at 3f7310e12, today's CI tooling, by a fresh reviewer standing in for the first: merge-ready. Both findings of review1 are fixed. All 9 test legs (next's 7, tooling-1 and tooling-2) are one matrix in the tests job with fail-fast, so a red leg of either suite stops all the others, as the old stop step did; SC6 now refuses a second matrix. The SC12 clash with pull request 1380 is gone: queue: max is SC12, the test-step limit law is SC13. The job limit as a matrix expression is allowed: GitHub's contexts table lists github, needs, strategy, matrix, vars and inputs for jobs.<job_id>.timeout-minutes. concurrency stays group: scheduled, queue: max, cancel-in-progress: false, the same as main. SC4 now takes any string for the tests job's limit, but SC13 pins that string exactly, so no law is looser. Green runs are no slower: 9 legs at once before and after.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only on the branch. Ran alone with Node 26.13.0: workflow-lint/scheduled.test.ts (101 passed), .github/ci/scheduled.test.ts (29), time-table.test.ts (7), workflow-lint/merge-line.test.ts (64). Plants in a scratch worktree, removed after: SC13's exact backstop pin dropped (5 red), SC8's tooling-step if dropped (1 red), suiteOf matching tooling anywhere (1 red), SC7's next-legs-first clause dropped (green, but SC8's tail check already refuses every reorder, so no gap). loosening.sh: six unrecognized-change hits, one per changed file, all read, none a loosening after the fix. git merge-tree with origin/main: clean. Timings artifacts are now timings-tests-<shard>; nothing in the repo reads them by name. No workflow run started or canceled; no typecheck.",
+  "step": "review"
+}

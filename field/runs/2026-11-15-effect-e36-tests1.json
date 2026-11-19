@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e36-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:18-08:00",
+  "ended": "2026-11-15T20:54:16-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "opus",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E36 of the Effect-check sweep (preferEffectRecord), in next/ and our tooling, fixing code only with no lock line. Counted with only preferEffectRecord at error through --lspconfig: 532 hits in the slice's folders, 475 in exam paths, 57 in product files, none in a file of PR 1366. The checker has no quick fix for this check (checkerfix.mjs fixed 0 of 10 on oxlint-plugins/advice.test.ts), so a scratchpad codemod swapped Object.keys, entries, values, fromEntries and hasOwn for Record.keys, toEntries, values, fromEntries and has at the checker's own offsets, then each type error was fixed by hand or the hit was put back. 413 exam hits fixed, 62 left: 9 in the three .github/ci .mjs scripts that run with no installed dependencies, 42 in 11 files where an effect import turns on fabrika/no-raw-try-catch for their try/catch, and 11 where Record's types do not fit the value (an AST node, a service class, a Partial record, unknown narrowed to object, a key outside the narrowed type).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 22,
+  "note": "Recount after the fix: 62 exam hits and 57 product hits left in the slice's folders. tsc --noEmit clean for .github/ci, oxlint-plugins, libfabrika and the app; pnpm lint passed. 105 touched or reading plain test files passed (1869 tests); 35 of 36 integration files passed, and commits-git-chain.integration.test.ts could not start because this box has no ssh-keygen. The slice adds no law, so there is no plant.",
+  "step": "tests"
+}

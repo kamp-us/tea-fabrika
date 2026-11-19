@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0123-mutation-schedule-not-in-workflow",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "sonnet",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0123-githubs-schedule-starts-the-mutation-run.md",
+    "line": 59
+  },
+  "says": "Today's tooling: decision 0123 decides that mutation.yaml gets a schedule trigger and that a mutation-heartbeat.yaml workflow runs beside it, but the tree holds neither.",
+  "proof": ".github/workflows/mutation.yaml:4-8 says only a person or a scheduler session starts it and that no push, pull request or cron starts it, and its `on:` (line 12) holds only workflow_dispatch; .github/workflows/ has no mutation-heartbeat.yaml (the heartbeat is .agents/skills/mutation/scripts/heartbeat.ts); the only cron in .github/workflows/scheduled.yaml:93 is `17 * * * *` for the full run (0581), and scheduled.yaml has no mutation job.",
+  "cost": "A reader who trusts 0123 or 0535 (mutation runs every 3 hours on the schedule) looks for a schedule that mutation.yaml does not have, and a stalled mutation run raises no alarm.",
+  "head": "6ec5525953cec1266fd0e6e4878aa2e921d4e275",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1627"
+}

@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1144-review2",
+  "ticket": "kamp-us/tea-fabrika#1144",
+  "pr": "kamp-us/tea-fabrika#1567",
+  "started": "2026-11-18T03:57:36-08:00",
+  "ended": "2026-11-18T04:10:18-08:00",
+  "parent": null,
+  "active": null,
+  "driver_caused": false,
+  "role": "reviewer",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "fail",
+  "head": "d31a87c4f8fedb227e31123faa87b8d2c4932cf8",
+  "base": "84f51f8017e1d1a00b36f85dd1856f11b661da9b",
+  "why": "Second whole-diff review of today's CI tooling against ci-test-progress-PLAN.md. The three earlier faults are answered: the P8 buffer plant receipt matches the plan's plant and its failure is the law's own detection, TT8's property is on it.effect.prop, and readQueueWait is under New names. The merge of main 84f51f8 kept main's effect/http client, explicit empty checks, fromJsonString, Formatter.formatJson and the @effect/vitest TT3 form, plus this PR's fixed reasons, queue wait and progress, with no law dropped. scheduled.yaml changes only the four reporter arguments and the changed-step LEG. The lead's 3% overhead call is inside the plan. One blocking class: the split-out TT8 example test checks a general rule with hand-picked cases, a planted status-gate narrowing stays green, and no TT8 plant is recorded.",
+  "note": "Cloud box, Node 26.13.0, nice 15, one worker. time-table 10, progress 5 and scheduled 283 tests passed; integration P8 passed (12 s); scoped lint of 8 owned files 0 blocking. Plants run once each and restored with sha256 checks: P8 buffer-until-end red at integration line 303; P3 progress gated on final JSON red; P7 LEG dropped red; P7 reporter dropped red; TT8 status gate narrowed to pending-only stayed green while queued, waiting and requested jobs got a queue wait. loosening.sh hits read: no law loosened. Effect Schema.DateTimeUtcFromString accepts 2026-02-30 and zone-less times, so the hand-written timestamp check is justified. CI run 44299326817 on this head was in progress, not awaited. One finding row: jobs API failure cause dropped from the timing artifact. git status clean at end. Requested model opus, effort high; served model and usage were not reported to the row.",
+  "plants": [
+    {
+      "law": "scenario: P8 installed callbacks survive a ready-observed SIGKILL before final JSON, while normal and timed-out verdicts stay real",
+      "plant": ".github/ci/progress-reporter.ts recording: buffer event writes until end",
+      "result": "red"
+    },
+    {
+      "law": "P3 missing or broken final results preserve independent progress and never invent file timings",
+      "plant": ".github/ci/time-table.ts collect: keep progress only when files are read",
+      "result": "red"
+    },
+    {
+      "law": "P7 every scheduled test command requires its progress reporter and existing reporters and changed leg identity",
+      "plant": ".github/ci/workflow-lint/scheduled.ts: ignore LEG in the changed step env",
+      "result": "red"
+    },
+    {
+      "law": "P7 every scheduled test command requires its progress reporter and existing reporters and changed leg identity",
+      "plant": ".github/ci/workflow-lint/scheduled.ts REPORTERS: drop the progress reporter",
+      "result": "red"
+    },
+    {
+      "law": "TT8: ignores pending placeholders and rejects jobs without valid queue timing",
+      "plant": ".github/ci/time-table.ts readQueueWait: reject only status pending",
+      "result": "green"
+    }
+  ],
+  "tokens": 213175,
+  "tools": 57,
+  "minutes": 13.6,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null
+}

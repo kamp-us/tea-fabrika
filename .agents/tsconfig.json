@@ -1,12 +1,53 @@
 {
-  // The lane scripts (0031, ticket 486): `scripts/typecheck.sh` checks them after the packages, so
+  // The quest scripts (0031, ticket 486): `scripts/typecheck.ts` checks them after the packages, so
   // a change to the Agent interface or to tea fails `pnpm typecheck` here first. `.agents/` is no
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
+        // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
+        "barrelImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferBarrelImport": "error" },
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5),
+          // schemaClassMissingBrand (E6), unnecessaryArrowBlock (E8), catchToOrElseSucceed (E9),
+          // instanceOfSchema (E10), unnecessaryFailYieldableError (E19), multipleCatchTag (E21),
+          // runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error",
+                "schemaClassMissingBrand": "error",
+                "unnecessaryArrowBlock": "error",
+                "catchToOrElseSucceed": "error",
+                "instanceOfSchema": "error",
+                "unnecessaryFailYieldableError": "error",
+                "multipleCatchTag": "error",
+                "runOfExitToRunExit": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",
+    "skills/lead/scripts/botdraft.test.ts",
+    "skills/lead/scripts/pr/BotDraft.ts",
+    "skills/lead/scripts/pr/PullRequestsGh.test.ts",
+    "skills/lead/scripts/ci/preflight.ts",
+    "skills/lead/scripts/ci/RunsGh.test.ts",
+    "skills/lead/scripts/pr/Arm.test.ts",
     "skills/lead/scripts/box.ts",
     "skills/lead/scripts/box.rm.test.ts",
     "skills/lead/scripts/box/*.ts",
@@ -16,10 +57,16 @@
     "skills/lead/scripts/clauderow.test.ts",
     "skills/lead/scripts/drive.ts",
     "skills/lead/scripts/drive.test.ts",
+    "skills/lead/scripts/fieldrow.ts",
+    "skills/lead/scripts/fieldrow.test.ts",
     "skills/lead/scripts/gc.ts",
     "skills/lead/scripts/gc.test.ts",
-    "skills/lead/scripts/lanes.ts",
-    "skills/lead/scripts/lanes.test.ts",
+    "skills/lead/scripts/git/*.ts",
+    "skills/lead/scripts/governance.ts",
+    "skills/lead/scripts/governance.test.ts",
+    "skills/lead/scripts/keepruns.test.ts",
+    "skills/lead/scripts/quests.ts",
+    "skills/lead/scripts/quests.test.ts",
     "skills/lead/scripts/mutbox.ts",
     "skills/lead/scripts/mutbox.test.ts",
     "skills/lead/scripts/flow/*.ts",
@@ -33,6 +80,7 @@
     "skills/lead/scripts/records.ts",
     "skills/lead/scripts/records.test.ts",
     "skills/mutation/scripts/scope.ts",
-    "skills/mutation/scripts/scope.test.ts"
+    "skills/mutation/scripts/scope.test.ts",
+    "skills/sev/scripts/*.ts"
   ]
 }

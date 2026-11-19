@@ -9,27 +9,41 @@
 // committed. L7 records every row write `Sql.exec` is sent during a save that changes nothing, and
 // there must be none.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
 import { Receipt } from "./internal/recovery.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const NAME = "writer:1";
+
 const PROCESS = "process_0000000000e008000000000001";
+
 /** Far above what a tape writes, so only a save that adds the huge receipt passes it. */
 const CAPACITY = 1024 ** 2;
+
 /** The largest number of receipts L5 keeps before its tape. */
 const TOP = 1000;
 
 /** A journal as the runner saves it: its own fields beside every receipt it holds. */
 const Journal = Schema.Struct({ name: Schema.String, n: Schema.Int, receipts: Schema.Array(Receipt) });
+
 type Journal = typeof Journal.Type;
 
 const receipt = (letter: string, value: number, pad = ""): Receipt => ({
   letter,
-  input: { type: "save", value, pad },
+  input: { ...Tag.cases.save.make({}), value, pad },
   errors: [],
   tries: 1,
   result: null,
@@ -39,7 +53,7 @@ const receipt = (letter: string, value: number, pad = ""): Receipt => ({
 const journal = (n: number, receipts: ReadonlyMap<string, number>): Journal => ({
   name: NAME,
   n,
-  receipts: [...receipts].map(([letter, value]) => receipt(letter, value)),
+  receipts: Arr.map([...receipts], ([letter, value]) => receipt(letter, value)),
 });
 
 /** A save the walk sends: the journal, and the value of each receipt it carries. */
@@ -52,21 +66,25 @@ const store = (sql: Sql) => recoveryStore(sql, { name: NAME, capacity: CAPACITY,
 /** The store's Sql, counting every row `exec` returns. */
 const counted = (sql: Sql) => {
   const count = { rows: 0 };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       const rows = sql.exec(query, ...params);
       count.rows += rows.length;
+
       return rows;
     },
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, count };
 };
 
 /** The store's Sql, recording every statement it is sent that writes a row. */
 const writing = (sql: Sql) => {
   const writes: Array<string> = [];
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*(?:INSERT|UPDATE|DELETE|REPLACE)\b/i.test(query)) {
@@ -78,12 +96,14 @@ const writing = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, writes };
 };
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT once armed. */
 const cutting = (sql: Sql) => {
   const fault: { after: number | null; hit: boolean } = { after: null, hit: false };
+
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query) && fault.after !== null) {
@@ -101,6 +121,7 @@ const cutting = (sql: Sql) => {
     transaction: (step) => sql.transaction(step),
     size: () => sql.size(),
   };
+
   return { sql: wrapped, fault };
 };
 
@@ -145,7 +166,9 @@ const Cell = fc.record({
   drop: fc.nat(),
   k: fc.integer({ min: 0, max: 2 }),
 });
+
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
+
 const Tape = fc.array(Cell, { minLength: 5, maxLength: 40, size: "max" });
 
 /** One L7 case: a journal, and who sends it again unchanged. */
@@ -156,6 +179,7 @@ const Same = fc.record({
 });
 
 const MOVES = ["save", "big", "cut", "retry", "other", "again", "load", "receipt", "input"] as const;
+
 type Move = (typeof MOVES)[number];
 
 export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
@@ -172,15 +196,18 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
               // The generated history, and the domain's end, so a failure prints the count at TOP; each
               // through a store that loaded first and one that did not.
-              const runs = [...new Set([kept, TOP])]
-                .sort((a, b) => a - b)
-                .flatMap((history) => [true, false].map((loaded) => ({ history, loaded })));
+              const runs = Arr.flatMap(
+                [...new Set([kept, TOP])].sort((a, b) => a - b),
+                (history) => Arr.map([true, false], (loaded) => ({ history, loaded })),
+              );
 
               for (const { history, loaded } of runs) {
                 const sql = yield* open;
+
                 const world = new Map<string, number>(
                   Array.from({ length: history }, (_, i): [string, number] => [`l-${i}`, 0]),
                 );
+
                 yield* store(sql).save(journal(0, world)).pipe(Effect.orDie);
                 const { sql: watched, count } = counted(sql);
                 const saver = store(watched);
@@ -219,9 +246,11 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 seen.push(`last save at n=${last.n}: ${last.rows} rows (law: ${last.expected})`);
               }
 
-              expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${seen.join("; ")}`).toBe(false);
+              expect(wrong, `L5: rows SQL returned during a save, by receipts kept: ${Arr.join(seen, "; ")}`).toBe(
+                false,
+              );
             }),
-          { numRuns: 50 },
+          { numRuns: runsFor({ fast: 5, full: 50 }) },
         ),
       600_000,
     );
@@ -231,6 +260,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
       () =>
         Effect.gen(function* () {
           const done = new Set<string>();
+
           const law = (tape: ReadonlyArray<Cell>) =>
             Effect.gen(function* () {
               const a = yield* open;
@@ -257,8 +287,9 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 }
 
                 // A left-out receipt stays stored, as the runner's old snapshots rely on.
-                return sent(n, new Map([...receipts].filter((_, i) => ((cell.drop >> (i % 30)) & 1) === 0)));
+                return sent(n, new Map(Arr.filter([...receipts], (_, i) => ((cell.drop >> (i % 30)) & 1) === 0)));
               };
+
               const committed = (save: Sent, by: "kept" | "other" = "kept") => {
                 world.n = save.n;
 
@@ -270,8 +301,10 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                   world.receipts.set(letter, v);
                 }
               };
+
               /** The twin's answer: a fresh store on the twin for this one call. */
               const fresh = (sql: Sql) => store(sql);
+
               const both = Effect.fnUntraced(function* (saved: Journal, onA: Effect.Effect<void, unknown>) {
                 const left = yield* Effect.exit(onA);
                 const right = yield* Effect.exit(fresh(twin).save(saved));
@@ -279,11 +312,17 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                   Exit.isSuccess(left),
                   "L6: the long-lived store and the twin's fresh store agree on a save",
                 ).toBe(Exit.isSuccess(right));
+
                 return Exit.isSuccess(left);
               });
+
               const possible = (): ReadonlyArray<Move> =>
-                MOVES.filter((move) =>
-                  move === "retry" ? failed !== null : move === "again" ? mine.last !== null : true,
+                Arr.filter(MOVES, (move) =>
+                  Match.value(move).pipe(
+                    Match.when("retry", () => failed !== null),
+                    Match.when("again", () => mine.last !== null),
+                    Match.orElse(() => true),
+                  ),
                 );
 
               for (const cell of tape) {
@@ -297,17 +336,21 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     committed(save);
                     break;
                   }
+
                   case "big": {
                     const save = value(cell, n);
+
                     const saved = {
                       ...save.saved,
-                      receipts: [...save.saved.receipts, receipt("huge", 0, "x".repeat(CAPACITY))],
+                      receipts: [...save.saved.receipts, receipt("huge", 0, Str.repeat(CAPACITY)("x"))],
                     };
+
                     expect(yield* both(saved, kept.save(saved)), "L6: a save past capacity is refused").toBe(false);
                     // Its retry sends the same journal without the receipt that did not fit.
                     failed = save;
                     break;
                   }
+
                   case "cut": {
                     const save = value(cell, n);
                     fault.after = cell.k;
@@ -328,6 +371,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
                     break;
                   }
+
                   case "retry": {
                     // The runner sends its model again: the failed save's own text.
                     if (failed === null) {
@@ -340,6 +384,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     failed = null;
                     break;
                   }
+
                   case "other": {
                     // A second store on the same database. Either it keeps the journal row's text and
                     // changes a receipt the long-lived store last wrote, so only receipts move, or it
@@ -365,6 +410,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     committed(save, "other");
                     break;
                   }
+
                   case "again": {
                     // The owner sends its own last save again, blind to what a second store wrote since.
                     if (mine.last === null) {
@@ -376,7 +422,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     // The journal row is the one this store last wrote, but a receipt under it is not.
                     if (
                       save.n === world.n &&
-                      [...save.values].some(([letter, v]) => world.receipts.get(letter) !== v)
+                      Arr.some([...save.values], ([letter, v]) => world.receipts.get(letter) !== v)
                     ) {
                       done.add("again_over_other");
                     }
@@ -385,6 +431,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     committed(save);
                     break;
                   }
+
                   case "load": {
                     const got = yield* kept.load.pipe(Effect.orDie);
                     expect(got, "L6: the long-lived store loads what a fresh store loads").toEqual(
@@ -392,11 +439,14 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                     );
                     break;
                   }
+
                   case "receipt":
                   case "input": {
                     const letter = choose([...world.receipts.keys(), "l-missing"], cell.pick);
+
                     const read = (s: ReturnType<typeof store>) =>
                       move === "receipt" ? s.receipt(letter) : s.input(letter);
+
                     const got = yield* read(kept).pipe(Effect.orDie);
                     expect(got, `L6: the long-lived store's ${move} of ${letter} is the fresh stores'`).toEqual(
                       yield* read(fresh(twin)).pipe(Effect.orDie),
@@ -407,17 +457,20 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
                 }
 
                 done.add(move);
+
                 const loads = {
                   a: yield* fresh(a).load.pipe(Effect.orDie),
                   twin: yield* fresh(twin).load.pipe(Effect.orDie),
                 };
+
                 expect(loads.a, `L6: after ${move}, a fresh store loads the same journal from both databases`).toEqual(
                   loads.twin,
                 );
                 expect(rows(a), `L6: after ${move}, both databases hold the same recovery rows`).toEqual(rows(twin));
               }
             });
-          yield* property(Tape, law, { numRuns: 100 });
+
+          yield* property(Tape, law, { numRuns: runsFor({ fast: 25, full: 100 }) });
           // An empty walk cannot pass: every move ran, a cut landed inside a transaction, a second store
           // changed only receipts under a journal row it left as it was, and the long-lived store then
           // sent its own last save over that change.
@@ -435,7 +488,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
             Effect.gen(function* () {
               const sql = yield* open;
               const { sql: watched, writes } = writing(sql);
-              const saved = journal(n, new Map(values.map((value, i): [string, number] => [`l-${i}`, value])));
+              const saved = journal(n, new Map(Arr.map(values, (value, i): [string, number] => [`l-${i}`, value])));
               const first = store(watched);
               yield* first.save(saved).pipe(Effect.orDie);
               const before = rows(sql);
@@ -450,7 +503,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               expect(writes.slice(from), `L7: rows written by a save sent again unchanged, ${again}`).toEqual([]);
               expect(rows(sql), "L7: the rows are as the first save left them").toEqual(before);
             }),
-          { numRuns: 100 },
+          { numRuns: runsFor({ fast: 10, full: 100 }) },
         ),
     );
   });

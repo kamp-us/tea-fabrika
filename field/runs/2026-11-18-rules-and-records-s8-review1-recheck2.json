@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-rules-and-records-s8-review1-recheck2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1634",
+  "started": "2026-11-18T12:30:28-08:00",
+  "ended": "2026-11-18T12:33:00-08:00",
+  "parent": "2026-11-18-rules-and-records-s8-fix2",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Second recheck of slice 8 of docs/plan/quests/rules-and-records-build-PLAN.md, today's tooling (kalfa/records), at 0a363c408. The lead's call holds as built: Patches.ts counts a record reference in the same sentence or the one before it, inside one block. Markdown.ts counts a reference-style link whose definition is a NNNN-slug.md record, the first definition of a label winning. The earlier green plant (the link half of the reference rule deleted) is now red, so finding 2026-11-18-records-patch-link-reference-unreached is fixed. A new plant that lets the window carry across blocks turns L3 and both scenario laws red. 0215:49 is the rule as decided, not a fault of the slice: its reference, 0576, is two sentences before 'The rest holds.', the same distance as 0603's false alarm (0599, two sentences before), so no sentence window keeps one and drops the other. 0215 still fails on its Amendments heading, and main has already folded it. The check on the checkout gives 57 patch findings: 37 Amendments headings and 20 sentences.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Usage and cost are not recorded. Node 26.13.0 outside the repo for every node, pnpm and vitest command. The plants ran in a scratch copy of kalfa/records outside the repo, with its node_modules linked.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "costUsd": null,
+  "billed": null,
+  "base": "0a363c4081529ce4c54e7c821b9502d8edb0080f",
+  "plants": [
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358",
+      "plant": "kalfa/records/src/Patches.ts:71, a link to a record no longer counts as a record reference",
+      "result": "red"
+    },
+    {
+      "law": "L3, kalfa/records/src/Patches.test.ts:358, and the two scenario laws of real patches and false alarms",
+      "plant": "kalfa/records/src/Patches.ts:78, the sentence before is read across blocks, so a block's first sentence counts the last sentence of the block before",
+      "result": "red"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-jobs-wire-red-fix",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1318",
+  "started": "2026-11-15T06:14:00-08:00",
+  "ended": "2026-11-15T06:35:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Sev1 fix, one agent writing both the product fix and the law, in next/. The A14 jobs-wire law went red on main after hands slice 3 (kamp-us/tea-fabrika#1309): every accepted jobs.finish over the real Project answered unreachable. Cause one, product: cloudflare/mail.ts wakeups read the current span with Effect.orDie, and the gateway wakes outside any span, so the wake died with NoSuchElementError and the Project's RPC rejected. Fixed: the wake sends the caller's span when there is one and no trace when there is none. Cause two, the law's world: the test's entry did not export IsolateTail, so no Process could be configured, and the seeded job's requester name wire:1 was never started, so its wake failed and the finish answered unavailable. Production always has both. The world now exports IsolateTail and starts wire:1. New law R2 in cloudflare/mail.test.ts runs on every pull request.",
+  "plants": [
+    {
+      "law": "cloudflare/mail.test.ts R2: a wake schedules its name once from any caller, with the caller's span as its trace or none, and fails only as unavailable",
+      "plant": "cloudflare/mail.ts wakeups: read the span with Effect.currentSpan.pipe(Effect.orDie) again",
+      "result": "red"
+    },
+    {
+      "law": "cloudflare/mail.test.ts R2: a wake schedules its name once from any caller, with the caller's span as its trace or none, and fails only as unavailable",
+      "plant": "cloudflare/mail.ts wakeups: always send no trace",
+      "result": "red"
+    },
+    {
+      "law": "jobs-wire.integration.test.ts scenario: A14 real Project takes, reconnects, starts, finishes and reads its startup request",
+      "plant": "cloudflare/mail.ts wakeups: read the span with Effect.orDie again, with the new world",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "Ran, Node 26.13.0, TYPESAFE_API_KEY unset, one file at a time: A14 red at a552fb67d, green at 8fe2a2eb8 and at this head; door, door-recovery, GatewayRevocation, node/gateway/Jobs, node/runtime/RunnerHands, worker-mail, pipeline runner.laws and queue.laws integration files all green; mail.test.ts 6 of 6; vitest --changed origin/main 46 files green; pnpm format, pnpm lint, the list ratchet, one pnpm typecheck, leakgrep: all clean. loosening.sh: two unrecognized-change hits, an export line and an import line, neither a loosening. Not run: the full scheduled run, which alone proves the sev1 over.",
+  "step": "build"
+}

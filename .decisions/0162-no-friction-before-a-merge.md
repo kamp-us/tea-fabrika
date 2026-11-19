@@ -1,7 +1,7 @@
 ---
 id: 0162
 title: A pull request whose steps passed lands on green CI and a clean leak check alone, with no wait, re-run, signature or script of ours in between
-status: amended-in-part by [0164](0164-the-bot-stays-without-signing.md), [0174](0174-a-queue-run-follows-its-paths.md), [0179](0179-an-admin-merge-is-the-owners.md)
+status: accepted
 date: 2026-11-13
 tags: [merge, lead, friction, catchup, ci, merge-queue, organization, budget]
 ---
@@ -34,7 +34,8 @@ flowchart LR
 ```sh
 # before (0146)
 sh .agents/skills/lead/scripts/catchup.sh <pr> <ticket>
-# after
+# after (the lead turns on merge when ready once its final read is done, 0530, and GitHub queues
+# the pull request when ci-required is green)
 gh pr merge <pr> --squash --match-head-commit <sha>
 ```
 
@@ -82,7 +83,8 @@ a clean leak check (owner, 2026-11-13).**
 
 - The principle above. A wait, a re-run, a signature or a script that only our tooling asks for is
   friction, and it goes.
-- Step signing and the bot are gone (0161).
+- Step signing is gone (0161). The bot stays, with no step signature
+  ([0164](0164-the-bot-stays-without-signing.md)).
 - This repo may move to an organization to use GitHub's merge queue. This replaces 0107's "this
   repo stays where it is". GitHub's queue is the stopgap. fabrika's own queue stays the design, as
   0107, [0110](0110-merge-queue-is-fabrika-programs.md) and
@@ -96,12 +98,14 @@ the owner did not object. They are not the owner's words, and the owner may take
   not come back.
 - **0156's batch has no job left.** It shared one check run among pull requests that each needed
   one on current main. None needs that now.
-- **The lead's landing scripts go.** A pull request lands by a push, green CI, and
-  `gh pr merge --squash`, pinned to the head that was checked. 0014's rule of when the lead merges
-  stands; its "with `catchup.sh`" does not. 0116's "`catchup.sh` keeps its own wait for the checks"
-  does not either: GitHub's required check is the guard.
-- **The lead answers a lane's budget stop at any time,** not only while the owner is away. 0096's
-  rules for that answer stand, and so does its list of what is the owner's alone.
+- **The lead's landing scripts go.** A pull request lands by the bot's push, green CI, and
+  `gh pr merge --squash`, pinned to the head that was checked. 0014's "with `catchup.sh`" and
+  0116's "`catchup.sh` keeps its own wait for the checks" go: GitHub's required check is the guard.
+  Once a pull request's steps have passed and the lead's final read is done, the lead turns on
+  GitHub's merge when ready without waiting for CI, and GitHub queues it when `ci-required` goes
+  green ([0530](0530-lead-turns-on-merge-when-ready.md)).
+- **The lead answers a lane's budget stop at any time,** not only while the owner is away
+  ([0096](0096-the-lead-fixes-forward-while-the-owner-is-away.md)).
 
 **From when.** Main's ruleset stopped requiring `commits` on 2026-11-13 (0161 listed that as
 owed; the lead made the edit on the owner's word,
@@ -112,7 +116,10 @@ unsigned commit can merge and the rules above hold from that day.
 
 - `ci-required` is green on the exact head that merges, and the head stays pinned (0049).
 - The leak check runs before every push and on a pull request's words, and fails closed.
-- No force push, no `--admin`, no auto-merge, no override flag.
+- No force push and no override flag. No `--admin`, except a merge the owner starts or names
+  ([0179](0179-an-admin-merge-is-the-owners.md)) and the lead's own admin merge of a docs-only pull
+  request ([0183](0183-the-lead-admin-merges-docs-only.md)). No auto-merge, except the lead's own
+  turn-on of merge when ready after its final read (0530).
 - A change under an exam path waits for the owner's read, and the loosening check is read at the
   merge (0161).
 - The four steps, plan, tests, build and review, are not changed here.
@@ -130,34 +137,31 @@ unsigned commit can merge and the rules above hold from that day.
   box cleanup ([0101](0101-box-cleanup-runs-on-a-timer.md)).
 - 0156's trial ends. Any numbers it produced still go in `experiments/`.
 - Owed for the move, each as its own pull request:
-  - CI: `check.yaml` gets the `merge_group` trigger, and `.github/ci/changes.mjs` runs every job on
-    it, as on a push to main. No workflow has that trigger today. These are exam paths, so the
-    owner reads it.
+  - CI: `check.yaml` gets the `merge_group` trigger, and `.github/ci/changes.mjs` picks a queue
+    run's jobs from the group's changed paths, exactly as for a ready pull request
+    ([0174](0174-a-queue-run-follows-its-paths.md)). `check.yaml` runs on `merge_group`.
   - After the transfer: the two places that hold this repo's address as config,
     `programs/tracker/src/github.ts` and the leak check's allowed URL in `leakgrep.sh`.
   - The prose that names `catchup.sh` as the way to merge: `AGENTS.md`, the plan's "How a change
     lands" and the lead skill.
+- GitHub's merge queue is on, on the owner's word of 2026-11-13: the ruleset "main only through a
+  pull request" holds its `merge_queue` rule, so main takes changes only through the queue. The
+  ruleset is GitHub's, not a file here, so these settings are as read on 2026-11-13: the merge
+  method is squash; a group holds one pull request (at least 1 and at most 1 to merge, with no wait
+  for more); up to 3 groups build at once; every group must be green (`ALLGREEN`); a group's checks
+  have 60 minutes to answer; and `ci-required` is the one required check. The squash commit takes
+  the pull request's title and description as its title and message. The repo's Actions allow list
+  gained `merge_group`, and `check.yaml` runs on it.
 - How sure the lead is that the move pays: about 80%. The doubt is what a transfer carries.
   GitHub's docs offer the queue to
   [a public repo owned by an organization](https://docs.github.com/en/repositories/configuring-branches-and-other-settings-on-github/configuring-pull-request-merges/managing-a-merge-queue),
   and do not say whether rulesets come along. Both are checked right after the transfer.
 - With a queue on, `gh pr merge` adds a green pull request to the queue and arms auto-merge on one
-  that is not green yet. The lead runs it only once the checks are green.
+  that is not green yet. The lead turns on merge when ready after its final read, and GitHub queues
+  the pull request only when `ci-required` is green (0530).
 - Not decided here:
   - whether field rows and plan rows ([0013](0013-plan-docs-change-with-the-work.md)) may trail a
     merge by a day;
   - the four steps and the draft pull request at the first commit
     ([0134](0134-no-code-stays-only-on-a-local-branch.md));
-  - the settings of GitHub's queue, and when fabrika's own queue takes over from it.
-
-## Amendments
-
-- 2026-11-13: a record of what was set, not a new ruling. On the owner's word of 2026-11-13, the
-  ruleset "main only through a pull request" gained GitHub's `merge_queue` rule, so main now takes
-  changes only through GitHub's merge queue. Its settings as read that day: the merge method is
-  squash; a group holds one pull request (at least 1 and at most 1 to merge, with no wait for
-  more); up to 3 groups build at once; every group must be green (`ALLGREEN`); a group's checks
-  have 60 minutes to answer; and `ci-required` is the one required check. The squash commit takes
-  the pull request's title and description as its title and message. The repo's Actions allow list
-  gained `merge_group`, and `check.yaml` runs on it. This settles the first half of "the settings
-  of GitHub's queue" under "Not decided here"; when fabrika's own queue takes over stays open.
+  - when fabrika's own queue takes over from GitHub's.

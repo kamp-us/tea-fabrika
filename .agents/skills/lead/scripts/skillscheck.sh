@@ -16,7 +16,7 @@ bad = []
 # No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
 # required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
-caps = "The test config and typecheck.sh hold worker, home and typecheck limits."
+caps = "The test config and typecheck.ts hold worker, home and typecheck limits."
 outside = "Something wrong that your task does not cover is one finding row with proof, then keep going: never a fix, a ticket or only a mention, and never a security hole."
 effect = "For a new property, use @effect/vitest's it.prop or it.effect.prop with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases."
 clauses = [
@@ -125,7 +125,7 @@ answer = (
 )
 cleanup = (
     "After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.",
-    "The sweep removes the lane's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
+    "The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.",
     "Use git worktree remove without force. Keep dirty, locked, ambiguous or unreadable candidates and any box that fails its guard.",
     "Print one line per retained item and continue.",
     "Saved plans, reports, logs and state/ remain.",
@@ -144,8 +144,8 @@ rules = {
             "Reviewed head:", "Decided notes:", "Last fixes:",
         ),
         "step:Land it": (*cleanup, *landing),
-        # Ticket 652: a lane agent's last act is land.ts ready; the lead session lands.
-        "heading:Lane brief template": ("land.ts ready",),
+        # Ticket 652: a quest agent's last act is land.ts ready; the lead session lands.
+        "heading:Quest brief template": ("land.ts ready",),
     },
 }
 
@@ -200,7 +200,7 @@ for path, sections in rules.items():
             if re.search(pattern, body, re.I):
                 bad.append(f"{path}: forbidden review restriction: {pattern}")
         # Ticket 652: no brief template hands an agent a lead-only step. The permission check
-        # refuses a subagent the lead key, so a lane that is told to sign as lead stops (0056).
+        # refuses a subagent the lead key, so a quest that is told to sign as lead stops (0056).
         # stepcommit.sh --commit-only lead stays allowed: it commits and signs nothing.
         lead_only = (
             r"commits\s+sign", r"step-keys", r"botpush", r"land\.ts\s+(?:run|queue|merged)",

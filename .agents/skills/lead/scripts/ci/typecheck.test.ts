@@ -8,12 +8,18 @@ import * as ChecksTest from "./ChecksTest.ts";
 import { errorsIn, type Found, LINES, logText, summary, type Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
 
 const options = { seed: 119120, numRuns: 300 };
+
 const part = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/);
+
 const dir = fc.array(part, { minLength: 1, maxLength: 3 }).map((ps) => ps.join("/"));
+
 const file = fc.tuple(fc.array(part, { maxLength: 2 }), part).map(([ps, f]) => [...ps, `${f}.ts`].join("/"));
+
 const message = fc.stringMatching(/^[A-Za-z][A-Za-z' ]{0,40}[a-z.]$/);
+
 // A made-up checkout, in the shape a runner lays one out: `.../work/<name>/<name>`.
-const root = "/w/work/lane/lane";
+const root = "/w/work/quest/quest";
+
 const error = (path: string, text: string) => `${path}(3,7): error TS2322: ${text}`;
 
 const found = (paths: ReadonlyArray<string>): ReadonlyArray<Found> =>
@@ -57,6 +63,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       `p typecheck: ${error("src/a.ts", `Type 'typeof import("${root}/p/src/b")' is wrong.`)}`,
       `p typecheck:   Type 'typeof import("${root}/p/src/c")' is not 'X'.`,
     ].join("\n");
+
     const [e] = errorsIn(out);
     expect(e?.text).toBe(
       `${error("p/src/a.ts", `Type 'typeof import("p/src/b")' is wrong.`)}\n  Type 'typeof import("p/src/c")' is not 'X'.`,
@@ -70,8 +77,9 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       "packages/p typecheck:   Property 'x' is missing in type 'A'.",
       "packages/p typecheck: Failed",
       "[ELIFECYCLE] Command failed with exit code 1.",
-      '  × "pnpm recursive run" failed in /w/lane-typecheck/packages/p',
+      '  × "pnpm recursive run" failed in /w/quest-typecheck/packages/p',
     ].join("\n");
+
     expect(errorsIn(out)).toEqual([
       {
         path: "packages/p/src/a.ts",
@@ -88,6 +96,7 @@ describe("CI's typecheck log gives tsc's errors, today's tooling", () => {
       "packages/p typecheck:   Property 'x' is missing.",
       "packages/q typecheck:   not an error's line",
     ].join("\n");
+
     expect(errorsIn(out).map((e) => e.text)).toEqual([
       `${error("packages/p/src/a.ts", "Type 'A' is wrong.")}\n  Property 'x' is missing.`,
     ]);
@@ -213,6 +222,7 @@ describe("a job's log as the command printed it, today's tooling", () => {
       "2026-11-11T18:11:03.9758354Z apps/fabrika typecheck: Failed",
       `2026-11-11T18:11:03.9768977Z   \u001B[31m×\u001B[39m "pnpm recursive run" failed in ${root}/`,
     ].join("\n");
+
     expect(errorsIn(logText(log))).toEqual([
       {
         path: "apps/fabrika/test-window.ts",
@@ -239,6 +249,7 @@ describe("the wait for CI's typecheck job, today's tooling", () => {
   const head = "c".repeat(40);
   const main = new URL("../../../../..", import.meta.url).pathname.replace(/\/$/, "");
   const job = (status: string, conclusion: string | null) => Option.some({ id: 9, status, conclusion });
+
   // The verdict after these polls and this log, checked by `law` once the wait ends.
   const waited = (
     polls: ReadonlyArray<ChecksTest.Poll>,
@@ -287,15 +298,15 @@ describe("the wait for CI's typecheck job, today's tooling", () => {
       { minutes: 0.002 },
     ));
 
-  it("scenario: a lane with no head reads nothing", () =>
+  it("scenario: a quest with no head reads nothing", () =>
     waited(
       [job("completed", "success")],
-      (v) => expect(v).toEqual({ _tag: "skipped", reason: "the lane has no head to read CI at (none)" }),
+      (v) => expect(v).toEqual({ _tag: "skipped", reason: "the quest has no head to read CI at (none)" }),
       { at: "" },
     ));
 });
 
-describe("CI's typecheck in the lane's log, today's tooling", () => {
+describe("CI's typecheck in the quest's log, today's tooling", () => {
   it("format: green, red with its step and first line, or why it gave no answer", () => {
     expect(summary({ _tag: "green" })).toBe("green");
     expect(summary({ _tag: "red", to: "tests", lines: ["a.ts(1,1): error TS1: x", "b"] })).toBe(

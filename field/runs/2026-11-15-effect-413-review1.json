@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-413-review1",
+  "ticket": "1054",
+  "pr": "kamp-us/tea-fabrika#1375",
+  "started": "2026-11-15T16:22:05-08:00",
+  "ended": "2026-11-15T16:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of b85e52a58, effect 4.1.2 to 4.1.3 in next/ and tooling, with today's version sharing the catalog: merge-ready, one finding row. The lockfile moves only the seven planned packages' integrity lines, the 4.1.2 to 4.1.3 version strings in snapshot keys, and adds the @effect/sql-d1 override line; no 4.1.4, the effect patch hash stays 062265f7..., undici and @effect/tsgo do not move. The renamed patch is byte-identical, reverses cleanly on the installed 4.1.3, and upstream commit d021cee is in neither the 4.1.3 nor the 4.1.4 tag. No reader branches on a span status of ok. L1 is a real type law at a right home. Owed by the lead before merge: a merge of main, which conflicts in pnpm-lock.yaml; the pull request title and body, which still describe the plan and do not say that ok becomes unset; and docs/plan/tier-1-detail.md line 890. The row: L1 reaches only Schema.TaggedUnion's isAnyOf, not Schema.toTaggedUnion's.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read-only apart from this row. Ran alone on Node 26.13.0: scripts/effect-arbitrary.test.ts (5), oxlint-plugins/jsdocs.test.ts (17), ExitReason.types.test.ts (1), oxlint-plugins/exact-versions.test.ts (56), all green. patch -R --dry-run on the installed effect took both hunks. git merge-tree with origin/main 24f39b2cc: conflict in pnpm-lock.yaml. Not run: pnpm typecheck (other agents' tsgo was running; CI's typecheck on this head passed), any .integration. or .visual. file. L1 planted by reading only.",
+  "step": "review"
+}

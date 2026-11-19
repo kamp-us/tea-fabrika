@@ -70,25 +70,23 @@ Both use 0 to mean "none required", with no second switch. This record does the 
 
 How it relates:
 
-- **[0079](0079-size-counts-governed-paths-name-who.md), amended in part.** 0079's sketch says the
-  count is "set by size alone". Here the count starts from the repo's `human-approvals`, and size moves it
-  from there; how size moves it is still 0079's trial. The record's prose keeps "look" for a
-  person's look; the setting is `human-approvals`, never `looks`. 0079's other rules and its binding
-  constraints stay.
-- **[0074](0074-agent-hands-over-a-flow.md), amended in part.** It answers part of 0074's open
-  point "what fabrika checks before it runs a handed-over flow": at least the floor's review steps.
-  The rest of that point stays open.
+- **[0079](0079-size-counts-governed-paths-name-who.md).** Its sketch said the count is "set by
+  size alone". Here the count starts from the repo's `human-approvals`, and size moves it from
+  there; how size moves it is 0079's trial. Its prose keeps "look" for a person's look; the setting
+  is `human-approvals`, never `looks`.
+- **[0074](0074-agent-hands-over-a-flow.md).** It answers part of 0074's open point "what fabrika
+  checks before it runs a handed-over flow": at least the floor's review steps. What else fabrika
+  checks stays open.
 - **[0071](0071-risk-tier-decides-who-looks.md)** left open which part of a risk tier a repo's
-  settings may change. This record makes the base count a setting. Its status is not changed here:
-  0079 already carries its amendment, and this record builds on 0079.
+  settings may change. This record makes the base count a setting, and builds on 0079.
 - **[0069](0069-choices-are-settings.md):** a choice that fits as a `fabrika.toml` value is one,
   declared once with its schema and default. The floor is a number, so it is one.
 - **[0064](0064-the-lead-drives-with-flows.md):** a flow is a list of typed steps one program runs.
   The floor is a check on that list.
 - **[One fabrika.toml per repo](../docs/direction/one-fabrika-toml-per-repo.md):** "the order of the
-  steps stays in code. No `steps = [...]`." That still holds: the order of a run lives in its flow,
-  which is code and data fabrika checks, never in the settings file. The file holds only the floor,
-  a number, which is a knob that note allows.
+  steps stays in code. No `steps = [...]`." The order of a run lives in its flow, which is code
+  and data fabrika checks, never in the settings file. The file holds only the floor, a number,
+  which is a knob that note allows.
 - **Today's version is not changed.** Its `[review]` has only `governed` and `ui`, and its
   `[ship] approval` is `codeowners` or `none`. This record is about the product, built in `next/`.
 
@@ -100,7 +98,7 @@ it (owner, 2026-11-10).**
 
 - **One setting, the industry's name.** The repo owns `human-approvals`, an integer of at least 0.
   Its name is the industry's word, as GitHub and GitLab say it, with `human-` in front so it says it
-  counts people ([Amendments](#amendments)). Never `looks`.
+  counts people: a bare `approvals` read as how many times an agent reviews. Never `looks`.
 - **A floor for every run.** A flow handed to fabrika ([0074](0074-agent-hands-over-a-flow.md)) may
   hold more review steps than the floor, never fewer. Our own pipeline's lane, one named flow, is
   held to it too.
@@ -118,8 +116,8 @@ it (owner, 2026-11-10).**
 - No flow, flag, run or agent lowers the floor. Only the repo's settings file does.
 - A flow under the floor never starts: the check refuses it before its first step.
 - The floor reads the settings at base and head, as 0079 does, never the head alone.
-- 0079's constraints stay: nothing about the writer feeds the count, and an agent's look never
-  counts toward the count of people. So an agent's review step never counts toward the floor.
+- 0079's constraints apply here: nothing about the writer feeds the count, and an agent's look
+  never counts toward the count of people. So an agent's review step never counts toward the floor.
 
 ## Consequences
 
@@ -141,14 +139,7 @@ it (owner, 2026-11-10).**
 
 ## Records
 
-- Glossary: `human-approvals` (first added as `approvals`) in the Pipeline section of [TERMS](../.glossary/TERMS.md).
+- Glossary: `human-approvals` in the Pipeline section of [TERMS](../.glossary/TERMS.md).
 - [0079](0079-size-counts-governed-paths-name-who.md) and
-  [0074](0074-agent-hands-over-a-flow.md): status lines now say amended in part by this record,
-  with a one-line pointer in each.
-
-## Amendments
-
-- 2026-11-10 (owner): the setting is renamed from `review.approvals` to `review.human-approvals`, so
-  its name says it counts people. A bare `approvals` read as how many times an agent reviews. An
-  agent's review never counts toward it. The sketch's `scope` is now the list `["repo"]`, not the
-  string `"repo"`, as the settings walk decided the same day. Nothing else in this record changes.
+  [0074](0074-agent-hands-over-a-flow.md) each carry a one-line pointer to this record where it
+  answers part of their open points.

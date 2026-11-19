@@ -6,7 +6,7 @@ summary: "Today's hand-run tooling removes mechanical instructions only when the
 # Skills keep judgment; code checks the steps
 
 **Decided 2026-11-08.** Today's hand-run tooling, used for work in either version.
-K20's lint advice applies only to `next/` tests.
+K20's lint rule applies only to `next/` tests.
 
 Its decided rules are in: [0408](../../.decisions/0408-skills-keep-only-judgment.md),
 [0409](../../.decisions/0409-one-leak-check-for-push-and-plan.md),
@@ -27,11 +27,12 @@ and the remaining repeated instructions. Slice 1a owns K19, K1 to K4 and K11.
 - K6 uses one `leakgrep.sh` for added push text and plan text. Private words stay outside the repo.
   The script reports the kind and line number without printing the matched text.
 - K9's test config caps workers and refuses broad local runs. Test setup chooses a home whose
-  host socket fits under 103 bytes. `typecheck.sh` uses one fixed OS lock across shells, keeps it
+  host socket fits under 103 bytes. `typecheck.ts` uses one fixed lock across shells, keeps it
   through patching and compiling, and releases it when its last holder exits, including a crash.
 - K20 uses existing Schemas or their own Effect Arbitraries for new properties, with tea's
   machine-law tools kept. Keep fast-check for unsupported data and edge cases. The syntax-based
-  lint rule only advises. A moved law keeps its old size, run count and real-limit coverage.
+  lint rule blocks in every folder at zero, and advises only where a folder's warn line says so
+  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md)). A moved law keeps its old size, run count and real-limit coverage.
 
 The approved plan's Amendment 1 sets these calls. The K20 wording is also in
 [five steps for every check](./five-steps-for-every-check.md#effect-test-data-k20-2026-11-08).

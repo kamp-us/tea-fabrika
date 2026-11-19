@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-t1137-ci-ref-queue-validation",
+  "ticket": "1137",
+  "pr": null,
+  "started": "2026-11-17T00:10:11-08:00",
+  "ended": "2026-11-17T00:13:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's CI and lead tooling, serving both versions. Local validation at 665108f4a8bd43b84b395ca9e07fdae4d1f60f08 passed 267 safe unit laws: 244 scheduled-workflow laws, 6 branch-preflight laws and 17 arm laws. Tests ran serially at nice 19 with one worker. Two native typechecks ran serially under the normal shared lock: CI plus shared test setup checked 586 files including four changed roots; the agent scope checked 818 files including seven changed roots. Both exited zero. Direct and nested Node 26.13.0 and pnpm 12.16.1 were verified. Temporary configs were removed; source, index and head were preserved.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "This row records the final local validation stretch, not total agent usage. The five CLI subprocess integration properties and the controlled old-CLI missing-sentinel fault remain unrun. The existing local guard refused subprocess integration execution; no bypass was used. Local checks do not prove remote overlap and job bounds, same-ref serialization or the legacy-run drain. The red controls below ran earlier in this repair and were restored before final validation. Raw outputs stay outside the public repository.",
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "inputTokens": null,
+  "cachedTokens": null,
+  "outputTokens": null,
+  "step": null,
+  "driver_caused": false,
+  "plants": [
+    {
+      "law": "rejects the schedule's plant: SC2: a newer run cancels the running one",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: no group",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: no explicit cancellation policy",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: one global group delays unrelated refs",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: one group per commit overlaps main runs",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: one group per run overlaps main runs",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: a short ref can mix a branch and tag",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: an event suffix separates main's triggers",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC2: another prefix separates participating runs",
+      "plant": "Remove SC2. The named rejection law fails. Restore the guard after the control run.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC19: an extra job has no shared slot",
+      "plant": "Run against the pre-fix checker without closed job and changed-matrix admission checks. The required SC19 finding is absent. Restore the corrected checker.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC19: changed adds another matrix axis",
+      "plant": "Run against the pre-fix checker without closed job and changed-matrix admission checks. The required SC19 finding is absent. Restore the corrected checker.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC19: changed admits a fixed unmapped slot",
+      "plant": "Run against the pre-fix checker without closed job and changed-matrix admission checks. The required SC19 finding is absent. Restore the corrected checker.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC19: changed reads arbitrary slots",
+      "plant": "Run against the pre-fix checker without closed job and changed-matrix admission checks. The required SC19 finding is absent. Restore the corrected checker.",
+      "result": "red"
+    },
+    {
+      "law": "rejects the schedule's plant: SC19: changed's parallel count differs from its slot selection",
+      "plant": "Run against the pre-fix checker without closed job and changed-matrix admission checks. The required SC19 finding is absent. Restore the corrected checker.",
+      "result": "red"
+    }
+  ]
+}

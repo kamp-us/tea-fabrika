@@ -56,8 +56,7 @@ has no hits, and the docs rule turns on the same way.
   nobody has to follow makes the code built on it a foundation that lies.
 - [0168](0168-old-lint-breaks-are-fixed.md) decided the same day that no list file takes new
   entries, and that a new rule turns on folder by folder as each folder reaches zero. This
-  decision builds it for these rules: the old hits are fixed, never listed, and 0168 stands
-  unchanged.
+  decision builds it for these rules: the old hits are fixed, never listed.
 - The comment fills of 2026-11-13 brought ten `libfabrika` folders to zero for the docs rule,
   `fabrika/jsdocs`, which was on for only a few folders.
 
@@ -75,15 +74,21 @@ a reason (owner, 2026-11-13).**
 
 - **The five block.** They leave the advice set in `pnpm lint`. Their messages stop saying
   "Advice, does not block".
-- **Where a folder still has hits, 0168 holds.** No list-file row is added. A folder with hits on
+- **A folder that still has hits follows 0168.** No list-file row is added. A folder with hits on
   main is fixed by a fill pull request, and the rule blocks there the moment it reaches zero.
   Until then its fires are printed as advice in that folder only.
 - **The folder is as small as the code allows.** A rule blocks in each source folder that is at
   zero, measured by running it there, so one dirty folder does not hold back its clean siblings.
 - **A false alarm takes a disable line:** `// oxlint-disable-next-line <rule> -- <plain reason>`,
   on the one line, which a reviewer reads. Never a disable comment in bulk to make a folder pass.
-- **The docs rule follows the same rule.** `fabrika/jsdocs` turns on for every folder at zero on
-  main. A folder that is not at zero stays off until its fill lands.
+- **The docs rule follows the same rule.** `fabrika/jsdocs` is an error for every source folder
+  of `next/` and `kalfa/` (the first override that sets it in `.oxlintrc.json`), so a new folder
+  blocks from its first file. A folder that is not at zero yet advises through one warn line in
+  that file until its fill deletes the line, in place of staying off. The set of folders that
+  pass with a missing doc block does not grow, so [0524](0524-no-list-lets-broken-code-pass.md)'s
+  rule that no list grows is kept (the lead's reading in the slice 2 plan, not an owner ruling;
+  tracker ticket 948 built it in
+  https://github.com/kamp-us/tea-fabrika/pull/1209).
 - **The false-alarm measure is not a gate for these.** The `AGENTS.md` rule that a blocking check
   needs its false alarms measured first does not hold this ruling back. Each pull request that
   makes a folder block reports, per rule, the hits it met, the ones it fixed and each disable line
@@ -106,12 +111,3 @@ a reason (owner, 2026-11-13).**
 - Not decided here:
   - `fabrika/service-id`, the sixth advice rule, which its own pull request makes block.
   - Whether `AGENTS.md`'s false-alarm rule changes for other new rules.
-
-## Amendments
-
-- 2026-11-13: the lead's reading, signed in the slice 2 plan. `fabrika/jsdocs` is `"error"` for
-  `next/packages/*/src/**`, so a new folder blocks from its first file. A dirty folder advises
-  through one warn line until its fill deletes it, in place of staying off. The set of folders
-  that pass with a missing doc block does not grow, so 0524's rule that no list grows holds. The
-  owner did not rule on this detail. Tracker ticket 948 built it in
-  https://github.com/kamp-us/tea-fabrika/pull/1209.

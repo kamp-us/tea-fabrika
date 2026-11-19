@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-17",
+  "run": "2026-11-17-host-runtime-remaining-faults-build",
+  "ticket": "kamp-us/tea-fabrika#1132",
+  "pr": null,
+  "started": "2026-11-17T01:16:07-08:00",
+  "ended": "2026-11-17T01:28:22-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling adds three closed host fault cases, exact matcher/frame checks, and trusted reporter case binding. Safe unit laws pass 17, phase machine 1, workflow policy 1. Six deliberate tooling faults failed and restored identical bytes. An initial raw-stack fault stayed green because the privacy check omitted JSON-escaped text; that check was corrected and the fault then failed. Protected reporter fixture and actual host fault triplets were not run. Compiler, full lint, API checks, source recheck, publication and CI remain lead-owned.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12.25,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "new host faults require their matcher values and exact assertion frame",
+      "plant": "Accept a wrong requested-pin assertion frame.",
+      "result": "red"
+    },
+    {
+      "law": "new host faults require their matcher values and exact assertion frame",
+      "plant": "Ignore the actual discovered pin value.",
+      "result": "red"
+    },
+    {
+      "law": "new host faults require their matcher values and exact assertion frame",
+      "plant": "Accept an environment comparison that did not retain a removed value.",
+      "result": "red"
+    },
+    {
+      "law": "new host diagnostics discard generated matcher values and paths",
+      "plant": "Copy raw stack after decoding closed metadata; initial privacy check missed JSON escaping.",
+      "result": "green"
+    },
+    {
+      "law": "new host diagnostics discard generated matcher values and paths",
+      "plant": "Copy raw stack after decoding closed metadata; corrected raw, JSON and percent checks.",
+      "result": "red"
+    },
+    {
+      "law": "reporter binds same-title failures to the trusted selected case only",
+      "plant": "Classify requested-pin as the earlier same-title host-pin case.",
+      "result": "red"
+    },
+    {
+      "law": "valid YAML forms pass and changed execution policy is refused",
+      "plant": "Accept a shortened case list by ignoring array length.",
+      "result": "red"
+    }
+  ]
+}

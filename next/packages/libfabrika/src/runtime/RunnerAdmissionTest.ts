@@ -1,9 +1,27 @@
-import { applyCell } from "@demlik/tea";
 // P13 slice 2, next/. Runtime laws take real stores from the module that owns their driver (0062).
+import { applyCell } from "@demlik/tea";
+
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import { type Runs, runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
+
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -12,6 +30,7 @@ import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { defaultPolicy, supervisor, Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
@@ -21,19 +40,38 @@ import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 
 const NAME = "admission:1";
+
 const PROGRAM = "admission";
+
 const SENT_AT = "2026-11-11T00:00:00Z";
+
 const TRACE = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
+
 const Model = Schema.Struct({ versions: Schema.Record(Schema.String, Schema.Int) });
 
-const Save = Schema.Struct({
-  type: Schema.Literal("save"),
+const Save = Schema.TaggedStruct("save", {
   note: Schema.String,
   base: Schema.Int,
   body: Schema.String,
 });
 
-const parameters = { seed: 119120, numRuns: 40 };
+/** The key of each supervisor Msg this walk hands the real schema, made by a schema (0562); the walk
+ *  sets the fields, and `supervisor.msg` judges them. */
+const Step = Schema.TaggedUnion({
+  begin: {},
+  admitted: {},
+  refused: {},
+  abandoned: {},
+  finished: {},
+  reply_written: {},
+  attempt_cleared: {},
+});
+
+const Later = Schema.Literals(["finished", "reply_written", "attempt_cleared"]);
+
+const COUNTS: Runs = { fast: 10, full: 40 };
+
+const parameters = { seed: 119120, numRuns: runsFor(COUNTS) };
 
 // The tape carries entropy only. Each choice is rebuilt from the state reached by its prefix.
 const Tape = fc.array(fc.record({ move: fc.noBias(fc.nat()), pick: fc.noBias(fc.nat()) }), {
@@ -85,8 +123,8 @@ const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json));
 
 // SQL columns and span fields can hold another JSON document.
-const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+const texts = (value: unknown, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -94,25 +132,25 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     }
 
     const decoded = decodeText(value);
+
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
         ),
       ),
     ];
+
     cache.set(value, result);
+
     return result;
   }
 
-  return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
-      : [];
+  // An array's values are its items, in order, so one branch reads arrays and objects alike.
+  return Predicate.isObjectKeyword(value) ? Arr.flatMap(Rec.values(value), (part) => texts(part, cache)) : [];
 };
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {
@@ -128,11 +166,13 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   const savedInputs = new Map<string, Schema.Json>();
   const pending = new Map<string, Incoming>();
   const owner = Writer.cases.person.make({ key: BRAIN, for: "fixture-writer" });
+
   const connect = Effect.fnUntraced(function* () {
     const raw = yield* files("journal").pipe(Scope.provide(scope));
+
     const sql: Sql = {
       exec: (query, ...params) => {
-        if (cut !== "" && WRITE.test(query) && query.includes(cut)) {
+        if (cut !== "" && WRITE.test(query) && Str.includes(cut)(query)) {
           cut = "";
           hits++;
           throw new Error("SQLITE_IOERR");
@@ -143,23 +183,24 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       transaction: (step) => raw.transaction(step),
       size: () => raw.size(),
     };
+
     return recoveryStore(sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision });
   });
+
   let store = yield* connect();
   yield* store.save(model);
 
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
-    const options =
-      j._tag === "idle"
-        ? ["begin", "crash"]
-        : j._tag === "checking"
-          ? ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]
-          : j._tag === "stepping"
-            ? ["finished", "crash"]
-            : j._tag === "writing_reply"
-              ? ["reply_written", "crash"]
-              : ["attempt_cleared", "crash"];
+
+    const options = Match.value(j).pipe(
+      Match.tag("idle", () => ["begin", "crash"]),
+      Match.tag("checking", () => ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]),
+      Match.tag("stepping", () => ["finished", "crash"]),
+      Match.tag("writing_reply", () => ["reply_written", "crash"]),
+      Match.orElse(() => ["attempt_cleared", "crash"]),
+    );
+
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
 
@@ -186,22 +227,23 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
           id: yield* ids.next(Id.Input),
           by: owner,
           arrivedAt: n,
-          input: Save.make({ type: "save", note: `n${cell.pick % 3}`, base: n, body: `BODY-${cell.pick}-${n} "/雪\n` }),
+          input: Save.make({ note: `n${cell.pick % 3}`, base: n, body: `BODY-${cell.pick}-${n} "/雪\n` }),
         },
         sentAt: SENT_AT,
         seen: 0,
         span: TRACE,
       };
+
       pending.set(input.id, input);
-      message = { type: "begin", process, letter: input.id, build: "test", phase: "fresh", at: n };
+      message = { ...Step.cases.begin.make({}), process, letter: input.id, build: "test", phase: "fresh", at: n };
     } else if (j._tag === "checking") {
       const input = pending.get(j.attempt.letter);
       expect(input).toBeDefined();
-      const delivery = Schema.decodeUnknownSync(Schema.Json)(input);
+      const delivery = yield* Schema.decodeUnknownEffect(Schema.Json)(input);
 
       if (move === "admit" || move === "fail_receipt" || move === "fail_journal") {
         message = {
-          type: "admitted",
+          ...Step.cases.admitted.make({}),
           seq: j.attempt.seq,
           receipt: {
             letter: j.attempt.letter,
@@ -220,7 +262,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
         }
       } else if (move === "refuse") {
         message = {
-          type: "refused",
+          ...Step.cases.refused.make({}),
           seq: j.attempt.seq,
           reply: {
             name: NAME,
@@ -233,17 +275,17 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
           },
         };
       } else {
-        message = { type: "abandoned", seq: j.attempt.seq };
+        message = { ...Step.cases.abandoned.make({}), seq: j.attempt.seq };
       }
     } else if ("attempt" in j) {
-      message = { type: move, seq: j.attempt.seq };
+      message = { ...Step.cases[Schema.decodeUnknownSync(Later)(move)].make({}), seq: j.attempt.seq };
     }
 
-    const msg = Schema.decodeUnknownSync(Schema.toType(supervisor.msg))(message);
+    const msg = yield* Schema.decodeUnknownEffect(Schema.toType(supervisor.msg))(message);
     const before = model;
     const next = applyCell(supervisor, model, msg)[0];
 
-    if (msg.type === "begin") {
+    if (msg._tag === "begin") {
       expect(next.journal._tag).toBe("checking");
     }
 
@@ -295,6 +337,7 @@ const walk = Effect.fnUntraced(function* (
   const versions = new Map<string, number>();
   const ids = yield* Id.Generator.pipe(Effect.provide(Id.Generator.layer));
   const owner = Writer.cases.person.make({ key: BRAIN, for: "fixture-writer" });
+
   const meta = {
     by: BRAIN,
     for: owner.for,
@@ -304,6 +347,8 @@ const walk = Effect.fnUntraced(function* (
     traceId: TRACE.traceId,
     build: "test",
   };
+
+  // SAFETY: expected starts unset; a law sets it to the Incoming it waits for.
   const control = { cut: "", hits: 0, checks: 0, updates: 0, mode: "", expected: null as Incoming | null };
   let serial = 0;
   let booted = false;
@@ -317,23 +362,32 @@ const walk = Effect.fnUntraced(function* (
         const text = JSON.stringify([query, params]);
         // Keep even rolled-back writes: inserting a body and later deleting it is a leak.
         writes.push(text);
+
         const admission =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
+
         const reply = /process_replies/.test(query);
+
         const cleanup =
-          /process_activity/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_activity/.test(query) &&
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
+
         const activity =
           /process_activity/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"stepping"')(p));
+
         const refusal =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"writing_reply"')(p));
+
         const abandonment =
           /process_recovery/.test(query) &&
-          params.some((p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"clearing_attempt"')(p));
+
         const replyComplete =
-          /process_recovery/.test(query) && params.some((p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          /process_recovery/.test(query) &&
+          Arr.some(params, (p) => Predicate.isString(p) && Str.includes('"_tag":"idle"')(p));
 
         if (
           control.cut === "all" ||
@@ -360,6 +414,7 @@ const walk = Effect.fnUntraced(function* (
     transaction: (body) => sql.transaction(body),
     size: () => sql.size(),
   });
+
   const program = {
     name: PROGRAM,
     machine: Machine.make({
@@ -392,6 +447,7 @@ const walk = Effect.fnUntraced(function* (
       }
 
       const now = s.versions[m.note] ?? 0;
+
       return m.base === now ? null : { reason: "changed_elsewhere", now };
     },
     inputs: { save: Input.cases.write.make({ schema: Save, description: "Save", personOnly: false }) },
@@ -399,6 +455,7 @@ const walk = Effect.fnUntraced(function* (
     writes: {},
     wake: () => null,
   };
+
   const connect = Effect.fnUntraced(function* () {
     const raw = yield* open("inbox").pipe(Scope.provide(scope));
     const manager = yield* open("manager").pipe(Scope.provide(scope));
@@ -417,10 +474,12 @@ const walk = Effect.fnUntraced(function* (
     }
 
     const status = yield* processes.status(NAME);
+
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
         const loaded = yield* ProgramLoader.use((l) => l.load(PROGRAM));
+
         return {
           load: () =>
             Effect.succeed({
@@ -476,6 +535,7 @@ const walk = Effect.fnUntraced(function* (
         };
       }),
     ).pipe(Layer.provide(ProgramLoader.layer({ [PROGRAM]: program }, {})));
+
     const dependencies = Layer.mergeAll(
       loader,
       ProcessStore.layer(sql, { process: status.state.process }),
@@ -505,16 +565,19 @@ const walk = Effect.fnUntraced(function* (
 
           control.cut = "";
           control.hits++;
+
           return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
         }),
       }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(services)));
+
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: status.state.process, name: NAME, program: PROGRAM, build: "test", owner },
-        { recovery: { sql, name: NAME, capacity: 1024 ** 3 } },
+        { recovery: { sql, name: NAME, capacity: 1024 ** 3 }, chunk: ANY_CHUNK },
       ).pipe(Layer.provide(dependencies)),
     ).pipe(Scope.provide(scope));
+
     const runner = Context.get(context, ProgramRunner);
 
     for (let round = 0; round < 12; round++) {
@@ -536,15 +599,19 @@ const walk = Effect.fnUntraced(function* (
 
     return yield* Effect.die(new Error("recovery did not reach a live successor"));
   });
+
   let live = yield* connect();
+
   const reopen = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* acquire;
     live = yield* connect();
   });
+
   const input = Effect.fnUntraced(function* (cell: Cell, refusing: boolean) {
     const note = `n${cell.pick % 3}`;
     const now = versions.get(note) ?? 0;
+
     return {
       id: `letter-${++serial}`,
       envelope: {
@@ -552,7 +619,6 @@ const walk = Effect.fnUntraced(function* (
         by: owner,
         arrivedAt: serial,
         input: Save.make({
-          type: "save",
           note,
           base: refusing ? now + 1 + (cell.pick % 4) : now,
           body: `BODY-${serial}-${cell.pick} "/雪\n`,
@@ -563,49 +629,69 @@ const walk = Effect.fnUntraced(function* (
       span: TRACE,
     } satisfies Incoming;
   });
+
   const noteError = (exit: Exit.Exit<unknown, unknown>) => {
     if (Exit.isFailure(exit)) {
       errors.push(JSON.stringify(Cause.squash(exit.cause)), Cause.pretty(exit.cause));
     }
   };
+
   const check = Effect.fnUntraced(function* () {
     const saved = yield* live.journal.load;
     expect((yield* live.runner.open("verify")).view, "only accepted inputs change the model").toEqual({
-      versions: Object.fromEntries(versions),
+      versions: Rec.fromEntries(versions),
     });
 
     for (const prior of failures) {
       expect(yield* live.journal.input(prior.id), "earlier failure evidence stays exact").toEqual(prior);
     }
 
-    expect(saved?.receipts.filter((r) => r.tries > 0).every((r) => r.errors.length === r.tries)).toBe(true);
-    const records = live.raw
-      .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .flatMap(({ name }) => live.raw.exec(`SELECT * FROM "${name}"`));
-    const outputs = [...writes, ...records.map((row) => JSON.stringify(row)), ...errors, ...monitor.text()].flatMap(
-      (output) => texts(output, decoded),
+    expect(
+      saved === null
+        ? undefined
+        : Arr.every(
+            Arr.filter(saved.receipts, (r) => r.tries > 0),
+            (r) => r.errors.length === r.tries,
+          ),
+    ).toBe(true);
+
+    const records = Arr.flatMap(
+      live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
+      ({ name }) => live.raw.exec(`SELECT * FROM "${name}"`),
     );
 
+    const written = [...writes, ...Arr.map(records, (row) => JSON.stringify(row)), ...errors, ...monitor.text()];
+    const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
+
     for (const body of refusedBodies) {
-      const forms = [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body), body.slice(0, 14)];
+      const forms = [
+        body,
+        Str.slice(1, -1)(Formatter.formatJson(body)),
+        encodeURIComponent(body),
+        Str.slice(0, 14)(body),
+      ];
+
       expect(
-        outputs.filter((output) => forms.some((form) => output.includes(form))),
+        Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",
       ).toEqual([]);
     }
   });
 
   for (const cell of tape) {
-    const unansweredFailures = failures.filter(
-      (failed) => !answers.some((answered) => answered.input.id === failed.id),
+    const unansweredFailures = Arr.filter(
+      failures,
+      (failed) => !Arr.some(answers, (answered) => answered.input.id === failed.id),
     );
-    const available = enabled.filter((move) =>
+
+    const available = Arr.filter(enabled, (move) =>
       move === "refuse_failed"
         ? unansweredFailures.length > 0
         : move === "retry" || move === "reuse"
           ? answers.length > 0
           : true,
     );
+
     const move = nth(available, cell.move);
     reached.add(move);
 
@@ -626,11 +712,13 @@ const walk = Effect.fnUntraced(function* (
 
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
-      const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
+      const message = yield* Schema.decodeUnknownEffect(Save)(original.envelope.input);
+
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
           : { ...original, envelope: { ...original.envelope, input: { ...message, base: "invalid" } } };
+
       refusedBodies.push(message.body);
       const answer = yield* live.runner.msg(delivery);
       expect(answer).toEqual(
@@ -644,8 +732,10 @@ const walk = Effect.fnUntraced(function* (
       expect((yield* live.journal.load)?.crashes).toBe(before?.crashes ?? 0);
       expect(control.updates).toBe(beforeUpdates);
       expect(control.checks).toBe(beforeChecks + (move === "invalid" ? 0 : 1));
+
       const hasReplies =
         live.raw.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='process_replies'").length > 0;
+
       expect(
         hasReplies ? live.raw.exec("SELECT id FROM process_replies WHERE name=? AND id=?", NAME, original.id) : [],
       ).toEqual([]);
@@ -658,8 +748,8 @@ const walk = Effect.fnUntraced(function* (
     if (move === "refuse_failed") {
       const prior = nth(unansweredFailures, cell.pick);
       const old = yield* live.journal.receipt(prior.id);
-      const message = Schema.decodeUnknownSync(Save)(prior.envelope.input);
-      const advance = yield* input({ ...cell, pick: Number(message.note.slice(1)) }, false);
+      const message = yield* Schema.decodeUnknownEffect(Save)(prior.envelope.input);
+      const advance = yield* input({ ...cell, pick: Number(Str.slice(1)(message.note)) }, false);
       control.expected = advance;
       const advanced = yield* live.runner.msg(advance);
       expect(advanced._tag).toBe("accepted");
@@ -681,29 +771,30 @@ const walk = Effect.fnUntraced(function* (
     if (move === "retry" || move === "reuse") {
       const prior = nth(answers, cell.pick);
       const component = Math.floor(cell.pick / answers.length) % 4;
-      const changed =
-        component === 0
-          ? { ...prior.input, seen: prior.input.seen + 1 }
-          : component === 1
-            ? { ...prior.input, sentAt: "2026-11-11T00:00:01Z" }
-            : component === 2
-              ? {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    input: {
-                      ...Schema.decodeUnknownSync(Save)(prior.input.envelope.input),
-                      body: `changed-${cell.pick}`,
-                    },
-                  },
-                }
-              : {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
-                  },
-                };
+
+      const changed = yield* Match.value(component).pipe(
+        Match.when(0, () => Effect.succeed({ ...prior.input, seen: prior.input.seen + 1 })),
+        Match.when(1, () => Effect.succeed({ ...prior.input, sentAt: "2026-11-11T00:00:01Z" })),
+        Match.when(2, () =>
+          Effect.map(Schema.decodeUnknownEffect(Save)(prior.input.envelope.input), (save) => ({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              input: { ...save, body: `changed-${cell.pick}` },
+            },
+          })),
+        ),
+        Match.orElse(() =>
+          Effect.succeed({
+            ...prior.input,
+            envelope: {
+              ...prior.input.envelope,
+              by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
+            },
+          }),
+        ),
+      );
+
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.
       const sameAnswer = move === "retry" || (prior.first._tag === "accepted" && component < 2);
@@ -717,6 +808,7 @@ const walk = Effect.fnUntraced(function* (
 
     const refusing =
       move === "refuse" || move === "refusal_save" || move === "reply_write" || move === "reply_complete";
+
     const fresh = yield* input(cell, refusing);
     control.expected = refusing ? null : fresh;
     control.mode = move;
@@ -740,7 +832,7 @@ const walk = Effect.fnUntraced(function* (
                       : "";
 
     if (refusing) {
-      refusedBodies.push(Schema.decodeUnknownSync(Save)(fresh.envelope.input).body);
+      refusedBodies.push((yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input)).body);
     }
 
     const exit = yield* Effect.exit(live.runner.msg(fresh));
@@ -791,12 +883,18 @@ const walk = Effect.fnUntraced(function* (
       if (move === "check_throw" || move === "update_throw") {
         failures.push(fresh);
         const saved = yield* live.journal.load;
-        expect(saved?.receipts.find((r) => r.letter === fresh.id)).toMatchObject({
+        expect(
+          saved === null
+            ? undefined
+            : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id)),
+        ).toMatchObject({
           input: fresh,
           tries: 1,
           errors: [move === "check_throw" ? "RangeError" : "TypeError"],
         });
-        expect(saved?.observations.filter((o) => o.letter === fresh.id)).toHaveLength(1);
+        expect(saved === null ? undefined : Arr.filter(saved.observations, (o) => o.letter === fresh.id)).toHaveLength(
+          1,
+        );
         expect(saved?.crashes).toBe((before?.crashes ?? 0) + 1);
       }
 
@@ -809,7 +907,10 @@ const walk = Effect.fnUntraced(function* (
         }
 
         control.cut = "";
-        expect((yield* live.journal.load)?.receipts.some((r) => r.letter === fresh.id && r.tries > 0)).toBe(false);
+        const loaded = yield* live.journal.load;
+        expect(
+          loaded === null ? undefined : Arr.some(loaded.receipts, (r) => r.letter === fresh.id && r.tries > 0),
+        ).toBe(false);
       }
 
       control.mode = "";
@@ -829,10 +930,16 @@ const walk = Effect.fnUntraced(function* (
 
       if (move === "lost_observation") {
         const saved = yield* live.journal.load;
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-        expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "interrupted")).toHaveLength(
-          sameRunner ? 0 : 1,
-        );
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+        ).toHaveLength(0);
+        expect(
+          saved === null
+            ? undefined
+            : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "interrupted"),
+        ).toHaveLength(sameRunner ? 0 : 1);
       }
 
       if (
@@ -877,14 +984,23 @@ const walk = Effect.fnUntraced(function* (
 
         if (move === "lost_observation") {
           const saved = yield* live.journal.load;
-          expect(saved?.observations.filter((o) => o.letter === fresh.id && o.phase === "fresh")).toHaveLength(0);
-          expect(saved?.receipts.find((r) => r.letter === fresh.id)?.errors ?? []).toEqual([]);
+          expect(
+            saved === null
+              ? undefined
+              : Arr.filter(saved.observations, (o) => o.letter === fresh.id && o.phase === "fresh"),
+          ).toHaveLength(0);
+          expect(
+            (saved === null
+              ? undefined
+              : Option.getOrUndefined(Arr.findFirst(saved.receipts, (r) => r.letter === fresh.id))
+            )?.errors ?? [],
+          ).toEqual([]);
         }
 
         answers.push({ input: fresh, first: answer });
 
         if (!refusing) {
-          const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+          const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
           versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
         }
       }
@@ -898,7 +1014,7 @@ const walk = Effect.fnUntraced(function* (
       answers.push({ input: fresh, first: answer });
 
       if (!refusing) {
-        const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+        const m = yield* Schema.decodeUnknownEffect(Save)(fresh.envelope.input);
         versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
       }
     }
@@ -916,26 +1032,28 @@ const walk = Effect.fnUntraced(function* (
   }
 
   const letters = yield* Stream.runCollect(live.mailbox.read(NAME, 0));
-  expect(letters.length).toBe([...versions.values()].reduce((a, b) => a + b, 0));
+  expect(letters.length).toBe(Arr.reduce([...versions.values()], 0, (a, b) => a + b));
   yield* check();
 });
 
 export const suite = (harness: Harness, register: Register) =>
   describe("P13 runner admission", () => {
-    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, numRuns = 40) => {
+    const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<string>, runs = COUNTS) => {
       const reached = new Set<string>();
       register(
         name,
         Tape,
         (tape) => {
           const monitor = capture();
+
           return walk(harness, tape, moves, reached, monitor).pipe(Effect.withTracer(monitor.tracer));
         },
-        { ...parameters, numRuns },
+        { ...parameters, numRuns: runsFor(runs) },
         reached,
         required,
       );
     };
+
     law(
       "A2, A4, A10, A12 [secrets]: refusal writes no draft, spends no crash budget and keeps the first bound answer",
       ["admit", "refuse", "legacy_refuse", "invalid", "retry", "reuse", "reopen", "restart"],
@@ -994,7 +1112,7 @@ export const suite = (harness: Harness, register: Register) =>
         "update_abandon_save:reopened",
         "resume_without_charge",
       ],
-      100,
+      { fast: 25, full: 100 },
     );
     const cuts = new Set<string>();
     register(

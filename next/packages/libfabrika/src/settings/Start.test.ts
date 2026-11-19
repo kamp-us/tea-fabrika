@@ -1,4 +1,6 @@
-// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut.
+// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut. P39 slice 3 (ticket
+// 1040) declares `hands.target`, so the declared paths gain it. The memory restart plan declares
+// `desktop.brain-memory` and `desktop.brain-grace`, so they join it too.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -15,6 +17,8 @@ describe("instance start envelope, next/", () => {
     ([recipe, cap]) =>
       Effect.gen(function* () {
         expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
+          "desktop.brain-grace",
+          "desktop.brain-memory",
           "desktop.brain-poll",
           "desktop.brain-start-timeout",
           "desktop.brain-stop-timeout",
@@ -23,7 +27,15 @@ describe("instance start envelope, next/", () => {
           "fabrika-version",
           "gateway.limit",
           "gateway.window",
+          "hands.target",
           "instance.port",
+          // P34c slice 4: the per-program quotas and the brain's reserved room (0147).
+          "limits.recovery",
+          "limits.storage",
+          "limits.writes",
+          // T1041: the inbox cap and the chunk size.
+          "mail.chunk",
+          "mail.unread",
         ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };
@@ -59,9 +71,11 @@ describe("instance start envelope, next/", () => {
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );
 
-  it("format: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
-    // format: schema field names are the serialized Worker protocol.
-    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<typeof import("./Snapshot.ts").Snapshot.Type>();
+  it("type: transport has one snapshot and explicit repo presence, as the approved wire table specifies", () => {
+    // The schema field names are the serialized Worker protocol.
+    expectTypeOf<typeof Start.Input.Type.settings>().toEqualTypeOf<
+      typeof import("@kalfa/config/Snapshot").Snapshot.Type
+    >();
     expectTypeOf<typeof Start.Input.Type.repo>().toEqualTypeOf<{ readonly revision: string } | null>();
   });
 
@@ -92,7 +106,8 @@ describe("instance start envelope, next/", () => {
       const error = new Starts.StartsError({ reason });
       expect(error.reason).toBeInstanceOf(Starts.Missing);
       expect(reason.target).toEqual(target);
-      expect(Object.hasOwn(reason, "cause")).toBe(false);
+      // An error class instance is no record, so its own names are read whole, the hidden ones too.
+      expect(Object.getOwnPropertyNames(reason)).not.toContain("cause");
       expect("cause" in reason).toBe(false);
     },
     StartsTest.options,

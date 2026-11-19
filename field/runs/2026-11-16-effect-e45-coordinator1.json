@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e45-coordinator1",
+  "ticket": "kamp-us/tea-fabrika#1075",
+  "pr": null,
+  "started": "2026-11-16T01:12:09-08:00",
+  "ended": null,
+  "parent": "2026-11-16-effect-e45-review2",
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Record of what E45 (strictBooleanExpressions, ticket 1075, next/ and our tooling) covers, at the request of the merge session, so the E90 slice need not fold. E45 at 43c36a72c0421b0582b3faa46f9a745a24f8ff82 also fixes E90's folders: lib:runtime and app:src, 55 sites, with the same text the E90 slice found. E90 adds nothing and does not fold. The final lock takes two globs for this check: next/apps/fabrika/src/*.ts and next/packages/libfabrika/src/runtime/**/*.ts. The only sites left across the 13 plan tsconfigs are the 7 in oxlint-plugins/effect-jsdocs.ts, excluded by path. The four pre-install CI scripts for the lock exclude, by exact path: .github/ci/changes.mjs, .github/ci/gate.mjs, .github/ci/required.mjs, .github/ci/scheduled.mjs. No code changed in this row's commit.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "A new row, since field rows are never edited. The end time is null because it was not read before the commit.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "coordinator"
+}

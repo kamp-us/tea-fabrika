@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s1-review-round2",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-15T23:36:39-08:00",
+  "ended": "2026-11-15T23:40:45-08:00",
+  "parent": "2026-11-16-port-s1-tests-round2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Recheck of slice S1 (today's tooling, the lint hold on 0113) at eb4fa6ecb, diff 8e5c817..eb4fa6ecb, after the lead's ruling on finding 2026-11-16-extensionless-shell-scripts-escape-hold: sent back to tests, one class. Ruling (a) says a '#!' line naming a shell or Python directly or through env is a script, but runsAsScript (oxlint-plugins/tracked-scripts.ts:62-75) takes the first env word that is not a flag or NAME=value, so the operand of an env option that takes one is read as the interpreter: check() gives [] for '#!/usr/bin/env -S -u FOO bash' and '#!/usr/bin/env -S -C /tmp sh'. The new law's generator (tracked-scripts.test.ts:65-76) draws only 'env' and 'env -S' with no flags, operands or assignments, so a plant that drops the NAME=value skip stays green (6 of 6). Everything else holds: ruling (b) lists the three tsh launchers with the 0525 reason, unedited; ruling (c) is red first on the hold at 8e5c817 (the new law alone fails, 1 of 6) and red under six plants of mine; ruling (d) is the dated note in the plan's S1 row. Law 1's extensionless sibling moving to '#!/usr/bin/env node' is forced by the ruling and loosens nothing. The pinned law's title still says 16 for a set of 19; kept so loosening.sh sees the same title, with the comment above it naming the three.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read-only apart from this row. Plants on a scratch copy, never the branch: BARE dropped, RUNS_AS_SCRIPT unanchored, env read as the name, flags not skipped, Python names dropped, listed files read anyway: each red; NAME=value skip dropped: green. Ran at eb4fa6ecb: nice -n 15 pnpm exec vitest run --maxWorkers=3 oxlint-plugins/tracked-scripts.test.ts, 6 of 6; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint, exit 0 (tracked-scripts: 19 scripts not yet ported); node oxlint-plugins/tracked-scripts.ts, exit 0; tsc -p oxlint-plugins/tsconfig.json --noEmit, exit 0. loosening.sh 8e5c817 eb4fa6ecb: two hits, tracked-scripts.test.ts line 53 (law 1's sibling input, as above) and tracked-scripts.ts line 14 (an import line, not a test), no law loosened. After the fast-forward to eb4fa6ecb the worktree's index and files still held 8e5c817's content; restored with git checkout HEAD on the four paths before any check ran.",
+  "step": "review",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}

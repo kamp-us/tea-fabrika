@@ -1,15 +1,18 @@
-// Branches: the git questions the unlisted check asks of a checkout (0134). This file is the
-// contract only (0095): `BranchesGit.layer` asks real git, `BranchesTest.layer` answers from a
-// model in memory. Today's lead tooling, run on our own laptop; it is not product.
+// Branches: the git questions the unlisted check (0134) and the sev script ask of a checkout. This
+// file is the contract only (0095): `BranchesGit.layer` asks real git, `BranchesTest.layer` answers
+// from a model in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** A git call failed, so the check cannot tell; it never reads a failure as "nothing there". */
-export class BranchesError extends Schema.TaggedError<BranchesError>()("BranchesError", {
-  /** The git subcommand, such as `merge-tree`. */
-  command: Schema.String,
-  reason: Schema.String,
-}) {}
+export class BranchesError extends Schema.TaggedError<BranchesError, { readonly brand: unique symbol }>()(
+  "BranchesError",
+  {
+    /** The git subcommand, such as `merge-tree`. */
+    command: Schema.String,
+    reason: Schema.String,
+  },
+) {}
 
 /** One branch: on the laptop (`refs/heads/`) or pushed (`refs/remotes/origin/`), and its tip. */
 export type Branch = {
@@ -27,9 +30,12 @@ export class Branches extends Context.Service<
     readonly list: Effect.Effect<ReadonlyArray<Branch>, BranchesError>;
     /** How many commits `tip` holds that origin/main does not. */
     readonly ahead: (tip: string) => Effect.Effect<number, BranchesError>;
+    /** How many commits origin/main holds that `tip` does not: 0 when `tip` holds main's head. */
+    readonly behind: (tip: string) => Effect.Effect<number, BranchesError>;
     /**
      * Whether merging `tip` into origin/main would change nothing: its work is on main already,
-     * by any road (a squash merge, a cherry-pick, the same edit made twice). A conflict is `false`.
+     * by any road (a squash merge, a cherry-pick, the same edit made twice). A conflict or no common
+     * ancestor is `false`.
      */
     readonly landsEmpty: (tip: string) => Effect.Effect<boolean, BranchesError>;
   }

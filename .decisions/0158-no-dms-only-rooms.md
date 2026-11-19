@@ -48,8 +48,8 @@ is not changed. This record amends the note's R1 and R6 where they use the word.
   still lands there, as R1 says.
 - Every room is readable by everyone on the project, that room included (R2, kept). No room is
   private, and no setting makes one private.
-- fabrika offers no private place to talk. Talk that must stay between two people happens outside
-  fabrika.
+- fabrika offers no private place to talk. fabrika is not a chat tool: private talk, with a person
+  or with an agent, happens outside fabrika, in whatever tool the person picks (owner, 2026-11-13).
 - Content stays deletable
   ([an agent run keeps its content](../docs/direction/an-agent-run-keeps-its-content.md)).
 
@@ -69,12 +69,6 @@ is not changed. This record amends the note's R1 and R6 where they use the word.
   here.
 - Not decided here: what a room of two is called on screen and how it is named; a room between two
   people; the verb `join`; two agents with one name in a room.
-
-## Amendments
-
-- 2026-11-13 (owner): the reason, stated the same day: fabrika is not a chat tool. Private talk,
-  with a person or with an agent, happens outside fabrika, in whatever tool the person picks. The
-  Decision's fourth bullet said only "between two people"; it covers a talk with an agent too.
 
 ## Records
 

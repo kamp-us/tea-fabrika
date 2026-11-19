@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-leakgrep-commits-reads-grafted-history",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": null,
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/leakgrep.sh",
+    "line": 214
+  },
+  "says": "leakgrep's --commits scans grafted history when the range's base is past a shallow boundary: in a shallow clone, the commits beyond the boundary are listed as the branch's own, and each grafted commit is read as a first commit, all it holds.",
+  "proof": "In two cloud sessions (shallow clones) on 2026-11-18, `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/main..HEAD` reported 2,587 hits on two branches whose own 408 and 139 commits read clean from their real merge base; every hit was in old main history already on main. leakgrep.sh:214 hands the range to `git rev-list --reverse --parents` as given, and rev-list in a shallow clone stops at the grafted commits, which it lists with no parents.",
+  "cost": "Every leak check run from a cloud session on a branch older than the clone's depth fails with thousands of false hits, so it cannot gate a push or a merge there, and a lead is tempted to read past it.",
+  "head": "92f5f416bfc060b67455acfecf19c8818d7ef9ed",
+  "ticket": null,
+  "pr": null
+}

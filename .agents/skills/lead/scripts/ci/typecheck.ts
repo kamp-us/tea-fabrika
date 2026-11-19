@@ -1,20 +1,21 @@
-// typecheck.ts: what CI's `typecheck` job says about a lane's pushed head. Today's lead tooling
+// typecheck.ts: what CI's `typecheck` job says about a quest's pushed head. Today's lead tooling
 // (0064). No push waits on a laptop typecheck: CI runs it (0133), as its own job in check.yaml, so
 // its answer comes the moment that one job ends, never after the whole run. chain.ts reads it right
 // after the pull request opens, before loosening.sh:
 //
-//   green    the job passed: the lane goes on to loosening.sh
-//   red      it failed with type errors: the lane goes back to tests when every error is in an
+//   green    the job passed: the quest goes on to loosening.sh
+//   red      it failed with type errors: the quest goes back to tests when every error is in an
 //            exam path (exam-paths.json, read by step-commit's exam.py), else to build, with the
 //            error lines from the job's log
 //   skipped  it could not be read, it failed with no type error, it ended another way (canceled,
-//            skipped), or it did not end within the time limit: the lane goes on, and its last
+//            skipped), or it did not end within the time limit: the quest goes on, and its last
 //            line says the typecheck gave no answer and why
 //
 // The wait polls that one job's check run at the head, every `every` seconds, within `minutes`. A
 // red `check` job (lint, build) is not this file's business: ci-required holds the merge for it.
 
-import { Duration, Effect, Option, Path, Ref, Schedule, Schema } from "effect";
+import { String as Str, pipe, Option, Array as Arr, Duration, Effect, Path, Ref, Schedule, Schema } from "effect";
+
 import { exec } from "../flow/host.ts";
 import { Checks, type Job } from "./Checks.ts";
 
@@ -24,13 +25,14 @@ export const Verdict = Schema.TaggedUnion({
   red: { to: Schema.Literals(["tests", "build"]), lines: Schema.Array(Schema.String) },
   skipped: { reason: Schema.String },
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /** The job in check.yaml that runs `pnpm typecheck` alone; workflow-lint.ts holds it there. */
 export const JOB = "typecheck";
 
 /**
- * Minutes the lane waits for the job to end, from the push. The job's own limit is 10 minutes; a
+ * Minutes the quest waits for the job to end, from the push. The job's own limit is 10 minutes; a
  * queue on a busy day adds to it, so twice that. `CHAIN_TYPECHECK_MINUTES` overrides it.
  */
 export const MINUTES = 20;
@@ -57,36 +59,43 @@ export type Found = { readonly path: string; readonly text: string };
 
 // `pnpm -r` puts the package's folder before each line of its output.
 const PREFIX = /^(\S+) typecheck: (.*)$/;
+
 // tsc's plain format, the one it prints to a pipe: `file(line,col): error TSnnnn: message`.
 const ERROR = /^(.+?)\(\d+,\d+\): error TS\d+: /;
+
 // What GitHub puts before each line of a job's log: the runner's time, then a `##[error]` mark on
 // a line the runner flagged.
 const STAMP = /^﻿?\d{4}-\d\d-\d\dT[\d:.]+Z (?:##\[error\])?/;
+
 // oxlint-disable-next-line no-control-regex -- the escape that starts a terminal color code
 const COLOR = /\u001B\[[0-9;]*m/g;
 
 /** A job's log as the command printed it: no time, no `##[error]` mark, no color. */
 export const logText = (log: string): string =>
-  log
-    .split("\n")
-    .map((line) => line.replace(/\r$/, "").replace(STAMP, "").replaceAll(COLOR, ""))
-    .join("\n");
+  pipe(
+    log,
+    Str.split("\n"),
+    Arr.map((line) => pipe(line, Str.replace(/\r$/, ""), Str.replace(STAMP, ""), Str.replaceAll(COLOR, ""))),
+    Arr.join("\n"),
+  );
 
 // The checkout's own folder in a line: an absolute path that ends `work/<name>/<name>/`, the way an
 // Actions runner lays out a repo's workspace. Read from the line itself, so no runner's home is
 // written here, and a path that does not end that way stays as it is.
 const CHECKOUT = String.raw`(?:/[^\s/"'()]+)*/work/([^\s/"'()]+)/\1/`;
+
 const ROOTED = new RegExp(`^${CHECKOUT}`);
+
 const ANYWHERE = new RegExp(CHECKOUT, "g");
 
 /** `text` with every checkout folder taken off, so each path in it is a repo path. */
-const fromRepo = (text: string): string => text.replaceAll(ANYWHERE, "");
+const fromRepo = (text: string): string => pipe(text, Str.replaceAll(ANYWHERE, ""));
 
 /** `file` read from the folder `dir`, both in the repo, as one path with no `.` or `..`. */
 const joined = (dir: string, file: string): string => {
   const parts: string[] = [];
 
-  for (const part of `${dir}/${file}`.split("/")) {
+  for (const part of pipe(`${dir}/${file}`, Str.split("/"))) {
     if (part === "..") {
       parts.pop();
     } else if (part !== "" && part !== ".") {
@@ -94,7 +103,7 @@ const joined = (dir: string, file: string): string => {
     }
   }
 
-  return parts.join("/");
+  return Arr.join(parts, "/");
 };
 
 /**
@@ -108,7 +117,7 @@ export const errorsIn = (output: string): ReadonlyArray<Found> => {
   let open = -1;
   let from = "";
 
-  for (const raw of output.split("\n")) {
+  for (const raw of pipe(output, Str.split("\n"))) {
     const prefixed = PREFIX.exec(raw);
     const dir = prefixed?.[1] ?? ".";
     const rest = prefixed?.[2] ?? raw;
@@ -129,9 +138,9 @@ export const errorsIn = (output: string): ReadonlyArray<Found> => {
     }
 
     const file = error[1] ?? "";
-    const outside = file.startsWith("/") ? file : joined(dir, file);
-    const path = ROOTED.test(file) ? file.replace(ROOTED, "") : outside;
-    found.push({ path, text: `${path}${fromRepo(rest.slice(file.length))}` });
+    const outside = pipe(file, Str.startsWith("/")) ? file : joined(dir, file);
+    const path = ROOTED.test(file) ? pipe(file, Str.replace(ROOTED, "")) : outside;
+    found.push({ path, text: `${path}${fromRepo(pipe(rest, Str.slice(file.length)))}` });
     open = found.length - 1;
     from = dir;
   }
@@ -143,7 +152,7 @@ export const errorsIn = (output: string): ReadonlyArray<Found> => {
 export type Ended = { readonly conclusion: string | null; readonly output: string };
 
 /**
- * The Check, pure: what the ended job means for the lane. `success` is green. A `failure` with
+ * The Check, pure: what the ended job means for the quest. `success` is green. A `failure` with
  * error lines is red, sent to tests when every error's path is in `exam`, else to build, with at
  * most `LINES` lines. A failure with no error line is no answer about the code, so it is skipped
  * with the log's last line; so is any other ending, with its name.
@@ -158,21 +167,32 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
   }
 
   if (errors.length === 0) {
-    const last = ended.output.trim().split("\n").at(-1) ?? "";
+    const last = pipe(Str.trim(ended.output), Str.split("\n")).at(-1) ?? "";
+
     return notRun(`CI's ${JOB} job failed with no error line: ${last}`);
   }
 
-  const to = errors.every((e) => exam.has(e.path)) ? "tests" : "build";
-  const cut = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 3)}...` : line);
-  const all = errors.flatMap((e) => e.text.split("\n")).map(cut);
+  const to = Arr.every(errors, (e) => exam.has(e.path)) ? "tests" : "build";
+  const cut = (line: string) => (line.length > WIDTH ? `${pipe(line, Str.slice(0, WIDTH - 3))}...` : line);
+
+  const all = Arr.map(
+    Arr.flatMap(errors, (e) => pipe(e.text, Str.split("\n"))),
+    cut,
+  );
+
   const more = `... and ${all.length - LINES + 1} more lines`;
   const lines = all.length > LINES ? [...all.slice(0, LINES - 1), more] : all;
+
   return Verdict.cases.red.make({ to, lines });
 };
 
-/** One line for the lane's log: green, red with where it goes and its first line, or why not. */
+/** One line for the quest's log: green, red with where it goes and its first line, or why not. */
 export const summary = (v: Verdict): string =>
-  v._tag === "green" ? "green" : v._tag === "red" ? `red, to ${v.to}: ${v.lines[0] ?? ""}` : `no answer: ${v.reason}`;
+  Verdict.match(v, {
+    green: () => "green",
+    red: (v) => `red, to ${v.to}: ${v.lines[0] ?? ""}`,
+    skipped: (v) => `no answer: ${v.reason}`,
+  });
 
 /** What one wait needs: the main checkout (for exam-paths.json), the head, the limits. */
 export type Args = {
@@ -190,34 +210,39 @@ const examIn = Effect.fn("typecheck.examIn")(function* (main: string, paths: Rea
   const list = path.join(main, "exam-paths.json");
   const ran = yield* exec(main, "python3", ["-I", script, list, ...paths]);
   // 0 is no exam path and 1 lists them; anything else read no list, so no error counts as exam.
-  const listed = ran.code === 1 ? ran.output.split("\n").filter(Boolean) : [];
-  return new Set(listed.map((l) => l.split("\t")[0] ?? l));
+  const listed = ran.code === 1 ? Arr.filter(pipe(ran.output, Str.split("\n")), Boolean) : [];
+
+  return new Set(Arr.map(listed, (l) => pipe(l, Str.split("\t"))[0] ?? l));
 });
 
 /** The job has not ended, or GitHub did not answer: the poll tries again. */
-class Pending extends Schema.TaggedError<Pending>()("Pending", { reason: Schema.String }) {}
+class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbol }>()("Pending", {
+  reason: Schema.String,
+}) {}
 
 /** Wait for the job at `head` to end, then read it; never fails. */
 export const wait = Effect.fn("typecheck.wait")(
   function* (a: Args) {
     if (!/^[0-9a-f]{40}$/.test(a.head)) {
-      return notRun(`the lane has no head to read CI at (${a.head || "none"})`);
+      return notRun(`the quest has no head to read CI at (${a.head || "none"})`);
     }
 
     const checks = yield* Checks;
     const last = yield* Ref.make(`no ${JOB} job yet`);
+
     const poll = checks.job(a.head, JOB).pipe(
       Effect.flatMap((found) =>
         Option.isSome(found) && found.value.status === "completed"
           ? Effect.succeed(found.value)
           : Effect.fail(
-              new Pending({
+              Pending.make({
                 reason: Option.isSome(found) ? `the ${JOB} job was ${found.value.status}` : `no ${JOB} job yet`,
               }),
             ),
       ),
       Effect.tapError((e) => Ref.set(last, e.reason)),
     );
+
     const ended: Option.Option<Job> = yield* poll.pipe(
       Effect.retry({ schedule: Schedule.spaced(Duration.seconds(a.every)) }),
       Effect.timeoutOption(Duration.minutes(a.minutes)),
@@ -225,14 +250,18 @@ export const wait = Effect.fn("typecheck.wait")(
 
     if (Option.isNone(ended)) {
       const said = yield* Ref.get(last);
-      return notRun(`CI's ${JOB} job at ${a.head.slice(0, 8)} did not end within ${a.minutes} minutes (${said})`);
+
+      return notRun(
+        `CI's ${JOB} job at ${pipe(a.head, Str.slice(0, 8))} did not end within ${a.minutes} minutes (${said})`,
+      );
     }
 
     const job = ended.value;
     const output = job.conclusion === "failure" ? logText(yield* checks.log(job.id)) : "";
     const errors = errorsIn(output);
-    const paths = [...new Set(errors.map((e) => e.path))];
+    const paths = [...new Set(Arr.map(errors, (e) => e.path))];
     const exam = paths.length === 0 ? new Set<string>() : yield* examIn(a.main, paths);
+
     return verdict({ conclusion: job.conclusion, output }, errors, exam);
   },
   // The poll retries Pending and ChecksError until the limit; only the log's read reaches here.

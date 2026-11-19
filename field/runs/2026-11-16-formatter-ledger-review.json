@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-formatter-ledger-review",
+  "ticket": "kamp-us/tea-fabrika#1087",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T21:10:38-08:00",
+  "parent": null,
+  "role": "hand",
+  "step": "review",
+  "model": null,
+  "effort": null,
+  "outcome": "pass",
+  "why": "Today's lead tooling. Independent source review found no fault in the three-path diff. Fresh no-fix diagnostics follow successful fix reports before ledger matching and pruning; ordinary and scoped behavior remain intact. No tracked ledger entry, directive, rule, permission, assertion or timeout was weakened.",
+  "note": "Read exact head, original wrapper, ledger/advice adapters, fixture setup and cleanup, installed oxlint 1.90.0 help, and supplied 27-pass and root-cause logs. No tests, compiler, broad selection, signals, CI wait, source changes, ref changes or public writes by this reviewer. Runtime logs are supplied evidence. Compiler and CI proof, PR and landing remain the merger's work. Review start time was not sampled and remains null.",
+  "head": "2d7ac89abbd5f79172b02817903e444024221ad2",
+  "base": "dac18a5ad407e26509acd4bd8d3ebe178aab8954",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null
+}

@@ -1,12 +1,13 @@
 ---
 id: 0129
-title: AGENTS.md becomes a short map, each rule leaving it by one of three moves, after the decided rules have moved and one test of long against short has run
-status: amended-in-part by [0180](0180-instruction-files-take-quick-edits.md)
+title: AGENTS.md becomes a short map, each rule leaving it by one of three moves, in one pull request with a table of every line removed
+status: superseded
+successor: "0610"
 date: 2026-11-11
 tags: [agents-md, agents, docs, rules, lint, decisions, discovery, map]
 ---
 
-# 0129: AGENTS.md becomes a short map, each rule leaving it by one of three moves, after the decided rules have moved and one test of long against short has run
+# 0129: AGENTS.md becomes a short map, each rule leaving it by one of three moves, in one pull request with a table of every line removed
 
 ```mermaid
 flowchart TD
@@ -21,22 +22,22 @@ flowchart TD
 
 ```text
 before   AGENTS.md   685 lines, 12 sections, every rule for both versions in one file
-after    AGENTS.md   a map of about 150 lines: where to read and write, the three checks,
-                     the public repo rules, the laptop caps
+after    AGENTS.md   a short map, within the `records.map.max-bytes` setting (0608): where to
+                     read and write, the three checks, the public repo rules, the laptop caps
          next/AGENTS.md and others   the rules for one folder, read when working there
 ```
 
 The same rules exist after as before. What changes is where each one is read.
 
-**What this decides:** how the top instructions file gets short, in which order, and what proves
-no rule was lost.
+**What this decides:** how the top instructions file gets short, and what proves no rule was lost.
 
 ## Context
 
 The fifth principle of how we get work done says the repo is the memory and the top file is a
 map. `AGENTS.md` is 685 lines on 2026-11-11, and every agent reads all of it for every job. The
 teams that study read keep theirs short and point from it, or scope rules by folder. No
-measurement here shows the long file hurts, so that is tested before the file is cut.
+measurement here shows the long file hurts. A test of long against short was to come before the
+cut, and [0180](0180-instruction-files-take-quick-edits.md) withdrew it.
 [0115](0115-decided-rules-live-in-decision-files.md) already moves every decided rule into a
 decision file, which empties much of `AGENTS.md` by itself.
 
@@ -51,17 +52,14 @@ decision file, which empties much of `AGENTS.md` by itself.
   [0008](0008-decision-discovery-is-the-agents-md-contract.md)).
 - **It is about one folder:** it moves to that folder's own `AGENTS.md`, such as `next/AGENTS.md`,
   which an agent reads when it works there.
+- **Its size is a setting, not a line count:** `records.map.max-bytes`, in `.kalfa/kalfa.toml` under
+  `[records.map]`, for the root alone and for the root with each folder's file
+  ([0608](0608-the-map-fits-its-readers-limits.md)).
 - What stays: what the repo is, the table of where to read and where to write, decision discovery,
   the three checks and the narrowest-check table, the public repo rules, and the laptop caps.
 
-**The order** (withdrawn by [0180](0180-instruction-files-take-quick-edits.md): the cut lands with
-no test first; the rest of this file still holds)
-
-1. 0115's move of decided rules lands first.
-2. One test runs: the same step, on the same tickets, with the long file and with a short one, and
-   the two are compared on send-backs, cost and what the agent got wrong. It is an experiment with
-   its own write-up.
-3. Then the cut, as one pull request.
+**The order:** the cut is one pull request, opened as soon as it is written, with no test first
+([0180](0180-instruction-files-take-quick-edits.md)).
 
 **Binding constraints**
 
@@ -75,5 +73,5 @@ no test first; the rest of this file still holds)
 - An agent's first read gets much shorter, and a rule is read where it applies.
 - The cost: it is the most-read file in the repo, so a lost rule would be felt at once and found
   late. The table is the guard.
-- If the test shows the short file does worse, the cut waits and the result goes to the owner.
-- Not decided here: the exact line count, and which folders get a file of their own.
+- A rule an agent missed after the cut is put back, or given a better home, the day it is seen.
+- Not decided here: which folders get a file of their own.

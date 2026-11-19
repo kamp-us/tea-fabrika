@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1041-plan",
+  "ticket": "kamp-us/tea-fabrika#1041",
+  "pr": "kamp-us/tea-fabrika#1310",
+  "started": null,
+  "ended": "2026-11-15T02:45:40-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for pipe plumbing in next/ (docs/plan/lanes/t1041-PLAN.md): a full inbox answers full, a writer sends in chunks with send_chunks, and the inbox cap and the chunk size are the settings mail.unread and mail.chunk. Committed at 67d97d3f5 (02:45:40 Pacific). Its amendment (the reader's type rides as `as`, and the ledger gains a position-only read) came with the second tests round at 92facd034 (03:48:54) and was approved at 236fdab21 (03:49:30).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Written after the fact, in the review's first fix round, from the git log of the plan file's commits. The start time, the model, the tokens and the tool calls were not recorded, so they stay unknown.",
+  "step": "plan"
+}

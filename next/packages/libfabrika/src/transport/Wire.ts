@@ -1,10 +1,20 @@
 /**
  * The wire schemas of the gateway transport: the client hello, who is connected, what an answer
  * to a request can be, and the attachment saved for each connection.
- *
- * @stability unstable
  */
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
+
+export {
+  /**
+   * How many entries one `ledger.read` answer holds at most, and how many spans one `spans.read`
+   * answer holds, re-exported from `Rev.ts`, the log's own page size. The door cuts every page
+   * here, so a client that gets a full page knows to ask again after its last entry, and a shorter
+   * page is the last.
+   *
+   * @category constants
+   */
+  PAGE,
+} from "../Rev.ts";
 
 /**
  * Schema for the hello a client sends to start a connection.
@@ -17,7 +27,6 @@ import { Schema } from "effect";
  * url, the tab and the nonce. `ping` is a duration such as `30s`. `platform` and `os` name the
  * client's runtime, and `sentAt` is the client's own clock time.
  *
- * @stability unstable
  * @category models
  */
 export const Hello = Schema.Struct({
@@ -38,7 +47,6 @@ export const Hello = Schema.Struct({
  * Schema for the identity of an admitted connection: the key, the person it belongs to, and
  * whether it acts as a window or an agent.
  *
- * @stability unstable
  * @category models
  */
 export const Who = Schema.Struct({
@@ -51,7 +59,6 @@ export const Who = Schema.Struct({
  * Schema for the outcome of asking whether a key may connect: `admitted` with its identity, or
  * `refused` with the reason `not_granted`.
  *
- * @stability unstable
  * @category models
  */
 export const Admission = Schema.TaggedUnion({
@@ -68,7 +75,6 @@ export const Admission = Schema.TaggedUnion({
  * milliseconds, at least 1. `parked` carries no reply yet: it names the stream and position the
  * request waits on.
  *
- * @stability unstable
  * @category models
  */
 export const Answer = Schema.TaggedUnion({
@@ -85,7 +91,6 @@ export const Answer = Schema.TaggedUnion({
 /**
  * Schema for a rate refusal with the earliest retry delay in milliseconds.
  *
- * @stability unstable
  * @category models
  */
 export const RateRefusal = Schema.TaggedStruct("refused", {
@@ -96,7 +101,6 @@ export const RateRefusal = Schema.TaggedStruct("refused", {
 /**
  * Identifies a failed rate count by the static Error message preserved across RPC.
  *
- * @stability unstable
  * @category models
  */
 export const RateCountFailure = Schema.Struct({
@@ -107,11 +111,10 @@ export const RateCountFailure = Schema.Struct({
  * Schema for one parked request: its JSON-RPC id, the stream it waits on and the position it
  * waits after.
  *
- * @stability unstable
  * @category models
  */
 export const Wait = Schema.Struct({
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   stream: Schema.String,
   after: Schema.Int,
 });
@@ -125,7 +128,6 @@ export const Wait = Schema.Struct({
  * `online` is after a successful hello. Only `online` carries the identity, the negotiated version, the
  * parked `waits`, a `watching` flag and a `busy` flag.
  *
- * @stability unstable
  * @category models
  */
 export const Attached = Schema.TaggedUnion({

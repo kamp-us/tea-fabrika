@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e86-tests",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T00:45:19-08:00",
+  "ended": "2026-11-16T01:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E86 of the Effect-checker sweep, processEnv and processEnvInEffect in next/apps/fabrika's top src/ files, in next/. Code fixes only: no lock line and no LOCKED row, as the lead's note says for a judgment slice (0589's first amendment); a lock entry and LOCKED row written first were taken out again. Recounted at eeb8ecdbb (the stack top, fabrikalfa/test-sqlite-store, with pull request 1366 merged) with effect-tsgo diagnostics on next/apps/fabrika/tsconfig.json and only the two checks at error through --lspconfig: 105 hits in src/*.ts, not the plan's 97. 103 sit in exam paths, all fixed; 2 are in a product file, local-instance.ts:36 and :37 (the DO_NOT_TRACK and ALCHEMY_HOME writes), left for the build. Recount after: 0 exam hits, the same 2 product hits. The fixes: reads go through Effect's Config with ConfigProvider.fromEnv({ preserveEmptyStrings: true }) made when the read runs, the same edits as the unmerged E49 branch so the two slices merge clean (hands-launcher PATH, repository-open PATH twice, instance-one-file P16_LOCAL_BAR, P16_BRAIN and CI, port-home T502_PORT_HOME at collection). Every set-and-restore of a variable that Alchemy, the local instance or a child reads from process.env itself now goes through one new test support file, env.test-support.ts: changeEnv saves each variable through Config and sets the new ones, answering the function that puts them back; scopedEnv is that for a scope; keptEnv only puts back a variable the code under test sets (ALCHEMY_HOME); noTracking sets DO_NOT_TRACK for good, as localInstance does. It replaces the three copies of a private env helper (sibling.laws, start-child.test-support, tezgah-runner.laws) and the hand-written blocks in 14 more files. Its three writes (set, delete, the DO_NOT_TRACK set) each carry one reasoned @effect-diagnostics-next-line processEnv:off line, the owner's Q7 case: code reads the variable from process.env itself, and Config cannot write one. One more reasoned line in sibling-objects.test-support.ts:58, the T502_PORT read as the Worker module loads in Node and in workerd, where no Effect runs (Config would throw in workerd where the read gave NaN). 4 ignore lines in all. One change in behavior: the DO_NOT_TRACK writes in sibling.laws, start-child.test-support, tezgah-runner.laws and scheduled-job-alarm were scoped and are now never put back, as localInstance's own write is never put back, so nothing Alchemy runs after a scope sends. no-secret-env stays: a probe showed the checker misses a form ours refuses.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "plants": [
+    {
+      "law": "L1: a hit of processEnv or processEnvInEffect in a locked folder fails the checker under the project's own config (run while the E86 lock was in place, before the lead's note took the lock out)",
+      "plant": "env.test-support.ts: `export const plantedRead = process.env.E86_PLANT` and `Effect.sync(() => process.env.E86_PLANT)`; effect-tsgo diagnostics --file printed `error effect(processEnv)` at 16,28 and `error effect(processEnvInEffect)` at 17,50",
+      "result": "red"
+    },
+    {
+      "law": "L2: oxlint-plugins/effect-checks.test.ts with a processEnv LOCKED row for next/apps/fabrika/src/*.ts (row taken out after the lead's note)",
+      "plant": "processEnv dropped from the app tsconfig's src/*.ts entry: AssertionError, 70 files listed with processEnv off",
+      "result": "red"
+    },
+    {
+      "law": "L2: the same, with a processEnvInEffect LOCKED row",
+      "plant": "processEnvInEffect set to warning in that entry: AssertionError, 70 files listed at warning",
+      "result": "red"
+    },
+    {
+      "law": "L4: a reasoned @effect-diagnostics-next-line silences the line after it",
+      "plant": "a probe file with `// @effect-diagnostics-next-line processEnv:off -- a probe` above a process.env read: that line was not flagged, the unreasoned reads around it were",
+      "result": "green"
+    },
+    {
+      "law": "0573's swap test for no-secret-env: does the checker catch every form ours refuses",
+      "plant": "a probe file in next/apps/fabrika/src with both checks at error: `process.env.GITHUB_TOKEN` and `process.env[\"GITHUB_TOKEN\"]` flagged, `delete process.env.Z` flagged, but `const { GITHUB_TOKEN } = process.env` not flagged (nor `process.env` alone or Object.assign(process.env, ...)); ours refuses the destructured form, so ours stays",
+      "result": "green"
+    }
+  ],
+  "note": "No law changed: the changed files are integration laws whose assertions are untouched; only how they set the environment changed. Ran here: the lock law oxlint-plugins/effect-checks.test.ts (1 passed, with and without the E86 row, on Node 26.13.0); a one-off script outside the repo that imported env.test-support.ts and checked a set, an empty and an unset variable, a kept one the code sets, the restore function and noTracking: all came back as they were. effect-tsgo diagnostics with the app's own config: only 4 TS377000 warnings (directive has no effect) at env.test-support.ts:19, :22, :66 and sibling-objects.test-support.ts:58, since processEnv is off until the integrator's lock, the same state E49 is in (Q1 to Q3: the lines and the lock land together). pnpm typecheck, run once: 28 packages Done; next/apps/fabrika fails on exactly those 4 TS377000 warnings, and pnpm then stopped apps/fabrika (today's app, untouched). pnpm format and pnpm lint pass (a first lint failed lint:dead on noTracking, then called only from test files; start-child.test-support.ts now calls it too). The list ratchet exits 0. Not run: every changed .integration. file (they start workerd or children; the brief allows none here), so the lead or a box runs them. The other 32 app-project hits are outside app:src (e2e, the top files, the P19 fixture), E49's.",
+  "step": "tests"
+}

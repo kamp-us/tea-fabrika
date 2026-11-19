@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-app-settings-files-import-effect-barrel",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/libfabrika/src/settings/App.ts",
+    "line": 8
+  },
+  "says": "In next/, main's ticket 1076 files in libfabrika import Effect by name from the barrel, against 0577's namespace form for libraries: settings/App.ts:8 (Schema), settings/Load.ts:8 (Effect, FileSystem, Path) and settings/App.test.ts:21-22 (Effect, Exit, FileSystem, Layer, Path, PlatformError, Schema, and Digest from effect/crypto).",
+  "proof": "git show 87e9b955b79bb973d9e9ef044cb1b909926f71f9:next/packages/libfabrika/src/settings/App.ts line 8 reads `import { Schema } from \"effect\";`, the same in commit 19cc78544; .decisions/0577-libraries-namespace-programs-barrel-imports.md says next/packages/* use `import * as X from \"effect/X\"`. The settings folder holds no preferNamespaceImport lock, so pnpm typecheck passes.",
+  "cost": "The folder's namespace lock (E61) gets 12 more names to convert, and each new settings file copies the barrel form.",
+  "head": "25c68982e142eee2e1514303cbd36ec944ed7528",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1562"
+}

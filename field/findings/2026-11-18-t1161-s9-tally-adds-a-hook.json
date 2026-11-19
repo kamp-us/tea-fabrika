@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-t1161-s9-tally-adds-a-hook",
+  "date": "2026-11-18",
+  "by": "review",
+  "model": "opus",
+  "rule": "rule_break",
+  "location": {
+    "path": ".github/ci/workflow-lint/scheduled.test.ts",
+    "line": 1610
+  },
+  "says": "In today's CI tooling, the fix round adds an afterAll hook to scheduled.test.ts, which had none, to tally S9's coverage, where 0579 says hooks are not exported by the law toolbox; fast-check's examples parameter in the law's options would reach every place and form without a hook.",
+  "proof": "`git show 279f97ee0:.github/ci/workflow-lint/scheduled.test.ts | grep -c afterAll` prints 0; at c83fe39bc line 6 is `import { afterAll, expect, it } from \"vitest\";` and line 1610 is `afterAll(() => {`. .decisions/0579-property-laws-use-it-prop.md: Hooks are not exported: afterAll and the rest.",
+  "cost": "One more hook for 0579's sweep to remove. A tally that only runs in a hook also fails as a file error, not as the law that missed a case.",
+  "head": "c83fe39bc955f719297843d0cf36f643235f4065",
+  "ticket": "kamp-us/tea-fabrika#1161",
+  "pr": "kamp-us/tea-fabrika#1623"
+}

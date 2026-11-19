@@ -1,0 +1,292 @@
+import fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import {
+  checkHolds,
+  questRoot,
+  questStuck,
+  lockfileBehind,
+  pinFolder,
+  pinsFolder,
+  questKeyed,
+  startHead,
+  wipBranch,
+  workspaceGlobs,
+} from "./quest.ts";
+
+// Today's tooling. Pure rules drive.ts and gc.ts share.
+const options = { seed: 119120, numRuns: 300 };
+
+const branch = fc.stringMatching(/^fabrikalfa\/[a-z0-9]{1,8}(-[a-z0-9]{1,4})?$/);
+
+const step = fc.constantFrom("tests", "build", "mutation", "review", "lead");
+
+describe("quest rules, today's tooling", () => {
+  // Plant: always append -wip. p12, 2026-11-09: a -wip quest was backed up to p12-wip-wip.
+  it("the backup branch ends in exactly one -wip, and a -wip branch is kept as it is", () => {
+    fc.assert(
+      fc.property(branch, fc.nat({ max: 3 }), (b, n) => {
+        const quest = b + "-wip".repeat(n);
+        const to = wipBranch(quest);
+        expect(to).toMatch(/(?<!-wip)-wip$/);
+        expect(to.replace(/-wip$/, "")).toBe(b);
+
+        if (n === 1) {
+          expect(to).toBe(quest);
+        }
+      }),
+      options,
+    );
+  });
+
+  // Plants: read only the branch's tip (the old rule); take the saved head over a newer tip; take the
+  // first tip over a newer one. layers, 2026-11-09: a lead merge pushed only to -wip was skipped.
+  it("starts at the newest of the branch, its -wip backup and the saved head; an off-branch save loses", () => {
+    // One line of history, commits "c0" < "c1" < ...; "x<n>" is off the line and holds nothing.
+    const at = (c: string) => Number(c.slice(1));
+    const isAncestor = (a: string, b: string) => (a[0] === "c" && b[0] === "c" ? at(a) <= at(b) : a === b);
+    const tip = fc.nat({ max: 9 }).map((n) => `c${n}`);
+    fc.assert(
+      fc.property(
+        fc.option(tip, { nil: undefined }),
+        fc.option(tip, { nil: undefined }),
+        fc.option(
+          fc.oneof(
+            tip,
+            fc.nat({ max: 9 }).map((n) => `x${n}`),
+          ),
+          { nil: undefined },
+        ),
+        (onBranch, onWip, saved) => {
+          const pushed = [onBranch, onWip].filter((t): t is string => t !== undefined);
+          const got = startHead(pushed, saved, isAncestor);
+          const newest = pushed.toSorted((a, b) => at(b) - at(a))[0];
+
+          const savedAhead =
+            saved !== undefined && (newest === undefined || (saved[0] === "c" && at(saved) > at(newest)));
+
+          expect(got).toBe(savedAhead || newest === undefined ? saved : newest);
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: keep any saved root the base holds (the old rule); always take the fresh merge base.
+  // ci375 tests6, 2026-11-09: after a catch-up, 48 of main's squash commits read as unsigned.
+  it("the quest root is the fresh merge base unless the base holds a saved root the merge base does not", () => {
+    // One line of history, "c0" < "c1" < ...; "x<n>" is off the line and holds nothing.
+    const at = (c: string) => Number(c.slice(1));
+    const isAncestor = (a: string, b: string) => (a[0] === "c" && b[0] === "c" ? at(a) <= at(b) : a === b);
+    const on = fc.nat({ max: 9 });
+    fc.assert(
+      fc.property(
+        on,
+        on,
+        fc.option(
+          fc.oneof(
+            on.map((n) => `c${n}`),
+            on.map((n) => `x${n}`),
+          ),
+          { nil: undefined },
+        ),
+        (a, b, saved) => {
+          const [fresh, base] = [`c${Math.min(a, b)}`, `c${Math.max(a, b)}`];
+          const got = questRoot(saved, fresh, base, isAncestor);
+          const between = saved !== undefined && saved[0] === "c" && at(saved) > at(fresh) && at(saved) <= at(base);
+          expect(got).toBe(between ? saved : fresh);
+        },
+      ),
+      options,
+    );
+  });
+
+  // Plants: waive every stale link; waive a stale link of a step the quest signed; waive other stuck;
+  // hold a missing signature.
+  // themes tests4, 2026-11-09: PR 565's lead link on ticket 343 made the quest's tests step stale_link lead.
+  // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the quest after 0161.
+  it("holds every stuck answer except a missing signature and a stale link of a step the quest has not signed", () => {
+    const answer = fc.oneof(
+      fc.record({ _tag: fc.constant("stuck"), reason: fc.constant("stale_link"), step }),
+      fc.record({
+        _tag: fc.constant("stuck"),
+        reason: fc.constantFrom("unsigned_commit", "broken_chain", "build_touched_exam", "no_exam_list"),
+      }),
+      fc.record({
+        _tag: fc.constant("ask"),
+        to: fc.constant("owner"),
+        for: fc.constant("exam_read"),
+      }),
+    );
+
+    fc.assert(
+      fc.property(fc.array(answer), fc.uniqueArray(step), (answers, signed) => {
+        const quest = new Set<string>(signed);
+        const out = [...answers.map((a) => JSON.stringify(a)), "commits: noise"].join("\n");
+        const held = questStuck(out, quest).map((l) => JSON.parse(l));
+
+        const want = answers.filter(
+          (a) =>
+            a._tag === "stuck" &&
+            a.reason !== "unsigned_commit" &&
+            !(a.reason === "stale_link" && "step" in a && !quest.has(a.step)),
+        );
+
+        expect(held).toEqual(want);
+        const stuck = answers.some((a) => a._tag === "stuck");
+        expect(checkHolds(0, out, quest)).toBe(false);
+        expect(checkHolds(1, out, quest)).toBe(want.length > 0 || !stuck);
+        expect(checkHolds(2, out, quest)).toBe(true);
+      }),
+      options,
+    );
+  });
+});
+
+describe("the lockfile follows the manifests, today's tooling", () => {
+  const globs = ["apps/*", "packages/*", "oxlint-plugins", "!packages/old"];
+  const dep = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
+  const version = fc.stringMatching(/^[0-9]\.[0-9]{1,2}\.[0-9]$/);
+  const deps = fc.dictionary(dep, version, { maxKeys: 4 });
+
+  const locked = fc.record({
+    dependencies: deps,
+    devDependencies: deps,
+  });
+
+  const loose = fc.record({
+    scripts: fc.dictionary(dep, fc.string({ maxLength: 6 }), { maxKeys: 3 }),
+    version,
+  });
+
+  const member = fc.constantFrom("package.json", "apps/fabrika/package.json", "oxlint-plugins/package.json");
+
+  const outside = fc.constantFrom(
+    "fixtures/slugify/repo/package.json",
+    "packages/old/package.json",
+    "experiments/results/x-package.json",
+  );
+
+  const text = (o: object) => JSON.stringify(o, null, "\t");
+  const reversed = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).toReversed());
+
+  // Plant: compare scripts too; compare raw text; drop the reorder canon.
+  it("a workspace manifest is behind exactly when a locked field changed, never on a reorder or other fields", () => {
+    fc.assert(
+      fc.property(member, locked, fc.option(locked), loose, loose, (path, a, other, la, lb) => {
+        // Half the runs keep the locked fields and change only the rest.
+        const b = other ?? a;
+        const before = text({ ...la, ...a });
+        const after = text(reversed({ ...lb, ...b, dependencies: reversed(b.dependencies) }));
+
+        const moved =
+          JSON.stringify(Object.entries(a.dependencies).toSorted()) !==
+            JSON.stringify(Object.entries(b.dependencies).toSorted()) ||
+          JSON.stringify(Object.entries(a.devDependencies).toSorted()) !==
+            JSON.stringify(Object.entries(b.devDependencies).toSorted());
+
+        expect(lockfileBehind([{ path, before, after }], globs, false)).toEqual(moved ? [path] : []);
+        // The step refreshed the lockfile itself, and CI's frozen install judges it.
+        expect(lockfileBehind([{ path, before, after }], globs, true)).toEqual([]);
+      }),
+      options,
+    );
+  });
+
+  // Plant: count every package.json; forget a negated glob.
+  it("a manifest outside the workspace never counts; an added, removed or unreadable one does", () => {
+    fc.assert(
+      fc.property(outside, member, locked, (out, path, a) => {
+        expect(lockfileBehind([{ path: out, before: null, after: text(a) }], globs, false)).toEqual([]);
+        expect(lockfileBehind([{ path, before: null, after: text(a) }], globs, false)).toEqual([path]);
+        expect(lockfileBehind([{ path, before: text(a), after: null }], globs, false)).toEqual([path]);
+        expect(lockfileBehind([{ path, before: text(a), after: "{" }], globs, false)).toEqual([path]);
+      }),
+      options,
+    );
+  });
+
+  // pinned: the workspace file itself moves the lockfile (catalog, overrides, packages).
+  it("any change to pnpm-workspace.yaml counts, and the same text does not", () => {
+    const path = "pnpm-workspace.yaml";
+    expect(lockfileBehind([{ path, before: "a: 1\n", after: "a: 2\n" }], globs, false)).toEqual([path]);
+    expect(lockfileBehind([{ path, before: "a: 1\n", after: "a: 1\n" }], globs, false)).toEqual([]);
+  });
+
+  // format: the packages block as this repo writes it, comments and quotes included.
+  it("reads the packages globs from pnpm-workspace.yaml", () => {
+    const yaml = [
+      "# a comment",
+      "packages:",
+      "  - apps/*",
+      "  # next/: the new version",
+      "  - 'next/packages/*'",
+      '  - "!next/old"',
+      "  - .github/ci",
+      "",
+      "catalog:",
+      "  effect: 4.1.2",
+    ].join("\n");
+
+    expect(workspaceGlobs(yaml)).toEqual(["apps/*", "next/packages/*", "!next/old", ".github/ci"]);
+    expect(workspaceGlobs("catalog:\n  a: 1\n")).toEqual([]);
+  });
+});
+
+describe("a saved quest's key, today's tooling", () => {
+  // Plants: keep `lane` beside `quest`; let `lane` win over a `quest` already there; touch a record
+  // with no `lane`. Decision 0546: saved data keeps its word, and a reader reads both.
+  it("property: a record's `lane` reads as `quest` and goes, and every other key stays as it was", () => {
+    const key = fc.stringMatching(/^[a-z]{1,8}$/).filter((k) => k !== "lane" && k !== "quest");
+    fc.assert(
+      fc.property(
+        fc.dictionary(key, fc.jsonValue(), { maxKeys: 5 }),
+        fc.option(fc.string(), { nil: undefined }),
+        fc.option(fc.string(), { nil: undefined }),
+        (rest, lane, quest) => {
+          const saved = {
+            ...rest,
+            ...(lane === undefined ? {} : { lane }),
+            ...(quest === undefined ? {} : { quest }),
+          };
+
+          const got = questKeyed(saved);
+          expect(got).not.toHaveProperty("lane");
+          expect(got).toEqual({ ...rest, ...((quest ?? lane) === undefined ? {} : { quest: quest ?? lane }) });
+        },
+      ),
+      options,
+    );
+  });
+
+  it("pinned: a value that is no JSON object is given back as it is, for the reader's schema to refuse", () => {
+    for (const v of [null, 3, "lane", ["lane"], true]) {
+      expect(questKeyed(v)).toBe(v);
+    }
+  });
+});
+
+describe("pin folders", () => {
+  const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,20}$/);
+  const pid = fc.integer({ min: 1, max: 99_999 });
+
+  it("every launch's pin is in the pins folder, named for its quest and process", () =>
+    fc.assert(
+      fc.property(fc.string({ minLength: 1 }), quest, pid, (boxes, l, p) => {
+        const at = pinFolder(boxes, l, p);
+        expect(at.startsWith(`${pinsFolder(boxes)}/`)).toBe(true);
+        expect(at.slice(pinsFolder(boxes).length + 1)).toBe(`${l}.${p}`);
+      }),
+    ));
+
+  it("two launches never share a pin", () =>
+    fc.assert(
+      fc.property(quest, pid, quest, pid, (l1, p1, l2, p2) => {
+        fc.pre(l1 !== l2 || p1 !== p2);
+        expect(pinFolder("/b", l1, p1)).not.toBe(pinFolder("/b", l2, p2));
+      }),
+    ));
+
+  it("pinned: the pins sit beside the boxes, outside the box trees gc reads as boxes", () => {
+    expect(pinsFolder("/b")).toBe("/b/pins");
+  });
+});

@@ -3,8 +3,19 @@
 // wrap the original error class, repeat a dead write, recompute a saved refusal, drop a note.
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Array as Arr, String as Str, Arbitrary, Effect, flow, Option, Schema } from "effect";
+import type { Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  uncheck: {},
+});
 
 type World = Effect.Success<RunnerOpen>;
 
@@ -29,7 +40,7 @@ export type Open = Effect.Effect<
     ) => ReturnType<World["session"]>;
     readonly person: Incoming["envelope"]["by"];
     readonly agent: Incoming["envelope"]["by"];
-    readonly letter: (n: number, input: unknown, by?: Incoming["envelope"]["by"]) => Incoming;
+    readonly letter: (n: number, input: Schema.Json, by?: Incoming["envelope"]["by"]) => Incoming;
     readonly fault: {
       readonly arm: (name: string, letter: string, errors: ReadonlyArray<ErrorClass>) => Effect.Effect<void>;
       readonly before: (input: Before) => Effect.Effect<void>;
@@ -43,8 +54,11 @@ export type Open = Effect.Effect<
 >;
 
 const NAME = "checklist:1";
+
 const PROGRAM = "fabrika/checklist";
-const options = { arbitrary: { seed: 119120, runs: 25 }, timeout: 120_000 };
+
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 5, full: 25 }) }, timeout: 120_000 };
+
 const integer = (maximum: number) => Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum })));
 
 const walk = Arbitrary.array(Arbitrary.all({ pick: integer(1000), retry: Arbitrary.schema(Schema.Boolean) }), {
@@ -57,10 +71,10 @@ const View = Schema.Struct({
   left: Schema.Int,
 });
 
-const shown = (raw: unknown) => {
-  const view = Schema.decodeUnknownSync(View)(raw);
-  return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
-};
+const shown = flow(Schema.decodeUnknownSync(View), (view) => ({
+  ...view,
+  items: [...view.items].sort((a, b) => Str.localeCompare(b.name)(a.name)),
+}));
 
 const Controller = Schema.TaggedStruct("armed", {
   attempts: Schema.Array(Schema.Struct({ process: Schema.String, error: Schema.String })),
@@ -78,45 +92,67 @@ export const suite = (open: Open, checklist: unknown) =>
             const items = new Map<string, string | null>();
             const replies: Array<{ input: Incoming; answer: unknown }> = [];
             let serial = 0;
+
             const expected = () => ({
-              items: [...items]
-                .map(([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept }))
-                .sort((a, b) => a.name.localeCompare(b.name)),
-              left: [...items.values()].filter((kept) => kept === null).length,
+              items: Arr.map([...items], ([name, kept]) => ({
+                name,
+                state: kept === null ? "new" : "checked",
+                note: kept,
+              })).sort((a, b) => Str.localeCompare(b.name)(a.name)),
+              left: Arr.filter([...items.values()], (kept) => kept === null).length,
             });
+
             const send = Effect.fnUntraced(function* (
               runner: ProgramRunner["Service"],
-              input: unknown,
+              input: Schema.Json,
               by = world.person,
             ) {
               const sent = world.letter(++serial, input, by);
               const answer = yield* runner.msg(sent);
               replies.push({ input: sent, answer });
+
               return { input: sent, answer };
             });
+
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, PROGRAM, checklist, {});
-                expect((yield* send(runner, { type: "add", name: "first" })).answer._tag).toBe("accepted");
-                const checked = yield* send(runner, { type: "check", name: "first", note }, world.agent);
+                expect((yield* send(runner, { ...Tag.cases.add.make({}), name: "first" })).answer._tag).toBe(
+                  "accepted",
+                );
+                const checked = yield* send(runner, { ...Tag.cases.check.make({}), name: "first", note }, world.agent);
                 expect(checked.answer._tag).toBe("accepted");
                 expect(
-                  (yield* send(runner, { type: "check", name: "first", note: "replacement" }, world.agent)).answer._tag,
+                  (yield* send(
+                    runner,
+                    { ...Tag.cases.check.make({}), name: "first", note: "replacement" },
+                    world.agent,
+                  )).answer._tag,
                 ).toBe("accepted");
                 expect(shown((yield* runner.open("first-note")).view).items[0]?.note).toBe(note);
-                const kept = (yield* world.letters(NAME)).find((row) => row.id === checked.input.id);
+
+                const kept = Option.getOrUndefined(
+                  Arr.findFirst(yield* world.letters(NAME), (row) => row.id === checked.input.id),
+                );
+
                 expect(kept).toMatchObject({
                   by: world.agent.key,
                   parent: checked.input.envelope.id,
-                  m: { type: "check", note },
+                  m: { ...Tag.cases.check.make({}), note },
                 });
-                const refusal = yield* send(runner, { type: "add", name: "first" });
+                const refusal = yield* send(runner, { ...Tag.cases.add.make({}), name: "first" });
                 expect(refusal.answer).toEqual(Sent.cases.refused.make({ reason: "taken" }));
-                expect((yield* send(runner, { type: "remove", name: "first" })).answer._tag).toBe("accepted");
+                expect((yield* send(runner, { ...Tag.cases.remove.make({}), name: "first" })).answer._tag).toBe(
+                  "accepted",
+                );
                 // This add is now legal, but the same identity must still receive its first refusal.
               }),
             );
-            const refused = replies.find((reply) => Schema.is(Schema.TaggedStruct("refused", {}))(reply.answer));
+
+            const refused = Option.getOrUndefined(
+              Arr.findFirst(replies, (reply) => Schema.is(Schema.TaggedStruct("refused", {}))(reply.answer)),
+            );
+
             expect(refused).toBeDefined();
 
             for (let offset = 0; offset < moves.length; offset += cut + 1) {
@@ -147,28 +183,30 @@ export const suite = (open: Open, checklist: unknown) =>
                     }
 
                     // Choose from the current model: additions need a free name; every other move needs an item.
-                    const free = ["one", "two", "three"].filter((name) => !items.has(name));
+                    const free = Arr.filter(["one", "two", "three"], (name) => !items.has(name));
                     const available = [...items.keys()];
+
                     const legal = [
-                      ...free.map((name) => ({ type: "add", name })),
-                      ...available.flatMap((name) => [
-                        { type: "check", name, note },
-                        { type: "uncheck", name },
-                        { type: "remove", name },
+                      ...Arr.map(free, (name) => ({ ...Tag.cases.add.make({}), name })),
+                      ...Arr.flatMap(available, (name) => [
+                        { ...Tag.cases.check.make({}), name, note },
+                        { ...Tag.cases.uncheck.make({}), name },
+                        { ...Tag.cases.remove.make({}), name },
                       ]),
                     ];
+
                     const input = legal[move.pick % legal.length];
 
                     if (input === undefined) {
                       return yield* Effect.die(new Error("the checklist walk has no legal input"));
                     }
 
-                    const by = input.type === "check" || input.type === "uncheck" ? world.agent : world.person;
+                    const by = input._tag === "check" || input._tag === "uncheck" ? world.agent : world.person;
                     expect((yield* send(runner, input, by)).answer._tag).toBe("accepted");
 
-                    if (input.type === "remove") {
+                    if (input._tag === "remove") {
                       items.delete(input.name);
-                    } else if (input.type === "check") {
+                    } else if (input._tag === "check") {
                       items.set(input.name, items.get(input.name) ?? note);
                     } else {
                       items.set(input.name, null);
@@ -183,7 +221,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const letters = yield* world.letters(NAME);
 
             for (const reply of replies) {
-              const found = letters.filter((row) => row.id === reply.input.id);
+              const found = Arr.filter(letters, (row) => row.id === reply.input.id);
               const accepted = Schema.is(Schema.TaggedStruct("accepted", {}))(reply.answer);
               expect(found).toHaveLength(accepted ? 1 : 0);
 
@@ -214,15 +252,25 @@ export const suite = (open: Open, checklist: unknown) =>
         Effect.scoped(
           Effect.gen(function* () {
             const world = yield* open;
-            const poison = world.letter(20, { type: "check", name: "kept", note: "first-agent-note" }, world.agent);
+
+            const poison = world.letter(
+              20,
+              { ...Tag.cases.check.make({}), name: "kept", note: "first-agent-note" },
+              world.agent,
+            );
+
             const errors = classes.slice(0, times);
             yield* world.fault.arm(NAME, poison.id, errors);
             const start = () => world.session(NAME, PROGRAM, checklist, {}, undefined, world.fault.before);
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* start();
-                expect((yield* runner.msg(world.letter(1, { type: "add", name: "kept" })))._tag).toBe("accepted");
-                expect((yield* runner.msg(world.letter(2, { type: "add", name: "other" })))._tag).toBe("accepted");
+                expect((yield* runner.msg(world.letter(1, { ...Tag.cases.add.make({}), name: "kept" })))._tag).toBe(
+                  "accepted",
+                );
+                expect((yield* runner.msg(world.letter(2, { ...Tag.cases.add.make({}), name: "other" })))._tag).toBe(
+                  "accepted",
+                );
               }),
             );
             const processes: Array<string> = [];
@@ -261,16 +309,18 @@ export const suite = (open: Open, checklist: unknown) =>
 
             expect(new Set(processes).size).toBe(times);
             const armed = Schema.decodeUnknownSync(Controller)(yield* world.fault.saved);
-            expect(armed.attempts).toEqual(processes.map((process, n) => ({ process, error: errors[n] })));
+            expect(armed.attempts).toEqual(Arr.map(processes, (process, n) => ({ process, error: errors[n] })));
             const lives = yield* world.history(NAME);
-            const restarts = lives.filter(Schema.is(Schema.TaggedStruct("restarted", { body: Schema.Unknown })));
+            const restarts = Arr.filter(lives, Schema.is(Schema.TaggedStruct("restarted", { body: Schema.Unknown })));
             expect(restarts.length).toBeGreaterThanOrEqual(times);
 
             for (const [n, process] of processes.entries()) {
               expect(
-                restarts.some((row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
+                Arr.some(restarts, (row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
               ).toBe(true);
-              const exited = lives.filter(
+
+              const exited = Arr.filter(
+                lives,
                 Schema.is(
                   Schema.TaggedStruct("exited", {
                     body: Schema.Struct({
@@ -280,7 +330,10 @@ export const suite = (open: Open, checklist: unknown) =>
                   }),
                 ),
               );
-              expect(exited.find((exit) => exit.body.process === process)?.body.reason).toEqual(
+
+              expect(
+                Option.getOrUndefined(Arr.findFirst(exited, (exit) => exit.body.process === process))?.body.reason,
+              ).toEqual(
                 Schema.TaggedStruct("crashed", { phase: Schema.String, error: Schema.String }).make({
                   phase: "step",
                   error: errors[n] ?? "",
@@ -295,7 +348,9 @@ export const suite = (open: Open, checklist: unknown) =>
                 if (times === 1) {
                   expect((yield* runner.msg(poison))._tag).toBe("accepted");
                   expect(
-                    shown((yield* runner.open("success")).view).items.find((item) => item.name === "kept"),
+                    Option.getOrUndefined(
+                      Arr.findFirst(shown((yield* runner.open("success")).view).items, (item) => item.name === "kept"),
+                    ),
                   ).toMatchObject({ state: "checked", note: "first-agent-note" });
                 } else {
                   for (let n = 0; n < cut + 1; n++) {
@@ -305,15 +360,27 @@ export const suite = (open: Open, checklist: unknown) =>
 
                 expect(
                   (yield* runner.msg(
-                    world.letter(30, { type: "check", name: "other", note: "unrelated-note" }, world.agent),
+                    world.letter(
+                      30,
+                      { ...Tag.cases.check.make({}), name: "other", note: "unrelated-note" },
+                      world.agent,
+                    ),
                   ))._tag,
                 ).toBe("accepted");
                 expect(
-                  shown((yield* runner.open("other")).view).items.find((item) => item.name === "other")?.note,
+                  Option.getOrUndefined(
+                    Arr.findFirst(shown((yield* runner.open("other")).view).items, (item) => item.name === "other"),
+                  )?.note,
                 ).toBe("unrelated-note");
                 expect(Schema.decodeUnknownSync(Controller)(yield* world.fault.saved).attempts).toEqual(armed.attempts);
+
                 // Rearm an already saved input, then force the real successor to fold it from history.
-                const saved = world.letter(30, { type: "check", name: "other", note: "unrelated-note" }, world.agent);
+                const saved = world.letter(
+                  30,
+                  { ...Tag.cases.check.make({}), name: "other", note: "unrelated-note" },
+                  world.agent,
+                );
+
                 yield* world.fault.arm(NAME, saved.id, errors);
                 yield* runner.restart({ id: "person-fold-saved", build: "chaos-law" });
                 yield* runner.open("folded");
@@ -328,7 +395,7 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(dead[0]).toMatchObject({ body: { m: poison.id, tries: 3, errors, name: NAME, program: PROGRAM } });
             }
 
-            expect((yield* world.letters(NAME)).filter((row) => row.id === poison.id)).toHaveLength(
+            expect(Arr.filter(yield* world.letters(NAME), (row) => row.id === poison.id)).toHaveLength(
               times === 1 ? 1 : 0,
             );
           }),

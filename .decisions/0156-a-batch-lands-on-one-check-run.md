@@ -1,7 +1,8 @@
 ---
 id: 0156
 title: A batch of pull requests may land on one check run of their combined merge, as a measured trial
-status: superseded by [0162](0162-no-friction-before-a-merge.md)
+status: superseded
+successor: "0162"
 date: 2026-11-12
 tags: [merge, lead, catchup, batch, ci]
 ---
@@ -87,11 +88,11 @@ later tier. The owner said yes to doing it by hand now, and asked for it to be m
 ## Consequences
 
 - 0146 is amended in part: a member of a green batch lands without its own check run on a head
-  that holds main. Outside a batch 0146 holds as written.
+  that holds main.
 - One check run can land three to five pull requests. A red batch costs more runs than it saves,
   so the trial's numbers depend on how often a batch goes red.
 - The batch is run by hand, with the steps kept on the experiment's branch, until the trial is
   read. If it helps, it becomes code in the lead's merge tooling or in the merge queue. If it does
-  not, this decision is superseded and 0146 stands alone.
+  not, this decision is superseded.
 - Not decided here: testing ahead (a second batch on top of one still in its checks), and what the
   merge queue does.

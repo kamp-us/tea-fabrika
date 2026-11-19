@@ -9,7 +9,7 @@ export default plugin("part-token-owner", (root, fire) => {
     for (const name of [decl.prop, ...references(decl)]) {
       const owner = tokens.get(name);
 
-      if (owner !== undefined && owner !== "design" && !parts[owner]?.includes(file(decl))) {
+      if (owner !== undefined && owner !== "design" && parts[owner]?.includes(file(decl)) !== true) {
         fire(decl, `${name} belongs to ${owner}; use it only in that part's stylesheets`);
       }
     }

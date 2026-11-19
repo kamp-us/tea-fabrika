@@ -8,10 +8,10 @@
 // - Model `Client`: {written, seen, pending, views}. `pending` is a list of `Pending`: dating{n, pid, m,
 //   seen, viewRev} or ready{the same, letter, sentAt, traceId?}. `views` is a record by pid of
 //   `Shown` {rev, view}.
-// - Msgs by `type`: press{pid, m}, dated{n, letter, sentAt, traceId?}, reply{letter, answer} where
+// - Msgs by `_tag`: press{pid, m}, dated{n, letter, sentAt, traceId?}, reply{letter, answer} where
 //   answer is accepted{rev, pos}, refused{reason, now?, most?}, unreachable{} or unknown{}, read{rev},
 //   notice{pid, note}. A note is what the brain's runner publishes, as it arrived: whole{rev, view} or
-//   patch{base, rev, patch}, by `type`. Cmd: ask{pid}.
+//   patch{base, rev, patch}, by `_tag`. Cmd: ask{pid}.
 // - `sendable(client)`: the ready letters ahead of the first slot still dating, in slot order.
 //
 // libfabrika may not import a program (boundary B12, `boundary-rules.json`), so L5 gives each of 1 to 3
@@ -24,13 +24,37 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Match from "effect/Match";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
-import type { Client, ClientMsg, Pending } from "./Client.ts";
-import { clientMachineFor, sendable } from "./Client.ts";
+import { ProcessId } from "../ProcessId.ts";
+import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
+import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  ask: {},
+  check: {},
+  dated: {},
+  notice: {},
+  press: {},
+  read: {},
+  remove: {},
+  reply: {},
+});
+
 const SEED = 119120;
+
 const opts = { seed: SEED, numRuns: 300 };
 
 // The exam's own statement of the shapes it walks, each pinned to the schema's type (0135).
@@ -56,6 +80,7 @@ type Ready = {
 };
 
 expectTypeOf<Dating>().toEqualTypeOf<Extract<Pending, { readonly _tag: "dating" }>>();
+
 expectTypeOf<Ready>().toEqualTypeOf<Extract<Pending, { readonly _tag: "ready" }>>();
 
 type Model = {
@@ -65,12 +90,13 @@ type Model = {
   readonly views: { readonly [pid: string]: { readonly rev: number; readonly view: Schema.Json } };
 };
 
-expectTypeOf<Model>().toEqualTypeOf<typeof Client.Type>();
+expectTypeOf<Model>().toEqualTypeOf<Client>();
 
 type Msg = ClientMsg;
-type Answer = Extract<Msg, { readonly type: "reply" }>["answer"];
 
-type Out = ReadonlyArray<{ readonly type: string; readonly pid?: string }>;
+type Answer = Extract<Msg, { readonly _tag: "reply" }>["answer"];
+
+type Out = ReadonlyArray<{ readonly _tag: string; readonly pid?: string }>;
 
 // --- The view shapes L5 gives its pids ------------------------------------------------------------
 
@@ -83,9 +109,14 @@ const SHAPES = {
 } as const;
 
 type Kind = keyof typeof SHAPES;
-const KINDS = Object.keys(SHAPES) as ReadonlyArray<Kind>;
+
+// SAFETY: SHAPES is a const object literal, so its own keys are exactly the Kind union.
+const KINDS = Rec.keys(SHAPES) as ReadonlyArray<Kind>;
+
 type ListView = typeof SHAPES.list.Type;
+
 type TagsView = typeof SHAPES.tags.Type;
+
 type RecordView = typeof SHAPES.record.Type;
 
 const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
@@ -95,61 +126,72 @@ const START: { readonly [K in Kind]: (typeof SHAPES)[K]["Type"] } = {
 };
 
 /** One generated edit of a value of `kind`, chosen from what the value holds now. */
-const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): unknown => {
+const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): ListView | TagsView | RecordView => {
   if (kind === "list") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a list value has the list shape.
     const v = value as ListView;
     const i = v.items.length === 0 ? 0 : at % v.items.length;
+
     const items =
       v.items.length === 0 || e % 4 === 0
         ? [...v.items, { name: word, done: false }]
         : e % 4 === 1
-          ? v.items.filter((_, j) => j !== i)
+          ? Arr.filter(v.items, (_, j) => j !== i)
           : e % 4 === 2
-            ? v.items.map((it, j) => (j === i ? { ...it, done: !it.done } : it))
+            ? Arr.map(v.items, (it, j) => (j === i ? { ...it, done: !it.done } : it))
             : [{ name: word, done: false }, ...v.items];
-    return { items, left: items.filter((it) => !it.done).length };
+
+    return { items, left: Arr.filter(items, (it) => !it.done).length };
   }
 
   if (kind === "tags") {
+    // SAFETY: edit is called with a value the walk made for this kind, so a tags value is an array of strings.
     const v = value as TagsView;
     const i = v.length === 0 ? 0 : at % v.length;
+
     return v.length === 0 || e % 4 === 0
       ? [...v, word]
       : e % 4 === 1
-        ? v.filter((_, j) => j !== i)
+        ? Arr.filter(v, (_, j) => j !== i)
         : e % 4 === 2
-          ? v.map((t, j) => (j === i ? word : t))
+          ? Arr.map(v, (t, j) => (j === i ? word : t))
           : [word, ...v];
   }
 
+  // SAFETY: the two branches above handled list and tags, so this value has the record shape.
   const v = value as RecordView;
   const i = v.rows.length === 0 ? 0 : at % v.rows.length;
+
   return e % 4 === 0
     ? { ...v, title: word }
     : e % 4 === 1
       ? { ...v, n: v.n + 1 }
       : e % 4 === 2 || v.rows.length === 0
         ? { ...v, rows: [...v.rows, at] }
-        : { ...v, rows: v.rows.filter((_, j) => j !== i) };
+        : { ...v, rows: Arr.filter(v.rows, (_, j) => j !== i) };
 };
 
 /** Each pid's own decoder, counting which pid's decoder checked which notice. */
 const checksWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>) => ({
   decode: (pid: string) => (view: unknown) => {
     log.push(pid);
+
     return Schema.decodeUnknownSync(SHAPES[kinds.get(pid) ?? "list"])(view);
   },
 });
 
 const machineWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>) => clientMachineFor(checksWith(kinds, log));
+
 type Machine = ReturnType<typeof machineWith>;
+
 const step = (machine: Machine, c: Model, m: Msg): readonly [Model, Out] => applyCell(machine, c, m);
 
 // --- L4: letters ----------------------------------------------------------------------------------
 
 /** L4's pids: each shows a bare list of words, so a press can capture the rev it shows. */
 const LETTER_PIDS = ["pid_a", "pid_b"] as const;
-const LETTER_KINDS: ReadonlyMap<string, Kind> = new Map(LETTER_PIDS.map((pid) => [pid, "tags"]));
+
+const LETTER_KINDS: ReadonlyMap<string, Kind> = new Map(Arr.map(LETTER_PIDS, (pid) => [pid, "tags"]));
 
 const letterChoice = fc.record({
   move: fc.nat(),
@@ -173,46 +215,48 @@ const answerFor = (c: LetterChoice): Answer =>
 type LetterWalk = { c: Model; letters: Map<number, Ready>; settled: Array<string> };
 
 const letterMoves = (w: LetterWalk, c: LetterChoice): ReadonlyArray<Msg> => {
-  const dating = w.c.pending.filter((p) => p._tag === "dating");
-  const ready = w.c.pending.filter((p): p is Ready => p._tag === "ready");
+  const dating = Arr.filter(w.c.pending, (p) => p._tag === "dating");
+  const ready = Arr.filter(w.c.pending, (p): p is Ready => p._tag === "ready");
   const pid = LETTER_PIDS[c.pick % LETTER_PIDS.length]!;
+
   const out: Array<Msg> = [
     {
-      type: "press",
+      ...Tag.cases.press.make({}),
       pid,
       m: [
-        { type: "add", name: c.word },
-        { type: "check", name: c.word },
-        { type: "remove", name: c.word },
+        { ...Tag.cases.add.make({}), name: c.word },
+        { ...Tag.cases.check.make({}), name: c.word },
+        { ...Tag.cases.remove.make({}), name: c.word },
       ][c.answer % 3],
     },
-    { type: "read", rev: w.c.seen + (c.rev % 5) - 2 },
+    { ...Tag.cases.read.make({}), rev: w.c.seen + (c.rev % 5) - 2 },
     // A whole view shown for the press to capture, through the real notice path.
-    { type: "notice", pid, note: { type: "whole", rev: c.rev, view: [`v${c.rev}`] } },
+    { ...Tag.cases.notice.make({}), pid, note: { type: "whole", rev: c.rev, view: [`v${c.rev}`] } },
   ];
 
   if (dating.length > 0) {
     const slot = dating[c.pick % dating.length]!;
     out.push({
-      type: "dated",
+      ...Tag.cases.dated.make({}),
       n: slot.n,
       letter: `letter_${c.word}`,
-      sentAt: `2026-11-11T00:00:${String(c.rev % 60).padStart(2, "0")}Z`,
+      sentAt: `2026-11-11T00:00:${Str.padStart(2, "0")(String(c.rev % 60))}Z`,
     });
   }
 
   if (ready.length > 0) {
     const r = ready[c.pick % ready.length]!;
     // A second date for a slot already ready, and the reply for one of the walk's own letters.
-    out.push({ type: "dated", n: r.n, letter: `letter_again_${c.word}`, sentAt: "2026-11-11T01:00:00Z" });
-    out.push({ type: "reply", letter: r.letter, answer: answerFor(c) });
+    out.push({ ...Tag.cases.dated.make({}), n: r.n, letter: `letter_again_${c.word}`, sentAt: "2026-11-11T01:00:00Z" });
+    out.push({ ...Tag.cases.reply.make({}), letter: r.letter, answer: answerFor(c) });
   }
 
   if (w.settled.length > 0) {
-    out.push({ type: "reply", letter: w.settled[c.pick % w.settled.length]!, answer: answerFor(c) });
+    out.push({ ...Tag.cases.reply.make({}), letter: w.settled[c.pick % w.settled.length]!, answer: answerFor(c) });
   }
 
-  out.push({ type: "reply", letter: `letter_never_${c.word}`, answer: answerFor(c) });
+  out.push({ ...Tag.cases.reply.make({}), letter: `letter_never_${c.word}`, answer: answerFor(c) });
+
   return out;
 };
 
@@ -236,7 +280,7 @@ const letterWalk = (
     }
 
     for (const r of w.c.pending) {
-      if (r._tag === "ready" && !next.pending.some((p) => p._tag === "ready" && p.letter === r.letter)) {
+      if (r._tag === "ready" && !Arr.some(next.pending, (p) => p._tag === "ready" && p.letter === r.letter)) {
         w.settled.push(r.letter);
       }
     }
@@ -255,10 +299,10 @@ describe("L4: client letters (p1)", () => {
     fc.assert(
       fc.property(letterWalks, (list) => {
         letterWalk(list, (prev, m, next) => {
-          const dated = next.pending.filter((p) => p._tag === "ready" && prev.letters.has(p.n));
-          expect(dated, "a slot changed after its first date").toEqual(dated.map((p) => prev.letters.get(p.n)));
+          const dated = Arr.filter(next.pending, (p) => p._tag === "ready" && prev.letters.has(p.n));
+          expect(dated, "a slot changed after its first date").toEqual(Arr.map(dated, (p) => prev.letters.get(p.n)));
 
-          if (m.type === "dated" && prev.letters.has(m.n)) {
+          if (m._tag === "dated" && prev.letters.has(m.n)) {
             redated++;
           }
         });
@@ -274,15 +318,24 @@ describe("L4: client letters (p1)", () => {
       fc.property(letterWalks, (list) => {
         letterWalk(list, (_prev, _m, next) => {
           const out = sendable(next);
-          const firstDating = next.pending.findIndex((p) => p._tag === "dating");
-          const expected = (firstDating < 0 ? next.pending : next.pending.slice(0, firstDating)).filter(
+
+          const firstDating = Option.getOrElse(
+            Arr.findFirstIndex(next.pending, (p) => p._tag === "dating"),
+            () => -1,
+          );
+
+          const expected = Arr.filter(
+            firstDating < 0 ? next.pending : next.pending.slice(0, firstDating),
             (p): p is Ready => p._tag === "ready",
           );
-          expect(out).toEqual(expected);
-          expect(out.map((p) => p.n)).toEqual([...out.map((p) => p.n)].sort((a, b) => a - b));
-          expect(next.pending.map((p) => p.n)).toEqual([...next.pending.map((p) => p.n)].sort((a, b) => a - b));
 
-          if (firstDating >= 0 && next.pending.slice(firstDating).some((p) => p._tag === "ready")) {
+          expect(out).toEqual(expected);
+          expect(Arr.map(out, (p) => p.n)).toEqual([...Arr.map(out, (p) => p.n)].sort((a, b) => a - b));
+          expect(Arr.map(next.pending, (p) => p.n)).toEqual(
+            [...Arr.map(next.pending, (p) => p.n)].sort((a, b) => a - b),
+          );
+
+          if (firstDating >= 0 && Arr.some(next.pending.slice(firstDating), (p) => p._tag === "ready")) {
             blocked++;
           }
         });
@@ -297,13 +350,17 @@ describe("L4: client letters (p1)", () => {
     fc.assert(
       fc.property(letterWalks, (list) => {
         letterWalk(list, (prev, m, next) => {
-          const gone = prev.c.pending.filter((p) => !next.pending.some((q) => q.n === p.n));
-          const terminal = m.type === "reply" && (m.answer._tag === "accepted" || m.answer._tag === "refused");
-          const own = prev.c.pending.filter((p) => p._tag === "ready" && m.type === "reply" && p.letter === m.letter);
+          const gone = Arr.filter(prev.c.pending, (p) => !Arr.some(next.pending, (q) => q.n === p.n));
+          const terminal = m._tag === "reply" && (m.answer._tag === "accepted" || m.answer._tag === "refused");
+
+          const own = Arr.filter(
+            prev.c.pending,
+            (p) => p._tag === "ready" && m._tag === "reply" && p.letter === m.letter,
+          );
 
           seen.removed += terminal && own.length > 0 ? 1 : 0;
-          seen.kept += !terminal && m.type === "reply" && own.length > 0 ? 1 : 0;
-          expect(gone, `${m.type} removed the wrong letters`).toEqual(terminal && own.length > 0 ? own : []);
+          seen.kept += !terminal && m._tag === "reply" && own.length > 0 ? 1 : 0;
+          expect(gone, `${m._tag} removed the wrong letters`).toEqual(terminal && own.length > 0 ? own : []);
         });
       }),
       opts,
@@ -317,7 +374,7 @@ describe("L4: client letters (p1)", () => {
     fc.assert(
       fc.property(letterWalks, (list) => {
         letterWalk(list, (prev, m, next) => {
-          if (m.type !== "press") {
+          if (m._tag !== "press") {
             return;
           }
 
@@ -344,7 +401,7 @@ describe("L4: client letters (p1)", () => {
         letterWalk(list, (prev, m, next) => {
           expect(next.seen).toBeGreaterThanOrEqual(prev.c.seen);
 
-          if (m.type === "read") {
+          if (m._tag === "read") {
             expect(next.seen).toBe(Math.max(prev.c.seen, m.rev));
             expect(next.pending).toEqual(prev.c.pending);
           }
@@ -371,28 +428,39 @@ type ViewChoice = typeof viewChoice extends fc.Arbitrary<infer C> ? C : never;
 /** The brain's side of one pid: its value at each revision, and every notice it made. */
 type Brain = { readonly kind: Kind; rev: number; views: Array<unknown>; made: Array<unknown> };
 
-const brainStep = (b: Brain, c: ViewChoice): unknown => {
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
+
+const brainStep = (b: Brain, c: ViewChoice): object => {
   const before = b.views[b.rev]!;
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
   b.rev += 1;
-  return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(before, after) };
+
+  return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(json(before), json(after)) };
 };
 
 /** The next notice the brain would send, broken one way: an op that is not RFC 6902, a path that is
  *  not there, an array index past the end, a value of the wrong type, the whole of another shape, or no
  *  list of ops at all. */
-const corrupt = (b: Brain, c: ViewChoice): unknown => {
+const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
   const rev = b.rev;
   const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
-  const wrongType =
-    b.kind === "list"
-      ? [{ op: "replace", path: "/left", value: "three" }]
-      : b.kind === "tags"
-        ? [{ op: "add", path: "/-", value: 3 }]
-        : [{ op: "replace", path: "/n", value: "x" }];
-  const pastEnd = b.kind === "list" ? "/items/99" : b.kind === "tags" ? "/99" : "/rows/99";
-  const other = KINDS.find((k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k]))!;
+
+  const wrongType = Match.value(b.kind).pipe(
+    Match.when("list", () => [{ op: "replace", path: "/left", value: "three" }]),
+    Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
+    Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
+  );
+
+  const pastEnd = Match.value(b.kind).pipe(
+    Match.when("list", () => "/items/99"),
+    Match.when("tags", () => "/99"),
+    Match.orElse(() => "/rows/99"),
+  );
+
+  const other = Option.getOrThrow(Arr.findFirst(KINDS, (k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k])));
+
   return [
     next([{ op: "move", from: "/x", path: "/y" }]),
     next([{ op: "replace", path: "/missing/deep", value: 1 }]),
@@ -422,6 +490,7 @@ const viewMoves = (w: ViewWalk, c: ViewChoice): ReadonlyArray<() => Notice> => {
   const pids = [...w.brains.keys()];
   const pid = pids[c.pick % pids.length]!;
   const b = w.brains.get(pid)!;
+
   const out: Array<() => Notice> = [
     // The pid's value changes and its patch arrives in order.
     () => ({ pid, note: brainStep(b, c) }),
@@ -431,11 +500,12 @@ const viewMoves = (w: ViewWalk, c: ViewChoice): ReadonlyArray<() => Notice> => {
     // A gap: the value changes twice and only the second patch arrives.
     () => {
       brainStep(b, c);
+
       return { pid, note: brainStep(b, c) };
     },
   ];
 
-  const others = pids.filter((p) => p !== pid);
+  const others = Arr.filter(pids, (p) => p !== pid);
 
   if (others.length > 0) {
     const other = w.brains.get(others[c.at % others.length]!)!;
@@ -463,12 +533,13 @@ const viewWalk = (
   each: (prev: ViewWalk, notice: Notice, next: Model, out: Out, w: ViewWalk) => void,
 ): void => {
   const log: Array<string> = [];
-  const pids = new Map(kinds.map((kind, i) => [`pid_${i}_${kind}`, kind] as const));
+  const pids = new Map(Arr.map(kinds, (kind, i) => [`pid_${i}_${kind}`, kind] as const));
   const machine = machineWith(pids, log);
+
   const w: ViewWalk = {
     c: machine.init(null, {})[0],
     accepted: {},
-    brains: new Map([...pids].map(([pid, kind]) => [pid, { kind, rev: 0, views: [START[kind]], made: [] }])),
+    brains: new Map(Arr.map([...pids], ([pid, kind]) => [pid, { kind, rev: 0, views: [START[kind]], made: [] }])),
     log,
     delivered: [],
   };
@@ -481,7 +552,7 @@ const viewWalk = (
     const prev: ViewWalk = { ...w, c: w.c, log: [...log] };
     log.length = 0;
     w.accepted = acceptNotice(w.accepted, notice);
-    const [next, out] = step(machine, w.c, { type: "notice", pid: notice.pid, note: notice.note });
+    const [next, out] = step(machine, w.c, { ...Tag.cases.notice.make({}), pid: notice.pid, note: notice.note });
     expect(notice.note, "a notice was changed").toEqual(snapshot);
     expect(w.c, "the old Model was changed").toEqual(before);
     each(prev, notice, next, out, w);
@@ -495,14 +566,18 @@ const viewWalks = fc.tuple(
   fc.array(viewChoice, { minLength: 1, maxLength: 50 }),
 );
 
-const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
+// SAFETY: every pid the walk makes ends in `_` and its kind, as `pid_${i}_${kind}`.
+const pidKind = (pid: string): Kind => Arr.lastNonEmpty(Str.split(pid, "_")) as Kind;
+
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
-const noteType = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;
+/** A notice's `type` when it is a string: every caller compares it with a string. */
+const noteType = (note: unknown): string | null =>
+  Predicate.hasProperty(note, "type") && Predicate.isString(note.type) ? note.type : null;
 
-const noteRev = (note: unknown): unknown =>
-  typeof note === "object" && note !== null ? Reflect.get(note, "rev") : null;
+/** A notice's `rev` when it is a number: every note the walks make carries a number. */
+const noteRev = (note: unknown): number | null =>
+  Predicate.hasProperty(note, "rev") && Predicate.isNumber(note.rev) ? note.rev : null;
 
 // L6 checks apply independently. Here the oracle owns revision and decoder checks, starting from
 // notices it accepted, since a valid foreign whole can replace the brain's historical value.
@@ -513,7 +588,12 @@ const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["view
 
   if (noteType(note) === "whole") {
     view = body.view;
-  } else if (noteType(note) === "patch" && shown && body.base === shown.rev && body.rev === shown.rev + 1) {
+  } else if (
+    noteType(note) === "patch" &&
+    shown !== undefined &&
+    body.base === shown.rev &&
+    body.rev === shown.rev + 1
+  ) {
     const result = apply(shown.view, body.patch);
 
     if (Result.isFailure(result)) {
@@ -525,6 +605,7 @@ const acceptNotice = (views: Model["views"], { pid, note }: Notice): Model["view
     return views;
   }
 
+  // SAFETY: decodes just checked the view against its kind's schema, and each of those is JSON.
   return decodes(pid, view) ? { ...views, [pid]: { rev: body.rev, view: view as Schema.Json } } : views;
 };
 
@@ -539,6 +620,7 @@ describe("L5: client views (p3)", () => {
 
           if (notice.foreign === "whole" && decodes(notice.pid, Object(notice.note).view)) {
             foreign.accepted++;
+            // SAFETY: a `foreign: "whole"` notice is built in the walk above with `rev: b.rev`, the brain's own rev, which Brain types as a number.
             foreign.different +=
               JSON.stringify(Object(notice.note).view) !==
               JSON.stringify(w.brains.get(notice.pid)!.views[noteRev(notice.note) as number])
@@ -550,12 +632,12 @@ describe("L5: client views (p3)", () => {
             foreign.refused++;
             expect(decodes(notice.pid, Object(notice.note).view)).toBe(false);
             expect(next.views).toEqual(prev.c.views);
-            expect(out).toEqual([{ type: "ask", pid: notice.pid }]);
+            expect(out).toEqual([{ ...Tag.cases.ask.make({}), pid: notice.pid }]);
           }
 
-          for (const [pid, shown] of Object.entries(next.views)) {
+          for (const [pid, shown] of Rec.toEntries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
-            arrays += JSON.stringify(shown.view).includes("[") && shown.rev > 0 ? 1 : 0;
+            arrays += Str.includes("[")(JSON.stringify(shown.view)) && shown.rev > 0 ? 1 : 0;
           }
         });
       }),
@@ -576,13 +658,13 @@ describe("L5: client views (p3)", () => {
             return;
           }
 
-          const view = Reflect.get(Object(notice.note), "view");
+          const view = Predicate.hasProperty(notice.note, "view") ? notice.note.view : undefined;
           const ok = decodes(notice.pid, view);
           seen[ok ? "installed" : "refused"]++;
           expect(next.views).toEqual(
             ok ? { ...prev.c.views, [notice.pid]: { rev: noteRev(notice.note), view } } : prev.c.views,
           );
-          expect(out).toEqual(ok ? [] : [{ type: "ask", pid: notice.pid }]);
+          expect(out).toEqual(ok ? [] : [{ ...Tag.cases.ask.make({}), pid: notice.pid }]);
         });
       }),
       opts,
@@ -603,31 +685,34 @@ describe("L5: client views (p3)", () => {
           const shown = prev.c.views[notice.pid];
           const note = Object(notice.note);
           const changed = next.views[notice.pid] !== shown;
-          const asks = out.filter((o) => o.type === "ask");
+          const asks = Arr.filter(out, (o) => o._tag === "ask");
           expect(asks.length).toBeLessThanOrEqual(1);
-          expect(asks.every((o) => o.pid === notice.pid)).toBe(true);
+          expect(Arr.every(asks, (o) => o.pid === notice.pid)).toBe(true);
           expect(
-            Object.keys(next.views)
-              .filter((p) => p !== notice.pid)
-              .map((p) => next.views[p]),
+            Arr.map(
+              Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid),
+              (p) => next.views[p],
+            ),
           ).toEqual(
-            Object.keys(next.views)
-              .filter((p) => p !== notice.pid)
-              .map((p) => prev.c.views[p]),
+            Arr.map(
+              Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid),
+              (p) => prev.c.views[p],
+            ),
           );
 
           if (changed) {
             seen.installed++;
             seen.removed +=
-              Array.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") ? 1 : 0;
+              Arr.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") === true ? 1 : 0;
             expect(shown).toBeDefined();
             expect(note.base).toBe(shown!.rev);
             expect(note.rev).toBe(shown!.rev + 1);
             expect(next.views[notice.pid]).toEqual(w.accepted[notice.pid]);
+
             return;
           }
 
-          if (shown !== undefined && typeof note.rev === "number" && note.rev > shown.rev + 1) {
+          if (shown !== undefined && Predicate.isNumber(note.rev) && note.rev > shown.rev + 1) {
             seen.gap++;
             expect(asks, "a gap asks once for a whole view").toHaveLength(1);
           }
@@ -653,11 +738,11 @@ describe("L5: client views (p3)", () => {
         viewWalk(kinds, list, (prev, notice, next, _out, w) => {
           checked += w.log.length;
           expect(
-            w.log.every((pid) => pid === notice.pid),
-            `${notice.pid}'s notice checked by ${w.log.join(",")}`,
+            Arr.every(w.log, (pid) => pid === notice.pid),
+            `${notice.pid}'s notice checked by ${Arr.join(w.log, ",")}`,
           ).toBe(true);
 
-          for (const pid of Object.keys(next.views).filter((p) => p !== notice.pid)) {
+          for (const pid of Arr.filter(Rec.keys(next.views), (p) => p !== notice.pid)) {
             expect(next.views[pid]).toBe(prev.c.views[pid]);
           }
         });
@@ -665,5 +750,111 @@ describe("L5: client views (p3)", () => {
       opts,
     );
     expect(checked).toBeGreaterThan(0);
+  });
+});
+
+// --- P18 slice 2, next/ (ticket 979): F1, a name's fold over pages ---------------------------------
+//
+// The shape this law holds `Client.ts` to, from the approved plan (the build may add more):
+// `foldName(fold, entries, name, by)` folds one page of `processes/<name>` as `ledger.read` sent it
+// into a `NameFold` {after, live, ended}: `live` is the newest start or restart by a writer `by`
+// trusts, unless a later exit by one ended it, and `ended` is the newest such exit, {pid, reason}.
+// `resolveName(entries, name, by)` stays, as the `live` of a fold from empty. A window reads a name
+// one page at a time (at most 256 entries a page), so a fold over the pages must be the fold over
+// the whole list.
+
+/** Process ids the fold can confuse: few enough that starts, exits and restarts name the same ones. */
+const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`);
+
+const F1_NAME = "checklist:1";
+
+const trusted = (writer: string) => writer === "brain" || Str.startsWith("brain:")(writer);
+
+const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
+
+const EXITS = [
+  { _tag: "normal" },
+  { _tag: "shutdown" },
+  { _tag: "kill" },
+  { _tag: "crashed", phase: "step", error: "TypeError" },
+  { _tag: "crashed", phase: "interrupted" },
+] as const;
+
+const fact = fc.record({
+  tag: fc.constantFrom("started", "restarted", "exited", "exited", "down"),
+  writer: fc.constantFrom("brain", "brain:p18", "brain", "SHA256:person"),
+  pid: fc.constantFrom(...F1_PIDS),
+  after: fc.constantFrom(...F1_PIDS),
+  name: fc.constantFrom(F1_NAME, F1_NAME, F1_NAME, "checklist:2"),
+  reason: fc.constantFrom(...EXITS),
+  gap: fc.integer({ min: 1, max: 3 }),
+});
+
+/** A name's stream as the door reads it out: each fact under its own rev, in rev order. */
+const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ? F : never>) => {
+  let rev = 0;
+
+  return Arr.map(facts, (f) => {
+    rev += f.gap;
+
+    const body = Match.value(f.tag).pipe(
+      Match.when("started", () => ({ process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" })),
+      Match.when("restarted", () => ({ process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" })),
+      Match.when("exited", () => ({ process: f.pid, reason: f.reason })),
+      Match.orElse(() => ({ process: f.pid, reason: "too_many", crashes: 1, until: 0 })),
+    );
+
+    return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
+  });
+};
+
+describe("P18 F1: a name's fold over pages", () => {
+  it("F1 property: foldName over any split of the entries into pages equals foldName over the whole list, its live equals resolveName, and entries by other writers never count", () => {
+    expect(
+      Arr.every(F1_PIDS, (pid) => Schema.is(ProcessId)(pid)),
+      "the fixture's ids are process ids",
+    ).toBe(true);
+    const seen = { live: 0, ended: 0, split: 0, forged: 0 };
+    fc.assert(
+      fc.property(
+        fc.array(fact, { minLength: 0, maxLength: 60 }),
+        fc.array(fc.nat(), { maxLength: 6 }),
+        (facts, cuts) => {
+          const entries = stream(facts);
+          const at = [...new Set(Arr.map(cuts, (n) => n % (entries.length + 1)))].sort((a, b) => a - b);
+          const bounds = [0, ...at, entries.length];
+
+          const pages = Arr.flatMap(bounds, (start, i) =>
+            i + 1 < bounds.length ? [entries.slice(start, bounds[i + 1])] : [],
+          );
+
+          const whole = foldName(FROM_EMPTY, entries, F1_NAME, trusted);
+          const paged = Arr.reduce(pages, FROM_EMPTY, (acc, page) => foldName(acc, page, F1_NAME, trusted));
+          seen.split += pages.length > 1 ? 1 : 0;
+          seen.live += whole.live === null ? 0 : 1;
+          seen.ended += whole.ended === null ? 0 : 1;
+          seen.forged += Arr.some(facts, (f) => !trusted(f.writer) && f.tag !== "down") ? 1 : 0;
+          expect(paged, "a fold over pages differs from the fold over the whole list").toEqual(whole);
+          expect(whole.live, "live is not resolveName's").toBe(resolveName(entries, F1_NAME, trusted));
+
+          const own = foldName(
+            FROM_EMPTY,
+            Arr.filter(entries, (e) => trusted(e.by)),
+            F1_NAME,
+            trusted,
+          );
+
+          expect({ live: whole.live, ended: whole.ended }, "another writer's entry counted").toEqual({
+            live: own.live,
+            ended: own.ended,
+          });
+        },
+      ),
+      opts,
+    );
+    expect(seen.split).toBeGreaterThan(0);
+    expect(seen.live).toBeGreaterThan(0);
+    expect(seen.ended).toBeGreaterThan(0);
+    expect(seen.forged).toBeGreaterThan(0);
   });
 });

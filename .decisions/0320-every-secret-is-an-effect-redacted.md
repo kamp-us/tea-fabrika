@@ -46,9 +46,11 @@ fabrika builds public repositories too, so anything it writes may be read by any
 - A one-way hash of a secret (SHA-256) may be a plain string.
 - Effect's own `Redacted`, never a type of ours: Effect's loggers, `Cause.pretty`, HTTP client and
   OpenTelemetry bridge already know it.
-- Code holds this, never a written rule: the types, and two blocking lint rules,
-  `fabrika/no-secret-env` (a secret-looking `process.env` read) and `fabrika/no-redacted-value`
-  (`Redacted.value` off an edge).
+- Code holds this, never a written rule: the types, and two blocking lint rules.
+  `fabrika/no-secret-env` refuses a secret-looking `process.env` read, and it stays beside the
+  Effect checker's `processEnv` and `processEnvInEffect`, which miss a destructured read. oxlint's
+  `no-restricted-properties` on `Redacted.value` refuses it off an edge, in place of
+  `fabrika/no-redacted-value` ([0573](0573-trusted-lint-rule-replaces-ours.md)).
 
 ## Consequences
 

@@ -1,0 +1,9 @@
+{
+  "_tag": "rated",
+  "finding": "2026-11-18-watch-l10-boot-drain-saw-repeated-installs",
+  "says": "fix",
+  "by": "lead",
+  "date": "2026-11-18",
+  "ticket": "kamp-us/tea-fabrika#1172",
+  "under": "0036: a flaky_test's rated row is written as fix with its ticket the same day, by the lead"
+}

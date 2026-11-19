@@ -1,7 +1,7 @@
 ---
 id: 0099
 title: No number caps the size of a pull request: a plan cuts big work by what lands whole, size picks who looks, and a warning drawn from our own merged pull requests only advises
-status: amended-in-part by [0100](0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md)
+status: accepted
 date: 2026-11-11
 tags: [size, review, plan, slice, stack, cap, settings]
 ---
@@ -52,8 +52,7 @@ favors, and its replay on this repo's merged pull requests had not run.
 
 What 0087 was after still matters: a huge landing is a weak review
 ([Tier 1's risks](../docs/plan/tier-1.md)). The plan's slices answer that, by meaning and not by
-count. This record amends 0087 in part: its cap, its `review.lines` setting and its plan check go;
-its slices, its stacks and its "each slice lands whole" stay.
+count. This record amends 0087 in part: its cap, its `review.lines` setting and its plan check go.
 
 ## Decision
 
@@ -67,12 +66,15 @@ line count, and a plan still cuts big work into slices, each of which lands whol
   is by what works on its own, never to fit a count.
 - Size is still recorded: each slice's estimated product lines in the plan, and its real product
   lines on the merged pull request ([record wide, read later](../AGENTS.md)).
-- **Size picks who looks, never whether it lands.**
-  [0079](0079-size-counts-governed-paths-name-who.md) stays as it is.
+- **Size picks who looks, never whether it lands.** Size may still say how many people look
+  ([0079](0079-size-counts-governed-paths-name-who.md)).
 - **A warning, never a block.** A pull request far larger than what this repo has merged before
   gets one printed line that asks whether it should have been sliced. The number comes from our own
   merged pull requests (the lean: larger than 95 of every 100 of them), counted without generated
-  files and lockfiles, and it moves as the data moves. Nobody picks it by hand.
+  files and lockfiles, and it moves as the data moves. Nobody picks it by hand. It is a backstop
+  only: a slice that passes twice its own plan's estimate goes back to the plan
+  ([0100](0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md)), and this warning catches a
+  plan whose estimate was itself far too large.
 
 What the makers do, read 2026-11-11:
 
@@ -89,9 +91,9 @@ What the makers do, read 2026-11-11:
 
 **Binding constraints**
 
-- No slice is cut so it cannot land alone (kept from 0087).
-- [0079](0079-size-counts-governed-paths-name-who.md) is not changed: size may still say how many
-  people look. This record only removes the ceiling.
+- No slice is cut so it cannot land alone.
+- Size may still say how many people look
+  ([0079](0079-size-counts-governed-paths-name-who.md)). This record only removes the ceiling.
 
 ## Consequences
 
@@ -100,8 +102,9 @@ What the makers do, read 2026-11-11:
 - AGENTS.md's cap line is replaced by the slicing rule.
 - The cost: nothing mechanical stops a 5,000-line landing like
   [PR 810](https://github.com/usirin/tea-fabrika/pull/810) any more. The guards left are the plan's
-  slices, the lead's read of the plan, and [0076](0076-a-lane-stops-at-its-budget.md)'s budget in
-  steps and dollars. PR 810 is still restacked.
+  slices, the lead's read of the plan, [0076](0076-a-lane-stops-at-its-budget.md)'s budget in
+  steps and dollars, and the stop of a slice past twice its estimate
+  ([0100](0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md)). PR 810 is still restacked.
 - The warning is lead tooling today, fast-tracked ([0033](0033-agents-code-follows-next-rules.md)).
   Before it is trusted it is replayed on this repo's merged pull requests: were the ones it flags
   the ones later fixed?

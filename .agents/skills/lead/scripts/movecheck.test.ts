@@ -1,3 +1,4 @@
+import { Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.ts";
@@ -18,7 +19,9 @@ import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.t
 const options = { seed: 119120, numRuns: 300 };
 
 type Change = Parameters<typeof moveFaults>[0][number];
+
 type Move = Parameters<typeof moveFaults>[1]["moves"][number];
+
 type Row = Parameters<typeof partFaults>[1]["base"][number];
 
 const SRC = "next/packages/libfabrika/src";
@@ -27,6 +30,7 @@ const paths = (faults: ReadonlyArray<{ readonly path: string }>): ReadonlyArray<
   [...new Set(faults.map((fault) => fault.path))].sort();
 
 const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
+
 const word = fc.stringMatching(/^[a-z]{2,7}$/);
 
 // A generated file: import and re-export statements, then body lines. A statement keeps its words
@@ -140,6 +144,7 @@ const edited = (t: Text): fc.Arbitrary<Text> =>
     });
 
 const before = text.chain((old) => fc.tuple(fc.constant(old), respecified(old)));
+
 const NAMED = ["layer-rules.json", ".oxlintrc.json", ".patterns/libfabrika-rooms.md"];
 
 describe("movecheck, a move PR: only the table's renames, and only specifiers change", () => {
@@ -157,6 +162,7 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
             before: written(old),
             after: written(after),
           });
+
           expect(moveFaults([renamed(moved)], { moves: [move], named: [] })).toEqual([]);
           expect(paths(moveFaults([renamed(broken)], { moves: [move], named: [] }))).toEqual([move.to]);
         },
@@ -186,6 +192,7 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
             from: `${SRC}/data/${name}.ts`,
             to: `${SRC}/ledger/${pascal(name)}.ts`,
           }));
+
           const fromTable = moves.flatMap((move, n): ReadonlyArray<Change> => {
             const texts = { before: written(old), after: written(moved) };
 
@@ -200,17 +207,19 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
                 return [{ _tag: "deleted", path: move.from, before: texts.before }];
             }
           });
+
           const wrong = moves.flatMap((move, n) =>
             fates[n] === "moved"
               ? []
               : [
-                  fates[n] === "elsewhere"
-                    ? `${move.to}.elsewhere.ts`
-                    : fates[n] === "wrong-source"
-                      ? move.to
-                      : move.from,
+                  Match.value(fates[n]).pipe(
+                    Match.when("elsewhere", () => `${move.to}.elsewhere.ts`),
+                    Match.when("wrong-source", () => move.to),
+                    Match.orElse(() => move.from),
+                  ),
                 ],
           );
+
           const outside = strays.map((mutation, n): Change => {
             const path = `${SRC}/node/stray${n}.ts`;
 
@@ -231,6 +240,7 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
                 return { _tag: "modified", path, before: written(config), after: written(changed) };
             }
           });
+
           // Clean, whatever else the PR holds: a file that imports a moved one and only follows
           // it, and the configs and docs the plan names, which may change in any way.
           const clean: ReadonlyArray<Change> = [
@@ -247,6 +257,7 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
               after: written(changed),
             })),
           ];
+
           const faults = moveFaults([...clean, ...fromTable, ...outside], { moves, named: NAMED });
           expect(paths(faults)).toEqual([...wrong, ...strays.map((_, n) => `${SRC}/node/stray${n}.ts`)].sort());
         },
@@ -262,9 +273,12 @@ describe("movecheck, a move PR: one @internal tag line above an export, in an in
     word.map((name) => `export const ${name} = 1;`),
     word.map((name) => `const ${name} = 2;`),
   );
+
   const body = fc.array(line, { minLength: 1, maxLength: 8 });
+
   const tagged = (lines: ReadonlyArray<string>, pick: ReadonlyArray<boolean>): string =>
     lines.flatMap((l, n) => (pick[n] === true && l.startsWith("export") ? ["/** @internal */", l] : [l])).join("\n");
+
   const moved = (to: string, before: string, after: string): Change => ({
     _tag: "renamed",
     from: `${SRC}/data/old.ts`,
@@ -272,8 +286,10 @@ describe("movecheck, a move PR: one @internal tag line above an export, in an in
     before,
     after,
   });
+
   const faults = (to: string, before: string, after: string) =>
     paths(moveFaults([moved(to, before, after)], { moves: [{ from: `${SRC}/data/old.ts`, to }], named: [] }));
+
   const INTERNAL = `${SRC}/runtime/internal/supervisor.ts`;
   const FRONT = `${SRC}/runtime/Runner.ts`;
 
@@ -324,6 +340,7 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
 
   const FRONT = `${SRC}/runtime/Runner.ts`;
   const part = (n: number) => `${SRC}/runtime/internal/part${n}.ts`;
+
   const old = (cut: Cut) => ({
     path: FRONT,
     text: [
@@ -334,10 +351,12 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
       "",
     ].join("\n"),
   });
+
   /** The new files, from what each one holds of the old body: `held[0]` is the front file's. */
   const split = (cut: Cut, held: ReadonlyArray<ReadonlyArray<string>>) => {
     const call = (n: number) => (cut.effect ? `\tyield* part${n}(deps);` : `\tpart${n}(deps);`);
     const parts = held.slice(1).map((_, n) => n + 1);
+
     return [
       {
         path: FRONT,
@@ -365,8 +384,10 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
       })),
     ];
   };
+
   const held = (cut: Cut): Array<Array<string>> =>
     Array.from({ length: Math.max(1, ...cut.to) + 1 }, (_, n) => cut.lines.filter((_line, at) => cut.to[at] === n));
+
   const cutOver = (lines: fc.Arbitrary<ReadonlyArray<string>>): fc.Arbitrary<Cut> =>
     lines.chain((ls) =>
       fc.record({
@@ -375,6 +396,7 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
         effect: fc.boolean(),
       }),
     );
+
   // Few shapes and few numbers, so one line often stands in the old file more than once.
   const repeated = fc.array(
     fc
@@ -385,6 +407,7 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
       .map(([line, n]) => line.replace("N", String(n))),
     { minLength: 2, maxLength: 12 },
   );
+
   const distinct = fc
     .array(fc.constantFrom("total += N;", "queue.push(N);", "const vN = read();"), {
       minLength: 2,
@@ -461,9 +484,11 @@ describe("movecheck --renamed: only the listed names change", () => {
     { from: "foldMembers", to: "foldAccess" },
     { from: "members", to: "access" },
   ];
+
   const KEPT = ["piece", "row", "count", "healthRow"];
   const name = fc.constantFrom(...LISTED.map((r) => r.from), ...KEPT);
   const kept = fc.constantFrom(...KEPT);
+
   // Each line ends in a name no table lists, so a planted edit always has one to change.
   const line = fc.oneof(
     fc.tuple(name, name, kept).map(([a, b, c]) => `const ${a} = ${b}.${c};`),
@@ -471,8 +496,10 @@ describe("movecheck --renamed: only the listed names change", () => {
     fc.tuple(name, kept).map(([a, c]) => `const sql = "select ${c} from ${a} where door/${a} = ${c}";`),
     fc.tuple(name, kept).map(([a, c]) => `export const ${a}Row = (${c}: number) => ${c};`),
   );
+
   const renameIn = (text: string, table: ReadonlyArray<{ from: string; to: string }>): string =>
     text.replace(/[A-Za-z_$][\w$]*/g, (token) => table.find((r) => r.from === token)?.to ?? token);
+
   const PATH = `${SRC}/telemetry/internal/measurements.ts`;
 
   // Plant (the plan's): rename a field 0038 says stays, such as `piece`. Also: take any changed
@@ -487,9 +514,11 @@ describe("movecheck --renamed: only the listed names change", () => {
         (table, lines, pick, mutation) => {
           const before = lines.map(([l]) => l);
           const after = lines.map(([l, renamed]) => (renamed ? renameIn(l, table) : l));
+
           const change = (text: ReadonlyArray<string>) => [
             { path: PATH, before: `${before.join("\n")}\n`, after: `${text.join("\n")}\n` },
           ];
+
           expect(renameFaults(change(after), table)).toEqual([]);
 
           const at = pick % after.length;
@@ -506,6 +535,7 @@ describe("movecheck --renamed: only the listed names change", () => {
             const last = KEPT.toSorted((a, b) => b.length - a.length).find((k) =>
               new RegExp(`\\b${k}\\b`).test(target),
             );
+
             broken[at] = target.replace(new RegExp(`\\b${last}\\b`), `${last}Renamed`);
           }
 
@@ -543,6 +573,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
     ["testing.ts", "Testing.ts", "next-app"],
     ["door/door.ts", "door/Door.ts", "next-door"],
   ];
+
   const ROWS = ["next-door", "next-app", "next-coordination", "next-data", "next-transport", "next-id"];
   const at = (path: string) => `${SRC}/${path}`;
   const moves: ReadonlyArray<Move> = TABLE.map(([from, to]) => ({ from: at(from), to: at(to) }));
@@ -560,6 +591,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
           at(entry[side]),
         ),
       }));
+
     fc.assert(
       fc.property(
         fc.subarray([...TABLE]).chain((broken) =>
@@ -580,6 +612,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
               rowsNow[n] === entry[2] ? [] : [[entry[1], rowsNow[n] ?? null]],
             ),
           );
+
           const rules = { base: rows(0, new Map()), head: rows(1, moved) };
           const except = excused.map((entry) => at(entry[0]));
           expect(partFaults(moves, { base: rules.base, head: rows(1, new Map()) }, [])).toEqual([]);
@@ -592,6 +625,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
           // Keep the original cases above, then exercise missing and ambiguous claims on
           // the same generated subset. Equal exact paths tie in rowsAt.
           const selected = broken.map((entry) => ({ from: at(entry[0]), to: at(entry[1]) }));
+
           const claimed = (side: "from" | "to"): ReadonlyArray<Row> =>
             claims === "none"
               ? []
@@ -601,6 +635,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
                     ? [{ name: "second", paths: selected.map((move) => move[side]) }]
                     : []),
                 ];
+
           expect(paths(partFaults(selected, { base: claimed("from"), head: claimed("to") }, except))).toEqual(
             selected
               .filter((move) => !except.includes(move.from))
@@ -623,6 +658,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
     { name: "next-transport", paths: [at("transport")] },
     { name: "next-id", paths: [at("id.ts")] },
   ];
+
   const head = (kept: ReadonlyArray<string>): ReadonlyArray<Row> => [
     { name: "next-door", paths: [at("door")] },
     { name: "next-app", paths: [at("app"), at("runtime"), at("Testing.ts")] },
@@ -634,6 +670,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
     { name: "next-transport", paths: [at("transport")] },
     { name: "next-id", paths: [at("Id.ts")] },
   ];
+
   const KEPT = ["runtime/ProcessStore*", "runtime/RecoveryStore*", "runtime/internal/recovery.ts"];
 
   // scenario: the plan's plant, on rows with folder and `*` patterns as the real rule file has,
@@ -653,6 +690,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
       { from: at("transport/waiting.ts"), to: at("door/internal/waiting.ts") },
       { from: at("transport/waiting.test.ts"), to: at("door/internal/waiting.test.ts") },
     ];
+
     const rules = { base: BASE, head: head(KEPT) };
     expect(paths(partFaults([...moves, ...waiting], rules, []))).toEqual(waiting.map((m) => m.to).sort());
     expect(

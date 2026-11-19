@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-review2",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T19:22:40-08:00",
+  "ended": "2026-11-15T19:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Recheck of ticket 1067's first fix round (next/ and our tooling, the Recorder in @kampus/vitest) at ad244da5b: changes 1, findings 0, sent to tests. Class 1 (types of calls) is fixed: a union of names now reads number | undefined at index 1, an optional method is a method, and a service with three overloads is refused. Class 2 is not fixed for the call form laws write: an inline impl on a service with a unique-symbol member (Shelf, and any service shaped like Effect's FileSystem with its TypeId) still compiles with fails naming a method impl leaves out. The same call on a service with no symbol member is refused. R17 reads layer's parameters by explicit instantiation only, so it never reaches the inferred call. A misspelled impl key is refused, and impl's lambdas stay typed from the service. Shown in scratch files, removed. Recorder.test.ts (6) and Recorder.types.test.ts (8) pass, and the vitest package's tsc is clean.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3.3,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

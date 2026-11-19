@@ -1,7 +1,7 @@
 ---
 id: 0293
 title: In next/, every record a process writes carries the build that wrote it, each load, refusal and failure is a code.loaded, code.refused or code.failed event, and a swap shows a quiet word and icon on its tile
-status: amended-in-part by [0529](0529-code-loaded-from-open.md)
+status: accepted
 date: 2026-11-01
 tags: [hot-reload, build, events, ledger, record-wide, accessibility, next]
 ---
@@ -12,7 +12,7 @@ tags: [hot-reload, build, events, ledger, record-wide, accessibility, next]
 
 ```ts
 // A sketch. Effect Schema writes `_tag`.
-const From = Schema.Literals(["watch", "deploy", "boot", "restart"]);
+const From = Schema.Literals(["watch", "deploy", "boot", "restart", "open"]);
 const CodeLoaded = Schema.TaggedStruct("code.loaded", { program: Schema.String, hash: Hash, was: Schema.NullOr(Hash), from: From });
 const CodeRefused = Schema.TaggedStruct("code.refused", { program: Schema.String, hash: Hash, was: Hash, reason: Schema.String });
 const CodeFailed = Schema.TaggedStruct("code.failed", { program: Schema.String, hash: Schema.NullOr(Hash), reason: Schema.String });
@@ -32,6 +32,9 @@ recorded now). The note's sketch says `why`; [0081](0081-no-question-word-names.
   (90%).
 - Each load, refusal and failure is a `code.loaded`, `code.refused` or `code.failed` event, so every
   `build` has an earlier `code.loaded`. A window's hello carries its own build.
+- `from: "open"` is used only for the move of a home saved before the code store, to the running
+  build when the Project opens: one per live process whose build has no code, before any step
+  runs. A normal boot is `from: "boot"` ([0529](0529-code-loaded-from-open.md)).
 - A swap shows a quiet word and icon on that tile's title bar, never color alone, gone at the next
   key. A refusal or an error stays until acted on (65%).
 - An agent sees the same events through its tools.

@@ -2,13 +2,15 @@
 // tracker or the leak grep, and nothing sweeps. The laws of the retired catchup.sh that still have
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Recorder } from "@kampus/vitest";
+import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Queue from "./Queue.ts";
 import * as SweepsTest from "./SweepsTest.ts";
@@ -16,13 +18,29 @@ import * as TicketsCli from "./TicketsCli.ts";
 import * as TicketsTest from "./TicketsTest.ts";
 
 const oid = "0123456789abcdef0123456789abcdef01234567";
+
 const merged = "feedfacefeedfacefeedfacefeedfacefeedface";
+
 const repo = "fixture/repo";
 
 const State = Schema.Literals(["OPEN", "CLOSED", "MERGED"]);
+
 /** How the required check stands at the head: not made yet, or one of GitHub's answers. */
 const Required = Schema.Literals(["none", "queued", "in_progress", "success", "failure", "cancelled", "skipped"]);
-const Leak = Schema.Literals(["clean", "leakChange", "leak", "leakText"]);
+
+/** Which leak check refuses, by its method's name, or none. */
+const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+
+const refused = new LeakGrepRefused({ reason: "private_word" });
+
+/** The one leak check that refuses, with the error it refuses with. */
+const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
+  Match.value(leak).pipe(
+    Match.when("clean", () => ({})),
+    Match.when("leakChange", () => ({ leakChange: refused })),
+    Match.when("leakGrep", () => ({ leakGrep: refused })),
+    Match.orElse(() => ({ leakText: refused })),
+  );
 
 const job = (stands: typeof Required.Type): Option.Option<Job> =>
   stands === "none"
@@ -53,18 +71,28 @@ const memory = (w: World = {}) => {
   const remote = PushesTest.remote();
   const tracker = TicketsTest.world(w.open ?? []);
   const sweeps = SweepsTest.count();
-  const leak = w.leak === undefined || w.leak === "clean" ? {} : { [w.leak]: "private_word" };
+
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github, w.failing?.prs),
-    PushesTest.layer(remote, leak),
+    PushesTest.layer(remote, leaking(w.leak ?? "clean")),
     ChecksTest.layer([job(w.required ?? "success")], ""),
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
   );
+
   return { github, remote, tracker, sweeps, layer };
 };
 
 const add = (m: ReturnType<typeof memory>) => Queue.add({ dir: ".", pr: 900 }).pipe(Effect.provide(m.layer));
+
+/** One add, and the leak checks it asked for, read inside the layer that recorded them. */
+const added = (m: ReturnType<typeof memory>) =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.result(Queue.add({ dir: ".", pr: 900 }));
+
+    return { answer, leaks: yield* Recorder.calls(Pushes) };
+  }).pipe(Effect.provide(m.layer));
+
 const settle = (m: ReturnType<typeof memory>) => Queue.settle({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
 
 describe("add: a finished pull request enters GitHub's merge queue by one pinned squash (0162)", () => {
@@ -88,23 +116,24 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           leak,
           required,
         });
-        const answer = yield* Effect.result(add(m));
+
+        const { answer, leaks } = yield* added(m);
         const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
         expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
         expect(answer._tag === "Success" && answer.success._tag === "queued").toBe(enters);
 
         if (enters) {
           // Every leak check ran, on the head and on the words a squash puts on main, before the ask.
-          expect(m.remote.calls).toEqual([
-            `leakchange ${oid}`,
-            `leakgrep ${oid}`,
-            "leaktext T1: a title\n\nWhat it does.\n",
+          expect(leaks).toEqual([
+            { method: "leakChange", args: [".", oid] },
+            { method: "leakGrep", args: [".", oid] },
+            { method: "leakText", args: [".", "T1: a title\n\nWhat it does.\n"] },
           ]);
         }
 
         // A pull request that may not enter is refused before anything is fetched or read.
         if (state !== "OPEN" || draft || base !== "main") {
-          expect(m.remote.calls).toEqual([]);
+          expect(leaks).toEqual([]);
         }
       }),
   );
@@ -140,9 +169,9 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         expect(red._tag === "NotQueued" ? red.reason : "").toContain(`ci-required is failure at ${oid}`);
         const none = yield* Effect.flip(add(memory({ required: "none" })));
         expect(none._tag === "NotQueued" ? none.reason : "").toContain("ci-required is missing");
-        const unread = memory({ failing: { prs: { view: "gh: offline" } } });
-        expect((yield* Effect.flip(add(unread)))._tag).toBe("PullRequestsError");
-        expect(unread.remote.calls).toEqual([]);
+        const unread = yield* added(memory({ failing: { prs: { view: "gh: offline" } } }));
+        expect(unread.answer._tag === "Failure" ? unread.answer.failure._tag : null).toBe("PullRequestsError");
+        expect(unread.leaks).toEqual([]);
         const refused = memory({ failing: { prs: { enqueue: "gh: head moved" } } });
         expect((yield* Effect.flip(add(refused)))._tag).toBe("PullRequestsError");
       }),
@@ -150,21 +179,25 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
 
   // Plants: ask the merge while the check still runs; wait past the limit; never read again.
   it.effect(
-    "scenario: a lane's wait reads the required check again until it ends, asks only on green, and gives up at its limit with nothing asked",
+    "scenario: a quest's wait reads the required check again until it ends, asks only on green, and gives up at its limit with nothing asked",
     () =>
       Effect.gen(function* () {
         const waited = (polls: ReadonlyArray<ChecksTest.Poll>) =>
           Effect.gen(function* () {
             const m = memory();
             const layer = Layer.merge(m.layer, ChecksTest.layer(polls, ""));
+
             const fiber = yield* Queue.add({ dir: ".", pr: 900, wait: { minutes: 5, every: 60 } }).pipe(
               Effect.provide(layer),
               Effect.result,
               Effect.forkChild,
             );
+
             yield* TestClock.adjust("6 minutes");
+
             return { answer: yield* Fiber.join(fiber), calls: m.github.calls };
           });
+
         const unreachable = new ChecksError({ reason: "gh: offline" });
         const green = yield* waited([job("none"), unreachable, job("in_progress"), job("success")]);
         expect(green.answer._tag).toBe("Success");
@@ -190,17 +223,40 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
     ({ number, head }) => {
       const args = PullRequestsGh.mergeArgs(repo, number, head);
       expect(args).toEqual(["pr", "merge", String(number), "-R", repo, "--squash", "--match-head-commit", head]);
+
       return true;
     },
+  );
+  // Plants: skip the names check, read it after the merge is asked, or read the title for the section.
+  it.effect.prop(
+    "property: a diff that exports a new name is queued only when its description names it under ## New names; else it is refused with the name and the merge is never asked (0587)",
+    { named: Schema.Boolean, name: Schema.Literals(["Names", "refusal", "PatchRow"]) },
+    ({ named, name }) =>
+      Effect.gen(function* () {
+        const lines = named ? `\n\n## New names\n\n- \`${name}\`: the industry's word, with its source.` : "";
+        const m = memory({ more: { body: `What it does.${lines}` } });
+        m.github.patches.set(900, [{ path: "src/a.ts", patch: `@@ -0,0 +1 @@\n+export const ${name} = 1;` }]);
+        const answer = yield* Effect.result(add(m));
+        expect(m.github.calls).toEqual(named ? [{ _tag: "enqueue", number: 900, oid }] : []);
+
+        if (!named) {
+          expect(answer).toMatchObject({ _tag: "Failure", failure: { _tag: "NotQueued" } });
+          expect(answer._tag === "Failure" && answer.failure.reason).toContain(`pr 900: its diff exports new names`);
+          expect(answer._tag === "Failure" && answer.failure.reason).toContain(name);
+        }
+      }),
   );
 });
 
 describe("settle: a merged pull request closes the tickets it names (0015, T410)", () => {
   const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
   const note = `Closed by the merge of https://github.com/${repo}/pull/900, merge commit ${merged}.\n`;
+
   const landed = (body: string, w: World = {}) =>
     memory({ state: "MERGED", ...w, more: { body, mergeCommit: merged, ...w.more } });
+
   const closes = (m: ReturnType<typeof memory>) => m.tracker.posts.filter((p) => p._tag !== "list");
+
   const Noise = Schema.Array(
     Schema.Literals(["", "Done.", "close ticket 5", "fabrika close ticket", "ticket 5", "#5"]),
   );
@@ -222,12 +278,14 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
     () =>
       Effect.gen(function* () {
         const keywords = ["close", "closes", "closed", "fix", "fixes", "fixed", "resolve", "resolves", "resolved"];
+
         const body = [
           ...keywords.flatMap((k) => [`${k} #5`, `${k.slice(0, 1).toUpperCase()}${k.slice(1)} #5`, `${k}: 5`]),
           "Ticket: 5",
           "Closes-ticket: 5",
           "T5 build: the fix",
         ].join("\n");
+
         const m = landed(body, { open: [5] });
         yield* settle(m);
         expect(m.tracker.posts).toEqual([]);
@@ -259,13 +317,16 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
     },
     ({ named, open, lead, trail, crlf }) =>
       Effect.gen(function* () {
+        // SAFETY: `indexOf` only compares: a number that is not in `named` answers -1.
         const isOpen = (n: number) => open[named.indexOf(n as never)] === true;
+
         // A repeated line closes its ticket once.
         const rows = [
           "Done.",
           ...named.map((n) => `${lead}fabrika close ticket ${n}${trail}`),
           `fabrika close ticket ${named[0]}`,
         ];
+
         const m = landed(rows.join(crlf ? "\r\n" : "\n"), { open: named.filter(isOpen) });
         const done = yield* settle(m);
         expect(m.tracker.posts[0]).toEqual({ _tag: "list" });
@@ -296,6 +357,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
       const m = landed("Builds the close.\n\nfabrika close ticket 410\nfabrika close ticket 411\n", {
         open: [410, 411],
       });
+
       const done = yield* settle(m);
       expect(closes(m).map((p) => [p._tag, "ticket" in p ? p.ticket : null])).toEqual([
         ["comment", 410],
@@ -333,6 +395,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
           more: { body: "fabrika close ticket 5", base: world.base, mergeCommit: world.commit },
           open: [5],
         });
+
         const done = yield* settle(m);
         expect(done._tag).toBe("unmerged");
         expect(done.lines).toHaveLength(1);
@@ -350,15 +413,21 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
       Effect.gen(function* () {
         const tickets =
           failing === "open" || failing === "comment" || failing === "close" ? { [failing]: "ERROR refused" } : {};
+
         const m = landed("fabrika close ticket 5", {
           open: [5],
           failing: { tickets, ...(failing === "sweep" ? { sweep: "no node" } : {}) },
         });
+
         const done = yield* settle(m);
         expect(done._tag).toBe("merged");
         expect(m.sweeps.kicks).toBe(1);
         expect(closes(m).map((p) => p._tag)).toEqual(
-          failing === "open" ? [] : failing === "comment" ? ["comment"] : ["comment", "close"],
+          Match.value(failing).pipe(
+            Match.when("open", () => []),
+            Match.when("comment", () => ["comment"]),
+            Match.orElse(() => ["comment", "close"]),
+          ),
         );
         expect(done.lines.slice(1)).toEqual(
           {
@@ -369,6 +438,42 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
             sweep: ["pr 900: closed ticket 5", "pr 900: box cleanup not started: no node"],
           }[failing],
         );
+      }),
+  );
+});
+
+describe("closeOnly: closes the named tickets and starts no sweep (0015)", () => {
+  const body = "Done.\nfabrika close ticket 5\n";
+  const run = (m: ReturnType<typeof memory>) => Queue.closeOnly({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
+
+  // Plants: kick a sweep; close from a pull request that is open, closed, unconfirmed or merged
+  // off main; close a ticket that is not open.
+  it.effect.prop(
+    "property: only a pull request confirmed merged into main closes its named open ticket, and no world starts a sweep",
+    {
+      state: State,
+      draft: Schema.Boolean,
+      base: Schema.Literals(["main", "fabrikalfa/parent"]),
+      confirmed: Schema.Boolean,
+      open: Schema.Boolean,
+    },
+    ({ state, draft, base, confirmed, open }) =>
+      Effect.gen(function* () {
+        const m = memory({
+          state,
+          draft,
+          open: open ? [5] : [],
+          more: { body, base, mergeCommit: confirmed ? merged : null },
+        });
+
+        const done = yield* run(m);
+        const lands = state === "MERGED" && confirmed && base === "main";
+        expect(done._tag).toBe(lands ? "merged" : "unmerged");
+        expect(m.tracker.posts.filter((p) => p._tag !== "list").map((p) => p._tag)).toEqual(
+          lands && open ? ["comment", "close"] : [],
+        );
+        expect(done.lines.includes("pr 900: closed ticket 5")).toBe(lands && open);
+        expect(m.sweeps.kicks).toBe(0);
       }),
   );
 });

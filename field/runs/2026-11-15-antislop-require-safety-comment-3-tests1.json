@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-require-safety-comment-3-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:48:05-08:00",
+  "ended": "2026-11-15T22:05:20-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for anti-slop judgment slice AS-require-safety-comment-3 (ticket 1057, decisions 0561 and 0563), in next/ and our tooling, on branch fabrikalfa/antislop-require-safety-comment-3 from origin/main bcad008, no pull request. Rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker, forced to error in a scratch config outside the repo, over libfabrika's cloudflare, processes, tasks and gateway, .github/ci and oxlint-plugins. Hits met: 309 in all; 7 are in pull request 1366's files and were not touched (cloudflare/connection.ts 77, 101, 203; cloudflare/ObjectService.test.ts 70; cloudflare/alarm.laws.test.ts 23; gateway/Gateway.ts 79; processes/internal/programMail.test.ts 102); 292 in exam paths (the exam-paths.json globs, which hold all of .github/** and oxlint-plugins/**) were fixed: .github/ci 89, oxlint-plugins 38, cloudflare 82, processes 67, tasks 15, gateway 1, in 70 files; 10 in product files are left for the build: cloudflare/record.ts 84 and 103 (two each, chain casts), cloudflare/ConnectionObject.ts 68 (two), cloudflare/ProcessObject.ts 71 (two), gateway/internal/waiting.ts 127, processes/ChildrenLedger.ts 381. Every fix is a hand-written SAFETY comment of its own, 257 comments in all, placed by a scratchpad script (never committed) at the line each reason names, then checked by a recount; no cast was removed or changed, no assertion touched, no disable line added, no quick fix used. A chain cast under an existing fabrika/no-type-assertions disable line gets its SAFETY line above that line, one comment for both casts. Three folders reach zero (.github/ci, oxlint-plugins, libfabrika tasks), so the zero lock in oxlint-plugins/anti-slop.ts makes pnpm lint fail with three lines asking to add them to the rule's block in .oxlintrc.json; the brief forbids that change (locks land later in one PR), so lint is red on those three lines only, 0 blocking otherwise.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Tests run on the commit's tree (base bcad008 plus this diff): the 46 touched plain test files in one narrow vitest run, nice -n 15, --maxWorkers=3, 1107 tests passed. Not run: --changed origin/main and every .integration. file (the test config refuses a broad run and, by 0178, any local run that reaches a real-resource file); the touched integration files are ProcessLifecycle, ProcessMonitors, ProcessStreams and ProcessTextCaps, and the suites' readers in next/packages/libfabrika/src/node/. The diff is comments only, plus two calls reshaped to hold a comment before an arrow (Process.test-support.ts filter, ProcessMonitors.integration.test.ts map). pnpm lint at the same tree: 0 blocking, failing only on the three zero-lock lines.",
+  "plants": [
+    {
+      "law": "anti-slop/require-safety-comment-for-type-assertion over .github/ci",
+      "plant": "the SAFETY line above the gate-limit cast in .github/ci/workflow-lint/scheduled.ts deleted: the scratch run names that cast",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

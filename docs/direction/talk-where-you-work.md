@@ -1,6 +1,6 @@
 ---
 state: "proposed, parts decided 2026-11-04, 2026-11-05, 2026-11-06 (`summon`) and 2026-11-07 (`@` in every box, every `@name` a mailbox address); walked at Tier 5"
-summary: "Today's version first. `@claude <words>` in tsh talks to the agent in the tile (Claude Code's `!`, reversed); a bare `@` goes to the only agent here; Tab completes names. tsh is the chat: fabrika has no chat program. In any program, select a thing and press a key, or click a presence label, and the frame opens a small box anchored there; the spot rides with the message, frozen at send, and the reply stays at the spot, never copied into tsh. Decided 2026-11-07: `@` works in every text box, the command palette included, with no \"Summon claude here\" row; every `@name` is a mailbox address (`@x words` is `tell x <input> \"words\"`), for an agent, a connector or a person, whose inbox is a program under their name, and the sender never knows where it runs (Erlang's location transparency); a line from an agent nobody summoned is an inbox row. Still proposed 2026-11-05: the `@` menu lists agents on your desk first, then \"summon <name> here\", and a program opts in by building its box from the design package's shared text field. Decided 2026-11-05: `@claude` is a wrapper, tsh's own `tell` to an agent the host started (or the line that starts one), read off the line before tsh's shell words, and the claude it starts works in the person's repo with the fabrika connection (experiment 210). Decided 2026-11-05, from a private Design canvas: talking at a spot is a mix, the box for the first 1 or 2 turns, then one thread tile reused for every spot, which always names its spot (no blank one), with Esc and `C-b ;` back; while it shows a thread the spot is a chip, \"N replies · in t3\"; a spot is a program's `location` plus the lane or plan version it came from, and may be several rows; the tile lists the ticket's threads. \"No chat program\" now reads as no conversation without a spot or a tile. Lean, 70%: a reply goes to the inbox only when it ends in a real question. Open: is the box alone enough, a hearable name for non-text spots. From experiments 209 and 210."
+summary: "Today's version first. `@claude <words>` in tsh talks to the agent in the tile (Claude Code's `!`, reversed); a bare `@` goes to the only agent here; Tab completes names. tsh is the chat: fabrika has no chat program. In any program, select a thing and press a key, or click a presence label, and the frame opens a small box anchored there; the spot rides with the message, frozen at send, and the reply stays at the spot, never copied into tsh. Decided 2026-11-07: `@` works in every text box, the command palette included, with no \"Summon claude here\" row; every `@name` is a mailbox address (`@x words` is `tell x <input> \"words\"`), for an agent, a connector or a person, whose inbox is a program under their name, and the sender never knows where it runs (Erlang's location transparency); a line from an agent nobody summoned is an inbox row. Still proposed 2026-11-05: the `@` menu lists agents on your desk first, then \"summon <name> here\", and a program opts in by building its box from the design package's shared text field. Decided 2026-11-05: `@claude` is a wrapper, tsh's own `tell` to an agent the host started (or the line that starts one), read off the line before tsh's shell words, and the claude it starts works in the person's repo with the fabrika connection (experiment 210). Decided 2026-11-05, from a private Design canvas: talking at a spot is a mix, the box for the first 1 or 2 turns, then one thread tile reused for every spot, which always names its spot (no blank one), with Esc and `C-b ;` back; while it shows a thread the spot is a chip, \"N replies · in t3\"; a spot is a program's `location` plus the quest or plan version it came from, and may be several rows; the tile lists the ticket's threads. \"No chat program\" now reads as no conversation without a spot or a tile. Lean, 70%: a reply goes to the inbox only when it ends in a real question. Open: is the box alone enough, a hearable name for non-text spots. From experiments 209 and 210."
 ---
 
 # Talk where you work: `@claude` in tsh, and talking at a spot
@@ -31,7 +31,7 @@ the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked de
   ```text
   tsh> summon claude haiku as scout
     scout · claude haiku · ready
-  tsh> @sc<tab>  ->  @scout find where the lane retries
+  tsh> @sc<tab>  ->  @scout find where the quest retries
   ```
 
 - **Decided 2026-11-06, a summoned agent lives on the desk, not in a tile.** Closing the tile it was
@@ -97,9 +97,9 @@ the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked de
 - **Decided 2026-11-05, never twice.** While the thread tile shows a thread, the spot shrinks to a
   chip, "2 replies · in t3", and does not show the talk again.
 - **Decided 2026-11-05, what a spot is.** A spot is a program's `location`
-  ([program guidelines](./program-guidelines.md), G2) plus the version it came from (the lane, or
+  ([program guidelines](./program-guidelines.md), G2) plus the version it came from (the quest, or
   the plan version), and it may be a list of several rows. When the spot goes away, as on a rerun,
-  the thread says "old lane" and its way back opens that lane.
+  the thread says "old quest" and its way back opens that quest.
 - **Decided 2026-11-05, the thread tile also lists the threads on this ticket.**
 - **Decided 2026-11-05, `@` does not clash.** `packages/fabrika/src/shell/grammar.ts` reads no `@`.
 - **Decided 2026-11-07, `@` works in every text box, the command palette included.** There is no
@@ -269,7 +269,7 @@ copy-paste. The reply stays at the spot for the first 1 or 2 turns, then the tal
 thread tile (below). It is never copied into tsh.
 
 ```text
-A sketch, today's version. trace in t2 beside tsh in t1; ticket #7's lane, the plan step.
+A sketch, today's version. trace in t2 beside tsh in t1; ticket #7's quest, the plan step.
 select the span "plan · turn 4"         trace tells the frame what is selected
 press the key (C-b @, made up)          the frame opens a box at the span: "Ask claude about plan · turn 4"
 type "why is this slow?", Enter         an input by you, in-3f9a0c21-60, the spot frozen at send
@@ -294,7 +294,7 @@ the span shows "1 reply"                a polite status says "claude replied on 
 // A sketch, both versions. What a program tells the frame about its selection (decided
 // 2026-11-05). `program` and `location` are G2's words; `Spot`, `Version` and `name` are made up.
 const Version = Schema.TaggedUnion({
-	lane: {lane: Schema.String}, // the lane run it came from; a rerun is a new lane
+	quest: {quest: Schema.String}, // the quest run it came from; a rerun is a new quest
 	plan: {plan: Schema.Number}, // the plan version: 2
 });
 const Spot = Schema.Struct({
@@ -305,10 +305,10 @@ const Spot = Schema.Struct({
 });
 const Spots = Schema.NonEmptyArray(Spot); // several rows selected: one thread about all of them
 
-// One value, traced: the span in ticket #7's lane, plan step, turn 4.
-// {program: "trace", location: {span: "7f3a"}, version: {_tag: "lane", lane: "..."},
+// One value, traced: the span in ticket #7's quest, plan step, turn 4.
+// {program: "trace", location: {span: "7f3a"}, version: {_tag: "quest", quest: "..."},
 //  name: "plan · turn 4"}
-// After a rerun the lane is gone: the thread says "old lane", and back opens that lane.
+// After a rerun the quest is gone: the thread says "old quest", and back opens that quest.
 ```
 
 ## The thread tile, and replies
@@ -344,7 +344,7 @@ const thread = Program.make({
   nothing to open: the palette has no "new thread" row.
 - **The same tile lists the threads on this ticket,** one row per spot, so a talk from another tile
   is found again.
-- **When the spot goes,** the thread stays and says "old lane"; its way back opens that lane's
+- **When the spot goes,** the thread stays and says "old quest"; its way back opens that quest's
   location, not today's.
 - **Replies (a lean, not decided, 70%).** A reply marks its spot "N replies", in words. A polite
   status line says it once, without moving focus. The ticket's thread list shows it. A reply never
@@ -418,7 +418,7 @@ the canvas's own guess. Sure: 50%; the spot's shape is now set, but nothing is b
 
 The `C-b @` key, `TextField` and its props, the `@` menu's row words, `Said` and its cases, `Spot`,
 `Spots`, `Version`, `name`, `thread`, `ThreadLocation`, the chip's and title's words, the refusal's
-words, the span names past the lane's real steps, claude's words, the
+words, the span names past the quest's real steps, claude's words, the
 ids, and the vitest path.
 
 ## What it cannot tell us

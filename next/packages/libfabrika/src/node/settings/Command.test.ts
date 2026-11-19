@@ -16,35 +16,43 @@
 // The home is `/t730`, a made-up folder that exists only in the counted FileSystem below.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  ConfigProvider,
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  Logger,
-  PlatformError,
-  References,
-  Sink,
-  Stream,
-  Tracer,
-} from "effect";
-import { Command as Cli } from "effect/cli";
-import { Digest } from "effect/crypto";
-import { TestConsole } from "effect/testing";
+import * as Print from "@kalfa/config/Print";
+import * as Reference from "@kalfa/config/Reference";
+import * as TomlParser from "@kalfa/config/TomlParser";
+import { Recorder } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as Cause from "effect/Cause";
+import * as Cli from "effect/cli/Command";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Match from "effect/Match";
+import * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as References from "effect/References";
+import * as Sink from "effect/Sink";
+import * as Str from "effect/String";
+import * as TestConsole from "effect/testing/TestConsole";
+import * as Tracer from "effect/Tracer";
+
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
-import * as Print from "../../settings/Print.ts";
-import * as Reference from "../../settings/Reference.ts";
-import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Command from "./Command.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 // T753 L8 and L9 reuse these complete command flows, with every output captured below.
 const VERSION = "0.0.0";
+
 const HOME = "/t730";
 
 type Person =
@@ -52,125 +60,134 @@ type Person =
   | { readonly _tag: "text"; readonly text: string }
   | { readonly _tag: "unreadable" };
 
+/** What one run asked of the FileSystem, read from the Recorder that watched it. */
 interface Counts {
-  /** Every path a read-side operation was asked for, in order. */
-  readonly touched: Array<string>;
+  /** The first argument of every call that reads, in order: a path, or a glob's pattern. */
+  readonly touched: ReadonlyArray<unknown>;
   /** Reads of the person's file. */
-  reads: number;
-  /** Every write-side operation called, by name. */
-  readonly writes: Array<string>;
+  readonly reads: number;
+  /** Every member called that writes or makes something, by name. */
+  readonly writes: ReadonlyArray<string>;
 }
+
+/** `FileSystem`'s members that write or make something. A name it does not have does not compile. */
+const WRITES: ReadonlySet<Recorder.Method<FileSystem.FileSystem>> = new Set([
+  "writeFile",
+  "writeFileString",
+  "makeDirectory",
+  "makeTempDirectory",
+  "makeTempDirectoryScoped",
+  "makeTempFile",
+  "makeTempFileScoped",
+  "remove",
+  "rename",
+  "copy",
+  "copyFile",
+  "symlink",
+  "link",
+  "truncate",
+  "chmod",
+  "chown",
+  "utimes",
+  "open",
+]);
 
 const missing = (method: string, path: string) =>
   PlatformError.systemError({ _tag: "NotFound", module: "FileSystem", method, pathOrDescriptor: path });
 
 /**
- * A FileSystem that holds only the person's file at `at`, counts every read and refuses every
- * write. A repo's file anywhere, the current folder's included, would hold a key no setting has.
+ * A FileSystem that holds only the person's file at `at`, with every call recorded. Each member it
+ * does not give answers as `FileSystem.makeNoop` does: `NotFound`, `exists` false. A repo's file
+ * anywhere, the current folder's included, would hold a key no setting has. A Sink is no member the
+ * Recorder watches, so each `sink` opened is written into `sunk`, and it dies.
  */
-const files = (at: string, person: Person, counts: Counts) => {
-  const look = (method: string) => (path: string) => {
-    counts.touched.push(path);
-    return Effect.fail(missing(method, path));
-  };
-  const wrote = (method: string) => () => {
-    counts.writes.push(method);
-    return Effect.die(new Error(`the settings command wrote with ${method}`));
-  };
-  return FileSystem.layerNoop({
-    readFileString: (path) => {
-      counts.touched.push(path);
-
-      if (path === at) {
-        counts.reads++;
-        return person._tag === "text"
-          ? Effect.succeed(person.text)
-          : person._tag === "unreadable"
-            ? Effect.fail(
+const files = (at: string, person: Person, sunk: Array<string>) =>
+  Recorder.layer(
+    FileSystem.FileSystem,
+    FileSystem.makeNoop({
+      readFileString: (path) => {
+        if (path === at) {
+          return Match.value(person).pipe(
+            Match.tag("text", (person) => Effect.succeed(person.text)),
+            Match.tag("unreadable", () =>
+              Effect.fail(
                 PlatformError.systemError({
                   _tag: "PermissionDenied",
                   module: "FileSystem",
                   method: "readFileString",
                   pathOrDescriptor: path,
                 }),
-              )
-            : Effect.fail(missing("readFileString", path));
-      }
+              ),
+            ),
+            Match.orElse(() => Effect.fail(missing("readFileString", path))),
+          );
+        }
 
-      return path.endsWith(".fabrika/fabrika.toml")
-        ? Effect.succeed("[nope]\nkey = 1\n")
-        : Effect.fail(missing("readFileString", path));
-    },
-    readFile: look("readFile"),
-    exists: (path) => {
-      counts.touched.push(path);
-      return Effect.succeed(false);
-    },
-    stat: look("stat"),
-    lstat: look("lstat"),
-    access: look("access"),
-    readDirectory: look("readDirectory"),
-    readDirectoryEntries: look("readDirectoryEntries"),
-    readLink: look("readLink"),
-    realPath: look("realPath"),
-    stream: (path) => {
-      counts.touched.push(path);
-      return Stream.fail(missing("stream", path));
-    },
-    watch: (path) => {
-      counts.touched.push(path);
-      return Stream.fail(missing("watch", path));
-    },
-    writeFile: wrote("writeFile"),
-    writeFileString: wrote("writeFileString"),
-    makeDirectory: wrote("makeDirectory"),
-    makeTempDirectory: wrote("makeTempDirectory"),
-    makeTempDirectoryScoped: wrote("makeTempDirectoryScoped"),
-    makeTempFile: wrote("makeTempFile"),
-    makeTempFileScoped: wrote("makeTempFileScoped"),
-    remove: wrote("remove"),
-    rename: wrote("rename"),
-    copy: wrote("copy"),
-    copyFile: wrote("copyFile"),
-    symlink: wrote("symlink"),
-    link: wrote("link"),
-    truncate: wrote("truncate"),
-    chmod: wrote("chmod"),
-    chown: wrote("chown"),
-    utimes: wrote("utimes"),
-    open: wrote("open"),
-    sink: () => {
-      counts.writes.push("sink");
-      return Sink.die(new Error("the settings command wrote with sink"));
-    },
+        return Function.pipe(path, Str.endsWith(".fabrika/fabrika.toml"))
+          ? Effect.succeed("[nope]\nkey = 1\n")
+          : Effect.fail(missing("readFileString", path));
+      },
+      sink: (path) => {
+        sunk.push(path);
+
+        return Sink.die(new Error("the settings command wrote with sink"));
+      },
+    }),
+  );
+
+/** Every call the run made on the FileSystem, as the law counts them. */
+const counted = (at: string, sunk: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const all = yield* Recorder.calls(FileSystem.FileSystem);
+    const reads = yield* Recorder.calls(FileSystem.FileSystem, "readFileString");
+
+    return {
+      touched: Arr.map(
+        Arr.filter(all, (call) => !WRITES.has(call.method)),
+        (call) => call.args[0],
+      ),
+      reads: Arr.filter(reads, ([path]) => path === at).length,
+      writes: [
+        ...Arr.map(
+          Arr.filter(all, (call) => WRITES.has(call.method)),
+          (call) => call.method,
+        ),
+        ...Arr.map(sunk, () => "sink"),
+      ],
+    } satisfies Counts;
   });
-};
 
 /** Spans, as their names, attributes, events and status. */
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       ended.push(span);
+
       return span;
     },
   });
+
   const text = () =>
-    ended
-      .map((span) =>
+    Arr.join(
+      Arr.map(ended, (span) =>
         JSON.stringify(
           { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
+          (_key, value: unknown) => (Predicate.isBigInt(value) ? String(value) : value),
         ),
-      )
-      .join("\n");
+      ),
+      "\n",
+    );
+
   return { tracer, text };
 };
 
 /** Every log entry at every level, with its fields and cause. */
 const logs = () => {
   const entries: Array<string> = [];
+
   const logger = Logger.make((options) => {
     entries.push(
       JSON.stringify({
@@ -181,6 +198,7 @@ const logs = () => {
       }),
     );
   });
+
   return { layer: Logger.layer([logger]), entries };
 };
 
@@ -198,51 +216,62 @@ const place = (env: Readonly<Record<string, string>>) =>
 
 /** One run of `settings` with these arguments, environment and person's file, everything it said. */
 const run = (input: Input) => {
-  const counts: Counts = { touched: [], reads: 0, writes: [] };
+  const at = place(input.env).path;
+  const sunk: Array<string> = [];
   const traced = spans();
   const logged = logs();
+
   return Effect.gen(function* () {
     const exit = yield* Cli.runWith(Command.make({ version: VERSION }), { version: VERSION })(input.args).pipe(
       Effect.withTracer(traced.tracer),
       Effect.exit,
     );
-    const stdout = (yield* TestConsole.logLines).map(String);
-    const stderr = (yield* TestConsole.errorLines).map(String);
+
+    const stdout = Arr.map(yield* TestConsole.logLines, String);
+    const stderr = Arr.map(yield* TestConsole.errorLines, String);
+    const counts = yield* counted(at, sunk);
+
     return { exit, stdout, stderr, counts, spans: traced.text(), logs: logged.entries };
   }).pipe(
     Effect.provideService(References.MinimumLogLevel, "All"),
     Effect.provide(
       Layer.mergeAll(
-        files(place(input.env).path, input.person, counts),
+        files(at, input.person, sunk),
         TestConsole.layer,
         TomlParser.layer,
         Digest.layerWebCrypto,
         logged.layer,
         ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...input.env } })),
-      ),
+      ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
-    Effect.provide(NodeServices.layer),
     Effect.runPromise,
   );
 };
 
 /** The oracle: the library's own load and report for the same inputs. */
 const expected = (input: Input, flags: Readonly<Record<string, string>>, all: boolean) => {
-  const counts: Counts = { touched: [], reads: 0, writes: [] };
   const at = place(input.env);
-  const env = Object.fromEntries(
-    Declarations.all.declarations.flatMap((d) => (input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]])),
+
+  const env = Rec.fromEntries(
+    Arr.flatMap(Declarations.all.declarations, (d) =>
+      input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]],
+    ),
   );
+
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
     Effect.map((loaded) => Print.report(Reference.rows(Declarations.all, loaded.snapshot), { all })),
     Effect.exit,
-    Effect.provide(Layer.mergeAll(files(at.path, input.person, counts), TomlParser.layer, Digest.layerWebCrypto)),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(
+      Layer.mergeAll(files(at.path, input.person, []), TomlParser.layer, Digest.layerWebCrypto).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
     Effect.runPromise,
   );
 };
 
 const port = fc.integer({ min: 1, max: 65535 });
+
 const badPort = fc.oneof(fc.integer({ min: 65536, max: 2 ** 30 }), fc.integer({ min: -(2 ** 30), max: 0 }));
 
 // The person's file: missing, empty, a valid port, or each way it can fail to load.
@@ -261,6 +290,7 @@ const person = fc.oneof(
 
 // Declared values, as a flag or in the environment, valid or not.
 const value = fc.oneof(port.map(String), badPort.map(String));
+
 const version = fc.constantFrom("0.0.0", "0.0.1", "nope");
 
 const inputs = fc.record({
@@ -273,24 +303,25 @@ const inputs = fc.record({
   envVersion: fc.option(version, { nil: undefined }),
 });
 
-it("T753 L8 explicit values equal to defaults remain visible without all", async () => {
-  await fc.assert(
+it("T753 L8 explicit values equal to defaults remain visible without all", () =>
+  fc.assert(
     fc.asyncProperty(fc.record({ viaEnv: fc.boolean(), all: fc.boolean() }), async (v) => {
       const d = Declarations.port;
+
       const ran = await run({
         args: [...(v.all ? ["--all"] : []), ...(v.viaEnv ? [] : [`--${d.path}=${d.default}`])],
         env: { HOME, ...(v.viaEnv ? { [d.env]: String(d.default) } : {}) },
         person: { _tag: "text", text: `[instance]\nport = ${d.default}\n` },
       });
+
       expect(Exit.isSuccess(ran.exit)).toBe(true);
       expect(ran.counts.reads).toBe(1);
-      expect(ran.stdout.join("\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
-      expect(ran.stdout.join("\n")).toContain(v.viaEnv ? d.env : `--${d.path}`);
+      expect(Arr.join(ran.stdout, "\n")).toContain(`${d.path} = ${JSON.stringify(d.default)}`);
+      expect(Arr.join(ran.stdout, "\n")).toContain(v.viaEnv ? d.env : `--${d.path}`);
       expect(ran.counts.writes).toEqual([]);
     }),
     check,
-  );
-});
+  ));
 
 type Generated = typeof inputs extends fc.Arbitrary<infer I> ? I : never;
 
@@ -299,23 +330,28 @@ const shape = (g: Generated) => {
     ...(g.flagPort === undefined ? {} : { [Declarations.port.path]: g.flagPort }),
     ...(g.flagVersion === undefined ? {} : { [Declarations.version.path]: g.flagVersion }),
   };
+
   const env: Record<string, string> = {
     HOME,
     ...(g.home === "fabrika-home" ? { FABRIKA_HOME: `${HOME}/f` } : {}),
     ...(g.envPort === undefined ? {} : { [Declarations.port.env]: g.envPort }),
     ...(g.envVersion === undefined ? {} : { [Declarations.version.env]: g.envVersion }),
   };
-  const args = [...(g.all ? ["--all"] : []), ...Object.entries(flags).map(([path, v]) => `--${path}=${v}`)];
+
+  const args = [...(g.all ? ["--all"] : []), ...Arr.map(Rec.toEntries(flags), ([path, v]) => `--${path}=${v}`)];
+
   return { input: { args, env, person: g.person }, flags };
 };
 
 /** Whether a line of output is a report row: it starts with a declared path. */
 const row = (line: string) =>
-  line.split("\n").some((l) => Declarations.all.declarations.some((d) => l.trimStart().startsWith(d.path)));
+  Arr.some(Str.split(line, "\n"), (l) =>
+    Arr.some(Declarations.all.declarations, (d) => Function.pipe(l, Str.trimStart, Str.startsWith(d.path))),
+  );
 
 describe("L7, the command loads once, prints only after success, selects no repo and writes nothing", () => {
-  it("a run prints the library's report for its load, or fails with no report; it reads only the person's file", async () => {
-    await fc.assert(
+  it("a run prints the library's report for its load, or fails with no report; it reads only the person's file", () =>
+    fc.assert(
       fc.asyncProperty(inputs, async (g) => {
         const { input, flags } = shape(g);
         const ran = await run(input);
@@ -325,31 +361,37 @@ describe("L7, the command loads once, prints only after success, selects no repo
         // One load, of the person's file alone: never the current folder's repo file.
         expect(ran.counts.reads, JSON.stringify(input)).toBe(1);
         expect(
-          ran.counts.touched.every((p) => p === at),
-          ran.counts.touched.join(", "),
+          Arr.every(ran.counts.touched, (p) => p === at),
+          Arr.join(
+            Arr.map(ran.counts.touched, (p) => (p === undefined ? "" : String(p))),
+            ", ",
+          ),
         ).toBe(true);
         expect(ran.counts.writes).toEqual([]);
         expect(Exit.isSuccess(ran.exit), JSON.stringify(input)).toBe(Exit.isSuccess(oracle));
 
         if (Exit.isSuccess(oracle)) {
-          expect(ran.stdout.join("\n")).toContain(oracle.value.trimEnd());
+          expect(Arr.join(ran.stdout, "\n")).toContain(Str.trimEnd(oracle.value));
         } else {
           // A failed load prints no row, not even a valid flag's.
-          expect(ran.stdout.some(row), ran.stdout.join("\n")).toBe(false);
+          expect(Arr.some(ran.stdout, row), Arr.join(ran.stdout, "\n")).toBe(false);
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [
+  secret,
+  Function.pipe(JSON.stringify(secret), Str.slice(1, -1)),
+  encodeURIComponent(secret),
+];
 
 // Made-up secrets with the characters that make the three forms differ.
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Function.pipe(word, Str.slice(0, 3))}`);
 
 /**
  * Where the person's file holds the secret: nowhere, at an unknown key, or under a declared key.
@@ -358,6 +400,7 @@ const secret = fc
  */
 const placed = (word: string) => {
   const s = JSON.stringify(word);
+
   return fc.constantFrom(
     "[instance]\nport = 18800\n",
     `[instance]\ntoken = ${s}\n`,
@@ -370,8 +413,8 @@ const placed = (word: string) => {
 };
 
 describe("L8 [secrets], unrelated environment values and refused file values never reach output or telemetry", () => {
-  it("stdout, stderr, the formatted failure, log fields and spans hold no form of a secret", async () => {
-    await fc.assert(
+  it("stdout, stderr, the formatted failure, log fields and spans hold no form of a secret", () =>
+    fc.assert(
       fc.asyncProperty(
         secret.chain((word) => fc.tuple(fc.constant(word), placed(word))),
         fc.subarray(
@@ -385,10 +428,12 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
         async ([word, text], fields, envPort, all) => {
           const env: Record<string, string> = {
             HOME,
-            ...Object.fromEntries(fields.map((f) => [f, word])),
+            ...Rec.fromEntries(Arr.map(fields, (f) => [f, word])),
             ...(envPort === undefined ? {} : { [Declarations.port.env]: String(envPort) }),
           };
+
           const ran = await run({ args: all ? ["--all"] : [], env, person: { _tag: "text", text } });
+
           const outputs = [
             ...ran.stdout,
             ...ran.stderr,
@@ -406,6 +451,5 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
         },
       ),
       check,
-    );
-  });
+    ));
 });

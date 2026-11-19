@@ -1,0 +1,348 @@
+diff --git a/dist/internal/arbitrary/model.js b/dist/internal/arbitrary/model.js
+index b683da8a355f9bd2488a24df7eb58a99939f309d..0732907473c6aafffc3835252b46e05fdea3dbc8 100644
+--- a/dist/internal/arbitrary/model.js
++++ b/dist/internal/arbitrary/model.js
+@@ -124,8 +124,10 @@ export function mapAttempt(self, f) {
+ }
+ /** @internal */
+ export function sampleFromShrink(value, shrink) {
+-  const values = shrink(value);
+-  return makeSample(value, values.length === 0 ? undefined : Effect.map(pullFromArray(values), value => sampleFromShrink(value, shrink)));
++  return makeSampleWithLazyShrinks(value, () => {
++    const values = shrink(value);
++    return values.length === 0 ? undefined : Effect.map(pullFromArray(values), value => sampleFromShrink(value, shrink));
++  });
+ }
+ /** @internal */
+ export function sampleFromValidatedShrink(value, shrink, validate) {
+diff --git a/dist/testing/TestConsole.d.ts b/dist/testing/TestConsole.d.ts
+index 48a398fedda23ec32db99374536bdf80dd07ef63..827707840b26f8e25081a52d56b3baff7c00d321 100644
+--- a/dist/testing/TestConsole.d.ts
++++ b/dist/testing/TestConsole.d.ts
+@@ -65,6 +65,36 @@ export interface TestConsole extends Console.Console {
+      * instance.
+      */
+     readonly errorLines: Effect.Effect<ReadonlyArray<unknown>>;
++    /**
++     * Returns an array of all items that have been logged by the program using
++     * `Console.warn` thus far.
++     *
++     * **When to use**
++     *
++     * Use to inspect captured `Console.warn` calls through a `TestConsole`
++     * instance.
++     */
++    readonly warnLines: Effect.Effect<ReadonlyArray<unknown>>;
++    /**
++     * Returns an array of all items that have been logged by the program using
++     * `Console.info` thus far.
++     *
++     * **When to use**
++     *
++     * Use to inspect captured `Console.info` calls through a `TestConsole`
++     * instance.
++     */
++    readonly infoLines: Effect.Effect<ReadonlyArray<unknown>>;
++    /**
++     * Returns an array of all items that have been logged by the program using
++     * `Console.debug` thus far.
++     *
++     * **When to use**
++     *
++     * Use to inspect captured `Console.debug` calls through a `TestConsole`
++     * instance.
++     */
++    readonly debugLines: Effect.Effect<ReadonlyArray<unknown>>;
+ }
+ /**
+  * The `TestConsole` namespace provides types and utilities for working with
+@@ -312,4 +342,55 @@ export declare const logLines: Effect.Effect<ReadonlyArray<unknown>, never, neve
+  * @since 4.0.0
+  */
+ export declare const errorLines: Effect.Effect<ReadonlyArray<unknown>, never, never>;
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.warn` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.warn` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export declare const warnLines: Effect.Effect<ReadonlyArray<unknown>, never, never>;
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.info` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.info` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export declare const infoLines: Effect.Effect<ReadonlyArray<unknown>, never, never>;
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.debug` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.debug` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export declare const debugLines: Effect.Effect<ReadonlyArray<unknown>, never, never>;
+ //# sourceMappingURL=TestConsole.d.ts.map
+\ No newline at end of file
+diff --git a/dist/testing/TestConsole.js b/dist/testing/TestConsole.js
+index 7d8bc5b5f4ed6134200aea1cf017f8e70002be7c..298a8664222e31b3ddebb8094fe119ee89a8ea6a 100644
+--- a/dist/testing/TestConsole.js
++++ b/dist/testing/TestConsole.js
+@@ -61,6 +61,9 @@ export const make = /*#__PURE__*/Effect.gen(function* () {
+   }
+   const logLines = Effect.sync(() => Array.flatMap(entries, entry => entry.method === "log" ? entry.parameters : []));
+   const errorLines = Effect.sync(() => Array.flatMap(entries, entry => entry.method === "error" ? entry.parameters : []));
++  const warnLines = Effect.sync(() => Array.flatMap(entries, entry => entry.method === "warn" ? entry.parameters : []));
++  const infoLines = Effect.sync(() => Array.flatMap(entries, entry => entry.method === "info" ? entry.parameters : []));
++  const debugLines = Effect.sync(() => Array.flatMap(entries, entry => entry.method === "debug" ? entry.parameters : []));
+   return {
+     assert: createEntryUnsafe("assert"),
+     clear: createEntryUnsafe("clear"),
+@@ -82,7 +85,10 @@ export const make = /*#__PURE__*/Effect.gen(function* () {
+     trace: createEntryUnsafe("trace"),
+     warn: createEntryUnsafe("warn"),
+     logLines,
+-    errorLines
++    errorLines,
++    warnLines,
++    infoLines,
++    debugLines
+   };
+ });
+ /**
+@@ -233,4 +239,55 @@ export const logLines = /*#__PURE__*/testConsoleWith(console => console.logLines
+  * @since 4.0.0
+  */
+ export const errorLines = /*#__PURE__*/testConsoleWith(console => console.errorLines);
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.warn` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.warn` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const warnLines = /*#__PURE__*/testConsoleWith(console => console.warnLines);
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.info` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.info` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const infoLines = /*#__PURE__*/testConsoleWith(console => console.infoLines);
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.debug` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.debug` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const debugLines = /*#__PURE__*/testConsoleWith(console => console.debugLines);
+ //# sourceMappingURL=TestConsole.js.map
+\ No newline at end of file
+diff --git a/src/internal/arbitrary/model.ts b/src/internal/arbitrary/model.ts
+index b095cd028169dadf8e35480312580930e4b6766f..827ad5214096664707d0eaed4ac1c7958bd825d9 100644
+--- a/src/internal/arbitrary/model.ts
++++ b/src/internal/arbitrary/model.ts
+@@ -240,11 +240,10 @@ export function mapAttempt<A, B>(self: Attempt<A>, f: (sample: Sample<A>) => Sam
+ 
+ /** @internal */
+ export function sampleFromShrink<A>(value: A, shrink: (value: A) => ReadonlyArray<A>): Sample<A> {
+-  const values = shrink(value)
+-  return makeSample(
+-    value,
+-    values.length === 0 ? undefined : Effect.map(pullFromArray(values), (value) => sampleFromShrink(value, shrink))
+-  )
++  return makeSampleWithLazyShrinks(value, () => {
++    const values = shrink(value)
++    return values.length === 0 ? undefined : Effect.map(pullFromArray(values), (value) => sampleFromShrink(value, shrink))
++  })
+ }
+ 
+ /** @internal */
+diff --git a/src/testing/TestConsole.ts b/src/testing/TestConsole.ts
+index 62fbe1a8132e3c91ec095d6e8df6a693b5fcef78..b4d54df3d1d267cb456ea5a07b8356bf900ff35a 100644
+--- a/src/testing/TestConsole.ts
++++ b/src/testing/TestConsole.ts
+@@ -79,6 +79,36 @@ export interface TestConsole extends Console.Console {
+    * instance.
+    */
+   readonly errorLines: Effect.Effect<ReadonlyArray<unknown>>
++  /**
++   * Returns an array of all items that have been logged by the program using
++   * `Console.warn` thus far.
++   *
++   * **When to use**
++   *
++   * Use to inspect captured `Console.warn` calls through a `TestConsole`
++   * instance.
++   */
++  readonly warnLines: Effect.Effect<ReadonlyArray<unknown>>
++  /**
++   * Returns an array of all items that have been logged by the program using
++   * `Console.info` thus far.
++   *
++   * **When to use**
++   *
++   * Use to inspect captured `Console.info` calls through a `TestConsole`
++   * instance.
++   */
++  readonly infoLines: Effect.Effect<ReadonlyArray<unknown>>
++  /**
++   * Returns an array of all items that have been logged by the program using
++   * `Console.debug` thus far.
++   *
++   * **When to use**
++   *
++   * Use to inspect captured `Console.debug` calls through a `TestConsole`
++   * instance.
++   */
++  readonly debugLines: Effect.Effect<ReadonlyArray<unknown>>
+ }
+ 
+ /**
+@@ -195,6 +225,12 @@ export const make = Effect.gen(function*() {
+     Array.flatMap(entries, (entry) => entry.method === "error" ? entry.parameters : [])
+   )
+ 
++  const warnLines = Effect.sync(() => Array.flatMap(entries, (entry) => entry.method === "warn" ? entry.parameters : []))
++
++  const infoLines = Effect.sync(() => Array.flatMap(entries, (entry) => entry.method === "info" ? entry.parameters : []))
++
++  const debugLines = Effect.sync(() => Array.flatMap(entries, (entry) => entry.method === "debug" ? entry.parameters : []))
++
+   return {
+     assert: createEntryUnsafe("assert"),
+     clear: createEntryUnsafe("clear"),
+@@ -216,7 +252,10 @@ export const make = Effect.gen(function*() {
+     trace: createEntryUnsafe("trace"),
+     warn: createEntryUnsafe("warn"),
+     logLines,
+-    errorLines
++    errorLines,
++    warnLines,
++    infoLines,
++    debugLines
+   } as TestConsole
+ })
+ 
+@@ -376,3 +415,63 @@ export const logLines: Effect.Effect<ReadonlyArray<unknown>, never, never> = tes
+ export const errorLines: Effect.Effect<ReadonlyArray<unknown>, never, never> = testConsoleWith(
+   (console) => console.errorLines
+ )
++
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.warn` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.warn` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const warnLines: Effect.Effect<ReadonlyArray<unknown>, never, never> = testConsoleWith(
++  (console) => console.warnLines
++)
++
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.info` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.info` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const infoLines: Effect.Effect<ReadonlyArray<unknown>, never, never> = testConsoleWith(
++  (console) => console.infoLines
++)
++
++/**
++ * Returns an array of all items that have been logged by the program using
++ * `Console.debug` thus far.
++ *
++ * **When to use**
++ *
++ * Use to assert on captured `Console.debug` output from a program provided
++ * with `TestConsole.layer`.
++ *
++ * @see {@link errorLines} for reading captured `Console.error` output
++ * @see {@link layer} for capturing console calls during a test
++ *
++ * @stability unstable
++ * @category testing
++ * @since 4.0.0
++ */
++export const debugLines: Effect.Effect<ReadonlyArray<unknown>, never, never> = testConsoleWith(
++  (console) => console.debugLines
++)

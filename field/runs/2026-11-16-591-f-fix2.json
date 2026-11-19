@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-f-fix2",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T23:36:59-08:00",
+  "ended": "2026-11-15T23:46:30-08:00",
+  "parent": "2026-11-16-591-f-review2",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second fix round for slice F of the exam-to-lint plan (0591, docs/plan/quests/exam-to-lint-PLAN.md), allowed by the lead under 0564 after the review's second send-back (field/runs/2026-11-16-591-f-review2.json), on fabrikalfa/exam-to-lint-f from e6432cb. The review found that fabrika/one-page-runtime (oxlint-plugins/one-page-runtime.ts) read a string only as the key inside a computed member, so `const k = \"runPromise\"; Effect[k](page);` and `Reflect.get(Effect, \"runFork\")(page);` passed, while the deleted next/apps/fabrika/src/build.test.ts text check refused both. The fix: the MemberExpression visitor is replaced by a Literal visitor and a TemplateLiteral visitor, so every string literal and every template with no expressions, wherever it stands, is read as the name it spells. A run* name is reported as a run the page does not own, and \"runMain\" is a second page runtime; this also covers the member key. Only a \"runMain\" that names an import specifier is skipped there, since imports are counted at Program:exit. The rule's top comment and oxlint-plugins/README.md say so. M7's law (oxlint-plugins/one-page-runtime.test.ts) gains two generated planted entries: a run's name held in a variable then read as a key, and a run's name passed to Reflect.get. Both draw the name from runPromise, runFork, runSync and runMain (runMain must report a second runtime, the others a foreign run) in double quotes, single quotes or a template, and the property's coverage check requires each name and each quote to be drawn. The first send-back's three cases and the four string-key spellings stay.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: refuses each planted entry with its own reports and passes the entry in every start spelling",
+      "plant": "the rule as it stood at e6432cb (reads a string only as a computed member key)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: scenario: the repo's config turns the rule on for the page entry and for no other file",
+      "plant": "the rule as it stood at e6432cb",
+      "result": "red"
+    },
+    {
+      "law": "case 1, a run named by a string in a variable: const k = \"runPromise\"; Effect[k](page);",
+      "plant": "the rule as it stood at e6432cb, in a scratch RuleTester file expecting one report",
+      "result": "red"
+    },
+    {
+      "law": "case 2, a run named by a string passed to Reflect.get: Reflect.get(Effect, \"runFork\")(page);",
+      "plant": "the rule as it stood at e6432cb, in a scratch RuleTester file expecting one report",
+      "result": "red"
+    },
+    {
+      "law": "cases 1 and 2, each alone, on the fixed rule",
+      "plant": "none: the fixed rule, in the same scratch RuleTester file, each case expecting exactly one report",
+      "result": "green"
+    },
+    {
+      "law": "oxlint-plugins/one-page-runtime.test.ts: both laws, on the fixed rule (M7's planned break)",
+      "plant": "count a runMain inside a function as the module's start (collect every ExpressionStatement through a visitor in place of program.body)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9.5,
+  "note": "The new law was run at 2026-11-15T23:37:38 with the test change and the rule still as at e6432cb: the property failed 'Should have 1 error but had 0' on 'a run named by a string in a variable' (counterexample: runPromise in double quotes), and the scenario 'a run named by a string in a variable: expected [] to have a length of 1 but got +0'. With the fix both laws pass. At 23:39:16 a scratch file oxlint-plugins/zz-cases.test.ts beside a copy of the e6432cb rule ran each case alone: the old rule gave each 0 reports, the fixed rule 1; both scratch files were deleted and never committed. M7's planned break was run at 23:38:49 on a saved copy and restored by copy, checked with cmp: 'inside a component' fails with 'Should have 2 errors but had 0', the scenario with 'expected [] to have a length of 2 but got +0'. M5: pnpm lint (NODE_OPTIONS=--max-old-space-size=6144, started when pgrep -x tsgo found none) exits 0, 17 parts passed; oxlint with .oxlintrc.json on the real entry next/apps/fabrika/src/entry/browser.tsx gives 0 diagnostics, and the entry is unchanged. Tests ran under nice -n 19 with --maxWorkers=1 on narrow paths only: oxlint-plugins/one-page-runtime.test.ts (2 passed) and oxlint-plugins/plants.test.ts (236 passed). The list ratchet exits 0. One pnpm typecheck, once pgrep -x tsgo found none: exit 0. No .integration. or .visual. law was reached, so none met the 0178 guard. No product file changed.",
+  "step": "tests"
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-botpush-reads-a-macos-keychain-in-the-cloud",
+  "date": "2026-11-18",
+  "by": "lead",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".agents/skills/lead/scripts/botpush.mjs",
+    "line": 118
+  },
+  "says": "In today's lead tooling, botpush.mjs reads the bot's app key only from the macOS keychain with the security command, so a cloud session on Linux cannot push as the bot even once a push without step notes is allowed, and the tests, build and review skills name botpush.mjs as their only push.",
+  "proof": "In a cloud session on 2026-11-18, `command -v security` printed nothing (`security: not found`), and botpush.mjs:118 calls execFileSync(\"security\", [\"find-generic-password\", ...]) before any push; decision 0164 keeps the app key in the laptop's keychain and says nothing about where a cloud session gets one.",
+  "cost": "Every cloud step's push still stops at botpush.mjs, now at the key read instead of the notes check, and the agent pushes some other way the step skills do not name.",
+  "head": "1d5e6d0ad461808efab12605b1a39db8cb90a8fd",
+  "ticket": null,
+  "pr": null
+}

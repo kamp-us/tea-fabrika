@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-changes-comments-say-merge-line-runs-no-tooling-tests",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".github/ci/changes.mjs",
+    "line": 12
+  },
+  "says": "The header comment of changes.mjs, and two more comments in it, say the merge line runs no tooling tests (citing 0539), but decision 0584 has every plain tooling law run on the pull request its change reaches and decision 0602 keeps the related job's plain tooling laws on the merge line, so the comments describe a rule that 0584 and 0602 changed. Ticket text: reword lines 11 to 13, 218 to 219 and 255 to 256 of .github/ci/changes.mjs to say that no flag here starts a tooling test because the related job and select pick the plain tooling laws a change reaches (0584, 0602), and that only tooling laws that start a process stay on main's full run.",
+  "proof": "`.github/ci/changes.mjs:12-13` reads \"No flag starts the tooling tests either: the merge line runs none of them, and the schedule (scheduled.yaml) runs them all (0539)\"; lines 218-219 and 255-256 say the same; `.decisions/0584-a-tests-kind-follows-what-it-uses.md` says \"A plain tooling law runs on the pull request its change reaches\" and marks 0539 amended in part; `.decisions/0602-integration-laws-leave-merge-line.md` keeps \"the plain tooling laws a change reaches\" on the `related` job; `.github/workflows/check.yaml:32-34` says a ready pull request and a group add the plain tooling tests their change reaches (the related job).",
+  "cost": "A reader of changes.mjs trusts that a tooling change starts no test on the merge line and may skip the narrow tooling tests, which in fact the related job runs.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

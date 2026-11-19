@@ -3,7 +3,13 @@
 // driver too, so they sit here: `telemetry/Sink.ts:393`, and C7 on every stored span output.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Str from "effect/String";
+
 import * as fc from "fast-check";
 import * as GatewayCauseTest from "../gateway/GatewayCauseTest.ts";
 import { Doorbell, Ledger, type LedgerCalls, LedgerError } from "../ledger/Ledger.ts";
@@ -20,7 +26,9 @@ import { Archive } from "../telemetry/Archive.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 100;
+
+const RUNS = runsFor({ fast: 10, full: 100 });
+
 const PROCESS = "process_0000000000e008000000000000";
 
 const opened: Array<DatabaseSync> = [];
@@ -28,6 +36,7 @@ const opened: Array<DatabaseSync> = [];
 const fresh = (): Sql => {
   const db = new DatabaseSync(":memory:");
   opened.push(db);
+
   return nodeSql(db);
 };
 
@@ -67,7 +76,14 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, { fresh });
+// The door's suite gets the ledger from this module, since `gateway/` never imports `ledger/` (0043).
+GatewayCauseTest.suite(law, {
+  fresh,
+  ledger: (sql) =>
+    Layer.merge(LedgerSql.layer(sql, { reader: "gateway-cause" }), LedgerTransactionSql.layer(sql)).pipe(
+      Layer.provide(quiet),
+    ),
+});
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),
@@ -75,7 +91,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 );
 
 /** The same `Sql`, but each transaction throws `failure`. */
-const throwing = (sql: Sql, failure: unknown): Sql => ({
+const throwing = (sql: Sql, failure: object): Sql => ({
   ...sql,
   transaction: () => {
     throw failure;
@@ -90,6 +106,7 @@ describe("T695, the span sink keeps what failed", () => {
     ({ failure, from, span }) =>
       Effect.gen(function* () {
         const sink = SpanSink.layer(throwing(fresh(), failure), { object: PROCESS });
+
         const error = yield* Effect.flip(
           Effect.gen(function* () {
             if (span) {
@@ -100,6 +117,7 @@ describe("T695, the span sink keeps what failed", () => {
             return yield* SpanSink.use((s) => s.summaries(from, from + 3_600_000));
           }).pipe(Effect.provide(sink)),
         );
+
         expect(error.reason).toBe("storage");
         expect(error.cause).toBe(failure);
       }),
@@ -120,27 +138,37 @@ const carriers = (text: string): ReadonlyArray<unknown> => [
   new TypeError("outer", { cause: new Error(text) }),
 ];
 
-const forms = (core: string, text: string) => [core, text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+const forms = (core: string, text: string) => [
+  core,
+  text,
+  Function.pipe(JSON.stringify(text), Str.slice(1, -1)),
+  encodeURIComponent(text),
+];
 
 /** Every row of every table in `sql`, as JSON text. */
 const dump = (sql: Sql): string =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table'")
-    .map((table) => JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)))
-    .join("\n");
+  Arr.join(
+    Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (table) =>
+      JSON.stringify(sql.exec(`SELECT * FROM "${String(table.name)}"`)),
+    ),
+    "\n",
+  );
 
 type Flow = "ledger_rejects" | "ledger_decode" | "archive_rejects" | "store_throws";
+
 const flows = fc.constantFrom<Flow>("ledger_rejects", "ledger_decode", "archive_rejects", "store_throws");
 
-/** One failing operation whose failure holds `text`, inside a span the sink stores. */
-const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown, unknown> => {
+/** One failing operation whose failure holds `text` in its `cause`, inside a span the sink stores. */
+const fail = (flow: Flow, text: string, cause: unknown): Effect.Effect<unknown, unknown> => {
   if (flow === "ledger_rejects" || flow === "ledger_decode") {
     const answer = flow === "ledger_rejects" ? null : { _tag: "ready", rev: { input: text } };
+
     const calls: LedgerCalls = {
-      append: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
-      read: () => (answer === null ? Promise.reject(carrier) : Promise.resolve([{ rev: { input: text } }])),
-      wait: () => (answer === null ? Promise.reject(carrier) : Promise.resolve(answer)),
+      append: () => (answer === null ? Promise.reject(cause) : Promise.resolve(answer)),
+      read: () => (answer === null ? Promise.reject(cause) : Promise.resolve([{ rev: { input: text } }])),
+      wait: () => (answer === null ? Promise.reject(cause) : Promise.resolve(answer)),
     };
+
     return Ledger.use((ledger) => ledger.wait("notes:1", 0)).pipe(
       Effect.provide(LedgerRemote.layer(calls, { reader: "connection:t1" })),
     );
@@ -150,20 +178,22 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
     return Archive.use((archive) => archive.put("spans/1", new Uint8Array([1]))).pipe(
       Effect.provide(
         Archive.bucket({
-          put: () => Promise.reject(carrier),
-          head: () => Promise.reject(carrier),
+          put: () => Promise.reject(cause),
+          head: () => Promise.reject(cause),
         }),
       ),
     );
   }
 
   const disk = fresh();
+
   const broken: Sql = {
     ...disk,
     exec: () => {
-      throw carrier;
+      throw cause;
     },
   };
+
   const store = ProcessStore.layer(broken, { process: PROCESS }).pipe(
     Layer.provide(
       LedgerSql.layer(disk, { reader: PROCESS }).pipe(
@@ -171,6 +201,7 @@ const fail = (flow: Flow, text: string, carrier: unknown): Effect.Effect<unknown
       ),
     ),
   );
+
   return ProcessStore.use((s) => s.load).pipe(Effect.provide(store));
 };
 
@@ -205,7 +236,10 @@ describe("T695, C7 [secrets]: the span sink stores no input-bearing detail of a 
 
         for (const { word } of steps) {
           for (const form of forms(word, `${decor}${word}${decor}`)) {
-            expect(stored.includes(form), "a stored span row holds a cause's input-bearing text").toBe(false);
+            expect(
+              Function.pipe(stored, Str.includes(form)),
+              "a stored span row holds a cause's input-bearing text",
+            ).toBe(false);
           }
         }
       }),

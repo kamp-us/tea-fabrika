@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-review1",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T18:48:12-08:00",
+  "ended": "2026-11-15T18:56:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "The one review of ticket 1067 (next/ and our tooling, the Recorder in @kampus/vitest) at 169601e42: changes 2, findings 0, sent to tests. One: Recorder.calls(Service, m) with a union method name answers ReadonlyArray<never> (Args is not distributive over M), so a wrong arg type compiles through the overloads with no cast; an optional effectful member is recorded at run but is no Method, so calls types its records never; an overloaded method's Args is its last overload. Two: a method named in fails but left out of impl dies with UnimplementedError and is not recorded, which R6 says it is, and the types allow it. Both shown in scratch files, removed. The five changed test files pass one at a time, one pnpm typecheck passed, and a throwaway config type-checks the changed lines of the pr tooling folder.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8.3,
+  "note": null,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

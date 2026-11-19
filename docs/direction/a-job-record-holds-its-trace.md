@@ -1,6 +1,6 @@
 ---
 state: "decided in pieces, see the note"
-summary: "Jaeger goes. A job (a root run and every run it starts, like a process group) is the host's, not tsh's: a tsh line, a lane, `hello world`. One Durable Object per job, `JobRecord`, in the project's ledger Worker, keyed by the job's trace id, for every program. It is its runs' `Storage` and holds the job's spans from every host, its beats, a summary when it ends, and pointers to agent logs in `Blobs`. A child run gets its parent's job. Spans come in as OTLP through the same door as facts. Nothing is ever deleted. The app's trace tile reads it through a `Traces` service."
+summary: "Jaeger goes. A job (a root run and every run it starts, like a process group) is the host's, not tsh's: a tsh line, a quest, `hello world`. One Durable Object per job, `JobRecord`, in the project's ledger Worker, keyed by the job's trace id, for every program. It is its runs' `Storage` and holds the job's spans from every host, its beats, a summary when it ends, and pointers to agent logs in `Blobs`. A child run gets its parent's job. Spans come in as OTLP through the same door as facts. Nothing is ever deleted. The app's trace tile reads it through a `Traces` service."
 ---
 
 # A JobRecord holds each host job: its runs' storage and its trace
@@ -14,7 +14,7 @@ Its decided rules are in: [0207](../../.decisions/0207-todays-job-record-per-job
 [0204](../../.decisions/0204-process-record-rolls-in-parts.md).
 
 Decided 2026-10-28 by the owner. First proposed 2026-10-27 as one record per
-lane (`LaneRecord`). The owner widened it the next day: traces are for every
+quest (named `LaneRecord` then). The owner widened it the next day: traces are for every
 program, not only the pipeline; the record is the storage programs already
 get; and a job is the host's, not tsh's. Jaeger goes away. Nothing extra runs:
 open fabrika and the traces are there.
@@ -58,11 +58,11 @@ const spans = yield* Traces.read(traceId); // the trace tile draws these
 
 ## Words
 
-- **Program:** the code. `seq`, `double`, the lane, the tracker.
+- **Program:** the code. `seq`, `double`, the quest, the tracker.
 - **Run:** one start of a program until it ends, like a process. It has its
   own id (`seq-3f9a1c02`), its own state, its own end.
 - **Job:** what one start on the host made: a root run and every run it
-  started, like a Unix process group. A tsh line is a job. A lane is a job.
+  started, like a Unix process group. A tsh line is a job. A quest is a job.
   `hello world` is a job of one run.
 
 ## One example, all the way
@@ -87,7 +87,7 @@ The trace tile draws one bar per span, one colour per program, with the sent
 and told events as dots. When the line ends, `jobs` no longer lists it, as
 today. The record stays, so the trace opens again from history.
 
-A lane is the same, bigger: the lane is the job, triage, build and review are
+A quest is the same, bigger: the quest is the job, triage, build and review are
 its runs, and each agent's turns are spans inside its run.
 
 ## Every step is kept, and the tile opens it
@@ -144,7 +144,7 @@ after, and no Cmds.
   (`packages/fabrika/src/shell/jobs.ts`) and leaves it when it ends. Now that
   we have hosts, the host keeps jobs, the way a kernel keeps process groups
   and a shell only shows them. Anything that starts a program makes a job: a
-  tsh line, the app starting a lane, a scheduled run. tsh's `jobs`, `&`,
+  tsh line, the app starting a quest, a scheduled run. tsh's `jobs`, `&`,
   `attach %n` and detach become views and calls on the host's jobs.
 - **One `JobRecord` per job, for every program.** Traces are a program's, not
   the pipeline's.
@@ -155,7 +155,7 @@ after, and no Cmds.
 - **A child run joins its parent's job.** Today a run joins its parent's trace
   only when it starts inside the parent's span, as tsh's lines do
   (`packages/fabrika/src/program/program.ts`, the run's span). On the host, a
-  lane's stages start later from a row (`startChild`), so each starts a trace
+  quest's stages start later from a row (`startChild`), so each starts a trace
   of its own. The host now hands the job's trace id to every child it starts,
   the way a Unix child keeps its parent's process group, and OpenTelemetry
   passes a trace's context along.
@@ -169,7 +169,8 @@ after, and no Cmds.
   object.
 - **Jaeger goes.** tsh and every program send their spans to the record.
   `trace:up`, `trace:down`, `trace:wipe`, `jaeger/` and the docs that point at
-  them are removed once the trace tile shows a tsh line.
+  them are removed once the trace tile shows a tsh line. Done 2026-11-14: they
+  are removed.
 - **It lives in the project's ledger Worker.** On 2026-10-25 each project got
   one Worker with an object for the project and one per person
   ([the ledger goes to Cloudflare](./the-ledger-goes-to-cloudflare.md)). This
@@ -184,7 +185,7 @@ after, and no Cmds.
 - **Nothing is deleted.** A job's record is kept forever. This repo is a lab
   notebook, and a trace is how we see where a job's time went.
 - **The name.** `JobRecord`, after the job: the record a job leaves behind.
-  `LaneRecord` is dropped, since a lane is only one kind of job.
+  `LaneRecord`, the first name, is dropped, since a quest is only one kind of job.
 
 ## What it holds
 
@@ -200,7 +201,7 @@ after, and no Cmds.
 
 - **A ticket finds its records through its facts.** Every `started` fact holds
   the run id and the trace id
-  ([what a ticket shows](./what-a-ticket-shows.md)). A ticket with two lanes,
+  ([what a ticket shows](./what-a-ticket-shows.md)). A ticket with two quests,
   say after a reassign, has two records, and its facts name both.
 - **Full logs stay in `Blobs`,** with a pointer here. A transcript can be
   larger than a SQLite row should hold.
@@ -219,7 +220,7 @@ after, and no Cmds.
   now act on the host's jobs.
 - **Slice 3t of the v1 plan** ([a ticket runs from the app](./a-ticket-runs-from-the-app.md))
   becomes the `JobRecord`, its `Storage`, host jobs, and the trace tile. Its
-  "done when": #7's whole lane shows as one trace in the tile, read from the
+  "done when": #7's whole quest shows as one trace in the tile, read from the
   Miniflare twin, after its host was killed halfway; and a tsh line shows the
   same way, with Jaeger stopped.
 - **The trace tile reuses the view rules that exist**
@@ -230,26 +231,26 @@ after, and no Cmds.
 ## The ticket's view, too (ticket 141, today's version)
 
 Added 2026-11-02. The `runs` program is gone, and `trace` does its job: a
-ticket's view is the trace of each of its lanes, read through the facts that
+ticket's view is the trace of each of its quests, read through the facts that
 name them.
 
 ```ts
-// tsh> trace --ticket 117          every lane of 117, oldest first; the newest opens
+// tsh> trace --ticket 117          every quest of 117, oldest first; the newest opens
 // tsh> tracker | trace             the ticket the tracker picks
 // tsh> pipeline --ticket 117 | trace
 // tsh> trace --id <trace id>       one job, as before
 
-// One section per trace id, each on its own axis from the lane's start. Made up, in ticket
-// 117's shape (programs/trace/src/t117.ts):
+// One section per trace id, each on its own axis from the quest's start. Made up, in ticket
+// 117's shape (programs/trace/src/t117.ts); today's window still labels each row "lane":
 // lane 1  sort, plan, ask (71 s), exam, test_writer, build, exam_merge   stuck: tests red
 // lane 2  restarted from plan; plan, ask, exam, ask, exam_merge
 // lane 3  exam_merge                                                     running
-// A step opens to its spans, from that lane's JobRecord.
+// A step opens to its spans, from that quest's JobRecord.
 ```
 
-- **Steps and waits come from the ticket's facts. Spans come from the lane's
-  record.** A `started` fact names its trace id, so each lane finds its record.
-- **A step row shows tokens, never dollars.** Dollars show only in each lane's
+- **Steps and waits come from the ticket's facts. Spans come from the quest's
+  record.** A `started` fact names its trace id, so each quest finds its record.
+- **A step row shows tokens, never dollars.** Dollars show only in each quest's
   line and the ticket's line, labeled "at list price". A price nobody knows is
   "no list price", never $0.00.
 - **The ticket view colors by state,** each with its words beside it: running
@@ -258,13 +259,13 @@ name them.
   debugger replays a history.
 
 Three facts are recorded from now on, so the view can join the facts to the
-spans. Each one is lost for a lane that ran before it, so it goes in now:
+spans. Each one is lost for a quest that ran before it, so it goes in now:
 
 ```ts
-// The `asked` fact names its lane, so a wait sits in the right lane:
+// The `asked` fact names its quest, so a wait sits in the right quest:
 {type: "asked", ask: "a-3", what: "approve", trace: "b2b2…b2b2", ...}
 
-// A "run a step" span, tagged when it ends:
+// A "run a step" span, tagged when it ends (today's code keeps the `tea.lane.*` keys):
 {name: "run a step", tags: {
 	"tea.lane.run": "r-plan-8", "tea.lane.step": "plan", "tea.outcome": "ask:owner:approval",
 	"tea.cost.usd": 0.41,                  // only when a list price is known
@@ -285,7 +286,7 @@ span that overlaps it most.
 - **Nothing extra to run.** Jaeger was never opened because it lives outside
   fabrika: one more thing to host and start. The record runs where the ledger
   already runs.
-- **One rule for everything.** A tsh line, a lane and `hello world` are each a
+- **One rule for everything.** A tsh line, a quest and `hello world` are each a
   job with one record. The trace ids already line up that way.
 - **One store for every host.** A job that hops from laptop to cloud is still
   one trace, and the other person can open it from their machine.
@@ -294,7 +295,7 @@ span that overlaps it most.
   Temporal keeps one history per run
   ([Temporal](https://docs.temporal.io/workflow-execution)), and Jaeger and
   Tempo store spans by trace.
-- **Size is not a worry.** One lane is a few dozen spans, a few thousand with
+- **Size is not a worry.** One quest is a few dozen spans, a few thousand with
   every agent turn. Each object holds one job, so no table grows with every
   job ever run.
 
@@ -308,7 +309,7 @@ redeploys the ledger too, the same risk the per-project Worker already takes.
 
 - **Write time.** `Storage` keeps each write before it returns. On the laptop
   the object is in Miniflare, close by. From the laptop to Cloudflare each
-  write is a trip over the network. A timing test settles it: writes per lane,
+  write is a trip over the network. A timing test settles it: writes per quest,
   and time per write, on Miniflare now and on Cloudflare once a deploy is
   agreed.
 - **Moving the job table.** tsh's jobs carry detach and attach across a tsh
@@ -319,6 +320,6 @@ redeploys the ledger too, the same risk the per-project Worker already takes.
 
 ## What it cannot tell us
 
-- How the tile reads on a long lane with many rounds. No real lane has run.
+- How the tile reads on a long quest with many rounds. No real quest has run.
 - What Cloudflare charges for this at all-day volume. It is small by the count
   above, but nothing has been measured.

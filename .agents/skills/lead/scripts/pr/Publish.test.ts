@@ -1,18 +1,23 @@
 // Today's lead tooling. Publish's laws (0134) on the test layers: nothing here pushes or asks GitHub.
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import * as Publish from "./Publish.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes, PushRefused } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 
-/** Branch names of every kind the commit step meets: the bot's, a lane's backup, a person's, a bare one. */
-const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/lane-wip", "person/b", "c"]);
+/** Branch names of every kind the commit step meets: the bot's, a quest's backup, a person's, a bare one. */
+const Branch = Schema.Literals(["fabrikalfa/a", "fabrikalfa/quest-wip", "person/b", "c"]);
+
 const Sha = Schema.Literals(["1".repeat(40), "2".repeat(40), "a".repeat(40)]);
+
 /** No PR on the branch yet, an open draft, or an open ready one. */
 const Already = Schema.NullOr(Schema.Boolean);
+
 const text = { title: "T1 tests: a law", body: Publish.DRAFT_BODY };
 
 const open = (number: number, head: string, draft: boolean): PullRequest => ({
@@ -31,6 +36,7 @@ const memory = (
   const remote = PushesTest.remote();
   const github = PullRequestsTest.world(prs);
   const layer = Layer.mergeAll(PushesTest.layer(remote, failing.pushes), PullRequestsTest.layer(github, failing.prs));
+
   return { remote, github, layer };
 };
 
@@ -40,15 +46,20 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   it.effect.prop(
     "property: the leak grep runs first, the head reaches its branch, and a draft opens only when none is open",
     { b: Branch, head: Sha, already: Already },
-    ({ b, head, already }) =>
-      Effect.gen(function* () {
-        const m = memory(already === null ? [] : [open(7, b, already)]);
-        yield* Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer));
-        expect(m.remote.calls).toEqual([`leakgrep ${head}`, `push ${b} ${head}`]);
+    ({ b, head, already }) => {
+      const m = memory(already === null ? [] : [open(7, b, already)]);
+
+      return Effect.gen(function* () {
+        yield* Publish.publish(ask(b, head));
+        expect(yield* Recorder.calls(Pushes)).toEqual([
+          { method: "leakGrep", args: [".", head] },
+          { method: "push", args: [".", b, head] },
+        ]);
         expect(m.remote.branches.get(b)).toBe(head);
         expect(m.github.prs.filter((pr) => pr.head === b && pr.state === "OPEN")).toHaveLength(1);
         expect(m.github.calls).toEqual(already === null ? [{ _tag: "draft", branch: b, title: text.title }] : []);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   it.effect.prop(
@@ -69,27 +80,36 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   it.effect.prop(
     "property: a refused leak grep pushes nothing and asks GitHub nothing",
     { b: Branch, head: Sha },
-    ({ b, head }) =>
-      Effect.gen(function* () {
-        const m = memory([], { pushes: { leak: "private_word" } });
-        const e = yield* Effect.flip(Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer)));
+    ({ b, head }) => {
+      const m = memory([], { pushes: { leakGrep: new LeakGrepRefused({ reason: "private_word" }) } });
+
+      return Effect.gen(function* () {
+        const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("LeakGrepRefused");
-        expect(m.remote.calls).toEqual([`leakgrep ${head}`]);
+        expect(yield* Recorder.calls(Pushes)).toEqual([{ method: "leakGrep", args: [".", head] }]);
         expect(m.remote.branches.size).toBe(0);
         expect(m.github.calls).toEqual([]);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   it.effect.prop(
     "property: a refused push fails the publish and opens no pull request",
     { b: Branch, head: Sha },
-    ({ b, head }) =>
-      Effect.gen(function* () {
-        const m = memory([], { pushes: { push: "rejected" } });
-        const e = yield* Effect.flip(Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer)));
+    ({ b, head }) => {
+      const m = memory([], { pushes: { push: new PushRefused({ reason: "rejected" }) } });
+
+      return Effect.gen(function* () {
+        const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("PushRefused");
+        expect(yield* Recorder.calls(Pushes)).toEqual([
+          { method: "leakGrep", args: [".", head] },
+          { method: "push", args: [".", b, head] },
+        ]);
+        expect(m.remote.branches.size).toBe(0);
         expect(m.github.prs).toEqual([]);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   // scenario: drive's sign worktree is detached, and no commit step ever pushes main.
@@ -98,11 +118,10 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
       ["", "HEAD", "main", "refs/heads/main"],
       (b) =>
         Effect.gen(function* () {
-          const m = memory();
-          const e = yield* Effect.flip(Publish.publish(ask(b, "a".repeat(40))).pipe(Effect.provide(m.layer)));
+          const e = yield* Effect.flip(Publish.publish(ask(b, "a".repeat(40))));
           expect(e._tag, b).toBe("NoBranch");
-          expect(m.remote.calls).toEqual([]);
-        }),
+          expect(yield* Recorder.calls(Pushes)).toEqual([]);
+        }).pipe(Effect.provide(memory().layer)),
       { concurrency: 1 },
     ),
   );
@@ -118,7 +137,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   );
 });
 
-describe("ready: a lane's steps passed, so its pull request takes the brief's words and is ready (0134)", () => {
+describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (0134)", () => {
   it.effect.prop(
     "property: the PR gets the brief's text, a draft is marked ready, a ready one is left as it is",
     { b: Branch, head: Sha, already: Already },

@@ -35,7 +35,7 @@ formal version of what drive proves.**
 - drive stays lead tooling: fast-tracked, no plan, tests or review steps, changed directly in small
   changes, merged on green CI with a clean leak grep.
 - What a drive run teaches goes into `next/` as a lesson, rethought. `next/` never imports drive and
-  never copies it ([rethink, do not port](../docs/direction/rethink-do-not-port.md) still holds).
+  never copies it, as [rethink, do not port](../docs/direction/rethink-do-not-port.md) says.
 - A rule we find ourselves typing into an agent's brief becomes a check in drive first.
 
 **Binding constraints.**

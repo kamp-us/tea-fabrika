@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-t1067-mock-fold-1-main-merge-review",
+  "ticket": "1067",
+  "pr": "kamp-us/tea-fabrika#1526",
+  "started": "2026-11-18T16:16:00Z",
+  "ended": "2026-11-18T16:27:00Z",
+  "parent": "2026-11-18-t1067-mock-fold-1-main-merge",
+  "active": null,
+  "role": "hand",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "In next/ and our lint tooling: the one review of the mock fold's main merge (merge commit b3ee00f4a, reviewed at its earlier local id 64555c328 with the same tree), only the resolution, not slice 1's design: merge-ready, two findings, neither blocking. It checked each of the resolver's five stated choices by comparing main's own change with the merge's change per file: Gateway.ts is main's plus the three WebCrypto lines, Routes and Answer.ts match main's Schema.Json params, the paused-hash laws and door.integration.test.ts keep the branch's seams with main's newer code, and the WebCrypto, SecureRandom, Routes and Recorder seams hold. Finding 1: four spots the branch rewrote kept native forms main's collections sweep (ticket 1075) had changed (deltas.map, two reduce calls, JSON.stringify(marker), an inline includes), plus a three-provide chain where main has one Layer.provideMerge. Finding 2: line references in the error-cause laws' comments point at other lines, one of them broken by the merge. The four sweep spots and the merge-broken binary.ts references in ErrorCause.types.test.ts were fixed on the branch the same turn by copying main's forms, a mechanical commit with no review (0589). The provide chain, the slice's layout helper and the references that were already wrong on both parents are finding rows: field/findings/2026-11-18-id-test-keeps-pre-sweep-forms.json and field/findings/2026-11-18-error-cause-audit-lines-point-elsewhere.json.",
+  "laws": [
+    { "law": "next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts", "result": "green, 7 of 7 (reviewer)" },
+    { "law": "next/packages/libfabrika/src/cloudflare/error-cause.test.ts", "result": "green, 12 of 12 (reviewer)" },
+    { "law": "Id.test.ts, telemetry/ErrorCause.test.ts and GatewayRevocation.integration.test.ts after the fixes", "result": "green, 52 of 52 (lead)" }
+  ],
+  "plants": [],
+  "note": "The reviewer ran loosening.sh origin/main HEAD (the slice's moves from fc.assert to it.effect.prop, as on the old head; no law loosened by the merge) and did not run typecheck or lint, which had run green on the tree. Times are approximate. Usage and cost were not recorded.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": 70,
+  "minutes": 11,
+  "costUsd": null,
+  "billed": null
+}

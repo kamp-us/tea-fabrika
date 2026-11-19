@@ -1,12 +1,10 @@
 /**
  * The proof that one instance start is on record. This file is the contract only. The layer that
  * records the start is `cloudflare/SettingsRecorded.ts`.
- *
- * @stability unstable
  */
+import type * as Snapshot from "@kalfa/config/Snapshot";
 import { type Config, Context } from "effect";
 import type * as Declarations from "./Declarations.ts";
-import type * as Snapshot from "./Snapshot.ts";
 import type * as Start from "./Start.ts";
 
 /**
@@ -22,7 +20,6 @@ import type * as Start from "./Start.ts";
  *
  * It is a plain value. Nothing in it changes after the layer has built.
  *
- * @stability unstable
  * @category services
  */
 export class RecordedStart extends Context.Service<

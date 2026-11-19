@@ -13,11 +13,11 @@
  * for that process and the ledger revision last read. Its time and letter id come later, from a
  * Cmd the window runs, and fill that same slot. A letter keeps its id and body on every resend, and
  * only its own terminal answer removes it.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import { ExitReason } from "../processes/ExitReason.ts";
 import { apply } from "./Patch.ts";
 import { Sent } from "./Runner.ts";
 
@@ -28,7 +28,6 @@ import { Sent } from "./Runner.ts";
  * then `ready`. `n` is the local queue position, never another letter id. `pid` is the tile's
  * process: its id, or the registered name the client resolves on each dial.
  *
- * @stability unstable
  * @category schemas
  */
 export const Pending = Schema.TaggedUnion({
@@ -50,22 +49,22 @@ export const Pending = Schema.TaggedUnion({
     traceId: Schema.optionalKey(Schema.String),
   },
 });
+
 export type Pending = typeof Pending.Type;
 
 /**
  * Schema for a checked view as installed: the revision it was made at, and the value.
  *
- * @stability unstable
  * @category schemas
  */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
+
 export type Shown = typeof Shown.Type;
 
 /**
  * Schema for everything a program client keeps between messages: what it promised (`pending`), and
  * what it shows (`views`, by process).
  *
- * @stability unstable
  * @category schemas
  */
 export const Client = Schema.Struct({
@@ -76,6 +75,7 @@ export const Client = Schema.Struct({
   pending: Schema.Array(Pending),
   views: Schema.Record(Schema.String, Shown),
 });
+
 export type Client = typeof Client.Type;
 
 const emptyClient: Client = Client.make({ written: 0, seen: 0, pending: [], views: {} });
@@ -91,32 +91,35 @@ const Reply = Schema.TaggedUnion({
   unknown: {},
 });
 
-const Msg = Schema.Union([
+/**
+ * Schema for what the client machine takes, each Msg made with its case's maker.
+ *
+ * @category schemas
+ */
+export const ClientMsg = Schema.TaggedUnion({
   /** A person pressed `m`, one of the program's Msgs, on the tile of `pid`. */
-  Schema.Struct({ type: Schema.Literal("press"), pid: Schema.String, m: Schema.Unknown }),
+  press: { pid: Schema.String, m: Schema.Unknown },
   /** Slot `n`'s letter id and time, from the Cmd the window ran. */
-  Schema.Struct({
-    type: Schema.Literal("dated"),
+  dated: {
     n: Schema.Int,
     letter: Schema.String,
     sentAt: Schema.String,
     traceId: Schema.optionalKey(Schema.String),
-  }),
+  },
   /** What came back for `letter`. */
-  Schema.Struct({ type: Schema.Literal("reply"), letter: Schema.String, answer: Reply }),
+  reply: { letter: Schema.String, answer: Reply },
   /** This client has read the ledger up to revision `rev`. */
-  Schema.Struct({ type: Schema.Literal("read"), rev: Schema.Int }),
+  read: { rev: Schema.Int },
   /** One view notification for `pid`, as it arrived: a whole view, a patch, or junk. */
-  Schema.Struct({ type: Schema.Literal("notice"), pid: Schema.String, note: Schema.Unknown }),
-]);
+  notice: { pid: Schema.String, note: Schema.Unknown },
+});
 
 /**
  * A Msg the client machine takes: `press`, `dated`, `reply`, `read` or `notice`.
  *
- * @stability unstable
  * @category models
  */
-export type ClientMsg = typeof Msg.Type;
+export type ClientMsg = typeof ClientMsg.Type;
 
 /** Ask for a whole view of `pid`: the last good one stays shown until it comes. The window turns
  *  it into its own move. */
@@ -126,7 +129,6 @@ const ask = Cmd.make("ask", { input: Schema.Struct({ pid: Schema.String }), ok: 
  * What a client checks a view with: each program's own decoder, by pid. The factory captures it, so
  * it is never in the Model, a Msg or a Cmd's input.
  *
- * @stability unstable
  * @category models
  */
 export type ClientChecks = { readonly decode?: (pid: string) => (view: unknown) => unknown };
@@ -138,6 +140,7 @@ type Step = readonly [Client, ReadonlyArray<ReturnType<typeof ask>>];
 /** Reserves the next slot for a press on `pid`, with what this client showed and had read. */
 const press = (c: Client, input: { readonly pid: string; readonly m: unknown }): Client => {
   const m = Schema.decodeUnknownResult(Schema.Json)(input.m);
+
   const slot = Pending.cases.dating.make({
     n: c.written,
     pid: input.pid,
@@ -145,6 +148,7 @@ const press = (c: Client, input: { readonly pid: string; readonly m: unknown }):
     seen: c.seen,
     viewRev: c.views[input.pid]?.rev ?? 0,
   });
+
   return { ...c, written: c.written + 1, pending: [...c.pending, slot] };
 };
 
@@ -155,7 +159,11 @@ const dated = (
   n: number,
   stamp: { readonly letter: string; readonly sentAt: string; readonly traceId?: string },
 ): Client => {
-  const at = c.pending.findIndex((p) => p.n === n);
+  const at = Option.getOrElse(
+    Arr.findFirstIndex(c.pending, (p) => p.n === n),
+    () => -1,
+  );
+
   const slot = c.pending[at];
 
   if (slot === undefined || slot._tag !== "dating") {
@@ -172,7 +180,8 @@ const dated = (
     sentAt: stamp.sentAt,
     ...(stamp.traceId === undefined ? {} : { traceId: stamp.traceId }),
   });
-  return { ...c, pending: c.pending.map((p, i) => (i === at ? ready : p)) };
+
+  return { ...c, pending: Arr.map(c.pending, (p, i) => (i === at ? ready : p)) };
 };
 
 /** Settles `letter` only on its own terminal answer. Every other answer keeps it for a resend. */
@@ -181,7 +190,8 @@ const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag"
     return c;
   }
 
-  const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
+  const kept = Arr.filter(c.pending, (p) => p._tag !== "ready" || p.letter !== letter);
+
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 
@@ -229,6 +239,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
 
   if (n.type === "whole") {
     const view = check(decode, n.view);
+
     return Result.isSuccess(view) ? [install(c, pid, { rev: n.rev, view: view.success }), []] : asked;
   }
 
@@ -247,6 +258,7 @@ const noticed = (c: Client, pid: string, note: unknown, decode: (u: unknown) => 
   }
 
   const next = Result.flatMap(apply(shown.view, n.patch), (candidate) => check(decode, candidate));
+
   return Result.isSuccess(next) ? [install(c, pid, { rev: n.rev, view: next.success }), []] : asked;
 };
 
@@ -258,13 +270,12 @@ const anyView = (view: unknown): unknown => view;
  * Makes the client machine, checking each view with `checks`: the program's own decoder for its pid,
  * else any JSON view.
  *
- * @stability unstable
  * @category machines
  */
 export const clientMachineFor = (checks: ClientChecks) =>
   Machine.make({
     model: Client,
-    msg: Msg,
+    msg: ClientMsg,
     cmds: [ask],
     init: (loaded: Client | null) => [loaded ?? emptyClient, []],
     update: {
@@ -282,13 +293,13 @@ export const clientMachineFor = (checks: ClientChecks) =>
 // --- Reads of the Model -------------------------------------------------------------------------
 
 type Ready = typeof Pending.cases.ready.Type;
+
 const isReady = (p: Pending): p is Ready => p._tag === "ready";
 
 /**
  * Returns the letters that may go now: ready ones ahead of the first slot still waiting for its
  * time.
  *
- * @stability unstable
  * @category getters
  */
 export const sendable = (c: Client): ReadonlyArray<Ready> => {
@@ -315,46 +326,85 @@ const Life = { by: Schema.String, body: Schema.Unknown };
 const decodeEntry = Schema.decodeUnknownOption(Schema.TaggedUnion({ started: Life, restarted: Life, exited: Life }));
 
 const decodeLife = Schema.decodeUnknownOption(
-  Schema.Struct({ process: Schema.String, name: Schema.optionalKey(Schema.String) }),
+  Schema.Struct({
+    process: Schema.String,
+    name: Schema.optionalKey(Schema.String),
+    reason: Schema.optionalKey(Schema.Unknown),
+  }),
 );
+
+const decodeRev = Schema.decodeUnknownOption(Schema.Struct({ rev: Schema.Int }));
+
+/**
+ * Schema for what a client knows of a registered name after reading some of its `processes/<name>`
+ * entries: `after`, the last rev folded; `live`, the newest start or restart, unless a later exit
+ * ended it; and `ended`, the newest exit with its reason.
+ *
+ * @category schemas
+ */
+export const NameFold = Schema.Struct({
+  after: Schema.Int,
+  live: Schema.NullOr(Schema.String),
+  ended: Schema.NullOr(Schema.Struct({ pid: Schema.String, reason: ExitReason })),
+});
+
+export type NameFold = typeof NameFold.Type;
+
+/**
+ * The fold of a name before any entry is read.
+ *
+ * @category constructors
+ */
+export const emptyFold: NameFold = { after: 0, live: null, ended: null };
+
+/** One entry folded in. Only the brain's own `started`, `restarted` and `exited` count. */
+const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: string) => boolean): NameFold => {
+  const after = Option.match(decodeRev(raw), { onNone: () => fold.after, onSome: ({ rev }) => rev });
+  const entry = Option.getOrNull(decodeEntry(raw));
+  const life = entry === null || !by(entry.by) ? null : Option.getOrNull(decodeLife(entry.body));
+
+  if (entry === null || life === null) {
+    return { ...fold, after };
+  }
+
+  if (entry._tag !== "exited") {
+    const named = life.name === undefined || life.name === name;
+
+    return { ...fold, after, live: named ? life.process : fold.live };
+  }
+
+  const reason = Schema.decodeUnknownOption(ExitReason)(life.reason);
+
+  return {
+    after,
+    live: life.process === fold.live ? null : fold.live,
+    ended: Option.match(reason, { onNone: () => fold.ended, onSome: (r) => ({ pid: life.process, reason: r }) }),
+  };
+};
+
+/**
+ * Folds one page of a name's `processes/<name>` entries, as `ledger.read` sent them, into `fold`.
+ * `by` says whether a writer is the brain's own, the one the client trusts for process facts. A
+ * fold over the pages in order is the fold over the whole list.
+ *
+ * @category getters
+ */
+export const foldName = (
+  fold: NameFold,
+  entries: ReadonlyArray<unknown>,
+  name: string,
+  by: (writer: string) => boolean,
+): NameFold => Arr.reduce(entries, fold, (acc, raw) => foldEntry(acc, raw, name, by));
 
 /**
  * Returns the live process a registered name points at, from its `processes/<name>` entries as read:
- * the newest start or restart by the brain's own writer, unless a later exit ended it. `by` says
- * whether a writer is the brain's own, the one the client trusts for process facts. It returns
+ * the newest start or restart by the brain's own writer, unless a later exit ended it. It returns
  * `null` when no such process is live.
  *
- * @stability unstable
  * @category getters
  */
 export const resolveName = (
   entries: ReadonlyArray<unknown>,
   name: string,
   by: (writer: string) => boolean,
-): string | null => {
-  let live: string | null = null;
-
-  for (const raw of entries) {
-    const entry = Option.getOrNull(decodeEntry(raw));
-
-    if (entry === null || !by(entry.by)) {
-      continue;
-    }
-
-    const life = Option.getOrNull(decodeLife(entry.body));
-
-    if (life === null) {
-      continue;
-    }
-
-    if (entry._tag === "started" || entry._tag === "restarted") {
-      if (life.name === undefined || life.name === name) {
-        live = life.process;
-      }
-    } else if (entry._tag === "exited" && life.process === live) {
-      live = null;
-    }
-  }
-
-  return live;
-};
+): string | null => foldName(emptyFold, entries, name, by).live;

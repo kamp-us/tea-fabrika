@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-quota-settings-instance-has-no-caller",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "dead_code",
+  "location": {
+    "path": "next/packages/libfabrika/src/cloudflare/QuotaSettings.ts",
+    "line": 65
+  },
+  "says": "In next/, QuotaSettings.instance, which reads the quota limits from a Worker's INSTANCE text, is exported and called by nothing, product or test. The live objects get their limits from the checked start input through QuotaSettings.limits. Smallest fix: delete it.",
+  "proof": "A search of next/ for QuotaSettings finds only cloudflare/quotas.ts:22, :36 and :49 (limits) and cloudflare/quotas.test.ts:102-112 (read); the name instance appears only at its own definition, cloudflare/QuotaSettings.ts:65.",
+  "cost": "A second, unused way to read the limits stays in the package, and a reader may take it for the path the Worker runs.",
+  "head": "ccc6670bee6fa1682587c967c3c4a89553c14401",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1092"
+}

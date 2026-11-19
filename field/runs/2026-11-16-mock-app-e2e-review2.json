@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-e2e-review2",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-16T01:54:05-08:00",
+  "ended": "2026-11-16T01:59:28-08:00",
+  "parent": "2026-11-16-mock-app-e2e-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck (0177) of the fix round for the mock sweep's app-e2e slice 1, ticket 1067, in next/, at 37b3529d2 on fabrikalfa/mock-app-e2e-s1: done, merge-ready. I read the whole diff from 581349822. L1 (next/packages/libfabrika/src/node/build/bundle-warnings.test.ts) now records each raw log's message, plugin and loc in the test plugin's onLog. Each unresolved-import line must start with exactly the plugin prefix and '<relative importer> (<line>:<column>) ', built from that log's own numbers. The plugin warning now carries a position and must start the same way. The generated pad and indent move line and column, and a loud check keeps them apart. The early length checks make the two 'if (x !== undefined)' guards safe. The comment above L17 in next/apps/fabrika/e2e/reload.visual.test.ts now names L2's real plants. The EPIPE finding row now has line 323 and ticket 1067. Nothing else changed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "plants": [
+    { "law": "L1", "plant": "real bundle.ts, in an untracked copy: print the place as (column:line)", "result": "red" },
+    { "law": "L1", "plant": "real bundle.ts, in an untracked copy: print the column one too high", "result": "red" },
+    { "law": "L1", "plant": "real bundle.ts, in an untracked copy: print log.message before the relative replacement", "result": "red" }
+  ],
+  "note": "Ran, at 37b3529d2: bundle-warnings.test.ts green at the fast depth and at FABRIKA_TEST_DEPTH=full (100 cases); oxlint-plugins/plants.test.ts 255 passed (the fix row says 256). NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: 17 of 18 parts passed; lint:promise-types died with EPIPE, the box-memory case of field/findings/2026-11-16-promise-types-epipe-in-full-lint.json, and passed alone with 0 findings and no tsgo running. A second full lint, run after this row was written, passed 18 of 18. It started while another agent's tsgo was running, which breaks the box rule: I did not wait. No typecheck: only a test file, a comment and rows changed, and the fix round reports libfabrika's tsc clean.",
+  "step": "review"
+}

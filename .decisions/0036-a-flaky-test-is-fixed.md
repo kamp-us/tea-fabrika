@@ -1,7 +1,7 @@
 ---
 id: 0036
 title: A flaky test is fixed the day it is seen, never rerun until green and left
-status: amended-in-part by [0052](0052-tests-never-depend-on-the-machine.md)
+status: accepted
 date: 2026-11-09
 tags: [flaky, tests, ci, rerun, checks, findings]
 ---
@@ -47,10 +47,9 @@ day is cheaper than a quarantine list somebody has to keep.
 
 **How this fits three older texts.**
 
-- [0035](0035-outside-work-becomes-finding-rows.md) is amended in part. Its closed rule list has
-  `flaky_test` as a finding row that waits for a person's rating, and its binding constraints say
-  no agent files a ticket for work outside its task. A flaky test no longer waits and does get a
-  ticket. The rest of 0035 stands, for `flaky_test` rows too.
+- [0035](0035-outside-work-becomes-finding-rows.md) says an agent that finds work outside its task
+  writes a finding row and files no ticket, and that a row waits for a person's rating. A flaky
+  test is the one exception: its row does not wait, and it does get a ticket.
 - [Done is per criterion](../docs/direction/done-is-per-criterion.md#a-stuck-task) says a crash or
   a flaky run is retried by the pipeline's code first, and counts toward "stuck" only if it keeps
   happening. That does not clash. The retry there answers one question: is this task stuck? It
@@ -90,14 +89,15 @@ day is cheaper than a quarantine list somebody has to keep.
 
 - No pull request merges on a rerun of a test that failed and has no fix in flight.
 - No fix for a flaky test is a wider timeout, a retry around the assertion or a skip, unless the
-  cause is proven to be outside our code and the write-up says what it is.
+  cause is proven to be outside our code, never the machine the test runs on
+  ([0052](0052-tests-never-depend-on-the-machine.md)), and the write-up says what it is.
 - A fix for a flaky test may not weaken a law: `loosening.sh` runs on it like any exam change.
 
 ## Consequences
 
 - The work a flaky test blocked waits a little, or runs beside the fix. That is the cost.
-- 0035's status becomes `amended-in-part by` this file, and its body and
-  [`field/README.md`](../field/README.md#a-finding) each get a one-line pointer.
+- 0035's rule list and binding constraints name this exception, and
+  [`field/README.md`](../field/README.md#a-finding) says it in one line.
 - An open flaky ticket from before today is covered too: tracker ticket 421, a second flaky law in
   the same file, starts now.
 - AGENTS.md's Checks section gets one line.

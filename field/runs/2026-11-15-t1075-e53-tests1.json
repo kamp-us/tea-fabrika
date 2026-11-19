@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e53-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:36:02-08:00",
+  "ended": "2026-11-15T20:43:40-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E53 of the Effect-checker sweep, in next/: missedPipeableOpportunity in lib:access, app:src, lib:codehost, lib:node, lib:settings and lib:ci. Counted on origin/main at e613fa45b with only this check at error through --lspconfig: 22 hits, as the plan's row says. 19 are in exam paths (ClientManager.integration.test.ts 13, Reference.test.ts 2, settings-generated.test.ts 2, CiTest.ts 1, CodeHostTest.ts 1), 3 in product files (CodeHost.ts:62, dev.ts:389, BrainControlLaunchd.ts:134), none in PR 1366's 58 files. All 19 exam hits were fixed by the checker's own quick fix through checkerfix.mjs, run with a temporary plugin block in the two package tsconfigs that was put back before the commit; the quick fix also rewrote two \\u0000 escapes in CiTest.ts to \\0, and that unrelated change was undone by hand. Recount: 0 in exam paths, the 3 product hits left for the build. Judgment per hit, for 0565's false-alarm measure: every one of the 22 rewrites keeps what the code does. 1 is wrong as a suggestion (CodeHost.ts:62, Schema.NullOr(Schema.Array(Path)) becomes Path.pipe(Schema.Array, Schema.NullOr), which reads worse than the nested schema it describes), 4 are style only with no gain either way (Reference.test.ts 2, settings-generated.test.ts 2, plain functions over a data value), and 17 read as well or better (the 13 layer chains, the 2 sync(Effect.scoped(Effect.gen)) suites, dev.ts:389, and BrainControlLaunchd.ts:134, where the build must keep the oxlint-disable line above Redacted.value). That is 1 of 22 wrong, not about half as 0565's read found. No law was added, changed or narrowed: the slice changes test code only and adds no lock line. Tests run green at the step's head: Ci.test.ts, CodeHost.test.ts, Reference.test.ts, settings-generated.test.ts, ClientManager.integration.test.ts, and the pipeline's Merger.laws, Change and handlers tests that import the two suites. Owner ruling mid-step: no pull request; the branch fabrikalfa/effect-e53 holds the work and an integrator folds it into one PR later, so this row and the step report carry what a PR body would say.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Two plants, each run once and restored by copy, prove the two rewritten suite bodies still run their assertions after the move from sync(Effect.scoped(...)) to .pipe(Effect.scoped, sync).",
+  "plants": [
+    {
+      "law": "C2: the CI contract (CiTest.suite, rewritten body)",
+      "plant": "Ci.ts Checks filter answers 'planted' for any non-empty list: Property failed after 1 tests, expected false to be true",
+      "result": "red"
+    },
+    {
+      "law": "C1: the code host contract (CodeHostTest.suite, rewritten body)",
+      "plant": "CodeHost.ts ChangeId takes isGreaterThan(1): both id lengths fail, Property failed after 1 tests",
+      "result": "red"
+    }
+  ],
+  "step": "tests",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}

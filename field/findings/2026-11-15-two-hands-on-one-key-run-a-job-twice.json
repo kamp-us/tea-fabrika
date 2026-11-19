@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-two-hands-on-one-key-run-a-job-twice",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/jobs/internal/job.ts",
+    "line": 86
+  },
+  "says": "In next/, two hands clients started with the same key both run the same job: a take from any connection of the target key answers the first assignment again, and a repeated jobs.started answers ok, so each client, with its own journal, saves executing and runs the command.",
+  "proof": "job.ts:86 answers a take of an assigned job with REPEATED whatever executor the second take proposed, and gateway/Jobs.ts answers it as assigned with the first execution; JobAccess.owns checks the key, the process and the execution, never the connection, so the second client's jobs.started and jobs.finish are accepted too.",
+  "cost": "A command meant to run once runs twice, on two machines, whenever a person copies a key or starts the hands twice.",
+  "head": "c2ce4f498d29785d4b81c7fc5ec44a6b0451a567",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}

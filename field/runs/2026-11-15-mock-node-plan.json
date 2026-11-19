@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-node-plan",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:31:04-08:00",
+  "ended": "2026-11-15T20:37:03-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Plan step for the mock sweep in next/packages/libfabrika/src/node, the RunnerAdmission integration law (ticket 1067's later slice): docs/plan/quests/mock-node-PLAN.md. Counted on main at f7169af: 4 vi.fn, 0 toHaveBeenCalled, 0 vi.spyOn in the top files, all stubs of Cloudflare bindings and none read for calls. The plan moves them onto the shared Stub.make of pull request 1433 (Reflect ban slice 8), which this slice waits for, and locks node/*.ts with oxlint's vitest/no-restricted-vi-methods for fn and 0555's four methods, with a plant law beside REFLECT. plancheck --draft passes. One finding: node/build's vi.doMock and vi.stubEnv calls have no mock-sweep slice.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Plan only: no test, typecheck or lint of code was run. The tracker ticket 1067 is not a GitHub issue, so ticket is null.",
+  "step": "plan"
+}

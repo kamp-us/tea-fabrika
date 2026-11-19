@@ -3,22 +3,41 @@
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, expect, it } from "vitest";
 import { paddingLineBetweenStatements } from "./padding-line-between-statements.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
+
 const CODE = "fabrika(padding-line-between-statements)";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
 
 const plant = mkdtempSync(join(import.meta.dirname, ".plant-"));
+
 afterAll(() => rmSync(plant, { recursive: true, force: true }));
+
+// The fix pass runs this rule alone. In `oxlint-plugins/` the repo's config also runs anti-slop's
+// `require-readable-spacing` (0563), whose fix adds lines of its own, and this law is about ours.
+const ours = join(plant, "ours.json");
+
+writeFileSync(
+  ours,
+  JSON.stringify({
+    plugins: [],
+    jsPlugins: [join(import.meta.dirname, "index.ts")],
+    rules: { "fabrika/padding-line-between-statements": "error" },
+  }),
+);
 
 /** One top-level piece. `pair` pieces are a value and its same-name type, which stay together. */
 type Kind = "import" | "one" | "many" | "pair" | "overloads";
@@ -57,12 +76,14 @@ type Report = {
 
 /** The lines the rule fires at in each file, from one oxlint run through the repo's own config. */
 const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[]> => {
-  const out = spawnSync(OXLINT, ["--format=json", ...files.map((f) => relative(ROOT, f))], {
+  const out = spawnSync(OXLINT, ["--format=json", ...Arr.map(files, (f) => relative(ROOT, f))], {
     cwd: ROOT,
     encoding: "utf8",
   });
+
+  // SAFETY: oxlint's `--format=json` output is the `Report` shape this file declares.
   const report = JSON.parse(out.stdout) as Report;
-  const lines = new Map<string, number[]>(files.map((f) => [f, []]));
+  const lines = new Map<string, number[]>(Arr.map(files, (f) => [f, []]));
 
   for (const d of report.diagnostics) {
     const at = lines.get(join(ROOT, d.filename));
@@ -72,7 +93,7 @@ const firesIn = (files: readonly string[]): ReadonlyMap<string, readonly number[
     }
   }
 
-  return new Map([...lines].map(([f, at]) => [f, at.sort((a, b) => a - b)]));
+  return new Map(Arr.map([...lines], ([f, at]) => [f, at.sort((a, b) => a - b)]));
 };
 
 const fires = (file: string): readonly number[] => firesIn([file]).get(file)!;
@@ -91,7 +112,7 @@ const check = ({ text, expected, fixed }: Case) => {
             {
               code: text,
               filename: "case.ts",
-              errors: expected.map((line) => ({ line, message: /Leave a blank line before this statement/ })),
+              errors: Arr.map(expected, (line) => ({ line, message: /Leave a blank line before this statement/ })),
               output: fixed,
             },
           ],
@@ -102,10 +123,14 @@ const check = ({ text, expected, fixed }: Case) => {
 const cli = (cases: ReadonlyMap<string, Case>) => {
   const files = [...cases.keys()];
   const found = firesIn(files);
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries([...cases].map(([f, c]) => [f, c.expected])));
-  spawnSync(OXLINT, ["--fix", ...files.map((f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8" });
-  expect(Object.fromEntries(files.map((f) => [f, readFileSync(f, "utf8")]))).toEqual(
-    Object.fromEntries([...cases].map(([f, c]) => [f, c.fixed])),
+  expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.expected])));
+  spawnSync(
+    OXLINT,
+    [`--config=${ours}`, "--disable-nested-config", "--fix", ...Arr.map(files, (f) => relative(ROOT, f))],
+    { cwd: ROOT, encoding: "utf8" },
+  );
+  expect(Rec.fromEntries(Arr.map(files, (f) => [f, readFileSync(f, "utf8")]))).toEqual(
+    Rec.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.fixed])),
   );
   expect([...firesIn(files).values()].flat()).toEqual([]);
 };
@@ -128,7 +153,7 @@ it("fires before each piece with no blank line above it, unless both sides are o
       let fixed = "";
       let line = 1;
       const expected: number[] = [];
-      pieces.forEach(({ kind, blank, comment }, i) => {
+      Arr.forEach(pieces, ({ kind, blank, comment }, i) => {
         const { text: body, first } = piece(kind, i);
         const lead = comment ? `// piece ${i}\n` : "";
 
@@ -202,11 +227,12 @@ it("inside a block, fires before and after each control statement with no blank 
     fc.property(body, (statements) => {
       const head =
         "declare const ys: number[];\ndeclare const f: () => number;\n\nexport function g() {\n\tlet x = 0;\n";
+
       let text = head;
       let fixed = head;
       let line = 6;
       const expected: number[] = [];
-      statements.forEach(({ kind, blank }, i) => {
+      Arr.forEach(statements, ({ kind, blank }, i) => {
         const prev = i === 0 ? "plain" : statements[i - 1]!.kind;
 
         if (blank) {

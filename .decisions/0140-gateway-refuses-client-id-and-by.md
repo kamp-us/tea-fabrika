@@ -1,12 +1,12 @@
 ---
 id: 0140
-title: In next/, the gateway refuses a write whose client sent its own id or by, counts each refusal in its hourly metric and never keeps it, and a write with no cause is the owner's own
-status: amended-in-part by [0143](0143-a-refused-write-is-counted-never-a-row.md), [0173](0173-child-root-and-requester.md)
+title: In next/, the gateway refuses a write whose client sent its own id or by, counts each refusal in its hourly metric and never keeps it, and a write with no cause is the process owner's root write
+status: accepted
 date: 2026-11-11
 tags: [gateway, sender, envelope, refusal, metric, mass-assignment, own, next]
 ---
 
-# 0140: In next/, the gateway refuses a write whose client sent its own id or by, counts each refusal in its hourly metric and never keeps it, and a write with no cause is the owner's own
+# 0140: In next/, the gateway refuses a write whose client sent its own id or by, counts each refusal in its hourly metric and never keeps it, and a write with no cause is the process owner's root write
 
 **What this decides:** the two points [0261](0261-inputs-carry-their-sender.md) left open: what the
 gateway does with a client-sent `id` or `by`, and who signs a write with no cause.
@@ -19,14 +19,14 @@ flowchart LR
   gateway -->|"no"| stamp["gateway stamps id and by"]
   stamp --> cause{"has a cause?"}
   cause -->|"yes"| caused["signed as the cause's sender"]
-  cause -->|"no"| own["own: the owner's write"]
+  cause -->|"no"| root["root: the process owner's write"]
 ```
 
 ```ts
-// The write a program asks for, as on main (runtime/Program.ts). Unchanged by this decision.
+// A sketch: the write a program asks for (runtime/Program.ts), with 0173's case names.
 export const Write = Schema.TaggedUnion({
-  caused: { parent: ParentText, event: Event },
-  own: { event: Event },
+  child: { parent: ParentText, event: Event },
+  root: { event: Event },
 });
 ```
 
@@ -56,8 +56,8 @@ nothing of it.**
   split out as [0124](0124-metrics-stay-rows-and-reading-comes-next.md) splits by a named tag.
 - No ledger entry is written per refused write, and what the client sent is never stored. A row per
   refusal would grow the store without bound.
-- A write with no cause is the owner's own, `own`, as the note proposed and main's `Write` already
-  has it.
+- A write with no cause is the process owner's, `root`
+  ([0173](0173-child-root-and-requester.md) named the case; the note proposed it as `own`).
 
 **Binding constraints:**
 
@@ -70,9 +70,9 @@ nothing of it.**
   written by `rollup` in `telemetry/internal/measurements.ts`) holds `count` and `errors` per piece,
   with no named split yet; 0124's tag with a closed list of values is the shape to follow, and the
   build's plan picks the tag and its values.
-- The refused request still ends its span, so its measurement row is written and kept forever, as
-  [0202](0202-spans-and-measurements-kept-forever.md) says of every row. That row holds timing and
-  an error class, never the body.
+- The refused request writes no span row and no measurement row either: the count is all that is
+  stored ([0143](0143-a-refused-write-is-counted-never-a-row.md)). That is the one exception to
+  [0202](0202-spans-and-measurements-kept-forever.md)'s rule that every row is kept forever.
 - `own` needs no code: main's runner already signs an `own` write as the job's own and refuses one
   for a person-only kind (`runtime/Runner.ts`).
 - Not decided here, a ticket follows: a rate limit per sender at the gateway, since every finished

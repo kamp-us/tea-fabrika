@@ -5,13 +5,19 @@
 // appended and in a later turn. L4: SQLite answers both through an index of `entries`, never a scan.
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Layer, Option } from "effect";
+import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
+import * as LedgerTurnEndTest from "./LedgerTurnEndTest.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
@@ -38,6 +44,7 @@ const recorded = (db: DatabaseSync) => {
   const backend = nodeSql(db);
   const seen: Array<{ readonly query: string; readonly params: ReadonlyArray<SqlValue> }> = [];
   const state = { capture: false };
+
   const sql: Sql = {
     ...backend,
     exec: (query, ...params) => {
@@ -48,35 +55,42 @@ const recorded = (db: DatabaseSync) => {
       return backend.exec(query, ...params);
     },
   };
+
   const layer = LedgerTransactionSql.layer(sql).pipe(
     Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
   );
+
   return { seen, state, layer };
 };
 
 /** Three streams that share ids, so a lookup that drops `stream` or `id` answers another entry. */
 const STREAMS = ["a", "b/inbox", "c/outbox"] as const;
+
 const IDS = ["one", "two", "three", "four"] as const;
+
 /** Names no append uses: an empty stream and a missing id. */
 const ABSENT = { stream: "never", id: "missing" } as const;
 
 /** One append: which stream and id it reuses, and a body from a small set, so resends happen. */
 const Append = fc.record({ stream: fc.nat(), id: fc.nat(), body: fc.integer({ min: 0, max: 2 }) });
+
 type Append = typeof Append extends fc.Arbitrary<infer A> ? A : never;
+
 const Log = fc.array(Append, { minLength: 0, maxLength: 40, size: "max" });
 
 /** What the turn answers through `get` and `head`, beside what `read(stream, 0)` holds. */
 const view = (turn: LedgerTurn) =>
-  [...STREAMS, ABSENT.stream].map((stream) => {
+  Arr.map([...STREAMS, ABSENT.stream], (stream) => {
     const all = [...turn.read(stream, 0)];
+
     return {
       stream,
       head: turn.head(stream),
       last: all.at(-1)?.rev ?? 0,
-      gets: [...IDS, ABSENT.id].map((id) => ({
+      gets: Arr.map([...IDS, ABSENT.id], (id) => ({
         id,
         got: turn.get(stream, id),
-        first: Option.fromUndefinedOr(all.find((entry) => entry.id === id)),
+        first: Arr.findFirst(all, (entry) => entry.id === id),
       })),
     };
   });
@@ -107,9 +121,11 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
     () =>
       Effect.gen(function* () {
         const outcomes = new Set<string>();
+
         const law = (log: ReadonlyArray<Append>) =>
           Effect.flatMap(memory, (db) => {
             const store = recorded(db);
+
             return Effect.gen(function* () {
               const tx = yield* LedgerTransaction;
               agrees(yield* tx.transact(view), "an empty log");
@@ -117,10 +133,12 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               for (const append of log) {
                 const stream = choose(STREAMS, append.stream);
                 const id = choose(IDS, append.id);
+
                 // The turn that appends answers its own reads: they see the append before it commits.
                 const inside = yield* Effect.exit(
                   tx.transact((turn) => {
                     turn.append(stream, id, line(append.body));
+
                     return view(turn);
                   }),
                 );
@@ -137,7 +155,8 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               }
             }).pipe(Effect.provide(store.layer));
           });
-        yield* property(Log, law, { numRuns: 50 });
+
+        yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }) });
         // An empty walk cannot pass: appends landed, and reused ids were refused.
         expect([...outcomes].sort()).toEqual(["appended", "refused"]);
       }),
@@ -157,6 +176,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
     () =>
       Effect.flatMap(memory, (db) => {
         const store = recorded(db);
+
         return Effect.gen(function* () {
           const tx = yield* LedgerTransaction;
           yield* tx.transact((turn) => {
@@ -166,7 +186,8 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
               }
             }
           });
-          const sent = (read: (turn: LedgerTurn) => unknown) =>
+
+          const sent = <A>(read: (turn: LedgerTurn) => A) =>
             Effect.gen(function* () {
               const from = store.seen.length;
               yield* tx.transact((turn) => {
@@ -178,23 +199,25 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
                   store.state.capture = false;
                 }
               });
+
               return store.seen.slice(from);
             });
+
           const queries = {
             get: yield* sent((turn) => turn.get("b/inbox", "two")),
             head: yield* sent((turn) => turn.head("b/inbox")),
           };
 
-          for (const [read, sentQueries] of Object.entries(queries)) {
-            const entries = sentQueries.filter(({ query }) => /\bentries\b/.test(query));
+          for (const [read, sentQueries] of Rec.toEntries(queries)) {
+            const entries = Arr.filter(sentQueries, ({ query }) => /\bentries\b/.test(query));
             expect(entries.length, `${read} asks SQLite for entries`).toBeGreaterThan(0);
 
             for (const { query, params } of entries) {
-              const details = db
-                .prepare(`EXPLAIN QUERY PLAN ${query}`)
-                .all(...params)
-                .map((row) => String(row["detail"]));
-              const named = details.filter((detail) => /\bentries\b/.test(detail));
+              const details = Arr.map(db.prepare(`EXPLAIN QUERY PLAN ${query}`).all(...params), (row) =>
+                String(row["detail"]),
+              );
+
+              const named = Arr.filter(details, (detail) => /\bentries\b/.test(detail));
               expect(named.length, `${read}: the plan of ${query} names entries`).toBeGreaterThan(0);
 
               for (const detail of named) {
@@ -209,3 +232,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
       }),
   );
 });
+
+// T1041: the turn's position-only read, on a fresh in-memory database; its SQLite-file twin is
+// LedgerTurnReads.integration.test.ts.
+LedgerTurnEndTest.suite(Effect.map(memory, nodeSql));

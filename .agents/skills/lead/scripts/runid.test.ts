@@ -5,22 +5,25 @@ import * as RunId from "./runid.ts";
 // Today's tooling. Pure: names in, an id out.
 const options = { seed: 119120, numRuns: 300 };
 
-const lane = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,10}$/);
-const step = fc.constantFrom("plan", "tests", "build", "mutation", "review", "host", "judge");
-const n = fc.integer({ min: 1, max: 40 });
-const parts = fc.record({ lane, step, n });
+const quest = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,10}$/);
 
-/** A file an older run left: its own lane and step, or another's, with any of a run's suffixes. */
+const step = fc.constantFrom("plan", "tests", "build", "mutation", "review", "host", "judge");
+
+const n = fc.integer({ min: 1, max: 40 });
+
+const parts = fc.record({ quest, step, n });
+
+/** A file an older run left: its own quest and step, or another's, with any of a run's suffixes. */
 const left = (run: fc.Arbitrary<RunId.Parts>) =>
   fc.tuple(run, fc.constantFrom(...RunId.FILES)).map(([p, suffix]) => `${RunId.make(p)}${suffix}`);
 
-describe("a lane's run id is lane + step + n, today's tooling", () => {
+describe("a quest's run id is quest + step + n, today's tooling", () => {
   it("vector: the settled sweep item's example", () => {
-    expect(RunId.make({ lane: "p39s1", step: "tests", n: 2 })).toBe("p39s1-tests2");
-    expect(RunId.parse("p39s1-tests2")).toEqual({ lane: "p39s1", step: "tests", n: 2 });
+    expect(RunId.make({ quest: "p39s1", step: "tests", n: 2 })).toBe("p39s1-tests2");
+    expect(RunId.parse("p39s1-tests2")).toEqual({ quest: "p39s1", step: "tests", n: 2 });
   });
 
-  // Plants: let the lane stop at its first dash; let n take a leading 0.
+  // Plants: let the quest stop at its first dash; let n take a leading 0.
   it("property: an id reads back as the parts it was made from", () => {
     fc.assert(
       fc.property(parts, (p) => {
@@ -40,7 +43,7 @@ describe("a lane's run id is lane + step + n, today's tooling", () => {
     );
   });
 
-  it("format: a lane's own files and the chain's briefs are no run's files", () => {
+  it("format: a quest's own files and the chain's briefs are no run's files", () => {
     for (const name of [
       "p39s1-rows.jsonl",
       "p39s1-PLAN.md",
@@ -53,20 +56,24 @@ describe("a lane's run id is lane + step + n, today's tooling", () => {
   });
 
   // Plants: n from the count of names (the state file's entries); the lowest free n, filling a
-  // gap; count another lane's or another step's files. p39s1, 2026-11-11: two launches counted
+  // gap; count another quest's or another step's files. p39s1, 2026-11-11: two launches counted
   // the state file and both took p39s1-tests2.
-  it("property: the next id is one past the highest n its lane and step hold, over any names", () => {
-    const names = fc.array(fc.oneof(left(parts), left(fc.record({ lane: fc.constant("p39s1"), step, n }))), {
+  it("property: the next id is one past the highest n its quest and step hold, over any names", () => {
+    const names = fc.array(fc.oneof(left(parts), left(fc.record({ quest: fc.constant("p39s1"), step, n }))), {
       maxLength: 30,
     });
+
     fc.assert(
       fc.property(step, names, (s, taken) => {
         const id = RunId.next("p39s1", s, taken);
+
         const held = taken.flatMap((name) => {
           const p = RunId.owner(name);
-          return p !== null && p.lane === "p39s1" && p.step === s ? [p.n] : [];
+
+          return p !== null && p.quest === "p39s1" && p.step === s ? [p.n] : [];
         });
-        expect(id).toBe(RunId.make({ lane: "p39s1", step: s, n: Math.max(0, ...held) + 1 }));
+
+        expect(id).toBe(RunId.make({ quest: "p39s1", step: s, n: Math.max(0, ...held) + 1 }));
       }),
       options,
     );
@@ -74,7 +81,7 @@ describe("a lane's run id is lane + step + n, today's tooling", () => {
 
   it("property: the next id never names a file that exists, and a restart over its files never reuses it", () => {
     fc.assert(
-      fc.property(lane, step, fc.array(left(parts), { maxLength: 30 }), (l, s, taken) => {
+      fc.property(quest, step, fc.array(left(parts), { maxLength: 30 }), (l, s, taken) => {
         const id = RunId.next(l, s, taken);
 
         for (const suffix of RunId.FILES) {

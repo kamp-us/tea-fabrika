@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e36-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:56:03-08:00",
+  "ended": "2026-11-15T23:08:00-08:00",
+  "parent": "2026-11-15-t1075-e36-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round for judgment slice E36 of the Effect-check sweep (preferEffectRecord, ticket 1075), after the review sent back 8cdac43. Exam paths only. (1) 72 tooling files that the tests step had given a barrel import of Record or Struct (6 in .agents, 30 in .github/ci, 36 in oxlint-plugins) now import effect/Record and effect/Struct by subpath, and each barrel line is back to main's text, or gone where main had none; a scratchpad script did this and checked each restored line against origin/main. (2) The 42 exam hits in the 11 files where an effect import turns on fabrika/no-raw-try-catch are fixed: .github/ci/workflow-lint.ts, workflow-lint/caches.ts, ci-speed.ts, issues.ts, scheduled.ts, shared.ts, oxlint-plugins/exact-versions.ts, program-package-layout.ts, program-package-layout.test.ts, stylelint.ts and workspace-reach.ts. Their 13 try/catch blocks became Result.try with the same answer on failure (the same error line, exit code or return value), and the async one in stylelint.ts became Effect.tryPromise run once at the script's top, its catch giving the error's text. No disable line. None of the 11 is in PR 1366's diff, and all are exam paths. (3) .github/ci/apt.test.ts:87 takes Rec.toEntries<string, string>(files); the review's suggested <string, string | undefined> does not typecheck, because writeFileSync refuses undefined. Recount with only preferEffectRecord at error over the 13 tsconfigs: 0 product hits and 19 exam hits in the slice's folders, which the review said hold: 9 in the three .github/ci .mjs scripts, plus 10 where Record's types do not fit (oxlint-plugins/match.ts:151, written-service-type.ts:77, next/apps/fabrika/src/exam/bytes.integration.test.ts:184, deps.integration.test.ts:133, 142, 734 twice, next/packages/libfabrika/src/node/repositories/Sources.test.ts:28, ledger/Ledger.types.test.ts:44 and 45). The build row's 63 product hits in E83's folders is the build's to correct; the review recounted 84 there (61 outside PR 1366's files). This round's own run counts 84 product hits outside the slice, 63 outside PR 1366's files and 21 inside them; why it differs from the review's 61 by 2 was not checked.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "No law is added or changed, so there is no plant. Ran on the working tree over 8cdac43: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed (it runs workflow-lint.ts, exact-versions.ts, workspace-reach.ts and stylelint.ts, all clean); the ratchet against the merge base exited 0; tsc --noEmit for .github/ci, oxlint-plugins and .agents passed; 69 test files (every touched test file, the tests beside each touched file, and all of .github/ci/workflow-lint/*.test.ts) passed, 1618 tests and 1 skipped. No integration law reaches a touched file. pnpm typecheck was not run (one per box, the build's).",
+  "step": "tests"
+}

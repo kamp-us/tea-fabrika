@@ -15,20 +15,24 @@ export const Model = Schema.TaggedStruct("ready", {
   queued: Schema.Int,
   refused: Schema.Int,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
 
-const Request = Schema.Struct({
-  type: Schema.Literal("request"),
-  ref: Schema.NonEmptyString,
-  value: Schema.Int,
-  reply: Schema.NonEmptyString,
-  parent: Schema.optionalKey(Schema.String),
+/** @internal */
+export const Msg = Schema.TaggedUnion({
+  request: {
+    ref: Schema.NonEmptyString,
+    value: Schema.Int,
+    reply: Schema.NonEmptyString,
+    parent: Schema.optionalKey(Schema.String),
+  },
+  approve: { parent: Schema.optionalKey(Schema.String) },
 });
 
-const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
-/** @internal */
-export const Msg = Schema.Union([Request, Approve]);
+/** The answer the requester takes, the same shape restated here: the responder shares the shape,
+ *  never the requester's code. */
+const Answer = Schema.TaggedStruct("answer", { ref: Schema.String, value: Schema.Int });
 
 const machine = Machine.make({
   model: Model,
@@ -38,7 +42,7 @@ const machine = Machine.make({
   update: {
     request: (s, m) => [
       { ...s, answered: s.answered + 1 },
-      [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
+      [send({ to: m.reply, m: Answer.make({ ref: m.ref, value: m.value + 1 }) })],
     ],
     approve: (s) => [s, []],
     send_ok: (s) => [{ ...s, queued: s.queued + 1 }, []],
@@ -52,7 +56,7 @@ export const mailResponder = Program.make({
   machine,
   state: { v: 1, upgrades: [] },
   view: (s) => s,
-  refuse: (_s, m) => (m.type === "request" && m.value < 0 ? { reason: "negative" } : null),
+  refuse: (_s, m) => (Msg.guards.request(m) && m.value < 0 ? { reason: "negative" } : null),
   inputs: {
     request: "Answer a request",
     approve: { description: "Approve", personOnly: true },

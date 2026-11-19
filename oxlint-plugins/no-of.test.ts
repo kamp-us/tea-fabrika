@@ -1,23 +1,30 @@
+import { Array as Arr, Match, pipe } from "effect";
 // `fabrika/no-of` against generated modules, in process through oxlint's RuleTester (0029). Each
 // module is 1 to 6 pieces, one per line; the oracle is the plan's case table: the lines that fire,
 // each with its message. The valid case is the same module with every firing line taken out.
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { noOf } from "./no-of.ts";
+import { plant } from "./plant.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: import.meta.dirname });
+
 const RUNS = { seed: 119120, numRuns: 100 };
 
 /** Which diagnostic a line gets: a declared name, or a named import of `of`. */
 type Message = "name" | "import";
+
 const MESSAGES: Record<Message, RegExp> = { name: /no bare `of` and no `xOf` names/, import: /imported by name/ };
 
 /** `of` exactly, an `xOf` name, a plain name, or one of the fixed near names (L6). */
 type Class = "of" | "xOf" | "plain" | "near";
+
 type Name = { readonly cls: Class; readonly base: string; readonly tail: string };
 
 /**
@@ -95,20 +102,23 @@ const BANNED: readonly Shape[] = [
   banned((n, i) => `declare function ${n}(h${i}: string): string; export { type ${n} };`),
   // Beside a top-level `const of; export { of }`, which passes: the flag it sets covers that one
   // binding, never a nested `of`. An `xOf` name fires at both.
-  ...[
-    (n: string, i: number) => `export function h${i}() { const ${n} = ${i}; return ${n}; }`,
-    (n: string, i: number) => `{ const ${n} = ${i}; void ${n}; }`,
-    (n: string, i: number) => `namespace S${i} { const ${n} = ${i}; void ${n}; }`,
-    (n: string, i: number) => `declare module "m${i}" { function ${n}(): void; }`,
-    (n: string, i: number) => `export function h${i}() { function ${n}() { return ${i}; } return ${n}(); }`,
-    (n: string, i: number) => `{ function ${n}() { return ${i}; } void ${n}; }`,
-    (n: string, i: number) => `export namespace S${i} { export function ${n}() { return ${i}; } }`,
-    (n: string, i: number) => `export namespace S${i} { export declare function ${n}(): void; }`,
-  ].map((nested): Shape => ({
-    text: (n, i) => `const ${n} = ${i}; export { ${n} }; ${nested(n, i)}`,
-    of: ["name"],
-    xOf: ["name", "name"],
-  })),
+  ...Arr.map(
+    [
+      (n: string, i: number) => `export function h${i}() { const ${n} = ${i}; return ${n}; }`,
+      (n: string, i: number) => `{ const ${n} = ${i}; void ${n}; }`,
+      (n: string, i: number) => `namespace S${i} { const ${n} = ${i}; void ${n}; }`,
+      (n: string, i: number) => `declare module "m${i}" { function ${n}(): void; }`,
+      (n: string, i: number) => `export function h${i}() { function ${n}() { return ${i}; } return ${n}(); }`,
+      (n: string, i: number) => `{ function ${n}() { return ${i}; } void ${n}; }`,
+      (n: string, i: number) => `export namespace S${i} { export function ${n}() { return ${i}; } }`,
+      (n: string, i: number) => `export namespace S${i} { export declare function ${n}(): void; }`,
+    ],
+    (nested): Shape => ({
+      text: (n, i) => `const ${n} = ${i}; export { ${n} }; ${nested(n, i)}`,
+      of: ["name"],
+      xOf: ["name", "name"],
+    }),
+  ),
   // Neither sets the flag: `export { of } from` names another module's `of`, and `export { a as of }`
   // exports `a`, so the local `of` stays a bare `of`.
   banned((n, i, from) => `const ${n} = ${i}; export { ${n} } from "${from}";`),
@@ -176,7 +186,11 @@ const EXPORTS: readonly Shape[] = [
 ];
 
 const hits = (shape: Shape, n: Name): readonly Message[] =>
-  n.cls === "of" ? shape.of : n.cls === "xOf" ? shape.xOf : [];
+  Match.value(n.cls).pipe(
+    Match.when("of", () => shape.of),
+    Match.when("xOf", () => shape.xOf),
+    Match.orElse(() => []),
+  );
 
 type Piece = { readonly shape: Shape; readonly name: Name; readonly from: string };
 
@@ -187,13 +201,14 @@ const piece = (shapes: readonly Shape[], n: fc.Arbitrary<Name>): fc.Arbitrary<Pi
 
 /** Other pieces beside the one under test: never `of`, never a second default export. */
 const filler = piece(
-  [...ALLOWED, ...BANNED, ...IMPORTS, ...EXPORTS].filter((s) => s.once === undefined),
+  Arr.filter([...ALLOWED, ...BANNED, ...IMPORTS, ...EXPORTS], (s) => s.once === undefined),
   name(["xOf", "plain"]),
 );
 
 /** The piece under test at a drawn position among 0 to 5 others. */
 const place = (main: Piece, others: readonly Piece[], at: number): readonly Piece[] => {
   const k = at % (others.length + 1);
+
   return [...others.slice(0, k), main, ...others.slice(k)];
 };
 
@@ -202,12 +217,21 @@ type Line = { readonly text: string; readonly fires: readonly Message[] };
 
 /** RuleTester: the module fires exactly these lines with these messages, and the rest of it fires nothing. */
 const check = (lines: readonly Line[]) => {
-  const code = lines.map((l) => l.text).join("\n");
-  const errors = lines.flatMap((l, i) => l.fires.map((m) => ({ line: i + 1, message: MESSAGES[m] })));
-  const valid = lines
-    .filter((l) => l.fires.length === 0)
-    .map((l) => l.text)
-    .join("\n");
+  const code = pipe(
+    lines,
+    Arr.map((l) => l.text),
+    Arr.join("\n"),
+  );
+
+  const errors = Arr.flatMap(lines, (l, i) => Arr.map(l.fires, (m) => ({ line: i + 1, message: MESSAGES[m] })));
+
+  const valid = pipe(
+    lines,
+    Arr.filter((l) => l.fires.length === 0),
+    Arr.map((l) => l.text),
+    Arr.join("\n"),
+  );
+
   tester.run("no-of", noOf, {
     valid: [{ code: valid, filename: "case.ts" }],
     invalid: errors.length === 0 ? [] : [{ code, filename: "case.ts", errors }],
@@ -215,7 +239,7 @@ const check = (lines: readonly Line[]) => {
 };
 
 const render = (pieces: readonly Piece[]): readonly Line[] =>
-  pieces.map((p, i) => ({ text: p.shape.text(spell(p.name, i), i, p.from), fires: hits(p.shape, p.name) }));
+  Arr.map(pieces, (p, i) => ({ text: p.shape.text(spell(p.name, i), i, p.from), fires: hits(p.shape, p.name) }));
 
 const all = name(["of", "xOf", "plain"]);
 
@@ -252,8 +276,8 @@ type Inner = { readonly kind: "key" | "param" | "const"; readonly name: Name };
 
 /** `of` at most once inside, so nothing is declared twice. */
 const once = (inner: readonly Inner[]): readonly Inner[] =>
-  inner.map((p, i) =>
-    p.name.cls === "of" && inner.slice(0, i).some((q) => q.name.cls === "of")
+  Arr.map(inner, (p, i) =>
+    p.name.cls === "of" && Arr.some(inner.slice(0, i), (q) => q.name.cls === "of")
       ? { ...p, name: { ...p.name, cls: "xOf" } }
       : p,
   );
@@ -265,10 +289,12 @@ const once = (inner: readonly Inner[]): readonly Inner[] =>
  * member of the parameter's type, a nested const a second, required parameter.
  */
 type Outer = "object" | "function" | "declare" | "overload" | "local";
+
 const OUTERS: readonly Outer[] = ["object", "function", "declare", "overload", "local"];
 
 const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   const fires = (p: Inner): readonly Message[] => (p.name.cls === "plain" ? [] : ["name"]);
+
   const line = (p: Inner, i: number, text: (n: string) => string): Line => ({
     text: text(spell(p.name, i)),
     fires: fires(p),
@@ -280,7 +306,9 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
       param: (n, i) => `  h${i}(${n}: number) { return ${n}; },`,
       const: (n, i) => `  h${i}: () => { const ${n} = ${i}; return ${n}; },`,
     };
-    const body = inner.map((p, i) => line(p, i, (n) => entry[p.kind](n, i)));
+
+    const body = Arr.map(inner, (p, i) => line(p, i, (n) => entry[p.kind](n, i)));
+
     return [{ text: "export const of = {", fires: [] }, ...body, { text: "};", fires: [] }];
   }
 
@@ -290,9 +318,10 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
       param: (n) => `  ${n}: string,`,
       const: (n) => `  ${n}: number,`,
     };
+
     return [
       { text: head, fires: [] },
-      ...inner.map((p, i) => line(p, i, (n) => entry[p.kind](n, i))),
+      ...Arr.map(inner, (p, i) => line(p, i, (n) => entry[p.kind](n, i))),
       { text: tail, fires: [] },
     ];
   };
@@ -305,14 +334,16 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
     return [...signature("declare function of(", "): string;"), { text: "export { of };", fires: [] }];
   }
 
-  const params = inner.flatMap((p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
-  const body = inner.flatMap((p, i) =>
-    p.kind === "key"
-      ? [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]
-      : p.kind === "const"
-        ? [line(p, i, (n) => `  const ${n} = ${i};`)]
-        : [],
+  const params = Arr.flatMap(inner, (p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
+
+  const body = Arr.flatMap(inner, (p, i) =>
+    Match.value(p.kind).pipe(
+      Match.when("key", () => [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]),
+      Match.when("const", () => [line(p, i, (n) => `  const ${n} = ${i};`)]),
+      Match.orElse(() => []),
+    ),
   );
+
   const implementation: readonly Line[] = [
     { text: "export function of(", fires: [] },
     ...params,
@@ -321,6 +352,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
     { text: "  return 0;", fires: [] },
     { text: "}", fires: [] },
   ];
+
   return outer === "overload" ? [...signature("export function of(", "): number;"), ...implementation] : implementation;
 };
 
@@ -348,12 +380,90 @@ it("L6: near names (`offer`, `thereof`, `Of`, `OF`, `ofs`) pass in every shape",
           minLength: 1,
           maxLength: 5,
         })
-        .filter((ps) => ps.filter((p) => p.shape.once !== undefined).length <= 1),
+        .filter((ps) => Arr.filter(ps, (p) => p.shape.once !== undefined).length <= 1),
       (pieces) =>
         check(
-          render(pieces.map((p) => ({ shape: p.shape, from: p.from, name: { cls: "near", base: p.near, tail: "" } }))),
+          render(
+            Arr.map(pieces, (p) => ({ shape: p.shape, from: p.from, name: { cls: "near", base: p.near, tail: "" } })),
+          ),
         ),
     ),
     RUNS,
   );
+});
+
+// The exam's path laws (next/apps/fabrika/src/exam/no-of.integration.test.ts, item 4), moved here by 0591:
+// the same rule through the real `.oxlintrc.json`, so tests are held too, a module's own `of` passes and a
+// named import fires. Plant: pass a named import of `of` in the rule, and line 13 of `fires` stops firing.
+const CODE = "fabrika(no-of)";
+
+const FIRES = "next/packages/tuval/src/desktop/fires.ts";
+
+const PASSES = "next/packages/tuval/src/desktop/passes.ts";
+
+const TEST = "next/packages/tuval/src/desktop/fires.test.ts";
+
+const LEASE = "next/packages/tuval/src/desktop/lease.ts";
+
+const fires = [
+  "export const colorsOf = (x: number) => x;", // 1
+  "export type IconOf = {readonly name: string};", // 2
+  "export const a = {of: 1};", // 3
+  "export function sizeOf(n: number) { return n; }", // 4
+  "export interface RowOf {readonly id: string}", // 5
+  "export class URLOf {}", // 6
+  "export const b = (of: number) => of;", // 7: the parameter
+  "export const c = {partOf(x: number) { return x; }};", // 8
+  "export type D = {readonly keyOf: string};", // 9
+  "export class E { static fromOf() { return 1; } }", // 10
+  "const {a: renamedOf} = {a: 1};", // 11
+  "export const f = renamedOf;", // 12: passes, a use
+  'import {of} from "./lease.ts";', // 13: a named import of `of`
+  "export const g = of(1);", // 14: passes, a use
+].join("\n");
+
+const passes = [
+  "declare const xs: readonly number[];",
+  "export const a = xs.indexOf(1);",
+  "export const b = () => { for (const x of xs) void x; };",
+  'import {nameOf} from "./old.ts";',
+  "export const c = nameOf(1);",
+  "const {lastIndexOf} = xs;",
+  "export const d = lastIndexOf;",
+  "export const e = {nameOf};",
+  "export const offer = 1;",
+  "export const thereof = 1;",
+  'import * as Lease from "./lease.ts";',
+  "export const g = Lease.of(1);",
+].join("\n");
+
+const lease = [
+  "export const of = (n: number) => n;", // 1: passes, the module's own top-level `of`
+  "export function make(of: number) { return of; }", // 2: the parameter
+].join("\n");
+
+describe("no-of through the real config, at next/ paths", async () => {
+  const all = await plant({
+    [FIRES]: fires,
+    [PASSES]: passes,
+    [TEST]: "export const helperOf = 1;",
+    [LEASE]: lease,
+    "next/packages/tuval/src/desktop/old.ts": "export const nameOf = (x: number) => x;",
+  });
+
+  it("scenario: fires on each declared name, of every kind", () => {
+    expect(all(CODE, FIRES)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
+  });
+
+  it("scenario: passes a use: indexOf, for...of, an import, a shorthand key, `Lease.of` under a namespace import", () => {
+    expect(all(CODE, PASSES)).toEqual([]);
+  });
+
+  it("scenario: passes a module's top-level exported `of` and fires on its `of` parameter", () => {
+    expect(all(CODE, LEASE)).toEqual([2]);
+  });
+
+  it("scenario: holds in tests too", () => {
+    expect(all(CODE, TEST)).toEqual([1]);
+  });
 });

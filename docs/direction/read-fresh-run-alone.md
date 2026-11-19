@@ -89,5 +89,5 @@ return yield* writes.enqueue(door.write);   // the proof made just now
     merge is not caught there.
   - Ship checks once; a head already in the queue is not pulled back. A fail
     posted after that would still land. The ticket claim
-    ([ledger](./ledger-behind-a-service.md)) is what stops it: one lane a
+    ([ledger](./ledger-behind-a-service.md)) is what stops it: one quest a
     ticket, one review a head.

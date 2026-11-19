@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-fold-1-plans-resign-build",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T00:59:37-08:00",
+  "ended": "2026-11-16T01:00:18-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Mock sweep fold 1, stack layer 7 (decision 0555), one merge only, on fabrikalfa/mock-fold-1 from its head c36ef34d. Merged fabrikalfa/mock-plans at eb7e5610 with --no-ff; merge commit 2cf3539d. The range c2810962..eb7e5610 is three commits that change two plan files and nothing else, and the merge was clean. docs/plan/quests/mock-app-src-PLAN.md: re-signed body hash, an amendment that 43 hits are on main (PR 1366 added runtime-quotas.laws.test.ts), Bundler becomes a Context.Reference whose default is the live bundle and answers a narrow output type, law L11 gains a fixed examples entry that draws the env case, and new files table rows for build.ts, bundle.ts, libfabrika package.json's Bundler export, brain.ts, objects.ts, start-child.test-support.ts and runtime-quotas.laws.test.ts. docs/plan/quests/mock-transport-PLAN.md: re-signed with 0574 added, the WebCrypto import sketch becomes the effect/crypto/WebCrypto module namespace, C6's row keeps its first guess marked wrong (C5 is red under the plant too), a tsconfig.base.json row adding effect/crypto/WebCrypto to the allowedUnstableApis list (tests step writes it), a slice 2 row moving C6 onto Layer.mock(Admissions, ...), and slice 1's size from 39 to 40 product lines.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1,
+  "note": "loosening.sh from c36ef34d to the merge commit: 0 hits in 0 exam files. No conflict, so no hand resolution. The merge itself adds no disable line, lock line or list entry; the plan text names a future allowedUnstableApis entry for the tests step, which is the plans branch's own content. Not run by this step, as briefed: pnpm lint, pnpm typecheck and every test, which the coordinator runs.",
+  "step": "build"
+}

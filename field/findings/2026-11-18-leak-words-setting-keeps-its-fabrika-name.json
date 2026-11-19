@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-leak-words-setting-keeps-its-fabrika-name",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": ".agents/skills/lead/scripts/leakgrep.sh",
+    "line": 44
+  },
+  "says": "Decision 0585 says no tooling setting, environment name or path takes FABRIKA_ or ~/.fabrika, and names KALFA_LEAK_WORDS and ~/.kalfa/leak-words as the first case, but leakgrep.sh and the tests that set it still read FABRIKA_LEAK_WORDS and ~/.fabrika/leak-words, and no .kalfa/ folder exists, so the code lags the decision. Ticket text: when the @kalfa/ci build moves leakgrep (0585 puts the leak-words move in the ci plan), read KALFA_LEAK_WORDS and ~/.kalfa/leak-words through @kalfa/config's app named kalfa, change every test that sets FABRIKA_LEAK_WORDS with it (botdraft.test.ts, botpush.test.ts, land.test.ts, the leakgrep.*.test.ts files, pr/Merge.test.ts, plancheck.draft.test.ts and plancheck.test-support.ts), and say in the pull request where the leak-words file moves for people who have it.",
+  "proof": "`.decisions/0585-kalfa-is-six-domain-packages.md` (the section \"No FABRIKA_ name in tooling\") reads \"`FABRIKA_LEAK_WORDS` becomes `KALFA_LEAK_WORDS`, and `~/.fabrika/leak-words` becomes `~/.kalfa/leak-words`\"; `.agents/skills/lead/scripts/leakgrep.sh:44` reads `os.environ.get('FABRIKA_LEAK_WORDS', str(Path.home() / '.fabrika/leak-words'))`; `grep -rn KALFA_LEAK_WORDS` outside node_modules finds only 0585 and `docs/plan/quests/kalfa-config-PLAN.md`; `ls -d .kalfa` prints \"No such file or directory\". This is not the fact of `field/findings/2026-11-15-t1076-command-l7-never-shows-a-file-origin.json`, which is a missing law on the shown name of the settings command's person file.",
+  "cost": "A person who sets KALFA_LEAK_WORDS, as the decision says, gets no leak words checked, so the leak check passes text it should refuse, until the move is built.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

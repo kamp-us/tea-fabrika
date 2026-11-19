@@ -1,6 +1,8 @@
 // next/, P21 L11. CI compiles the uncalled bad lines; Vitest never proves a type refusal.
 import { expectTypeOf, it } from "@effect/vitest";
-import { type Effect, type Layer, Schema } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import type * as Access from "../access/Access.ts";
 import * as Menu from "./Menu.ts";
 import * as Contract from "./PersonCheck.ts";
@@ -20,6 +22,7 @@ const types = () => {
   expectTypeOf<"layer" extends keyof typeof Contract.PersonCheck ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof Contract ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<ReturnType<typeof PersonCheckTest.layer>>().toEqualTypeOf<Layer.Layer<Contract.PersonCheck>>();
+
   const badLines = () => {
     // @ts-expect-error A new access kind must acquire words before any client can show it.
     const missingWords: Record<Kind | "future-client-kind", string> = Menu.words;
@@ -27,8 +30,10 @@ const types = () => {
     const staticLayer = Contract.PersonCheck.layer;
     // @ts-expect-error A platform handle cannot stand in for an ordinary reason string.
     const handle = Contract.PersonCheck.of({ ask: (_reason: { show: () => void }) => null });
+
     return [missingWords, staticLayer, handle];
   };
+
   void badLines;
 };
 

@@ -40,6 +40,8 @@ the program's schema.**
 - In a laws file, each restated type has one `expectTypeOf<Copy>().toEqualTypeOf<...>()` line
   against the type the program exposes (its state schema, its machine's Msg). A drift then fails
   the typecheck in CI.
+- A restated shape holds no hand-written `_tag`: it is held like any other hand-written `_tag`
+  ([0562](0562-nothing-teaches-the-wrong-shape.md)).
 - A shape the program does not expose in any type is not restated as a guess: the laws use it
   through the program's own values.
 - We count how often a pin goes red or a copy differs at merge, and report it in a field note. If

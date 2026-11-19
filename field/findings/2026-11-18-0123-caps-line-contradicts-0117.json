@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-0123-caps-line-contradicts-0117",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".decisions/0123-githubs-schedule-starts-the-mutation-run.md",
+    "line": 75
+  },
+  "says": "0123 says 0066's three-tickets-a-day cap holds, but 0117, which amends 0066 in part, removes that cap.",
+  "proof": ".decisions/0123-githubs-schedule-starts-the-mutation-run.md:75 reads \"0066's caps hold: three tickets a day\"; .decisions/0117-every-mutation-gap-gets-a-ticket.md:12 reads \"the limit of three tickets a day is gone\", and both are status accepted.",
+  "cost": "A reader of 0123 learns a cap that 0117 removed.",
+  "head": "50b8cdb5324c18cb4aa2951a57ac602693099ad0",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1629"
+}

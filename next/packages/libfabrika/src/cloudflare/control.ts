@@ -1,129 +1,128 @@
+/**
+ * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
+ * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
+ */
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
-import { LedgerError } from "../ledger/Ledger.ts";
-import { httpContext } from "./fetch.ts";
-import { workerLoader, type ProgramSource } from "./index.ts";
-import { ProcessClient, ProjectClient, RecordClient } from "./platform.ts";
-import {
-  checkedPut,
-  bucketHead,
-  processStub,
-  projectStub,
-  recordStub,
-  rpc,
-  settingsFailure,
-  type Env,
-} from "./runtime.ts";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Str from "effect/String";
+import { Connection } from "../presence/Connections.ts";
+import { ExitReason } from "../processes/ExitReason.ts";
+import { From } from "../processes/Mailbox.ts";
+import { Activity, Start } from "../processes/Process.ts";
+import { BrainEvent } from "../runtime/BrainEvent.ts";
+import { CodeEvent, Install } from "../runtime/Code.ts";
+import { Deletion, Sent } from "../telemetry/Records.ts";
+import { Chain } from "../telemetry/Trace.ts";
+import { ConnectionId } from "./bindings.ts";
+import { Dispatcher, Request } from "./Dispatcher.ts";
+import type { ProgramSource } from "./index.ts";
+import type { Env } from "./runtime.ts";
 
-const Request = Schema.Struct({
-  target: Schema.Literals(["project", "process", "record", "loader", "bucket"]),
-  project: Schema.String,
+/** No arguments: the empty list, and any argument is refused. It is an array of `Never` and not
+ *  `Schema.Tuple([])`, whose empty tuple type crashes the TypeScript 7.0.2 API that
+ *  `lint:promise-types` reads types through. */
+const None = Schema.Array(Schema.Never);
+
+/** A number as JSON carries it: never NaN or an infinity. */
+const Num = Schema.Finite;
+
+/** Who a client's hello says it is, as the door's caller vouches for it. */
+const Trusted = Schema.Struct({
+  url: Schema.String,
+  tab: Schema.String,
   name: Schema.String,
-  method: Schema.String,
-  args: Schema.Array(Schema.Unknown),
+  session: Schema.optionalKey(Schema.String),
 });
 
-const methods = {
-  project: new Set([
-    "clientConnect",
-    "challenge",
-    "initialize",
-    "route",
-    "grant",
-    "read",
-    "append",
-    "wait",
-    "start",
-    "exit",
-    "info",
-    "sign",
-    "commit",
-    "join",
-    "leave",
-    "online",
-    "brain",
-  ]),
-  process: new Set(["msg", "open", "due", "restart", "abort", "activity", "recover", "savedAlarm"]),
-  record: new Set(["write", "read", "content", "deleteContent"]),
+/** A Project `commit`'s line: the append's input without its `process`, which the door refuses. */
+const Commit = Schema.Struct({
+  id: Schema.String,
+  parent: Schema.String,
+  kind: Schema.String,
+  stream: Schema.String,
+  event: Schema.Json,
+});
+
+/**
+ * The door's table of argument schemas: for each target, one tuple per callable method, which
+ * decodes that method's arguments from the request (the payload of Effect's `Rpc.make`).
+ *
+ * **Details**
+ *
+ * Each schema needs no service and its encoded side is JSON. A method with no arguments takes the
+ * empty tuple. The keys are the only names the door calls.
+ *
+ * @category schemas
+ */
+export const Payloads = {
+  project: {
+    clientConnect: None,
+    challenge: Schema.Tuple([ConnectionId]),
+    initialize: Schema.Tuple([ConnectionId, Schema.Json, Trusted]),
+    route: Schema.Tuple([ConnectionId, Schema.String, Schema.Json, Schema.optionalKey(Schema.String)]),
+    grant: Schema.Tuple([Schema.Json]),
+    read: Schema.Tuple([Schema.String, Num, Schema.String]),
+    append: Schema.Tuple([Schema.String, Schema.String, Schema.Json]),
+    wait: Schema.Tuple([Schema.String, Num, Schema.String]),
+    start: Schema.Tuple([Start, From]),
+    exit: Schema.Tuple([Schema.String, ExitReason, From]),
+    info: None,
+    sign: Schema.Tuple([Schema.String, Schema.String, Schema.String, Schema.String]),
+    commit: Schema.Tuple([Schema.String, Commit]),
+    join: Schema.Tuple([Connection]),
+    leave: Schema.Tuple([Schema.String, Schema.String]),
+    online: Schema.Tuple([Schema.String]),
+    brain: Schema.Tuple([BrainEvent]),
+    codeInstall: Schema.Tuple([Install]),
+    codeFailed: Schema.Tuple([CodeEvent.cases["code.failed"]]),
+  },
+  process: {
+    msg: Schema.Tuple([Schema.Json]),
+    open: Schema.Tuple([Schema.String]),
+    due: Schema.Tuple([Num]),
+    restart: Schema.Tuple([Schema.Struct({ id: Schema.String, build: Schema.String })]),
+    abort: None,
+    activity: Schema.Tuple([Activity]),
+    recover: None,
+    savedAlarm: None,
+  },
+  record: {
+    write: Schema.Tuple([Chain, Num, Schema.Array(Sent)]),
+    read: Schema.Tuple([Chain, Num, Num]),
+    content: Schema.Tuple([Chain, Num, Schema.String]),
+    deleteContent: Schema.Tuple([Chain, Num, Schema.String, Deletion]),
+  },
 };
 
-const dispatch = Effect.fnUntraced(function* (
-  env: Env,
-  programs: Readonly<Record<string, ProgramSource>>,
-  request: typeof Request.Type,
-) {
-  const { target, project, name, method, args } = request;
-
-  if (target === "loader" || target === "bucket") {
-    yield* settingsFailure(httpContext(env));
-  }
-
-  if (target === "loader") {
-    const loaded = yield* workerLoader(env.LOADER, programs).load(name, project);
-
-    if (method === "init") {
-      return yield* loaded.execution.init(args[0]);
-    }
-
-    if (method === "step") {
-      return yield* loaded.execution.step(args[0], args[1]);
-    }
-
-    return yield* Effect.fail({ reason: "unknown_method" });
-  }
-
-  if (target === "bucket") {
-    if (method === "put") {
-      const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
-        Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
-      )(args).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
-      return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
-    }
-
-    if (method === "head") {
-      const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
-        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-      );
-      return yield* bucketHead(env.MEASUREMENTS, key);
-    }
-
-    return yield* Effect.fail({ reason: "unknown_method" });
-  }
-
-  if (!methods[target].has(method)) {
-    return yield* Effect.fail({ reason: "unknown_method" });
-  }
-
-  if (
-    target === "project" &&
-    method === "commit" &&
-    typeof args[1] === "object" &&
-    args[1] !== null &&
-    "process" in args[1]
-  ) {
-    return yield* Effect.fail({ reason: "reserved" });
-  }
-
-  // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
-  const client =
-    target === "project"
-      ? ProjectClient.make(projectStub(env, project))
-      : target === "process"
-        ? ProcessClient.make(
-            processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
-          )
-        : RecordClient.make(recordStub(env, project, name));
-  // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
-  const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);
-  return yield* target === "process" && method === "abort" ? answer.pipe(Effect.ignore) : rpc(answer);
-});
-
+/**
+ * Answers one control request: a JSON body naming a target, a project, a name, a method and its
+ * arguments.
+ *
+ * **Details**
+ *
+ * A request whose bearer token is not `token` gets a 403, and a body that does not decode gets a 400
+ * with reason `bad_input`. Only the listed methods of each target are called; another fails with
+ * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
+ * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
+ *
+ * @category combinators
+ */
 export const control = Effect.fn("runtime.control")(function* (
   request: globalThis.Request,
   env: Env,
   token: Redacted.Redacted<string>,
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
-  const bearer = Redacted.make(request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]);
+  const bearer = Redacted.make(
+    Function.pipe(
+      request.headers.get("authorization") ?? "",
+      Str.match(/^Bearer (.+)$/),
+      Option.map((found) => found[1]),
+      Option.getOrUndefined,
+    ),
+  );
 
   if (!Equal.equals(token, bearer)) {
     return new Response(null, { status: 403 });
@@ -137,18 +136,19 @@ export const control = Effect.fn("runtime.control")(function* (
     return Response.json({ error: { reason: "bad_input" } }, { status: 400 });
   }
 
-  const answer = yield* Effect.result(dispatch(env, programs, input.success));
+  // The service is read on each request, so a law that provides another one sees every dispatch.
+  const dispatcher = yield* Dispatcher;
+  const answer = yield* Effect.result(dispatcher.dispatch(env, programs, input.success));
+
   return Result.isSuccess(answer)
     ? Response.json({ value: answer.success ?? null })
     : Response.json(
         {
           error: {
             reason:
-              typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
+              Predicate.isObjectOrArray(answer.failure) && "reason" in answer.failure
                 ? answer.failure.reason
-                : typeof answer.failure === "object" && answer.failure !== null && "reason" in answer.failure
-                  ? answer.failure.reason
-                  : "unreachable",
+                : "unreachable",
           },
         },
         { status: 500 },

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-lint-parts-oom-in-shared-box",
+  "date": "2026-11-16",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "package.json",
+    "line": 11
+  },
+  "says": "In a cloud box shared by several agents, pnpm lint runs its 18 parts at once, and the parts that start a TypeScript API process (lint:promise-types, lint:kind, lint:dead) fail with EPIPE or an unexpected EOF when the box's memory cgroup kills a compiler, though each passes alone.",
+  "proof": "Two full pnpm lint runs with NODE_OPTIONS=--max-old-space-size=6144 on fabrikalfa/effect-e99 failed in those parts with 'Error: EPIPE: broken pipe, write' and 'Unexpected EOF while reading from child process'; dmesg showed 'Memory cgroup out of memory: Killed process (tsc)' while another agent ran tsgo, code-graph and oxlint; each part run alone passed. Other slices (E93, E87, E82) saw the same.",
+  "cost": "Every step in a shared box sees a red lint that is not its own, and reruns parts by hand or reports a false red.",
+  "head": "18d8a2c8354fe5bf035132a4d2d6a6d115c7238d",
+  "ticket": null,
+  "pr": null
+}

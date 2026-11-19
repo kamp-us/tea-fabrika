@@ -1,5 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Schema from "effect/Schema";
 import { Attached, Wait, Who } from "../Wire.ts";
 
 const Online = {
@@ -19,21 +20,26 @@ const Model = Schema.TaggedUnion({
   idle: Online,
   busy: Online,
 });
+
 /** @internal */
 export type Model = typeof Model.Type;
+
 type Online = typeof Model.cases.idle.Type | typeof Model.cases.busy.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("observed"), attached: Attached }),
-  Schema.Struct({ type: Schema.Literal("started") }),
-  Schema.Struct({ type: Schema.Literal("finished") }),
-  Schema.Struct({ type: Schema.Literal("waited"), wait: Wait }),
-  Schema.Struct({ type: Schema.Literal("answered"), wait: Wait }),
-]);
+/** @internal */
+export const Msg = Schema.TaggedUnion({
+  observed: { attached: Attached },
+  started: {},
+  finished: {},
+  waited: { wait: Wait },
+  answered: { wait: Wait },
+});
+
 /** @internal */
 export type Msg = typeof Msg.Type;
 
 const MAX_WAITS = 64;
+
 const MAX_BYTES = 16_384;
 
 /**
@@ -64,6 +70,7 @@ const loaded = (attached: typeof Attached.Type): Model => {
   }
 
   const s = fields(attached);
+
   return attached.busy ? Model.cases.busy.make(s) : Model.cases.idle.make(s);
 };
 
@@ -95,7 +102,7 @@ export const attachment = (model: Model): typeof Attached.Type | null => {
 
 /** The limits measure the saved attachment as UTF-8 JSON, metadata included. */
 const admits = (s: Online, next: Online, wait: typeof Wait.Type) =>
-  !s.waits.some((w) => w.id === wait.id) &&
+  !Arr.some(s.waits, (w) => w.id === wait.id) &&
   next.waits.length <= MAX_WAITS &&
   new TextEncoder().encode(JSON.stringify(attachment(next))).length <= MAX_BYTES;
 
@@ -115,6 +122,7 @@ export const connection = Machine.make({
       }
 
       const next = { ...s, waits: [...s.waits, m.wait] };
+
       return [admits(s, next, m.wait) ? next : s, []];
     },
     answered: (s, m) => {
@@ -123,8 +131,9 @@ export const connection = Machine.make({
       }
 
       const { id, stream, after } = m.wait;
-      const matching = s.waits.some((w) => w.id === id && w.stream === stream && w.after === after);
-      return [matching ? { ...s, waits: s.waits.filter((w) => w.id !== id) } : s, []];
+      const matching = Arr.some(s.waits, (w) => w.id === id && w.stream === stream && w.after === after);
+
+      return [matching ? { ...s, waits: Arr.filter(s.waits, (w) => w.id !== id) } : s, []];
     },
   },
 });

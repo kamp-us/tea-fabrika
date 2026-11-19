@@ -1,9 +1,12 @@
-// T753, next/, L3 and L10 [secrets]. The Worker reads only INSTANCE through Alchemy.
+// T753, next/, L3 and L10 [secrets]. The Worker reads only INSTANCE through Alchemy. The memory restart
+// plan declares the brain's memory limit and grace, so the values gain `brainMemory` and `brainGrace`.
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { ByteSize, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
+import * as Declarations from "../settings/Declarations.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
@@ -15,6 +18,7 @@ describe("shared Worker settings reader, next/", () => {
     (port) =>
       Effect.gen(function* () {
         const valid = Number.isInteger(port) && port >= 1 && port <= 65535;
+
         const input = yield* StartsTest.input({
           port: valid ? port : 18787,
           start: "port-boundary",
@@ -22,12 +26,15 @@ describe("shared Worker settings reader, next/", () => {
           revision: null,
           origin: "flag",
         });
+
         const raw = valid
           ? input
           : { ...input, settings: { ...input.settings, values: { ...input.settings.values, "instance.port": port } } };
+
         const exit = yield* Effect.exit(
-          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: JSON.stringify(raw) })),
+          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: Formatter.formatJson(raw) })),
         );
+
         expect(Exit.isSuccess(exit)).toBe(valid);
 
         if (Exit.isSuccess(exit)) {
@@ -35,7 +42,7 @@ describe("shared Worker settings reader, next/", () => {
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     // vector: the port protocol's inclusive endpoints and their immediate neighbours.
-    [[1], [65535], [0], [65536]],
+    { examples: [[1], [65535], [0], [65536]] },
   );
 
   StartsTest.law(
@@ -60,14 +67,16 @@ describe("shared Worker settings reader, next/", () => {
 
           const raw =
             move === "corrupt" ? StartsTest.corrupt(current, Math.floor(choice / moves.length), secret) : current;
+
           const exit = yield* Effect.exit(
             SettingsInput.read.pipe(
               Effect.provideService(WorkerEnvironment, {
-                INSTANCE: JSON.stringify(raw),
+                INSTANCE: Formatter.formatJson(raw),
                 UNRELATED_PASSWORD: secret,
               }),
             ),
           );
+
           expect(Exit.isSuccess(exit)).toBe(move !== "corrupt");
 
           if (Exit.isSuccess(exit)) {
@@ -81,7 +90,26 @@ describe("shared Worker settings reader, next/", () => {
               brainPoll: current.settings.values["desktop.brain-poll"],
               brainStartTimeout: current.settings.values["desktop.brain-start-timeout"],
               brainStopTimeout: current.settings.values["desktop.brain-stop-timeout"],
+              // A byte size is saved as its JSON spelling and read back as a byte count.
+              brainMemory: yield* Schema.decodeUnknownEffect(Schema.toCodecJson(Schema.ByteSize))(
+                current.settings.values["desktop.brain-memory"],
+              ),
+              brainGrace: current.settings.values["desktop.brain-grace"],
               desktopLinkTtl: current.settings.values["desktop.link-ttl"],
+              // T1041: the two mail settings; a byte size is saved as its count of bytes in text.
+              mailUnread: current.settings.values["mail.unread"],
+              mailChunk: ByteSize.bytes(BigInt(String(current.settings.values["mail.chunk"]))),
+              // P39 slice 3: the recipe sets no hands key, so the start reads the default, none.
+              handsTarget: null,
+              // P34c: the three quota settings. A byte size inside them is saved as its text and
+              // read back with its declaration's schema.
+              writes: current.settings.values["limits.writes"],
+              storage: yield* Schema.decodeUnknownEffect(Declarations.storage.schema)(
+                current.settings.values["limits.storage"],
+              ),
+              recovery: yield* Schema.decodeUnknownEffect(Declarations.recovery.schema)(
+                current.settings.values["limits.recovery"],
+              ),
             });
             StartsTest.exclude(exit.value, secret);
           }

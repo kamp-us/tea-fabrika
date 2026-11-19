@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-lint-dead-test-support-review2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-16T00:14:27-08:00",
+  "ended": "2026-11-16T00:19:25-08:00",
+  "parent": "2026-11-16-lint-dead-test-support-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Recheck of fix round 1 for lead tooling slice lint-dead-test-support, head 9446dbb0276bdb72368487b88c26a78f6d5c4e8d: send back to tests, one blocking class; review1's class 1 (an export of a .test-support.ts file that nothing uses is withheld, loosening 0006) waits on the owner and is not judged here. Fixed: law 3 now plants a helper for every alternative of both default groups in .ts and .tsx, with real coverage checks; a reviewer plant shows .tsx helpers are seen (with only test-support-module, x.tsx under test/, test-db.tsx and a.fixture.tsx are each only-called-from-tests; at the head they are withheld). The three laws are it.effect.prop with Schema inputs and no seed, which follows 0579's 'a law carries no seed'; 117 other files still pass arbitrary.seed because the package-level seed 0579 names is not built, so this file is the odd one out but on the decided side. New fault, made live by the random draws: the Segment schema (next/apps/fabrika/src/exam/unreachable.integration.test.ts:82-85) can draw names where law 2 is false by code-graph's design: base 'index' makes next/index.ts a barrel (isBarrel, dist/index.js:8310), so its dead exports are withheld as public-entry-surface; a folder segment 'dist' or 'vendor' makes code-graph skip the files. Reviewer plant: law 2's tree with base index, or in next/dist or next/vendor, reports no dead export; with base a in next/lib it reports next/lib/a.ts:dzz. Rare per case, but with no seed it is a flaky law (0036), and the law claims a case that does not hold. Fix: Segment also excludes index, dist, vendor and __generated__, with a comment naming code-graph's reasons.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 9446dbb: nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/apps/fabrika/src/exam/unreachable.integration.test.ts and next/apps/fabrika/src/exam/node-kinds.test.ts: 2 files, 4 tests passed, at the fast depth. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint:dead: exit 0, 'PASS, 3 recorded finding(s), none new'; unreachable-ledger.json md5 unchanged, no prune. NODE_OPTIONS=--max-old-space-size=6144 pnpm lint: exit 0, 18 parts passed. loosening.sh 701a651..HEAD: the same one hit as review1, 'node-kinds.json: unrecognized change: line 7', which this round did not touch; the test file is added in the range, so it gives no hit. Not blocking: the coverage checks in laws 1 and 2 test a tree the law itself builds, so they always pass; they guard a future edit, not the draws. Reviewer plants ran on temp trees from a scratch folder, never in the branch.",
+  "step": "review"
+}

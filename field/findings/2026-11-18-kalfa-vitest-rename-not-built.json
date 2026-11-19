@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-18-kalfa-vitest-rename-not-built",
+  "date": "2026-11-18",
+  "by": "build",
+  "model": "claude-sonnet-5-5",
+  "rule": "rule_break",
+  "location": {
+    "path": "next/packages/vitest/package.json",
+    "line": 2
+  },
+  "says": "Decisions 0557 and 0600 make next/'s test package @kalfa/quality/vitest, a subpath of the one @kalfa/quality package, but the package is still @kampus/vitest in next/packages/vitest, and kalfa/ holds only config and quality, with no ./vitest export, so the code lags the decisions. Ticket text: move next/packages/vitest into kalfa/quality as its ./vitest subpath, name it @kalfa/quality/vitest, change every import of @kampus/vitest, then add the lint rule that no file outside it imports vitest or @effect/vitest (0557, 0600, and 0554 and 0555, which move their hold to it); 0538, 0579, 0585 and the glossary's test depth row follow the new name.",
+  "proof": "`grep -n '\"name\"' next/packages/vitest/package.json` prints line 2, `\"name\": \"@kampus/vitest\"`; `ls kalfa` prints `config` and `quality`; `grep -c '\"./vitest' kalfa/quality/package.json` prints 0 (its exports start at ./stryker); `rg -l '@kampus/vitest' --glob '!node_modules' next | wc -l` prints 185.",
+  "cost": "Records 0538, 0554, 0555, 0557, 0579 and 0585 now name @kalfa/quality/vitest as decided while every test still imports @kampus/vitest, so a reader who follows a record to the code finds a different name, and the no-direct-vitest-import lint rule 0557 asks for cannot exist until the package moves.",
+  "head": "4f653bcc061a9be59607c46fe68c3c8118ef6202",
+  "ticket": null,
+  "pr": null
+}

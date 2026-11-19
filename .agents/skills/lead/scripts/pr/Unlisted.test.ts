@@ -48,14 +48,16 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     ),
   );
 
-  // scenario: 3, the lane's branch and its -wip backup are one lane; one open PR lists both.
-  it.effect("scenario: 3, an open PR on the branch or on its lane covers it, draft or not", () => {
+  // scenario: 3, the quest's branch and its -wip backup are one quest; one open PR lists both.
+  it.effect("scenario: 3, an open PR on the branch or on its quest covers it, draft or not", () => {
     const model = {
       branches: [branch("fabrikalfa/x", "a"), branch("fabrikalfa/x-wip", "b"), branch("fabrikalfa/y", "c")],
       ahead: { a: 2, b: 3, c: 1 },
       empty: [],
     };
+
     const prs = [pr(1, "fabrikalfa/x", "OPEN"), { ...pr(2, "fabrikalfa/y-wip", "OPEN"), draft: true }];
+
     return Effect.map(checked(model, prs), (r) => expect(names(r)).toEqual({ unlisted: [], landed: [] }));
   });
 
@@ -85,6 +87,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     "scenario: 6, commits after a merged PR, or a closed PR, still need a pull request, and it is named",
     () => {
       const model = { branches: [branch("x", "new"), branch("z", "c")], ahead: { new: 1, c: 2 }, empty: [] };
+
       return Effect.map(checked(model, [pr(5, "x", "MERGED", "old"), pr(6, "z", "CLOSED", "c")]), (r) =>
         expect(Unlisted.lines(r)).toEqual([
           "no pull request: origin x, 1 commit not on main, at new; PR 5 was merged at another head",
@@ -98,6 +101,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   // scenario: 7, a local branch with commits never pushed, beside its pushed twin.
   it.effect("scenario: 7, the laptop's branch and origin's are two lines, since either can hold more", () => {
     const model = { branches: [branch("x", "a", "local"), branch("x", "b")], ahead: { a: 3, b: 2 }, empty: ["b"] };
+
     return Effect.map(checked(model, []), (r) =>
       expect(names(r)).toEqual({ unlisted: ["local x"], landed: ["origin x"] }),
     );
@@ -117,6 +121,7 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   const Name = Schema.Literals(["a", "b", "a-wip", "c"]);
   const Tip = Schema.Literals(["t1", "t2", "t3"]);
   const Count = Schema.Literals([0, 1, 2, 3]);
+
   const World = Schema.Struct({
     branches: Schema.Array(Schema.Struct({ name: Name, tip: Tip, location: Schema.Literals(["local", "origin"]) })),
     ahead: Schema.Struct({ t1: Count, t2: Count, t3: Count }),
@@ -125,17 +130,18 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
   });
 
   it.effect.prop(
-    "property: every branch ahead of main with no open PR on its lane is in exactly one list",
+    "property: every branch ahead of main with no open PR on its quest is in exactly one list",
     { w: World },
     ({ w }) =>
       Effect.gen(function* () {
         const prs = w.prs.map((p, i) => pr(i + 1, p.head, p.state, p.oid));
         const r = yield* checked(w, prs);
-        const openLanes = new Set(prs.filter((p) => p.state === "OPEN").map((p) => Unlisted.laneName(p.head)));
-        const due = w.branches.filter((b) => w.ahead[b.tip] > 0 && !openLanes.has(Unlisted.laneName(b.name)));
+        const openQuests = new Set(prs.filter((p) => p.state === "OPEN").map((p) => Unlisted.questName(p.head)));
+        const due = w.branches.filter((b) => w.ahead[b.tip] > 0 && !openQuests.has(Unlisted.questName(b.name)));
         const key = (b: Branch) => JSON.stringify([b.name, b.location, b.tip]);
         const found = [...r.unlisted.map((u) => u.branch), ...r.landed.map((l) => l.branch)];
         expect(found.map(key).toSorted()).toEqual(due.map(key).toSorted());
+        // SAFETY: `includes` only compares: a tip that is not in `w.empty` is not found.
         expect(r.unlisted.every((u) => !w.empty.includes(u.branch.tip as "t1"))).toBe(true);
       }),
   );
@@ -145,11 +151,14 @@ describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
     { u: Schema.Literals([0, 1, 2, 4]), l: Schema.Literals([0, 1, 3]) },
     ({ u, l }) => {
       const at = (i: number) => branch(`b${i}`, `t${i}`);
+
       const r: Unlisted.Report = {
         unlisted: Array.from({ length: u }, (_, i) => ({ branch: at(i), ahead: 1, earlier: null })),
         landed: Array.from({ length: l }, (_, i) => ({ branch: at(i), merged: null })),
       };
+
       const out = Unlisted.lines(r);
+
       return out.length === u + l + 1 && out.at(-1) === `unlisted: ${u} with no pull request, ${l} safe to delete`;
     },
   );
@@ -179,17 +188,22 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
       GIT_COMMITTER_NAME: "fixture",
       GIT_COMMITTER_EMAIL: "fixture@example.test",
     };
+
     const git = (...args: string[]) => {
       const r = spawnSync("git", args, { cwd: dir, env, encoding: "utf8" });
       expect(r.status, r.stderr).toBe(0);
+
       return r.stdout.trim();
     };
+
     const commit = (file: string, text: string) => {
       writeFileSync(join(dir, file), text);
       git("add", file);
       git("commit", "-q", "-m", file);
+
       return git("rev-parse", "HEAD");
     };
+
     git("init", "-q", "-b", "main");
     commit("a.txt", "one\n");
     git("checkout", "-q", "-b", "squashed");
@@ -206,7 +220,8 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
     // Main moves on in a file the squashed branch never touched.
     commit("a.txt", "one, changed on main\n");
     git("update-ref", "refs/remotes/origin/main", "main");
-    return { squashed, fresh, clash };
+
+    return { squashed, fresh, clash, git };
   };
 
   // scenario: the three roads the check must tell apart, on a real repo with origin/main.
@@ -215,8 +230,10 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
       const fs = yield* FileSystem.FileSystem;
       const dir = yield* fs.makeTempDirectoryScoped({ prefix: "unl-" });
       const tips = fixture(dir);
+
       const got = yield* Effect.gen(function* () {
         const branches = yield* Branches;
+
         return [
           yield* branches.landsEmpty(tips.squashed),
           yield* branches.landsEmpty(tips.fresh),
@@ -224,7 +241,78 @@ describe("BranchesGit on real git: the refs it lists and the trial merge", () =>
           yield* branches.ahead(tips.squashed),
         ];
       }).pipe(Effect.provide(BranchesGit.layer(dir)));
+
       expect(got).toEqual([true, false, false, 2]);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // scenario: retained roots may share main's files without sharing its history.
+  it.effect("scenario: unrelated retained histories stay unlisted while other branches are still reported", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fs.makeTempDirectoryScoped();
+      const { git } = fixture(dir);
+
+      for (const [name, source] of [
+        ["retained-same", "main"],
+        ["retained-new", "fresh"],
+      ]) {
+        const tip = git("commit-tree", git("rev-parse", `${source}^{tree}`), "-m", name);
+        git("update-ref", `refs/heads/${name}`, tip);
+      }
+
+      git("remote", "add", "origin", dir);
+      git("fetch", "-q", "origin");
+      writeFileSync(join(dir, "a.txt"), "staged work\n");
+      git("add", "a.txt");
+      writeFileSync(join(dir, "a.txt"), "unstaged work\n");
+      writeFileSync(join(dir, "keep.txt"), "untracked work\n");
+      const refs = git("show-ref");
+      const head = git("rev-parse", "HEAD");
+      const index = git("write-tree");
+      const status = git("status", "--porcelain");
+
+      const report = yield* Unlisted.check().pipe(
+        Effect.provide(Layer.mergeAll(BranchesGit.layer(dir), PullRequestsTest.layer(PullRequestsTest.world([])))),
+      );
+
+      for (const location of ["local", "origin"] as const) {
+        expect(report.unlisted.filter((u) => u.branch.location === location).map((u) => u.branch.name)).toEqual([
+          "clash",
+          "fresh",
+          "retained-new",
+          "retained-same",
+        ]);
+        expect(report.landed.filter((l) => l.branch.location === location).map((l) => l.branch.name)).toEqual([
+          "squashed",
+        ]);
+      }
+
+      expect(Unlisted.lines(report).at(-1)).toBe("unlisted: 8 with no pull request, 2 safe to delete");
+      expect(git("show-ref")).toBe(refs);
+      expect(git("rev-parse", "HEAD")).toBe(head);
+      expect(git("write-tree")).toBe(index);
+      expect(git("status", "--porcelain")).toBe(status);
+      expect(yield* fs.readFileString(join(dir, "a.txt"))).toBe("unstaged work\n");
+      expect(yield* fs.readFileString(join(dir, "keep.txt"))).toBe("untracked work\n");
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+  // scenario: an unreadable tip is a real Git error, not an unrelated history.
+  it.effect("scenario: an unknown tip still fails the Git read", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fs.makeTempDirectoryScoped();
+      fixture(dir);
+
+      const error = yield* Effect.gen(function* () {
+        const branches = yield* Branches;
+
+        return yield* Effect.flip(branches.landsEmpty("missing-retained-tip"));
+      }).pipe(Effect.provide(BranchesGit.layer(dir)));
+
+      expect(error._tag).toBe("BranchesError");
+      expect(error.reason).toContain("exited 128");
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 });

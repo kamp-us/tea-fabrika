@@ -2,8 +2,6 @@
  * Mail delivery: how the runner gets a program's Send to its recipient. The runner hands over a
  * saved Send with the sender the host bound; `MailDeliveryLive.layer` saves the letter, then
  * schedules its recipient. This file holds the contract only (0095).
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -16,21 +14,21 @@ import { type Queued } from "./Send.ts";
  * **Details**
  *
  * A `MailRefusal` reason is final: the runner gives it to the program as the Send's answer.
+ * `full` means the recipient's inbox holds its cap of unread letters and nothing was saved; the
+ * recipient was woken to read. A plain Send answers it, and a chunked send waits and tries again.
  * `storage` (the letter was not saved) and `unavailable` (its recipient was not scheduled) answer
  * nothing: the Send stays dispatched, and the runner tries it again.
  *
- * @stability unstable
  * @category errors
  */
 export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError>()("MailDeliveryError", {
-  reason: Schema.Union([MailRefusal, Schema.Literals(["storage", "unavailable"])]),
+  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage", "unavailable"])]),
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 /**
  * One saved Send: its command ID, the life that runs it, its operands and the writer's own facts.
  *
- * @stability unstable
  * @category models
  */
 export type Mail = Delivery;
@@ -44,7 +42,6 @@ export type Mail = Delivery;
  * `send` answers `queued`, with the saved letter's id, only after both steps. `queued` never means
  * the recipient took or answered the letter.
  *
- * @stability unstable
  * @category services
  */
 export class MailDelivery extends Context.Service<
