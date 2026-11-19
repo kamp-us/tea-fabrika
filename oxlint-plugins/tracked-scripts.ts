@@ -39,7 +39,7 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
 ];
 
 /**
- * Scripts that are another author's text, kept byte for byte (Matt Pocock's skills, MIT,
+ * Scripts that are another author's text, kept byte for byte: vendored skills (MIT, see
  * `.agents/skills/UPSTREAM-mattpocock-skills-LICENSE`). The check changes, never the text, so they
  * carry no edge line and no port. A script is added here only with a vendored skill that ships it.
  */

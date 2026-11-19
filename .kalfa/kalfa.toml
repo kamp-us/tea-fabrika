@@ -2,12 +2,12 @@
 [[records]]
 name = "decisions"
 path = ".kalfa/decisions/"
-prompt = "Matt Pocock's ADR format. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
+prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
 
 [[records]]
 name = "glossary"
 path = ".kalfa/glossary/"
-prompt = "GLOSSARY-MAP.md is the map of bounded contexts. Each context's words live in its own GLOSSARY.md, in Matt Pocock's glossary format: only words a caller of that context sees. A context's GLOSSARY.md is written when its words are decided. A term goes in with an _Avoid_ line, in the pull request that coins or renames it."
+prompt = "GLOSSARY-MAP.md is the map of bounded contexts. Each context's words live in its own GLOSSARY.md, in the glossary format in the `domain-modeling` skill: only words a caller of that context sees. A context's GLOSSARY.md is written when its words are decided. A term goes in with an _Avoid_ line, in the pull request that coins or renames it."
 
 [[records]]
 name = "guidelines"
@@ -32,9 +32,9 @@ prompt = "One signed plan per ticket, approved by the owner before its tests are
 [[records]]
 name = "research"
 path = ".kalfa/research/"
-prompt = "Matt Pocock's research format: one file per question, answered from high-trust primary sources, each claim cited."
+prompt = "The research format in the `research` skill: one file per question, answered from high-trust primary sources, each claim cited."
 
 [[records]]
 name = "retro"
 path = ".kalfa/retro/"
-prompt = "Matt Pocock's retro format: one file per session worth learning from."
+prompt = "The retro format in the `retro` skill: one file per session worth learning from."

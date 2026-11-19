@@ -6,7 +6,7 @@ description: Record one owner decision as an ADR in `.kalfa/decisions/`. Use on 
 # adr
 
 Decisions live in `.kalfa/decisions/`, one file each, numbered `0001-slug.md`, `0002-slug.md` and so
-on. The format is Matt Pocock's ADR format: a title, then one to three sentences of context, what we
+on. The format is the ADR format in the `domain-modeling` skill: a title, then one to three sentences of context, what we
 decided and why. Read the ADR format (`.agents/skills/domain-modeling/ADR-FORMAT.md`) before you write one (that file
 lands with the domain-modeling skill).
 
