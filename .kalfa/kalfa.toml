@@ -28,3 +28,8 @@ prompt = "One file per operation done by hand, written the first time it is done
 name = "retro"
 path = ".kalfa/retro/"
 prompt = "Matt Pocock's retro format: one file per session worth learning from."
+
+[[records]]
+name = "research"
+path = ".kalfa/research/"
+prompt = "Matt Pocock's research format: one file per question, answered from high-trust primary sources, each claim cited."
