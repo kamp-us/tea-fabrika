@@ -159,6 +159,9 @@ What must land before each slice, in order. Each line needs the lines above it u
 14. **Slice 6,** merger live through `land.ts arm`, after slice 4's shadow run reaches 10 matches.
 15. **Later, on the owner's answer to [open question 2](#open-questions):** merger's admin merge
     live, with a second App.
+16. **Later, the web UI,** `dashboard` ([Later slices](#later-slices-not-built-now)), after slices
+    1, 3 and 4 and lines 5 to 7, and after the owner's answer to the `person` row of
+    [open question 1](#open-questions). Its look step runs before its pull request opens.
 
 ## How others do it
 
@@ -336,6 +339,7 @@ next/apps/fabrikalfa/          @kampus/fabrikalfa: the app, beside next/apps/fab
     Ask.ts                     the ask protocol: the request, the answer, the error, as schemas
     Policy.ts                  fabrikalfa's WritePolicy Layer: who may ask which program for what
     Callers.ts                 the caller-token check: an environment's token to an identity
+    Inbox.ts                   the lead's mailbox: the message schema, send, read and ack (slice 7)
     App.ts                     joins the Layers: provider-github, provider-cloudflare, ledger, program
     merger/Merger.ts           the merger program
     checks/Checks.ts           the checks program
@@ -347,6 +351,7 @@ next/apps/fabrikalfa/          @kampus/fabrikalfa: the app, beside next/apps/fab
 fixtures/next/fabrikalfa      recorded webhook payloads and GitHub answers, each labeled vector:
 kalfa/ci/src/Gates.ts          green, leftovers (pure)
 kalfa/ci/src/Freeze.ts         verdict (pure)
+.agents/skills/lead/scripts/inbox.ts   the agents' and the lead's client: send, read, ack (slice 7)
 ```
 
 What the move into `next/` means for the repo's own files, each read on main:
@@ -388,6 +393,7 @@ export const Ask = Schema.TaggedUnion({
   merger: { input: Merger.Asks },   // arm, admin
   freeze: { input: Freeze.Asks },   // next
   tokens: { input: Tokens.Asks },   // push
+  lead: { input: Inbox.Asks },      // send, ack: the lead's mailbox (slice 7)
 });
 // POST /ask, body { _tag: "merger", input: { _tag: "arm", pr: 1280, head: "h1", leaks: "clean" } },
 // header Authorization: Bearer <a caller token>. The door answers 401 with nothing appended when the
@@ -413,8 +419,8 @@ Send into a program's inbox, which is a ledger append, so the policy is asked be
 const may = {
   github: ["merger.event", "checks.event", "freeze.event", "settings.event"],
   clock: ["checks.tick", "freeze.tick", "settings.tick"],
-  agent: ["merger.arm", "tokens.push"],
-  lead: ["merger.arm", "merger.admin", "freeze.next", "tokens.push"],
+  agent: ["merger.arm", "tokens.push", "lead.send"],
+  lead: ["merger.arm", "merger.admin", "freeze.next", "tokens.push", "lead.send", "lead.ack"],
   ci: ["tokens.push"],
 } as const satisfies Record<Caller["_tag"], ReadonlyArray<string>>;
 
@@ -422,12 +428,17 @@ export const layer = Layer.succeed(WritePolicy, WritePolicy.of({
   allows: (caller, stream, input) => Effect.succeed(may[caller._tag].includes(`${stream}.${input._tag}`)),
 }));
 // merger.admin is also refused by merger itself outside a sev0: the policy says who, the program says when.
+// lead.send appends to lead/inbox (slice 7). Reading lead/inbox is not a write, so it is the door's
+// own rule, beside this table: only the `lead` identity reads it.
 ```
 
 Caller tokens: one random token per environment (the laptop's boxes, a cloud session, the lead
 session). The Worker keeps only each token's SHA-256, in the Secrets Store, and compares in
 constant time. The token itself stays in that environment: on the laptop, a file under
-`~/.fabrikalfa/` that is never mounted into a box for the lead's.
+`~/.fabrikalfa/` that is never mounted into a box for the lead's. In a cloud session the
+environment's token is saved as that environment's network secret for the Worker's host, so the
+proxy adds it and the session never reads it (a guess at the setup, read from this session's own
+tools; slice 7's build checks it on one cloud environment).
 
 ### merger
 
@@ -650,6 +661,87 @@ The vend record in the journal names `by`, `at`, `expires` and the token's finge
 12 hex of its SHA-256), never the token. A record of who held push rights when cannot be rebuilt
 later, so it is written from the first vend.
 
+### The lead's inbox
+
+Slice 7. Agents, in the cloud and on the laptop, send their messages to the lead's mailbox through
+the door, never to a git branch. It is Runtime's mailbox: one inbox stream with many writers
+(0601), `lead/inbox`, named as `next/` names a name's inbox. The lead's two sessions read it.
+
+```ts
+// next/apps/fabrikalfa/src/Inbox.ts, a sketch. What lands is a message (0547, 0582); a Send is a
+// ledger append with an id, saved before anyone reads it (0103, 0601).
+export const Reader = Schema.Literals(["lead", "merger"]); // the lead, and its session that lands pull requests
+export const Usage = Schema.Struct({                       // today's usage file's row: counts, never text
+  id: Schema.String, at: Schema.String, session: Schema.String, agent: Schema.NullOr(Schema.String),
+  model: Schema.String,
+  usage: Schema.Struct({ input: Count, output: Count, cacheWrite5m: Count, cacheWrite1h: Count, cacheRead: Count }),
+});
+export const Message = Schema.TaggedUnion({
+  status: { to: Reader, ticket: Schema.NullOr(Schema.String), pr: Schema.NullOr(Pr), text: Text },
+  plan: { to: Reader, ticket: Schema.String, path: Schema.String, head: Sha, digest: Schema.String },
+  usage: { to: Reader, session: Schema.String, rows: Schema.NonEmptyArray(Usage) },
+});
+export const Asks = Schema.TaggedUnion({
+  send: { id: Schema.String, sentAt: Schema.Number, m: Message }, // id is the sender's: a resend is one entry
+  ack: { reader: Reader, pos: Pos },                              // the lead only
+});
+export const Answer = Schema.TaggedUnion({
+  queued: { pos: Pos },   // saved; the same id again answers the same pos
+  full: {},               // mailbox.capacity unread past the lead's place: nothing saved, send again later (0109)
+  acked: { pos: Pos },
+});
+// One entry on lead/inbox, as the ledger keeps it. `by` and `arrivedAt` are the door's, never the body's.
+const Entry = Schema.Struct({ id: Schema.String, by: Caller, sentAt: Schema.Number, arrivedAt: Schema.Number, m: Message, pos: Pos });
+// lead/acked holds { _tag: "acked", reader, pos }; an ack at or behind a reader's place writes nothing.
+```
+
+Who reads it: only the `lead` identity, at `GET /inbox/lead?after=<pos>`, which answers the entries
+after `pos` in order and waits up to 30 seconds on the ledger's `wait` when there are none. An
+agent's token answers 403 there, and an unknown one 401. A body that does not decode answers 400
+`bad_input`, and one over `mailbox.chunk` bytes answers 413 `too_big`; neither saves anything.
+
+One call, with its answers:
+
+```ts
+// A cloud agent says its plan is ready. Its environment's caller token rides in Authorization.
+POST /ask { _tag: "lead", input: { _tag: "send", id: "session_x/0004", sentAt: 1763600000000,
+  m: { _tag: "plan", to: "merger", ticket: "1003", path: "docs/plan/quests/t1003-PLAN.md", head: "9b1a3fd9a", digest: "1da49c6f98e9" } } }
+// -> the door: { _tag: "agent", environment: "cloud" }; may it lead.send? yes
+// -> lead/inbox: { id: "session_x/0004", by: { _tag: "agent", environment: "cloud" }, sentAt, arrivedAt, m, pos: 41 }
+// -> { _tag: "queued", pos: 41 }; the same POST again -> { _tag: "queued", pos: 41 }, no second entry
+GET /inbox/lead?after=40                                    // the lead's token -> [the entry at 41]
+POST /ask { _tag: "lead", input: { _tag: "ack", reader: "merger", pos: 41 } }  // -> { _tag: "acked", pos: 41 }
+```
+
+The client is `.agents/skills/lead/scripts/inbox.ts`: `send <tag> <json>` for any agent, `read
+--reader <lead|merger> [--follow]` and `ack` for the lead. `--follow` is one waiting read after
+another, which replaces today's watchers. Usage rows go in as many `usage` messages as
+`mailbox.chunk` needs, and stay in the ledger, which only the lead reads. Nothing writes them, or
+any message, to a public place: not git, not a comment, not a view, not a span attribute (law I4).
+
+**Until the slice's last step, the message branches stay as the stopgap.** An agent sends to the
+inbox once slice 7 is deployed and its brief says so, and to its `fabrikalfa/mail-session_*`
+branch until then.
+
+**The slice's last step: delete today's message tooling.** After one week in which every message
+the lead got came through the inbox, the lead, outside any box:
+
+1. Copies each message branch's files into the private archive (0027), then deletes the branches
+   on `origin`: every `fabrikalfa/mail-session_*` (46 on 2026-11-19), and `fabrikalfa/mail-experiments`,
+   `fabrikalfa/mail-t955` and `fabrikalfa/mail-twin`, which hold the same numbered message files
+   (`001-mail-works.md` first). With them go the usage files on those branches, such as
+   `usage/usage-20261119T000935Z.json`, and the `mail/` folder two full-tree branches carry.
+2. Stops each watcher of those branches. **None is in the repo:** a search of `.agents/`,
+   `scripts/`, `.claude/` and the workflows folder on main for `mail-session` and for mail finds no watcher,
+   reader or collector. A guess at where they live: the lead sessions' own background loops, the
+   laptop reader a 2026-11-19 message names, and a cloud session's two-hour scheduled run that
+   sends usage rows. The lead lists each one it finds in the slice's run row before it stops it.
+3. Adds one line to `.agents/skills/lead/SKILL.md`: an agent's message goes through `inbox.ts
+   send`, never a branch.
+
+A deleted branch's commits may still be reachable on GitHub by their SHA, and clones keep them. The
+deletion stops new writes to a public place; it does not take back what was already pushed.
+
 ### The Worker
 
 ```ts
@@ -658,6 +750,7 @@ later, so it is written from the first vend.
 //                  Webhook.decode(event, body) -> [program, input] | null; Send with id = X-GitHub-Delivery,
 //                  so a delivery GitHub sends twice is one message (tea's logged admission keeps the first).
 // POST /ask        Callers.identify(Authorization) or 401; WritePolicy.allows or 403; Send; await the answer.
+// GET /inbox/lead  the `lead` identity only (401, 403); the entries after `after`, waiting up to 30 s (slice 7).
 // GET /view/<p>    the program's latest output as JSON. No secret is in any output (law X1).
 // scheduled        cron "*/5 * * * *": tick to checks and freeze; cron "17 * * * *": tick to settings.
 ```
@@ -722,6 +815,15 @@ refusal.
 | R1, only if ticket 1190 leaves them out: the memory Layers of `Rulesets` and `RepoSettings` pass their conformance suites, and a read after a write answers what was written, default runs | test | fc.record: rulesets and repo settings, one field changed at a time | a memory Layer that drops `required` on write: red | kalfa/codehost/src/RulesetsTest.ts |
 | R2, only if ticket 1190 leaves them out: no `Rulesets` write takes a bypass list, so no caller can write one (0603) | type | type | add `bypass` to the write input: the test's type assertion fails to compile | kalfa/codehost/src/Rulesets.ts |
 | Y1, each program's input function takes only its `In` union's members; an input with an unknown `_tag` fails to compile | type | type | add an untyped input to `match`: typecheck fails | next/apps/fabrikalfa/src/merger/Merger.ts |
+| I1, a `send` from an `agent` or `lead` caller appends exactly one entry to `lead/inbox` per id, with `by` and `arrivedAt` from the door and never from the body; a resend answers the same `pos`; a `github`, `clock` or `ci` caller answers 403 and an unknown token 401, each appending nothing, 200 runs | test | fc.array: sends with ids from a small set, from every caller kind, on the memory Ledger | append before the id check: red; take `by` from the body: red | next/apps/fabrikalfa/src/Inbox.test.ts |
+| I2, a body that does not decode, a message tag outside `Message`, or a body over `mailbox.chunk` bytes is refused and appends nothing; past `mailbox.capacity` unread after the lead's place a send answers `full` and appends nothing, default runs | test | fc.record: bodies of every size around the two settings, bad tags, reader places | save a message over the chunk size: red; save past the cap: red | next/apps/fabrikalfa/src/Inbox.test.ts |
+| I3, `GET /inbox/lead` answers to the `lead` identity only, every entry after `after` once and in order; an `ack` moves a reader's place only forward, and each reader's place is its own, default runs | test | fc.array: sends, reads and acks of both readers in fc.shuffledSubarray order | let an agent token read: red; move the merger's place on the lead's ack: red | next/apps/fabrikalfa/src/Inbox.test.ts |
+| I4, [secrets] a message's text, its usage rows and the caller token never appear in a span attribute, an output, a view, an error or a comment body, 100 runs | test | fc.string: generated text, rows and tokens planted in every send, read and refusal path | put the message text on the send span: red | next/apps/fabrikalfa/src/Secrets.test.ts |
+| I5, `inbox.ts` sends one POST per message with the agent's id and resends under the same id after a timeout; `--follow` reads from its last ack and never skips an entry, default runs | test | fc.array: answers queued, full, timeout and entries on a fake door | resend under a new id: red; follow from the newest entry and skip unacked ones: red | .agents/skills/lead/scripts/inbox.test.ts |
+
+P1 grows in slice 7 with `lead.send` and `lead.ack`. The deletion of today's message branches has
+no law: no code in the repo writes them (they come from session briefs), so no law can hold their
+end. The lead's step and the skill line hold it, and the run row lists what was deleted.
 
 The tests step runs each plant once and records it in its report and run row, never committed. The
 `vector:` payloads in W2 come from real deliveries to the App, recorded once with the event, action
@@ -797,6 +899,22 @@ owner's and the lead's, under [Rollout](#rollout-in-the-order-the-owner-sees-it)
 | `.agents/skills/lead/scripts/pr/Arm.test.ts` | its laws on a fake merger answer | tests | tests | 6 |
 | `.glossary/TERMS.md` | rows: caller token, trust policy, the five programs; the fabrikalfa row names its folder | docs | build | 1 |
 | `docs/plan/README.md` | where we are: fabrikalfa and its slices (0013) | docs | build | 1 |
+| `next/apps/fabrikalfa/src/Inbox.ts` | the lead's mailbox: `Message`, `Asks`, send, read, ack on `lead/inbox` and `lead/acked` | 130 | build | 7 |
+| `next/apps/fabrikalfa/src/Inbox.test.ts` | I1, I2, I3 | tests | tests | 7 |
+| `next/apps/fabrikalfa/src/Ask.ts` | the `lead` case | 5 | build | 7 |
+| `next/apps/fabrikalfa/src/Policy.ts` | `lead.send` for `agent` and `lead`, `lead.ack` for `lead` | 5 | build | 7 |
+| `next/apps/fabrikalfa/src/Policy.test.ts` | P1 grows with the two inputs | tests | tests | 7 |
+| `next/apps/fabrikalfa/src/Worker.ts` | `GET /inbox/lead`, the lead-only read that waits | 35 | build | 7 |
+| `next/apps/fabrikalfa/src/Secrets.test.ts` | I4 | tests | tests | 7 |
+| `next/apps/fabrikalfa/src/settings/Desired.ts` | the `[mailbox]` section: `capacity`, `chunk` | 10 | build | 7 |
+| `.fabrikalfa/fabrikalfa.toml` | `[mailbox]` with `capacity = 256` and `chunk = 65536` | 4 | build | 7 |
+| `.agents/skills/lead/scripts/inbox.ts` | the client: `send`, `read --follow`, `ack` | 90 | build | 7 |
+| `.agents/skills/lead/scripts/inbox.test.ts` | I5 | tests | tests | 7 |
+| `.agents/skills/lead/SKILL.md` | one line: an agent's message goes through `inbox.ts send`, never a branch | docs | build | 7 |
+
+The message branches on `origin` that slice 7's last step deletes are not repo files, so they are
+not rows above: the lead deletes them, after a copy into the private archive
+([the slice](#the-leads-inbox), step 1).
 
 ## Existing tools
 
@@ -863,6 +981,15 @@ owner's and the lead's, under [Rollout](#rollout-in-the-order-the-owner-sees-it)
   Layer calls GitHub's REST API through the provider's own client, as its other Layers do.
 - `kalfa/provider-github/src/RepoSettings.ts`, only if ticket 1190 leaves it out: searched the same
   scripts and found no repo settings call; a Layer like the one above.
+- `next/apps/fabrikalfa/src/Inbox.ts`: searched `next/`'s `Mailbox` service
+  (`next/packages/libfabrika/src/processes/Mailbox.ts`: `send(to, id, m, from)`, `receive(name,
+  after)`, the stream `<name>/inbox`), whose shape it follows but which the app may not import (L2),
+  and `@kalfa/program`'s planned mailbox (0601: "a process has an id, a mailbox"). If that plan
+  exports a mailbox service, this file uses it; otherwise it is `Ledger.append` with the id and
+  `Ledger.read` and `wait` on the stream, which is all a mailbox is (0601).
+- `.agents/skills/lead/scripts/inbox.ts`: searched the lead's scripts (`rg -n -i mail
+  .agents/skills/lead/scripts`), which hold no message client, and `botpush.mjs`, whose HTTPS ask
+  to tokens it follows; `curl` alone would not resend under the same id or follow from the last ack.
 - `kalfa/ci/src/Freeze.ts`: searched the sev skill's `Freeze.ts` `verdict`, which keeps the queue's
   and the allowed branch's runs and cancels main's push runs. 0611 changed that rule; the new one is
   pure and lives where 0612 puts admission.
@@ -879,6 +1006,11 @@ Each new choice, asked (0069):
 - The repo's wanted state (merge methods, rulesets, required checks): settings, in the same file.
 - The cron times (5 minutes, hourly): set once in `alchemy.run.ts`, not in the file, because a cron
   trigger is deployed, not read. The hourly drift run is the ticket's word.
+- `mailbox.capacity` and `mailbox.chunk`: settings, 0582's own keys, in the file's `[mailbox]`
+  section. Their values are the lead skill's for `next/` today (256 unread, 64 KiB), until a
+  measurement of fabrikalfa's own traffic replaces them, as 0109 asks.
+- The readers, `lead` and `merger`: not settings. Who may read the lead's mailbox is the policy,
+  which is the owner's answer to open question 1.
 - The token's permissions and its one hour: not settings. The permissions are what `botpush.mjs`
   needs, and one hour is GitHub's fixed lifetime.
 - The freeze's keep rule, the bypass rule and "never land an untested tree": not settings. 0611,
@@ -890,8 +1022,10 @@ Each new choice, asked (0069):
   answer or the refusal and its reason; for every webhook, its delivery id; for every arm, the head
   it was pinned to and the checks it saw; for every admin merge, the sev, the fix, main's head and
   the head; for every cancel, the run and its verdict; for every settings read, the live state with
-  its bypass lists; for every token, who held it, when and until when. Each is in a journal from its
-  first day, and none can be rebuilt later.
+  its bypass lists; for every token, who held it, when and until when; for every message to the
+  lead, who sent it, both clocks and its id. Each is in a journal or the inbox stream from its first
+  day, and none can be rebuilt later. Usage rows sent before slice 7 sit on public branches; from
+  slice 7 they are kept only in the ledger.
 - Derived later from the journals: time from arm to merge, how often checks go missing or stuck,
   the drift history.
 - `field/runs/` rows for each step, by the lead, and a field note for the shadow run.
@@ -945,6 +1079,12 @@ Each new choice, asked (0069):
    bypass. Until the owner answers and, on a yes, makes the second App, T1 keeps tokens refusing if
    the App it vends from ever holds a bypass, and admin merges stay with `land.ts merge --admin`. His
    2026-11-14 answer (the existing App) was about the queue and the day-one programs.
+8. **Slice 7 lands, any time after slice 3:** the lead's inbox. **Waits on the owner:** his answer
+   to [open question 1](#open-questions), written as a decision, before any agent is asked to send
+   usage rows. The lead gives each environment (the laptop's boxes, each cloud environment) its
+   caller token, and new briefs say "send with `inbox.ts send`". The message branches stay as the
+   stopgap meanwhile. After one week in which every message came through the inbox, the lead does
+   the slice's last step: archive, then delete the branches, and stop their watchers.
 
 ## Later slices, not built now
 
@@ -956,6 +1096,50 @@ Each new choice, asked (0069):
   STS's fields, the JWKS check, when the first workflow needs to ask.
 - **The leak gate on the server,** with the word list in the Secrets Store, on the owner's word.
 - **Chat:** asks from a comment that mentions the bot, through `@kalfa/chat` (0616).
+- **A plain web UI, `dashboard`** (owner, relayed by the lead, 2026-11-19; Kubernetes Dashboard's
+  word for a web UI that shows a cluster's state and edits it). A program with a view, served by
+  the Worker as one page at `GET /`: no multiplexer, no shell. It shows three things: fabrikalfa's
+  settings, editable; each program's journal; and merger's queue. Its one write is a settings change
+  through the settings program's protocol, so nothing in it writes the file or GitHub itself.
+
+  ```ts
+  // next/apps/fabrikalfa/src/dashboard/Dashboard.ts, a sketch for the later slice's own plan.
+  export const In = Schema.TaggedUnion({
+    settings: { wanted: Desired, live: Live, drift: Schema.Array(Diff) }, // piped from settings' output
+    queue: { line: Schema.Array(Landing), mode: Mode, shadow: Shadow },   // piped from merger's view
+  });
+  export const View = Schema.TaggedUnion({
+    settings: { wanted: Desired, drift: Schema.Array(Diff) }, // a form; a bypass list shows, read-only (0603)
+    journal: { program: Program, after: Pos },               // GET /journal/<program>?after=, a ledger read
+    queue: { line: Schema.Array(Landing), mode: Mode },
+  });
+  // The one write: an ask to settings, which opens a draft pull request that changes
+  // .fabrikalfa/fabrikalfa.toml through @kalfa/codehost. It lands through the normal steps, and
+  // settings applies it on the push to main, so S2 holds: settings still writes only on that push.
+  // settings: Asks = TaggedUnion({ propose: { path: Schema.String, value: Schema.Json } })
+  //   propose refuses a path under a bypass list (0603), as Drift marks it write: false.
+  // Policy.ts's table gains one row, the later part of open question 1:
+  //   person: ["settings.propose"],  // a person, known by a signed login, never a caller token
+  ```
+
+  The journal view reads the ledger through the Worker and is no program's state, so no program
+  reads another's (0103). **A browser is always a client:** the page speaks the same `POST /ask`
+  JSON and plain `GET` reads as `inbox.ts` does, with no Node, no socket and no file, so it holds
+  [a browser is always a client](../../../docs/direction/a-browser-is-always-a-client.md) by
+  construction. **Manti:** every part is a Manti UI part wearing our tokens
+  ([0461](../../../.decisions/0461-every-ui-part-is-on-manti.md)), from the design package both
+  versions share (0456). That adds the design package and `@manti-ui/*` to the `next-fabrikalfa`
+  type's imports, the one change it makes to L2. **Its own build, not this plan, owes** what
+  [changing the product](../../../.agents/skills/guidelines/references/changing-the-product.md)
+  asks: how Linear's team would build each of the three screens and where we differ ("Linear as
+  the builder"); the look step's 3 or 4 designs and the owner's pick before its pull request opens
+  ("Pick the look before the PR"); shots from the real built page ("Show it running"); and, for each
+  key state (settings clean, drifted, a change proposed; an empty and a long journal; an empty
+  queue, one landing, shadow mode), shots at the five layouts: one tile filling the window, two
+  side by side, two stacked, a 2x2 grid, and a small window of about 1024x700 ("Shoot more than one
+  layout"). This plan designs no look. It needs slice 1 (settings and the ask route), lines 5 to 7
+  of [Order](#order) (the journals), slice 3 (the policy, for its `person` row) and slice 4
+  (merger's queue view). It needs slice 7 only if the owner later wants the lead's inbox shown too.
 
 ## Earlier owner answers, kept and dropped
 
@@ -1007,6 +1191,10 @@ Each new choice, asked (0069):
 | shadow | shadow deployment | the old plan's row | kept |
 | `missing`, `stuck` | not reported, hung check | GitHub required checks | kept, plain words |
 | `Refused`, `reason` | the repo's refusal word | `.agents/skills/sev/scripts/Level.ts` | kept |
+| mailbox, `lead/inbox` | mailbox, message queue | Erlang processes, via [0582](../../../.decisions/0582-mail-as-a-noun-goes-it-is-a-mailbox-and-messages.md) | kept, `next/`'s words |
+| message | message | [0547](../../../.decisions/0547-program-mail-is-a-message.md) | kept |
+| `send`, `ack`, `full` | send, committed offset, `EAGAIN` | the glossary's `Mailbox (service)`, `ack (inbox)` and `full` rows | kept |
+| dashboard | web UI, dashboard | Kubernetes Dashboard | kept, a later slice |
 
 ## What this cannot tell us
 
@@ -1027,16 +1215,23 @@ Each new choice, asked (0069):
 - **Per-environment tokens cannot tell two agents in one environment apart.** The journal names
   the environment. An identity per agent run is later, if the owner wants it.
 - **The ticket numbers 1189 to 1192 are the brief's.** The tracker was not readable from this step.
+- **Where today's message watchers live.** No watcher, reader or usage collector is in the repo on
+  main. The plan guesses the lead sessions' loops, a laptop reader and a cloud scheduled run, from
+  messages on the branches; the lead finds the real list at the slice's last step.
+- **Whether fabrikalfa's message traffic fits 256 unread and 64 KiB.** One session sent 630 usage
+  rows in a day, about two messages of 64 KiB by a guess at 200 bytes a row. Not measured.
+- **Whether a cloud environment's network secret carries the caller token** the way this session's
+  own tools describe. Slice 7's build tries it on one cloud environment.
 
 ## Open questions
 
-1. **Who may ask fabrikalfa for what: the `WritePolicy` of 0601.** The plan's table: GitHub itself, known by its webhook signature, sends events only; CI, known by a GitHub Actions OIDC token that matches a trust policy file in the repo (Octo STS style), may ask only for a push token; an agent, known by its environment's caller token (one token per environment: the laptop's boxes, a cloud session), may ask merger to arm and tokens for a push token; the lead, known by a caller token of its own that is never mounted into a box, may also name the sev fix and ask merger for an admin merge, which merger takes only while a sev0 is open. Yes, or say which line changes. Lean: yes, 70% sure. Why: it is the least each caller needs today, every ask is checked at the door before it reaches a journal, and no person meets a prompt in the daily flow. What it costs: a per-environment token cannot tell two agents in one environment apart, so the journal names the environment, not the agent; the lead's power rests on one file on the laptop staying out of every box; and the CI half is built only when a workflow first asks. What would settle the doubt: a read of the box mounts in `drive.ts` and `box.sh` showing no box can read the lead's file, and the owner's word on whether an agent run should have its own identity later.
+1. **Who may ask fabrikalfa for what: the `WritePolicy` of 0601.** The plan's table: GitHub itself, known by its webhook signature, sends events only; CI, known by a GitHub Actions OIDC token that matches a trust policy file in the repo (Octo STS style), may ask only for a push token; an agent, known by its environment's caller token (one token per environment: the laptop's boxes, a cloud session), may ask merger to arm, tokens for a push token, and send a message (status, a plan ready, usage rows) to the lead's inbox; the lead, known by a caller token of its own that is never mounted into a box, may also name the sev fix, ask merger for an admin merge, which merger takes only while a sev0 is open, and read and ack the lead's inbox, which no other caller may read; later, with the web UI, a person, known by a signed login and never a caller token, may propose a settings change, which lands as a pull request through the normal steps. Yes, or say which line changes. Lean: yes, 70% sure. Why: it is the least each caller needs today, every ask is checked at the door before it reaches a journal or the inbox, no person meets a prompt in the daily flow, and agents' messages and usage rows leave the public repo for a stream only the lead reads. What it costs: a per-environment token cannot tell two agents in one environment apart, so the journal and the inbox name the environment, not the agent; a leaked agent token could also write messages into the lead's inbox, though not read them; the lead's power rests on one file on the laptop staying out of every box; and the CI half is built only when a workflow first asks. What would settle the doubt: a read of the box mounts in `drive.ts` and `box.sh` showing no box can read the lead's file, and the owner's word on whether an agent run should have its own identity later. A yes here is also the owner's yes, in his own words, to agents sending usage rows to the inbox.
 2. **A second GitHub App, so that push tokens and main's bypass never sit on one App.** merger's admin merge in a sev needs an App on main's bypass list, and a push token carries its App's bypass, so T1 keeps tokens refusing while the App it vends from holds any bypass. The plan asks for a second App, made and installed by the owner only when merger's admin merge is to go live (Rollout step 7), never before. The existing `fabrikalfa` App keeps the webhook, the programs and the push tokens, and stays on no bypass list. The new App holds only main's bypass and only what an admin merge needs (`contents: write`, `pull_requests: write`), has no webhook, is used by merger alone, and keeps its key in the Secrets Store (0537). Yes; or no, and admin merges stay with `land.ts merge --admin` for good while merger's admin path, built and tested on memory layers in slice 4, never runs live; or yes with the jobs swapped, so the new App vends push tokens and the existing App takes the bypass. Lean: yes, as written, 70% sure. Why: it keeps T1 true without giving up merger's admin merge; the App on the bypass list does one rare, powerful thing, so its key is the one most worth keeping narrow; and every push and draft pull request stays `fabrikalfa[bot]`'s, the identity 0401 gives agents. The known way splits the same: Octo STS (https://github.com/octo-sts/app) is a GitHub App of its own whose one job is minting narrowed tokens, and its README tells an org that cannot use the hosted one to "self-host octo-sts with their own GitHub App". The swapped branch follows Octo STS more literally, but pushes would then come from a second bot name while commits still name `fabrikalfa[bot]`. What it costs: one App made and installed once by the owner, a few minutes once and no recurring prompt; a second private key in the Secrets Store and in any key rotation; sev admin merges show the second App's bot as the merger in the history; and `@kalfa/provider-github`'s credentials Layer takes two Apps, a small change at Rollout step 7. What would settle the doubt: a `vector:` read of GitHub's ruleset API showing that a bypass is per actor and that no token narrows it (from memory today), recorded before Rollout step 7; and the owner's word on whether a second bot name on sev admin merges is fine in the history.
 
 ## Size
 
-Six pull requests, each lands whole, in the order the owner sees them. About 1,600 product lines,
-or about 1,850 if slice 1 adds rulesets and repo settings, and about 14 agent hours across the
+Seven pull requests, each lands whole, in the order the owner sees them. About 1,880 product lines,
+or about 2,130 if slice 1 adds rulesets and repo settings, and about 16 agent hours across the
 steps, 60% sure; the doubts are at the end of this section. The move into `next/apps` changes no
 slice's size: the `exam-paths.json` line goes and the `.oxlintrc.json` override for L1 comes.
 
@@ -1054,17 +1249,24 @@ slice's size: the `exam-paths.json` line goes and the `.oxlintrc.json` override 
    to M3, M6, Y1.
 5. Slice 5, tokens and `botpush.mjs`: about 150 lines, with T1.
 6. Slice 6, merger live through `land.ts arm`: about 40 lines. Starts after shadow's 10 matches.
+7. Slice 7, the lead's inbox: `Inbox.ts`, the `lead` ask case and its two policy inputs, the
+   waiting read route, the `[mailbox]` settings, and the `inbox.ts` client, with I1 to I5 and P1
+   grown: about 280 lines, 70% sure. Its last step, the archive and deletion of the message
+   branches and the stop of their watchers, is the lead's work, with no product lines.
+
+The later web UI is not sized here: its own plan sizes it after its look step.
 
 Priced from the `@kalfa/quality/stryker` quest, a new kalfa package of about this slice size
 (`field/runs/2026-11-18-kalfa-quality-stryker-*.json`: tests $6.92, build $3.80, review $5.55, a
 fix $2.20 and its recheck $7.74, list dollars), and the old plan's basis, ticket 290's lane. Slices
 1 and 4 are larger, about $30 each for tests, build and review; slices 2, 3 and 5 about $20 each;
-slice 6 about $10; four send-backs at about $10 each. If slice 1 adds rulesets and repo settings,
+slice 6 about $10; slice 7 about $20, like slices 2, 3 and 5; five send-backs at about $10 each,
+one of them for slice 7. If slice 1 adds rulesets and repo settings,
 its three steps cost about $40, not $30; at about even odds that adds about $10 to the budget. 60%
 sure: the doubts are `@kalfa/program`'s API, which every program sketch leans on, and whether
 ticket 1190 covers rulesets.
 
-Estimate: 22 steps, $180
+Estimate: 26 steps, $210
 
 ## Findings
 
