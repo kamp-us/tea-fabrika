@@ -67,7 +67,7 @@ Rules:
   and `:140` provide `Digest.layerWebCrypto`.
 - **A hash whose failure must stay typed reads `crypto.subtle` through the `WebCrypto` reference,
   not `Digest`.** `Digest` would turn a rejection into a defect. `Archive.ts:45-54` (`sha256`, a
-  `SinkError` `storage`) and `Gateway.ts:2295-2320` (`fingerprint` and `hash`, a `LedgerError`
+  `SinkError` `storage`) and `Gateway.ts:2301-2326` (`fingerprint` and `hash`, a `LedgerError`
   `crypto`) yield `WebCrypto.WebCrypto` and hash under one `Effect.tryPromise` whose `catch` makes
   the typed error, its `fabrika/no-promises` edge comment directly above. A reference needs no
   provide, so the callers do not change. A law hands in a stand-in with `WebCrypto.layer`
@@ -81,10 +81,12 @@ Rules:
   over `bytes` and `throws`). One bundled layer stays on purpose: `Id.Generator.layer` (`Id.ts:303-305`)
   provides `SecureRandom.layerWebCrypto` inside itself, so its about 50 callers need nothing. It stays
   until an edge needs to pick (the mock sweep's lib-top plan, amendment 2026-11-16).
-  `ProcessIdGenerator.layer` does the same with `Id.Generator.layer`, so a law that picks the bytes
-  builds `ProcessIdGenerator.layerWithGenerator` (`processes/ProcessIdGenerator.ts:28`, the same
-  service over an `Id.Generator` the caller provides) over `generatorWith`, as
-  `processes/ProcessIdGenerator.test.ts:152` does.
+  `ProcessIdGenerator.layer` is built over `Id.Generator.layer`, so a law of it cannot hand in a
+  `SecureRandom`. It hands in a stand-in crypto instead: `SecureRandom.layerWebCrypto` reads the
+  `WebCrypto` reference when `Id.Generator.layer` is built, so `Effect.provide(WebCrypto.layer(crypto))`
+  outside `Effect.provide(ProcessIdGenerator.layer)` reaches the draw, with no change to the
+  product (`processes/ProcessIdGenerator.test.ts`, `cryptoFilling`, a `Stub.make<Crypto>` whose
+  `getRandomValues` fills 255 or throws).
   The service's `uuidV7` reads the `Clock`, so a test clock moves it
   (`SecureRandom.ts:90-107`); the module-level `uuidV7Unsafe` reads `Date.now()` and does not
   (`:381`).
@@ -105,7 +107,7 @@ field that counts up, so every id's bits and the `exhausted` edge would change (
 
 - `next/packages/libfabrika/src/runtime/Built.ts:35-38` uses `Digest` but provides
   `Digest.layerWebCrypto` inside `hash` itself, so its callers cannot pick the layer.
-- `next/packages/libfabrika/src/gateway/Gateway.ts:822` and `:2293` call the global
+- `next/packages/libfabrika/src/gateway/Gateway.ts:828` and `:2299` call the global
   `crypto.getRandomValues`.
 - `next/packages/libfabrika/src/gateway/GatewayNonce.ts:37`, `:65`, `:74`, `:77` and `:108` make a
   key and salt with `crypto.getRandomValues`, and import an HMAC key, sign and verify with
@@ -129,8 +131,9 @@ test, so a law patches the global with `vi.spyOn`. The opposite mistake is to mo
 - The mock lock in `.oxlintrc.json`, a pair of oxlint's own rules over libfabrika's top files
   (`src/*`) and `gateway/**`, `processes/**` and `telemetry/**`, refuses `vi.fn`, `vi.mock`,
   `vi.doMock`, `vi.spyOn` and `vi.stubEnv`, so a law there cannot patch `crypto.subtle` or
-  `crypto.getRandomValues` and must hand in a stand-in through `WebCrypto.layer` (a hash) or
-  `generatorWith` (a random draw). It is written as two blocks, one for every file and a copy for
+  `crypto.getRandomValues` and must hand in a stand-in through `WebCrypto.layer` (a hash, or the
+  draw of a bundled layer such as `ProcessIdGenerator.layer`) or `generatorWith` (a random draw into
+  `Id.makeGenerator`). It is written as two blocks, one for every file and a copy for
   the files but their `*.test.ts` with the two `process` entries added, since an override replaces
   the options of an earlier one and each block writes out again the entries its files already took
   (at `warn`, the level of the JSON.parse blocks these four sets still sit in). The `vitest` rule
@@ -142,7 +145,7 @@ test, so a law patches the global with `vi.spyOn`. The opposite mistake is to mo
 - The laws that pass only through the reference or a provided source: `telemetry/ErrorCause.test.ts`
   C1 (the rejected digest is `storage`, and the stand-in saw exactly the body), the three
   paused-hash laws of `gateway/GatewayRevocation.integration.test.ts`, and the `entropy` and
-  `exhausted` cases of `processes/ProcessIdGenerator.test.ts`, which `Id.Generator.layer` would not
+  `exhausted` cases of `processes/ProcessIdGenerator.test.ts`, which the real crypto would not
   produce.
 - No check finds the global `crypto.subtle` or `crypto.getRandomValues` in product code: Effect's
   `nodeBuiltinImport` sees only `node:crypto`. A lint rule of ours is proposed in the Effect code

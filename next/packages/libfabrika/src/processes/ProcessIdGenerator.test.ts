@@ -2,12 +2,39 @@
 // ProcessIdGenerator.layer owns one writer's state; next remains an Effect<ProcessId>.
 import { describe, expect, it } from "@effect/vitest";
 // The id format, clocks, rollback and exhaustion are Id.Generator's own laws, in Id.test.ts.
-import { Cause, Effect, Exit, Layer, Option, Schema, Tracer, Match } from "effect";
+import { Stub } from "@kampus/vitest";
+import { Cause, Effect, Exit, Option, Schema, Tracer, Match } from "effect";
+import { WebCrypto } from "effect/crypto";
 import { TestClock } from "effect/testing";
-import { bytes, generatorWith, processClocks, throws } from "../Id.test-support.ts";
+import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 
 const maxClock = 2 ** 48 - 1;
+
+type Crypto = typeof globalThis.crypto;
+
+const unexpected = (member: string): never => {
+  throw new Error(`unused crypto member in a law: ${member}`);
+};
+
+/**
+ * A stand-in crypto for `Id.Generator.layer`, which draws its bytes through the `WebCrypto` reference
+ * (decision 0555): all ones, or a throw of `failure` as a platform with no entropy left does.
+ */
+const cryptoFilling = (failure: Option.Option<Error>): Crypto =>
+  Stub.make<Crypto>(unexpected, {
+    getRandomValues: (array) => {
+      if (Option.isSome(failure)) {
+        throw failure.value;
+      }
+
+      if (array instanceof Uint8Array) {
+        array.fill(255);
+      }
+
+      return array;
+    },
+  });
 
 const Time = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: maxClock - 10_000 }));
 
@@ -148,8 +175,8 @@ describe("P10 shared process ids", () => {
           },
         });
 
-        // The generator draws from a SecureRandom the law writes: all ones for `clock` and `exhausted`, a throw for `entropy`.
-        const random = generatorWith(exitReason === "entropy" ? throws(new Error(marker)) : bytes(255));
+        // The generator draws through the WebCrypto reference: all ones for `clock` and `exhausted`, a throw for `entropy`.
+        const crypto = cryptoFilling(exitReason === "entropy" ? Option.some(new Error(marker)) : Option.none());
 
         return Effect.gen(function* () {
           yield* TestClock.setTime(
@@ -190,7 +217,8 @@ describe("P10 shared process ids", () => {
             }
           }
         }).pipe(
-          Effect.provide(ProcessIdGenerator.layerWithGenerator.pipe(Layer.provide(random))),
+          Effect.provide(ProcessIdGenerator.layer),
+          Effect.provide(WebCrypto.layer(crypto)),
           Effect.withTracer(tracer),
         );
       },
