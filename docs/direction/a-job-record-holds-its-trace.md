@@ -10,8 +10,7 @@ summary: "Jaeger goes. A job (a root run and every run it starts, like a process
 - One `JobRecord` per job, for every program: decided 2026-10-28, below.
 - Its build: in the approved [Tier 1 plan](../plan/tier-1.md), P37.
 
-Its decided rules are in: [0207](../../.decisions/0207-todays-job-record-per-job.md),
-[0204](../../.decisions/0204-process-record-rolls-in-parts.md).
+Its decided rules are in:,.
 
 Decided 2026-10-28 by the owner. First proposed 2026-10-27 as one record per
 quest (named `LaneRecord` then). The owner widened it the next day: traces are for every

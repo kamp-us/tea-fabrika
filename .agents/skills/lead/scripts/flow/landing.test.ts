@@ -27,7 +27,7 @@ const decision = landDecision({
   ticket: "656",
   dir: "worktree",
   branch: "fabrikalfa/adr-x",
-  paths: [".decisions/0000-x.md"],
+  paths: [".kalfa/decisions/0000-x.md"],
   subject: "T656 lead: x",
   title: "x",
   body: "y",

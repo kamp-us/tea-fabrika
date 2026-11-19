@@ -6,11 +6,11 @@ Plancheck-Version: 3
 This is `next/` only. Today's app is not touched. It is one folder's slice of the mock sweep that
 [the Recorder plan](./recorder-PLAN.md) lists under "Size" (its row: `apps/fabrika/e2e`, 0 `vi.fn`,
 0 `toHaveBeenCalled*`, 1 `spyOn` on `console`). It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
+ (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
 `vi.stubEnv`; a call the law watches goes through a service) and
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the Recorder is the one way to watch a
+ (the Recorder is the one way to watch a
 service's calls; `console` needs a product change to a service first). Amendment 2026-11-15: its
-Effect patch follows [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) (read the
+Effect patch follows (read the
 package's own answer before patching it; Effect's `TestConsole` was read, and it has no `warn`
 reader in 4.1.3).
 
@@ -39,8 +39,7 @@ const printed = (yield* TestConsole.warnLines).map(String).join("\n");
   as `{ method, parameters }`, but the service exposes only `logLines` and `errorLines`. So the law
   cannot read a warning without help. The lean is a small `pnpm patch` that adds `warnLines`, the
   same shape as `errorLines`, with its upstream issue filed the same day
-  ([patch upstream locally](../../../docs/direction/patch-upstream-locally.md),
-  [0054](../../../.decisions/0054-read-upstream-before-patching-it.md): the read proved the gap). The
+  ([patch upstream locally](../../../docs/direction/patch-upstream-locally.md),: the read proved the gap). The
   other ways and why not are under "How others do it". What would settle it: whether upstream
   already has a reader on its main branch, which this plan did not fetch; the tests step checks before
   it writes the patch, and if a release has it, the patch is that release's code, word for word.
@@ -98,7 +97,7 @@ is every match. None of these files is in pull request 1366's diff (read with `p
 - **Why not a hand-written `Console` in the law.** A `Layer.succeed(Console.Console, { ...,
   warn: push })` works, but it is a second way to spy, beside the Recorder and `TestConsole`, which
   0579 rules out ("our one way to watch calls"), and 0555 puts any new spy in the test package.
-- **Why not `Effect.logWarning`.** [0024](../../../.decisions/0024-next-records-with-spans-and-log-lines.md)
+- **Why not `Effect.logWarning`.**
   lets code log, and the log line would land on the `build.bundle` span. But `build.ts:428` says
   Rolldown's warnings can quote source, and a span is kept; a terminal line is not. Putting them on
   the record is a design call this slice does not need, so it stays out.
@@ -196,7 +195,7 @@ scoped(
 ```
 
 - The source law used `fc.assert`. Rewriting L17 also moves it to `it.effect.prop` with Schema
-  inputs and the package setup seed (0579). Keep its input bounds, run count, pinned cases,
+  inputs and the package setup seed. Keep its input bounds, run count, pinned cases,
   first failing case and all checks; the spy's two reads become `TestConsole` reads.
 - Each generated case provides its own `TestConsole.layer`, so a case reads only its own lines, as
   the spy, made per case, did.
@@ -208,18 +207,18 @@ scoped(
 ```jsonc
 // .oxlintrc.json, a new block after the Reflect ban's blocks. A sketch.
 {
-  // Decisions 0555 and 0579: no vi mock, spy, env stub or vi.fn in a law. A folder is listed whole
+  // an earlier decision and 0579: no vi mock, spy, env stub or vi.fn in a law. A folder is listed whole
   // and joins the day its own slice of the mock sweep brings it to zero; none is ever taken off.
   "files": ["next/apps/fabrika/e2e/**"],
   "rules": {
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with the Recorder, or TestConsole for Console (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555).",
-        "fn": "Record the service's calls with the Recorder (0579)."
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with the Recorder, or TestConsole for Console.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer.",
+        "fn": "Record the service's calls with the Recorder."
       }
     ]
   }
@@ -245,7 +244,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -260,11 +259,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 },
@@ -276,11 +275,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "error",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -324,7 +323,7 @@ the same line as Rolldown printed it before.
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -339,7 +338,7 @@ that moving a runner keeps the same first failing case.
 | L4. In every folder the block lists, `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.stubEnv` and `vi.fn` are refused, through a renamed import and a computed key too, and `vi.hoisted` passes. Amendment 2026-11-15 (merge session ruling 2): this is node's M1, and its plant lines are node's shared `VI_METHODS` set, with this plan's renamed-import, computed-key and `vi.hoisted` lines added to it, in place of a `MOCKS` plant of its own | lint | lint | delete the block's one `files` entry: L4 red for that folder. Amendment 2026-11-16 (lead ruling): the lock is the pair, and this law also runs `VI_PROPERTIES` (see the lock's amendment): drop the block's `vi` entries from `eslint/no-restricted-properties`, and its chained lines are not refused, red | oxlint-plugins/builtin-plants.ts, oxlint-plugins/plants.test.ts |
 | L5. The folder has no `vi.` call and no disable line for the rule | lint | lint | put the old spy back: `pnpm lint` red. Amendment 2026-11-16 (lead ruling): the old spy, `vi.spyOn(console, "warn").mockImplementation(() => {})`, is a chained call, which `vitest/no-restricted-vi-methods` alone takes; it is red through `eslint(no-restricted-properties)`, the pair's other half | .oxlintrc.json |
 
-- **L1's input** is a Schema, so `it.effect.prop` draws it (0579). A sketch:
+- **L1's input** is a Schema, so `it.effect.prop` draws it. A sketch:
   `const WarningCase = Schema.Struct({ folder: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9 -]{1,24}$/)), missing: Schema.String.check(Schema.isPattern(/^[a-z]{4,16}$/)) })`,
   the same shapes L17 draws with fast-check. The tests step checks the check names in effect 4.1.3.
 - **L1 is new,** because the product change is in the wrapper and L2 can only run on the schedule
@@ -406,8 +405,7 @@ request" in step 2 is that one.
    README section. L3, L4 and L5 are green at once. L1 and L2 are red until the build, since
    `bundle` still prints through Rolldown's handler. L2 is not run in the box. The tests step runs
    L1, L3, L4 and the lockfile's readers narrow, and says each plant's result in its run row.
-2. **Build:** `bundle.ts` and the docs. Runs L1 green. The upstream issue, with the patch folded in
-   (0060), is filed by the lead, since it is outside this repo; the lead adds its link
+2. **Build:** `bundle.ts` and the docs. Runs L1 green. The upstream issue, with the patch folded in, is filed by the lead, since it is outside this repo; the lead adds its link
    to `pnpm-workspace.yaml` in the same pull request.
 3. **The lead runs L2** on the laptop, before the review.
 4. **Review:** one review of the whole diff.
@@ -420,7 +418,7 @@ request" in step 2 is that one.
   `vi.importActual` stay unset, as 0555 leaves them open.
 - **`bundle.ts` drops `"debug"` itself,** 85%: that is what Rolldown's handler does today at its
   default level, so nothing a person sees changes. Is it a setting? No: a log level for Rolldown is
-  not a choice anyone makes today, and the config sets none (0069).
+  not a choice anyone makes today, and the config sets none.
 - **L1 is new and `.integration.`,** 90%, for the reasons under "Laws".
 - **The lock's block is the rule's first, scoped to this folder,** 90%, the Reflect ban's shape.
 - **L17 follows 0579 when rewritten.** Other untouched laws do not move merely because they
@@ -430,7 +428,7 @@ request" in step 2 is that one.
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - Tests step: `nice -n 19 pnpm exec vitest run --maxWorkers=1` on L1's, L3's and the plants' files;
@@ -441,7 +439,7 @@ tags are historical source facts.
   package, since the lockfile makes a changed-files run the full suite.
 - Build: L1's file.
 - The lead: the one whole typecheck and L2's required proof before review. Read the exact
-  selected L2 body, every build/helper it reaches and their cleanup before a local run (0594).
+  selected L2 body, every build/helper it reaches and their cleanup before a local run.
   A file name or this plan's earlier no-signal claim is not clearance. The complete visual file
   also starts workerd, a port, Chromium and a watcher; any selection reaching real signals runs
   only on eligible disposable CI, with isolation for other real resources where needed.

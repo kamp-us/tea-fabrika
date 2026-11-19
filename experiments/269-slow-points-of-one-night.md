@@ -13,7 +13,7 @@ running lanes for both `next/` and today's app. Sources: the lanes' chain record
 end, outcome, box), each box's first agent event and prompt file time (box ready), the step cost
 rows (minutes, dollars), the lander's log, the lead's own log of the night, `gh pr list`,
 `gh run list` (900 runs) and `gh run view` for all 91 failed or canceled `check` runs. The working
-files stayed outside git ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+files stayed outside git.
 One agent counted; no model call of its own, $0.
 
 [Experiment 260](./260-lane-queue-or-scheduled-job.md#what-the-wrong-home-cost) already carries
@@ -85,7 +85,7 @@ Why steps went back or stopped, grouped (each step counted once, 216 steps in th
 - Plan gap (`not_owner`, a file outside the table, `send:plan`): 15 (settings1 2, errcause 3, t688
   2, svc4 2, p34c2, svc1, p39s1, p40s1, p34cs2, p13b, auditi).
 - askdesk7's host loop: 9 reviews in a row said "host laws not run" to a build that cannot run them.
-- Budget stop ([0076](../.decisions/0076-a-lane-stops-at-its-budget.md)): 9 (p34cs2 3, p14b 2,
+- Budget stop: 9 (p34cs2 3, p14b 2,
   settings1, sm6 backstop, errcause, svc4).
 - Tool fault: 7 (npm registry from a box, `not_formatted` on collect, an offline install that
   emptied `node_modules`, Docker socket refused in a box, `cannot lock ref`, a duplicate box name,
@@ -177,15 +177,15 @@ below in short. "Was in flight" is as of 10:00 on 2026-11-11.
 2. **Serial merge line.** 32 pull requests merged before the outage spent 27.9 PR-hours beyond a
    0.4 h ideal (open to merged minus one CI run and 10 min). 23 queued at 08:20 at about 6 an hour:
    20 to 45 more PR-hours draining (estimate). Smallest fix: land PR 933,
-   [0097](../.decisions/0097-a-green-pull-request-lands-without-catching-up.md) (a green pull
+ (a green pull
    request lands without a second run); it was red on `test (5)`, fix that first. Later: a merge
-   queue that batches ([0107](../.decisions/0107-fabrika-provides-the-merge-queue.md)), with the
-   hourly run on main ([0066](../.decisions/0066-mutation-runs-on-a-schedule.md)) catching what a
+   queue that batches ([0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)), with the
+   hourly run on main catching what a
    skipped rerun misses.
 3. **Lanes parked for the owner overnight.** sm6 141 min (backstop $6 after one $6.50 step),
    settings1 108, p14b 89, errcause 197 (exam-owner rule, PR 877), askdesk7 109 (layer exception):
    644 min, 10.7 lane-hours, most ended between 05:18 and 05:26, right after the owner's
-   fix-forward call ([0096](../.decisions/0096-the-lead-fixes-forward-while-the-owner-is-away.md)).
+   fix-forward call.
    After it, budget stops still cost about 50 min (p14b 21, p34cs2 13 and 10, svc4). Smallest fix:
    a plan's `Estimate:` line must give at least $8 per tests step (sm6's stop came from a $3
    estimate against a $6.50 step), checked in `plancheck.sh`. Keep the stop: it caught real loops
@@ -198,7 +198,7 @@ below in short. "Was in flight" is as of 10:00 on 2026-11-11.
 5. **Docker hang in box gc.** 12 step starts waited over 6 min, 504 min, all 21:13 to 02:00; worst
    askdesk7 r19 116 min, p14 r17 112 min, askdesk7 r20 68 min. PR 863 (time limit) merged 00:43;
    PR 919 (Alchemy beta.85, fewer Docker calls). Smallest fix: gc's Docker sweep never runs before a
-   box is made. *Decided later as [0101](../.decisions/0101-box-cleanup-runs-on-a-timer.md): gc
+   box is made. *Decided later as: gc
    leaves the start path entirely.* Later: a watchdog outside the process that kills a `docker ps`
    older than 2 min.
 6. **Plan writers one at a time.** Each start equaled the previous end, to the minute (sm1 01:30,
@@ -268,7 +268,7 @@ below in short. "Was in flight" is as of 10:00 on 2026-11-11.
     to 2.9 min each, 2 to plan and 3 to itself, 38 min and **$5.40** with no pull request. Smallest
     fix: `drive.ts` treats a send to its own step as `stuck:no_progress` on the first one.
 16. **`commits` check red behind main.** 48 of 285 runs red; the lander hit one. Smallest fix: land
-    [0098](../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md)'s change.
+'s change.
 
 Dollars named in the night: $42 (item 8), about $15 (item 12), $5.40 (item 15), $3.88 (t688's
 broken plan), all at list price from the step cost rows. The night's total spend was not summed.

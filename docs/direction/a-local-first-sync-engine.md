@@ -1,5 +1,5 @@
 ---
-state: "vision; ledger runtime decided; 2026-10-30: central first and one ephemeral lane, at-most-once (show it, never save it, never decide with it) decided; transport and data decided 2026-10-30, coordination 2026-10-31; 2026-10-31: five layers, not four, and every window dials the brain itself (T3 changed); the first pass's standard per layer replaced, marked in the note; 2026-11-07: a wait never blocks, it answers ready or parked, then a ring (from the owner's call of 2026-11-02); 2026-11-09: in libfabrika a folder is one subject and its layer is a rank in the rule file ([0043](../../.decisions/0043-rooms-on-floors.md)), named module and layer 2026-11-10 ([0091](../../.decisions/0091-modules-and-layers.md)); amended in part 2026-11-18 by [0601](../../.decisions/0601-program-make-with-optional-pipes.md): local first, each place keeps its own ledger copy, and WebRTC joins the WebSocket"
+state: "vision; ledger runtime decided; 2026-10-30: central first and one ephemeral lane, at-most-once (show it, never save it, never decide with it) decided; transport and data decided 2026-10-30, coordination 2026-10-31; 2026-10-31: five layers, not four, and every window dials the brain itself (T3 changed); the first pass's standard per layer replaced, marked in the note; 2026-11-07: a wait never blocks, it answers ready or parked, then a ring (from the owner's call of 2026-11-02); 2026-11-09: in libfabrika a folder is one subject and its layer is a rank in the rule file, named module and layer 2026-11-10; amended in part 2026-11-18 by [0017](../../.kalfa/decisions/0017-protocols-live-once.md): local first, each place keeps its own ledger copy, and WebRTC joins the WebSocket"
 summary: "Signed append-only logs that hosts sync, with leases for one-writer work. The ledger is the first log on it; solo is a team of one. The ledger is one Durable Object everywhere: on Cloudflare for a team, in Miniflare on a laptop (experiment 93), restarted when its memory passes a cap. First step now: every fact says who wrote it. Five layers, bottom to top: transport (one WebSocket per client, to its own gateway; JSON-RPC 2.0; a signed hello with versions; a text ping), data (the ledger: append, read, wait; poke, then pull), coordination (claims, inboxes, the process tree, following OTP), app and desktop; central first, and a browser is always a client. This note holds the lower three (T1 to T8, D1 to D6, C1 to C5)."
 ---
 
@@ -17,7 +17,7 @@ summary: "Signed append-only logs that hosts sync, with leases for one-writer wo
   that sync by gossip, [why the design already allows it](#why-the-design-already-allows-it)
   and [open](#open). [The hard part](#the-hard-part-a-claim)'s leases were decided
   central first, as layer 3's C3. The first pass's W3C `traceparent` stays proposed.
-- **Renamed 2026-11-10 for `next/`:** the per-client gateway object is now a connection, and the door is the gateway ([0051](../../.decisions/0051-gateway-connection-and-node-by-job.md)).
+- **Renamed 2026-11-10 for `next/`:** the per-client gateway object is now a connection, and the door is the gateway.
 
 *Written 2026-11-05: this header said the whole note was "a vision ... not planned,
 not sized", which was wrong for the parts above since 2026-10-19 and 2026-10-31.* It
@@ -129,13 +129,12 @@ has no single place that can say who was first.
 The owner walked the architecture one layer at a time on 2026-10-30 and
 2026-10-31. It ended with five layers. Each one uses only the layer below it.
 
-*Changed 2026-11-09 (owner, [0043](../../.decisions/0043-rooms-on-floors.md)): in
+*Changed 2026-11-09 (owner): in
 `next/packages/libfabrika/src` the layers are no longer folders. A folder is one subject, a module,
 and its rank is a library layer: a line in `layer-rules.json` that says which modules a module may
 import. A library layer is not one of the five below. There is no `coordination/` folder; its files
 sit in `processes/`, `presence/`, `access/` and `runtime/`, and `data/` is `ledger/` and
-`telemetry/`. The five layers below stay as the way the design is told. Renamed 2026-11-10 (owner,
-[0091](../../.decisions/0091-modules-and-layers.md)): 0043 said room and floor, which stay only as
+`telemetry/`. The five layers below stay as the way the design is told. Renamed 2026-11-10 (owner): 0043 said room and floor, which stay only as
 the analogy.*
 
 ```ts
@@ -429,8 +428,7 @@ after about 10 s and drops what waits in memory.*
 - **D6, the services:** today's `Ledger` (about 25 methods, all three layers
   mixed) splits into small services, one Effect Layer per level. A service
   name is never plural; one that holds many of a thing is `<Thing>Manager`. *Changed 2026-11-09:
-  one that holds many is plural, as Effect names them (`Leases`;
-  [0029](../../.decisions/0029-format-and-names-follow-effect.md)).*
+  one that holds many is plural, as Effect names them (`Leases`).*
 
   ```ts
   // data
@@ -508,14 +506,14 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   brake it writes `down` with its `until`, and tries again then; nothing
   escalates to a parent. Strategies, restart types and escalation wait for
   Tier 4 ([Tier 1's slice](../plan/tier-1.md)). The decision above stands.
-  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):*
   Tier 1's supervision is OTP's top-level supervisor. One root per brain, its children the
   brain's named programs, `one_for_one`, child specs with OTP's restart types, and OTP's
   intensity and period (1 in 5 s) unless a reason is written. A restart is at once: no
   Kubernetes-style backoff. Past intensity the root stops its children and itself; the brain marks
   the name `failed`, logs it and asks the person, and only a person restarts it. The `down {until}`
   retry above goes. P34c builds it. Sibling strategies, nested trees and links still wait for Tier 4.
-  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* not one root per brain. Each program is its
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):* not one root per brain. Each program is its
   own OTP application with its own top-level supervisor, under the brain as the node. Past
   intensity only that program stops and asks the person; every other program keeps running. Fault
   isolation per program is required from the first version.
@@ -525,7 +523,7 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   still owed, since experiment 99 came before experiment 107.
   *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
   with tickets 404 to 406 for what it found.*
-  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):*
   each difference from OTP's supervisor is written with its reason in two places, here and in the
   opening table of P34c's plan. A reason comes from Durable Objects or from
   [a browser is always a client](./a-browser-is-always-a-client.md); code already written is not one.
@@ -561,11 +559,11 @@ found them with no written reason; these are the reasons. Paths are under
   action before it acts, so an eviction at any point resumes from what was saved. Its backoff and
   `down` deadlines sit on the object's one alarm (`app/runner.ts:292`). A supervisor elsewhere
   would keep that state one hop away from the step. C4 says why there is one child.
-  *Walked back 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
+  *Walked back 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):*
   the supervisor becomes one root per brain, in the project object beside the process tree, so a
   restart is counted in the same transaction as the `exited` and `started` facts it causes. The
   receipts and dead letters stay in the program's object. P34c writes the new reason.
-  *Amended 2026-11-09 (owner, [0018](../../.decisions/0018-one-application-per-program.md)):* one top-level supervisor per program, not one
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):* one top-level supervisor per program, not one
   per brain, so one program's crash loop never stops another.
 - **`demonitor` always flushes.** OTP keeps a queued `DOWN` unless the caller asks for `flush`
   ([`demonitor/2`](https://www.erlang.org/doc/apps/erts/erlang.html#demonitor/2)). Here a
@@ -635,7 +633,7 @@ Cloudflare, which a keystroke-echo test would settle.
   `entries`. The memory and disk versions already share them; a synced one
   would be a third.
 - **The `Ledger` has no GitHub in it**, and safety never rests on a code host's
-  permissions ([North Star first](../../.decisions/0324-security-follows-the-goal.md)).
+  permissions (North Star first).
 - **Data first** ([markdown is a view](./data-first-markdown-is-a-view.md)):
   state is folded from facts on every read, so a client that receives new lines
   just folds again.

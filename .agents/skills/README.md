@@ -15,10 +15,10 @@ both tools.
 | [lead](./lead/SKILL.md) | start the boxes, approve plans, run e2e, push and land |
 | [step-commit](./step-commit/SKILL.md) | commit and sign a step's work in one command |
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
-| [adr](./adr/SKILL.md) | write one owner decision to `.decisions/`, the turn it is made |
-| [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
+| [adr](./adr/SKILL.md) | write one hard-to-reverse owner decision to `.kalfa/decisions/` |
+| [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.kalfa/patterns/` doc on how the code is shaped now |
 | [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
-| [sev](./sev/SKILL.md) | CI as the emergency: the level table and the judgment; each sev situation has its runbook in `.runbooks/` |
+| [sev](./sev/SKILL.md) | CI as the emergency: the level table and the judgment; each sev situation has its runbook in `.kalfa/runbooks/` |
 | [domain-modeling](./domain-modeling/SKILL.md) | sharpen a context's words and write its glossary as you design |
 | [codebase-design](./codebase-design/SKILL.md) | deep modules, seams and adapters, in Effect and kalfa terms |
 | [grilling](./grilling/SKILL.md) | stress-test a design with one question at a time |
@@ -36,10 +36,9 @@ that need no approval, and a report a reader with no context can follow.
 
 An agent that meets something wrong outside its task writes one finding row, with proof, and
 keeps going: never a fix, a ticket or only a mention
-([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md), fields in
+(fields in
 [field/README.md](../../field/README.md#a-finding)). A read-only step hands the row over in its
-report, and the lead saves it as its own file in `field/findings/`
-([0090](../../.decisions/0090-each-field-row-is-a-file.md)). A person rates each row, and only a `fix` becomes a ticket.
+report, and the lead saves it as its own file in `field/findings/`. A person rates each row, and only a `fix` becomes a ticket.
 
 ## Changing a skill
 

@@ -21,8 +21,7 @@ is linked; the others have no other home yet.
 - **Never wait on upstream.** Patch a package we do not own with `pnpm patch`, file the upstream
   issue the same day, and keep building; the bump that takes the release deletes the patch
   ([patch upstream locally](../../../../docs/direction/patch-upstream-locally.md)). Read the package first and
-  patch only a gap or bug that read proved
-  ([0054](../../../../.decisions/0054-read-upstream-before-patching-it.md)). An upstream issue reports one bug
+  patch only a gap or bug that read proved. An upstream issue reports one bug
   we proved, with its repro; a list of missing features found by reading is patched locally and not
   reported in bulk.
 - **Read the installed version.** Agents know older libraries. Before you write or judge code
@@ -30,8 +29,8 @@ is linked; the others have no other home yet.
   means ask why before you call it a false alarm. Before you write Effect code, read
   `node_modules/effect/AGENTS.md` in full: it ships inside the installed package, so it always
   matches the lockfile. Where it and a decision here differ, the decision wins
-  ([0023](../../../../.decisions/0023-next-follows-effects-code-style.md) and
-  [the pattern](../../../../.patterns/effect-differences-say-why.md) list the differences). Read a
+  (and
+  [the pattern](../../../../.kalfa/patterns/effect-differences-say-why.md) list the differences). Read a
   package's source in the repo its installed `package.json` names in `repository`: for Effect that is
   `Effect-TS/effect`, never `effect-smol`, where v4 was only built as a beta.
 - **Judge a design by its properties, never its size.** Never pick between designs by how many lines
@@ -79,21 +78,17 @@ is linked; the others have no other home yet.
   // No: longer, and the parent already said it.
   { _tag: "ask", askWho: "owner", forWhat: "owner_approval" }
   ```
-- **Decided, and read in their files:** try an existing tool before you hand-write one
-  ([0040](../../../../.decisions/0040-existing-tools-before-hand-written.md)); a choice that fits as a
-  `fabrika.toml` value is one, and a plan asks "is this a setting?" of each new choice and says why not
-  ([0069](../../../../.decisions/0069-choices-are-settings.md)); no question word is a name
-  ([0081](../../../../.decisions/0081-no-question-word-names.md)); plural service names and test tooling read
-  through its module ([0029](../../../../.decisions/0029-format-and-names-follow-effect.md)); new schemas are
-  Effect Schema ([0209](../../../../.decisions/0209-schemas-are-effect-schema.md)); every union's tag is `_tag`,
-  and plain fields stay plain words, such as `platform`
-  ([0214](../../../../.decisions/0214-unions-are-tagged-with-tag.md)); a step answers in five verbs, which
+- **Decided, and read in their files:** try an existing tool before you hand-write one; a choice that fits as a
+  `fabrika.toml` value is one, and a plan asks "is this a setting?" of each new choice and says why not; no question word is a name; plural service names and test tooling read
+  through its module; new schemas are
+  Effect Schema; every union's tag is `_tag`,
+  and plain fields stay plain words, such as `platform`; a step answers in five verbs, which
   `outcomesOf` and `nameOf` in `packages/pipeline/src/stages/outcome.ts` write, in today's code that
-  still says stage for a step ([0396](../../../../.decisions/0396-every-step-answers-in-five-verbs.md)); build
+  still says stage for a step; build
   from the six pipeline primitives in `packages/pipeline/src/primitives.ts` and their combos in
-  `combos.ts` ([0421](../../../../.decisions/0421-reuse-before-special-rules.md)); talk to typed services,
+  `combos.ts`; talk to typed services,
   never straight to a command-line tool, `gh` included
-  ([0231](../../../../.decisions/0231-ledger-and-codehost-are-separate.md)).
+  ().
 
 ## Checks a plan picks
 
@@ -102,16 +97,15 @@ is linked; the others have no other home yet.
   every law.
 - **A check that can block needs its false alarms measured first:** about 0% to block, up to 10% to
   only advise (Google, CACM 2018). Every number in a rule needs a source or our own data. A tool's
-  default is not a source. [0523](../../../../.decisions/0523-advice-rules-block-where-clean.md) sets the
+  default is not a source. sets the
   five old advice rules aside from this: they block in every folder at zero.
 
 ## Check what is settled first
 
 Before any question to the owner, design question, recommendation
-or plan, search `.decisions/`, each context's `GLOSSARY.md`, `docs/direction/`, `experiments/` and the plan for the
-topic. Start with `node .agents/skills/lead/scripts/records.ts find "<words>"`, which ranks those
-records (and `.patterns/`, `.runbooks/`) on `origin/main` by the rare words they share with yours,
-then `rg` for what its shortlist cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
+or plan, search `.kalfa/decisions/`, each context's `GLOSSARY.md`, `docs/direction/`, `experiments/` and the plan for the
+topic. Start with `rg -il "<words>"` over those folders (and `.kalfa/patterns/`, `.kalfa/runbooks/`),
+in two or three wordings, then read every hit and look for what a word search cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
 shape with the note it says it builds, and name any place it walks a decision back. A claim about
 how a piece runs comes from reading that piece's note now, never from a summary. A settled note is
 evidence, not a tiebreaker: nothing from before experiment 107 (the first run on a repo other than

@@ -1,6 +1,6 @@
 ---
 state: "proposed 2026-11-08; walked at Tier 6"
-summary: "Proposed for `next/`: an agent hands back a change; code checks, commits and signs it, using one list of roles. Today's tooling adopts only signing at fetch early, owner, 2026-11-08. Agents still commit; removing Git from their tools and adding roles remain proposed. *Changed 2026-11-13 (owner, [0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's tooling stops signing.*"
+summary: "Proposed for `next/`: an agent hands back a change; code checks, commits and signs it, using one list of roles. Today's tooling adopts only signing at fetch early, owner, 2026-11-08. Agents still commit; removing Git from their tools and adding roles remain proposed. *Changed 2026-11-13 (owner): today's tooling stops signing.*"
 ---
 
 # Code commits and signs each step
@@ -15,7 +15,7 @@ and MAIN checks saved run bounds and owners before signing missing notes. Existi
 calls remain valid. This note stays proposed for `next/`; the call approves neither removing Git
 from agent tools nor adding signing roles. Mutation still uses the tests key.
 
-Owner, 2026-11-13 ([0161](../../.decisions/0161-no-step-signing-by-hand.md)): today's hand-run
+Owner, 2026-11-13: today's hand-run
 tooling stops signing, so the paragraph above no longer holds for it. This note stays proposed for
 `next/`.
 
@@ -224,7 +224,7 @@ const BRIEFS: Record<Role, Brief> = {...}; // the compiler refuses a role with n
 
 When `main` moves, code merges it into the branch and signs a `lead` link from the old tree to the
 merged one, on every merge, before the pull request can land.
-*Changed 2026-11-11 by [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md):
+*Changed 2026-11-11 by:
 a branch behind `main` is no longer refused for that, so the merge is not needed before it lands; a
 merge that is made is still a signed `lead` link.*
 
@@ -240,8 +240,7 @@ merge that is made is still a signed `lead` link.*
   `lead` merge. Whether a conflicted merge commit should be signed as `lead` before the step fixes it
   is open; one real conflict on a Tier 1 row would show it.
 - **What holds it:** P32's `broken_chain` answer, and a test that a pull request behind `main` gets
-  a `lead` link from code before it can merge. *Changed 2026-11-11 by
-  [0098](../../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md): the check no longer
+  a `lead` link from code before it can merge. *Changed 2026-11-11 by: the check no longer
   answers `broken_chain` for a branch behind `main`, so this holds only a merge that is made.*
 
 ## Where it differs from settled notes

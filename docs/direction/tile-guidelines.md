@@ -1,21 +1,16 @@
 ---
 state: "decided 2026-11-01"
-summary: "Today's version, not built yet. Written rules for each part of a tile: edge, focus, hover, title bar, name, id, pipe marker, asking, fold strip, closing, empty, gap, bottom line, zoomed, lost link. The title bar is a mono `header`, with no line under it. One `main`, one region per open tile. F6, `C-b o`, `C-b ;`, `C-b [` and resize keys are added. Forced colors and more contrast have rules. Each part is tested against how Linear would build it."
+summary: "Today's version, not built yet. Written rules for each part of a tile: edge, focus, hover, title bar, name, id, pipe marker, asking, fold strip, closing, empty, gap, bottom line, zoomed, lost link. The title bar is a mono `header`, with no line under it. One `main`, one region per open tile. F6, `C-b o`, `C-b ;`, `C-b ` and resize keys are added. Forced colors and more contrast have rules. Each part is tested against how Linear would build it."
 ---
 
 # A tile stays quiet, says every fact in words, and every part is reached by keys
 
 Decided 2026-11-01 by the owner. Tiles PR 1 builds it. This is about today's version, and `next/` follows its
-rules as written ([0543](../../.decisions/0543-next-follows-approved-guidelines-as-written.md)). It holds the written rules for every part of a tile, each tested against how Linear
+rules as written ([0543). It holds the written rules for every part of a tile, each tested against how Linear
 would build it. [Pipe colors](./pipe-colors.md) and [color principles](./color-principles.md) came
 first, and this note applies them.
 
-Its decided rules are in: [0499](../../.decisions/0499-a-tile-adds-a-word-not-color.md),
-[0500](../../.decisions/0500-a-tiles-edge-is-one-outline.md),
-[0501](../../.decisions/0501-a-tiles-title-bar-is-mono.md),
-[0502](../../.decisions/0502-a-tiles-state-is-a-word.md),
-[0503](../../.decisions/0503-each-tile-is-one-region.md),
-[0504](../../.decisions/0504-two-live-regions-from-boot.md).
+Its decided rules are in:,,,,,.
 
 **Changed 2026-11-08:** design foundations PR 1 builds slate a9 focus in both looks for today's
 version, shared by the plain tile's edge and strip ring through `--focus`. Dark pipes stay at a8;

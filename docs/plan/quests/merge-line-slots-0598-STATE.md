@@ -1,7 +1,7 @@
 # State: merge-line-slots-0598 (Sev 1 issue 1333, lane C2)
 
 Today's version, CI tooling. Pull request https://github.com/kamp-us/tea-fabrika/pull/1590,
-branch `fabrikalfa/merge-line-slots-0598`, from `origin/main` at 955a82d. Builds decision 0598
+branch `fabrikalfa/merge-line-slots-0598`, from `origin/main` at 955a82d. Builds an earlier decision
 (pull request 1586), which amends 0595. Moved off the cloud session to the laptop on 2026-11-18, at
 the owner's call, in the middle of the tests step.
 

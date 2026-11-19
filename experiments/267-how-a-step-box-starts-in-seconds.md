@@ -9,8 +9,7 @@ summary: "Today's lead tooling. Stripe's 10 s is a pool of devboxes made ahead (
 Read and counted on 2026-11-10, landed 2026-11-11. **This is reading plus a count of our own
 timestamps, not an experiment run:** no box or container was started for it, and nothing in the
 repo changed. **Every claim about our boxes is about today's lead tooling** (`drive.ts`, `chain.ts`,
-`box.sh`) running steps for both versions. It is the evidence behind
-[0101](../.decisions/0101-box-cleanup-runs-on-a-timer.md), which moved the box cleanup off the
+`box.sh`) running steps for both versions. It is the evidence behind, which moved the box cleanup off the
 step's start path. One agent read; no model was called beyond it, $0.
 
 **The answer: Stripe's 10 seconds is "take a box from a pool that is already made", not "build a
@@ -70,8 +69,7 @@ More from Stripe:
 
 ## What our step's box cost on 2026-11-10
 
-Read: the box script, the drive and chain scripts, the mutation box script and
-[0045](../.decisions/0045-test-steps-run-in-containers.md). Then four clocks were joined:
+Read: the box script, the drive and chain scripts, the mutation box script and. Then four clocks were joined:
 
 - step start: when the drive log was created, or else the previous step's end in the lane's state
   file
@@ -106,13 +104,13 @@ not timed on its own):
    minute or more on the main checkout".
 
 *Rechecked on main, 2026-11-11:* item 1 is gone. `drive.ts` no longer runs `box.sh gc`; a timer and
-each merge do, through `gcloop.ts` (`drive.ts:29`, [0101](../.decisions/0101-box-cleanup-runs-on-a-timer.md)).
+each merge do, through `gcloop.ts` (`drive.ts:29`).
 The "minute or more" comment is no longer in `box.sh`, and the shared-ticket check has changed
 since; its time today was not measured again.
 
 Containers: on 2026-11-10 only the mutation step used Docker. Its image is tagged by a hash of the
 lockfile, so it builds once per lockfile, and since
-[0066](../.decisions/0066-mutation-runs-on-a-schedule.md) mutation is no step of the chain. Test
+ mutation is no step of the chain. Test
 and build steps ran in the agent's own sandbox, not a container. Several drive logs ended stuck on
 `listen EPERM` or `spawnSync ps EPERM` for that reason. So 0045's container was not yet on most
 steps' start path. When it is, Cloudflare's 1 to 3 s and Docker's start add to the start time.
@@ -128,7 +126,7 @@ steps' start path. When it is, Cloudflare's 1 to 3 s and Docker's start add to t
   this needed the owner's yes.
 - How to measure: timestamps around gc in the drive log; compare step start to clone start across
   20 steps before and after.
-- **Taken:** the owner decided it as [0101](../.decisions/0101-box-cleanup-runs-on-a-timer.md), and
+- **Taken:** the owner decided it as, and
   `gcloop.ts` runs it every `GC_MINUTES` (default 30) and after each merge. The study's lean said
   drive would run gc itself when disk is low; 0101 decided the opposite, a step that finds no room
   fails with that reason and starts no cleanup of its own.

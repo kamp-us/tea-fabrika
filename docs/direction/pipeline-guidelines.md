@@ -127,8 +127,7 @@ const OURS = {
      at its next turn, or the next step does when none runs. It never cuts a turn off. The comment's
      fact records `during`, the run that was live when it was written, filled in by code (what the
      person saw, recorded now). A "reply to this step" view is later a filter on `during`. 80%.
-     In `next/`, a quest's room is a second way in, and a person's line there may answer an ask
-     ([0073](../../.decisions/0073-a-lane-has-a-room.md)); the ticket comment's rules here hold.
+     In `next/`, a quest's room is a second way in, and a person's line there may answer an ask; the ticket comment's rules here hold.
   3. **Red goes back on its own, by default.** Linear makes it a loop each team turns on. Here it is
      on, with a repository setting to turn it off. 70%.
 
@@ -200,8 +199,7 @@ principle with no holder is a wish ([make the mistake impossible](./make-the-mis
 
 ### P4: resume, never redo
 
-**Decided 2026-11-01.** Amended in part on 2026-11-10 by
-[0072](../../.decisions/0072-a-churning-lane-is-redone.md): a change that points the wrong way, or
+**Decided 2026-11-01.** Amended in part on 2026-11-10 by: a change that points the wrong way, or
 is sent back too often, is redone on a fresh branch; a crash or a stuck still resumes as below.
 
 - **What it means.** A stuck or crashed quest is a crash recovery case. It goes on from the step that
@@ -272,8 +270,7 @@ is sent back too often, is redone on a fresh branch; a crash or a stuck still re
   at every point a quest can stop, so a lost save can be rebuilt (PR 289's PR 5 has it).
 - **Requirement: nothing stale** (owner, 2026-11-09). Once the work is saved, the pipeline removes
   every workspace its steps ran in (a box, a worktree, a container) when the quest lands, as code with
-  a law, and frees disk itself before it refuses a step; it never asks a person to clean up
-  ([0019](../../.decisions/0019-nothing-stale.md)).
+  a law, and frees disk itself before it refuses a step; it never asks a person to clean up.
 
 ### P7: a step is idempotent, keyed by its inputs
 

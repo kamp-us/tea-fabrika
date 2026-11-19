@@ -248,7 +248,7 @@ What a demlik rule change would need (not done; demlik was not changed):
 - `CLAUDE.md` line 105: "Write `Closes #N` in the body, where `N` is an
   issue number." It would accept a tracker id, or the approved ticket's text,
   in place of an issue number.
-- `CLAUDE.md` "What fabrika reads here" and ADR 0013 ("fabrika is the work
+- `CLAUDE.md` "What fabrika reads here" and an earlier ADR ("fabrika is the work
   pipeline"): the list of what the pipeline reads would gain the tracker and
   lose issues for new work.
 - While today's fabrika still runs on demlik: its ship skill refuses a code
@@ -370,13 +370,13 @@ pull request body. Put the approved ticket's title and text in the body for
 people. Ask demlik to accept that instead of `Closes #N`.**
 
 - Why: no stage needs a GitHub issue once the lane's facts name the ticket.
-  [Push after review](../.decisions/0391-the-ledger-holds-the-commit-hash.md) already makes
+  Push after review already makes
   build and review work from a commit and a fact. No outsider ever wrote a
   demlik issue or comment, so a GitHub copy would have no readers that the
   body does not reach. And comments on a copy reach nobody.
 - This goes against the tracker note's lean (a GitHub copy at approval, 70%).
 - Cost: `ticketIn` and the review and ship gates move to the lane's fact.
-  demlik's `CLAUDE.md` rule and ADR 0013 change. While today's
+  demlik's `CLAUDE.md` rule and an earlier ADR change. While today's
   fabrika runs on demlik, its ship rule and heal-ci will meet pull requests
   with no issue.
 - **How sure: 65%.** The doubt: an outside reader of the repo may want a

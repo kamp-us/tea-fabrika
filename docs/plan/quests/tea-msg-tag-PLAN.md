@@ -4,7 +4,7 @@ Plancheck-Version: 3
 # Plan: tea moves to 0.27.0, then one local patch keys tea's Msgs, Cmds, Subs and state table on `_tag` and carries eleven more asks, and every machine of ours follows
 
 This is `next/` and our tooling (`.agents/`). Today's version is left as it runs now. It builds
-[0569](../../../.decisions/0569-tea-msgs-are-keyed-on-tag.md) (owner, 2026-11-15) and its amendment
+ (owner, 2026-11-15) and its amendment
 for Cmds, Subs and the state table
 ([pull request 1384](https://github.com/kamp-us/tea-fabrika/pull/1384)). It counts as a fix of that
 day's sev0. Everything we ask tea for is patched here and not waited on: one patch file,
@@ -42,7 +42,7 @@ syncTest(machine, {}, { msgs, seed });          // 955: save and restart at ever
 
 | # | Pull request | Tea issue | Why here |
 |---|---|---|---|
-| 1 | tea 0.25.0 to 0.27.0; today's version on its own catalog at 0.25.0, with its 897 patch kept | 897, shipped in 0.27.0 | the patch is written against 0.27.0; today's version keeps its runtime and types as they are (0569, 0217) |
+| 1 | tea 0.25.0 to 0.27.0; today's version on its own catalog at 0.25.0, with its 897 patch kept | 897, shipped in 0.27.0 | the patch is written against 0.27.0; today's version keeps its runtime and types as they are (0002) |
 | 2 | the `_tag` patch: Msg, Cmd and the `cmd` a settled Msg carries, Sub, the state table; all of our side; old dev and test homes wiped at landing | [949](https://github.com/kamp-us/demlik/issues/949) | every later ask is written in `_tag` terms, and the issues say so ("With #949, `type` here becomes `_tag`") |
 | 3 | `applyCell` and its siblings take their types from the machine | [950](https://github.com/kamp-us/demlik/issues/950) | types only, the smallest; slice 12 steps children with the typed `applyCell` |
 | 4 | a Cmd from `Cmd.make` keeps its Effect schemas in its type; the any-def keeps `input` | [951](https://github.com/kamp-us/demlik/issues/951) | types only; slice 5 builds `settled` from these typed schemas |
@@ -74,7 +74,7 @@ engine, never runs for us. Demlik issue 961 is that gap in the pure stepping fun
 - **Merger and Queue** keep their `reduce` and their 21 forwarding rows until the ruling. No other
   slice here touches them.
 
-**Step returns, once slice 11 is in.** The owner ruled that a cell answers a pipeable `Step` ([0578](../../../.decisions/0578-tea-cell-answers-a-step.md)). The sweep of today's return sites is not in this plan (see "What comes after"). Each
+**Step returns, once slice 11 is in.** The owner ruled that a cell answers a pipeable `Step` ([0008](../../../.kalfa/decisions/0008-tea-cells-answer-a-step.md)). The sweep of today's return sites is not in this plan (see "What comes after"). Each
 slice that writes a return says which form it writes, so no return is written twice:
 
 - slices 2 to 10 write no new return shape: they move keys, types and helpers, and every return they
@@ -101,7 +101,7 @@ names it.
   schemas, and on 0.25.0 without the patch it fails with TS2344 at line 69 (the tests step of slice 1
   proved this). That test is the law that holds the kept patch, and no law moves. The 0.25.0 key
   never reaches `next/`'s 0.27.0, which slice 2 patches with its own file. The patch and its row go
-  when today's version goes (0217).
+  when today's version goes (0002).
 - pnpm's catalogs docs describe named catalogs for holding two versions of one package in a
   workspace (from memory of the docs, not fetched for this plan).
   `oxlint-plugins/exact-versions.ts` already checks that a `catalogs.<name>` entry is exact (line
@@ -117,7 +117,7 @@ names it.
 
 ## How others do it
 
-- **tea itself** ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md): read first).
+- **tea itself** (: read first).
   Read in tea's repository, `kamp-us/demlik`, the one the installed `package.json` names, and in the
   0.27.0 tarball (`npm pack @demlik/tea@0.27.0` into an empty folder, nothing installed).
   - No tea decision sets the key. Its `.decisions/0014` keeps a Cmd a plain record
@@ -157,7 +157,7 @@ names it.
   Upcasting"; Marten's docs, "Events Versioning". None fetched. tea's own `schemaMigrate(schema,
   upcast)` does this for state. We take neither it nor a rewrite: `next/` holds no real data, and the
   owner ruled that old dev and test homes are wiped when the patch lands, with no conversion code: the
-  wipe [0572](../../../.decisions/0572-pre-release-shape-change-wipes-data.md) sets.
+  wipe sets.
 - **Changing a key in every reader at once** is a **flag day** (the Jargon File's term). The usual
   way around one is **parallel change**, or expand and contract (Danilo Sato on martinfowler.com,
   2014, not fetched): accept both keys for a while. Here that is tea reading `_tag ?? type`, or our
@@ -172,11 +172,11 @@ catalog:
   '@demlik/tea': 0.27.0          # next/, the root (tooling); patched from slice 2 on
 catalogs:
   # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
-  # its patch, while next/ moves to `_tag` (0569). Goes when today's version goes.
+  # its patch, while next/ moves to `_tag`. Goes when today's version goes.
   old:
     '@demlik/tea': 0.25.0
 patchedDependencies:
-  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0217);
+  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0002);
   # 0.27.0 ships the fix. Goes when today's version goes.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
 minimumReleaseAgeExclude:
@@ -200,15 +200,15 @@ const exact = (version: unknown) =>
   stays keyed to `@demlik/tea@0.25.0`; only its comment changes, to say it is today's version's
   alone. `packages/pipeline/src/machine-make.test.ts:60-69` holds it: drop the row and that type law
   fails with TS2344 at line 69.
-- [0256](../../../.decisions/0256-a-program-is-one-program-make.md) lines 52-53 still say tea's side
+- lines 52-53 still say tea's side
   is unfixed and patched locally. The bump fixes that line: "tea 0.27.0 ships it (demlik 897); today's
   version keeps the local patch on 0.25.0 until it goes". A fact correction, in the same pull request.
 - Our code needs one change for 0.27.0, and it is a setting, not code: Effect's checker is told
   that `@demlik/tea` may appear twice in the `.agents` project. Today's library keeps 0.25.0 under
-  [0217](../../../.decisions/0217-next-grows-beside-today.md) until `next/` takes the job, the tooling
+  [0002](../../../.kalfa/decisions/0002-next-grows-beside-today.md) until `next/` takes the job, the tooling
   still uses today's agent runner, and no tea value crosses between the two. It is a declared
   dependency choice, like
-  [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md)'s
+'s
   `allowedUnstableApis`, and not a list that lets broken code pass. It goes when the tooling stops
   importing `@kampus/fabrika-old` (ticket 1065). Everything else type-checks as it is:
   `Program.make` already reads the machine's `model` and `msg`, which 0.27.0 types the way the patch
@@ -219,7 +219,7 @@ const exact = (version: unknown) =>
 // tooling. tsgo's schema calls this a "scoped allow-list for duplicatePackage".
 {
   // The lead tooling imports tea 0.27.0 itself and today's agent runner, which runs on tea 0.25.0
-  // (0217); no tea value crosses between them. Goes with ticket 1065.
+  // (0002); no tea value crosses between them. Goes with ticket 1065.
   "include": [".agents/**/*.ts"],
   "options": { "allowedDuplicatedPackages": ["@demlik/tea"] }
 }
@@ -313,7 +313,7 @@ stays: E extends { type: string } (22), E["type"], Extract<E, ...>
 ```ts
 // A Msg schema: next/programs/counter/src/program.ts and its 59 siblings.
 const Msg = Schema.TaggedUnion({ inc: {}, dec: {}, reset: {} });
-runtime.dispatch(Msg.cases.inc.make({}));                     // made by its maker (0562)
+runtime.dispatch(Msg.cases.inc.make({}));                     // made by its maker
 // Read by its own matcher (0567, form 1). 0567's form 2 for a tea Msg, Match.discriminators("type"),
 // goes: a Msg is now like every other union.
 Msg.match(m, { inc: ..., dec: ..., reset: ... });
@@ -374,7 +374,7 @@ Paths without a folder are under `next/packages/libfabrika/src/`.
 **The inline ignores this slice may add, and no others.** A reader or writer that knows no cases, or
 a value tea gives no maker for, must still name the key `_tag`, and `fabrika/no-hand-tag` fires on any
 object key, struct field or type member called `_tag`.
-[0562](../../../.decisions/0562-nothing-teaches-the-wrong-shape.md) allows one exception:
+ allows one exception:
 `// oxlint-disable-next-line fabrika/no-hand-tag -- <why>` on the line. Expected places:
 
 - readers that know no cases, with the reason `oxlint-plugins/no-hand-tag.ts` gives for
@@ -390,7 +390,7 @@ type holds the key, since 0562 forbids a named wrapper that lets a hand-written 
 
 ### Old saved data: wiped when the patch lands, never converted
 
-The owner ruled in [0572](../../../.decisions/0572-pre-release-shape-change-wipes-data.md) that our code holds no conversion for saved tea
+The owner ruled in that our code holds no conversion for saved tea
 values. `next/` holds no real data, so a home written before slice 2 is wiped as a step of the
 landing, and nothing in our code reads the old shape. After the merge, a row keyed `type` that is
 somehow still read makes the restart fail loudly: by my read of `Program.ts:839-854`, the fold fails
@@ -410,11 +410,10 @@ Where saved tea values live, read on main today, and what happens to each:
 
 - **The wipe on the owner's Mac waits for his yes.** It deletes files in his home folder, so the lead
   shows him the exact list of entries first, and runs it only after his yes, the same rule as any run
-  on his machine ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). On the lead's own
+  on his machine. On the lead's own
   checkouts and boxes, the lead runs it at the merge.
 - **The landing step is a command list in the pull request body,** not code in the repo: no new
-  shell or Python script enters the repo
-  ([0113](../../../.decisions/0113-no-shell-or-python-scripts.md)), and a wipe that runs once needs
+  shell or Python script enters the repo, and a wipe that runs once needs
   no program.
 - **The wire is not converted either.** The gateway decodes an input with the program's own Msg
   schema before it is saved (`Gateway.ts:1238-1243`). An input from a window still on old code is
@@ -613,7 +612,7 @@ machine: Schema.declare(Machine.is, { expected: "a tea machine" }),
 
 ```ts
 // next/packages/libfabrika/src/Testing.ts:18 today, our stopgap of about 80 lines; its own header
-// says to remove it when tea ships the helper, as decision 0226 asks.
+// says to remove it when tea ships the helper, as an earlier decision asks.
 syncTest(controller, {}, { msgs, encode: Schema.encodeSync(Model), decode: Schema.decodeUnknownSync(Model),
   equals: (a, b) => JSON.stringify(a) === JSON.stringify(b), seed: 119120 });
 // After: from @demlik/tea/pbt. On the Effect entry the machine carries its `model` schema (897), so tea
@@ -638,7 +637,7 @@ Step.to(model).pipe(Step.run(a), Step.run(b));   // `run` is a `dual`, piped aft
 // tuple passes as it is. Core, applyCell and the engine do not change, so our runner's applyCell
 // calls (Program.ts, Runner.ts) still get the tuple.
 
-// A cell after, matching its state with the Model union's own matcher (0567):
+// A cell after, matching its state with the Model union's own matcher:
 upload_ok: (s, m) =>
   Model.match(s, {
     uploading: () => Step.to(Model.cases.done.make({ url: m.value.url })).pipe(Step.run(notify({ text: "Uploaded" }))),
@@ -777,7 +776,7 @@ rest, so the review checks the readers table line by line.
 
 **New names in tests:** `SampleCmdInput` is a small input schema for a Cmd made with `Cmd.make`,
 defined in the test. `CounterMachines` draws the counter written with a function `init` and with an
-object `init`, defined in the test. Both are restated as [0135](../../../.decisions/0135-a-laws-file-pins-its-shapes-to-the-schema.md)
+object `init`, defined in the test. Both are restated as
 allows. `TeaAsks.test.ts` and `TeaAsks.types.test.ts` hold the laws of
 slices 3 to 12, one `describe` per issue.
 
@@ -787,7 +786,7 @@ home keeps the port-home laws honest: they read a home of the new shape.
 
 **Host-only and scheduled laws.** None needs launchd, the real app, a signal or a real socket. W2 is
 an integration test, since it needs the runner on a real SQLite file; under
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) a pull request leaves
+ a pull request leaves
 it to the 3-hour schedule, and it is not run on this laptop. Slice 2 also edits about 43
 `*.integration.test.ts` files and the law suites they run (`RunnerTest.ts`, `ChildrenTest.ts` and the
 rest). The lead runs `scheduled.yaml` once on the branches of slices 2 and 12 (`workflow_dispatch`)
@@ -816,7 +815,7 @@ before each merge (see "Calls taken").
 | programs/trace/package.json | build | 1 | `catalog:old` |
 | docs/tutorials/agents/package.json | build | 1 | `catalog:old` |
 | docs/tutorials/two-hosts/package.json | build | 1 | `catalog:old` |
-| .decisions/0256-a-program-is-one-program-make.md | build | docs | lines 52-53: tea 0.27.0 ships 897; today's version keeps the local patch on 0.25.0 until it goes |
+| a program is one program make | build | docs | lines 52-53: tea 0.27.0 ships 897; today's version keeps the local patch on 0.25.0 until it goes |
 | tsconfig.base.json | tests | 6 | one checker override for `.agents/**` with `allowedDuplicatedPackages: ["@demlik/tea"]` and its comment, naming ticket 1065; an exam path, so the tests step writes it |
 | oxlint-plugins/duplicate-packages.test.ts | tests | tests | E3, new |
 | .agents/tsconfig.json | build | 0 | no change: the setting lives in the base file's override (see "Slice 1"); it changes only if the fallback is taken |
@@ -924,8 +923,7 @@ The build step owns product files only.
 - **One pull request holds the `_tag` patch and all of our side (slice 2).** 95% sure. A value cannot
   carry both keys without our code writing `type` beside `_tag`, a conversion 0569 forbids; tea
   reading both keys is a conversion inside tea that the maintainer is not making. Any split leaves
-  main red between the parts. No number caps a pull request
-  ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)).
+  main red between the parts. No number caps a pull request.
 - **Each later ask is its own pull request, in the order above.** 85% sure; the order table gives
   each reason.
 - **The patch is the tests step's.** The patches folder, `pnpm-workspace.yaml` and `pnpm-lock.yaml`
@@ -934,7 +932,7 @@ The build step owns product files only.
   sites.
 - **Our runner takes tea's own answer makers (slice 2).** `Runner.ts:1584-1602` mints
   `{ type: "<cmd>_ok" }` in tea's shape today. tea's `CmdDef` has `ok(cmd, value, at)` and
-  `err(cmd, error, at)` (`core-CDR1i78K.d.ts:172-173`), and tea's decision 0021 says the engine makes
+  `err(cmd, error, at)` (`core-CDR1i78K.d.ts:172-173`), and tea's an earlier decision says the engine makes
   these Msgs. The runner builds its answer with them and adds its `reason` field to the error. Then
   our answers move with tea's, and slice 12's wrap reaches them for free. 70% sure the runner holds the
   def there. If it holds only the Cmd value, it finds the def by the Cmd's `_tag` in the program's
@@ -956,8 +954,7 @@ The build step owns product files only.
 - **The lead runs the scheduled workflow once on slices 2 and 12.** 80% sure. Both change what the
   integration tests exercise, and 0536 leaves those to the schedule. A break found after the merge
   would leave main red for up to 3 hours. One extra CI run each is the cost.
-- **Is this a setting?** No new choice here is one
-  ([0069](../../../.decisions/0069-choices-are-settings.md)). The key and the five asks are tea's
+- **Is this a setting?** No new choice here is one. The key and the five asks are tea's
   contract, not values a person flips. The catalog versions are pins, and pins live in the workspace
   file. The wipe is a one-time landing step, not a choice a person makes again.
 
@@ -965,15 +962,14 @@ The build step owns product files only.
 
 - **0569's amendment** ([pull request 1384](https://github.com/kamp-us/tea-fabrika/pull/1384)) widens
   0569 to Cmds, Subs and the state table. Slice 2 merges after it. It also amends
-  [0214](../../../.decisions/0214-unions-are-tagged-with-tag.md) and
-  [0567](../../../.decisions/0567-a-tagged-value-is-matched.md)'s form 2 for a tea Msg.
+ and
+'s form 2 for a tea Msg.
 - **Slice 1 does not wait:** it touches none of the open branches' code.
 - **Slice 2 waits for** pull requests [1341](https://github.com/kamp-us/tea-fabrika/pull/1341),
   [1331](https://github.com/kamp-us/tea-fabrika/pull/1331) and
   [1366](https://github.com/kamp-us/tea-fabrika/pull/1366) to merge, and is built on main after them
   and after slice 1.
-- **Slice 2 goes before the Effect-check sweep in busy folders**
-  ([0565](../../../.decisions/0565-effects-own-checks-block.md)): a sweep pull request in `runtime/`,
+- **Slice 2 goes before the Effect-check sweep in busy folders**: a sweep pull request in `runtime/`,
   `processes/` or `client/` starts after slice 2 merges. Slices 3 to 12 are smaller and may run beside
   the sweep; each rebases onto what merged.
 - **Slices 3 to 12** each start from main after the slice before merges, since each adds hunks to the
@@ -1001,8 +997,7 @@ rebase (K7), so a stale branch breaks loudly, never quietly.
 
 ## Each issue carries its patch
 
-A named step of slices 2 to 12, after the build is green and before the merge
-([0060](../../../.decisions/0060-upstream-issue-carries-the-patch.md)): the slice's tests step saves
+A named step of slices 2 to 12, after the build is green and before the merge: the slice's tests step saves
 only that slice's hunks under `runs/`. The lead reads every line and appends them to that issue's
 body, inside `<details><summary>The patch we apply locally</summary>`, a fenced `diff` block, then
 `</details>`. Slice 2 posts on 949, slice 3 on 950, slice 4 on 951, slice 5 on 952, slice 6 on 954,

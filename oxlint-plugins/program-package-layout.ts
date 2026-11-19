@@ -83,7 +83,7 @@ const targetStrings = (x: unknown): string[] =>
         : [];
 
 // The platform's own import names, as decision 0042 lists them
-// (.decisions/0042-platform-pieces-go-through-alchemy.md, "New `next/` code never imports the
+// (.kalfa/decisions/0018-cloudflare-only-through-alchemy.md, "New `next/` code never imports the
 // platform directly"): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A
 // change to that list changes this one. A name ending in `:` or `/` is a prefix; the rest are
 // package names, with their subpaths.

@@ -1,4 +1,4 @@
-Approved by the lead agent, builds effect-code-guidelines.md (0168); the owner answered its open question on 2026-11-13; body 85334000b907
+Approved by the lead agent, builds effect-code-guidelines.md; the owner answered its open question on 2026-11-13; body 85334000b907
 Plancheck-Version: 3
 
 # Plan A: six small Effect rules, each turned on at zero
@@ -22,7 +22,7 @@ flowchart LR
 
 - **Six slices, one per rule.** Each slice is one pull request that fixes every break and turns the
   rule on, so the rule starts at zero. No list file and no `debt:` line is written
-  (decision 0168, [pull request 1137](https://github.com/kamp-us/tea-fabrika/pull/1137)).
+  (an earlier decision, [pull request 1137](https://github.com/kamp-us/tea-fabrika/pull/1137)).
 - **Four can start today:** A1, A2, A4 and A6. They share no product file.
 - **Two wait for A1:** A3 and A5. A1 and A5 change the same lines of `runtime/Runner.ts`, and A1 and
   A3 change the same statement of `cloudflare/tail.ts`. After A1 merges, A3 and A5 run side by side.
@@ -66,12 +66,12 @@ or a class from another package, which Effect's check does not flag.
 
 ## How others do it
 
-Existing tools first ([0040](../../.decisions/0040-existing-tools-before-hand-written.md)).
+Existing tools first.
 
 | Rule | Tool looked at | Used? | Why, with proof |
 |---|---|---|---|
 | `instanceOfSchema`, `globalFetchInEffect`, `globalDateInEffect` | [`@effect/tsgo`](https://github.com/Effect-TS/tsgo) 0.63.0, installed | yes | They are its own checks, off by default (`node_modules/@effect/tsgo/schema.json:2627`, `:2602`, `:2582`). Each takes a severity and no other option |
-| no `Cause.squash` | oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | no | The lint runner decides advice by rule code, and this rule's code is already advice for `JSON.parse` (`oxlint-plugins/lint.ts:16`). A second entry would only advise. It also misses `import { squash } from "effect/Cause"`. *2026-11-13: since ticket 930 the runner reads severity, not the rule code, so the first reason no longer holds (0523).* |
+| no `Cause.squash` | oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | no | The lint runner decides advice by rule code, and this rule's code is already advice for `JSON.parse` (`oxlint-plugins/lint.ts:16`). A second entry would only advise. It also misses `import { squash } from "effect/Cause"`. *2026-11-13: since ticket 930 the runner reads severity, not the rule code, so the first reason no longer holds.* |
 | no `Cause.squash` | oxlint's [`no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports) | no | It can ban a named import, not a member read on a namespace, and all 10 sites read `Cause.squash` |
 | `written-service-type` | Effect's checker | no | Its schema has no check for a service type built from `ReturnType`, `Effect.Success` or `typeof`. `serviceNotAsClass` and `leakingRequirements` are on and all three sites pass both |
 | exported `fnUntraced` | Effect's `effectFnOpportunity` | no | It is on at `error` and the 13 sites pass. It suggests `Effect.fn` for a plain function. It does not read a function that is already `fnUntraced` |
@@ -519,13 +519,12 @@ are.
 | 12. The global `fetch`, `Date.now()` and `new Date()` inside Effect code fail the type check in `next/` product code | type | type | write each inside an `Effect.gen` in a product file |
 | 13. The three Effect checks are set at `error` under the `next/` overrides | test | pinned: the config's own lines, read as JSON, since a rule lost in a merge is silent | delete one of the three lines |
 
-As [0093](../../.decisions/0093-laws-walk-plants-run-once.md) has it, each plant is run once and
+As has it, each plant is run once and
 recorded, not kept as a test.
 
 ## Is it a setting?
 
-A setting is a value in `fabrika.toml`
-([0069](../../.decisions/0069-choices-are-settings.md)). None of these is one. They are the repo's
+A setting is a value in `fabrika.toml`. None of these is one. They are the repo's
 own exam, not a choice a person makes when running fabrika. Each is a line of lint or type-check
 config, as every other rule is.
 
@@ -559,7 +558,7 @@ the tests step writes them. Product fixes are the build step's.
 | `next/packages/libfabrika/src/node/settings/Load.ts` `next/packages/libfabrika/src/processes/Mailbox.ts` `next/packages/libfabrika/src/runtime/IsolateUsage.ts` `next/packages/libfabrika/src/settings/Files.ts` `next/packages/libfabrika/src/settings/Snapshot.ts` `next/packages/libfabrika/src/settings/Sources.ts` | build | A3 | 8 | 8 exports become `Effect.fn` |
 | `next/packages/libfabrika/src/Id.ts` `next/packages/libfabrika/src/processes/ChildrenLedger.ts` `next/packages/libfabrika/src/processes/ProgramMailLedger.ts` `next/packages/libfabrika/src/runtime/Execution.ts` `next/packages/libfabrika/src/runtime/Program.ts` `next/packages/libfabrika/src/runtime/RecoveryStore.ts` `next/packages/libfabrika/src/runtime/RepliesSql.ts` | build | A5 | 12 | 8 `instanceof` fixes |
 | `next/apps/fabrika/grant.ts` `next/packages/libfabrika/src/node/dev/dev.ts` | build | A6 | 30 | `HttpClient` and `DateTime` |
-| `.decisions/0252-effect-fn-for-exported-effects.md` `docs/direction/effect-fn-for-traced-functions.md` | build | A3 | docs | the `effectFnOpportunity` line: on with its default option, the wide options stay off |
+| `effect fn for exported effects` `docs/direction/effect-fn-for-traced-functions.md` | build | A3 | docs | the `effectFnOpportunity` line: on with its default option, the wide options stay off |
 | `docs/direction/effect-code-guidelines.md` `docs/plan/tier-1-detail.md` | build | A4 | docs | the runner's id in three code blocks |
 
 No screenshots: no window changes.
@@ -584,7 +583,7 @@ Nothing at run time: a lint rule keeps no data. Three facts are written down the
 
 - **Each rule's first-day count and its false alarms,** in `oxlint-plugins/README.md`, as every
   rule there has. For the three Effect checks, the count goes in the pull request.
-- **The plants' results,** in each slice's tests field row (0093).
+- **The plants' results,** in each slice's tests field row.
 - **Why `effectFnOpportunity` is on,** in 0252 and its note, so the next reader does not find a
   config that seems to contradict a decision.
 

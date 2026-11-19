@@ -13,13 +13,13 @@ with all 135 of its checks on, once per `next/` project, in a scratch worktree t
 alone. Nothing in the real checkout changed. It feeds the note
 [Effect code guidelines](../docs/direction/effect-code-guidelines.md). No Design canvas: this study
 is about code, so the guidelines skill's design steps (step 5's looks and shots, step 9's canvas and
-page) do not apply ([0114](../.decisions/0114-effects-team-as-the-builder.md)). Steps 1 to 4, 6, 7
+page) do not apply. Steps 1 to 4, 6, 7
 and 8 ran. Dollars: no paid API call. The five agents' tokens were not recorded, so their list
 price is a hole.
 
 Versions read: `effect` 4.1.2 (its `src/` ships in the package, with `AGENTS.md`, 433 lines, read in
 full), `@effect/platform-node-shared` 4.1.2, `@effect/sql-d1` 4.0.6, `@effect/tsgo` 0.63.0, oxlint
-1.90.0, and Effect-TS/effect-smol's own `AGENTS.md` and `.patterns/effect.md`, fetched with `gh api`
+1.90.0, and Effect-TS/effect-smol's own `AGENTS.md` and `.kalfa/patterns/effect.md`, fetched with `gh api`
 on 2026-11-11.
 
 **The answer.** Effect's team writes small named pieces. A long file is a shelf: many short exports,
@@ -62,19 +62,19 @@ Decided, each with its source, and never asked again here:
 
 | Point | Source |
 |---|---|
-| `next/` follows Effect's code style and doc comments; a kept difference names its reason | [0023](../.decisions/0023-next-follows-effects-code-style.md) |
-| Format, `Module.of`, plural service names, test tooling read through its module | [0029](../.decisions/0029-format-and-names-follow-effect.md), [0039](../.decisions/0039-keep-semicolons-and-es5-commas.md), [0094](../.decisions/0094-lines-are-100-columns.md) |
-| Lead tooling follows `next/`'s rules | [0033](../.decisions/0033-agents-code-follows-next-rules.md) |
-| Every implicit state machine is made explicit, as a tea machine, one per file | [0037](../.decisions/0037-implicit-state-machines-made-explicit.md), [0046](../.decisions/0046-one-tea-machine-per-file.md) |
-| Try an existing tool before writing a check | [0040](../.decisions/0040-existing-tools-before-hand-written.md) |
-| A ledger step is a plain synchronous function inside the transaction | [0050](../.decisions/0050-a-ledger-step-is-a-plain-function.md) |
-| Each service fails with its own error | [0055](../.decisions/0055-errors-named-by-their-service.md) |
-| A resource is acquired in a scope | [0061](../.decisions/0061-resources-are-acquired-in-a-scope.md) |
-| Tests keep the layers; a database suite is run by the module that owns the driver | [0062](../.decisions/0062-test-files-keep-the-floors.md) |
-| A folder is a module; its rank is a layer | [0091](../.decisions/0091-modules-and-layers.md) |
-| A service file holds only its contract; layers are sibling files; no static layer; platform code in its folder | [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) |
-| A Durable Object works inside a wake and sleeps | [0105](../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md) |
-| Effect's team is the builder we measure `next/` against | [0114](../.decisions/0114-effects-team-as-the-builder.md), accepted 2026-11-11, not on main yet |
+| `next/` follows Effect's code style and doc comments; a kept difference names its reason | |
+| Format, `Module.of`, plural service names, test tooling read through its module | |
+| Lead tooling follows `next/`'s rules | |
+| Every implicit state machine is made explicit, as a tea machine, one per file | |
+| Try an existing tool before writing a check | |
+| A ledger step is a plain synchronous function inside the transaction | [0011](../.kalfa/decisions/0011-ledger-step-is-plain-function.md) |
+| Each service fails with its own error | |
+| A resource is acquired in a scope | |
+| Tests keep the layers; a database suite is run by the module that owns the driver | |
+| A folder is a module; its rank is a layer | |
+| A service file holds only its contract; layers are sibling files; no static layer; platform code in its folder | |
+| A Durable Object works inside a wake and sleeps | |
+| Effect's team is the builder we measure `next/` against |, accepted 2026-11-11, not on main yet |
 | Every exported function that returns an Effect is a named `Effect.fn` | [the `Effect.fn` note](../docs/direction/effect-fn-for-traced-functions.md) |
 | No Promises outside a marked edge | [no Promises](../docs/direction/no-promises.md) |
 | Effect's checker runs inside `tsc`; 65 of its checks block today | `tsconfig.base.json`'s `@effect/language-service` block |
@@ -151,7 +151,7 @@ each with its own edge comment (`platform.ts:20-25` and on), and every one fails
 |---|---|---|
 | [a1] | `node_modules/effect/AGENTS.md`, 4.1.2 | "Avoid functions that only wrap and return `Effect.gen`" (`:16-17`); errors are `Schema.TaggedError`, with `cause: Schema.Defect()` (`:166-168`); "**AVOID using predicates or manual parsing**" (`:114`); "**NEVER** write your own helper functions like `isRecord`" (`:321-322`); use `DateTime`, not `Date` (`:290`); a service id holds "the package name and the subdirectory path" (`:142-144`); a static layer on the service (`:146-148`) |
 | [a2] | effect-smol `AGENTS.md` (fetched) | "Prefer existing abstractions and conventions over introducing new ones"; "Do not use `async` / `await` or `try` / `catch`"; "Do not use `Date.now` or `new Date`" |
-| [a3] | effect-smol `.patterns/effect.md` (fetched) | "Always use `return yield*` when yielding terminal effects"; "Prefer `Effect.fnUntraced` over functions that only return `Effect.gen`"; class syntax for `Context.Service` |
+| [a3] | effect-smol `.kalfa/patterns/effect.md` (fetched) | "Always use `return yield*` when yielding terminal effects"; "Prefer `Effect.fnUntraced` over functions that only return `Effect.gen`"; class syntax for `Context.Service` |
 | [a4] | `@effect/tsgo` 0.63.0 `README.md` and `schema.json` | 135 checks in five groups (correctness, anti-pattern, Effect-native, style, maintainers) and seven oxlint presets |
 | [a5] | the checker run (step 6 below) | Effect's own repo blocks on none of these checks and keeps its docs rule, `effect/jsdocs`, private |
 
@@ -405,7 +405,7 @@ are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as ab
   `flatMapConditionalToFilterOrFail` (0/2), `deterministicKeys` (40/2, 5 of 42 read). 75% sure.
 - **Leave off, 0 or 1 right of 5:** `preferEffectArray` (358/1,640), `unstableApiUsage` (112/1,314),
   `preferEffectString`, `preferEffectRecord`, `newSchemaClass`, `missingPipeableSignature`,
-  `strictBooleanExpressions`, `schemaSync` (0050), `schemaClassMissingBrand`, `preferSchemaOverJson`,
+  `strictBooleanExpressions`, `schemaSync` (0011), `schemaClassMissingBrand`, `preferSchemaOverJson`,
   `nodeBuiltinImport`, and the test-only Promise checks.
 - **Our rules against theirs:** replace `fabrika/no-data-taggederror` with `preferSchemaTaggedError`
   (90%) and `fabrika/no-raw-try-catch` with `tryCatchInEffectGen` (70%); `fabrika/no-context-tag`
@@ -434,7 +434,7 @@ are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as ab
   the versions above.
 - [a1] `node_modules/effect/AGENTS.md`, 4.1.2.
 - [a2] [Effect-TS/effect-smol `AGENTS.md`](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md).
-- [a3] [Effect-TS/effect-smol `.patterns/effect.md`](https://github.com/Effect-TS/effect-smol/blob/main/.patterns/effect.md).
+- [a3] [Effect-TS/effect-smol `.kalfa/patterns/effect.md`](https://github.com/Effect-TS/effect-smol/blob/main/.kalfa/patterns/effect.md).
 - [a4] `@effect/tsgo` 0.63.0, its `README.md` and `schema.json` in the installed package;
   [Effect-TS/tsgo](https://github.com/Effect-TS/tsgo).
 - [m1] [Elm guide, Structuring Web Apps](https://guide.elm-lang.org/webapps/structure.html).

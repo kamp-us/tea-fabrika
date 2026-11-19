@@ -4,9 +4,9 @@
 // adapter: the same harness rows `summon claude as <name>` starts in the app
 // (`packages/fabrika/src/agents/acp/harness.ts`), so a box is the harness's own containment
 // (Claude's OS sandbox, Codex's permission profile and its own home), unchanged
-// (.decisions/0026-fabrika-never-owns-the-agent-loop.md). The agent holds only its model login;
+// (.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md). The agent holds only its model login;
 // commits, signing, pushes and rows stay with the caller
-// (.decisions/0028-the-parent-holds-every-right.md).
+// (.kalfa/decisions/0027-parent-holds-every-right.md).
 //
 //   const agents = yield* makeStepAgents(sessions, main); // the provider table, once per process
 //   const turned = yield* runTurn(agents, {provider: "codex", folder: box, prompt, answer: Answer, ...});
@@ -48,7 +48,7 @@ export type Provider = (typeof PROVIDERS)[number];
 export const EXEC_PROVIDERS: ReadonlySet<Provider> = new Set(["codex-exec", "codex-exec-read"]);
 
 /**
- * One break a step planted once and undid (.decisions/0093): the law, what it broke (file:line and
+ * One break a step planted once and undid: the law, what it broke (file:line and
  * how), and `red` when the law failed on it, `green` when the law did not catch it.
  */
 export const Plant = Schema.Struct({
@@ -83,7 +83,7 @@ export const answerFor = (step: string) =>
 
 /**
  * The judgment agent's answer: send a quest step again with a note, or park the quest for the lead.
- * A quest has no mutation step (.decisions/0066), so the answer cannot name one.
+ * A quest has no mutation step, so the answer cannot name one.
  */
 export const Judgment = Schema.Struct({
   answer: Schema.Literals(["send", "park"]),

@@ -4,9 +4,9 @@ Plancheck-Version: 3
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
 
 This is `next/` and our tooling (`.agents/`, the `oxlint-plugins` folder, the CI scripts). Today's app is not
-touched. It builds [0554](../../../.decisions/0554-no-reflect-get-set-has.md) (the ban), under
-[0562](../../../.decisions/0562-nothing-teaches-the-wrong-shape.md) (tests and tooling are covered
-too), [0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list of leftovers) and
+touched. It builds (the ban), under
+ (tests and tooling are covered
+too) (no list of leftovers) and
 0560, the order for Effect code (accepted, in
 https://github.com/kamp-us/tea-fabrika/pull/1359, not on main yet). It is one of the fixes of the
 sev0 the owner called on 2026-11-15: nothing more is built on wrong code foundations.
@@ -20,7 +20,7 @@ const Hello = Schema.Struct({ signed: Schema.String, tab: Schema.String });
 const params = Schema.decodeUnknownOption(Hello)(hello?.params);
 
 // And the hold, in .oxlintrc.json, on for each folder the day it reaches zero:
-// { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." }
+// { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first." }
 ```
 
 ## Doubts, read these first
@@ -34,7 +34,7 @@ The owner is away, so each lean below is taken. Two are at or under 80%.
   only the `JSON.parse` fire can advise. The doubt: those folders' config block still says `warn`
   above the `Reflect` entries, and a plain `oxlint` run in an editor shows yellow, though
   `pnpm lint` and CI fail on it. What would settle it: the `JSON.parse` cleanup of
-  [0523](../../../.decisions/0523-advice-rules-block-where-clean.md) reaching zero, which deletes
+ reaching zero, which deletes
   that block. See "The hold".
 - **Where the dev client's method types come from: settled for the process half, a lean for the
   project half (75%).** The merge session ruled choice (A): the method types move type-only to a
@@ -100,7 +100,7 @@ Nothing in the repo changed. It fires 165 times in 39 files: 155 `get`, 6 `set`,
   one shared helper only. That is the owner's choice, written in 0554.
 - **The lint rule.** ESLint's `no-restricted-properties` is the industry's rule for banning one
   member of one object, and oxlint ships it. 0554 names it as the hold.
-- **The trusted repos.** The anti-slop plugin has `no-reflect-get`. Decision 0563 (accepted, in
+- **The trusted repos.** The anti-slop plugin has `no-reflect-get`. an earlier decision (accepted, in
   https://github.com/kamp-us/tea-fabrika/pull/1363, not on main) takes it, and says its rule reads
   only `get`, so `set` and `has` need the built-in rule either way. The plugin is not installed
   yet. Not fetched for this plan: the plugin's source.
@@ -130,7 +130,7 @@ const Read = Schema.Struct({
 const entry = Schema.decodeUnknownOption(Read)(raw);
 ```
 
-A schema that refuses a whole entry drops fields the old loop still read (0554). So each loop's
+A schema that refuses a whole entry drops fields the old loop still read. So each loop's
 schema makes every field optional and as loose as the old read, and the law keeps its own checks.
 The reviewer compares each loop by hand.
 
@@ -162,7 +162,7 @@ expect(Schema.is(LedgerError)(error) && error.cause instanceof RpcCallError && e
 ```
 
 **4. A field the type has, or will have: read it plainly.** A law for a field the build has not
-added yet writes the field. Its type error is the law's red (0554).
+added yet writes the field. Its type error is the law's red.
 
 ```ts
 // next/packages/libfabrika/src/client/WindowMachine.laws.test.ts:1338, before
@@ -294,10 +294,10 @@ One built-in rule, `eslint/no-restricted-properties`, with four entries.
 
 ```jsonc
 // The entries, a sketch. The first three are 0554's. The fourth closes a gap the probe found.
-{ "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-{ "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-{ "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
-{ "object": "globalThis", "property": "Reflect", "message": "Name Reflect directly, so lint can read the call (0554)." }
+{ "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first." },
+{ "object": "Reflect", "property": "set", "message": "Assign through the type." },
+{ "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty." },
+{ "object": "globalThis", "property": "Reflect", "message": "Name Reflect directly, so lint can read the call." }
 ```
 
 The rule was probed on a scratch file with oxlint 1.90.0, outside the repo:
@@ -361,7 +361,7 @@ const always = () => true;
 
 /** Each advice rule's code, and which of its fires may advise. */
 const ADVICE: ReadonlyMap<string, (fire: Fire) => boolean> = new Map([
-  // Only the JSON.parse guard advises (0523). Any other entry of this rule blocks at every level.
+  // Only the JSON.parse guard advises. Any other entry of this rule blocks at every level.
   ["eslint(no-restricted-properties)", (fire) => (fire.message ?? "").startsWith("'JSON.parse' ")],
   ["fabrika(jsdocs)", always],
   // the other four, unchanged
@@ -385,7 +385,7 @@ own because this rule's code "only advises".
   unrelated lines in the busiest folders.
 
 **When the plugin lands,** the plan that turns on `anti-slop/no-reflect-get` says whether it stands
-beside these entries or takes over the `get` one (0563). `set`, `has` and `globalThis.Reflect` stay
+beside these entries or takes over the `get` one. `set`, `has` and `globalThis.Reflect` stay
 here either way.
 
 ### The shared stub, in the test package
@@ -395,7 +395,7 @@ here either way.
 have one shape: some members answer by name, and every other method name gets one answer.
 
 ```ts
-// next/packages/vitest/src/Stub.ts, a sketch, read through its module as `Stub.make` (0029)
+// next/packages/vitest/src/Stub.ts, a sketch, read through its module as `Stub.make`
 
 /**
  * A stand-in for a platform object, such as a Durable Object stub, its storage or a bucket.
@@ -424,7 +424,7 @@ const project = Stub.make<ProjectBinding>(unexpected, { settingsStart: async () 
 - It imports no service of ours, so 0538's rule for the package holds.
 - One function, not three (80%). `rejecting` and `answering` in the tests today are one line each
   over `make`, and a name per use would hide that they are the same thing.
-- The package is to be renamed `@kalfa/vitest` (0557). This plan builds under today's name. The
+- The package is to be renamed `@kalfa/vitest`. This plan builds under today's name. The
   rename moves the file with the rest.
 
 ### The dev client
@@ -636,14 +636,13 @@ rule, and an amendment to this plan records the new numbers before the tests ste
 
 **Is this a setting?** No, for each choice. Which calls are banned and where the ban is on are
 rules about our own source, held by lint, and nothing a person running fabrika picks. They are not
-`fabrika.toml` values (0069).
+`fabrika.toml` values.
 
 ## Validation
 
 - The tests step of each slice: `pnpm format`, then `pnpm lint`, then
   `nice -n 19 pnpm exec vitest run --maxWorkers=1` on the narrow path of each file it edited.
-- A file named `.integration.` or `.visual.` is not run on the laptop. It runs on the schedule
-  (0536), and the slice's pull request says which files that leaves unrun.
+- A file named `.integration.` or `.visual.` is not run on the laptop. It runs on the schedule, and the slice's pull request says which files that leaves unrun.
 - Each plant is run once and recorded in the step's report.
 - The lead runs the one type check for a slice with a type law (slice 9) and for each slice that
   swaps a `Reflect.get` for a typed read, since the new read is checked only there.
@@ -687,7 +686,7 @@ Estimate: 38 steps, $163
 
 - **What is lost if it is not recorded now:** the per-folder count before the cleanup, which no
   later run can give back. It is in "The count" above, with its commit. Each slice's pull request
-  records the fires it met, its fixes and its disable lines (0523).
+  records the fires it met, its fixes and its disable lines.
 - `oxlint-plugins/README.md`: the ban's section, the probe's results, and the two corrected lines.
 - `next/AGENTS.md`: one row in "What lint holds".
 - `.glossary/TERMS.md`: no new word. "Stub" is the industry's word for a stand-in that gives
@@ -1228,7 +1227,7 @@ stays 38 steps and $163: the growth sits inside slice 14's one tests step, price
 **The answer first.** Slice 13 starts now and no longer waits for pull request 1312. Its count is
 unchanged: 15 fires in 5 files. Slice 15 runs after it, in the same pull request. One fact is new
 since point 7: main now puts a `Data.TaggedError` entry first in every block that sets
-`eslint/no-restricted-properties` (0573), so the fold keeps that entry in each block it writes.
+`eslint/no-restricted-properties`, so the fold keeps that entry in each block it writes.
 This point records the order, the counts and that entry. It makes no new design call.
 
 Read on `fabrikalfa/reflect-rest` at `70dddec3e`, which merged `origin/main` at `a6761bce1`.

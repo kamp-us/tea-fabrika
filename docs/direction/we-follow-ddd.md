@@ -1,13 +1,13 @@
 ---
-state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context ([0043](../../.decisions/0043-rooms-on-floors.md), named 2026-11-10 by [0091](../../.decisions/0091-modules-and-layers.md))"
-summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The rule is decided; the context list in `.glossary/TERMS.md` is a draft map, checked with Event Storming."
+state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context (named 2026-11-10 by)"
+summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The rule is decided; the context list in `.kalfa/glossary/GLOSSARY-MAP.md` is a draft map, checked with Event Storming."
 ---
 
 # We follow Domain-Driven Design
 
 **Decided 2026-11-03 by the owner.** Both versions. The rule is decided, in the same pull request
 ([PR 362](https://github.com/usirin/tea-fabrika/pull/362)). The context list in
-[the map](../../.glossary/TERMS.md) is a draft, checked with Event Storming on real flows, and its
+[the map](../../.kalfa/glossary/GLOSSARY-MAP.md) is a draft, checked with Event Storming on real flows, and its
 borders may move.
 
 ```text
@@ -30,7 +30,7 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   is a bug to fix.
 - **The same word may mean different things in two contexts.** That is normal, not a clash, as
   long as the context map names the boundary and says how the word translates across it.
-- **The map is `.glossary/TERMS.md`; each context's words live in its own `GLOSSARY.md`,** written
+- **The map is `.kalfa/glossary/GLOSSARY-MAP.md`; each context's words live in its own `GLOSSARY.md`,** written
   when they are decided. The map names the contexts and how they relate.
 - **The old glossary is gone from the tree** (reset 2026-11-18, it stays in git history). It was
   one 700-line file and read as noise. Words are decided again, one context at a time, and today's
@@ -89,13 +89,11 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   The borders follow `next/`'s layers where today's code draws them elsewhere: today's one
   `Ledger` service mixes layers 2 to 4, and `next/` splits it.
 
-  *Changed 2026-11-09 (owner,
-  [0043](../../.decisions/0043-rooms-on-floors.md)): inside `@kampus/libfabrika` a folder is
+  *Changed 2026-11-09 (owner): inside `@kampus/libfabrika` a folder is
   not a context and not a layer. It is one subject, a module (`access/`, `processes/`, `ledger/`),
   Evans's Module, and the library's layers live only in the rule file. A module's words still have
   their rows in the context that owns them: `access/`'s under clients, `processes/`'s under ledger.
-  The table above stays as the map from layers to contexts. Renamed 2026-11-10 (owner,
-  [0091](../../.decisions/0091-modules-and-layers.md)): 0043 said room, which stays only as the
+  The table above stays as the map from layers to contexts. Renamed 2026-11-10 (owner): 0043 said room, which stays only as the
   analogy.*
 
 - **The package.** A package belongs to one context, or to the shared names.

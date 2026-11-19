@@ -5,8 +5,7 @@ description: Run the hourly mutation check on what merged to main with StrykerJS
 
 # The mutation run
 
-Mutation is no step of a pull request
-([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)). It runs once an hour against
+Mutation is no step of a pull request. It runs once an hour against
 main, on the changed lines of what merged since the last run, in the container, with the tests
 beside the changed files. No new merge, no run. A merge never waits on it.
 
@@ -31,7 +30,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 
 1. **Read** `AGENTS.md`'s mutation rules.
 2. **Read the fast check's report.** `drive.ts` ran it before you started, in a container with its
-   own network ([0045](../../../.decisions/0045-test-steps-run-in-containers.md)), with
+   own network, with
    [the command below](#the-command). Your prompt holds its report, `mutbox.json`, whole. Never run
    Stryker yourself, and start nothing that listens on a port. `run.sh` and `sample.ts` hold file
    selection, the seed, sample cap and round settings. Ask before you scale up.
@@ -77,8 +76,7 @@ the container's own copy in place (`IN_PLACE=1`); its header says why (ticket 45
 quest read 0 kills of 61). A quest built before that fix samples with the old `run.sh` until it
 merges main.
 
-**The run happens in a container, never on the host and never in an agent's sandbox**
-([0045](../../../.decisions/0045-test-steps-run-in-containers.md)). Stryker starts a logging
+**The run happens in a container, never on the host and never in an agent's sandbox**. Stryker starts a logging
 server that listens on a port. The container has its own network (`--network none`), so it may,
 and nothing on the laptop is opened. `mutbox.ts` copies the build commit in read-only, mounts
 nothing from the home folder, and takes the one Docker box lock. `drive.ts` runs it for a
@@ -120,7 +118,7 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
 
 ## The hourly run, in CI
 
-The hourly run on main ([0066](../../../.decisions/0066-mutation-runs-on-a-schedule.md)) runs in
+The hourly run on main runs in
 GitHub CI, in `.github/workflows/mutation.yaml`, on the free arm64 runner. Nothing starts it but a
 hand dispatch: no push, pull request or cron. It runs the command above with `--ticket 0`, the
 range's base as arm a, and the tests beside the changed files as `--related`.
@@ -157,8 +155,7 @@ the heartbeat on a schedule yet.
 
 ## A gap's category
 
-Each real gap the hourly run files gets one category
-([0077](../../../.decisions/0077-mutation-gaps-carry-a-category.md)). The tracker tickets are the
+Each real gap the hourly run files gets one category. The tracker tickets are the
 record: keep no other file. No script holds this yet, so do these steps by hand.
 
 1. **Pick one category** by the test that is missing. The mutator is a hint, not the rule. The

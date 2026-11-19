@@ -3,7 +3,7 @@ Plancheck-Version: 3
 
 # Plan: no list lets broken code pass, in both versions
 
-The owner ruled on 2026-11-13 that [0168](../../.decisions/0168-old-lint-breaks-are-fixed.md) holds
+The owner ruled on 2026-11-13 that holds
 everywhere: an old break is fixed, never kept in a list. Every list of that kind goes, what it holds
 is fixed properly, and checks make sure no new one appears. Code-graph JSON files may stay only
 where no agent can use them to let wrong code through.
@@ -58,7 +58,7 @@ expect(waivers).toEqual([]); // the gate closes behind the last fix
 | 6 | today's | `layer-rules.json` key `allowed` | old pipeline laws importing `packages/pipeline/src/laws/explore.ts` and `world/search.ts` | 34 | 2026-10-23 | open question 1 |
 | 7 | `next/` | `compiler-ledger.json`, read by `next/apps/fabrika/src/exam/compiler.ts` | React Compiler findings, owner-approved rows | 0 | 2026-11-05 | this plan, slice 9 |
 | 8 | today's | `stylelint.config.ts` `known` lists, read by `oxlint-plugins/stylelint.ts` | CSS breaks in `apps/fabrika/src/window/window.css`: token-exists 28, no-raw-color 20, font-size-from-scale 6 | 54 | 2026-11-08 | this plan, slice 10 |
-| 9 | both | `oxlint-plugins/lint.ts` `ADVICE` set, plus 8 `"warn"` levels in `.oxlintrc.json` | 6 rules print and never fail | 6 rules, 922 fires | 2026-10-31 | being fixed: PR 1194 (0523), PR 1170 |
+| 9 | both | `oxlint-plugins/lint.ts` `ADVICE` set, plus 8 `"warn"` levels in `.oxlintrc.json` | 6 rules print and never fail | 6 rules, 922 fires | 2026-10-31 | being fixed: PR 1194, PR 1170 |
 | 10 | today's | `.oxlintrc.json` overrides 6 and 8 to 13: a rule `"off"` for one named product file | `no-project-settings` in `rules.ts`; `no-redacted-value` in six `packages/fabrika/src/host/` files (9 lines) | 7 overrides | 2026-10-31 | open question 2, slice 11 |
 | 11 | none | `.oxlintrc.json` override 7: two rules `"off"` for `experiments/**` | nothing: `experiments/` holds no code file on main | 1 override | 2026-10-31 | this plan, slice 2 |
 | 12 | `next/` | `.oxlintrc.json` overrides 32, 39, 43, 44, 46 replace the import ban list and drop entries | the `useState` ban (5 overrides), the `_electron` ban (1), `@decimalturn/toml-patch` (1) | 5 overrides, 0 code hits | 2026-11-10 onward | this plan, slice 2 |
@@ -81,7 +81,7 @@ Not waivers, checked and left as they are:
   narrow nothing the rule exists for.
 - **Stricter overrides** (0, 1, 35, 36, 40, 41): they add bans or allow only a few imports.
 - **`ignorePatterns`**: `**/fixtures/**` (toy repos, the tests' subject), `**/experiments/results/**`
-  (saved output, [0006](../../.decisions/0006-no-unused-exports.md)), `.claude/**` (symlinks that
+  (saved output), `.claude/**` (symlinks that
   would lint `.agents/` twice), and two ledger files, which go with slice 13.
 - **tsconfig `exclude`**: only `packages/fabrika` and `packages/pipeline` build configs leave tests
   out of the built package. The typecheck still reads them. `adapters/` has no `typecheck` script
@@ -90,8 +90,7 @@ Not waivers, checked and left as they are:
   typecheck pull request closes `next/apps/fabrika`'s: its `e2e/` and `e2e.ts` were outside the type
   check from 2026-11-06, hiding 19 errors. Three gaps stay, each a finding: `.agents/tsconfig.json`
   lists files one by one (72 outside); the repo root's 16 TypeScript files, which no typecheck runs;
-  today's `apps/fabrika` (2 files), frozen by
-  [0525](../../.decisions/0525-todays-version-is-frozen.md). One error it hid: every run of P19's
+  today's `apps/fabrika` (2 files), frozen by. One error it hid: every run of P19's
   L13 before that pull request sent `SIGTERM`, not `SIGKILL`, since the kill passed `signal`, a key
   Effect's `KillOptions` does not have.
 - **vitest `exclude`**: skill fixtures, and `next/packages/tuval/src/browser/key.laws.test.ts`, which
@@ -147,7 +146,7 @@ adds it.
   https://github.com/kamp-us/tea-fabrika/pull/1189. Slices 4 to 7 wait on that plan's open
   question 1, for the owner. Each slice deletes its rows. With slice 3 of this plan, which empties
   the 13 hook rows, `next-ledger.json` is then empty.
-- **The advice set** empties through decision 0523 (https://github.com/kamp-us/tea-fabrika/pull/1194)
+- **The advice set** empties through an earlier decision (https://github.com/kamp-us/tea-fabrika/pull/1194)
   and its quest: the five advice rules block folder by folder at zero, and the docs rule turns on the
   same way. `fabrika/service-id` blocks since
   https://github.com/kamp-us/tea-fabrika/pull/1186, so it is not in the set. When the last folder
@@ -229,7 +228,7 @@ built. 70% sure; a second drift after the law lands would change it.
 ```ts
 // fabrika/no-bare-disable grows one refusal (slice 2): a reason that sets a deadline is debt.
 const DEBT = /\buntil (?:PR|pull request|ticket|T)\s?#?\d+|\b(?:TODO|FIXME)\b/;
-// `-- edge: raw storage until PR 8` -> refused: "a disable line is not a way to postpone a fix (0168)"
+// `-- edge: raw storage until PR 8` -> refused: "a disable line is not a way to postpone a fix"
 // `-- edge: defer Alchemy loading until telemetry is disabled` -> passes: "until" with no PR or ticket
 ```
 
@@ -241,7 +240,7 @@ const DEBT = /\buntil (?:PR|pull request|ticket|T)\s?#?\d+|\b(?:TODO|FIXME)\b/;
    `{file: ".../css.test.ts", rule: "vitest(no-hooks)", code: "afterEach(() => {"}` and waives it.
 2. The tests step rewrites the test: each test opens its home with
    `Effect.acquireRelease(makeHome, (h) => Effect.sync(() => rmSync(h, {recursive: true, force: true})))`
-   inside `it.effect`, as [0061](../../.decisions/0061-resources-are-acquired-in-a-scope.md) says.
+   inside `it.effect`, as says.
    Same assertions, same generators.
 3. Oxlint reports nothing for that file. `lint.ts`'s whole run finds the row unmatched, prunes it,
    and the commit carries the shorter `next-ledger.json`.
@@ -402,7 +401,7 @@ pull request, and is fast-tracked under 0168 (it changes no law's assertions or 
    ban messages to name their paths. Fix `record.ts:102`: type the Durable Object state through a
    typed read of Alchemy's `state.raw` and keep only a real `edge:` reason, or none. L4 to L8.
 3. **The 13 after-hook rows** of `next-ledger.json` (row 2). Each test acquires what it holds with
-   `Effect.acquireRelease` in its own scope (0061); the four mock resets get the same shape. Run by
+   `Effect.acquireRelease` in its own scope; the four mock resets get the same shape. Run by
    the tests step, since every file is an exam path.
 4. **Lead tooling, mutation scripts** (38 rows of `agents-ledger.json`): `sample.ts` onto Effect's
    platform services and no Promises; `run.test.ts` onto `it.effect`.
@@ -413,7 +412,7 @@ pull request, and is fast-tracked under 0168 (it changes no law's assertions or 
    `gridOf`, `memoryHistory`) move into test support beside their tests, or go with their tests if
    the product never needs them. Delete `unreachable-ledger.json`, its CI step, and the
    `ignorePatterns` and `.oxfmtrc.json` entries. L12. Today's version: this is a fix CI needs under
-   the ruling (0217).
+   the ruling (0002).
 8. **`next/` layer exceptions** (row 5, 6 rows, ticket 641): the telemetry database laws take a Sql
    maker as a suite, and `storage()` moves down beside the ledger's test support, so no test imports
    up. Delete the 6 rows. L13 turns on only once question 1's 34 rows are gone too.
@@ -444,7 +443,7 @@ The 34 old-pipeline layer rows (row 6) are not sliced: question 1.
 
 ## Size
 
-Each slice lands whole. No number caps one (0099).
+Each slice lands whole. No number caps one.
 
 1. Slice 1: stop growth, 90 lines.
 2. Slice 2: config holes, 350 lines.
@@ -489,7 +488,7 @@ place. Each slice's quest writes its rows in `field/` the same day.
 
 ## Decision file
 
-The ruling is [0524](../../.decisions/0524-no-list-lets-broken-code-pass.md). It leaves open the
+The ruling is. It leaves open the
 three questions below.
 
 ## Open questions

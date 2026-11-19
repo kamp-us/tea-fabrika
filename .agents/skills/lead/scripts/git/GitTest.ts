@@ -1,11 +1,10 @@
 // GitTest.layer: the Git service in memory, answering from one model of a repository: its commits,
-// each a map from path to text, and its refs. `workTree` gives the files HEAD checks out, as a
-// FileSystem, so a port that reads both git and the work tree runs with no process and no disk.
+// each a map from path to text, and its refs.
 //
 // The model answers only the calls it can answer the way git does; any other call fails with
 // GitError, never with an empty answer. git.integration.test.ts holds it to real git on small real
 // repositories, so the model stays honest as later slices add calls.
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { Git, GitError } from "./Git.ts";
 
 /** One commit's files: each path from the top, and its text. */
@@ -204,41 +203,3 @@ export const layer = (model: Model): Layer.Layer<Git> =>
       diff: (args) => answerDiff(model, args),
     }),
   );
-
-/** What a read outside the work tree answers: the no-op FileSystem's own NotFound. */
-const nothing = FileSystem.makeNoop({});
-
-/** The files HEAD checks out under `model.top`, as a FileSystem that reads them and writes nothing. */
-export const workTree = (model: Model): Layer.Layer<FileSystem.FileSystem> => {
-  const head = resolve(model, "HEAD");
-  const tree = (head === undefined ? undefined : model.commits[head]?.tree) ?? {};
-  const files = new Map(Object.entries(tree).map(([path, text]) => [`${model.top}/${path}`, text]));
-  const clean = (path: string) => path.replace(/\/+$/, "");
-
-  const children = (path: string) => {
-    const folder = `${clean(path)}/`;
-
-    return [
-      ...new Set(
-        [...files.keys()]
-          .filter((file) => file.startsWith(folder))
-          .map((file) => file.slice(folder.length).split("/")[0] ?? ""),
-      ),
-    ];
-  };
-
-  const isFolder = (path: string) => children(path).length > 0;
-
-  const read = (path: string) => {
-    const text = files.get(clean(path));
-
-    return text === undefined ? nothing.readFileString(path) : Effect.succeed(text);
-  };
-
-  return FileSystem.layerNoop({
-    exists: (path) => Effect.succeed(files.has(clean(path)) || isFolder(path)),
-    readDirectory: (path) => (isFolder(path) ? Effect.succeed(children(path)) : nothing.readDirectory(path)),
-    readFileString: read,
-    readFile: (path) => Effect.map(read(path), (text) => new TextEncoder().encode(text)),
-  });
-};

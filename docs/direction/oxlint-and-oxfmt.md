@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-10-31; CSS gets stylelint, 2026-11-07"
-summary: "These two tools lint and format the repo. Biome is gone. The custom rules are oxlint JS plugin rules that fire on the same lines. The five old advice rules block in every folder at zero, and a dirty folder's warn line keeps a rule advising there until a fill (0523). CSS and HTML linting, and some real catches of the built-in rules, are lost, each one named."
+summary: "These two tools lint and format the repo. Biome is gone. The custom rules are oxlint JS plugin rules that fire on the same lines. The five old advice rules block in every folder at zero, and a dirty folder's warn line keeps a rule advising there until a fill. CSS and HTML linting, and some real catches of the built-in rules, are lost, each one named."
 ---
 
 # Oxlint and oxfmt, and nothing else
@@ -61,8 +61,7 @@ export const noNumericDuration: CreateRule = {
   `oxlint` or `oxfmt` by hand skips this, and only `pnpm lint` counts.
 - **A warning still fails `pnpm lint`.** Oxlint has only `warn` and `error`. The five rules that
   only advised now block in every folder at zero
-  ([0523](../../.decisions/0523-advice-rules-block-where-clean.md), building
-  [0168](../../.decisions/0168-old-lint-breaks-are-fixed.md)). A folder that still has fires keeps a
+  (building). A folder that still has fires keeps a
   warn line in `.oxlintrc.json`, so the rule only advises there until a fill brings it to zero. So
   `oxlint-plugins/lint.ts` runs oxlint once and decides:
   - it prints every fire;
@@ -78,14 +77,11 @@ export const noNumericDuration: CreateRule = {
 - **A blank line stands between top-level statements and class members, and around every `if`,
   loop, `switch` and `try`; every body has braces.** Oxfmt keeps blank lines but never adds one, and
   oxlint has no padding rule, so `fabrika/padding-line-between-statements` blocks a missing one,
-  `eslint/curly` `"all"` blocks a missing brace, and `pnpm format` adds both
-  ([0021](../../.decisions/0021-a-blank-line-between-top-level-statements.md)).
+  `eslint/curly` `"all"` blocks a missing brace, and `pnpm format` adds both.
 - **Oxfmt keeps the old settings:** tabs, 100 columns, no bracket spacing, imports sorted. It leaves
   Markdown, YAML and fixtures alone, as Biome did. *Superseded 2026-11-09 for indent, width,
-  semicolons, trailing commas and bracket spacing: the format follows Effect's settings
-  ([0029](../../.decisions/0029-format-and-names-follow-effect.md)), except that semicolons and
-  trailing commas stay
-  ([0039](../../.decisions/0039-keep-semicolons-and-es5-commas.md)). Oxfmt and the import sort stay.*
+  semicolons, trailing commas and bracket spacing: the format follows Effect's settings, except that semicolons and
+  trailing commas stay. Oxfmt and the import sort stay.*
 
 ## Why it can be trusted
 
@@ -163,7 +159,7 @@ built-in rules did get weaker, and [What it costs](#what-it-costs) lists how.
 | `ban-types` | 1 | `string & {}`; three narrower rules replace it |
 
   - `no-accumulating-spread` goes on in `next/` and our tooling
-    ([0559](../../.decisions/0559-no-accumulating-spread-is-on.md), 2026-11-15), which replaces
+    (2026-11-15), which replaces
     this call there. The row above still holds for today's app.
   - Six of these stand for Biome rules that were on: `noRedeclare`, `noConfusingVoidType`,
     `noInvalidBuiltinInstantiation`, `noAccumulatingSpread`, `noArrayIndexKey`,

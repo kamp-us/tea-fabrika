@@ -18,7 +18,7 @@ no false alarm in the sample and could block after a small fix; most of the rest
 often than right.** The zero-hit rules, the
 `import` and `promise` plugins and the zero-hit Effect checks landed in
 [PR 665](https://github.com/usirin/tea-fabrika/pull/665). Later,
-[0114](../.decisions/0114-effects-team-as-the-builder.md) made 16 more Effect checks block in
+ made 16 more Effect checks block in
 `next/` only ([PR 958](https://github.com/usirin/tea-fabrika/pull/958)), after experiment
 [262](./262-effects-team-as-the-builder.md) read the checks again with all 135 on; this write-up
 does not repeat 262. What had no home until now is the false-alarm rate of each rule with hits,
@@ -65,7 +65,7 @@ FP         up to 10 hits read per rule, spread across files; FP = the line is ri
 ## oxlint, rules with hits
 
 File paths and lines in this section are **as of 2026-11-09 at `40b36a47`, not rechecked**;
-`next/`'s folders have moved since (modules, [0091](../.decisions/0091-modules-and-layers.md)).
+`next/`'s folders have moved since (modules).
 As of 2026-11-11, none of the "block" rows below is on in `.oxlintrc.json`.
 
 | Rule | Hits (files) | FP in sample | Lean | Why |

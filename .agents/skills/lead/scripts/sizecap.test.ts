@@ -158,11 +158,15 @@ describe("classify", () => {
 
   it("property: Markdown and anything under docs/ is docs; a marked file is generated, first of all", () => {
     fc.assert(
-      fc.property(fc.constantFrom("next", "apps", ".decisions", "experiments"), code, (root, [inner, name, ext]) => {
-        expect(classify(Arr.join([root, ...inner, `${name}.md`], "/"), false)).toBe("docs");
-        expect(classify(Arr.join([root, ...inner, "docs", `${name}${ext}`], "/"), false)).toBe("docs");
-        expect(classify(Arr.join([root, ...inner, `${name}.test${ext}`], "/"), true)).toBe("generated");
-      }),
+      fc.property(
+        fc.constantFrom("next", "apps", ".kalfa/decisions", "experiments"),
+        code,
+        (root, [inner, name, ext]) => {
+          expect(classify(Arr.join([root, ...inner, `${name}.md`], "/"), false)).toBe("docs");
+          expect(classify(Arr.join([root, ...inner, "docs", `${name}${ext}`], "/"), false)).toBe("docs");
+          expect(classify(Arr.join([root, ...inner, `${name}.test${ext}`], "/"), true)).toBe("generated");
+        },
+      ),
       options,
     );
   });

@@ -8,7 +8,7 @@ summary: "Talk a plan through in free form, file it as a ticket, and the plan st
 Decided 2026-11-01, with all its leans. Tier 1 goes this way once, with its last step by hand. The
 whole flow is built in `next/`.
 
-Its decided rules are in: [0222](../../.decisions/0222-free-form-plan-to-planner.md).
+Its decided rules are in:.
 
 **The answer:** a person and an agent talk a plan through in free form. It goes in the
 tracker as a ticket. The plan step turns that text into the real plan, and the owner

@@ -79,7 +79,7 @@ runs every job, so "after each merge" needs no new job, only a reader for its re
 | `next` `e2e.ts` and edges (shard 1) | an empty e2e folder fails; an edge goes unlisted | undoable; edges is advice | 11; edges not measured | after each merge |
 | e2e on macOS (Electron, ruler) | the daily app's window rules break | undoable: a revert or fix; the owner's app runs from the checkout | 253 | after each merge |
 | aria (in e2e) | nothing: advice only, `continue-on-error` | undoable | 19 | after each merge |
-| mutation, hourly (0066, 0123) | already after | undoable: a survivor is a missing test | not in 268 | on a schedule, as now |
+| mutation, hourly | already after | undoable: a survivor is a missing test | not in 268 | on a schedule, as now |
 | main's full suite on push | already after | | 834 (run level) | after each merge, as now |
 
 Today's three things that guard lasting harm and run off CI (the leak grep, `loosening.sh`, the
@@ -130,7 +130,7 @@ merge. They answer fast: the whole `check` job is 164 s, typecheck 50 s, lint 66
   request CI "only checks each one in isolation", so "check the combination, before it goes to
   master". [GitHub's merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
   runs the required checks against main plus the changes ahead. It is not offered to this repo
-  (0107). The original "not rocket science rule" post was not reachable (two addresses gave 404),
+  (0034). The original "not rocket science rule" post was not reachable (two addresses gave 404),
   so its wording is not quoted here.
 
 **What exists here today.**
@@ -148,7 +148,7 @@ merge. They answer fast: the whole `check` job is 164 s, typecheck 50 s, lint 66
 
 **What it would need, from the known way.** Each item is small, and none exists yet:
 
-1. A reader: the main watcher (0108), or a step in main's run that files the ticket (0131), with
+1. A reader: the main watcher, or a step in main's run that files the ticket, with
    the merge's commit.
 2. A stop: the merge script and later the merge queue read main's last run, and while it is red
    land only the fix or a revert. This is Google's norm made code. The doubt is Google's own: a
@@ -171,7 +171,7 @@ fewer tests on the pull request; this proposal runs fewer too.
 
 **In 0131.** Its binding constraint "A test moves here only for being slow because of real
 processes." would become "a test moves here when the harm it guards can be undone", and its title
-would widen. "A check against lasting harm never moves here (0108)" stays as it is: it is this
+would widen. "A check against lasting harm never moves here" stays as it is: it is this
 write-up's sorting line. "The list of tests that run only on main is one named place in the repo"
 stays, and becomes the list of the before-merge set instead, since that set is the shorter one.
 

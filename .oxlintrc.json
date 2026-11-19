@@ -3897,6 +3897,7 @@
       "files": [
         "kalfa/ci/**",
         "kalfa/ledger/**",
+        "kalfa/records/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/codehost/**",
@@ -3964,6 +3965,7 @@
       "files": [
         "kalfa/ci/**",
         "kalfa/ledger/**",
+        "kalfa/records/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
@@ -4087,6 +4089,7 @@
       // 0562: no tagged type written by hand.
       "files": [
         "kalfa/ci/**",
+        "kalfa/records/**",
         "kalfa/config/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/ci/**",
@@ -4137,6 +4140,7 @@
       "files": [
         "kalfa/ci/**",
         "kalfa/ledger/**",
+        "kalfa/records/**",
         "kalfa/config/**",
         ".github/ci/**",
         "next/apps/fabrika/**",

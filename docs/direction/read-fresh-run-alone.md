@@ -7,8 +7,7 @@ summary: "A stage reads the facts again at the moment it acts, so every stage ma
 
 Decided 2026-10-11, while sketching the ship machine.
 
-Its decided rules are in: [0397](../../.decisions/0397-a-step-reads-fresh-and-runs-alone.md),
-[0398](../../.decisions/0398-each-write-reads-the-facts-again.md).
+Its decided rules are in:,.
 
 ## What was decided
 

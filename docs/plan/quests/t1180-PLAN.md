@@ -1,4 +1,4 @@
-Approved by the lead agent, builds the sev1 fix of ticket 1180 (0542, 0036), with amendment 1, as the lead (fabrikaa-merger) approved it; body 010e3c9d1a45
+Approved by the lead agent, builds the sev1 fix of ticket 1180, with amendment 1, as the lead (fabrikaa-merger) approved it; body 010e3c9d1a45
 Plancheck-Version: 3
 
 ```ts
@@ -13,9 +13,9 @@ const denied = control(forged, env, Redacted.make(bearer), {}).pipe(Effect.provi
 
 // 2. instance-one-file.integration.test.ts and 3. counter's runner.laws.integration.test.ts.
 //    Before (main, since PR 1619): the law sends the counter a Msg keyed on `type`, which no longer
-//    names a counter case (decision 0569), so the door answers bad_input and the runner bad_msg.
+//    names a counter case (an earlier decision), so the door answers bad_input and the runner bad_msg.
 m: { type },                       input: { type: "inc" },
-// After: the counter's own Msg, made by its maker (0562); `fabrika/no-hand-tag` refuses `{ _tag: type }`.
+// After: the counter's own Msg, made by its maker; `fabrika/no-hand-tag` refuses `{ _tag: type }`.
 m: CounterMsg.cases[type].make({}), input: CounterMsg.cases.inc.make({}),
 ```
 
@@ -23,19 +23,16 @@ m: CounterMsg.cases[type].make({}), input: CounterMsg.cases.inc.make({}),
 
 `next/` only. Ticket 1180, sev1 [issue 1631](https://github.com/kamp-us/tea-fabrika/issues/1631),
 branch `fabrikalfa/t1180-integration-after-1644` from origin/main at dcb99bd4d. It changes no product
-code, no expected value, no seed, no run count, no timeout and no retry
-([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)), and walks back no decision.
+code, no expected value, no seed, no run count, no timeout and no retry, and walks back no decision.
 
 **Said plainly first:** two pull requests each changed a contract, and some integration laws were
-not moved with them. Integration laws run only in main's full run
-([0602](../../../.decisions/0602-integration-laws-leave-merge-line.md)), so nothing before the merge
+not moved with them. Integration laws run only in main's full run, so nothing before the merge
 saw it.
 
 - **Law A**, the `[secrets]` control edge law: PR 1644 made `control` ask the new `Dispatcher`
   service. The law calls `control` through `Reflect.apply`, typed without services, and never
   provides `DispatcherLive.layer`, so the run dies with "Service not found".
-- **Law B**, P16's "p33 complete output and T10 recovery": PR 1619 keyed every Msg on `_tag`
-  ([0569](../../../.decisions/0569-tea-msgs-are-keyed-on-tag.md)). The law still sends
+- **Law B**, P16's "p33 complete output and T10 recovery": PR 1619 keyed every Msg on `_tag`. The law still sends
   `m: { type }`, the door finds no `_tag`, answers `bad_input`, and `answer.result` is `undefined`.
 - **Laws C and D**, two counter runner laws the bisect did not reach: they hand the runner
   `input: { type }` the same way, and the runner answers `refused` with reason `bad_msg`, so the
@@ -102,9 +99,8 @@ finds only lines 550, 557 and 565 above. `reload.visual.test.ts` line 304 alread
 `Tag.cases[type].make({})`.
 
 **Proof (Amendment 1):** visual laws run on a pull request only with the `visual` label
-([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md), 0602) and in a
-branch's proof run. Law G spawns its child and signals it, so it runs only on disposable CI
-([0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md)), never on a laptop and never here. Law
+(0602) and in a
+branch's proof run. Law G spawns its child and signals it, so it runs only on disposable CI, never on a laptop and never here. Law
 F starts Chromium and a real brain; it also runs on CI. So the lead proves both on the pull request
 with the `visual` label, or on a branch proof run at the head, and the tests step does not run them
 locally.
@@ -210,7 +206,7 @@ confirms both, with the error the reading predicted.
   `turn` then decodes that answer as `SealedTurn` (a `stepped` case), which fails at once and fails
   the law fast, with a schema error. So that path explains a fast failure, not a 60-second
   timeout, and the law does not fail that way on any run. The code does not show this ticket's
-  cause, so no fix is planned, and no timeout changes (0036).
+  cause, so no fix is planned, and no timeout changes.
 - The doubt, for the lead's finding row: in `outbound` mode the law expects `outbound: "allowed"`,
   which needs the program's fetch to settle after `init`, so the `{ type: "read" }` step should
   run there. That it passes means either the step is not reached or I misread the step path. I did
@@ -253,7 +249,7 @@ confirms both, with the error the reading predicted.
    change is a law's own wiring. The lead skill says a test-only fix still runs every step, so the
    build step runs, confirms no product line is needed, and runs the plants.
 6. **Of run 44416548062's five red laws, the four whose cause is one of the two contract changes are
-   in this pull request, and law E is not** (80%): a `type`-keyed Msg (0569) or a missing
+   in this pull request, and law E is not** (80%): a `type`-keyed Msg or a missing
    `Dispatcher` (PR 1644) in a law's wiring is this ticket; a timeout under load is a different fix,
    and this pull request should land whole and fast as the sev1 fix. The lead files law E as a
    finding row; its section above gives what the code shows for it.
@@ -364,12 +360,11 @@ then checks that no secret reached any output.
 | D: "L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter" (unchanged expectations) | test | fc.array: `fc.nat()`, 2 to 24 items, seed 119120, 3 runs fast and 20 runs full | Main as it is (red on run 44416548062 at line 523, counterexample `[[0,0]]`). After build: line 512 sends `CounterMsg.cases.inc.make({})` for every cell (red: the hand count disagrees on a `dec` or `reset` cell) | `next/programs/counter/src/runner.laws.integration.test.ts` | As law C |
 | A Msg in these laws is never a hand-written `_tag` literal | lint | lint | After build: `m: { _tag: type }` at line 948: `fabrika/no-hand-tag` fails `pnpm lint` | `oxlint-plugins/no-hand-tag.ts` (unchanged) | `pnpm lint` on every pull request |
 | F (Amendment 1): "S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages" (unchanged expectations; the expected Msg is the counter's own, made by its maker) | test | fc.array: `fc.nat()` picks, 1 to 10 items, seed 119120, 3 runs fast and 20 runs full | Main as it is (red on run 44418704040: `getOrThrow called on a None` at line 527). After build: line 550 back to `program.step(model, { type })` (red, the same); line 557 back to expecting `{ type }` (red: the page emits `{ _tag: "inc" }`) | `next/apps/fabrika/e2e/one-file.visual.test.ts` | Main's full run; a pull request with the `visual` label, or a branch proof run |
-| G (Amendment 1): "generated fault walks: success, setup failure, test failure and interruption after each reached acquisition" (not changed) | test | fc.array: `fc.record` of a pick, a kind and a signal, seed 119120, 3 runs | Main as it is (red: the plain child exits 1, line 239). After build: line 565 of the child back to `{ type }` (law F red, so the plain child exits 1 and G is red) | `next/apps/fabrika/e2e/resources.laws.visual.test.ts` | As law F; it signals its child, so CI only (0594) |
+| G (Amendment 1): "generated fault walks: success, setup failure, test failure and interruption after each reached acquisition" (not changed) | test | fc.array: `fc.record` of a pick, a kind and a signal, seed 119120, 3 runs | Main as it is (red: the plain child exits 1, line 239). After build: line 565 of the child back to `{ type }` (law F red, so the plain child exits 1 and G is red) | `next/apps/fabrika/e2e/resources.laws.visual.test.ts` | As law F; it signals its child, so CI only |
 
 No law here is host-only in 0178's sense: no launchd, no Electron, no signal. Law B starts a real
 workerd child, which the local config's host guard refuses (`vitest.config.ts`, the
-`fabrika-local-host-only` plugin), so it runs on disposable Linux CI under
-[0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), never on the owner's laptop. These are
+`fabrika-local-host-only` plugin), so it runs on disposable Linux CI under, never on the owner's laptop. These are
 existing `.integration.` laws; no new integration file is added, so 0581's stand-in question does
 not arise.
 
@@ -384,7 +379,7 @@ lead's hand check of each hit:
 - dev-secrets: the call is typed and gets the live `Dispatcher` that `control` asks for since PR
   1644; the `denied` call gets it too, for the type. Every expect is unchanged.
 - instance-one-file and counter's runner laws: the Msg is the counter's own, keyed on `_tag` since
-  PR 1619 (0569). `{ type }` is no counter input, so these laws sent nothing they could check. The
+  PR 1619. `{ type }` is no counter input, so these laws sent nothing they could check. The
   old key's refusal stays held in `MsgKey.test.ts` and `MsgKey.types.test.ts`.
 
 ## Search results: what else in next/ has the same holes
@@ -452,7 +447,7 @@ Nothing here touches `.oxlintrc.json`, `patches/` or `pnpm-lock.yaml` (PR 1648),
 
 ## Is this a setting?
 
-No new choice is made. The Msg key is decided (0569), and the layer the edge needs is the one live
+No new choice is made. The Msg key is decided, and the layer the edge needs is the one live
 member of `Dispatcher` (`Dispatcher.ts` doc: "`DispatcherLive.layer` is the one live member").
 
 ## Records
@@ -478,7 +473,7 @@ member of `Dispatcher` (`Dispatcher.ts` doc: "`DispatcherLive.layer` is the one 
 
 ## Real-run proof
 
-PR CI and a branch's proof run never start an `.integration.` law (0602). So the lead proves all
+PR CI and a branch's proof run never start an `.integration.` law. So the lead proves all
 four laws as in the bisect: a throwaway push-triggered workflow at the branch head that runs
 `dev-secrets.laws.integration.test.ts`, `instance-one-file.integration.test.ts` and
 `next/programs/counter/src/runner.laws.integration.test.ts` on disposable Linux CI, with no
@@ -486,7 +481,7 @@ fail-fast, and records the run URL in the pull request. Main's next full run goi
 issue 1631. No window changes, so no screenshots.
 
 - (Amendment 1) Laws F and G are visual laws: they run on the pull request with the `visual` label
-  (0536) or on a branch proof run at the head, on CI only. Law G signals its child, so 0594 keeps it
+ or on a branch proof run at the head, on CI only. Law G signals its child, so 0594 keeps it
   off every laptop, this box included. The tests step does not run either locally.
 
 ## What this cannot tell us

@@ -9,8 +9,7 @@ Read on 2026-11-13, on `origin/main` at `f18bea901`. It covers today's hand-run 
 used for work in both versions. This is reading, not a measurement of agent behavior: nothing ran
 but `wc`, `rg`, `git`, two read-only `gh pr view` calls and two small counting scripts. No model,
 no key, **$0**. No script is kept: each count is one command, written beside its number. This page
-was written on its branch from its first line
-([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)).
+was written on its branch from its first line.
 
 **The answer: 578 of the 2,928 lines of skill text can be cut with proof, which is about 49 KB of
 186.5 KB. More than half of that is in one file, the lead skill.**
@@ -25,7 +24,7 @@ was written on its branch from its first line
 - **About 205 lines can be cut by hand today with no judgment.** The rest needs a person's read,
   because a fact must be checked against a script header before its prose goes.
 - **The root `AGENTS.md` is not audited here.** It is 722 lines and 58.7 KB, another agent is
-  cutting it under [0129](../.decisions/0129-agents-md-becomes-a-short-map.md), and this page only
+  cutting it under, and this page only
   names it as the other home of a duplicate.
 
 ```text
@@ -54,9 +53,9 @@ Each finding below names the yardstick it comes from.
   one trigger per branch in a description, and steering by "never" as a failure mode. Phoenix's own
   `AGENTS.md` is 72 lines.
 - **Y3.** This repo's decisions: 0129's three moves,
-  [0130](../.decisions/0130-every-piece-of-knowledge-has-one-home.md) (one home per kind),
-  [0115](../.decisions/0115-decided-rules-live-in-decision-files.md) (a decided rule lives in a
-  decision file) and [0408](../.decisions/0408-skills-keep-only-judgment.md) (a skill keeps only
+ (one home per kind),
+ (a decided rule lives in a
+  decision file) (a skill keeps only
   reading, judgment and writing, and nothing leaves before its check has landed).
 
 ## The files
@@ -125,18 +124,18 @@ Y1's red flag "Duplicate info across multiple files", and Y2's single source of 
 | What is said | Where, every place | Cut |
 |---|---|---|
 | The decision file template and its three notes | `adr/SKILL.md` 39 to 68, and again at 72 to 102 | 30 lines; keep the second |
-| The Mermaid rules, the diagram-type table, what breaks on GitHub | `adr/SKILL.md` 178 to 204 and `write-pattern/SKILL.md` 203 to 233, near word for word; rule one is also in decision 0005, lines 62 to 63 | 27 lines; one shared reference file both skills point at |
+| The Mermaid rules, the diagram-type table, what breaks on GitHub | `adr/SKILL.md` 178 to 204 and `write-pattern/SKILL.md` 203 to 233, near word for word; rule one is also in an earlier decision, lines 62 to 63 | 27 lines; one shared reference file both skills point at |
 | The 13 review clauses ("Sweep, do not sample" to "End with exactly one answer: line") | `review/SKILL.md` 25 to 34 and 66 to 78, and `lead/SKILL.md` 76 to 98 | 23 lines in the lead skill; the brief's first line already says "Use the review skill" |
 | What a recheck is | `review/SKILL.md` 93 to 100 and the recheck message in `lead/SKILL.md` 167 to 173 | 7 lines |
 | "Something wrong that your task does not cover is one finding row" with its three-line pointer | `lead` 684 to 688, `build` 42 to 45, `tests` 97 to 100, `plan` 69 to 72, `mutation` 189 to 192, `README.md` 36 to 41, and the root `AGENTS.md` table, which every step reads first | 4 lines in each of four step skills |
 | The prototype and walk-page rules | `guidelines/SKILL.md` 207 to 253 and `references/deck-structure.md` 82 to 101 and 150 to 242; line 205 of the skill already says to follow that file | 46 lines |
 | The six fields of a principle | `guidelines/SKILL.md` 168 to 175 and `references/guideline-page.md` 26 to 35 and 89 to 97 | 8 lines |
-| Who runs which step, one fresh agent a step, containers for ports | `lead/SKILL.md` 196 to 229 and the root `AGENTS.md` bullets "One fresh agent per step" and "A step that needs ports", with decisions 0045, 0064 and 0177 | 22 of 34 lines: one line and a link each (0129's second move) |
+| Who runs which step, one fresh agent a step, containers for ports | `lead/SKILL.md` 196 to 229 and the root `AGENTS.md` bullets "One fresh agent per step" and "A step that needs ports", with an earlier decision, 0064 and 0177 | 22 of 34 lines: one line and a link each (0129's second move) |
 | Lead tooling is fast-tracked | `lead/SKILL.md` 703 to 708 and the root `AGENTS.md`, word for word | 5 lines |
 | Decisions land at once | `lead/SKILL.md` 712 to 727, the root `AGENTS.md` rule of thumb, and `adr/SKILL.md` 8 to 10 and 173 to 175 | 14 lines |
 | Where code goes in `next/` | `plan/SKILL.md` 113 to 118 and the root `AGENTS.md`, word for word | 6 lines |
 | A plan comes back unsigned and only the lead session approves | `plan/SKILL.md` 8 to 10, 87 and 111, `lead/SKILL.md` 54 and 550 to 556, `README.md` 43 to 46 | 5 lines |
-| The host-only law rule | `lead/SKILL.md` 569 to 572 and again at 587 to 593, `build/SKILL.md` 57 to 63, `plan/SKILL.md` 43 to 46, the root `AGENTS.md` and decision 0178 | 4 lines in the lead skill |
+| The host-only law rule | `lead/SKILL.md` 569 to 572 and again at 587 to 593, `build/SKILL.md` 57 to 63, `plan/SKILL.md` 43 to 46, the root `AGENTS.md` and an earlier decision | 4 lines in the lead skill |
 | Linear as the builder, fewer boxes, the five layouts | `guidelines/SKILL.md` 74 to 80, 105 to 106 and 107 to 110, and the root `AGENTS.md`, "Changing the product" | 11 lines |
 | The `gh stack` commands | `lead/SKILL.md` 53, 561 to 565 and 633 to 643, and `README.md` 56 to 59 | 2 lines, with the README lines below |
 | The step skills, summed up again | `README.md` 43 to 59 restates the plan, step-commit, review and lead skills | 17 lines |
@@ -195,26 +194,26 @@ Y1's Currency criterion. Each was checked by looking.
 
 - **`README.md` line 13** says the mutation skill is "a fixed StrykerJS sample on the build's
   files, then laws for real survivors". The mutation skill's own line 8 says mutation is no step
-  of a pull request (0066).
+  of a pull request.
 - **`lead/SKILL.md` lines 314 to 315 and 632** say a commits check is left to CI and that catch-up
   waits for it. `.github/workflows/` holds only `check.yaml` and `mutation.yaml`, and 0161 records
   that the `commits` workflow came out in pull request 1134.
 - **`lead/SKILL.md` line 537** links a rule suite at the repo's old address.
 - **`guidelines/SKILL.md` line 103** calls program guidelines "PR 332, proposed". Pull request 332
   is merged.
-- **`guidelines/SKILL.md` lines 183 to 184** say to add a `docs/guidelines/` row to the root
+- **`guidelines/SKILL.md` lines 183 to 184** say to add a `.kalfa/guidelines/` row to the root
   `AGENTS.md` table if it is missing. The row is there.
 - **The lead skill misses the host step,** as the answer says.
 
 Three bigger blocks are stale by decision but still match the code, so they are **not** in the
 578:
 
-- **Signing.** [0161](../.decisions/0161-no-step-signing-by-hand.md) and
-  [0164](../.decisions/0164-the-bot-stays-without-signing.md) say no step signs a commit, and that
+- **Signing.** and
+ say no step signs a commit, and that
   the lead, step-commit, tests and build skills lose that prose in the pull requests that make the
   scripts plain. Until then the tooling still signs. `grep -ci sign` finds 42 lines in the lead
   skill and 18 in step-commit, whose 65 lines are mostly about signing.
-- **Landing.** [0162](../.decisions/0162-no-friction-before-a-merge.md) retires `catchup.sh` as the
+- **Landing.** retires `catchup.sh` as the
   way to merge. Pull request 1136 does it and is an open draft. It changes the lead skill by 53
   lines added and 38 removed, so the skill grows by 15.
 - **A lane parked inside a mutation step from before 0066.** About 45 lines serve it:

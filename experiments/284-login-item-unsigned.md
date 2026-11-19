@@ -9,7 +9,7 @@ Run on 2026-11-13 (Pacific), on GitHub's hosted `macos-15` runner: macOS 15.8.2 
 arm64, user id 501, in a real login session (`launchctl managername` says `Aqua`). Electron 45.2.1,
 the installed version. It is about `next/`, for the "open at login, menu bar icon only" setting. No
 model, no key, no account: **$0**. Nothing ran on a person's Mac. This page was written on its
-branch from its first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)).
+branch from its first line.
 
 **The answer: yes. macOS takes the registration from a build with no paid signature, as long as the
 binary carries any signature at all, even the free ad-hoc one. A bundle with its signature removed
@@ -35,7 +35,7 @@ and no packager in its `package.json`; its `build` script builds the brain. Toda
 (`apps/fabrika`) starts as `electron .`, Electron's own binary running our files. No
 `electron-builder`, `@electron/packager` or forge is in any `package.json`. So the first shape below
 is what runs today, and the other three are what a packaged build could be.
-[0280](../.decisions/0280-the-app-starts-a-launchd-brain.md) has the app start the brain, so the
+ has the app start the brain, so the
 login item is the app's alone.
 
 ## What ran
@@ -98,8 +98,7 @@ itself is the open part below.
   A runner never logs in again; every reading here says `wasOpenedAtLogin: false`. The test that
   settles it, on a real Mac: build the ad-hoc signed bundle, put it in `/Applications`, turn the
   setting on, log out and in again (and once more after a restart), and have the app write
-  `getLoginItemSettings()` to a file at start. That test runs only under
-  [0178](../.decisions/0178-host-only-laws-run-first.md): after the lead has read its lines and the
+  `getLoginItemSettings()` to a file at start. That test runs only under: after the lead has read its lines and the
   owner has said yes.
 - **A bundle that was downloaded.** Ours was made on the machine, so it had no quarantine mark. A
   build sent to the second person does, and Gatekeeper may block its start before any login item

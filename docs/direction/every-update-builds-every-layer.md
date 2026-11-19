@@ -32,7 +32,7 @@ desktop (Tuval)   one core, with browser, Electron and headless on subpaths of
                   @kampus/tuval, and a menu bar with Approve and Remove
 ```
 
-*Changed 2026-11-11 ([0137](../../.decisions/0137-tier-1s-program-is-the-checklist.md)): pass D is
+*Changed 2026-11-11: pass D is
 now the checklist, which a person fills and agents check with a note through MCP, and D2 brings the
 same checklist back; notes, drawn as Markdown, is Tier 2's first real app.*
 
@@ -45,7 +45,7 @@ same checklist back; notes, drawn as Markdown, is Tier 2's first real app.*
   links, trap exit and leases stay in Tier 4, since Tier 1 has no process that starts another
   and no claims. *Changed 2026-11-06: this note and the tiers gave Tier 1's coordination only the
   mailbox, who belongs and grants, which clashed with the five layers' header.*
-  *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)): the restart follows OTP's top-level supervisor, at once and
+  *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): the restart follows OTP's top-level supervisor, at once and
   with no backoff; past the brake a name is `failed` until a person restarts it.*
 - **A pass is not done until it runs everywhere it should.** "Everywhere" means a
   browser tab and an Electron window, on the laptop and on Cloudflare, one command

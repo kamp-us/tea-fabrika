@@ -4,11 +4,11 @@ Plancheck-Version: 3
 # Plan: `@kampus/vitest` gets a `Recorder`, the one typed way a law watches a service's calls (ticket 1067)
 
 This is `next/` and our tooling (`.agents/`, the `oxlint-plugins` folder, the CI scripts). Today's
-app is not touched. It builds [0579](../../../.decisions/0579-property-laws-use-it-prop.md) ("the
+app is not touched. It builds ("the
 it.prop and Recorder decision", the owner's ruling of 2026-11-15), which answers the open "way to
-spy" of [0555](../../../.decisions/0555-no-vi-mock-or-domock.md), inside the toolbox rule of
-[0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md) and the placement rule of
-[0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md) (test layers stay beside
+spy" of, inside the toolbox rule of
+ and the placement rule of
+ (test layers stay beside
 their service).
 
 ```ts
@@ -58,7 +58,7 @@ and failure switches it replaces one for one, and the settings command's law in
 ## The package's name
 
 The plan says `@kampus/vitest`, the name on main today (`next/packages/vitest/package.json`). 0557
-renames the package to `@kalfa/vitest` and moves it to `kalfa/vitest` (0556), but that rename is
+renames the package to `@kalfa/vitest` and moves it to `kalfa/vitest`, but that rename is
 its own pull request, not on main and not open, and it changes one import line in every file that
 names the package. Building on the name that resolves today lets this land now. The rename then
 changes the new import lines with the rest. Call: 90%.
@@ -80,7 +80,7 @@ changes the new import lines with the rest. Call: 90%.
   0579 says `args`, so the key is `args`, not Effect's `parameters`.
 - **Effect's fakes that control, not record.** `TestClock` in the same folder is a fake clock a law
   moves by hand. It records nothing, so it is the other kind of double. The Recorder does not try to
-  be one: a stateful fake stays in its service's own test layer (0538), and the Recorder wraps it.
+  be one: a stateful fake stays in its service's own test layer, and the Recorder wraps it.
 - **Effect's partial service.** `Layer.mock(Service, part)` (`node_modules/effect/src/Layer.ts`,
   stable) types a part of a service against its interface with `Layer.PartialEffectful<S>`: every
   member that is not effectful must be given, and an effectful member left out dies with an
@@ -89,8 +89,7 @@ changes the new import lines with the rest. Call: 90%.
   way Effect's makers already made it work.
 - **`@effect/vitest` has no spy.** Its `src/index.ts` (4.1.3) re-exports all of `vitest` and adds
   `it.effect`, `layer`, `prop` and friends; nothing records calls. In `Effect-TS/effect`'s own
-  tests, 0555 counted `vi.spyOn` in 22 files, so the makers spy with the test framework. We do not
-  (0555, 0557).
+  tests, 0555 counted `vi.spyOn` in 22 files, so the makers spy with the test framework. We do not.
 - **What a spy keeps, in the tools people use.** Vitest's `mock.calls` keeps each call's arguments,
   and `mock.results` keeps `{ type: "return" | "throw" | "incomplete", value }` per call (vitest.dev,
   fetched 2026-11-15). Sinon's spy call keeps `args`, `returnValue` and `exception` (from memory;
@@ -324,7 +323,7 @@ The Recorder's own laws use a small made-up service in the test file, since the 
 service of ours (0538, held by `fabrika/package-imports`). Made up for the laws, and nowhere else: a
 service `Shelf` with an Effect method that can fail (`put(name, count)`), one that cannot
 (`count(name)`), an Effect member (`size`), a Stream method (`watch(name)`) and a plain data member.
-Property laws are `it.effect.prop` with Schemas as inputs (0579), and the seed is the package's.
+Property laws are `it.effect.prop` with Schemas as inputs, and the seed is the package's.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -397,7 +396,7 @@ Property laws are `it.effect.prop` with Schemas as inputs (0579), and the seed i
 - **The two proof sites are `PushesTest` and the settings command's law,** 85%. Every `vi.fn` with
   a `toHaveBeenCalled*` matcher on main stands in for either a plain function argument (the
   `transport/` laws), a platform object (the `cloudflare/` laws) or a service inside an
-  integration law of the app, whose folder is busy and whose laws run only on the schedule (0536).
+  integration law of the app, whose folder is busy and whose laws run only on the schedule.
   None is a cold service site whose law runs on every pull request. `PushesTest` is the ruling's
   case exactly: a service of ours, a hand log of its calls and a failure switch per method.
   `Command.test.ts` is in `next/`, type-checked, run on every pull request, and on Effect's own
@@ -408,7 +407,7 @@ Property laws are `it.effect.prop` with Schemas as inputs (0579), and the seed i
   in hand, rather than this plan guessing its shape.
 - **Is this a setting?** No, for each choice. `fails`, the record's keys and the read forms are
   parts of a test helper's API, written in test code. Nothing a person running fabrika picks, so no
-  `fabrika.toml` value (0069).
+  `fabrika.toml` value.
 - **What fact is lost if not recorded now?** None. A call record lives only inside one test run and
   is never stored. The answer can be added to the record later with nothing lost, since every
   run records it fresh.
@@ -443,7 +442,7 @@ the `oxlint-plugins` folder and the CI scripts, one match per call.
 | Folder | `vi.fn` | `toHaveBeenCalled*` | `spyOn` | What it watches, and what it needs first |
 |---|---|---|---|---|
 | `libfabrika/src/transport` | 9 | 11 | 1 | `admit`, `consume` and `route` passed as plain functions to `checkHello` and `answerFrame`; 1 `crypto.subtle` spy. Needs a product change: those arguments become a service the law records. Slice 1 landed in #1526; slice 2 (the hello's admission, `Admissions`) is built in #1638. The folder's lock waits: its lint rule (L1) is not in that round |
-| `libfabrika/src/cloudflare` | 8 | 0 | 15 | WebSocket and object-state doubles, which are platform fakes for this package (0554, 0557), not the Recorder; spies on `Effect.result` 3, `ProgramRunner.withLoader` 3, `SpanSink.layer` 3, `ProjectClient.make` 1, `Tracer.NativeSpan.prototype` 1, `console` 1, `process.stdout` and `process.stderr` 2, `crypto.subtle` 1 |
+| `libfabrika/src/cloudflare` | 8 | 0 | 15 | WebSocket and object-state doubles, which are platform fakes for this package, not the Recorder; spies on `Effect.result` 3, `ProgramRunner.withLoader` 3, `SpanSink.layer` 3, `ProjectClient.make` 1, `Tracer.NativeSpan.prototype` 1, `console` 1, `process.stdout` and `process.stderr` 2, `crypto.subtle` 1 |
 | `libfabrika/src/node` (the `RunnerAdmission` integration law) | 4 | 0 | 0 | platform namespace doubles; platform fakes, not the Recorder |
 | `libfabrika/src/node/dev` | 0 | 2 | 15 | `fetch` 7, `process.kill` 6, `console` 2; all need a product change first |
 | `libfabrika/src/node/client` | 0 | 0 | 3 | `console` 1, `process.stdout` and `process.stderr` 2; product change first |

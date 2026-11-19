@@ -1,7 +1,7 @@
 // Ban a test whose ONLY assertions are branch-gated: an `expect(...)` nested inside an
 // `if` in a test body that has no unconditional assertion at all. IN TEST FILES ONLY.
 //
-// Rationale (single site; .patterns/unconditional-test-assertions.md): a test whose only
+// Rationale (single site; .kalfa/patterns/unconditional-test-assertions.md): a test whose only
 // `expect(...)` sits inside an `if` passes vacuously whenever the branch isn't entered: the
 // assertion never runs, no failure is raised, and the suite goes green while proving nothing.
 // This is the pipeline's structural test blind spot: coder-written tests are the bulk of new

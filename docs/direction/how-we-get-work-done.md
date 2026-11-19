@@ -1,16 +1,15 @@
 ---
 state: "decided 2026-11-11"
-summary: "Step 1 to 3 of decision 0059's order, before `next/`'s pipeline is designed, redone on the teams where agents do most of the work (0059's ticket 645 amendment); today's version is the evidence. The loop in plain words (decide, shape, do, check, ship, learn), then in fabrika's words, then seven principles: a person's attention is the scarce budget (F1); a ticket with intent, run to one pull request with proof (F2); check in layers and place people by risk (F3); every miss becomes a check the same day, and stale rules leave (F4); the repo is the memory and the top file a map (F5); one writer per change (F6); code holds the edges, the agent the path inside a step (F7). The first draft's W1 to W6 are mapped onto them. Ticket 574 traced through it. From experiment 250."
+summary: "Step 1 to 3 of an earlier decision's order, before `next/`'s pipeline is designed, redone on the teams where agents do most of the work (0059's ticket 645 amendment); today's version is the evidence. The loop in plain words (decide, shape, do, check, ship, learn), then in fabrika's words, then seven principles: a person's attention is the scarce budget (F1); a ticket with intent, run to one pull request with proof (F2); check in layers and place people by risk (F3); every miss becomes a check the same day, and stale rules leave (F4); the repo is the memory and the top file a map (F5); one writer per change (F6); code holds the edges, the agent the path inside a step (F7). The first draft's W1 to W6 are mapped onto them. Ticket 574 traced through it. From experiment 250."
 ---
 
 # How we get work done
 
 **Decided 2026-11-11.** Redone on the teams where agents do most of the work, as 0059's amendment
 of ticket 645 asked. The owner walked this study on 2026-11-10 and approved the seven principles
-below as the starting point on 2026-11-11
-([0127](../../.decisions/0127-how-we-get-work-done-seven-principles.md)). The leans' confidence
+below as the starting point on 2026-11-11. The leans' confidence
 numbers stay as written. Already decided: the order of design, work first and
-the pipeline last ([0059](../../.decisions/0059-pipeline-starts-from-the-work.md)); this study's
+the pipeline last; this study's
 five-part plan, with ticket 574 as its running example and the loop starting at "decide what to
 work on next" (0059's amendment, 2026-11-10).
 
@@ -28,7 +27,7 @@ apply. There are no shots and no Design canvas. The page traces ticket 574 inste
 the loop, with ticket 574 traced through it (today's version, 2026-11-10, Pacific)
 
 decide   a test box on ticket 576 fails: the test setup reads the home folder
-         the owner rules it goes; decision 0052 merges 11:50; ticket 574 is filed
+         the owner rules it goes; an earlier decision merges 11:50; ticket 574 is filed
 shape    the lead approves a plan that builds 0052, laws L1 to L5
          A1 11:52  the test writer: the linter lacks the rule the plan named
          A2 12:38  mutation stuck twice: the code ran only at file load
@@ -36,7 +35,7 @@ do       tests 8 rounds (4 done), build 7 rounds (5 done), 11:48 to 13:18
          tests stuck twice on fetch_failed: the tools, not the work
 check    mutation: 17 killed, none left; review: sent back once, then done
          loosening.sh: 2 hits; the lead's hand check: both laws got stricter
-ship     PR 787 lands 13:28 on green CI, no owner read (0014)
+ship     PR 787 lands 13:28 on green CI, no owner read
 learn    a field note names four causes; none becomes a ticket or a finding
 cost     $19.47 at list price, 70 agent minutes; $8.81 went to rounds that stalled
 ```
@@ -113,8 +112,8 @@ is **event** in `next/` (renamed 2026-11-08); today's code says fact.
 | Shape | a plan file approved on its line 1, by the lead when it builds a decided note | a `plan` with criteria and properties, approved by version and hash |
 | Do | `test_writer` and `build`, run by `drive.ts`, chained by `chain.ts` (a tea machine) | steps are tea machines that answer in five verbs; an `attested` link per commit, checked by `next/`'s exam |
 | Check | `mutation`, `review`, CI, `leakgrep.sh`, `loosening.sh`, the lead's hand check | `mutation`, `review`, the `exam`; a person only for a `judgment` |
-| Ship | `land.ts queue` under the lead, into GitHub's merge queue (0014, 0162) | `ship`, the one merge authority |
-| Learn | `field/` rows and notes, findings a person rates, `.decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
+| Ship | `land.ts queue` under the lead, into GitHub's merge queue | `ship`, the one merge authority |
+| Learn | `field/` rows and notes, findings a person rates, `.kalfa/decisions/` | a `finding` row until Tier 6; `asked` and `answered` events, with `needed` |
 
 The full table, with a source for each name, is in experiment 250, part 8.
 
@@ -141,10 +140,9 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Cost:** one event per look.
 - **Ticket 574:** half. The owner looked once, at the rule, and nothing else asked him. But no look
   by anyone was recorded.
-- **Since the walk:** [0096](../../.decisions/0096-the-lead-fixes-forward-while-the-owner-is-away.md):
+- **Since the walk:**:
   while the owner is away, the lead leaves pull requests to read, not questions, and the owner hears
-  one line only when something cannot wait.
-  [0082](../../.decisions/0082-approvals-is-a-floor-for-every-run.md): how many people must approve
+  one line only when something cannot wait.: how many people must approve
   is one repo setting, `human-approvals`, a floor no run goes under, and an agent's look never
   counts.
 
@@ -169,9 +167,8 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Cost:** proof costs tokens per PR.
 - **Ticket 574:** follows. One ticket, one plan, one PR; the proof was CI and `loosening.sh` in a
   PR comment.
-- **Since the walk:** [0099](../../.decisions/0099-no-number-caps-a-pull-request.md): no number
-  caps a pull request; a plan cuts big work into slices that each land whole with their tests.
-  [0100](../../.decisions/0100-a-slice-over-its-own-estimate-goes-back-to-the-plan.md): a slice
+- **Since the walk:**: no number
+  caps a pull request; a plan cuts big work into slices that each land whole with their tests.: a slice
   past twice its own plan's estimate goes back to the plan.
 
 ### F3: check in layers, and place people by risk
@@ -189,8 +186,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Elm or OTP:** OTP's supervisor decides from a child's exit reason. A check's answer is a reason
   the parent reads, never a flag.
 - **What holds it:** law. Today: plan, tests, build, mutation and one review, each by its own
-  agent; the lead reads every diff, CI and the leak grep; the owner reads only real loosening
-  ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)),
+  agent; the lead reads every diff, CI and the leak grep; the owner reads only real loosening,
   [nobody writes their own exam](./nobody-writes-their-own-exam.md).
 - **The lean as walked:** keep the exam rule; add a risk tier per PR set from the paths it touches;
   try one holdout set of scenarios the builder can't see.
@@ -203,9 +199,9 @@ The full table, with a source for each name, is in experiment 250, part 8.
   here marked as wrong. [Experiment 252](../../experiments/252-risk-tiers-on-phoenix.md) replayed
   path tiers on 457 merged pull requests of kamp-us/phoenix: the high tier was not above the medium
   one in later fixes (7.4% against 9.8%), while size alone separated them (1.3% at 50 lines or
-  fewer, 11.6% over 400). [0079](../../.decisions/0079-size-counts-governed-paths-name-who.md)
+  fewer, 11.6% over 400).
   replaces that part of the lean: size sets how many people look, governed paths set who.
-  [0082](../../.decisions/0082-approvals-is-a-floor-for-every-run.md) adds the floor.
+ adds the floor.
 
 ### F4: every miss becomes a check, a rule or a skill the same day; and stale rules leave
 
@@ -223,13 +219,13 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Elm or OTP:** OTP's `code_change` moves a running process to new code and keeps its state: the
   standard changes while the work goes on.
 - **What holds it:** a check later: a note of kind failure with no link. Today a finding row is
-  rated by a person ([0035](../../.decisions/0035-outside-work-becomes-finding-rows.md)), and "a
+  rated by a person, and "a
   rule in a prompt that could be code becomes code" (AGENTS.md).
 - **Doubt:** deletion needs proof a rule is stale.
 - **Cost:** one link per note, one pass a week.
 - **Ticket 574:** breaks. Note 2026-11-10-25 names the branch move and the box limits, and nothing
   picks them up.
-- **Since the walk:** [0077](../../.decisions/0077-mutation-gaps-carry-a-category.md): each real
+- **Since the walk:**: each real
   mutation gap carries a category, and the second gap of one category files one ticket for the
   tests step to catch the whole category.
 
@@ -246,10 +242,10 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Linear as the builder:** an agent rebuilds its context from the session's activities, not from
   comments (experiment 186). The record is the memory, not the agent.
 - **Elm or OTP:** state that must survive a restart is stored, and the recovery path reads it
-  ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md)'s third test). An agent is
+  ('s third test). An agent is
   a process that restarts every run.
-- **What holds it:** taste today. This is already fabrika's habit: `.decisions/`, `docs/direction/`,
-  `.glossary/`, one fresh agent per step reading a state file. But AGENTS.md is about 685 lines.
+- **What holds it:** taste today. This is already fabrika's habit: `.kalfa/decisions/`, `docs/direction/`,
+  `.kalfa/glossary/`, one fresh agent per step reading a state file. But AGENTS.md is about 685 lines.
 - **Doubt:** no measurement here that a long file hurts. Settled by running the same step with the
   long and the short file.
 - **Cost:** a rewrite of the most-read file.
@@ -275,7 +271,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Cost:** less parallel speed inside a ticket.
 - **Ticket 574:** follows. Tests and build wrote in turn on one branch; mutation and review only
   read.
-- **Since the walk:** [0093](../../.decisions/0093-laws-walk-plants-run-once.md), a trial: its
+- **Since the walk:**, a trial: its
   second check had a fresh agent write laws from the plan alone, blind to the old tests.
   [Experiment 257](../../experiments/257-second-check-blind-laws.md) found it killed the same 98 of
   144 mutants as the old file: a second reader that writes only its own check file.
@@ -294,20 +290,17 @@ The full table, with a source for each name, is in experiment 250, part 8.
   are Linear's; the path is the agent's.
 - **Elm or OTP:** Elm's parent steps its children by hand; `update` is the edge, and the agent is a
   command whose result comes back as a Msg.
-- **What holds it:** law. Every state machine in `next/` is explicit and a tea machine
-  ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md),
-  [0046](../../.decisions/0046-one-tea-machine-per-file.md)); the quest's moves are code in
+- **What holds it:** law. Every state machine in `next/` is explicit and a tea machine; the quest's moves are code in
   `chain.ts` (today's version).
 - **Doubt:** OpenAI's lesson is secondary, and our own data is two days. Settled by running the
   same tickets through today's fixed steps and through one goal-plus-checks agent.
 - **Cost:** none to keep; an experiment to test.
 - **Ticket 574:** half. The chain ran the quest with no agent holding it. But at one edge,
   collecting a stuck commit moved the branch, and the lead fixed it by hand.
-- **Since the walk:** [0064](../../.decisions/0064-the-lead-drives-with-flows.md): the lead drives
+- **Since the walk:**: the lead drives
   work as a flow, a list of typed steps one program runs, and no agent holds a loop.
-  [0074](../../.decisions/0074-agent-hands-over-a-flow.md): an agent that composes work hands
-  fabrika a flow as data, so the goal is the agent's and the loop is fabrika's.
-  [0070](../../.decisions/0070-flow-runner-stays-a-machine.md): the flow runner stays a plain tea
+  [0029](../../.kalfa/decisions/0025-one-rebac-permission-system.md): an agent that composes work hands
+  fabrika a flow as data, so the goal is the agent's and the loop is fabrika's.: the flow runner stays a plain tea
   machine for now.
 
 ### Also: the tools are a first-class source of defects
@@ -317,7 +310,7 @@ whether the work is wrong or the tools are, and the two go to different owners. 
 source control [a2, a3], its quality postmortem [a8] and OpenAI's build times [o2] all broke before
 the work did. Here, 16 of 31 stuck test-writer runs were `fetch_failed`.
 
-**Since the walk:** [0076](../../.decisions/0076-a-lane-stops-at-its-budget.md): every stuck step
+**Since the walk:**: every stuck step
 says its fault, `tool` or `work`; a tool fault files a finding and drains one tool budget shared by
 all quests, and does not count against the quest.
 [Experiment 254](../../experiments/254-how-a-lane-should-stop.md) sorted about 35 of 41 stuck steps

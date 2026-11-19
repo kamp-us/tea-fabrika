@@ -1,6 +1,6 @@
 ---
 state: "decided (2026-10-31); rules built in Tier 1's P2 and P35; five edges approved 2026-11-08; 0042's ports not built yet"
-summary: "Effect all the way. A Promise appears only in a one-line edge the platform demands. Lint rules refuse the rest. The owner approved five edges on 2026-11-08, the WebCrypto calls in the door's `door.ts` and `door-nonce.ts`, each one `Effect.tryPromise` with a typed error, and a crypto failure gets the `why` `crypto`, not `storage`. From 2026-11-09 a platform call is not an edge we write: every platform piece is used through Alchemy ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md))."
+summary: "Effect all the way. A Promise appears only in a one-line edge the platform demands. Lint rules refuse the rest. The owner approved five edges on 2026-11-08, the WebCrypto calls in the door's `door.ts` and `door-nonce.ts`, each one `Effect.tryPromise` with a typed error, and a crypto failure gets the `why` `crypto`, not `storage`. From 2026-11-09 a platform call is not an edge we write: every platform piece is used through Alchemy ([0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md))."
 ---
 
 # Nothing in `next/` is built on Promises
@@ -21,14 +21,13 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 - **`next/` is Effect all the way:** services and Layers, typed errors, Streams.
 - **A Promise appears only at a thin edge the platform demands:** a Durable
   Object method, a browser event handler. It is one line of `Effect.runPromise` or
-  `Effect.tryPromise`, and it holds no logic. *From 2026-11-09
-  ([0041](../../.decisions/0041-object-classes-are-effect-objects.md)): a Durable Object class
+  `Effect.tryPromise`, and it holds no logic. *From 2026-11-09: a Durable Object class
   is written with Alchemy's Effect model, so once its port (ticket 502) lands, an object method
   is no longer an edge we write. Until then the edge lines in `brain.ts` stay. `RecordPart` and
   `Connection` have moved (2026-11-13): their methods are Effects, and a call to `Connection`
   goes through Alchemy's typed stub and `reach`. `Project` and `Process` keep their edge lines.*
   *Also from 2026-11-09
-  ([0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md)): every platform piece,
+  ([0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)): every platform piece,
   in the cloud and in the local instance, is used through Alchemy's Effect form, so a platform call
   is not an edge we write either. 130 edge comments sit on platform calls today (64
   `fabrika/no-promises`, 66 `fabrika/no-effect-run-outside-edge`); each goes with its port. An
@@ -49,7 +48,7 @@ append(stream, id, line) { return this.runtime.runPromise(/* ... */); }
 
 Each new edge comment is read by the lead at merge, one line at a time, and added here. A new kind
 of edge, one that is not a one-line call the platform demands, is a new design call and goes to the
-owner ([0014](../../.decisions/0014-the-lead-merges-when-every-step-passed.md)). *Changed
+owner. *Changed
 2026-11-09 (owner): the owner read each new edge.* The ones read so far:
 
 | Where | The edge | Read |

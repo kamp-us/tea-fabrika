@@ -13,7 +13,7 @@ driver for Durable Objects and that an Effect can run synchronously? Ticket 551.
 the laptop: Node 26.13.0 and a local workerd through `@alchemy.run/cloudflare` 2.0.0-beta.84.
 Nothing was deployed. No script called a model, so the cost is $0 at any list price. The code is on
 the branch `fabrikalfa/t502-s10-spike` (`c984e1ca`), which is never merged. Raw outputs are in the
-owner's private archive, not in git ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+owner's private archive, not in git.
 
 **The answer.** Yes, it can, and the comment in `data/sqlite.ts` that says it cannot is wrong for
 Node. The slice (append, read, one transaction) ran on `effect/sql`'s `SqlClient` with
@@ -77,7 +77,7 @@ more than one way on the same statements.
 | W | Alchemy's `state.storage.sql.exec` | `state.storage.transaction(body)` | an Effect |
 
 S is main today. Sb is the plan's route (b), and what decision
-[0042](../.decisions/0042-platform-pieces-go-through-alchemy.md)'s amendment names for PR 8. E is
+[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)'s amendment names for PR 8. E is
 "use Effect's SQL modules as shipped". W is "use Alchemy's wrapper for everything".
 
 ## 1. Does the store run on `SqlClient`, on both drivers?
@@ -215,7 +215,7 @@ What each route loses, and how it fails:
 - **W.** A SQL error is a defect (`exec`'s error type is `never`), so the store catches defects to
   keep the ledger's typed `storage`. Laws run only over a stand-in.
 
-**Rooms ([0043](../.decisions/0043-rooms-on-floors.md)).** On E, E2 and Es, `data/sqlite.ts` (56
+**Rooms.** On E, E2 and Es, `data/sqlite.ts` (56
 lines) and `data/worker-sql.ts` (7 lines) go away: each driver is a Layer picked at the edge, and
 the store asks for `SqlClient`. The `node:sqlite` edge comment goes with them. But `LedgerTurn`
 becomes an Effect API, and about 17 product files call it today. On Sb nothing above `data/`

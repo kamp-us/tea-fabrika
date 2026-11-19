@@ -1,6 +1,6 @@
 ---
 date: "2026-11-11"
-summary: "Reading plus four read-only runs. Phoenix finds decisions the same way we do (ADR 0129, which 0008 copied) and still misses them (issues 9132, 7483, 3172). It has three tools we lack: `adr sweep` (ranks decisions by rare shared words in title, gloss and Decision), `adr resolve` (cite only live) and `grill read` (keeps a recommendation apart from a ruling). Its only hard gate is at merge, for governed paths. The sweep ranked the right decisions 2nd and 6th for the Tier 6 miss and found nothing for the pipe-letters miss, whose rule lived only in a direction note. Sweeping the notes too made both worse. Leans: try the sweep as advice (70%), add a lint for live citations (80%), a backlinks list (80%), and move note rules into decision files (85%). The last two became 0115. Agent time only, $0."
+summary: "Reading plus four read-only runs. Phoenix finds decisions the same way we do (an earlier ADR, which 0008 copied) and still misses them (issues 9132, 7483, 3172). It has three tools we lack: `adr sweep` (ranks decisions by rare shared words in title, gloss and Decision), `adr resolve` (cite only live) and `grill read` (keeps a recommendation apart from a ruling). Its only hard gate is at merge, for governed paths. The sweep ranked the right decisions 2nd and 6th for the Tier 6 miss and found nothing for the pipe-letters miss, whose rule lived only in a direction note. Sweeping the notes too made both worse. Leans: try the sweep as advice (70%), add a lint for live citations (80%), a backlinks list (80%), and move note rules into decision files (85%). The last two became 0115. Agent time only, $0."
 ---
 
 # 270. What does phoenix's fabrika do to make agents find a decision, and would it have caught our two misses?
@@ -11,15 +11,14 @@ and it cost $0 (agent time only; tokens not recorded). The tool read is phoenix'
 `@kampus/fabrika-cli` 0.10.0 ([kamp-us/phoenix](https://github.com/kamp-us/phoenix), public, also
 on npm), run from a local checkout of phoenix 2 commits behind its origin. It is not part of this
 repo, in either version. Claims about this repo are about its lead tooling and `.decisions/`, which
-both versions share. It is the reading behind the sweep in
-[0115](../.decisions/0115-decided-rules-live-in-decision-files.md).
+both versions share. It is the reading behind the sweep in.
 
 **The answer: phoenix does not find decisions any better than we do, but it has three pieces of
 code we lack, and one of them would have caught one of our two misses.**
 
 - Discovery there is the same contract: list `.decisions/` plus frontmatter, no hook, no index
-  ([phoenix ADR 0129](https://github.com/kamp-us/phoenix/blob/main/.decisions/0129-adr-discovery-is-the-claude-md-contract.md),
-  which our [0008](../.decisions/0008-decision-discovery-is-the-agents-md-contract.md) copied).
+  (phoenix an earlier ADR,
+  which our copied).
   Nothing in phoenix pushes a decision at an agent before it asks the owner a question.
 - The three pieces:
   1. `fabrika adr sweep`: ranks the decision files a text is about, by rare shared words in each
@@ -35,8 +34,8 @@ code we lack, and one of them would have caught one of our two misses.**
   this contradict a decision" half is a hand read unless the diff adds a decision file.
 - **Phoenix still misses decisions** (issues 9132, 7483, 3172, below).
 - **Against our two misses of 2026-11-11:** the sweep ranked the right decisions 2nd and 6th for
-  the first (a plan placed the pipeline in Tier 6, which [0078](../.decisions/0078-agent-and-flow-slices-start-early.md)
-  and [0088](../.decisions/0088-six-slices-in-tier-1.md) had moved). It found nothing for the second
+  the first (a plan placed the pipeline in Tier 6, which
+ had moved). It found nothing for the second
   (a question about cleaning up old pipe letters, which
   [design for bounded objects](../docs/direction/design-for-bounded-objects.md) answers), because
   that rule lived in no decision file and its note never says "pipe" or "letter".
@@ -68,7 +67,7 @@ copying most: a search that failed is never read as "nothing settled".
 
 | Piece | What it does | Reads, writes, needs | Forced by |
 |---|---|---|---|
-| Discovery (`ls .decisions/` + frontmatter) | Filenames are the map; frontmatter `id`, `title`, `status` is the row. The title carries the ruling, not the topic. | Reads files. Needs nothing. | Prose only (CLAUDE.md). ADR 0129 dropped a SessionStart hook "before it was built"; the on-demand `compact` map died with the old CLI (0129's 2026-08-19 amendment). |
+| Discovery (`ls .decisions/` + frontmatter) | Filenames are the map; frontmatter `id`, `title`, `status` is the row. The title carries the ruling, not the topic. | Reads files. Needs nothing. | Prose only (CLAUDE.md). an earlier ADR dropped a SessionStart hook "before it was built"; the on-demand `compact` map died with the old CLI (0129's 2026-08-19 amendment). |
 | `adr sweep --new <id or draft path>` | Ranks live decisions by summed `ln(N/df)` of shared rare words, over title + gloss + `## Decision` only (Context and Consequences are left out on purpose). Excludes what the draft already cites. Caps at 8. Answers `shortlist`, `no-overlap` or `indeterminate` (corpus under 10 live records), and says none of them is a clearance. | Reads `--dir` (default `.decisions`, or `decisionsDir` in `.fabrika.jsonc`). Writes nothing. No git, no GitHub. 200 lines in `adr/sweep.ts`, the algorithm written out step by step in the adr contract. | Prose: the adr skill's step 3 says to run it before writing a decision. Born from [phoenix issue 3980](https://github.com/kamp-us/phoenix/issues/3980) ("Nothing sweeps a new ADR against live accepted ADRs"). |
 | `adr resolve <ids>` | Prints `live`, `landed` (present but superseded or proposed), `in-flight` (only in an open pull request) or `absent`, with the real filename. | Fetches the base ref from `origin`; lists open pull requests on GitHub for the in-flight set. Needs an origin remote and a GitHub token. | Prose ("cite only live"), checked again by the governance skill. |
 | `adr next` / `adr mint` | Next free id: merged files, ids claimed by open pull requests, and ids on local and remote-tracking branches. `mint` writes the file in the same call. | Git fetch, GitHub pull request list, branch refs. Writes one file (`mint`). | Code, plus a CI number lock (`decisions-index.yml`). Not about finding decisions. |
@@ -88,15 +87,15 @@ write a decision file.
 Phoenix still misses decisions, in the same ways we do:
 
 - [kamp-us/phoenix#9132](https://github.com/kamp-us/phoenix/issues/9132) (open): a founder
-  ruling's premise contradicted accepted ADR 0276, and a triager minted acceptance criteria from it
+  ruling's premise contradicted accepted an earlier ADR, and a triager minted acceptance criteria from it
   anyway. The issue says the only corpus check (governance) "grades a diff at review time",
   downstream of where the miss happened. It also says
   [#6511](https://github.com/kamp-us/phoenix/issues/6511) filed the same contradiction before.
 - [kamp-us/phoenix#7483](https://github.com/kamp-us/phoenix/issues/7483) (open): a ruling that
   dropped invite-only was made on an issue comment; no ADR recorded it, and two accepted ADRs still
   describe invite-only as live. A ruling outside the corpus is invisible to every tool.
-- [kamp-us/phoenix#3172](https://github.com/kamp-us/phoenix/issues/3172) (closed): a `.patterns/`
-  doc repeated a claim that ADR 0032 had corrected. A doc outside `.decisions/` drifted from it.
+- [kamp-us/phoenix#3172](https://github.com/kamp-us/phoenix/issues/3172) (closed): a `.kalfa/patterns/`
+  doc repeated a claim that an earlier ADR had corrected. A doc outside `.decisions/` drifted from it.
 - [kamp-us/phoenix#3980](https://github.com/kamp-us/phoenix/issues/3980) (closed): two live cases
   in one session of a new ADR contradicting an accepted one; this is what produced `adr sweep`.
 - The `governance-floor` workflow's own header says two pull requests merged with no governance
@@ -109,9 +108,8 @@ of that, as far as its decisions and issues show.
 ## What we could take
 
 The rules here that shape this: no Claude Code hooks from repo tooling (owner, 2026-11-09; 0008);
-no GitHub issues on this repo; `.agents/` code follows `next/` rules, TypeScript and Effect
-([0033](../.decisions/0033-agents-code-follows-next-rules.md)); try an existing tool before writing
-one ([0040](../.decisions/0040-existing-tools-before-hand-written.md)); a rule code can check
+no GitHub issues on this repo; `.agents/` code follows `next/` rules, TypeScript and Effect; try an existing tool before writing
+one; a rule code can check
 becomes code; a blocking check needs its false alarms measured first; and this repo never quotes
 what a person typed.
 
@@ -120,15 +118,15 @@ what a person typed.
 | `adr sweep` ranking | Works today, read-only, on our `.decisions/` (tested below). Needs `@kampus/fabrika-cli` pinned as a dev dependency or a global install, which a step's Docker box does not have. Its bin is also named `fabrika`, which may clash with `next/`'s own. | A TypeScript and Effect script, about 150 lines plus tests, porting the written-out ranking (it is a plain idf sum; the spec is exact). 0040 asks to look at widely used search libraries first: MiniSearch or lunr give BM25 with field weights, which would also handle long notes better. | **(a) now, for a measured trial, then (b)** once it should run in boxes or block. Why: zero code to learn whether ranking helps; 0040 is satisfied by measuring the existing tool first. Cost: one pinned dev dependency. 70% sure. |
 | `adr resolve` (cite only live) | Needs GitHub pull request reads; fine, but only answers for ids you pass. | A `pnpm lint` check over every Markdown link into `.decisions/`: target exists, and status is not `superseded`. About 80 lines. This is the "rule code can check becomes code" case: today it is prose in our adr skill's step 5 (`.agents/skills/adr/SKILL.md`, "Cite only live decisions"). | **(b)**. Small, local, no false alarms by construction. Does not touch either miss. 80% sure. |
 | `adr next` / `mint` | Works with git and `gh`. | Not needed for the misses. | **Skip** for this problem. Number clashes are a separate, small annoyance. 75%. |
-| `grill` sessions | Fights two rules: it writes GitHub issues on this repo, and `grill rule` requires the owner's words quoted verbatim, which this public repo forbids. | The idea only: a plan's open question carries a kind, `fact` or `decision`, and `plancheck.sh` refuses a `fact` question ("could evidence settle it?"). A few lines in the plan check plus one line in the plan skill. Rulings already land as decision files the same turn ([0001](../.decisions/0001-decisions-live-in-the-repo.md)). | **Skip the CLI; take the fact/decision split.** It sharpens the open questions test we already have. 65%: the split is still the agent's judgment, so it only helps if agents label honestly. |
-| `governance scope/guards/post` | Built on pull request numbers, comments, a workflow rerun and `governedRoots`. Our `governance.sh` already lists decisions a diff's words touch. Calling phoenix's would add a second gate design. | Improve `governance.sh`: rank by rarity, as the sweep does, instead of raw shared-word counts, which over a whole diff lists many files. The study called it a Python script; **wrong**: on main on 2026-11-11 it is a shell script (`.agents/skills/lead/scripts/governance.sh`), which moves to TypeScript when touched ([0113](../.decisions/0113-no-shell-or-python-scripts.md)). | **(b), later.** It acts after the work is written; both misses happened before. 70%. |
+| `grill` sessions | Fights two rules: it writes GitHub issues on this repo, and `grill rule` requires the owner's words quoted verbatim, which this public repo forbids. | The idea only: a plan's open question carries a kind, `fact` or `decision`, and `plancheck.sh` refuses a `fact` question ("could evidence settle it?"). A few lines in the plan check plus one line in the plan skill. Rulings already land as decision files the same turn. | **Skip the CLI; take the fact/decision split.** It sharpens the open questions test we already have. 65%: the split is still the agent's judgment, so it only helps if agents label honestly. |
+| `governance scope/guards/post` | Built on pull request numbers, comments, a workflow rerun and `governedRoots`. Our `governance.sh` already lists decisions a diff's words touch. Calling phoenix's would add a second gate design. | Improve `governance.sh`: rank by rarity, as the sweep does, instead of raw shared-word counts, which over a whole diff lists many files. The study called it a Python script; **wrong**: on main on 2026-11-11 it is a shell script (`.agents/skills/lead/scripts/governance.sh`), which moves to TypeScript when touched. | **(b), later.** It acts after the work is written; both misses happened before. 70%. |
 | Anchored invariants (`<!-- anchor: NAME -->`) | Needs the guards verb on a pull request. | A lint that a removed anchor needs a decision file in the same pull request. | **Skip for now.** Not about finding decisions. 70%. |
 | `wire doc-section` | Works as is, stdin only. | 125 lines, or `mdq`- or `markdown-section`-style tools. | **Skip.** It reads one section; both misses were reading the wrong part or the wrong file. 75%. |
 | (Not phoenix) backlinks: which decisions link the file I am reading | n/a | `rg -l <path> .decisions` with titles printed. About 30 lines inside the `settled` check. | **(b), in the first step.** It is what catches the Tier 6 miss without guessing words. 80%. |
 | (Not phoenix) corpus coverage | n/a | Move the decided rules of direction notes into decision files, as 0001 says ("Old decisions are not copied in yet", `0001:37`). On 2026-11-11, 133 of our 149 direction notes said "decided" in their first lines, and 73 of those were linked from no decision file. | **Yes, steadily, one decision per pull request.** No tool finds a rule that lives only in a long note. 85%. |
 
 One more gap found on the way: a search tool the lead used outside the repo searched `docs`,
-`experiments`, `field`, `.glossary` and `AGENTS.md`, but **not `.decisions/`**, and step agents in a
+`experiments`, `field`, `.kalfa/glossary` and `AGENTS.md`, but **not `.decisions/`**, and step agents in a
 box could not run it at all.
 
 What happened next, on main: 0115 took the corpus row (decided rules move into decision files,

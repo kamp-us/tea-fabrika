@@ -11,7 +11,7 @@ replay over our own `field/runs.jsonl` rows. **Every claim about our lanes is ab
 tooling** (`chain.ts`, `drive.ts`, Codex and Claude boxes) running work for both versions, not
 about `next/`'s own pipeline, which runs no lanes yet. One agent read and counted; no model was
 called beyond it, and nothing in the repo changed. It is the study that
-[0076](../.decisions/0076-a-lane-stops-at-its-budget.md) asked for, under tracker ticket 675.
+ asked for, under tracker ticket 675.
 
 **The answer: not alone.** Long lanes mostly run long because the tools around them fail and the
 chain tries again, not because the work is big. A flat cap of twice the median lane would have
@@ -95,7 +95,7 @@ with clear choices; and let failures drain the budget faster than successes refi
 ## How the numbers were counted
 
 Data: `field/runs.jsonl` (6,075 rows) and `field/notes.jsonl` (560 rows), on main on 2026-11-10.
-The analysis script is not kept ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+The analysis script is not kept.
 What it does, in enough detail to redo:
 
 - Take every run row dated 2026-11-01 or later that has a `ticket`. Leave out rows whose `role` is
@@ -118,7 +118,7 @@ counts for 3 in 5 (7) and 4 in 10 (6) matched too. One did not: 2 stuck in 3 ste
 when rows are sorted by `started` and 19 in file order, where the study had 17. The "later landed"
 splits and dollars after each stop were not re-counted.
 
-[0076](../.decisions/0076-a-lane-stops-at-its-budget.md) counts differently: 40 lanes, a median of
+ counts differently: 40 lanes, a median of
 12.5 steps, from the lane state files the rows name. Lanes here are cut by ticket from the rows, so
 the two do not compare one to one.
 
@@ -242,15 +242,15 @@ an agent. Size played no part.
   Fails: a planner who wants room writes a big estimate, and nothing checks it after. Honesty: it
   makes an honest small estimate costly to write.
 - **OTP intensity, N stuck in M steps.** Holds: it is what OTP does, which this repo says to follow,
-  and it counts work, not the clock, as [0065](../.decisions/0065-speed-laws-count-work.md)
+  and it counts work, not the clock, as
   asks of speed laws. At 3 in 5 it caught the bursts no retry fixes (270's `fetch_failed`, 502's
   600-line limit). Lost: slow drift; a lane that loops on send-backs without getting stuck (282,
   102) runs on. Fails: if stuck rows are not written, or a step says `fail` where it was stuck.
   Honesty: risky, since saying stuck brings a stop closer; it needs the cause split below.
 - **A separate budget for tool faults, charged to the tool.** Holds: it matches the data and gRPC's
   shared token count. A tool fault becomes a finding row
-  ([0035](../.decisions/0035-outside-work-becomes-finding-rows.md)) and the tool is fixed the same
-  day, like a flaky test ([0036](../.decisions/0036-a-flaky-test-is-fixed.md)). Lost: it needs a
+ and the tool is fixed the same
+  day, like a flaky test. Lost: it needs a
   typed cause, `tool` or `work`, on every stuck step; today a third of stuck rows have free text
   only, and an agent cannot always tell. Fails: everything gets called `tool`; a budget shared
   across all lanes catches that, since past it no new step starts until the tool is fixed. Honesty:
@@ -269,7 +269,7 @@ a backstop:
 - Each stuck step carries a typed cause, `tool` or `work`. A `tool` stuck files a finding row
   against the tool and does not count against the lane.
 - 3 `work` stuck (or sent back) in 5 steps stops the chain and asks a person to redo, cut scope or
-  drop, in [0072](../.decisions/0072-a-churning-lane-is-redone.md)'s and 0076's words. That is
+  drop, in's and 0076's words. That is
   OTP's restart intensity with a person as the parent.
 - A tool budget shared across all lanes: past it, chains start no new step until the tool is fixed.
 - 0076's 2x budget stays, with steps and dollars written in the plan instead of hours, so it can be

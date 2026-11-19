@@ -4,14 +4,10 @@ Plancheck-Version: 3
 
 `next/` and our tooling (`.agents/`, `oxlint-plugins/`, `.github/ci/`). Today's version is not
 touched. Every number below was counted on `origin/main` at `82296f5cf` on 2026-11-15. The ticket is
-not filed yet. This plan builds [0565](../../../.decisions/0565-effects-own-checks-block.md) as
-amended by [0574](../../../.decisions/0574-no-stability-tag-and-unstable-api-is-an-error.md),
-[0575](../../../.decisions/0575-deterministic-keys-is-the-service-id-form.md),
-[0576](../../../.decisions/0576-schema-sync-error-result-in-plain-code.md) and
-[0577](../../../.decisions/0577-libraries-namespace-programs-barrel-imports.md), under
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md),
-[0523](../../../.decisions/0523-advice-rules-block-where-clean.md) and
-[0168](../../../.decisions/0168-old-lint-breaks-are-fixed.md).
+not filed yet. This plan builds as
+amended by,,
+ and, under,
+ and.
 
 **Current scope, after 0565's amendments.** The counts and slice numbers below are the dated
 inventory, not a new count. `strictEffectProvide` locks library and program source, not test
@@ -87,7 +83,7 @@ nice -n 19 pnpm exec effect-tsgo diagnostics --format json \
 # $ALL_AT_ERROR: every name in node_modules/@effect/tsgo/schema.json's diagnosticSeverity (135)
 # at "error", includeSuggestionsInTsc true, no overrides, plus the import list:
 # namespaceImportPackages ["effect"] for libraries and tooling, barrelImportPackages ["effect"]
-# for programs and the app (0577). A second run of the 3 tooling tsconfigs took the barrel list.
+# for programs and the app. A second run of the 3 tooling tsconfigs took the barrel list.
 ```
 
 - `--lspconfig` replaces the project's own plugin block, so nothing we set today hides a hit.
@@ -96,8 +92,7 @@ nice -n 19 pnpm exec effect-tsgo diagnostics --format json \
 - The 39,888 on main came from a run I did not see. Two known differences: the import lists above
   follow 0577 (0565's count named `effect` for namespace imports everywhere, which gave 3,098
   `preferNamespaceImport` hits), and main moved since.
-- The raw output stayed in a scratch folder outside the repo. Only these totals are here
-  ([0027](../../../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+- The raw output stayed in a scratch folder outside the repo. Only these totals are here.
 
 ## The count by check
 
@@ -194,7 +189,7 @@ them test files, so the tests step does most of the fixing.
 
 - **The Effect team** sets few checks: in `Effect-TS/effect` at `d5f8bdf4f`, two at error and the
   rest at default, with `@effect-diagnostics-next-line` for an exception. 0565 records that read;
-  I did not fetch it again. We go further on purpose (0565), so their repo gives the config shape
+  I did not fetch it again. We go further on purpose, so their repo gives the config shape
   and the ignore comment, not the scope.
 - **A large change is cut into pieces that each land on their own and are each reviewed,** mostly
   by tool, the way Google's large-scale change process shards one change by directory owner
@@ -217,11 +212,11 @@ checks touch different lines.
   The slice that brings a check's last folder to zero replaces the list with that check's scope
   globs, keeping the four exact CI-script exclusions and `strictEffectProvide`'s source-only scope.
 - `preferNamespaceImport`: libfabrika's and tuval's own tsconfig, with `overrides` there until the
-  package is at zero (0577); vitest is at zero and takes the package-wide block in E0. E2 moves the
+  package is at zero; vitest is at zero and takes the package-wide block in E0. E2 moves the
   two libfabrika entries out of `tsconfig.base.json`.
 - `preferBarrelImport`: the six programs and the tooling take the package-wide block in E0 (0
   hits); the app's 9 hits are E13.
-- `allowedUnstableApis` (0574) sits in the `unstableApiUsage` entry's own `options`, so it reaches
+- `allowedUnstableApis` sits in the `unstableApiUsage` entry's own `options`, so it reaches
   nothing else. It names modules, as the checker's README allows ("a module entry permits that
   module and its descendants").
 
@@ -250,7 +245,7 @@ checks touch different lines.
 // strictEffectProvide uses its source-only include, not SCOPE.
 ```
 
-**The ignore line,** for a line that is right where the check does not fit (0565). E0 teaches
+**The ignore line,** for a line that is right where the check does not fit. E0 teaches
 `oxlint-plugins/no-bare-disable.ts` the checker's comment, so the reason is held by code, not
 prose:
 
@@ -298,13 +293,12 @@ is one `.agents/tsconfig.json` includes. `filesMatching` omits the accepted scop
 the check before the law checks each remaining file's effective level.
 
 The sketch uses `it` and `expect` from `@kalfa/vitest`. Each law declares its `plant` and any
-label as options, never a title prefix (0580). A law that reads files declares its `reads:`
-patterns, including inherited configs and files it reaches, so changes select it (0591).
+label as options, never a title prefix. A law that reads files declares its `reads:`
+patterns, including inherited configs and files it reaches, so changes select it.
 
 - New words: none. "Slice" and "lock" are plain words here, not glossary terms.
 - Settings: each level and `allowedUnstableApis` is a setting of the checker, kept in its own
-  config file. None is a `fabrika.toml` value: they shape the build, not a running fabrika
-  ([0069](../../../.decisions/0069-choices-are-settings.md)).
+  config file. None is a `fabrika.toml` value: they shape the build, not a running fabrika.
 
 ## One slice end to end: E8, `unnecessaryArrowBlock`
 
@@ -354,7 +348,7 @@ scope, with the four exact CI-script exclusions above.
   in an existing rule. L2 is a test, as the law it replaces is: it reads config, not code shape.
   L2's format reason, plant and file reads are declaration options, as in the sketch above.
 - Every rule of ours that a check replaces goes in the slice that turns the check on where ours
-  ran, never before ([0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md)):
+  ran, never before:
   `service-id` with the last `deterministicKeys` slice (E93, 0575). ~~`no-secret-env` with the last
   `processEnv` slice (E86), `no-wall-clock` and `no-clock-in-view` with the last `globalDate` slice
   (E89).~~ Wrong: those three stay, since the checker misses forms ours refuse (0573's amendments of
@@ -402,7 +396,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E27 | now | `preferEffectString` | lib:node 304, app:exam 290, app:e2e 121, lib:client 58, lib:packs 19, lib:tasks 7, lib:presence 1 | 800 | judgment | Opus | tests, build, review |
 | E28 | now | `preferEffectArray` | app:exam 562, tuval 93, prog:tezgah 77, prog:checklist 66 | 798 | judgment | Opus | tests, build, review |
 | E29 | now | `preferEffectArray` | lib:node 452, app:e2e 281, prog:chaos 58, app:top 7 | 798 | judgment | Opus | tests, build, review |
-| E30 | now | `strictEffectProvide` | Historical: lib:node 215, lib:processes 153, lib:ledger 91, lib:telemetry 76, lib:access 74, app:e2e 37, app:exam 33, lib:client 23, lib:top 15, lib:presence 15, prog:counter 10, prog:pipeline 10, app:top 6, lib:packs 6, lib:desktop 4, lib:permissions 4, lib:tasks 2, app:entry 1. Recount source only; test files are out of the lock (0565) | 775 historical | judgment | Opus | tests, build, review |
+| E30 | now | `strictEffectProvide` | Historical: lib:node 215, lib:processes 153, lib:ledger 91, lib:telemetry 76, lib:access 74, app:e2e 37, app:exam 33, lib:client 23, lib:top 15, lib:presence 15, prog:counter 10, prog:pipeline 10, app:top 6, lib:packs 6, lib:desktop 4, lib:permissions 4, lib:tasks 2, app:entry 1. Recount source only; test files are out of the lock | 775 historical | judgment | Opus | tests, build, review |
 | E31 | now | `preferEffectArray` | oxlint-plugins 739 | 739 | judgment | Opus | tests, review |
 | E32 | now | `asyncFunction` | lib:node 216, oxlint-plugins 104, .github/ci 93, lib:settings 51, app:e2e 40, lib:transport 37, lib:gateway 27, app:exam 22, lib:ledger 14, lib:top 13, prog:checklist 13, prog:counter 11, lib:packs 10, prog:tezgah 10, lib:telemetry 8, lib:access 7, lib:client 2, tuval 2, lib:processes 1 | 681 | judgment | Opus | tests, review |
 | E33 | now | `preferEffectString` | oxlint-plugins 340, .github/ci 336 | 676 | judgment | Opus | tests, review |
@@ -452,7 +446,7 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E77 | after 1366 | `preferEffectArray` | app:src 547, lib:telemetry 142, lib:gateway 94 | 783 | judgment | Opus | tests, build, review |
 | E78 | after 1366 | `asyncFunction` | app:src 424, lib:runtime 209, lib:cloudflare 149 | 782 | judgment | Opus | tests, review |
 | E79 | after 1366 | `preferEffectString` | app:src 209, lib:runtime 167, lib:settings 109, lib:telemetry 94, lib:cloudflare 65, lib:processes 54, lib:ledger 33, lib:gateway 25 | 756 | judgment | Opus | tests, build, review |
-| E80 | after 1366 | `strictEffectProvide` | Historical: lib:runtime 358, app:src 210, lib:cloudflare 67, lib:gateway 35, lib:settings 33. Recount source only; test files are out of the lock (0565) | 703 historical | judgment | Opus | tests, build, review |
+| E80 | after 1366 | `strictEffectProvide` | Historical: lib:runtime 358, app:src 210, lib:cloudflare 67, lib:gateway 35, lib:settings 33. Recount source only; test files are out of the lock | 703 historical | judgment | Opus | tests, build, review |
 | E81 | after 1366 | `schemaSync`, `schemaSyncInEffect` | lib:runtime 168, app:src 126, lib:cloudflare 50, lib:processes 26, lib:gateway 25, lib:telemetry 17, lib:ledger 11 | 423 | judgment | Opus | tests, build, review |
 | E82 | after 1366 | `anyUnknownInErrorContext` | lib:cloudflare 153, app:src 112, lib:runtime 100, lib:settings 10 | 375 | judgment | Opus | tests, build, review |
 | E83 | after 1366 | `preferEffectRecord` | lib:runtime 97, lib:settings 92, app:src 69, lib:cloudflare 35, lib:processes 29, lib:telemetry 11, lib:gateway 3 | 336 | judgment | Opus | tests, build, review |
@@ -473,11 +467,11 @@ per folder. Steps: "tests, review" means no product file has a hit.
 | E98 | after 1366 | `globalErrorInEffectCatch`, `globalErrorInEffectFailure` | lib:runtime 9 | 9 | judgment | Opus | tests, review |
 | E99 | after 1366 | `lazyEffect` | lib:cloudflare 6, lib:gateway 1, lib:runtime 1 | 8 | judgment | Opus | tests, build, review |
 | E99b | after E99 | `lazyEffect` | the 8 hits E99 left (lib:cloudflare 6, lib:gateway 1, lib:runtime 1) and every caller, in lib:cloudflare, lib:gateway, lib:runtime, lib:node, app:src, app:e2e and app:exam | 8 | judgment | Opus | tests, build, review |
-| E100 | after E60 | `apiStabilityLeak` | recount once every tag is gone (0574) | 242 | judgment | Opus | tests, build, review |
+| E100 | after E60 | `apiStabilityLeak` | recount once every tag is gone | 242 | judgment | Opus | tests, build, review |
 
 - **Mechanical** means the checker's message names one replacement and nothing else changes: the
   checker's own quick fix (`unnecessaryArrowBlock` and the other one-line cleanups), the import
-  split (0577), `@stability` removal (0574), `new X()` to `X.make()`, `Schema.Number` to
+  split, `@stability` removal, `new X()` to `X.make()`, `Schema.Number` to
   `Schema.Finite` (pre-release, no data to keep), `instanceof` to `Schema.is`, the typed decoder,
   and the brand type argument.
 - **Judgment** means each hit needs a choice: the three helper checks (an `Option` in place of
@@ -523,7 +517,7 @@ clientConnect: RemoteCall<() => DoorService["connect"]>; // as `mailed` and `inf
 **Why it crosses folders.** Each fix changes the type of a service member, and TypeScript makes
 every caller change in the same commit, or the typecheck is red. The callers of these 8 members sit
 in lib:cloudflare, lib:gateway, lib:runtime, lib:node and the app (`src`, `e2e`, `exam`). A
-signature cannot be split by folder, so this is the smallest slice the code allows (0565). E99 left
+signature cannot be split by folder, so this is the smallest slice the code allows. E99 left
 these hits on purpose, as its brief's step 2 says, because no other `lazyEffect` slice owns those
 folders: `next/packages/libfabrika/src/cloudflare` and its neighbors cannot lock `lazyEffect` until
 this lands. The three `connect` members also move as one: `ProjectService.connect` forwards
@@ -598,7 +592,7 @@ and p67, "a new door start retries an injected id collision" (both in
 `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts`; L8 and L9 in
 `next/packages/libfabrika/src/runtime/RunnerInitTest.ts`; the runtime-quotas and runtime-recovery
 laws that fire the alarm and read `recover`. The two door laws are `.integration.`, so they run
-only in the full run (0584); the plain twins below run on every pull request (0581). Every new law
+only in the full run; the plain twins below run on every pull request. Every new law
 is plain: it runs on in-memory stand-ins and starts nothing.
 
 | Law | Lint, type or test | Generator | Plant |
@@ -612,11 +606,10 @@ is plain: it runs on in-memory stand-ins and starts nothing.
 | B7. With a saved reserve fault, `QuotaRunner.guard`'s `init` runs no turn and fails as its `msg` does (new, in `next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts`) | test | scenario: a name stopped under its reserve, then init | `QuotaRunner.ts:74` as `init: runner.init`, unguarded: the turn runs, red |
 | B8. `recover` asked through the app's Process stub stand-in answers the saved marker, never `undefined` (new, in `next/apps/fabrika/src/runtime-quotas.laws.test.ts`) | test | Effect Arbitrary: Activity | The stub at `:370` keeps its `Effect.void` fallback for a member that is not a function: `recover` answers `undefined`, red |
 
-- B2 to B6 and B8 use `it.prop` or `it.effect.prop` from `@kalfa/vitest`, with Schema inputs
-  (0579). B2 and B3 check `Schema.Int` to the stated ranges. `WakeTimes` is a local test schema,
+- B2 to B6 and B8 use `it.prop` or `it.effect.prop` from `@kalfa/vitest`, with Schema inputs. B2 and B3 check `Schema.Int` to the stated ranges. `WakeTimes` is a local test schema,
   `Schema.Array(Schema.Int).check(Schema.isMinLength(2), Schema.isMaxLength(6))`. All keep the
   plants above in a `plant` option. B7 keeps its scenario reason in a `scenario` option; no law
-  puts a label in its title (0580). A law that reads file text also declares `reads:` (0591).
+  puts a label in its title. A law that reads file text also declares `reads:`.
 - **B6 is the law the finding asks for.** Lint or type cannot see it: both shapes typecheck, and the
   difference is whether a call reaches the platform. It is a test, plain by 0584: its storage is a
   recording fake and its SQL the in-memory fake `alarm.laws.test.ts` already has. Its storage fake
@@ -628,7 +621,7 @@ is plain: it runs on in-memory stand-ins and starts nothing.
   rules say: the door, door-recovery, runtime, runtime-recovery, start-member, start-child and
   checklist-instance laws in the app, and GatewayRevocation, IsolateUsage and RunnerAdmission in
   libfabrika. Laws or cleanup that send real process signals run only in eligible disposable CI
-  under [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), before review. A local box
+  under, before review. A local box
   or a plain filename does not permit those laws on the owner's laptop.
 
 | File | Owner | Product lines expected | What changes |
@@ -756,8 +749,7 @@ check. If 1366 then adds such a hit, its lead merge of main fixes it: that is th
 
 **Clashes with other open pull requests.** None waits; the one that lands second merges main in
 as a lead commit. Only a native stacked child uses 0004's `gh stack` commands. A mechanical slice
-redoes its fix on the new base, and the lead may fix what CI names in a test file
-([0144](../../../.decisions/0144-the-lead-fixes-what-ci-names-in-a-test-file.md)).
+redoes its fix on the new base, and the lead may fix what CI names in a test file.
 
 | Pull request | With hits | Hits | Slices it meets most |
 |---|---|---|---|
@@ -804,12 +796,11 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 - **What the lead may combine:**
   - Tests and build in one agent: **no decision allows it** for product code. The lead skill says
     no step is skipped and a step agent never writes another step's code, and
-    [0177](../../../.decisions/0177-fix-round-is-one-agent.md) allows one agent only in a fix round.
+ allows one agent only in a fix round.
   - An `.agents/`-only slice: one agent, merged on green, under
     [the lead tooling fast track](../../../.agents/skills/lead/SKILL.md#lead-tooling-is-fast-tracked)
     (call 5).
-  - No owner read before a merge: 0168's fast track and
-    [0166](../../../.decisions/0166-owed-work-needs-no-owner-read.md).
+  - No owner read before a merge: 0168's fast track and.
   - A red typecheck or lint in a test file after a lead merge of main: the lead fixes it under
     0144. A native stacked child follows 0004 instead.
 - **Field rows:** one per step, the same day, as every hand-run step.
@@ -819,7 +810,7 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 | File | Owner | Product lines expected | What changes |
 |---|---|---|---|
 | `tsconfig.base.json` | tests | tests | One `overrides` entry per check, grown a glob per slice |
-| `next/packages/libfabrika/tsconfig.json` | tests | tests | E2, E61: the namespace block and its `overrides` (0577) |
+| `next/packages/libfabrika/tsconfig.json` | tests | tests | E2, E61: the namespace block and its `overrides` |
 | `next/packages/tuval/tsconfig.json` | tests | tests | E2: the namespace block |
 | `next/packages/vitest/tsconfig.json` | tests | tests | E0: the namespace block, at zero |
 | `next/programs/counter/tsconfig.json` | tests | tests | E0: the barrel block; the other five programs the same |
@@ -828,16 +819,16 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 | `.agents/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `.github/ci/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `.github/ci`, `.github/ci/`, `.github/ci/**/*.ts`, `.github/ci/**/*.mjs` | tests | tests | Every hit in its scripts, in each slice that lists it; the scope globs name them |
-| `.github/ci/changes.mjs`, `.github/ci/gate.mjs`, `.github/ci/required.mjs`, `.github/ci/scheduled.mjs` | tests | tests | Kept outside every check's lock by exact-path exclusions (0565); no source edit |
+| `.github/ci/changes.mjs`, `.github/ci/gate.mjs`, `.github/ci/required.mjs`, `.github/ci/scheduled.mjs` | tests | tests | Kept outside every check's lock by exact-path exclusions; no source edit |
 | `oxlint-plugins/tsconfig.json` | tests | tests | E0: the barrel block (call 2) |
 | `oxlint-plugins/namespace-imports.test.ts` | tests | tests | E0: `git mv` to the next row |
 | `oxlint-plugins/effect-checks.test.ts` | tests | tests | E0: law L2, general for any check; each slice adds its `LOCKED` row |
 | `oxlint-plugins/no-bare-disable.ts` | tests | tests | E0: law L3, the checker's comment |
 | `oxlint-plugins/jsdocs.ts` | tests | tests | E1: stops asking for `@stability`; E60: refuses it |
 | `oxlint-plugins/effect-jsdocs.ts` | tests | tests | E1: the same, in the port |
-| `oxlint-plugins/jsdocs.test.ts` | tests | tests | E1, E60: the planted blocks and laws that need the tag (0574) |
+| `oxlint-plugins/jsdocs.test.ts` | tests | tests | E1, E60: the planted blocks and laws that need the tag |
 | `oxlint-plugins/README.md` | tests | tests | E1: the `jsdocs` row; each rule that gives way drops its row |
-| `oxlint-plugins/service-id.ts` | tests | tests | E93: deleted with its test (0575) |
+| `oxlint-plugins/service-id.ts` | tests | tests | E93: deleted with its test |
 | `oxlint-plugins/`, `oxlint-plugins/**/*.ts`, `oxlint-plugins/**/*.mjs`, `stylelint.config.ts` | tests | tests | Every hit in the lint rules, in each slice that lists it; the scope globs name them |
 | `fixtures/next/`, `fixtures/next/**/*.ts` | tests | tests | The app's one fixture, `p19-launchd/brain.ts`: its 6 hits go with `app:top` |
 | `next/**/*.test.ts`, `next/**/*.test.tsx`, `next/**/*Test.ts`, `next/**/*.test-support.ts`, `next/apps/fabrika/src/exam/`, `next/apps/fabrika/src/exam/**`, `next/apps/fabrika/e2e/`, `next/apps/fabrika/e2e/**` | tests | tests | The 29,226 hits in exam paths, by slice |
@@ -872,9 +863,8 @@ This one plan covers every slice; the lead approves it once, and each slice's br
 
 - **What is lost if not written now:** each slice's per-check numbers, which 0565 makes the false
   alarm measure: the hits met, the ones fixed, each ignore line with its reason, and for the
-  `schemaSync` slices how many were decodes of outside input and what failure path each got
-  (0576). They go in each pull request body and its field rows, the same day.
-- This count's raw output is not kept in the repo (0027). The lead may put it in the private
+  `schemaSync` slices how many were decodes of outside input and what failure path each got. They go in each pull request body and its field rows, the same day.
+- This count's raw output is not kept in the repo. The lead may put it in the private
   archive; the totals above are enough to plan.
 - No stored data, no new state, no glossary row.
 
