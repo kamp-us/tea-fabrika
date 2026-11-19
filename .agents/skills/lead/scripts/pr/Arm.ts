@@ -50,7 +50,10 @@ const AUTOMATIC = "check.yaml";
 /** The folders of a docs pull request: only words, which no full run tests. */
 export const DOCS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/"] as const;
 
-export const isDocs = (path: string): boolean => DOCS.some((folder) => path.startsWith(folder));
+/** A context's glossary is words too, in whatever folder its context lives (0617). */
+const isGlossary = (path: string): boolean => path === "GLOSSARY.md" || path.endsWith("/GLOSSARY.md");
+
+export const isDocs = (path: string): boolean => DOCS.some((folder) => path.startsWith(folder)) || isGlossary(path);
 
 /**
  * The jobs a branch's proof run skips by design (0590): `select` on a hand start on main, the test

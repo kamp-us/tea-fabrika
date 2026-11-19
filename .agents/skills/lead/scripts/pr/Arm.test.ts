@@ -750,6 +750,19 @@ describe("failingLines: what a red leg's log says failed, cut to a readable size
   });
 });
 
+describe("isDocs: a context's GLOSSARY.md is words, in whichever folder its context lives (0544, 0617)", () => {
+  // property: the file name decides it, so a GLOSSARY.md in any folder is docs, and a code file beside it is not.
+  it.prop(
+    "property: a GLOSSARY.md counts as docs in any folder, and a code file in the same folder does not",
+    { folders: Schema.Array(Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/))).check(Schema.isMaxLength(4)) },
+    ({ folders }) => {
+      const dir = folders.map((folder) => `next-${folder}/`).join("");
+      expect(Arm.isDocs(`${dir}GLOSSARY.md`)).toBe(true);
+      expect(Arm.isDocs(`${dir}GLOSSARY.ts`)).toBe(false);
+    },
+  );
+});
+
 describe("RunsGh: the shapes GitHub answers", () => {
   // format: GitHub's jobs body for run 43776563690, read whole.
   it.effect(

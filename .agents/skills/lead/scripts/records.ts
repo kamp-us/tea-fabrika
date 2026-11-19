@@ -359,11 +359,12 @@ const decidingText = (text: string): string => {
 };
 
 /**
- * A glossary's terms: each `**Term**:` line starts one, and the term runs to the next blank line,
- * so its meaning and its `_Avoid_` line are its words. The first line is the title.
+ * A glossary's terms: each `**Term**:` line starts one, and the term runs to the next blank line or
+ * heading, so its meaning and its `_Avoid_` line are its words. A term written straight under a
+ * heading, with no blank line between, is one too. The first line is the title.
  */
 const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> =>
-  Arr.flatMap(Str.split(text, /\n\s*\n/), (block) => {
+  Arr.flatMap(Str.split(text, /\n\s*\n|\n(?=#)|\n(?=\*\*[^*\n]+\*\*:)/), (block) => {
     const term = /^\*\*([^*\n]+)\*\*:/.exec(Str.trim(block))?.[1];
 
     return term === undefined ? [] : [{ path, title: Str.trim(term), words: wordsIn(block), decision: undefined }];

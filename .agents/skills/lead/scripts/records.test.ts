@@ -444,6 +444,13 @@ describe("readEntries", () => {
     expect(readEntries("experiments/README.md", "# Log\n")).toEqual([]);
   });
 
+  it("format: a term written straight under a heading, with no blank line between, is one entry, and its _Avoid_ line counts", () => {
+    const text = Arr.join(["## Misc", "**zebra stripe dots**:", "Dots on a zebra's back.", "_Avoid_: stripes"], "\n");
+    const found = readEntries("docs/GLOSSARY.md", text);
+    expect(Arr.map(found, (e) => e.title)).toEqual(["zebra stripe dots"]);
+    expect(found[0]?.words.has("stripes")).toBe(true);
+  });
+
   it("scenario: only what says what a record is counts: a decision's Context and a note's body are not searched", () => {
     const entry = (path: string) => Option.getOrThrow(Arr.findFirst(entries, (e) => e.path === path));
     const zebra = entry(".decisions/0001-x.md");
