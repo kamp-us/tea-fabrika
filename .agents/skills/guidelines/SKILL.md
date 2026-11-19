@@ -1,6 +1,6 @@
 ---
 name: guidelines
-description: Run a guidelines study, one product area's design from the settled check to an approved guideline page and its build plan. Use when an area needs guidelines, when a new or changed screen needs its look picked before its pull request opens, when an approved guideline page changes, or when an older note is sorted into the record kinds.
+description: Run a guidelines study, one product area's design from the settled check to an approved guideline page and its build plan. Use when an area needs guidelines, when a new or changed screen needs its look picked before its pull request opens, or when an approved guideline page changes.
 ---
 
 # A guidelines study
@@ -18,8 +18,7 @@ then into a build in the app. It ends with:
 
 `.kalfa/kalfa.toml` says where each record kind lives and what goes in it. A study writes a
 `research`, a `guidelines` and a `quests` record, and its settled check reads the `decisions`,
-`glossary` and `guidelines` records. Sorting an older note's pieces into the record kinds is its own
-branch, with its own labels: read [sorting a note](references/sorting-a-note.md) whole first.
+`glossary` and `guidelines` records.
 
 Read [the rules for changing the product](references/changing-the-product.md) whole before step 4.
 Every design, prototype and page in the study follows them.
@@ -62,8 +61,8 @@ above, and you have read it whole.
 
 ### 3. Pick one running example
 
-- One real case from today's code, read on main, with `file:line` for each claim: a mode the app
-  has today, one real ticket's run, or the key code as it stands.
+- One real case from the code on main, with `file:line` for each claim: a mode the app has now,
+  one real ticket's run, or the key code as it stands.
 - The running example is carried through every later step: the principles, the designs, the
   prototype, the page and the walk. Every principle says whether the example follows it or breaks
   it, and where.
@@ -96,7 +95,7 @@ before its pull request opens, with or without a study; then read
 
 Build the designs with the prototype skill's UI path: 3 or 4 variants of the program's window, each
 a different answer to the same job, such as a list, a card, a panel or inline. Keys and mouse both
-work in each. Read today's code for which jobs exist, and design how they look afresh. Our layer on
+work in each. Read the code on main for which jobs exist, and design how they look afresh. Our layer on
 top of that skill:
 
 - **The fabsh pipe line first.** Before a design is built, write its fabsh pipe line:
@@ -108,8 +107,8 @@ top of that skill:
   (`@kampus/fabrika-design`) and sits in the real chassis, with as few boxes as "No extra
   containers" asks.
 - **Shots at five layouts.** Shoot each design as "Show it running" says, at the five layouts of
-  "Shoot more than one layout", dark mode first, as the owner runs it. Set each shot beside today's
-  app and beside the closest Linear screen, from Linear's public docs or changelog.
+  "Shoot more than one layout", dark mode first, as the owner runs it. Set each shot beside the
+  app as it runs now and beside the closest Linear screen, from Linear's public docs or changelog.
 
 **Done when** each design has its pipe line, runs in the real chassis, and has shots at all five
 layouts, each beside today's app and Linear.
@@ -117,7 +116,7 @@ layouts, each beside today's app and Linear.
 ### 6. The owner picks one, then refine it in rounds
 
 - Show the owner the designs: each one's pipe line, its variant in the prototype skill's switcher,
-  and its shots beside today's and Linear's. **The owner picks one.**
+  and its shots beside the current app's and Linear's. **The owner picks one.**
 - Each design that lost gets one or two plain lines on why, tied to a principle or a shot ("lost on
   T2: the rec sits under the question, see the 2x2 shot").
 - Refine the pick in rounds. For each shot, one line: would Linear's team ship this? Name what looks
@@ -199,8 +198,8 @@ leakgrep.sh checks added text; private words stay outside the repo.
 
 An approved page is done when the app shows it, so every study ends here.
 
-- The same day as the merge, write the build plan with the plan skill, for the version new work
-  goes in. It is saved as a `quests` record, and it names the prototype branch.
+- The same day as the merge, write the build plan with the plan skill. It is saved as a `quests`
+  record, and it names the prototype branch.
 - The plan picks which principles get codified, from each one's kind. A codified principle goes
   into the ticket's spec as user stories until it is built, then lives as a test whose name reads
   like the principle, so a reader finds it by the page's own words.
