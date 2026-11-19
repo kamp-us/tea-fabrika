@@ -384,22 +384,44 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
   });
 
   // Plant: `added` answers [] whatever the base branch's list holds, so a dirty folder put on the list passes.
-  it("scenario: an excluded folder the base branch's list does not name is refused, even with hits", () => {
-    const [clean, dirty] = ["next/programs/clean/**", "next/programs/dirty/**"];
+  it("property: an excluded glob the base branch's list does not name is refused, whatever its hits", () => {
+    const glob = (name: string) => `next/programs/${name}/**`;
+    const reached = { added: false, none: false, dirty: false, noBase: false };
 
-    const hits = new Map([
-      [clean, 1],
-      [dirty, 3],
-    ]);
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(fc.stringMatching(/^[a-z]{1,6}$/), { minLength: 1, maxLength: 8 }).chain((names) =>
+          fc.record({
+            names: fc.constant(names),
+            onList: fc.subarray(names),
+            base: fc.option(fc.subarray(names), { nil: null }),
+            hits: fc.array(fc.nat({ max: 3 }), { minLength: names.length, maxLength: names.length }),
+          }),
+        ),
+        ({ names, onList, base, hits }) => {
+          const scope = Arr.map(names, glob);
+          const map = new Map(Arr.map(names, (name, i) => [glob(name), hits[i] ?? 0] as const));
+          const result = lock(scope, Arr.map(onList, glob), map, base === null ? null : Arr.map(base, glob));
 
-    expect(lock([clean, dirty], [clean, dirty], hits, [clean])).toEqual({
-      remove: [],
-      missing: [],
-      refused: [],
-      added: [dirty],
-    });
+          const added =
+            base === null
+              ? []
+              : Arr.map(
+                  Arr.filter(onList, (name) => !base.includes(name)),
+                  glob,
+                );
 
-    expect(lock([clean, dirty], [clean], new Map([[clean, 1]]), [clean, dirty]).added).toEqual([]);
+          expect(result.added).toEqual(added);
+          reached.added ||= added.length > 0;
+          reached.none ||= base !== null && added.length === 0;
+          reached.dirty ||= Arr.some(result.added, (folder) => (map.get(folder) ?? 0) > 0);
+          reached.noBase ||= base === null && onList.length > 0;
+        },
+      ),
+      { seed: 119120, numRuns: 100 },
+    );
+
+    expect(reached).toEqual({ added: true, none: true, dirty: true, noBase: true });
 
     // The repository's own lists, read as the base branch's text is read, grow past nothing.
     const base = Option.getOrThrow(baseLists(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8")));
@@ -412,32 +434,56 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
   });
 
   // Plant: `remove` reads a folder's own hits in place of `loose`, so the outer glob stays on the list.
-  it("scenario: an excluded folder whose every hit sits in an excluded folder inside it comes off the list", () => {
-    const [pkg, src] = ["kalfa/config/**", "kalfa/config/src/**"];
+  it("property: an excluded folder comes off the list exactly when no hit is left outside the excluded folders inside it", () => {
+    const reached = { outer: false, kept: false, inner: false };
 
-    const hits = new Map([
-      [pkg, 4],
-      [src, 4],
-    ]);
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(
+          fc.record({
+            name: fc.stringMatching(/^[a-z]{1,6}$/),
+            own: fc.nat({ max: 3 }),
+            source: fc.nat({ max: 3 }),
+            pkgOn: fc.boolean(),
+            srcOn: fc.boolean(),
+          }),
+          { minLength: 1, maxLength: 6, selector: ({ name }) => name },
+        ),
+        (packages) => {
+          const pkg = (name: string) => `kalfa/${name}/**`;
+          const src = (name: string) => `kalfa/${name}/src/**`;
+          const scope = Arr.flatMap(packages, ({ name }) => [pkg(name), src(name)]);
 
-    expect(lock([pkg, src], [pkg, src], hits, [pkg, src])).toEqual({
-      remove: [pkg],
-      missing: [],
-      refused: [],
-      added: [],
-    });
+          const map = new Map(
+            Arr.flatMap(packages, ({ name, own, source }) => [
+              [pkg(name), own + source] as const,
+              [src(name), source] as const,
+            ]),
+          );
 
-    expect(
-      lock(
-        [pkg, src],
-        [pkg, src],
-        new Map([
-          [pkg, 5],
-          [src, 4],
-        ]),
-        [pkg, src],
-      ).remove,
-    ).toEqual([]);
+          const onList = Arr.flatMap(packages, ({ name, pkgOn, srcOn }) => [
+            ...(pkgOn ? [pkg(name)] : []),
+            ...(srcOn ? [src(name)] : []),
+          ]);
+
+          const remove = Arr.flatMap(packages, ({ name, own, source, pkgOn, srcOn }) => [
+            ...(pkgOn && own + (srcOn ? 0 : source) === 0 ? [pkg(name)] : []),
+            ...(srcOn && source === 0 ? [src(name)] : []),
+          ]);
+
+          expect(lock(scope, onList, map, onList).remove).toEqual(remove);
+
+          for (const { own, source, pkgOn, srcOn } of packages) {
+            reached.outer ||= pkgOn && srcOn && own === 0 && source > 0;
+            reached.kept ||= pkgOn && srcOn && own > 0 && source > 0;
+            reached.inner ||= srcOn && source === 0;
+          }
+        },
+      ),
+      { seed: 119120, numRuns: 100 },
+    );
+
+    expect(reached).toEqual({ outer: true, kept: true, inner: true });
   });
 });
 
@@ -454,17 +500,59 @@ describe("L5 no block for a taken rule says off or warn", () => {
 
 // Plant: `lowered` reads only the blocks that set a taken rule at error, so a later "off" block passes.
 describe("L9 no block sets a taken rule below error", () => {
-  it("scenario: a later block that sets a taken rule to off or warn is refused", () => {
-    const on = { files: [...SCOPE], rules: { "anti-slop/no-runtime-typeof": "deny" } };
-    const off = { files: ["next/programs/a/**"], rules: { "anti-slop/no-runtime-typeof": "allow" } };
-    const warn = { files: ["kalfa/**"], rules: { "anti-slop/max-ternary-depth": ["warn", [{ max: 2 }]] as const } };
-    const other = { files: ["next/**"], rules: { "eslint/no-console": "allow" } };
+  it("property: each block that sets a taken rule to off or warn gets one line, and no other block does", () => {
+    const level = fc.constantFrom("deny", "warn", "allow");
+    const reached = { allow: false, warn: false, options: false, clean: false };
 
-    expect(lowered([on, other])).toEqual([]);
-    expect(lowered([on, off, warn])).toEqual([
-      expect.stringContaining("anti-slop/no-runtime-typeof to allow in next/programs/a/**"),
-      expect.stringContaining("anti-slop/max-ternary-depth to warn in kalfa/**"),
-    ]);
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            files: fc.uniqueArray(fc.constantFrom(...SCOPE), { minLength: 1, maxLength: 3 }),
+            taken: fc.dictionary(fc.constantFrom(...TAKEN), fc.tuple(level, fc.boolean()), { maxKeys: 4 }),
+            other: fc.dictionary(fc.constantFrom("eslint/no-console", "fabrika/no-promises"), level, { maxKeys: 2 }),
+          }),
+          { maxLength: 5 },
+        ),
+        (drawn) => {
+          const blocks = Arr.map(drawn, ({ files, taken, other }) => ({
+            files,
+            rules: {
+              ...other,
+              ...Rec.map(taken, ([at, options]): typeof Setting.Type => (options ? [at, [{ max: 2 }]] : at)),
+            },
+          }));
+
+          const lines = Arr.flatMap(drawn, ({ files, taken }) =>
+            pipe(
+              TAKEN,
+              Arr.flatMap((rule) => {
+                const at = taken[rule]?.[0];
+
+                return at === undefined || at === "deny" ? [] : [`${rule} to ${at} in ${files.join(", ")};`];
+              }),
+            ),
+          );
+
+          const said = lowered(blocks);
+          expect(said.length).toBe(lines.length);
+
+          for (const [i, line] of lines.entries()) {
+            expect(said[i]).toContain(line);
+          }
+
+          reached.allow ||= Arr.some(lines, (line) => line.includes(" to allow in "));
+          reached.warn ||= Arr.some(lines, (line) => line.includes(" to warn in "));
+          reached.options ||= Arr.some(drawn, ({ taken }) =>
+            Arr.some(Rec.values(taken), ([at, o]) => o && at !== "deny"),
+          );
+          reached.clean ||= drawn.length > 0 && lines.length === 0;
+        },
+      ),
+      { seed: 119120, numRuns: 100 },
+    );
+
+    expect(reached).toEqual({ allow: true, warn: true, options: true, clean: true });
     expect(lowered(printed.overrides)).toEqual([]);
   });
 });

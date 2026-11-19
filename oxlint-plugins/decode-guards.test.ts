@@ -1,6 +1,6 @@
 // Ticket 737, G1 and G3. next/ decodes input with Effect Schema (next/ follows Effect's code style and doc comments), so oxlint's own
 // `no-restricted-properties` reports a bare `JSON.parse` there. It blocks in every folder at zero
-// (a lint rule blocks wherever its code is clean), and since ticket 909 a wrong service ID blocks too (an old lint break is fixed, never kept in a list). The fixtures are the
+// (a new rule turns on where its breaks are at zero), and since ticket 909 a wrong service ID blocks too (an old lint break is fixed, never kept in a list). The fixtures are the
 // rule's inputs (a lint rule's planted lines are its test inputs, and they stay); the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
