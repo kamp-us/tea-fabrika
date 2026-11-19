@@ -36,8 +36,8 @@ for the product code.
    lists, each as a `**Term**:` entry with its meaning and an `_Avoid_:` line.
 4. **Write it to be read:** plain names by the repo's rules (no `makeThing`, no `thingLayer`, no
    question-word names, short everyday data keys, `_tag` for unions, Effect Schema), small modules
-   with one job each, and invalid states made unrepresentable. A generated file the plan lists
-   (`repo.json`, `docs/settings-reference.md`) comes from the repo's own command, never a hand edit.
+   with one job each, and invalid states made unrepresentable. A generated file comes
+   from the repo's own command, never a hand edit.
 5. **Where the plan leaves a choice,** take your lean at 80% sure or more and say so with the
    percentage. Under that, build the plan's reading and name the doubt.
 6. **Run** every law the test writer wrote and the laws that read the files you changed, one file
