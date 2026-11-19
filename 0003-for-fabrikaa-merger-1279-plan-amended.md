@@ -1,14 +1,14 @@
 # For fabrikaa-merger: 1279 plan amended
 
-Pull request: https://github.com/kamp-us/tea-fabrika/pull/1279 (draft), branch `fabrikalfa/plan-t1003`, head `087d06db4`. The plan is `docs/plan/quests/t1003-PLAN.md`. It is still unsigned, with line one blank. The amendment was written by one plan subagent (opus, high effort). Main is merged in.
+Pull request: https://github.com/kamp-us/tea-fabrika/pull/1279 (draft), branch `fabrikalfa/plan-t1003`, head `9fb9bb20e`. The plan is `docs/plan/quests/t1003-PLAN.md`. It is still unsigned, with line one blank. It now carries two amendments, each written by one plan subagent (opus, high effort): your five rulings, then the two owner calls you relayed after them (the inbox, and the web UI). Main is merged in. One commit between them, `1c7fc2dfe`, is a work-in-progress snapshot that a stop hook forced; read the plan at the head.
 
 ## The digest
 
-- `plancheck.sh --draft` exits 0 with a frozen-lockfile install: `plan-sha256: ff872729f40013fe24241f1c4b1ea8073d6fbc1f6993a39aa69089a7dd2d33f8`.
+- `plancheck.sh --draft` exits 0 with a frozen-lockfile install: `plan-sha256: b42fa3b8f7f24e85a9910d980acd8e958525c09fafd4fc365940f9de7f0d9503`.
 - The line `plancheck.sh --approved` accepts, tried on a copy of the plan that was then deleted:
 
 ```text
-Approved by the lead agent, builds 0537, 0601, 0611, 0616; body ff872729f400
+Approved by the lead agent, builds 0537, 0601, 0611, 0616; body b42fa3b8f7f2
 ```
 
 ## Your five rulings, and where each landed
@@ -19,6 +19,20 @@ Approved by the lead agent, builds 0537, 0601, 0611, 0616; body ff872729f400
 4. **Rulesets and repo settings.** If 1190 leaves them out, slice 1 adds them. Ten files-table rows are marked "only if 1190 leaves them out": six in `kalfa/codehost/src/`, two in `kalfa/provider-github/src/`, and both packages' exports. That is about 275 lines, with laws R1 and R2.
 5. **"From memory" facts.** Under Validation, one rule for the tests step: no law leans on a "from memory" fact until a `vector:` fixture of a real response exists in `fixtures/next/fabrikalfa`. Every mark is kept.
 
+## The second amendment: the two later owner calls
+
+- **Slice 7, the lead's inbox, about 280 lines (70% sure).** Agents send through `POST /ask { _tag: "lead", input: { _tag: "send", id, sentAt, m } }`, and `m` is one of three messages: `status`, `plan` or `usage`. A usage message holds counts only, never message text. The answers are `queued { pos }` (a resend under the same id gets the same pos), `full` and `acked`. Only the `lead` identity reads, at `GET /inbox/lead?after=`, and each reader's place is an `acked` entry. The size limits are settings: `[mailbox] capacity = 256` and `chunk = 65536`. The client is `.agents/skills/lead/scripts/inbox.ts`. Its laws are I1 to I5, and P1 grows to cover the inbox asks. It follows 0601 (Runtime's mailbox), 0103, 0109, 0547 and 0582, and the glossary's `ack (inbox)` row.
+- **The deletion, slice 7's last step,** waits for one week of messages through the inbox. It first copies every `fabrikalfa/mail-*` branch on `origin` into the private archive (0027), with their usage files and the `mail/` folder two branches carry, then deletes the branches. There were 46 `mail-session_*` branches on 2026-11-19, plus `mail-experiments`, `mail-t955` and `mail-twin`. Mail branches stay as the stopgap until then. 0525 lists `.agents/` as not frozen, so nothing frozen is touched. The deletion has no law, since no repo code writes the branches.
+- **The web UI, `dashboard`, a later slice** (Order item 16). It is a program with a view at `GET /` and no shell. It shows the settings with drift (bypass lists read-only, per 0603), each program's journal and merger's queue. Its one write is `settings.propose`, which opens a draft pull request against `.fabrikalfa/fabrikalfa.toml`, so law S2 still holds. It is built from Manti parts (0461) and the shared design package (0456), and it speaks plain JSON over HTTPS, so a browser is its client. Its own build owes how Linear would build each screen, the look step and shots at the five layouts; this plan designs no look.
+- **Open question 1 grew**, so its owner mail 0002 is updated. Agents may now send to the lead's inbox. The lead may read and ack it, and no other caller may read it. Later, a person known by a signed login may propose a settings change.
+
+## Read closely in the second amendment
+
+1. **Who "the merger" is (75%).** The plan reads "the lead and the merger read it" as your own landing session, not fabrikalfa's `merger` program. It is in "Doubt first".
+2. **No mail watcher or usage collector is in the repo.** `.agents/`, `scripts/`, `.claude/` and the workflows folder were searched. The deletion step asks the lead to list the real watchers, which are likely the sessions' own loops.
+3. **Usage rows wait for the owner's own words.** Child sessions refused to send usage rows on a relayed yes, so the plan holds usage sending until the owner's answer to open question 1 is written as a decision.
+4. **The UI's write path is the plan's reading (70%).** No settings protocol is settled yet, so the plan reads it as asks to the settings program that become a pull request.
+
 ## Size
 
-About 1,600 product lines, or about 1,850 with the conditional rows. Slice 1 is about 690 lines; the first draft's 760 did not match its own table. `Estimate: 22 steps, $180`, up from $170.
+Seven slices, about 1,880 product lines, or about 2,130 with slice 1's conditional rows, and about 16 agent hours. Slice 1 is about 690 lines; the first draft's 760 did not match its own table. `Estimate: 26 steps, $210`, up from $170 in the first draft and $180 after the first amendment.
