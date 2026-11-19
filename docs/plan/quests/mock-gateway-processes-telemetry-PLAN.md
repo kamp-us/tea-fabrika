@@ -4,8 +4,8 @@ Plancheck-Version: 3
 # Plan: the mock sweep in `gateway`, `processes` and `telemetry`, in next/ (ticket 1067's sweep)
 
 This is `next/` and the lint config. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.spyOn` in a law; a stand-in comes
-from a service with a test layer), [0579](../../../.decisions/0579-property-laws-use-it-prop.md)
+ (no `vi.spyOn` in a law; a stand-in comes
+from a service with a test layer)
 (the `Recorder` is the one way to watch calls) and
 [`effect-crypto-through-services.md`](../../../.patterns/effect-crypto-through-services.md) (hashes
 and random bytes go through `effect/crypto`'s services). It is the row "`libfabrika/src/gateway`,
@@ -211,7 +211,7 @@ export const rejecting = (failure: unknown) => {
 and provide it with `WebCrypto.layer(...)`, so a law that pauses builds its doors on `paused(...)`.
 Each law's wait for `entered` gets an `Effect.timeout`, so a hash that no longer goes through the
 reference fails the law at once and does not hang it. The `try/finally` with `spy.mockRestore()`
-goes, and with it the module-level patch that could leak into the next law (0061). The helper's
+goes, and with it the module-level patch that could leak into the next law. The helper's
 two Promise lines are marked `fabrika/no-promises` edges, as transport's `Rejecting.crypto` is, and
 it uses `Stub.make` (reflect slice 8), never a double cast. If gateway, cloudflare and transport
 end up with three like it, the review names one shared helper as a finding.
@@ -238,8 +238,8 @@ law states only the bytes. The `entropy` reason stays a typed `IdError`, as lib-
 ```jsonc
 // .oxlintrc.json, a new block after the Reflect ban's. A sketch.
 {
-  // Decisions 0555 and 0579: no vi mock in a law. The block lists the folders at zero; a folder
-  // joins the day its own slice brings it to zero, and none is taken off (0524).
+  // an earlier decision and 0579: no vi mock in a law. The block lists the folders at zero; a folder
+  // joins the day its own slice brings it to zero, and none is taken off.
   "files": [
     "next/packages/libfabrika/src/gateway/**",
     "next/packages/libfabrika/src/telemetry/**"
@@ -250,11 +250,11 @@ law states only the bytes. The `entropy` reason stays a typed `IdError`, as lib-
       "error",
       {
         // Amendment 2026-11-15, ruling 2: the five methods with node's five messages.
-        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder.",
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with a Recorder.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer."
       }
     ]
   }
@@ -280,7 +280,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -295,11 +295,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's warn block; slice 2 adds `processes/**`.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -344,7 +344,7 @@ Amended 2026-11-15, on the `WebCrypto` reference:
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -353,7 +353,7 @@ that moving a runner keeps the same first failing case.
 
 All five rewritten laws keep every value they compared on main. The source used hand runners
 and seeds, including ErrorCause's; rewritten properties use `it.effect.prop` with Schema inputs
-and the package setup seed (0579), preserving all input bounds, run counts and first failing cases.
+and the package setup seed, preserving all input bounds, run counts and first failing cases.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -457,7 +457,7 @@ Slice 2, after the top-level folder's `Id.Generator` change: processes.
   shadow `crypto.subtle` by hand with `Object.defineProperty`. Moving them to `Mac` and `SecureRandom`
   is the pattern doc's "Not yet", a crypto slice of its own.
 - **Is this a setting?** No. Which crypto layer runs is wiring at the edge, not a choice a person
-  makes in `fabrika.toml` (0069).
+  makes in `fabrika.toml`.
 - **What fact is lost if not recorded now?** None. No stored data changes shape: the archive's hash
   is the same hex, and the gateway's digests are the same bytes.
 
@@ -465,7 +465,7 @@ Slice 2, after the top-level folder's `Id.Generator` change: processes.
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `pnpm format`, `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144` in a
@@ -563,7 +563,7 @@ as it was asked. The `SecureRandom` half is lib-top's, whose plan keeps `IdError
 
 ## Current execution and input rule, 2026-11-17
 
-Read the exact selected laws, their helpers and cleanup before local execution (0594). An older
+Read the exact selected laws, their helpers and cleanup before local execution. An older
 no-host claim or test filename is not clearance. Any selected check reaching real process
 signals, launchd or real Electron runs on eligible disposable CI before review; keep isolation
 for other real resources where needed. Narrow the lead's local changed selection accordingly.

@@ -1,7 +1,7 @@
 Approved by the lead agent, builds 0600; body 69d77d25e2b5
 Plancheck-Version: 3
 
-# Plan: @kalfa/quality/stryker, the plant runner on Stryker, and libfabrika's laws in the hourly mutation run (decision 0600's first build; ticket to be filed)
+# Plan: @kalfa/quality/stryker, the plant runner on Stryker, and libfabrika's laws in the hourly mutation run (an earlier decision's first build; ticket to be filed)
 
 This is our tooling: a new package in `kalfa/quality/`, the repo's plant catalog in `.github/ci/plants.ts`,
 and one change to today's lead tooling for the hourly mutation run. `next/` product code and
@@ -55,14 +55,14 @@ export default [
 
 The hand-written plant runner (`.github/ci/plant.ts` and its four neighbors, ticket 1133) pins
 each target by sha256 and by commit, and it broke on a squash merge and on two blank lines.
-Decision 0600 moves plants onto Stryker. Slice 1 adds `@kalfa/quality` with one subpath,
+an earlier decision moves plants onto Stryker. Slice 1 adds `@kalfa/quality` with one subpath,
 `/stryker`: a plant names a product file, a Stryker mutator, the node's text and Stryker's
 replacement, and the law (test file and full name) that must kill it. The runner asks Stryker's
 own instrumenter for every mutant in the file, keeps the one that matches the shape, and fails
 loudly unless exactly one does. Then it runs Stryker on that one place against the law's file
 alone, with bail off, and reads which tests killed the mutant from the JSON report's `killedBy`
 and `testFiles`. The five product-code cases that have a Stryker mutant move to a catalog in
-`.github/ci/plants.ts`; the ten that edit a test file's own fake are dropped (0093, 0600). The
+`.github/ci/plants.ts`; the ten that edit a test file's own fake are dropped. The
 old runner stays: lane 1569 holds it, and it is deleted once these run. Slice 2 lets the hourly
 mutation run reach libfabrika's laws: it picks a changed file's `name.<kind>.test.ts` siblings,
 not only `name.test.ts`, and passes CI's own `CI` marker into its container so `.integration.`
@@ -132,7 +132,7 @@ kalfa/quality/
       Target.ts                  pure: find exactly one mutant by shape
       Options.ts                 pure: the Stryker options for one target
       Report.ts                  pure: read the JSON report, decide the answer, the record
-      Mutants.ts                 the service contract: make mutants, run Stryker (0095)
+      Mutants.ts                 the service contract: make mutants, run Stryker
       MutantsMemory.ts           the stand-in layer the PR laws run on
       node/MutantsStryker.ts     the real layer: Stryker's instrumenter and its bin
       Run.ts                     ./stryker/Run: plant(name) and survey(...)
@@ -249,7 +249,7 @@ met this as ticket 457, and `run.sh` mutates in place for it). The runner finds 
 run is refused as `needs_in_place` before Stryker starts, naming the setting. checklist-pid is
 such a plant: its law is in `next/apps/fabrika`, its target in `next/packages/libfabrika`.
 
-### Settings (0069, 0585)
+### Settings
 
 Each is one Effect `Config` with its Schema and its one default, under `quality.stryker`, so the
 environment name is `KALFA_QUALITY_STRYKER_<KEY>`. No `FABRIKA_` name and no `~/.fabrika` path.
@@ -300,7 +300,7 @@ gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path
 node .github/ci/plants.ts stryker plant host-pnpm-path --out runs/plants/host-pnpm-path.json
 # To find a shape for a new plant: every mutant on some lines, with its status and its killers.
 node .github/ci/plants.ts stryker survey .agents/skills/lead/scripts/boxnode.ts --law .agents/skills/lead/scripts/flow/host.test.ts --from 120 --to 135
-# Later, once @kalfa/cli exists and finds the package's `kalfa.cli` field (0585):
+# Later, once @kalfa/cli exists and finds the package's `kalfa.cli` field:
 kalfa quality stryker plant host-pnpm-path
 ```
 
@@ -404,7 +404,7 @@ What still cannot run in the hourly container after slice 2: a law in another fo
 "successive sends land" (open question 4); `.visual.` laws and any test that imports Electron or
 Playwright (mutbox's edge case 11); `.types.` laws, by choice; and possibly a slow integration
 law file that passes run.sh's 300 s cap (doubt above). A mutant only a child-process test reaches
-stays `unconfirmed` (0104).
+stays `unconfirmed`.
 
 ## One value traced: `host-pnpm-path`
 
@@ -446,7 +446,7 @@ it for good. Failure text is not kept, on purpose (law Q13).
 ## Laws
 
 Laws use `it.prop` or `it.effect.prop` from `@effect/vitest` 4.1.3 with Schema inputs where Effect
-can generate them (0579), and fast-check arbitraries, each with its reason, where a law needs
+can generate them, and fast-check arbitraries, each with its reason, where a law needs
 built text or reports. `@kalfa/vitest` and 0580's `plant` option are not on main, so each plant
 lives in the tests step's report and run row, and fixed laws keep main's title labels.
 
@@ -472,10 +472,10 @@ lives in the tests step's report and run row, and fixed laws keep main's title l
 | Q18, `CI` crosses into the container only from CI: for generated host environments, `runArgs` carries `--env CI=<value>` exactly when the host's `CI` is set and not empty, and carries no other host variable. 100 runs | test | fc.record: a host environment of 0 to 8 variables, CI among them or not | always pass `CI=true`: red on the laptop's case; pass the whole environment: red | .agents/skills/lead/scripts/mutbox.test.ts |
 
 No law here needs launchd, real Electron or a real signal, so none is host-only in 0178's sense.
-Q11 is a real-resource law and runs on the schedule (0536). The five catalog plants are real runs
+Q11 is a real-resource law and runs on the schedule. The five catalog plants are real runs
 too; before the first review they run in the session's disposable cloud box (lead amendment
 below), and after the merge on the plants workflow, on GitHub's disposable Linux
-runner (0594), never on the owner's laptop.
+runner, never on the owner's laptop.
 
 ## Files
 
@@ -493,7 +493,7 @@ runner (0594), never on the owner's laptop.
 | kalfa/quality/src/stryker/Target.ts | build | 90 | slice 1, new: fold, find, `within` |
 | kalfa/quality/src/stryker/Options.ts | build | 45 | slice 1, new |
 | kalfa/quality/src/stryker/Report.ts | build | 100 | slice 1, new: the report Schema (as much as is read), `Answer`, `Refused`, the record |
-| kalfa/quality/src/stryker/Mutants.ts | build | 30 | slice 1, new: the service contract (0095) |
+| kalfa/quality/src/stryker/Mutants.ts | build | 30 | slice 1, new: the service contract |
 | kalfa/quality/src/stryker/MutantsMemory.ts | build | 35 | slice 1, new: the stand-in layer, scripted mutants and reports, counting its calls |
 | kalfa/quality/src/stryker/node/MutantsStryker.ts | build | 90 | slice 1, new: the instrumenter through one marked dynamic import, the bin from `@stryker-mutator/core/package.json`, the spawn under `nice` in a scoped temp folder |
 | kalfa/quality/src/stryker/Run.ts | build | 110 | slice 1, new: `plant`, `survey`, the package-edge check |
@@ -579,7 +579,7 @@ runner (0594), never on the owner's laptop.
   place weighed: beside each law, as 0580's `plant` option. That waits on `@kalfa/quality/vitest`
   and turns 0580's string into an object, a design change, so not now.
 - **One dispatch workflow, `plants.yaml`, 80%.** Plants run real Stryker on laws that must not run
-  on the laptop (0594), and the follow-up deletion needs proof that they ran. It has no schedule
+  on the laptop, and the follow-up deletion needs proof that they ran. It has no schedule
   and no pull request trigger, so it adds no automatic run; wiring it into the pull request's legs
   is the follow-up's, with `changes.mjs`.
 - **The answer needs the named law among the killers, with bail off, 85%.** With bail on, Stryker
@@ -595,12 +595,11 @@ runner (0594), never on the owner's laptop.
   prose; slice 2 edits none of it. The skill's line "the tests beside the changed files" stays
   true.
 - **One pull request for both slices (lead amendment).** The brief is one pull request, and no
-  number caps its size (0099). It waits for 1589 on main (open question 1's answer), so slice 2
+  number caps its size. It waits for 1589 on main (open question 1's answer), so slice 2
   waits too; that costs an hour-scale delay to the hourly pick, nothing else.
 - **The `.oxlintrc.json` override, 80%.** On main no `next/` override covers `kalfa/**`, so Q8 and
   Q15 need their own. Pull request 1583 extends the `next/**` overrides to `kalfa/**`; the second
-  to land merges main and keeps both. Until then the code is written to `next/`'s rules by hand
-  (0033), and the review checks it.
+  to land merges main and keeps both. Until then the code is written to `next/`'s rules by hand, and the review checks it.
 
 ## Validation
 
@@ -648,10 +647,9 @@ Estimate: 7 steps, $56
 ## Records
 
 - `field/runs/` rows for each step, by the lead, with each plant's record from the workflow.
-- Glossary, a new row: `plant` | A break put once into product code to show a law can fail
-  ([0093](../../../.decisions/0093-laws-walk-plants-run-once.md)). In `@kalfa/quality/stryker`, a
+- Glossary, a new row: `plant` | A break put once into product code to show a law can fail. In `@kalfa/quality/stryker`, a
   Stryker-made mutant named by its code shape (file, mutator, original, replacement), with the
-  law that must kill it ([0600](../../../.decisions/0600-kalfa-quality-holds-test-lint-format.md)).
+  law that must kill it.
   Industry: a targeted mutant | Not a mutant of the hourly run, which is sampled, not named. Not a
   plant test: nothing is committed but the catalog entry.
 - `docs/plan/README.md`, as in the files table.
@@ -675,7 +673,7 @@ Estimate: 7 steps, $56
 
 Each answers an open question below, inside 0600 and the brief. Question 1: one pull request, armed only once
 1589 is on main and main is merged in, so CI runs its laws first. Question 2: left out, its gap
-recorded in a field row as ticket text. Question 3: not a new design call (0069). Question 4: the
+recorded in a field row as ticket text. Question 3: not a new design call. Question 4: the
 gap stays recorded, as 0600 says.
 
 ## Open questions
@@ -690,8 +688,7 @@ gap stays recorded, as 0600 says.
    line's deadline, and no Stryker 10.1.1 mutator moves or unwraps code. Lean, 80%: leave it out of
    the catalog, with no hand-written fallback, and file a ticket for its law's proof, as 0600 does
    for the fixture cases. Its law ("stalled runtime discovery shares the first command's deadline")
-   keeps its recorded one-time plant (0093), and `flow/host.ts` stays in the hourly run's scope
-   (0089).
+   keeps its recorded one-time plant, and `flow/host.ts` stays in the hourly run's scope.
 3. **Settings before `@kalfa/config` is on main.** Each setting is an Effect Config with its
    default, read from `KALFA_` variables, with the repo's three values supplied at the edge in
    `.github/ci/plants.ts`; the TOML files and flags join when 1583 lands. Lean, 85%: this is not a

@@ -3,8 +3,7 @@
 `@demlik/tea` is the Elm architecture in TypeScript, and every new shape names Elm's answer first
 ([Elm first](../elm-first.md)). This table is about `next/`. One row per behavior. Paths are under
 `next/packages/libfabrika/src/` unless they start with `next/`. A pull request that changes one of
-these behaviors updates its row in the same pull request
-([0017](../../../.decisions/0017-each-model-we-follow-has-one-table.md)).
+these behaviors updates its row in the same pull request.
 
 Seeded 2026-11-09 from [Elm first](../elm-first.md) and its named exceptions, checked against main
 at `5b1171ed`. Elm's side is [the Elm guide][arch].

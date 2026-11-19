@@ -5,10 +5,10 @@ Plancheck-Version: 3
 
 This is `next/`, the pipeline program and the two scripted test layers it reads from libfabrika,
 plus our lint config and its plant test. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
+ (no `vi.mock`, `vi.doMock`, `vi.spyOn` or
 `vi.stubEnv`, held by `vitest/no-restricted-vi-methods`) and
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md) (a `Recorder` is the one way to watch
-calls), and (amendment 2026-11-15) [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
+ (a `Recorder` is the one way to watch
+calls), and (amendment 2026-11-15)
 for its tea patch (demlik's decisions and patterns read first), with the Recorder as it landed (`next/packages/vitest/src/Recorder.ts`) and the folder row of
 [the Recorder plan's Size section](./recorder-PLAN.md#size): "`programs/pipeline`: 1 `spyOn` on
 `console`", plus the hand-written call log `CodeHostTest.Control.calls` its two runner suites read.
@@ -44,8 +44,7 @@ expect((yield* h.host.calls("merge")).map(([change]) => change)).toEqual([1, 2, 
 
   **Amendment (2026-11-16, merge session ruling):** coverage is never lost. tea's direct
   `console.warn` lines are patched with `pnpm patch` so S2 still sees them, and the upstream issue
-  is filed the same day ([patch upstream locally](../../direction/patch-upstream-locally.md),
-  [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)). See "Tea's warnings reach
+  is filed the same day ([patch upstream locally](../../direction/patch-upstream-locally.md)). See "Tea's warnings reach
   the S2 check" under "The shape". The doubt left is only the `Console.warn` one, which
   `TestConsole` keeps but does not read back.
 
@@ -107,7 +106,7 @@ Not a call log, and kept: `CiTest.Control.starts` (`next/packages/libfabrika/src
 read at `QueueRunnerTest.ts:349,358,367`. It is the fake CI's state, the commits whose start the CI
 took: it is written after a scripted fault passes, so a refused start is not in it. A Recorder
 records every run, refused ones too, so swapping it in would change what those laws assert. It
-stays the fake's own state (0538). Call: 80%.
+stays the fake's own state. Call: 80%.
 
 ## How others do it
 
@@ -120,7 +119,7 @@ stays the fake's own state (0538). Call: 80%.
   builds on it, and that a stateful fake stays in its service's test layer and the Recorder wraps
   it, as `PushesTest.ts` does.
 - **The lint rule.** `vitest/no-restricted-vi-methods` is oxlint's own (installed 1.90.0), named by
-  0555 and by [0563](../../../.decisions/0563-anti-slop-plugin-as-it-ships.md), which says the
+  0555 and by, which says the
   anti-slop plugin's `no-module-mocking` reads only `mock`, `doMock` and `unstable_mockModule`, so
   `spyOn` and `stubEnv` need this rule either way. A scratch run here (a temp folder with its own
   config, 2026-11-15) refused `vi.spyOn`, `v.spyOn` after `import { vi as v }`, `vi["spyOn"]` and
@@ -257,7 +256,7 @@ so it reaches every fiber the logger reaches; the law already relies on that pla
 **Amendment (2026-11-16, merge session ruling).** The spy also saw what `@demlik/tea` writes to the
 global `console` past Effect's `Console` reference. That coverage stays, through a local patch.
 
-What was read first (0054), in the installed `@demlik/tea` 0.25.0 `dist/`, with today's patch
+What was read first, in the installed `@demlik/tea` 0.25.0 `dist/`, with today's patch
 (demlik#897) applied:
 
 - tea's own answer for errors no caller can take is the runtime's `OnError` sink: its doc in
@@ -266,7 +265,7 @@ What was read first (0054), in the installed `@demlik/tea` 0.25.0 `dist/`, with 
 - Seven direct `console.warn` sites skip that sink: `defaultOnError` for a `RuntimeDiscardNotice`
   (the loop), `contained` (a run listener that threw), two `onToolError` guards, and
   `fromTransport`'s two close failures and its dropped send.
-- Not read, since this session cannot reach `kamp-us/demlik`: its `.decisions/` (ADR 0021 is cited
+- Not read, since this session cannot reach `kamp-us/demlik`: its `.decisions/` (an earlier ADR is cited
   by the sink's doc) and `.patterns/`. The tests step reads them before it writes the patch, and the
   pull request names what it read and why the sink alone does not cover these sites, as 0054 binds.
 
@@ -279,14 +278,14 @@ What was read first (0054), in the installed `@demlik/tea` 0.25.0 `dist/`, with 
   (`chunk-LNJSAPQV.js:1046`), two `onToolError` guards (`:1170`, `:1192`), and `fromTransport`'s
   three (`chunk-BSGN3CEF.js:338`, `:353`, `:367`).
 - demlik's
-  [0031](https://github.com/kamp-us/demlik/blob/main/.decisions/0031-a-fenced-run-must-pass-on-error.md)
+
   says "`defaultOnError` does not change. It warns on a `RuntimeDiscardNotice` and rethrows
   everything else", and that the default sink "must not grow a case". So routing the other six
   warnings into `OnError` would hit the default sink's rethrow branch and end a host that passed
   no sink: the `OnError` route is ruled out, and the host-set hook stays the shape. A host that
-  passes `onError` already receives the discard notice there (0030, 0033).
+  passes `onError` already receives the discard notice there.
 - demlik's
-  [0020](https://github.com/kamp-us/demlik/blob/main/.decisions/0020-tea-owns-no-dependency-injection.md)
+  [0007](../../../.kalfa/decisions/0007-otp-supervision-per-program.md)
   says tea owns no dependency injection. A module-level hook a host sets is a plain function, not a
   container, but it is global state, so the upstream issue proposes it as a question, and the
   maintainers may prefer a `warn` option on `run` and on `fromTransport`. The local patch takes the
@@ -334,7 +333,7 @@ yield* Effect.acquireRelease(
   upstream issue. The bump that takes tea's release with the hook deletes the patch. If demlik#897's
   change is not in 0.27.0, that is not this patch's: `next/` does not read the machine's schemas
   through it (the tests step checks with `rg` and says so).
-- The upstream issue carries the diff in a folded `<details>` block (0060), and reports one gap:
+- The upstream issue carries the diff in a folded `<details>` block, and reports one gap:
   tea writes warnings no host can route.
 
 ### The lock
@@ -342,17 +341,17 @@ yield* Effect.acquireRelease(
 ```jsonc
 // .oxlintrc.json, a new block in "overrides", after the Reflect blocks
 {
-  // The mock ban (0555, 0579): a folder joins this list when it has no vi mock, spy, stub or fn.
+  // The mock ban: a folder joins this list when it has no vi mock, spy, stub or fn.
   "files": ["next/programs/pipeline/**"],
   "rules": {
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and watch it with Recorder.layer from @kampus/vitest (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555).",
-        "fn": "Watch the call with Recorder.layer from @kampus/vitest (0579)."
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and watch it with Recorder.layer from @kampus/vitest.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer.",
+        "fn": "Watch the call with Recorder.layer from @kampus/vitest."
       }
     ]
   }
@@ -360,9 +359,9 @@ yield* Effect.acquireRelease(
 ```
 
 - `fn` is in the list: 0579 says the Recorder replaces "the `vi.fn` plus `toHaveBeenCalled*`
-  uses", and [0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md) says a mechanism
+  uses", says a mechanism
   the test package does not export is not used. The folder has none. Call: 85%.
-- The block is at error, never warn ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)),
+- The block is at error, never warn,
   and lists no file to let through. Later folders append their glob to this block.
 - `oxlint-plugins/builtin-plants.ts:699` plants `vi.mock("./b.ts")` for `vitest/hoisted-apis-on-top`
   in the `oxlint-plugins` folder, which this block does not reach, so that plant stays as it is (0555 named
@@ -381,7 +380,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -396,11 +395,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "error",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's error block.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -447,7 +446,7 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -470,7 +469,7 @@ that moving a runner keeps the same first failing case.
 - L4 is new: it proves the swap watches what the spy watched, for the channel Effect writes.
 - L8 is new (amendment 2026-11-16): it proves the swap watches what the spy watched, for the
   channel tea writes, so no coverage is lost.
-- L5 and L3 run inside `*.integration.test.ts` files (0536), as they do today: they need real SQLite
+- L5 and L3 run inside `*.integration.test.ts` files, as they do today: they need real SQLite
   stores and real runners, which no stand-in gives. The tests step runs both integration files in
   its box, which step rules allow.
 - No law needs the real machine, so none is host-only. The `[secrets]` law S2 keeps its own flows:
@@ -511,7 +510,7 @@ that moving a runner keeps the same first failing case.
   (amendment 2026-11-16).
 - The tea patch's `pnpm-workspace.yaml` and `pnpm-lock.yaml` lines meet the app-e2e plan's Effect
   patch lines in the same two files: a normal merge preserving both changes for whichever lands second.
-- `CodeHostTest.ts` is a libfabrika test layer beside its service (0538), and libfabrika's other
+- `CodeHostTest.ts` is a libfabrika test layer beside its service, and libfabrika's other
   `*Test.ts` layers already import `@kampus/vitest` (`processes/ProgramMailTest.ts`), which
   `fabrika/package-imports` allows.
 - Open pull requests on these files, each resolved by a normal merge preserving both changes for whichever lands second:
@@ -536,7 +535,7 @@ that moving a runner keeps the same first failing case.
 - **The lock lands in this slice,** 95%. The brief says on when the folder reaches zero, and it does
   in this pull request.
 - **Is this a setting?** No. The lint block, a test layer's type and a law's console stand-in are
-  test and tooling code, nothing a person running fabrika picks (0069).
+  test and tooling code, nothing a person running fabrika picks.
 - **What fact is lost if not recorded now?** None. Call records live inside one test run.
 
 ## Validation
@@ -545,7 +544,7 @@ Every local test selection first needs the lead to read its actual code, helpers
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `pnpm format`, then `NODE_OPTIONS=--max-old-space-size=6144 pnpm lint`, then

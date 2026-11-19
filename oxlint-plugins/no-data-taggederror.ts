@@ -1,6 +1,6 @@
 // Ban `class ... extends Data.TaggedError(...)`: require `Schema.TaggedErrorClass`.
 //
-// Rationale (single site; .patterns/effect-errors.md, in the pipeline this repo rebuilds): every
+// Rationale (single site; .kalfa/patterns/effect-errors.md, in the pipeline this repo rebuilds): every
 // error class is a `Schema.TaggedErrorClass` so the `FateWireCode` wire-code annotation can ride the
 // class's AST; `Data.TaggedError` has nowhere to put one. The ban applies uniformly, including
 // CLI-only errors that never reach the wire (the verb package's own gold boundary files already use
@@ -18,6 +18,6 @@ import { banNames } from "./match.ts";
 export const noDataTaggederror: CreateRule = {
   create: banNames({
     "Data.TaggedError":
-      "`class ... extends Data.TaggedError` is banned: errors must be `Schema.TaggedErrorClass` so the `FateWireCode` annotation can ride the AST (.patterns/effect-errors.md; #2736). Fix: `class MyError extends Schema.TaggedErrorClass<MyError>()('feature/MyError', { ...fields }, { [FateWireCode]: 'CODE' }) {}`: copy `packages/fate-effect/src/CurrentUser.ts` (or `packages/fabrika-cli/src/io/fs.ts` for a CLI-only error). Exception: // oxlint-disable-next-line fabrika/no-data-taggederror -- <reason>.",
+      "`class ... extends Data.TaggedError` is banned: errors must be `Schema.TaggedErrorClass` so the `FateWireCode` annotation can ride the AST (.kalfa/patterns/effect-errors.md; #2736). Fix: `class MyError extends Schema.TaggedErrorClass<MyError>()('feature/MyError', { ...fields }, { [FateWireCode]: 'CODE' }) {}`: copy `packages/fate-effect/src/CurrentUser.ts` (or `packages/fabrika-cli/src/io/fs.ts` for a CLI-only error). Exception: // oxlint-disable-next-line fabrika/no-data-taggederror -- <reason>.",
   }),
 };

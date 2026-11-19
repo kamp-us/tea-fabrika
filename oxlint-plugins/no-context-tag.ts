@@ -1,7 +1,7 @@
 // Ban the pre-v4 service forms `Context.Tag(...)` / `Context.GenericTag(...)` /
 // `Effect.Service(...)`: require Effect-v4 `Context.Service`.
 //
-// Rationale (single site; .patterns/effect-context-service.md, in the pipeline this repo
+// Rationale (single site; .kalfa/patterns/effect-context-service.md, in the pipeline this repo
 // rebuilds): the code is on Effect v4. The v3 service idioms, `Context.Tag`,
 // `Context.GenericTag` and the `Effect.Service` helper, are wrong here; the single v4 idiom is
 // `class S extends Context.Service<S, Shape>()("id") {}`. This rule is a pure regression gate:
@@ -23,8 +23,8 @@ const fix =
 
 export const noContextTag: CreateRule = {
   create: banNames({
-    "Context.Tag": `\`Context.Tag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
-    "Context.GenericTag": `\`Context.GenericTag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.patterns/effect-context-service.md; #2736). ${fix}`,
-    "Effect.Service": `\`Effect.Service(...)\` is not used here: v4 uses \`Context.Service\` only (.patterns/effect-context-service.md; #2736). ${fix}`,
+    "Context.Tag": `\`Context.Tag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.kalfa/patterns/effect-context-service.md; #2736). ${fix}`,
+    "Context.GenericTag": `\`Context.GenericTag(...)\` is the Effect-v3 service form and is banned: this code is on Effect v4 (.kalfa/patterns/effect-context-service.md; #2736). ${fix}`,
+    "Effect.Service": `\`Effect.Service(...)\` is not used here: v4 uses \`Context.Service\` only (.kalfa/patterns/effect-context-service.md; #2736). ${fix}`,
   }),
 };

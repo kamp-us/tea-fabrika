@@ -70,7 +70,7 @@ on someone's machine before a push leaves no trace.
 | `no-type-assertions` | `as any`, `as unknown as T`, `<T>x` | phoenix, copied unchanged | 3 / 2 at adoption (commit a9ac00b) | keep blocking |
 | `no-effect-promise` | `Effect.promise` and one-argument `Effect.tryPromise` | phoenix (its issue #2736), copied unchanged | 8 / about 2 at adoption | change: allow `Effect.promise`, keep the `tryPromise` part |
 | `no-raw-try-catch` | any `try` in a file that imports `effect` | phoenix (#2736), copied unchanged | 21 / a few at adoption | change: only inside `Effect.gen` and `Effect.fn`, or report only |
-| `no-node-sqlite-test-backing` | no `node:sqlite` import | phoenix (its ADR 0082, about D1) | 8 / 0 | drop |
+| `no-node-sqlite-test-backing` | no `node:sqlite` import | phoenix (its an earlier ADR, about D1) | 8 / 0 | drop |
 | `no-throw-in-effect-gen`, `no-context-tag`, `no-data-taggederror`, `no-numeric-duration`, `no-expect-in-if` | five Effect and test idioms | phoenix (#2736, #3196, its patterns docs) | 0 / 1 at adoption (a `throw` became `Effect.die`) | keep blocking |
 | `no-implicit-effect-concurrency` | `Effect.all` and `forEach` name a `concurrency` | phoenix (#2567, a slow read chain there) | 0 / 1 at adoption; 40 `concurrency: 1` written since | keep, 60% sure (see below) |
 | `lint:layers` | an import never points up the stack | our own order (experiments 82, 103, 114) and a fence (`property-tests-not-our-own-search.md`) | 0 / not counted (32 allowlist entries, one fence) | keep blocking |
@@ -109,7 +109,7 @@ CI=1 PR44=origin/<PR 44's branch> node experiments/125-check-audit.ts
 **The custom rules from phoenix.**
 
 - All ten were copied unchanged from kamp-us/phoenix on 2026-10-12 (commit a9ac00b). Their
-  reasons are phoenix's: its issues #2736, #3196 and #2567, its ADR 0082 about Cloudflare D1, its
+  reasons are phoenix's: its issues #2736, #3196 and #2567, its an earlier ADR about Cloudflare D1, its
   `FateWireCode`. None was checked against this repo before it was turned on.
 - Eight of the ten headers say phoenix registered the rule at "warn". Four say it was "Phase 1"
   of #2736, one adds "warn keeps CI green while every site is remediated". Five still give their
@@ -270,7 +270,7 @@ still fails under load. 075eb56 also hit the 5 s limit. So the 5 s limit still c
   promises and build checks means no evidence, not proof they are right.
 - **The tests themselves were not audited.** 2206 tests can each raise a false alarm. Only the
   time limit stood out in CI.
-- **We did not read phoenix's #2736, #3196 or ADR 0082.** They might give a reason for a rule that
+- **We did not read phoenix's #2736, #3196 or an earlier ADR.** They might give a reason for a rule that
   its header leaves out.
 
 Sources:

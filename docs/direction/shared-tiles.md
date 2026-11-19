@@ -1,6 +1,6 @@
 ---
 state: "proposed, parts decided 2026-11-04, 2026-11-05, 2026-11-06 and 2026-11-07 (presence, color and the smaller calls; `summon`; in `next/`, an alias with a session, kept by the brain, with routing); walked at Tier 5"
-summary: "Today's version first. One kind of tile: a person summons any agent that speaks the agent link into their own tile (with the `summon` line, [0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md); `@claude` as the way to summon, decided 2026-11-05, was walked back the next day), and the agent's own tile goes as a kind. Nothing shows twice on screen, and the person is never sent to another tile to act, so follow (design B) and \"Open #7 in your own tile\" are out. \"Only a person\" is checked on the input's sender. Presence, decided 2026-11-07: a 12px avatar in the title bar (an agent a rounded square with a ✦, a person a circle, shape plus name), and a presence label on the thing an agent's job writes now, which fades; no cursor, no ring. Color, decided 2026-11-07, walking back one Radix orange hue: each agent gets its own color, a stable pick from its name out of a swatch the person may change, every swatch color passing the themes' 3:1 check in both looks, no status hue or accent, stored as a swatch name, only inside the avatar and the label. The arrow pointer is dropped everywhere (decided 2026-11-05). The smaller calls, decided 2026-11-07: `@` in every text box, the palette included, with no palette row; a line from an agent nobody summoned is an inbox row, replied to inline; an `@` line runs in the background; a dropped link says \"away\", then \"gone\" after about 10 minutes; the ticket shows what an agent changed, as activity rows with `cause`. From experiment 209."
+summary: "Today's version first. One kind of tile: a person summons any agent that speaks the agent link into their own tile (with the `summon` line; `@claude` as the way to summon, decided 2026-11-05, was walked back the next day), and the agent's own tile goes as a kind. Nothing shows twice on screen, and the person is never sent to another tile to act, so follow (design B) and \"Open #7 in your own tile\" are out. \"Only a person\" is checked on the input's sender. Presence, decided 2026-11-07: a 12px avatar in the title bar (an agent a rounded square with a ✦, a person a circle, shape plus name), and a presence label on the thing an agent's job writes now, which fades; no cursor, no ring. Color, decided 2026-11-07, walking back one Radix orange hue: each agent gets its own color, a stable pick from its name out of a swatch the person may change, every swatch color passing the themes' 3:1 check in both looks, no status hue or accent, stored as a swatch name, only inside the avatar and the label. The arrow pointer is dropped everywhere (decided 2026-11-05). The smaller calls, decided 2026-11-07: `@` in every text box, the palette included, with no palette row; a line from an agent nobody summoned is an inbox row, replied to inline; an `@` line runs in the background; a dropped link says \"away\", then \"gone\" after about 10 minutes; the ticket shows what an agent changed, as activity rows with `cause`. From experiment 209."
 ---
 
 # Shared tiles: summon an agent into your tile, and see who is there
@@ -9,11 +9,7 @@ summary: "Today's version first. One kind of tile: a person summons any agent th
 decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
 in later walks, each marked decided below:
 
-Its decided rules are in: [0517](../../.decisions/0517-a-tile-holds-you-and-your-agents.md),
-[0518](../../.decisions/0518-you-summon-with-at.md),
-[0519](../../.decisions/0519-presence-is-an-avatar-and-a-label.md),
-[0520](../../.decisions/0520-each-agent-gets-its-own-color.md),
-[0521](../../.decisions/0521-an-agents-message-is-an-inbox-row.md).
+Its decided rules are in:,,,,.
 
 - **Decided, one kind of tile.** A tile holds the person and any agent they summon. The "agent's
   own tile" goes as a kind, for good.
@@ -29,8 +25,7 @@ Its decided rules are in: [0517](../../.decisions/0517-a-tile-holds-you-and-your
   in tsh is a command; `@claude <words>` talks to claude. With no claude on the desk, the `@` starts it
   first and says so, since that starts a paid run. **Walked back 2026-11-06:** `summon` starts an
   agent by name, and `@` talks only to one summoned already
-  ([talk where you work](./talk-where-you-work.md),
-  [0157](../../.decisions/0157-summon-starts-an-agent-and-at-talks-to-it.md)). Kept as it was decided.
+  ([talk where you work](./talk-where-you-work.md)). Kept as it was decided.
 - **Decided 2026-11-05, no presence label on a card a step writes.** The plan step runs its own agent,
   not the summoned claude, so a "✦ claude" tag on the plan card names the wrong writer. The label goes
   only where claude itself writes: its lines in tsh, a button it presses. The intent stays: claude's

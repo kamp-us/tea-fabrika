@@ -146,7 +146,7 @@ const decision = landDecision({
   ticket: "656",
   dir: "worktree",
   branch: "fabrikalfa/adr-x",
-  paths: [".decisions/0000-x.md"],
+  paths: [".kalfa/decisions/0000-x.md"],
   subject: "T656 lead: x",
   title: "x",
   body: "y",
@@ -157,7 +157,6 @@ describe("the land-decision flow", () => {
     expect(Arr.map(decision.steps, (s) => [s._tag, s.name, s.lead])).toEqual([
       ["act", "format", false],
       ["check", "lint", false],
-      ["gather", "governance", false],
       ["act", "lead-commit", true],
       ["check", "leak-grep", false],
       ["act", "bot-push", false],
@@ -174,11 +173,11 @@ describe("the land-decision flow", () => {
         const ok = () => Outcome.done("ok");
         const { calls, layer } = fakes(Rec.fromEntries(Arr.map(decision.steps, (s) => [s.name, ok])));
         const model = yield* runFlow(decision, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
-        expect(calls).toEqual(["format", "lint", "governance"]);
-        expect(model._tag === "parked" ? model.position : -1).toBe(3);
+        expect(calls).toEqual(["format", "lint"]);
+        expect(model._tag === "parked" ? model.position : -1).toBe(2);
         const led = yield* runFlow(decision, { state, resume: true, lead: true }).pipe(Effect.provide(layer));
         expect(led._tag).toBe("done");
-        expect(calls.slice(3)).toEqual(Arr.map(decision.steps.slice(3), (s) => s.name));
+        expect(calls.slice(2)).toEqual(Arr.map(decision.steps.slice(2), (s) => s.name));
       }),
     ));
 });

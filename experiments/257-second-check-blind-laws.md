@@ -8,7 +8,7 @@ summary: "`next/`, 0093's second check, on ticket 707's waiting machine (`waitin
 Measured on 2026-11-11, on main at `bbb13727b`, in a worktree on the branch
 `fabrikalfa/exp-second-check`. **Every claim is about `next/`**
 (`next/packages/libfabrika/src/gateway/internal/waiting.ts`), never today's version. This is the
-second check that [0093](../.decisions/0093-laws-walk-plants-run-once.md) asks for. One agent read
+second check that asks for. One agent read
 the plan, wrote the laws and ran the mutants. No paid model was called beyond that agent.
 
 **The answer: yes, as many, not more.** The new file, written before any mutation result, killed
@@ -167,7 +167,7 @@ the final version). Nothing here would reverse it.
 
 ## Where things are
 
-None of it is on main (0027). The new law file,
+None of it is on main. The new law file,
 `next/packages/libfabrika/src/gateway/internal/waiting.second-check.test.ts`, is in the worktree of
 the branch `fabrikalfa/exp-second-check`. The Stryker reports, the sample, the plant log and the
 first version of the file are raw results under `runs/second-check/`, for the owner's private

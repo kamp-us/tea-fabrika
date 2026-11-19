@@ -1,4 +1,4 @@
-Approved by the lead agent, builds decision 0538 (next/'s test primitives live in @kampus/vitest) for ticket 1029; body 2b594a35a04c
+Approved by the lead agent, builds an earlier decision (next/'s test primitives live in @kampus/vitest) for ticket 1029; body 2b594a35a04c
 Plancheck-Version: 3
 
 # Plan: ticket 1029, a test opens its SQLite file through one module in `@kampus/vitest`, in next/
@@ -10,7 +10,7 @@ is checked against `origin/main` at `86a7668d6`. Installed: effect 4.1.2 (patche
 ```ts
 // The whole idea. Before: each test file opens its own file, and 27 of them in SQLite's default mode.
 const db = new DatabaseSync(file); // a rollback journal and a disk sync on every commit
-// After: one module of the test primitives package (decision 0538) opens it, the same way everywhere.
+// After: one module of the test primitives package (an earlier decision) opens it, the same way everywhere.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 const db = yield* TestDatabase.make(file); // journal in memory, no disk sync, closed with the scope
 ```
@@ -34,20 +34,15 @@ const db = yield* TestDatabase.make(file); // journal in memory, no disk sync, c
 
 ## What I read, and what runs today
 
-- **Decided notes:** [0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md)
+- **Decided notes:**
   (test primitives live in `@kampus/vitest`, which imports no service of ours);
-  [0061](../../../.decisions/0061-resources-are-acquired-in-a-scope.md) (a database is acquired in
-  a scope); [0052](../../../.decisions/0052-tests-never-depend-on-the-machine.md) (a test never
+ (a database is acquired in
+  a scope) (a test never
   depends on the machine, and a disk's sync speed is the machine);
-  [0029](../../../.decisions/0029-format-and-names-follow-effect.md) and
-  [0023](../../../.decisions/0023-next-follows-effects-code-style.md) (one PascalCase module per
-  file, `make` constructors, test tooling follows the same names);
-  [0069](../../../.decisions/0069-choices-are-settings.md),
-  [0421](../../../.decisions/0421-reuse-before-special-rules.md),
-  [0040](../../../.decisions/0040-existing-tools-before-hand-written.md),
-  [0209](../../../.decisions/0209-schemas-are-effect-schema.md),
-  [0535](../../../.decisions/0535-pull-requests-stay-fast-the-schedule-carries-the-rest.md) and
-  [0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md).
+ and
+ (one PascalCase module per
+  file, `make` constructors, test tooling follows the same names);,,,,
+ and.
 - **Pull request 1300 (ticket 1028, merged today):** a test store in the default mode wrote and
   deleted a rollback journal and synced the disk on every commit. In the jobs law A5, 22,289 request
   commits took 11.0 to 13.9 s before and 3.0 s after `journal_mode=WAL; synchronous=OFF`, and the
@@ -120,7 +115,7 @@ Two files sit in two groups and are counted once, by their file opens: `door.int
 ```ts
 // next/packages/vitest/src/TestDatabase.ts, a sketch
 /**
- * A SQLite file a test opens (decision 0538), as Django and Rails call it "the test database". `make`
+ * A SQLite file a test opens (an earlier decision), as Django and Rails call it "the test database". `make`
  * opens a file the test owns, fast: the journal in memory and no disk sync, since no law cuts the
  * power and a close keeps every commit (ticket 1028). `open` opens a file something else owns and
  * changes nothing in it.
@@ -230,7 +225,7 @@ possible follow-up, not this ticket.
    module home for a second operation and breaks 0029's names; (b) a `Layer` of a service, which
    needs a service class in the package and a tag per file, while the stores here need two to six
    files per test, opened at will; (c) a handle type of ours with `reopen` built in, which repeats
-   what `ScopedRef` already does (0421). The raw handle is what `nodeSql`, `db.prepare` and
+   what `ScopedRef` already does. The raw handle is what `nodeSql`, `db.prepare` and
    `db.isOpen` callers take today. `make` dies on a failed open, since the test made the folder;
    `open` fails typed, since `port-home.test-support.ts` maps that failure to its own `GuardError`
    today and a law reads it. Lean: this shape, 85% sure. The doubt is whether a second operation
@@ -262,8 +257,8 @@ possible follow-up, not this ticket.
      `open` sets no mode.
    - A crash: `MEMORY` can leave a broken file if the writer dies mid-write. No law here kills a
      process that holds a test store, and the temp folder is removed anyway.
-   - Is it a setting (0069)? No. A setting is a value a person picks, and nobody picks a test's
-     journal mode; a second value would only let a test drift back to the disk's speed (0052).
+   - Is it a setting? No. A setting is a value a person picks, and nobody picks a test's
+     journal mode; a second value would only let a test drift back to the disk's speed.
    - A law that must keep SQLite's default mode because it proves durability: none exists today.
      The only test that sets durable pragmas on purpose, `next/apps/fabrika/e2e/stored.integration.test.ts`,
      writes the product's own span queue file the product's way (`WAL; synchronous=FULL`). It moves to
@@ -334,7 +329,7 @@ possible follow-up, not this ticket.
 
 Every plant runs once in the tests step, is recorded in its report and run row, and is undone; none
 is committed. No host-only law: nothing needs launchd, Electron or the owner's Mac. D1 to D3 drive a
-real file, so their file is `*.integration.test.ts` and runs on the 3-hour schedule (0536); the
+real file, so their file is `*.integration.test.ts` and runs on the 3-hour schedule; the
 tests and build steps run it here by its path.
 
 ## Files
@@ -431,10 +426,10 @@ Estimate: 4 steps, $24
 ## Answered questions
 
 1. Is the journal mode a setting? No, by 0069's own test: nobody picks it, and a second value only
-   lets a test lean on the disk again (0052). The lead's call, not the owner's.
+   lets a test lean on the disk again. The lead's call, not the owner's.
 2. Should the 11 WAL files keep WAL? No: one value is the point of the ticket, and nothing in them
    needs WAL (each reopen closes first). The A5 re-timing checks the cost.
-3. Does `@effect/sql-sqlite-node` fit (0040)? No: not installed, and it is an async client, not the
+3. Does `@effect/sql-sqlite-node` fit? No: not installed, and it is an async client, not the
    synchronous handle the stores take.
 
 ## Open questions

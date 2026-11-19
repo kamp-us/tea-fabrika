@@ -1,7 +1,7 @@
 // Ban `Effect.promise(...)` and single-arg `Effect.tryPromise(...)`: require the
 // object-notation `Effect.tryPromise({ try, catch })` with an explicit tagged-error `catch`.
 //
-// Rationale (single site; .patterns/index.md house rule "Effect.tryPromise always uses
+// Rationale (single site; .kalfa/patterns/index.md house rule "Effect.tryPromise always uses
 // object notation"): `Effect.promise` and the single-arg `Effect.tryPromise(() => p)`
 // carry no `catch`, so a rejection surfaces as an uncatchable DEFECT with an empty `E`
 // channel instead of a typed, recoverable failure: the "cosplay as Effect" tell the
@@ -35,7 +35,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: node.arguments[0] ?? node,
             message:
-              "`Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "`Effect.promise(...)` is discouraged: a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`, or lift the pure core to an `Effect.fn` returning a typed `Effect`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
 
@@ -52,7 +52,7 @@ export const noEffectPromise: CreateRule = {
           context.report({
             node: only ?? node,
             message:
-              "Single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
+              "Single-arg `Effect.tryPromise(() => ...)` is discouraged: with no `catch` a rejection becomes an uncatchable defect with an empty error channel (.kalfa/patterns/index.md; #2736). Fix: use object-notation `Effect.tryPromise({ try, catch: (cause) => new SomeError({ cause }) })` with a `Schema.TaggedErrorClass`: copy `packages/fabrika-cli/src/capture/capture.ts` (or `packages/fate-effect`). Exception: // oxlint-disable-next-line fabrika/no-effect-promise -- <reason>.",
           });
         }
       },

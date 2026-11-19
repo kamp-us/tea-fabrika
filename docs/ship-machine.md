@@ -891,8 +891,7 @@ Three things to know before a real run. None of them came up in the first:
   847 real trips through ship, 4.8%). It is a separate outcome so no parent can
   close the ticket by mistake. What happens next is read from the ticket, never
   asked of a person: closed meanwhile, a named stop the ledger already holds,
-  or criteria still open, which go to a new build of only those. See
-  [0415](../.decisions/0415-ask-a-person-for-decisions.md).
+  or criteria still open, which go to a new build of only those. See.
 - **A branch behind main ships as it is.** The machine trusts the code host's
   own answer to "can this merge". A branch that is behind but has no conflict
   goes into the merge queue, which tests it on top of main. The gate has no

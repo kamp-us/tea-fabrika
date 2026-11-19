@@ -25,14 +25,11 @@ when to keep going and how to write for a reader who saw none of the work.
 2. **Read the code as built,** on main. Read the installed versions in `pnpm-lock.yaml` (Effect,
    `@demlik/tea`, vitest, any patch in `patches/`) and check every API against that version.
    Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
-   its decisions, patterns and source, and name its answer or say you found none
-   ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
-3. **Check what is settled** before you call anything open: `.decisions/`, `docs/direction/`,
+   its decisions, patterns and source, and name its answer or say you found none.
+3. **Check what is settled** before you call anything open: `.kalfa/decisions/`, `docs/direction/`,
    `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Run
-   `node .agents/skills/lead/scripts/records.ts find "<words>"` for each open question, in two or
-   three wordings, and read every hit. In a read-only sandbox, use `find --read-only "<words>"`
-   over the `origin/main` the lead fetched before the step. It may lack newer records; an absent
-   `origin/main` still fails.
+   `rg -il "<words>" .kalfa/decisions .kalfa/glossary docs/direction .kalfa/patterns .kalfa/runbooks` for each open
+   question, in two or three wordings, and read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
    this project.
@@ -54,21 +51,17 @@ when to keep going and how to write for a reader who saw none of the work.
   Inspect every named output, including encoded URLs, and plant a leak into each.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
 - When the plan changes a skill, a rule code checks or could check becomes a check and leaves the
-  prose. Only judgment stays in prose
-  ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+  prose. Only judgment stays in prose.
 - Name each host-only law: one that can only run on the real machine (launchd, the real Electron
   app, a real OS process or socket, a real signal). Say it runs before the first review, and that on
-  the owner's Mac it waits for the lead's read of its signal and launchd lines and the owner's yes
-  ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). A test on a real resource is a
-  `*.integration.test.ts` file ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)).
+  the owner's Mac it waits for the lead's read of its signal and launchd lines and the owner's yes. A test on a real resource is a
+  `*.integration.test.ts` file.
   A law that can run on a stand-in (an in-memory layer) runs on every pull request, so a new
-  `.integration.` law says in the plan why no stand-in will do
-  ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
+  `.integration.` law says in the plan why no stand-in will do.
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes
   ([changing the product](../guidelines/references/changing-the-product.md), "Shoot more than one layout").
-- **Existing tools first** ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
-  [0040](../../../.decisions/0040-existing-tools-before-hand-written.md)). Before a new helper,
+- **Existing tools first**. Before a new helper,
   function or tool, look for one in the repo, in the packages it already installs and on npm. Give
   each new one a line under `## Existing tools`: the path or name, what you searched, and the one
   you found or why none fits. A new function inside a file that exists gets its line too.
@@ -77,20 +70,19 @@ when to keep going and how to write for a reader who saw none of the work.
   library or industry term that the pull request's `## New names` cites. The plan lists each new
   domain word it coins (code names, plan text, examples) with its context and its `_Avoid_` words,
   and names `<context>/GLOSSARY.md` in its files table. The build writes the terms there, and the
-  review checks them ([0617](../../../.decisions/0617-glossary-reset-to-a-map.md)). The word is the
+  review checks them. The word is the
   industry's where one exists, else a short everyday word.
-- Ask "is this a setting?" of each new choice, and say why not when it is not
-  ([0069](../../../.decisions/0069-choices-are-settings.md)).
+- Ask "is this a setting?" of each new choice, and say why not when it is not.
 - Say what fact is lost if it is not recorded now.
 - In `next/`, place each file by [`next/AGENTS.md`](../../../next/AGENTS.md)'s libfabrika test.
 - Split a big plan into pull requests that each land whole, ordered by what the owner sees first.
   Give the files table a "Product lines expected" column (a number, or a word such as `tests` or
   `docs`), and list the slices as numbered items under `## Size`, each saying "<n> lines".
   `plancheck.sh --draft` prints the plan's size and names each slice with no estimate. No number
-  caps a slice ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)): cut by what
+  caps a slice: cut by what
   lands whole, never to fit a count.
 - End the Size section with `Estimate: <n> steps, $<d>`, the quest's budget: chain.ts stops a quest
-  at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps you expect:
+  at twice it. `n` is the steps you expect:
   tests, build, review, plus one per likely send-back. `d` is their list-price dollars, priced from
   similar steps in `field/runs/` and the older rows in `field/runs.jsonl`.
 

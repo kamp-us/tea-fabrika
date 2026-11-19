@@ -29,15 +29,14 @@ new version, and "today's" is the one in daily use.
 
 ## Every note
 
-This folder keeps no table of its notes
-([0522](../../.decisions/0522-no-folder-keeps-an-index-table.md)). Each note says what it is at its
-own top, and the lead's command prints one line per note as it is on `origin/main`:
+This folder keeps no table of its notes. Each note says what it is at its
+own top. To scan them:
 
 ```sh
-node .agents/skills/lead/scripts/records.ts list docs/direction
+head -n 12 docs/direction/*.md
 ```
 
-[`follows/`](./follows/README.md) holds one table per outside model we follow (0017); its README is
+[`follows/`](./follows/README.md) holds one table per outside model we follow; its README is
 one record of this folder.
 
 ## Adding a note

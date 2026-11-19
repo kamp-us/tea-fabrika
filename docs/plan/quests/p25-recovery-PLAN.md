@@ -26,10 +26,8 @@ PR description. Final type proof, remote proof and a fresh whole-diff review rem
 ## Approved scope
 
 Keep Tools, Program.port, T1 through T5, the tools exam binding and amendments A-Module, A-Port,
-A-Wire and A-Closed. These implement the checklist direction in
-[0137](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0137-tier-1s-program-is-the-checklist.md),
-the schema contract in
-[0210](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0210-agents-get-a-closed-schema.md),
+A-Wire and A-Closed. These implement the checklist direction in,
+the schema contract in,
 and [P25](https://github.com/kamp-us/tea-fabrika/blob/main/docs/plan/tier-1.md#the-pull-requests-one-at-a-time).
 The scope remains the library code half. It completes neither slice 1's real harness experiment
 nor the P25 row. Tracker 888 and umbrella ticket 328 stay open.
@@ -187,11 +185,9 @@ Tools.types.test.ts does not check its uncalled assertions. T5's real-rule integ
 and its plants need eligible remote proof. A lint pass alone does not prove those deliberate faults.
 
 The lead must obtain the required final-head CI and full branch proof. The manifest, lockfile
-and lint configuration trigger the full proof set under
-[0590](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md).
+and lint configuration trigger the full proof set under.
 Keep guarded laws on their eligible remote runners. Launchd, real Electron and real process-signal
-laws stay off the owner's laptop under
-[0594](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0594-safe-checks-direct-mac-ci.md).
+laws stay off the owner's laptop under.
 Obtain required real-resource proof before fresh whole-diff review. Match proof and review to
 the final head. A later push needs the corresponding updated read and proof.
 

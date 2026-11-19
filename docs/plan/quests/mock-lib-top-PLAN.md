@@ -5,8 +5,8 @@ Plancheck-Version: 3
 
 This is `next/` only: `next/packages/libfabrika/src/Id.ts`, the tests beside it, and the lint
 config that locks the folder. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) (no `vi.spyOn` in `next/`: a call goes
-through a service) and [0579](../../../.decisions/0579-property-laws-use-it-prop.md) (the
+ (no `vi.spyOn` in `next/`: a call goes
+through a service) (the
 Recorder is the one way to watch calls), on the shape of
 [`.patterns/effect-crypto-through-services.md`](../../../.patterns/effect-crypto-through-services.md)
 (random bytes come from Effect's `SecureRandom`). It is one row of the sweep list in
@@ -73,7 +73,7 @@ and `vitest/no-restricted-vi-methods` goes on for them.
 - **Effect on translating a defect:** `Effect.catchDefect` is "for when you need to report or
   translate defects at integration boundaries" (`effect/src/Effect.ts:5871`, `@stability stable`).
   The generator is that boundary: it turns the platform's failure into its own typed error, as
-  decision 0043 rule 12 asks of a module.
+  an earlier decision rule 12 asks of a module.
 - **The industry:** a random source passed in, not read from a global, is the plain dependency
   injection that lets a UUIDv7 maker be tested with fixed bits; RFC 9562 section 6.2 (the monotonic
   counter methods the generator follows) assumes the random bits come from a CSPRNG the
@@ -225,10 +225,10 @@ Counted again on main at `f7169af` with `rg -n 'vi\.|toHaveBeenCalled' *.test.ts
 | `Id.test.ts:975` | the same law: allocation order | spies on the id format check's `run` to log ids as they are decoded | goes; the law checks the exact ids a model predicts (below) |
 
 Every `try`/`finally` with `mockRestore` goes with its spy: the layer is scoped to the law's own
-provide, so nothing is left to restore (0061). `vi` leaves both files' imports.
+provide, so nothing is left to restore. `vi` leaves both files' imports.
 
 The source C1 law used `fc.assert` over `Effect.runPromise`. Its rewrite uses `it.effect.prop`
-with Schema inputs and the package setup seed (0579). Keep its input bounds, run count,
+with Schema inputs and the package setup seed. Keep its input bounds, run count,
 pinned cases, first failing case and all failure checks.
 
 ### The allocation-order law, rewritten
@@ -277,7 +277,7 @@ generator does: with `at` rolled back, the counter keeps counting.
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -303,7 +303,7 @@ the source runner does not grant an exception.
   lines that pass (`vi.waitFor`, a comment, a string, another object's `fn`). **Amendment
   (2026-11-15, merge session ruling 2):** `vi.fn()` is a line that must be refused. The first
   sketch planted it as a line that passes, since 0555 names four methods; the ruling puts `fn` in
-  every block (0557, 0579). The renamed import (`import { vi as v } ...; v.spyOn(...)`) joins the
+  every block. The renamed import (`import { vi as v } ...; v.spyOn(...)`) joins the
   set, and the tests step records its answer, since 0555 says the lint pull request plants it to
   find out. `plants.test.ts` runs the lines in every folder of every block that sets the rule, as
   its `REFLECT` scenario does, so each later slice's glob is checked by the same test.
@@ -324,11 +324,11 @@ block, and a later slice adds its glob to the block's `files`:
       "error",
       {
         // Amendment 2026-11-15, ruling 2: all five methods, `fn` included, with node's messages.
-        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder.",
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with a Recorder.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer."
       }
     ]
   }
@@ -357,7 +357,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -372,11 +372,11 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`), of the Reflect ban's warn block.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -445,7 +445,7 @@ No file of pull request 1366's diff is in this table (its 57 files were read wit
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `nice -n 19 pnpm exec vitest run --maxWorkers=1
@@ -580,7 +580,7 @@ choice is introduced: this preserves the existing generator properties under 055
 
 ## Current execution rule, 2026-11-17
 
-Read every selected law, helper and cleanup before local execution (0594). The earlier all-in-memory
+Read every selected law, helper and cleanup before local execution. The earlier all-in-memory
 claim is not blanket clearance for the changed selection. Checks that reach real process signals,
 launchd or real Electron run only on eligible disposable CI before review; preserve isolation for
 other real resources where needed. Coordinate the one global compiler. Bring a branch forward

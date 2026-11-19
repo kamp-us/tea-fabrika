@@ -1,7 +1,6 @@
 # Diagrams
 
-For a pattern doc and for a decision file
-([0005](../../../../.decisions/0005-patterns-and-decisions-are-visual.md)). The write-pattern and
+For a pattern doc and for a decision file. The write-pattern and
 adr skills both read this file.
 
 **Rule one: diagrams are Mermaid wherever possible.** Only when Mermaid really cannot express the

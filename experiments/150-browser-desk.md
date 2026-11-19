@@ -304,7 +304,7 @@ approval from a signed-in fabrika for any other browser.** It comes in branches,
 ```ts
 // A sketch: how a browser gets a session from the door, case by case.
 type Login =
-	| {kind: "token"}    // the person's own laptop: `fabrika open` reads <home>/web/url (0600) and opens it
+	| {kind: "token"}    // the person's own laptop: `fabrika open` reads <home>/web/url and opens it
 	| {kind: "approve"; code: string} // any other browser: it shows a short code and a QR;
 	                                  // the person approves it in their own fabrika, already signed in
 	| {kind: "passkey"}  // later: a browser approved once keeps a passkey, once the door is on https

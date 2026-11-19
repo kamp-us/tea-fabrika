@@ -9,7 +9,7 @@ Tracker ticket: "The desk program fabrika/tezgah: split, close, move between til
 A sketch, next/: the lines that work at the end of this lane, in a browser tab and the Electron app.
 C-b %      t1 checklist:1  ->  t1 | t2 side by side; t2 runs a new checklist, focus on t2
 C-b "      t2 splits down  ->  t2 over t3, focus on t3
-C-b o      focus t1 at once (optimistic, 0167); the brain confirms; your place in t1 comes back (0165)
+C-b o      focus t1 at once (optimistic, 0167); the brain confirms; your place in t1 comes back
 C-b ;      focus back to t3, the tile focused before
 C-b x      "close t3? (y/n)"  y  ->  t3 gone, its checklist stopped (shutdown), focus to the next tile in reading order
 a small second window on the same workspace   same layout and focus; tiles under 220x120 draw as strips
@@ -24,11 +24,11 @@ This builds two things from [Tier 1, the four primitives first](docs/plan/tier-1
 
 ## What the owner sees, slice by slice
 
-1. **S1, nothing on screen yet.** In the brain, a start is checked against the member who caused it (0170), and a program may stop its own child. Every later slice needs both.
+1. **S1, nothing on screen yet.** In the brain, a start is checked against the member who caused it (0026), and a program may stop its own child. Every later slice needs both.
 2. **S2a, a headless client.** `fabrika/tezgah` runs in the brain, one process per person. A headless window follows its layout instead of a fixed tile list, and a real-instance test splits and closes.
 3. **S2b, the browser tab.** The tab draws the workspace from tezgah. `C-b %`, `C-b "` and `C-b x` work, the close asks y/n, and a split with no room is refused in words. This is the first thing the owner sees.
 4. **S3, moving between tiles.** `C-b o`, `C-b ;`, the arrows, `h j k l`, F6 where the backend has it, and a click all move focus at once. The brain confirms each move, and a tile keeps its cursor.
-5. **S4, a smaller window.** A smaller second window folds tiles under 220x120 into strips (0277).
+5. **S4, a smaller window.** A smaller second window folds tiles under 220x120 into strips.
 6. **S5, the Electron app.** The same e2e suite and shots run in Electron, once P19 slice 3 (the Electron client) lands. The row counts as done only after S5 (0159's third amendment).
 
 ## How others do it
@@ -77,21 +77,21 @@ Each of these was read whole:
   - After a close, focus goes to the next open tile in reading order. The tile guidelines decided this, and program guidelines stand on it.
   - No motion on a tile.
   - Why: these are accessibility and keyboard rules that do not depend on today's code.
-- **From 0503, it leaves:** resize keys, `C-b [` and the covered terminal going inert. This lane has no terminal and no resize mode (0492).
+- **From 0503, it leaves:** resize keys, `C-b [` and the covered terminal going inert. This lane has no terminal and no resize mode.
 - **From 0505, it takes:**
-  - Two directions only, named `dir: "row" | "column"` (0277). Never tabs.
+  - Two directions only, named `dir: "row" | "column"`. Never tabs.
   - A split in the container's own direction adds a sibling; a split the other way nests a new container.
   - Nested containers alternate direction.
   - A settle after every change.
   - A check that refuses a broken tree (law L5).
-- **From 0505, it leaves:** `sizes` keyed by node id. In `next/`, `percent` sits on each part (0277).
+- **From 0505, it leaves:** `sizes` keyed by node id. In `next/`, `percent` sits on each part.
 - **From 0506, it takes:**
   - The last tile of a workspace never closes.
   - Focus is always on an open tile.
   - Programs know nothing about folds.
   - A strip is a real button named by its program.
 - **From 0506, it leaves:**
-  - A fold stored on the tile. In `next/`, a fold is the viewer's, worked out from the window's size and never stored (0277).
+  - A fold stored on the tile. In `next/`, a fold is the viewer's, worked out from the window's size and never stored.
   - `C-b f` and `C-b Space`. This lane is not asked for them.
 
 ## The shape
@@ -102,7 +102,7 @@ The types are sketches. Effect Schema writes every `_tag`.
 // next/packages/libfabrika/src/tezgah/Workspace.ts: the wire contract any client reads (a new module).
 export const TileId = Id.make("tile");             // 0211; a tile is counted too: tezgah prints t<n>
 export const WorkspaceId = Id.make("workspace");
-export const CursorKey = Schema.String.check(Schema.isMaxLength(80)); // a stable key a view gives (0165)
+export const CursorKey = Schema.String.check(Schema.isMaxLength(80)); // a stable key a view gives
 export const Tile = Schema.Struct({
   id: TileId,
   n: Schema.Int,                       // printed as t<n> by tezgah only; nobody parses it
@@ -185,7 +185,7 @@ tezgah.focus_left ...   <prefix>h j k l, arrows     word "focus left" ... (S3)
 <prefix> <prefix>       passes the prefix key to the tile's content, as tmux's send-prefix
 ```
 
-**States** (0037):
+**States**:
 
 - The prefix is `idle`, `armed` or `asking`.
 - A split waits in `starting` until `start_child` answers. Then the tile enters the layout; a refusal drops it.
@@ -206,7 +206,7 @@ tezgah.focus_left ...   <prefix>h j k l, arrows     word "focus left" ... (S3)
 2. **"%" resolves to a command.** `Keys.route` matches step 2 of 0272, the prefix, and gives `tezgah.split_right`. `Prefix` goes back to `idle`. `Layout.rects` says each half of t1 would be 720x868, so the 220x120 floor holds. The window mints `tile_01j...` with `Id.Generator`, the same way it mints letter ids.
 3. **The press goes out.** This is the press path built in P18 slice 1. `now` stamps the letter `letter_01j...` and its `sentAt`. Then `process.send` carries `{type: "did", does: "tezgah.split_right", from: <t1 id>, tile: <new id>, via: {_tag: "key", keys: "ctrl+b %"}}` to tezgah's pid. The tab writes client rows `press {command: "tezgah.split_right", via: "key", letter}` and `prefix {does, ms}`.
 4. **tezgah takes the letter.** The door stamps the sender. `refuse` sees a fresh id on a known workspace and answers null. The update adds the split to `starting` and returns `start_child {program: "fabrika/checklist", name: "checklist:tile_01j..."}`.
-5. **The runner asks, and main's core checks.** The runner calls `Children.start` with `from.parent`, the window letter's id. `ChildrenLedger`'s `judge` asks `Senders` who sent that letter: the founder. `StartProgram` finds the founder's `owner` row on the fabrika, which the boot writes, and lets it through (0170, 0526). `Children.start` writes `started` with `member` set to the founder, and tezgah gets `start_child_ok {started}`.
+5. **The runner asks, and main's core checks.** The runner calls `Children.start` with `from.parent`, the window letter's id. `ChildrenLedger`'s `judge` asks `Senders` who sent that letter: the founder. `StartProgram` finds the founder's `owner` row on the fabrika, which the boot writes, and lets it through (0026, 0025). `Children.start` writes `started` with `member` set to the founder, and tezgah gets `start_child_ok {started}`.
 6. **tezgah changes the layout.** `start_child_ok` runs `Layout.split`: a row with t1 at 50 and t2 at 50, where t2 is `{n: 2, child: true, keep: "failed", cursor: null}`. Focus moves to t2, and `recent` is `[t2, t1]`. A view patch goes to every window on workspace 1.
 7. **The window follows.** The window's `Tezgah` child takes the new server state, and the window works out its tiles from it. t2 is new, so the window reads `processes/checklist:tile_01j...` and opens that pid's view.
 8. **Tuval draws.** Two regions, `checklist, t1` and `checklist, t2, focused`, with the 4px divider between them. DOM focus goes to t2's body, since its cursor is null. The tab writes the reply row `reply {letter, result: "accepted"}`.
@@ -285,19 +285,19 @@ The settled notes were checked first for each item. The lane goes on with each l
 - After a close, focus goes to the next open tile in reading order (tile guidelines, decided). The saved model holds the focus that resulted (amendment 3).
 - A split's new tile takes half the focused tile's share, after it, and takes focus (program guidelines G3 R3 and G4).
 - The last tile of a workspace never closes: `last_tile` (0506's rule, read through 0277).
-- Layout changes wait for the server; focus and cursor do not (0167).
-- A start from a tezgah letter is checked by main's permission core: the window letter's sender, with `StartProgram` on the fabrika. tezgah holds no start permission of its own (0170, 0526). A start with no person's letter behind it acts as the member its requester was checked against (0531), and only a start with no member at all falls back to `StartGrant` (amendment 15).
-- The prefix arms only the window it was pressed in, and only the finished command travels (0278).
-- A default on a key the backend cannot have is never shipped to that backend. A person's binding on such a key fails at load (0278).
+- Layout changes wait for the server; focus and cursor do not.
+- A start from a tezgah letter is checked by main's permission core: the window letter's sender, with `StartProgram` on the fabrika. tezgah holds no start permission of its own (0026, 0025). A start with no person's letter behind it acts as the member its requester was checked against, and only a start with no member at all falls back to `StartGrant` (amendment 15).
+- The prefix arms only the window it was pressed in, and only the finished command travels.
+- A default on a key the backend cannot have is never shipped to that backend. A person's binding on such a key fails at load.
 - The router follows 0272's order for steps 1, 2 and 6. No program has a mode yet.
 - A fixed `tiles` list stays only for a headless client started with no desk. Every window with a desk takes its tiles from tezgah (0279's amendment).
-- A tile's `keep` is written from its first letter, and P18 slice 4 acts on it (0276).
+- A tile's `keep` is written from its first letter, and P18 slice 4 acts on it.
 
 ## Linear, per screen
 
 - **The tiled frame (S2b).** Linear would make it a piece every program gets for free: keyboard first, little chrome, and each action's key shown where the action is. We differ in tiling and the prefix, which are tmux's (W5: where they clash, the prefix wins). We match Linear in having one table: the status line hint, the tooltips and the later palette all read it.
 - **The prefix line.** Linear's two-key sequences show what the next key does. Ours shows the same after `C-b`, from the same table.
-- **The close ask.** Linear confirms in a small dialog. Ours is one line in the status line, because nothing covers the focused tile and only one modal is open at a time (0265). This is tmux's answer.
+- **The close ask.** Linear confirms in a small dialog. Ours is one line in the status line, because nothing covers the focused tile and only one modal is open at a time. This is tmux's answer.
 - **No room to split.** Linear lays panels out to fit. Ours says it in words, as tmux refuses, and a smaller window folds (S4).
 - **Strips (S4).** Linear folds its sidebar to icons. Ours folds a tile to a strip named by its program, never an icon alone (WCAG 1.4.1).
 
@@ -311,7 +311,7 @@ The settled notes were checked first for each item. The lane goes on with each l
 - macOS window rules cannot be checked on Linux.
 - CI runs the visual tests (`*.visual.test.ts`, the `next-visual` Vitest project) on the 3-hour full run, and on a pull request only when it carries the `visual` label. Integration tests (`*.integration.test.ts`, the `next-integration` project) run only on the 3-hour full run (0536, amendment 15).
 
-**How the shots are taken.** Browser shots come from the visual tests, run from the repo root as `SHOTS=<a temp folder under runs/> nice -n 15 pnpm exec vitest run --project next-visual <file>`, on the real `dev.ts` with its own temp `FABRIKA_HOME`. The app's old e2e runner script is gone on main; the `next-visual` project picks up every visual file (amendment 15). Shots come from `page.screenshot`, are attached and are never committed (0160). Each one covers the five layouts, plus 0471's eight in both looks (200% zoom on the 2x2, the smallest tile, 400% reflow).
+**How the shots are taken.** Browser shots come from the visual tests, run from the repo root as `SHOTS=<a temp folder under runs/> nice -n 15 pnpm exec vitest run --project next-visual <file>`, on the real `dev.ts` with its own temp `FABRIKA_HOME`. The app's old e2e runner script is gone on main; the `next-visual` project picks up every visual file (amendment 15). Shots come from `page.screenshot`, are attached and are never committed. Each one covers the five layouts, plus 0471's eight in both looks (200% zoom on the 2x2, the smallest tile, 400% reflow).
 
 **Shots per slice:**
 - **S2b** (`next/apps/fabrika/e2e/tezgah-frame.visual.test.ts`): one tile; after `C-b %`; after `C-b "`; the 2x2; 1024x700; the close ask; the refused split; the prefix line armed.
@@ -447,9 +447,9 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 - **L12, L21, L28, L30 and L33** start a real `dev.ts` brain (workerd through Alchemy), real sockets and Chromium. A step's container can run them, and they run before the first review of their slice. In CI, L12 (an integration test) runs only on the 3-hour full run; L21, L28, L30 and L33 (visual tests) run there too, and on a pull request only with the `visual` label (0536, amendment 15).
 - **L35** needs the real Electron app.
-  - On the owner's Mac, it waits for the lead's read of its signal and the owner's yes (0178).
+  - On the owner's Mac, it waits for the lead's read of its signal and the owner's yes.
   - In this container, it could run only once Electron's binary is fetched and run under `xvfb-run`, which is untried. A skipped run is not evidence.
-- **The cursor needs a real screen reader run before it counts as done** (0165). That is VoiceOver on the Mac, by a person. It is owed after S3 and named in that pull request.
+- **The cursor needs a real screen reader run before it counts as done**. That is VoiceOver on the Mac, by a person. It is owed after S3 and named in that pull request.
 
 ## What it records, and what is lost if not
 
@@ -464,7 +464,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 - New: `prefix {does, ms}`, `focus {letter, result, ms}` (S3) and `fold {strips, width, height}` on change (S4).
 - What is lost if these are not recorded now: whether a move was overridden, which only the window sees, and the prefix latency, which settles 0278's 70%.
 
-**The start's member.** Main's core reads it from `parent` through `Senders` and writes it on the child's `started` line as `member` (0531). The desk adds no field (amendment 15).
+**The start's member.** Main's core reads it from `parent` through `Senders` and writes it on the child's `started` line as `member`. The desk adds no field (amendment 15).
 
 **A stop.** It ends with `shutdown`, never `normal` or `crashed`. Without that, a closed tile could not be told from a crash.
 
@@ -500,19 +500,19 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
 - 2026-11-14 (lead, after S2b's first review): the room check measures drawn tiles, never bare percent shares. `Layout.rects` takes the gap the frame draws between parts (`rects(layout, size, {gap})`): each container gives each part its percent of what is left after its own `parts - 1` gaps, so nested containers lose their own gaps too. The window's `size` Msg is the area the parts are laid out in, inside the frame's outer padding. The gap is one number in libfabrika (4px, 0492's divider), and Tuval's frame draws its divider and padding from that same number, so the drawing and the check can never drift apart. L18 measures drawn tiles; S4's fold (L31) reuses it.
 
-- 2026-11-14 (lead, after S3's tests step): (1) a pending move is matched by its letter and dropped once its reply has come and a view whose `rev` is at or past the reply's inbox position (`accepted.pos`) has arrived; a view's `rev` counts inbox positions, never ledger revisions. (2) A click or a Tab into another tile is the command `tezgah.focus` with `via {_tag: "click"}` and no key row; the window's Msg for it is `focus {tile, cursor}`. (3) Every letter that moves focus off a tile carries that tile's cursor, a split included, and tezgah stores it on `from`, since 0165 says returning to a tile never resets it to the top; a close carries none, its tile is gone. (4) Next and previous wrap, as tmux does; a direction with no neighbor does nothing; a tie for the most overlap goes to the tile first in reading order (the lead's lean, 70%). (5) A refused move is dropped when its refusal arrives, since tezgah's state did not change; it writes `focus {letter, result: "overridden"}` (the lead's lean, 75%). (6) The focus rows of the commands table are checked in `next/programs/tezgah/src/program.laws.test.ts`. (7) The real screen reader run of the cursor (0165) is owed after S3, by a person, on the Mac.
+- 2026-11-14 (lead, after S3's tests step): (1) a pending move is matched by its letter and dropped once its reply has come and a view whose `rev` is at or past the reply's inbox position (`accepted.pos`) has arrived; a view's `rev` counts inbox positions, never ledger revisions. (2) A click or a Tab into another tile is the command `tezgah.focus` with `via {_tag: "click"}` and no key row; the window's Msg for it is `focus {tile, cursor}`. (3) Every letter that moves focus off a tile carries that tile's cursor, a split included, and tezgah stores it on `from`, since 0165 says returning to a tile never resets it to the top; a close carries none, its tile is gone. (4) Next and previous wrap, as tmux does; a direction with no neighbor does nothing; a tie for the most overlap goes to the tile first in reading order (the lead's lean, 70%). (5) A refused move is dropped when its refusal arrives, since tezgah's state did not change; it writes `focus {letter, result: "overridden"}` (the lead's lean, 75%). (6) The focus rows of the commands table are checked in `next/programs/tezgah/src/program.laws.test.ts`. (7) The real screen reader run of the cursor is owed after S3, by a person, on the Mac.
 
-- 2026-11-14 (lead, after S3's first review): (1) a dropped move's row says what the person saw: `overridden` when tezgah refused it, or when dropping it moves the drawn focus (a jump back); `kept` otherwise, so a window's own earlier move that its next move superseded is `kept`. Every dropped move gets its row, as before. (2) `CursorKey` holds any key a view gives: at most 256 characters, so the checklist's `item:<name>` (up to 85) always fits; tezgah and the window read the same schema, and a longer key a future view gives is its own bug, refused at that view. (3) A pending move's states are one tagged union, `waiting {n}`, `sent {letter}` and `answered {letter, pos, ms}`, never two nullable fields (0037).
+- 2026-11-14 (lead, after S3's first review): (1) a dropped move's row says what the person saw: `overridden` when tezgah refused it, or when dropping it moves the drawn focus (a jump back); `kept` otherwise, so a window's own earlier move that its next move superseded is `kept`. Every dropped move gets its row, as before. (2) `CursorKey` holds any key a view gives: at most 256 characters, so the checklist's `item:<name>` (up to 85) always fits; tezgah and the window read the same schema, and a longer key a future view gives is its own bug, refused at that view. (3) A pending move's states are one tagged union, `waiting {n}`, `sent {letter}` and `answered {letter, pos, ms}`, never two nullable fields.
 
-- 2026-11-14 (lead, round R, after the project lead's review of the pull request and its nine finding rows): (1) this plan lives in the repo at `docs/plan/lanes/desk-PLAN.md`, so a law's "the approved plan" and "amendment N" resolve. (2) A window whose person has no tezgah process (the boot starts only the founder's) says so: its tezgah link reaches a `missing` state, the page says "tezgah is not running for you yet" in the status bar and the polite region, never "Opening", and the window reads `processes/tezgah:<person>` again on each redial (the lead's lean, 70%; who starts a later member's tezgah stays with invites, Tier 3). (3) Inside tezgah, `workspace` always means a workspace's number, as on the wire and in the window's `tezgah: {workspace}` option; a workspace's id is never keyed `workspace` (in `Starting` it is `space`). (4) A fixed example keeps the `pinned:` label only for a named past bug (the tests skill); a plan lean or a boundary of a rule is labeled `scenario:` with its reason, or becomes part of a property. (5) The Tier 1 rows and the glossary rows the lane touched are brought up to date in the same change (0013).
+- 2026-11-14 (lead, round R, after the project lead's review of the pull request and its nine finding rows): (1) this plan lives in the repo at `docs/plan/lanes/desk-PLAN.md`, so a law's "the approved plan" and "amendment N" resolve. (2) A window whose person has no tezgah process (the boot starts only the founder's) says so: its tezgah link reaches a `missing` state, the page says "tezgah is not running for you yet" in the status bar and the polite region, never "Opening", and the window reads `processes/tezgah:<person>` again on each redial (the lead's lean, 70%; who starts a later member's tezgah stays with invites, Tier 3). (3) Inside tezgah, `workspace` always means a workspace's number, as on the wire and in the window's `tezgah: {workspace}` option; a workspace's id is never keyed `workspace` (in `Starting` it is `space`). (4) A fixed example keeps the `pinned:` label only for a named past bug (the tests skill); a plan lean or a boundary of a rule is labeled `scenario:` with its reason, or becomes part of a property. (5) The Tier 1 rows and the glossary rows the lane touched are brought up to date in the same change.
 
 - 2026-11-14 (lead, after S4's tests step): (1) the focused tile is never a strip, even when the window is too small for it (0506's lesson: focus is always on an open tile); the 220x120 floor holds for every other open tile. (2) Which tiles fold is decided on the drawn geometry of full percent shares (`rects` with `GAP`); a strip is then drawn 22px across in a row and 20px tall in a column (the fold-not-tabs note), and the open tiles of its container share the space it leaves, so an open tile only grows past what the fold measured and the floor still holds (the lead's lean, 75%). (3) Each folded tile is its own strip, a button named `open <program>, t<n>`, as L31 says; a container whose tiles all fold is not merged into one strip (today's 0506 merges it; the lead's lean, 65%: one button per tile keeps each reachable and named). (4) The `fold` row's `strips` is the count of strips; which tiles folded rebuilds from tezgah's view, the window's size and its focus. (5) L32's "never sent" half also walks the split path, where splits are walked (`next/packages/libfabrika/src/client/Prefix.laws.test.ts`, a tests row).
 
-- 2026-11-14 (lead, after S4's first review, which sent the plan back; this replaces amendment 12's points 1 to 3): amendment 12 measured folds on full shares while the frame draws strips at a fixed size, so an open tile could be drawn under the floor and a narrow focused tile lost its title (the tile guidelines: a title's id and state are never cut). Now: (1) **one geometry, in libfabrika.** `Fold.ts` owns a pure `drawn(w, size, strips)` that gives each tile's drawn box, and `STRIP = {row: 22, column: 20}` moves there beside `GAP` (as amendment 7 moved the gap): a strip takes its fixed size along its container's axis; every container on the focused tile's path holds the part that leads to it at `min(220 or 120, what the container has)` along its own axis; the other open parts share what is left by percent. (2) **`fold` is a fixpoint on that geometry:** start with no strips and add every open tile but the focused one drawn under 220x120, again and again, until nothing changes (strips only grow, so it ends within the tile count). (3) **A container whose tiles all fold** takes one strip's size along its parent's axis, and its strips lie along that band, one button per tile, each named as before. (4) **The window's split room check measures with the same `drawn`**, so a split it allows does not fold a tile at once. (5) **Tuval draws from the same numbers** (each part's size from `drawn`, or the same rule in flex terms), so drawing and check cannot drift. (6) L31 becomes: every open tile but the focused one, as drawn, is at least 220x120; the focused tile is drawn at least `min(220x120, the area)`; no extra folds (each strip was under the floor in the geometry it folded in); and the e2e compares the tab's boxes with `drawn` within 1px. (7) A pixel size in a Msg or a row is typed by its own schema, never `Ms` (0212). The lead's lean, from the reviewer's, 80%.
+- 2026-11-14 (lead, after S4's first review, which sent the plan back; this replaces amendment 12's points 1 to 3): amendment 12 measured folds on full shares while the frame draws strips at a fixed size, so an open tile could be drawn under the floor and a narrow focused tile lost its title (the tile guidelines: a title's id and state are never cut). Now: (1) **one geometry, in libfabrika.** `Fold.ts` owns a pure `drawn(w, size, strips)` that gives each tile's drawn box, and `STRIP = {row: 22, column: 20}` moves there beside `GAP` (as amendment 7 moved the gap): a strip takes its fixed size along its container's axis; every container on the focused tile's path holds the part that leads to it at `min(220 or 120, what the container has)` along its own axis; the other open parts share what is left by percent. (2) **`fold` is a fixpoint on that geometry:** start with no strips and add every open tile but the focused one drawn under 220x120, again and again, until nothing changes (strips only grow, so it ends within the tile count). (3) **A container whose tiles all fold** takes one strip's size along its parent's axis, and its strips lie along that band, one button per tile, each named as before. (4) **The window's split room check measures with the same `drawn`**, so a split it allows does not fold a tile at once. (5) **Tuval draws from the same numbers** (each part's size from `drawn`, or the same rule in flex terms), so drawing and check cannot drift. (6) L31 becomes: every open tile but the focused one, as drawn, is at least 220x120; the focused tile is drawn at least `min(220x120, the area)`; no extra folds (each strip was under the floor in the geometry it folded in); and the e2e compares the tab's boxes with `drawn` within 1px. (7) A pixel size in a Msg or a row is typed by its own schema, never `Ms`. The lead's lean, from the reviewer's, 80%.
 
 - 2026-11-14 (lead, after S4's tests to amendment 13): (1) "what the container has" is its length minus its own gaps and strips, so the focused tile is held at `min(floor, that)`. (2) When a container's strips alone are longer than the container, its strips share its length equally; that window is too small for the layout, and nothing else is promised there (the lead's lean, 70%). (3) A band's strips share the band's length equally, and each strip's text runs along it, drawn whole where the band allows.
 
-- 2026-11-14 (plan, after main's permission core, ticket 953, [pull request 1239](https://github.com/kamp-us/tea-fabrika/pull/1239), was merged into the lane at `90409b69a`): S1's start check moves off its stand-in and onto main's core. Main now checks every start a letter caused with `StartProgram` on the fabrika, against that letter's sender, in `next/packages/libfabrika/src/processes/ChildrenLedger.ts`'s `judge`, and carries the member down the chain of starts (0170, 0526, 0531). Nothing reads the stand-in's verdict since the merge, and two of its laws went red, because they say any admitted key may start any program and main refuses a sender with no relation row.
+- 2026-11-14 (plan, after main's permission core, ticket 953, [pull request 1239](https://github.com/kamp-us/tea-fabrika/pull/1239), was merged into the lane at `90409b69a`): S1's start check moves off its stand-in and onto main's core. Main now checks every start a letter caused with `StartProgram` on the fabrika, against that letter's sender, in `next/packages/libfabrika/src/processes/ChildrenLedger.ts`'s `judge`, and carries the member down the chain of starts (0026, 0025). Nothing reads the stand-in's verdict since the merge, and two of its laws went red, because they say any admitted key may start any program and main refuses a sender with no relation row.
 
   (1) **The stand-in goes.** Each piece, and the step that deletes it:
   - Build: `next/packages/libfabrika/src/access/StartRule.ts`, the whole file (`mayStart`, always true).
@@ -521,12 +521,12 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
   - Tests: `next/packages/libfabrika/src/access/StartRule.laws.test.ts`, the whole file.
   - Tests: in `next/packages/libfabrika/src/runtime/StartChildTest.ts`, the moves `member_start` and `outsider_start`, the props "Desk S1 L1" and "Desk S1 L2", and the header lines that describe `mayStart`. The writers `memberWriter` and `outsider` and the door's `SessionManager` stay: the new moves in (2) use them.
   - Tests: in `next/apps/fabrika/src/start-child.laws.integration.test.ts`, the scenario "Desk S1 L1, L2" and its comment; (2) restates it.
-  - The stand-in also checked an agent as its own key. Main's `Senders` checks an agent as `person:<for>`, capped by its person (0526), so that rule leaves with the stand-in, and no desk law asserted it.
+  - The stand-in also checked an agent as its own key. Main's `Senders` checks an agent as `person:<for>`, capped by its person (0025), so that rule leaves with the stand-in, and no desk law asserted it.
   - Nothing else in the lane reads `mayStart` or `permitted` (searched under `next/`).
 
   (2) **L1 and L2, in the real check's terms** (the Laws table rows above are rewritten to match). They still run on real runners, the real ledger and the door's real `SessionManager`, through the runner's `start_child` Cmd. That is what main's own laws in the processes module's `ChildrenMemberTest` suite do not cover: they call `Children.start` directly, so only the desk's laws prove that the runner hands main's core the letter's id as `from.parent`.
   - **The test world.** `next/packages/libfabrika/src/node/StartChild.integration.test.ts` gives `ChildrenLedger.layer` the world's relation rows through `RelationsMemory.layer`, and a `Senders` made with `SessionSenders.make` from the door's own `SessionManager.sender`, the same way `cloudflare/runtime.ts` makes the real one. Today that driver gives every start "no sender", which is why the stand-in's laws went red. So `StartChildTest.Store["shared"]` takes the rows and the `Senders`, and the host builds the door's `SessionManager` before `shared`.
-  - **What the generator plants.** Each run draws three people, each with a role from `owner`, `admin`, `member` or none, and one `related` row per role on `fabrika:p42`. A fourth sender's key is removed (the existing outsider, whose key the `SessionManager` refuses). The moves are `related_start`, `unrelated_start` and `removed_start`, a letter from one of those senders to a starter that asks for any program in `ANY_PROGRAM`. L2 also sends letters to a child that a related sender's start made, so the requester has a member of its own (0531). Seed 119120, 200 runs each.
+  - **What the generator plants.** Each run draws three people, each with a role from `owner`, `admin`, `member` or none, and one `related` row per role on `fabrika:p42`. A fourth sender's key is removed (the existing outsider, whose key the `SessionManager` refuses). The moves are `related_start`, `unrelated_start` and `removed_start`, a letter from one of those senders to a starter that asks for any program in `ANY_PROGRAM`. L2 also sends letters to a child that a related sender's start made, so the requester has a member of its own. Seed 119120, 200 runs each.
   - **L1 asserts:** a sender with any of the three roles gets `start_child_ok` with a fresh `started`, decoded by `Started`, for a program no `StartGrant` names (`plain`, `starter`) as well as for one it does (`merger`). The child runs the program asked for, and its `started` line carries `member: {_tag: "person", key, for: <the sender>}`. A sender with no role gets `{type: "start_child_err", outcome: "forbidden"}`, writes no process row and registers no name. The plants: `permissions/Model.ts`'s `start` drops `member` (`p.union("owner", "admin")`), and the member draws go red; `judge` lets a `Denied` through, and the no-role draws go red.
   - **L2 asserts:** the member checked is the letter's sender, never the program that asked and never the requester's own member. A sender with no row, or with a removed key, is `forbidden` even for `merger`, which the starter's own grant names, and even when the requester is a child whose member holds `start`. Each refusal writes nothing. The plants: `judge` reads the requester's member before the sender (the child draws go red); `judge` falls back to `StartGrant` when the sender holds no row (the `merger` draws go red).
   - **The real door's scenario** in `next/apps/fabrika/src/start-child.laws.integration.test.ts` keeps its two programs, with no start grant on the instance. It now asserts that each start is allowed because the boot's `owner` row names the founder, and that each `started` line names the founder as `member`. Its plant: `cloudflare/runtime.ts` writes no owner row, and both starts answer `forbidden`. Only the founder can be admitted on a real instance today, so its refusal half stays with L1 and L2 here and with main's L18, the app's start-member scenario, which this lane does not change.
@@ -561,7 +561,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
   | L1: any member may start any program (0170's first rule) | L10 and L13: a member's start is started exactly when the member holds start, whatever StartGrant says |
   | scenario: Desk S1 L1, L2: the founder's letter starts any program with no start grant at all | scenario: Desk S1 L1, L2: the founder's letter starts two programs with no start grant, as the fabrika's owner, and each started line names the founder as member |
 
-  (3) **Lint, type or test.** L1, L2 and the scenario are tests, since each needs real runners or a real instance; they are integration tests, run on the 3-hour full run. The deletion needs no law of its own: the type check fails on a leftover import of `StartRule.ts` or a leftover `permitted`, and `pnpm lint:dead` fails on a leftover export (0006).
+  (3) **Lint, type or test.** L1, L2 and the scenario are tests, since each needs real runners or a real instance; they are integration tests, run on the 3-hour full run. The deletion needs no law of its own: the type check fails on a leftover import of `StartRule.ts` or a leftover `permitted`, and `pnpm lint:dead` fails on a leftover export.
 
   (4) **Stale text, brought up to date.** In this plan: the "Decided in one line" start line, the shape's `StartRule` sketch, step 5 of the trace, "What it records" on the start's member, the Laws table's L1 and L2, the Files table (the deleted stand-in files and the Node driver, each with its owner), Validation's commands, and where each test runs (integration tests on the 3-hour full run only; visual tests there too, and on a pull request only with the `visual` label; 0536). The test files already carry main's names (`tezgah-runner.laws.integration.test.ts`, and `tezgah-frame`, `tezgah-focus` and `tezgah-fold` as `*.visual.test.ts`), and the app's old e2e runner script is gone, so "Show it running" and Validation now use the `next-visual` project. In `docs/plan/tier-1.md` (a build row, 0013), the build step: rewrites piece 2's S1 bullet to say the start check is main's `StartProgram` check against the window letter's sender, with no "ticket 953 moves the check" left; moves the "Not built" line about 0531 ("Ticket 953 builds it") into what is built, since main records and checks the requester's member; and marks the "Decide first" item on how `fabsh` may start any program when a start right names one exact pair as settled by 0170 and 0526, since a member is checked and no program holds a start right.
 
@@ -569,7 +569,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 
   (6) **Two old asks are closed.** May tezgah hold a start grant until the core lands: no. 0170 says the desk and `fabsh` hold no start permission of their own, and the ask is moot now, since the check reads the window letter's sender. Where focus lands after a close: the next open tile in reading order, on that tile's cursor, and at the top only for a tile that never had focus (`docs/direction/tile-guidelines.md`, "Where focus lands"; 0165).
 
-  (7) **No new open question.** Searched `.decisions/` (0170, 0172, 0526, 0531, 0536, 0165), `.glossary/TERMS.md` (`permission`, `grant`, `tezgah`), `docs/direction/` (`tile-guidelines.md`, `the-desktop-layer.md`) and the plan docs (`docs/plan/tier-1.md`, `docs/plan/lanes/t953-PLAN.md`) for the start check, the test world's rows and the layer move. Each choice here builds a decided note. Open question 1 stands as it was.
+  (7) **No new open question.** Searched `.decisions/` (0026, 0025), `.glossary/TERMS.md` (`permission`, `grant`, `tezgah`), `docs/direction/` (`tile-guidelines.md`, `the-desktop-layer.md`) and the plan docs (`docs/plan/tier-1.md`, `docs/plan/lanes/t953-PLAN.md`) for the start check, the test world's rows and the layer move. Each choice here builds a decided note. Open question 1 stands as it was.
 
 ## Open questions
 
@@ -592,7 +592,7 @@ Each shot is looked at, and the pull request says what squeezes, breaks or looks
 - **No line here ran.** Every claim about `next/` is read from the code at `d25a796`. Every claim about Electron in this container is read, not run.
 - **Pull request 1204 also changes Tuval's page start and `next/apps/fabrika/src/entry/browser.tsx`.** Whichever lands second merges by hand.
 - **Pull request 1104 adds shard rows for new test files.** Until it lands, each new file counts as 1 s in CI's split.
-- **S2a is the largest slice, about 1,100 lines.** It lands whole because a headless client drives it end to end. No number caps it (0099).
+- **S2a is the largest slice, about 1,100 lines.** It lands whole because a headless client drives it end to end. No number caps it.
 - **How two windows on one workspace feel day to day** (W4's fast follow) is not settled by any law here.
 - **Whether an empty checklist per split reads as clutter** is only answered by use.
 
@@ -617,7 +617,7 @@ Estimate: 25 steps, $60
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-14-desktop-note-names-desk-program","date":"2026-11-14","by":"plan","model":"claude-opus-5-5","rule":"doc_drift","location":{"path":"docs/direction/the-desktop-layer.md","line":14},"says":"In next/, the desktop layer note still says the desk is `next/programs/desk`, built in as `fabrika/desk`, while 0491 and the glossary's tezgah row say the program is `fabrika/tezgah` and never desk.","proof":"docs/direction/the-desktop-layer.md:14 reads 'a program, `next/programs/desk`, built in as `fabrika/desk`'; .glossary/TERMS.md:69 reads 'Its program is `fabrika/tezgah` ... Not `desk`'; .decisions/0491-window-view-tile-and-tezgah.md says 'Tuval's window manager is tezgah and never desk'.","cost":"A builder who reads the note names the package or the commands `desk`, and a review has to send it back.","head":"d25a7962556e5e400d3b95dec0eee17a5fae30d5","ticket":null,"pr":null}
+{"_tag":"finding","id":"2026-11-14-desktop-note-names-desk-program","date":"2026-11-14","by":"plan","model":"claude-opus-5-5","rule":"doc_drift","location":{"path":"docs/direction/the-desktop-layer.md","line":14},"says":"In next/, the desktop layer note still says the desk is `next/programs/desk`, built in as `fabrika/desk`, while 0491 and the glossary's tezgah row say the program is `fabrika/tezgah` and never desk.","proof":"docs/direction/the-desktop-layer.md:14 reads 'a program, `next/programs/desk`, built in as `fabrika/desk`'; .glossary/TERMS.md:69 reads 'Its program is `fabrika/tezgah` ... Not `desk`'; window view tile and tezgah says 'Tuval's window manager is tezgah and never desk'.","cost":"A builder who reads the note names the package or the commands `desk`, and a review has to send it back.","head":"d25a7962556e5e400d3b95dec0eee17a5fae30d5","ticket":null,"pr":null}
 ```
 
 ```json

@@ -1,43 +1,43 @@
 ---
 name: write-pattern
-description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
+description: Write or re-ground one `.kalfa/patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
 ---
 
 # write-pattern
 
-`.patterns/` says **how the code is shaped now**. A decision that describes an old world is
+`.kalfa/patterns/` says **how the code is shaped now**. A decision that describes an old world is
 history doing its job. A pattern doc that describes an old world is a trap. So the whole skill is
 one question asked twice: is this true of the source right now, and will a reader who cannot check
 still be right tomorrow?
 
 It is the code-level sibling of the [guidelines skill](../guidelines/SKILL.md), which covers product
-design. You edit one path and nothing else: `.patterns/<name>.md`. You only read the code you
+design. You edit one path and nothing else: `.kalfa/patterns/<name>.md`. You only read the code you
 describe.
 
 ```mermaid
 flowchart TD
-  start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .patterns/ own it?"}
-  owns -- "it is a why" --> routed["routed: .decisions/ via the adr skill"]
-  owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .glossary/TERMS.md"]
+  start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .kalfa/patterns/ own it?"}
+  owns -- "it is a why" --> routed["routed: .kalfa/decisions/ via the adr skill"]
+  owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .kalfa/glossary/GLOSSARY-MAP.md"]
   owns -- "it is a measurement" --> routedExp["routed: experiments/"]
-  owns -- "it is a shape" --> bar{"clears the bar in .patterns/README.md?"}
+  owns -- "it is a shape" --> bar{"clears the bar in .kalfa/patterns/README.md?"}
   bar -- no --> declined["declined: write nothing"]
   bar -- yes --> exists{"a doc already covers it?"}
   exists -- yes --> reground["re-ground that doc against the source"]
-  exists -- no --> write["write .patterns/name.md"]
+  exists -- no --> write["write .kalfa/patterns/name.md"]
   reground --> register["its frontmatter: where and when"]
   write --> register
 ```
 
-## 1. Check that `.patterns/` owns it
+## 1. Check that `.kalfa/patterns/` owns it
 
 Four places sit next to each other, and material often arrives in the wrong one's clothes:
 
 | Place | Holds |
 |---|---|
-| `.patterns/` | how the code is shaped now |
-| `.decisions/` and `docs/direction/` | why, and its history |
-| `.glossary/TERMS.md` and each context's `GLOSSARY.md` | what a word means |
+| `.kalfa/patterns/` | how the code is shaped now |
+| `.kalfa/decisions/` and `docs/direction/` | why, and its history |
+| `.kalfa/glossary/GLOSSARY-MAP.md` and each context's `GLOSSARY.md` | what a word means |
 | `experiments/` and `field/` | what was measured, on a date |
 
 The mix-up that really happens is **the why**. A pattern doc that argues why a choice was made has
@@ -60,7 +60,7 @@ decision's reason as "below the bar", which is true and answers the wrong questi
 
 Most material that feels like a pattern is not one. **Declining is the most useful thing this skill
 does**: a corpus grows by adding, and nobody removes a doc. The bar lives in
-[`.patterns/README.md`](../../../.patterns/README.md#when-to-add-a-doc). Apply it as written, and
+[`.kalfa/patterns/README.md`](../../../.kalfa/patterns/README.md#when-to-add-a-doc). Apply it as written, and
 soften nothing. In short, there are two ways in:
 
 - **A shape in use:** real source and tests here show a reusable shape and where it stops. No
@@ -75,11 +75,10 @@ are below the bar. Writing nothing is a correct result.
 ## 3. Read the library before you add to it
 
 ```sh
-node .agents/skills/lead/scripts/records.ts list .patterns
+rg -n '^(where|when):' .kalfa/patterns
 ```
 
-It prints one line per doc on `origin/main`, from each doc's own frontmatter. A line that says
-`(no where)` or `(no when)` is a doc nobody will find. Fix it in step 6.
+It prints each doc's `where` and `when` from its own frontmatter. A doc with no `where` or no `when` is a doc nobody will find. Fix it in step 6.
 
 A doc that already covers the shape gets **extended**. A second doc on one subject is how a corpus
 starts to contradict itself.
@@ -92,7 +91,7 @@ Skip this for a new doc. An existing doc goes stale in two ways, and only one sh
 repo path in it is a cited path (drop a `:line` suffix). List what touched them since:
 
 ```sh
-doc=.patterns/act-keeps-its-intent.md
+doc=.kalfa/patterns/act-keeps-its-intent.md
 anchor=$(git log -1 --format=%H origin/main -- "$doc")
 paths=$(rg -o '`[a-z.][^` ]*/[^` ]*`' "$doc" | tr -d '`' | sed 's/:[0-9-]*$//' | sort -u)
 git log --oneline "$anchor"..origin/main -- $paths
@@ -140,7 +139,7 @@ pattern doc reads exactly like a held one, and a reader cannot tell them apart.
 ### The doc's shape
 
 Frontmatter (step 6), then the heading. One file per shape, a short kebab-case name. **A
-picture first, then one small real code block, then the words** ([0005](../../../.decisions/0005-patterns-and-decisions-are-visual.md)):
+picture first, then one small real code block, then the words**:
 
 ````markdown
 ---
@@ -194,9 +193,9 @@ read from a pinned dependency.
 
 ## 6. Give it frontmatter, or nobody finds it
 
-The folder keeps no index table ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)),
+The folder keeps no index table,
 so the doc says at its own top where it applies and when to read it. That block is what
-`records.ts list .patterns` prints. Each value is one line, in double quotes:
+the list above prints. Each value is one line, in double quotes:
 
 ```markdown
 ---

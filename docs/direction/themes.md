@@ -353,7 +353,7 @@ const Theme = Schema.Struct({
   them. Found in P31; Tier 2 meets it. *Changed 2026-11-07: a part token among them follows a
   global one and needs no theme name; which are global is settled in call 6's rename.*
   *Changed 2026-11-09: an imported theme derives six of them (all but `--focus`) from its own
-  palette ([0009](../../.decisions/0009-imported-themes-derive-their-grays.md)).*
+  palette.*
 - **Values are hex for now.** Whether a theme may hold Display P3 is still open on main
   ([pipe colors](./pipe-colors.md), [color principles](./color-principles.md)). Adding it later
   loses no data, since hex stays valid.

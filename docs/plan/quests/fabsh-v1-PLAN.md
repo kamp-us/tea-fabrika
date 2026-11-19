@@ -4,7 +4,7 @@ Plancheck-Version: 3
 # Plan: fabsh v1, today's terminal in a tile of next/, with its line editor, tsh's grammar, syntax highlighting and [terminal] settings in Ghostty's key names (ticket 1078)
 
 Tracker ticket 1078. Version: `next/` only. Today's version is read as the spec and is not touched.
-It builds accepted decision 0586 (https://github.com/kamp-us/tea-fabrika/pull/1429),
+It builds accepted an earlier decision (https://github.com/kamp-us/tea-fabrika/pull/1429),
 which amends 0432 and sets aside 0217's lesson rule for this one case. Read on main at `a1df7569d`.
 
 **The doubt, at the top (75%).** `next/` has no ephemeral frame on main. Today's terminal sends raw
@@ -29,7 +29,7 @@ fabsh$ counter                        the counter covers the tile; Ctrl-C stops 
 
 ## What it builds
 
-- Decision 0586's first part, "fabsh v1 is today's terminal rebuilt on `next/`'s runtime", and its
+- an earlier decision's first part, "fabsh v1 is today's terminal rebuilt on `next/`'s runtime", and its
   syntax highlighting and `[terminal]` settings.
 - Step 1 of 0586's order for the four primitives, and with it
   [Tier 1, piece 3](../tier-1.md) ("`fabsh`, a program in a tile").
@@ -123,7 +123,7 @@ Read in today's code: `apps/fabrika/src/window/terminal.ts`, `apps/fabrika/src/e
 - An agent's own `tsh` in a tile, whose lines come from the agent: part of the agent plumbing, so it
   goes to the summon plan (0586's owed list).
 
-**Against the real-terminal bar, what today's terminal lacks.** Each is in scope (0586):
+**Against the real-terminal bar, what today's terminal lacks.** Each is in scope:
 
 | Gap | What a real terminal does | In v1 |
 |---|---|---|
@@ -138,7 +138,7 @@ Read in today's code: `apps/fabrika/src/window/terminal.ts`, `apps/fabrika/src/e
 | Font zoom | Ghostty's `increase_font_size`, `decrease_font_size`, `reset_font_size` | yes, S2, as `[terminal] keybind` actions |
 | Copy and paste keys | Ghostty's `copy_to_clipboard` and `paste_from_clipboard` | yes, S2; the builder checks what ghostty-web 0.4.0's selection gives first |
 | Settings | Ghostty reads a config file | yes, S2, `[terminal]` |
-| Ctrl-Z | bash suspends the foreground job | no: today's tsh does nothing on it, and the summon plan settles it (0586) |
+| Ctrl-Z | bash suspends the foreground job | no: today's tsh does nothing on it, and the summon plan settles it |
 | fish's gray suggestion | fish's autosuggestion | no: bash has none, so a real terminal does not need it, and it was a parked PR 1254 idea |
 
 ## How others do it
@@ -230,8 +230,8 @@ type Mode =
 ```
 
 ```ts
-// The runner keeps a terminal program's editor and screen in memory, beside its saved model (0275).
-// A program says it has one; nothing of it is in the saved fold (0229).
+// The runner keeps a terminal program's editor and screen in memory, beside its saved model (0036).
+// A program says it has one; nothing of it is in the saved fold.
 export const fabsh = Program.make({
   name: "fabsh",
   machine: fabshMachine,          // saved: jobs, the history it was last told, the last status
@@ -257,7 +257,7 @@ export const fontFamily = Setting.make("terminal.font-family", {
 //   font-family, font-size (13), theme ("light:fabrika-light,dark:fabrika"), cursor-style ("block"),
 //   cursor-style-blink (false), cursor-color, background, foreground, selection-background,
 //   selection-foreground, palette ("N=COLOR", N from 0 to 15), scrollback-limit, keybind ("trigger=action")
-//   history-limit (1,000): no Ghostty command-history key; this follows its *-limit spelling (0586).
+//   history-limit (1,000): no Ghostty command-history key; this follows its *-limit spelling.
 ```
 
 Where each file goes, by `next/AGENTS.md`'s libfabrika test:
@@ -312,13 +312,13 @@ A person in a browser tab types `countr` and Tab in tile `tile_01k`, which runs 
   `scrollback` option first; if it counts lines, the key is left out of v1 and the README says why,
   rather than a Ghostty name with another unit (80%).
 - `[terminal] keybind` takes only terminal actions (copy, paste, the three font sizes,
-  `clear_screen`); a window command stays in fabrika's key table (0278), so the two never bind one
+  `clear_screen`); a window command stays in fabrika's key table, so the two never bind one
   key twice. A clash between them fails at load (80%).
 - A new tile runs `fabrika/fabsh`, tezgah's `NEW_TILE` named in its README as waiting for the shell
   (85%).
 - `$( )`, `&&`, `||` and `;` come in S3 with job control, since each needs a finished process's
   status or output (90%).
-- Ctrl-B is the window's prefix (0278), so readline's `backward-char` on Ctrl-B never reaches
+- Ctrl-B is the window's prefix, so readline's `backward-char` on Ctrl-B never reaches
   `fabsh`; Left does it. The prefix pressed twice sends one Ctrl-B on, as tmux's `send-prefix`
   does (90%).
 
@@ -329,7 +329,7 @@ A person in a browser tab types `countr` and Tab in tile `tile_01k`, which runs 
   every size, and the same speed as a native terminal. We follow that: a canvas, no extra frame,
   colors from the one theme.
 - **Where Linear would do more.** Every command would also be in Cmd-K, and a refusal would offer
-  its fix as a button. In v1, every built-in is also a palette entry (0278); a "did you mean" stays
+  its fix as a button. In v1, every built-in is also a palette entry; a "did you mean" stays
   text, as in bash.
 - **What today's terminal does that Linear's would not.** It rings a bell; it prints `^C`; it speaks
   in `%1` job numbers; a refusal is a line of text, not a hint under the word; settings are a text
@@ -345,7 +345,7 @@ A person in a browser tab types `countr` and Tab in tile `tile_01k`, which runs 
   inside the tile, and the error mark (underline, or underline and bold). Each is shot beside
   Linear at the five layouts, and the owner picks one. The plan's map above is a sketch until then.
 - **Shots,** from the real built app with its own `FABRIKA_HOME` in a temp folder, attached and
-  never committed (0160), for each state: an empty prompt, a highlighted line with an error, Tab's
+  never committed, for each state: an empty prompt, a highlighted line with an error, Tab's
   list, Ctrl-R, a running foreground program, a job's status row. Each at one tile filling the
   window, two side by side, two stacked, a 2x2 grid, and a 1024x700 window. The pull request says
   what squeezes or breaks in each.
@@ -485,19 +485,19 @@ table is made, never copied from today's file.
 | L27 | A pipe, `summon`, `@name` or `#room` line is read and colored, and Enter refuses it in words that name the quest that builds it | test | Effect Arbitrary: Schema.Union | one line of each kind with random words, 100 runs | run the first program of a pipe | S2 |
 | L28 | The prefix pressed twice sends one Ctrl-B on to the tile, and the prefix alone never reaches it | test | @demlik/tea/pbt.arbMsgSequence | prefix message walks, default runs | pass the first Ctrl-B on | S2 |
 | L29 | A program with a view run in the foreground shows in the tile and the tile goes back to fabsh when it ends; Ctrl-C stops it; `&` gives the prompt back at once; `attach %n` brings it forward | test | fc.commands | starts, ends, Ctrl-C and attach on tezgah's stepper, 200 runs | leave the tile on the ended process | S3 |
-| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0170) | test | fc.commands | lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
+| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0026) | test | fc.commands | lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
 | L31 | `;` runs each statement, `&&` only after status 0, `\|\|` only after another, and `$( )` puts a finished process's output into the line by its shape | test | fc.commands | chains of statements with random statuses, 200 runs | run `&&`'s right side on any status | S3 |
 | L32 | `jobs`, `ps`, `stop %n`, `tell %n` and `close %n` act on the job table every tile shares, and a job's `%n` is the same in each tile | test | fc.commands | jobs begun and ended across two tiles, 200 runs | number jobs per tile | S3 |
 | L33 | The screen's text region, the status region and the replies region hold the grid's text, at most once a frame, every 3 s and 50 lines | test | scenario: a long print, a status that changes each second, 60 replies | long print, status each second, 60 replies | write the status on each change | S2 |
 | L34 | The whole suite on a real local instance, in a browser tab | test | scenario: the suite's lines typed into a real tab | real-browser run of L19, L20 and L29 | none: it runs L19, L20, L29 against the real runner | S3 |
 | L35 | The same suite in the real built Electron app | test | scenario: the suite's lines typed into the real app | the L34 suite in the real app | none: it runs L34's steps there | S4 |
 
-All property laws use `it.prop` or `it.effect.prop` through the shared test package (0579).
+All property laws use `it.prop` or `it.effect.prop` through the shared test package.
 The Schema constructors in the table describe the inputs, not a second set of production types:
 use the existing domain Schema where there is one, with its Arbitrary constraints covering the
 listed characters, lists, cursor positions, widths and boundary cases. Keep every listed run count.
 
-**State-aware generator exceptions (0411, 0579).** L8-L11, L16, L18-L21 and L29-L32 keep
+**State-aware generator exceptions.** L8-L11, L16, L18-L21 and L29-L32 keep
 `fc.commands`: the next command is drawn from the model's legal moves as the walk proceeds.
 A Schema for one command cannot by itself generate that state-dependent walk. Generate each
 command's data from its domain Schema, preserve the table's run counts and boundaries, and use the
@@ -516,7 +516,7 @@ pure; the runner's laws use the runner's stand-in layers; tezgah's use its stepp
 **Why one law is `.integration.`** `fabsh-runner.laws.integration.test.ts` holds L34's run against
 a real local instance, because only a real runner shows the gateway, the frames and the ledger
 together. Every law it reaches also has a plain version on the stand-in (L16 to L21, L29), so a
-pull request still checks the behavior (0581).
+pull request still checks the behavior.
 
 ## Host-only laws
 
@@ -535,21 +535,21 @@ still apply: its own `FABRIKA_HOME` in a temp folder, never in the foreground.
 - **One client row per submitted line, with counts and no text:** how many keys, how many were
   predicted, how many predictions the process overwrote, and the longest wait for a confirm. Wide
   events; nothing reads them yet, and they are the only record of how echo feels.
-- **Not recorded, on purpose:** key bytes and the line before Enter (0275), and the screen's bytes.
+- **Not recorded, on purpose:** key bytes and the line before Enter (0036), and the screen's bytes.
 
 ## Is this a setting?
 
 | Choice | A setting? | Why |
 |---|---|---|
 | Font, size, theme, cursor, colors, scrollback, terminal keys | yes, `[terminal]` | 0586 |
-| History length | yes, `terminal.history-limit` | positive integer, default 1,000 from today's editor; declared once, person scope, read through the settings system (0069). Ghostty has no command-history key; `history-limit` follows its `*-limit` spelling (0586) |
+| History length | yes, `terminal.history-limit` | positive integer, default 1,000 from today's editor; declared once, person scope, read through the settings system. Ghostty has no command-history key; `history-limit` follows its `*-limit` spelling |
 | The role-to-palette map | no | the theme's 16 colors already are settings (`palette`); a second map would be two places to set one color |
 | `gateway.keys-limit` | yes | a budget per key, as `gateway.limit` is |
 | The prompt `fabsh$ ` | no | the summon guidelines' R5 fixes the word |
 
 ## Clashes with the parked pull requests
 
-Both stay open and unmerged, and no v1 commit builds on their branches (0586).
+Both stay open and unmerged, and no v1 commit builds on their branches.
 
 - **PR 1232** (https://github.com/kamp-us/tea-fabrika/pull/1232):
   - It adds `process.draft` (the line as text) and `gateway.draft-limit`. v1 adds `process.keys`
@@ -578,7 +578,7 @@ Both stay open and unmerged, and no v1 commit builds on their branches (0586).
 The test writer and the builder run, under the machine caps: `pnpm format`, `pnpm lint`, the
 verified-safe narrow vitest paths of the files in their slice, under the current worker caps.
 The lead runs the changed checks and one `pnpm typecheck` at the end. Real Electron, launchd and
-real process-signal laws run only on eligible disposable CI away from the owner's laptop (0594),
+real process-signal laws run only on eligible disposable CI away from the owner's laptop,
 with required proof before the first implementation review. Other real-resource and visual laws
 follow 0536 as amended by 0581, 0584 and 0590; L35 follows the host-only section above.
 

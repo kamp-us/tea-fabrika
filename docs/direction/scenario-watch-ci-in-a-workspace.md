@@ -23,7 +23,7 @@ workspace 3 · ci
 
 ## What happened
 
-- On 2026-11-14 CI was in a sev0 ([0532](../../.decisions/0532-a-sev0-freezes-ci.md)). The owner wanted
+- On 2026-11-14 CI was in a sev0. The owner wanted
   to see the queue, the runners in use, each ready pull request and the goal numbers at a glance.
 - Every number came from asking the lead session in chat. That cost the owner's attention all day.
 - The lead built one HTML page by hand, outside the product, that a background loop rewrites every
@@ -42,7 +42,7 @@ workspace 3 · ci
 - Opening the pack puts each program in a tile of a new workspace
   ([the desktop layer](./the-desktop-layer.md)). The person rearranges tiles like any other.
 - A program reads GitHub through the `CodeHost` service, never `gh` straight
-  ([0231](../../.decisions/0231-ledger-and-codehost-are-separate.md)), and wakes on a timer or a
+  ([0017](../../.kalfa/decisions/0017-protocols-live-once.md)), and wakes on a timer or a
   webhook: its `wake` names its next wake time, as any program's does.
 
 ```ts

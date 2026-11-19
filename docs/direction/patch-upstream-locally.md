@@ -5,8 +5,7 @@ summary: "Both versions. When our work needs a change in a package we do not own
 
 # Patch upstream locally, and never wait for a release
 
-**Decided 2026-11-07 (owner).** Both versions. Amended in part by
-[0054](../../.decisions/0054-read-upstream-before-patching-it.md): read the package's decisions,
+**Decided 2026-11-07 (owner).** Both versions. Amended in part by: read the package's decisions,
 patterns and source first, and patch only a gap or bug that read proved.
 
 ```sh
@@ -25,10 +24,10 @@ gh issue create -R kamp-us/demlik ...  # 2. file the same change upstream
 - **Every patch has an upstream issue.** The pull request that adds the patch links it. A fix we keep
   only for ourselves helps nobody else and drifts on each release.
   - **The issue carries the patch (owner, 2026-11-10):** its body ends with our diff for it, folded in
-    `<details><summary>The patch we apply locally</summary>` ([0060](../../.decisions/0060-upstream-issue-carries-the-patch.md)).
+    `<details><summary>The patch we apply locally</summary>`.
   - **One exception (owner, 2026-11-09):** the six Alchemy gaps listed in 0042 are patched and not
     reported as a batch
-    ([0042's amendment](../../.decisions/0042-platform-pieces-go-through-alchemy.md#amendments)).
+    ([0042's amendment](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md#amendments)).
     Each such patch carries, at its `patchedDependencies` row, a comment with the gap's name and
     `not reported, 0042 amendment 2026-11-09`, so a later bump still knows why the patch exists.
   - **One proved bug per issue (owner, 2026-11-09):** an upstream issue reports one bug we proved,

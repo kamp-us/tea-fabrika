@@ -21,13 +21,9 @@ jobs:
 
 Today's version: CI tooling only (`.github/`), serving both versions, plus three glossary rows.
 Ticket 1161, branch `fabrikalfa/scheduled-dispatch-scope` from origin/main 605a0e513. It follows
-[0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md) (amended
-by [0591](../../../.decisions/0591-exam-shape-checks-become-lint-rules-and-text-reads-are-declared.md)),
-[0598](../../../.decisions/0598-merge-line-leaves-scheduled-groups.md),
-[0595](../../../.decisions/0595-scheduled-runs-share-slots.md),
-[0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md),
-[0069](../../../.decisions/0069-choices-are-settings.md) and
-[0408](../../../.decisions/0408-skills-keep-only-judgment.md). It walks back no decision, and it
+ (amended
+by),,,,
+ and. It walks back no decision, and it
 builds no new design call: the one call it raises is under Open questions, and nothing is built for
 it.
 
@@ -74,7 +70,7 @@ What would settle it: the owner's word, or the first time someone looks for a `f
   branch-only input in front of main's run.
 - **A `full` ask names its law: `law`, a test file path that `vitest list` gives back exactly over
   the four projects a proof runs (`next`, `next-integration`, `next-visual`, `tooling`). A
-  `changed` ask refuses a non-empty `law`. 80%.** Vitest's own list is the existing tool (0040): it
+  `changed` ask refuses a non-empty `law`. 80%.** Vitest's own list is the existing tool: it
   checks the path exists, matches a project's include globs and is not excluded, and that the
   project is one a proof run runs (a `today` test would not run, so naming it would be false). A
   law that starts with `-` or holds whitespace is refused before Vitest sees it, so it can never
@@ -97,8 +93,7 @@ What would settle it: the owner's word, or the first time someone looks for a `f
   `SCOPE` and `LAW`. 90%.** The input rule follows host.ts's H1 (a `choice` input, `required`, its
   default, its exact options) and l11.ts's input rule; the read rule follows SC5's "only these steps
   get the token".
-- **On main, `scope` and `law` do nothing, silently. 85%.** A hand start on main is main's full run
-  (0581), and `select` never runs there (SC17). The input descriptions say so. No gate changes, so
+- **On main, `scope` and `law` do nothing, silently. 85%.** A hand start on main is main's full run, and `select` never runs there (SC17). The input descriptions say so. No gate changes, so
   no new path can narrow main.
 - **`preflight.ts` keeps printing the plain start command. 85%.** With no `-f`, GitHub uses the
   default, `changed`, which is today's behavior, so the printed command stays right. A `full` start
@@ -140,12 +135,12 @@ What would settle it: the owner's word, or the first time someone looks for a `f
 ```yaml
 on:
   # By hand, on main or on a branch. On main it is main's full run whatever the inputs say: select
-  # never runs there (SC17). On a branch it is a proof run (0590): `changed` runs what the change
+  # never runs there (SC17). On a branch it is a proof run: `changed` runs what the change
   # reaches, and a rerun trigger still runs the full set; `full` runs the full set, for `law`.
   workflow_dispatch:
     inputs:
       scope:
-        description: On a branch, the changed set (0590) or the full set; main always runs every test
+        description: On a branch, the changed set or the full set; main always runs every test
         type: choice
         required: true
         default: changed
@@ -180,7 +175,7 @@ one above.
 ### proof.ts, after (a sketch)
 
 ```ts
-/** What the hand start asked for: `scope`, as scheduled.yaml's input gives it (0590). */
+/** What the hand start asked for: `scope`, as scheduled.yaml's input gives it. */
 export const Scope = Schema.Literals(["changed", "full"]);
 
 /** The ask, decoded: a `full` ask carries the law that needs the full set. */
@@ -268,7 +263,7 @@ const files = triggers.length > 0 || asked._tag === "full" ? [] : withReaders(/*
 ### workflow-lint/scheduled.ts, after (a sketch)
 
 ```ts
-// SC21. The hand start's two inputs (0590): `scope`, `changed` by default, and `law`. The default
+// SC21. The hand start's two inputs: `scope`, `changed` by default, and `law`. The default
 // is 0590's ruling, not a free setting: a default of `full` would make every hand start the full set.
 const SCOPE_INPUT = { type: "choice", required: true, default: "changed", options: ["changed", "full"] };
 const LAW_INPUT = { type: "string", required: false, default: "" };
@@ -363,7 +358,7 @@ call. The cost is one changed-set run of this branch (the tooling tests that rea
 on free public runners). There is no `full` dispatch: the `full` path after `select` is today's
 trigger path, and `LAW` reaches the step by the same expression form as `SCOPE`, which lint holds.
 
-No law here is host-only (0178): nothing runs launchd, Electron, a real OS process or a signal. No
+No law here is host-only: nothing runs launchd, Electron, a real OS process or a signal. No
 law is an `.integration.` test and no test clones a repository: `proof.ts`'s main block, the only
 code that runs git and Vitest, is untouched by every test (`import.meta.main` is false under
 Vitest), and `scheduled.integration.test.ts` is not changed.
@@ -522,7 +517,7 @@ Before the merge:
 
 After the merge: the first branch proof anyone starts is the same check again, at no extra cost.
 No `full` dispatch is needed or asked for: its nine legs on four groups cost about 26 to 28 minutes
-of legs (0598), and they prove nothing the trigger path does not already prove daily.
+of legs, and they prove nothing the trigger path does not already prove daily.
 
 ## Size
 
@@ -564,8 +559,8 @@ Estimate: 5 steps, $15
    triggers are for, the tests that read those files as text, such as the lint plugins' tests of
    `.oxlintrc.json`, until 0591's `reads:` declarations land (they have not: `changes.mjs` still
    keeps the `readers` list). A miss shows on main's next full run, within about an hour of the
-   merge (0581), as a red main and a `ci-scheduled` issue. The gain: a run like 1525's would take a
-   few changed legs instead of nine legs on four proof groups, about 26 to 28 minutes (0598).
+   merge, as a red main and a `ci-scheduled` issue. The gain: a run like 1525's would take a
+   few changed legs instead of nine legs on four proof groups, about 26 to 28 minutes.
    **No** keeps 0590 as it is: a trigger change keeps its full set. Since 0598 that set holds only
    the four proof groups, never a pull request's legs, so its remaining cost is that a second proof
    started at the same time waits behind it.

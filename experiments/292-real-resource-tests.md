@@ -11,10 +11,10 @@ summary: "next/ only, read-only, at origin/main 4120e0500. 133 of next/'s 280 te
 - **133 of 280 test files drive a real resource. They take 5,630 of 6,025 file-seconds, 93%** of
   `next/`'s CI test time. The other 147 files take 395 s.
 - **Counting SQLite opened as `:memory:` as real too** (the brief's reading), it is 151 files and
-  5,832 s, 97%, and 129 files with 193 s stay on the merge line. Decision 0536's own text reads the
+  5,832 s, 97%, and 129 files with 193 s stay on the merge line. an earlier decision's own text reads the
   other way ("anything outside the process's memory"), so both counts are here. The one-line call
   is in [what this cannot tell us](#what-this-cannot-tell-us).
-- **Class 1, a pure driver proof, is empty.** Every shared suite that decision 0062 set up
+- **Class 1, a pure driver proof, is empty.** Every shared suite that an earlier decision set up
   (34 modules, among them `WatchersTest`, `StartChildTest`, `RunnerAdmissionTest`) runs on one
   kind of driver only. 26 run only on a SQLite file; the few that run in memory have no real runner
   beside them. No suite runs on both. So every real file that moves takes a check off pull
@@ -96,7 +96,7 @@ WatchersTest.suite(nodeSql);              // in Watchers.integration.test.ts: to
 
 | Kind | Treated as | Why |
 |---|---|---|
-| A SQLite file (`new DatabaseSync(path)`, a temp folder under `nodeSql`) | real | a file on disk, outside the process (0536) |
+| A SQLite file (`new DatabaseSync(path)`, a temp folder under `nodeSql`) | real | a file on disk, outside the process |
 | SQLite on `:memory:` (`nodeSql(new DatabaseSync(":memory:"))`) | memory, counted apart | inside the process's memory, 0536's own line; the brief counts it real, so a second total is given |
 | git (`git init`, `ChildProcess.make("git")`, `spawnSync("git")`) | real | a spawned process and a repo on disk |
 | workerd, Miniflare, Alchemy's local runtime (`localInstance`, `dev.ts`, `alchemy/State/LocalState`) | real | a separate process with its own storage |
@@ -203,7 +203,7 @@ node/repositories/Sources.test.ts     one generated law builds real git repos   
   `processTable.laws.test.ts`, `supervisor.laws.test.ts`, `processes/ExitReason.test.ts`,
   `internal/programMail.test.ts`, `runtime/internal/exitReason.test.ts` and `node/ErrorCause.test.ts`
   touch the disk although they only use its constants. `door.test.ts:255` does the same. That breaks
-  [0061](../.decisions/0061-resources-are-acquired-in-a-scope.md) (a temp folder is acquired in a
+ (a temp folder is acquired in a
   scope), and with the file-name split it would put file system work on the merge line. The fix is
   to move `storage()` and its folder into a scope, or into an integration helper. I counted the six
   as memory.

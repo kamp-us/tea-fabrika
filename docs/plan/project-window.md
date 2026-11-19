@@ -315,7 +315,7 @@ All paths are repo-relative. New files are marked new.
 | `apps/fabrika/docs/projects/`, new | Generated screenshots from the approved capture steps | images | build |
 | `apps/fabrika/README.md` | Opening, switching, state locations and CLI use | 50 | build |
 | `docs/plan/project-window.md`, new; `docs/plan/README.md` | Save this replacement plan and keep its state current | 40 plus this plan | lead |
-| `docs/direction/a-window-is-one-project.md`, new; `docs/direction/project-window.md`; `docs/direction/brain-hands-window-agent.md`; `docs/direction/the-frame.md`; `docs/direction/README.md`; `.glossary/TERMS.md` | Bring the approved host decisions into the repo and update current descriptions | 100 | lead |
+| `docs/direction/a-window-is-one-project.md`, new; `docs/direction/project-window.md`; `docs/direction/brain-hands-window-agent.md`; `docs/direction/the-frame.md`; `docs/direction/README.md`; `.kalfa/glossary/GLOSSARY-MAP.md` | Bring the approved host decisions into the repo and update current descriptions | 100 | lead |
 | `field/notes.jsonl`; `field/runs.jsonl` | Each hand-run step and its findings | 20 | lead |
 
 The exam-path checker was run against the listed paths. Every matched path belongs to `tests`. The test writer also owns any required runner or exam changes discovered during the build. The builder owns product files and generated images.

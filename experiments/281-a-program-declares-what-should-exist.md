@@ -12,7 +12,7 @@ the old number.
 Run on 2026-11-11 against `alchemy` 2.0.0-beta.85, `@alchemy.run/cloudflare` 2.0.0-beta.85 and
 `effect` 4.1.2, the installed versions. No account, no network deploy, no key, no model: **$0**. It
 is about `next/`. Nothing here touched a real ledger. This page was written on its branch from its
-first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)). It follows
+first line. It follows
 [experiment 264](264-hands-as-an-alchemy-resource.md), which wrote two custom Alchemy resources in
 Effect.
 
@@ -85,7 +85,7 @@ runtime and on Cloudflare, when a program is loaded at run time, with the ledger
 store?
 
 - If yes, a program's resources are Alchemy resources for real, and an instance and its programs
-  are provisioned one way ([0126](../.decisions/0126-the-library-makes-an-instance-from-an-apps-choices.md)).
+  are provisioned one way.
 - If no, this page says exactly what stops it, and sketches the same four functions applied by
   fabrika itself.
 
@@ -165,7 +165,7 @@ cost is in the types: `Stack.make`'s providers are typed against all of `StackSe
   `:291`). `Alchemist.plan` also reads `.env` (`Operations.ts:51`). In a Worker that needs a
   `FileSystem` whose `exists` says no. That was not tried.
 
-No upstream patch is needed for what ran ([0054](../.decisions/0054-read-upstream-before-patching-it.md)).
+No upstream patch is needed for what ran.
 Two small upstream changes would help, both in Alchemy's code: let `loadConfigProvider` take a
 `ConfigProvider` instead of reading `.env` (`Util/ConfigProvider.ts:125`), and type the providers
 layer against what a provider really asks for, not all of `StackServices` (`Stack.ts:125`). Neither
@@ -270,7 +270,7 @@ fqn, and `set` appends a `state_set`. It is 80 lines, most of them the eleven ca
 ## If fabrika builds it itself: `Resource.make`
 
 The owner asked for this to be concrete enough to judge either way. **A sketch, not built.** Names
-follow [0029](../.decisions/0029-format-and-names-follow-effect.md): a module read through its name,
+follow: a module read through its name,
 a plural service.
 
 ```ts
@@ -333,10 +333,9 @@ removal policy, provider version) has no job here yet:
 { _tag: "resource_deleted",  name: "watcher" }
 ```
 
-The resource's life is an explicit tea machine ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md),
-[0046](../.decisions/0046-one-tea-machine-per-file.md)): `absent`, `applying`, `present`,
+The resource's life is an explicit tea machine: `absent`, `applying`, `present`,
 `deleting`, folded from those entries. A `ScheduledJob`'s reconcile sets an alarm in the project's
-object and its handler sets the next one ([0105](../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md));
+object and its handler sets the next one;
 the job itself is a command that runs, not a resource.
 
 What our own module adds, against Alchemy's engine:
@@ -397,8 +396,7 @@ crosses into the brain as data, and the providers live in the brain, never in th
   provider that reads artifacts) may use a service the tripwires did not catch.
 
 The scripts are in `experiments/276-program-resources/` on the branch
-`fabrikalfa/exp-program-resources-script` only, not on main
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). To run them, link that
+`fabrikalfa/exp-program-resources-script` only, not on main. To run them, link that
 folder's `node_modules` to `next/apps/fabrika/node_modules`, then run `node.ts`, and `workerd.ts`
 with `EXP276_HOME` set to a temp folder. The raw output of the last run is under `runs/276/` on the
 owner's machine, not in git.

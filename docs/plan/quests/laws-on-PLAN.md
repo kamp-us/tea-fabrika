@@ -5,13 +5,13 @@ Plancheck-Version: 3
 
 This is `next/` and the test tooling. Today's app is not touched. It is ticket 1070, an owner ruling
 of 2026-11-15 and the first item of the test-toolbox order in the sev0 of that day. It builds
-[0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md) ("a runner that applies
+ ("a runner that applies
 the same laws to a memory layer and a real layer, the real one only on the schedule"), inside
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) (a shared suite
+ (a shared suite
 runs twice: memory on the merge line, the real driver on the schedule),
-[0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md) (the tool lives in our test
-package), [0579](../../../.decisions/0579-property-laws-use-it-prop.md) ("`lawsOn` and `depth` cover"
-`skipIf` and `runIf`) and [0580](../../../.decisions/0580-law-options-carry-plant-and-label.md)
+ (the tool lives in our test
+package) ("`lawsOn` and `depth` cover"
+`skipIf` and `runIf`)
 (how a law states its plant). It builds on the test database of
 [pull request 1301](https://github.com/kamp-us/tea-fabrika/pull/1301) (ticket 1029), merged as
 `1566fd4eef67c5cd1762cfdf7be56d097ea6fafb` on 2026-11-16. The dependency is satisfied
@@ -44,8 +44,7 @@ The lead approves this plan; each lean is taken with its confidence. Three are a
   1,740.6 s on files today, so the memory side could add about 1,100 to 1,400 file-seconds when a
   change reaches all of them, and much less for most changes, which reach few. Pull request 1301
   also made the file runs faster, which narrows the gap. What settles it: slice 1's four files, read
-  from the `next` job's `shard-times` step. If the numbers threaten the merge line's time goal
-  ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)), that is a new call
+  from the `next` job's `shard-times` step. If the numbers threaten the merge line's time goal, that is a new call
   for the owner, and it is not decided here.
 - **A reopen on memory keeps the connection (80%).** On the memory side every open of one name in a
   law's scope gets the same `:memory:` connection, so a reopen builds the whole host again over the
@@ -191,7 +190,7 @@ a case-free match of `\breopen` in the suite module or the kit the file imports.
 `Monitors` are new since pull request 1341 and have no rows yet.
 
 Main's full run starts after a push when its one-hour limiter permits it; an hourly catch-up
-starts one for an untested main head ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
+starts one for an untested main head.
 References to the schedule below mean that full run.
 
 ## The shape
@@ -254,7 +253,7 @@ export const lawsOn = <A>(memory: A, real: NoInfer<A>): Laws<A> =>
 - **The title says the side:** `watcher laws on memory`, `watcher laws on real`. The schedule's
   uploaded Vitest reports then record which layer each law passed on.
 - **Depth is a separate thing.** `lawsOn` never reads `FABRIKA_TEST_DEPTH` (0538: one reader, in
-  `Depth.ts`). Depth sets how many cases a generated law runs (0535); the project sets which layer.
+  `Depth.ts`). Depth sets how many cases a generated law runs; the project sets which layer.
   A pull request runs the memory side at `fast`; the schedule runs the memory side and the real side
   at `full`.
 
@@ -303,7 +302,7 @@ const shared = { /* as today */ provide: { layer: "memory" } }; // every project
 - The memory default sits in `shared`, so `testConfig` (Stryker's single config, no projects) runs a
   contract file on memory and never opens a file. `next-visual` sets `extends: false` and includes no
   contract file.
-- **Is this a setting? No** ([0069](../../../.decisions/0069-choices-are-settings.md)). Which layer a
+- **Is this a setting? No**. Which layer a
   project runs is fixed by 0536 for each project; no person running fabrika picks it, and no
   `fabrika.toml` holds test config.
 
@@ -370,7 +369,7 @@ that.
 
 Every new law states its plant the way the tests skill says when the slice is built: as a `plant`
 option if 0580's build has landed by then, else as today's comment. Each plant is run once and not
-kept (0093).
+kept.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -386,7 +385,7 @@ kept (0093).
 | L10. In a `*.contract.test.ts`, a top-level `it`, `test`, `describe` or `layer` call, or a call of a shared suite outside a `lawsOn` runner's callback, is refused, and a file with no `lawsOn` call is refused | lint | lint | a fixture with a bare `WatchersTest.suite(x)` line under the runner: fires | oxlint-plugins/contract-test.test.ts |
 | L11. `fabrika/integration-test-name` does not fire on a `*.contract.test.ts` that builds a real side | lint | lint | take `contract` out of the rule's `NAMED` name test: a contract fixture that names `TestDatabase.folder` fires | oxlint-plugins/integration-test-name.test.ts |
 | L12. (slice 4) A `next/` `*.integration.test.ts` whose only top-level calls are shared-suite calls is refused, with a message that names `<base>.contract.test.ts` and `lawsOn` | lint | lint | put back a five-line runner like today's `StartChild.integration.test.ts` in a fixture: fires | oxlint-plugins/contract-test.test.ts |
-| L13. The repo's `.oxlintrc.json` wires `fabrika/contract-test` for `next/`'s tests, suites and kits, and `next/`'s tree is at zero, so the rule blocks from the start ([0523](../../../.decisions/0523-advice-rules-block-where-clean.md)) | test | scenario: the real config and tree, the two things this law is about | leave the wiring out of `.oxlintrc.json`: L13 red | oxlint-plugins/contract-test.test.ts |
+| L13. The repo's `.oxlintrc.json` wires `fabrika/contract-test` for `next/`'s tests, suites and kits, and `next/`'s tree is at zero, so the rule blocks from the start | test | scenario: the real config and tree, the two things this law is about | leave the wiring out of `.oxlintrc.json`: L13 red | oxlint-plugins/contract-test.test.ts |
 | L14. Each moved suite's laws run on both sides: for each contract file, `vitest list --project next` and `--project next-integration` name the same laws, less the `on.real` ones on the memory side, and every `on.real` call carries a non-empty reason | test | scenario: the moved files themselves, listed by Vitest | turn one `on` call of a moved file into `on.real` with an empty reason: L14 red | .github/ci/legs.integration.test.ts |
 
 - **L4, L6, L7 and L8 live in one contract file,** `TestDatabase.contract.test.ts`, run through
@@ -396,7 +395,7 @@ kept (0093).
   finds every one of its laws (D1 to D3) fits as a contract law; else both stay.
 - **L14 reads Vitest's own list.** It runs `vitest list --filesOnly=false --project <p> <file>` the
   way `legs.ts` runs `vitest list`. It lives in `.github/ci/legs.integration.test.ts` because
-  it starts a real child process ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)).
+  it starts a real child process.
   A stand-in cannot prove which laws the actual Vitest projects collect. Main's full run or the
   supported source-proof run proves L14; it never runs on the pull request or merge line.
   Existing pure checks stay in their current files.
@@ -467,7 +466,7 @@ every law in these 34 files now runs before a merge, on any change that reaches 
 | next/packages/libfabrika/src/node/StartChild.test-support.ts | tests | tests | `databases` takes `TestDatabase.Databases` |
 | .github/ci/legs.integration.test.ts | tests | tests | L14, the real-process listing check |
 | .glossary/TERMS.md | build | docs | rows for `contract test` and `lawsOn` |
-| .github/workflows/check.yaml | tests | docs | the comment at "Which tests (0536)" names contract files' memory side; no command changes |
+| .github/workflows/check.yaml | tests | docs | the comment at "Which tests" names contract files' memory side; no command changes |
 
 ### Slices 2 to 4: the rest, by folder
 
@@ -517,7 +516,7 @@ every law in these 34 files now runs before a merge, on any change that reaches 
 - **Placement by `next/AGENTS.md`'s libfabrika test.** Every contract file sits where its
   integration file sits today, in the module that owns the driver (0062: `node/` for libfabrika's
   stores, the app or program for its own runner laws). `Laws.ts` and the openers are test tooling,
-  so they go in our test package (0538, 0557), not in libfabrika.
+  so they go in our test package, not in libfabrika.
 - **No suite module changes in slices 1 to 4** unless a law is real-only: then the suite module
   exports that law in its own suite, called through `on.real`, as `StartChildTest` already splits
   `exitSuite` and `boundarySuite`. Each such split names its reason in the pull request.
@@ -564,7 +563,7 @@ by whichever lands second.
 - **The memory default lives in `shared` (85%),** so no run can reach a contract file with no layer,
   and Stryker's config stays safe.
 - **The rule's third check (L12) lands in slice 4, at zero (90%).** A blocking rule needs zero
-  false alarms (0523); before slice 4 the tree has 30 files it would fire on, and 0524 allows no
+  false alarms; before slice 4 the tree has 30 files it would fire on, and 0524 allows no
   list of leftovers.
 
 ## Validation
@@ -585,8 +584,7 @@ pnpm lint
 - The lead runs `--changed origin/main` and the one `pnpm typecheck`. CI runs the merge line; the
   real sides and L14 are proven by main's first full run after each merge, or by a supported
   source-proof run before it. Source proof follows
-  [0590](../../../.decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md) and
-  [0595](../../../.decisions/0595-scheduled-runs-share-slots.md): supported starts check the exact
+ and: supported starts check the exact
   branch HEAD for shared job locks. The existing run-head and checkout-HEAD checks identify the
   tested source. Existing historical proof keeps its acceptance rules; it is not a supported new
   start through an unlocked workflow.

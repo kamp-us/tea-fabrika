@@ -295,7 +295,7 @@ describe("T321 K11 sections and K2 approval, today's tooling", () => {
   });
 });
 
-// The Estimate line, version 3 (.decisions/0076): the plan feeds chain.ts's backstop. Edge cases,
+// The Estimate line, version 3: the plan feeds chain.ts's backstop. Edge cases,
 // listed before the code (0040), each with its case below:
 //   missing                  no Estimate line at all
 //   two                      two lines, both well formed, in Size and in another section

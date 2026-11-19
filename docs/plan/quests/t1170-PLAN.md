@@ -25,9 +25,9 @@ weigh before signing.
    `.github/workflows/scheduled.yaml` on a branch runs `--project tooling` only
    (`scheduled.yaml:308`), and `.github/ci/proof.ts:58-61` leaves every `.integration.` file out of
    a changed set. That is decision
-   [0602](../../../.decisions/0602-integration-laws-leave-merge-line.md)'s binding constraint: no
+'s binding constraint: no
    branch proof run starts an `.integration.` law, with `scope: full` or not. So P8 runs only in
-   main's full run. [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md) still wants
+   main's full run. still wants
    signal proof on disposable CI before the first review, and says "a workflow that does not run a
    required law still needs its own change before that law has proof". 0602 leaves the host
    workflow outside its ban ("Not decided here"). My lean: add one fixed, hand-started suite `p8`
@@ -43,8 +43,7 @@ weigh before signing.
    ends empty: the last journal the law read, and the child reporter's own `vitest-progress:`
    lines. It changes no expectation, no bound and no verdict. It is evidence, not the fix. The
    lead may drop it and keep the law byte for byte; the fix does not need it.
-3. **The 30-second bound stays, as the brief asks (lean 80%).**
-   [0609](../../../.decisions/0609-laws-wait-on-events-never-on-a-fixed-time-bound.md), accepted
+3. **The 30-second bound stays, as the brief asks (lean 80%).**, accepted
    the same day PR 1624 added the bound, says a law has no fixed bound on machine-speed work and
    only the test runner's own limit backstops it. This plan keeps the bound and files a finding
    row (below), so whether it goes is decided on its own.
@@ -122,8 +121,7 @@ reasoning.
   `remainingWait`). From memory; not fetched. The rule is the same: a trailing call is never
   dropped because its timer ran early.
 - **This repo:** a bug proven in a package we use is patched with `pnpm patch` and dropped at the
-  release that has the fix ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md),
-  [patch upstream locally](../../../docs/direction/patch-upstream-locally.md)). Upstream has already
+  release that has the fix ([patch upstream locally](../../../docs/direction/patch-upstream-locally.md)). Upstream has already
   shipped this fix, so there is nothing to report and no issue to file; the patch comment names the
   release, as the `@alchemy.run/*` and `effect` entries in `pnpm-workspace.yaml` do.
 - Elm and OTP have no answer here: this is a dependency's timer bug, not a design choice.
@@ -295,7 +293,7 @@ so the lead uses narrow paths, not `--changed`, and the pull request's own check
 plain suite.
 
 P8 is a host-only law: it sends a real signal. Its proof runs after the tests step and before the
-first review (0178, 0594), on disposable Linux CI through the new suite, started by hand with
+first review, on disposable Linux CI through the new suite, started by hand with
 `gh workflow run host.yaml --ref <branch> -f suite=p8`. It does not run on the owner's Mac, so no
 launchd read or owner's yes is due. The suite's concurrency group cancels a second start of the
 same suite at the same commit, so the runs below go one at a time.
@@ -333,7 +331,7 @@ runner. Sure of the number 80%.
   changes every test run in both versions at once, with `@effect/vitest` and Stryker's runner on
   top. The patch goes at the bump. Not a setting: it is a dependency fix.
 - **The law is right and keeps its expectations (95%).** It found a real gap in the reporter's
-  purpose. Decision [0036](../../../.decisions/0036-a-flaky-test-is-fixed.md) holds: no timeout
+  purpose. Decision holds: no timeout
   grows, no retry, no expectation, seed or wait limit changes, the 30-second bound included.
 - **The cause is not in our code, and is proven by reading upstream (0036's "no, and proven"
   branch), so the fix removes it upstream's way rather than adding a wait (90%).**
@@ -392,5 +390,5 @@ each has a lean.
 
 ```json
 {"_tag":"finding","id":"2026-11-19-progress-journal-refuses-tooling-integration","date":"2026-11-19","by":"plan","model":"claude-opus-5-5","rule":"bug","location":{"path":".github/ci/progress.ts","line":39},"says":"In today's CI, the progress journal allows the projects next, next-integration, next-visual and tooling but not tooling-integration, so every callback from a tooling-integration law is dropped as 'vitest-progress: metadata unavailable' and every tooling leg's time table reads partial, with write gaps.","proof":"vitest.config.ts:260 names the project tooling-integration; progress.ts:39 allows only [\"next\", \"next-integration\", \"next-visual\", \"tooling\"]. Main full run 44428278854, job 135239318310, printed 8 'vitest-progress: metadata unavailable' lines, all while .github/ci/progress-reporter.integration.test.ts ran, and its time table said 'Journal partial' and 'Reasons: write_gap. Gap starts: 2741, 2747, 2755.' The green leg in run 44426789535, job 135233711469, printed the same 8 lines and 'Gap starts: 2743, 2749, 2755.'","cost":"On main's full run, a hung tooling-integration law, the kind that starts processes, is never shown as the last observed activity, and a real write gap on a tooling leg cannot be told from these.","head":"5c2dc3102030f3abacf6a97d109fe2d0ef21230d","ticket":"kamp-us/tea-fabrika#1170","pr":null}
-{"_tag":"finding","id":"2026-11-19-p8-fixed-bound-against-0609","date":"2026-11-19","by":"plan","model":"claude-opus-5-5","rule":"rule_break","location":{"path":".github/ci/progress-reporter.integration.test.ts","line":309},"says":"In today's CI, the P8 law waits for the child journal's acknowledgement under a fixed 30-second bound, which decision 0609 rules out: a law waits on the event, and only the test runner's own limit backstops a part that never answers.","proof":".github/ci/progress-reporter.integration.test.ts:309 reads `observation.pipe(Effect.timeoutOption(\"30 seconds\"), Effect.map(Option.getOrNull))`; .decisions/0609-laws-wait-on-events-never-on-a-fixed-time-bound.md's binding constraint says 'No law wraps a real build or other machine-speed work in a fixed time bound.' PR 1624 (da86605) added the bound on 2026-11-18, the date 0609 was accepted.","cost":"The law keeps a shape an accepted decision forbids, so the next fix to it must first settle whether 0036's 'no timeout grows' or 0609's 'remove the clock' governs; on a very slow runner a slow acknowledgement turns the law red instead of only slower.","head":"5c2dc3102030f3abacf6a97d109fe2d0ef21230d","ticket":"kamp-us/tea-fabrika#1170","pr":null}
+{"_tag":"finding","id":"2026-11-19-p8-fixed-bound-against-0609","date":"2026-11-19","by":"plan","model":"claude-opus-5-5","rule":"rule_break","location":{"path":".github/ci/progress-reporter.integration.test.ts","line":309},"says":"In today's CI, the P8 law waits for the child journal's acknowledgement under a fixed 30-second bound, which an earlier decision rules out: a law waits on the event, and only the test runner's own limit backstops a part that never answers.","proof":".github/ci/progress-reporter.integration.test.ts:309 reads `observation.pipe(Effect.timeoutOption(\"30 seconds\"), Effect.map(Option.getOrNull))`; laws wait on events never on a fixed time bound's binding constraint says 'No law wraps a real build or other machine-speed work in a fixed time bound.' PR 1624 (da86605) added the bound on 2026-11-18, the date 0609 was accepted.","cost":"The law keeps a shape an accepted decision forbids, so the next fix to it must first settle whether 0036's 'no timeout grows' or 0609's 'remove the clock' governs; on a very slow runner a slow acknowledgement turns the law red instead of only slower.","head":"5c2dc3102030f3abacf6a97d109fe2d0ef21230d","ticket":"kamp-us/tea-fabrika#1170","pr":null}
 ```
