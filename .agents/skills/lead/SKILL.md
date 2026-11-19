@@ -342,7 +342,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
 | `governance.ts` | list the `.decisions/` files a diff touches; advice only |
 | `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
-| `fieldrow.ts` | print one run row from a Codex run's events (box.sh run reads it) |
+| `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
 Cleanup is the tooling's job: never ask the owner to free disk
 ([0019](../../../.decisions/0019-nothing-stale.md)).
