@@ -125,10 +125,15 @@ export const sev1Fix = (entries: ReadonlyArray<Entry>, issues: ReadonlyArray<Ale
  * The branches an open sev0 holds as fixes: those `open --allow` and `next` named, which `allow`
  * (a ready pull request, 0603) did not. `lines` are the log from the sev0's `opened` on.
  */
-export const sev0Fixes = (lines: ReadonlyArray<Entry>): ReadonlyArray<string> =>
-  Arr.reduce<ReadonlyArray<string>, Entry>(lines, [], (named, e) =>
-    e._tag === "opened" ? e.allow : e._tag === "next" ? [e.branch] : named,
-  );
+export const sev0Fixes = (lines: ReadonlyArray<Entry>): ReadonlyArray<string> => {
+  let named: ReadonlyArray<string> = [];
+
+  for (const e of lines) {
+    named = e._tag === "opened" ? e.allow : e._tag === "next" ? [e.branch] : named;
+  }
+
+  return named;
+};
 
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
 export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
