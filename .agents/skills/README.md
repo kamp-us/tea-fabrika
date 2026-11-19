@@ -19,6 +19,9 @@ both tools.
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.patterns/` doc on how the code is shaped now |
 | [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
 | [sev](./sev/SKILL.md) | CI as the emergency: the level table and the judgment; each sev situation has its runbook in `.runbooks/` |
+| [domain-modeling](./domain-modeling/SKILL.md) | sharpen a context's words and write its glossary as you design |
+| [codebase-design](./codebase-design/SKILL.md) | deep modules, seams and adapters, in Effect and kalfa terms |
+| [grilling](./grilling/SKILL.md) | stress-test a design with one question at a time |
 
 ## How a brief uses them
 
