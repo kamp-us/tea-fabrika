@@ -3,29 +3,29 @@
   "run": "2026-11-19-t1170-sigkill-tests1",
   "ticket": "kamp-us/tea-fabrika#1170",
   "pr": "kamp-us/tea-fabrika#1663",
-  "started": "2026-11-18T17:09:00-08:00",
-  "ended": "2026-11-18T17:31:00-08:00",
+  "started": "2026-11-19T01:17:52+00:00",
+  "ended": "2026-11-19T01:31:19+00:00",
   "parent": null,
   "active": null,
   "driver_caused": false,
   "role": "hand",
   "step": "tests",
   "model": "claude-sonnet-5-5",
-  "effort": null,
+  "effort": "high",
   "outcome": "pass",
   "head": "63a64be25b98c1dd847465350db05677164870a6",
   "base": "5c2dc31",
   "why": "Today's CI tooling. The plan has no build step, so this step wrote all of it. A pnpm patch of vitest@5.0.5 (patches/vitest@5.0.5.patch, declared in pnpm-workspace.yaml) makes a worker's task-update throttle clear its spent timer before it re-enters, as Vitest 5.1.0 does. The lockfile gains only one patchedDependencies line and the patch hash on the 49 vitest@5.0.5 keys. host.yaml gains the hand-started p8 suite (ubuntu-latest, P8's file at full depth, proof uploaded always) and host.ts lints it as H9 (the code already had H7 for the box proof and H8 for concurrency, so the plan's H7 is H9 here), with H1 and H3 lists gaining p8 and 11 new plants in host.test.ts. P8 prints one CI_PROGRESS_CUTOFF line (last journal read and the child reporter's vitest-progress lines) when its wait ends empty; no expectation, bound or fixture changed. host.test.ts: 42 passed. pnpm lint and pnpm typecheck passed. P8 itself never ran here: it sends a real SIGKILL (0594).",
   "note": "Node 26.13.0 was downloaded into a scratch folder because the box has Node 22 and the config refuses another Node. One lint part (lint:promise-types) was killed for memory in the full run and passed alone. The patched Vitest ran host.test.ts. Plant A and plant B for P8 are prepared as local branches for the lead to push and run on CI; they are not counted as plants here. The P8 failure line's stderr pipeline was checked in a scratch script on chunked text, not in the law.",
-  "tokens": null,
-  "tools": null,
-  "minutes": 22,
+  "tokens": 180732,
+  "tools": 52,
+  "minutes": 13.4,
   "costUsd": null,
-  "listUsd": null,
-  "billed": null,
-  "inputTokens": null,
-  "cachedTokens": null,
-  "outputTokens": null,
+  "listUsd": 1.3559,
+  "billed": 7246136,
+  "inputTokens": 7214777,
+  "cachedTokens": 7081088,
+  "outputTokens": 31359,
   "plants": [
     {
       "law": "scenario: host workflow refuses p8 runs another test file (and the ten other p8 plants)",
@@ -42,5 +42,6 @@
       "plant": ".github/ci/workflow-lint/host.ts: H3's job list loses p8",
       "result": "red"
     }
-  ]
+  ],
+  "billing": "subscription"
 }

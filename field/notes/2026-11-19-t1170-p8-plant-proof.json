@@ -1,0 +1,20 @@
+{
+  "id": "2026-11-19-t1170-p8-plant-proof",
+  "date": "2026-11-19",
+  "quests": ["kamp-us/tea-fabrika#1170"],
+  "stage": "review",
+  "kind": "success",
+  "what": "In today's CI, the P8 SIGKILL law's second red on main (run 44428278854, :312 after 31381 ms) was traced to installed Vitest 5.0.5, and a fault plant reproduced it on demand on disposable Linux CI through the new host.yaml p8 suite. Plant A (the worker throttle's trailing timer at ms / 2 with today's `pendingCall ??=` line) went red at the same not-null check after 30805 ms, and its CI_PROGRESS_CUTOFF line showed the journal held only module queued, collected and started for probe.test.ts, with no test start and no beforeEach end. Plant B (the same early timer with Vitest 5.1.0's fix) and the PR head both went green, P8 in 8511 ms and 8510 ms.",
+  "cause": "Vitest 5.0.5's throttle (dist/chunks/run.BPv-BBRv.js:3804-3820) keeps the already-fired timer in pendingCall, so a trailing call that finds now - last not over 100 ms schedules nothing and the batch with the blocked test is never sent. PR 1624 removed the child's 5-second Vitest deadline, which had flushed that batch, so the failure moved from :356 to :312. Vitest 5.1.0 clears pendingCall before it calls again.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "A pnpm patch of vitest@5.0.5 carrying 5.1.0's change, dropped at the bump to 5.1.0 (the lead's ticket). A hand-started p8 suite in host.yaml, since no branch proof run reaches tooling-integration (0602).",
+  "test": "Plant runs R1 and R2, then 8 green p8 runs in a row at the PR head; main's full runs after the merge.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44428278854",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44437607644",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44437632767",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/44437651892",
+    "https://github.com/kamp-us/tea-fabrika/pull/1663"
+  ]
+}
