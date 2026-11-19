@@ -1,6 +1,6 @@
 # kalfa/
 
-Our tooling packages, one domain each.
+Small Effect libraries, one domain each, each usable alone in any repo ([0047](../.kalfa/decisions/0047-kalfa-is-small-libraries-usable-alone.md)).
 The [root map](../AGENTS.md) holds here too. This page adds guidelines for imports between kalfa
 packages. They are guidelines, not laws: no check enforces them, and a reviewer may accept a break
 with a reason.
