@@ -1,12 +1,14 @@
-// Today's CI for both versions. No installed dependencies: changes and field can
-// decide what to run before pnpm setup or cache restoration. Only the `--same` pass loads
-// program.ts and its parser, after their own install, and a failed load runs all of next/.
+// Today's CI for both versions. changes and field can decide what to run before pnpm setup or cache
+// restoration. The one module this imports, @kalfa/ci/DocsOnly, has no dependencies of its own, and
+// check.yaml's changes job links it before this runs, so no install comes first. Only the `--same`
+// pass loads program.ts and its parser, after their own install, and a failed load runs all of next/.
 import { spawnSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRow, kind, reads } from "@kalfa/ci/DocsOnly";
 
 // Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
 // is no such flag, on any event. No flag starts the tooling tests either: the merge line runs none of
@@ -17,57 +19,20 @@ const all = { check: true, typecheck: true, next: true, field: true, build: true
 
 const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
 
-/**
- * Field rows: a direct `.jsonl` file, or anything in a log's folder, where each new row is its own
- * file (decision 0090). field-check.ts names and checks them; a misnamed file fails there.
- * @param {string} path
- */
-const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
-
-// kalfa/ is read too: the package's README ships inside its archive, and a reader test reads the parser
-// adapter's location as text, so a Markdown change there is no safe Markdown.
-const readTrees = ["programs/", "fixtures/", "packages/", "next/", "kalfa/"];
-
-const skillTrees = [".agents/skills/", ".claude/skills/"];
-
 /** @param {string} path */
 const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
-
-/** Skill prose is checked in the changes job on every event. @param {string} path */
-const prose = (path) =>
-  (path.startsWith(".agents/skills/") && path.endsWith(".md") && !script(path)) ||
-  /^\.claude\/skills\/[^/]+$/.test(path);
-
-const readFolders = new Set(["brief", "briefs", "prompt", "prompts"]);
-
-/**
- * Markdown a program or test reads: briefs, prompts and fixtures are inputs.
- * @param {string} path
- */
-const reads = (path) =>
-  path.endsWith(".md") &&
-  (readTrees.some((tree) => path.startsWith(tree)) ||
-    path
-      .split("/")
-      .slice(0, -1)
-      .some((dir) => readFolders.has(dir)));
-
-/** @param {string} path */
-const markdown = (path) => path.endsWith(".md") && !reads(path) && !skillTrees.some((tree) => path.startsWith(tree));
-
-/** @param {string} path */
-const safe = (path) => rows(path) || markdown(path);
 
 /** @param {string} path */
 const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
 
 /**
- * Paths no heavy job reads: field rows, plain Markdown and skill prose, and a path `shown` lists:
- * the paths `displayOnly` proved change nothing but how GitHub shows a diff.
+ * Paths no heavy job reads: a docs or instructions kind (DocsOnly.ts: field rows, Markdown no program
+ * reads, skill prose, AGENTS.md, CLAUDE.md and agent definitions), and a path `shown` lists: the paths
+ * `displayOnly` proved change nothing but how GitHub shows a diff.
  * @param {string} path
  * @param {readonly string[]} shown
  */
-const quiet = (path, shown) => safe(path) || prose(path) || shown.includes(path);
+const quiet = (path, shown) => kind(path) !== "code" || shown.includes(path);
 
 /**
  * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
@@ -233,7 +198,7 @@ export const classify = (paths, event, _proven = [], shown = []) => {
   const touched = paths.some(todays);
 
   if (paths.some(reads)) {
-    return { ...all, field: paths.some(rows), build: touched };
+    return { ...all, field: paths.some(isRow), build: touched };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
@@ -242,7 +207,7 @@ export const classify = (paths, event, _proven = [], shown = []) => {
     check: !paths.every((path) => quiet(path, shown)),
     typecheck: !paths.every((path) => quiet(path, shown) || experiment(path)),
     next: scope(paths, event, [], shown) !== "none",
-    field: paths.some(rows),
+    field: paths.some(isRow),
     build: touched,
   };
 };

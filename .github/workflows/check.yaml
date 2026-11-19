@@ -62,7 +62,8 @@ permissions:
 # sized at its job.
 # workflow-lint.ts fails a job without one.
 jobs:
-  # Today's CI, both versions. One no-install classifier holds every path rule.
+  # Today's CI, both versions. One classifier holds every path rule: @kalfa/ci/DocsOnly, which the
+  # changes job links below, so it runs with no install.
   # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
   # Today's version is frozen (0525, 0533): its tests, its promise checks and its app end to end run
@@ -129,6 +130,16 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      # changes.mjs imports @kalfa/ci/DocsOnly, a TypeScript module with no dependencies, which Node 26
+      # runs by type stripping. The runner's own Node may be older, so this step sets the pinned one.
+      - name: setup node for the classifier
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26.13.0
+      # The link pnpm makes for the workspace dependency (.github/ci/package.json), so the import
+      # resolves without an install: a filtered pnpm install measured 27 s, and this costs nothing.
+      - name: link @kalfa/ci
+        run: mkdir -p .github/ci/node_modules/@kalfa && ln -s ../../../../kalfa/ci .github/ci/node_modules/@kalfa/ci
       - name: classify
         id: diff
         env:
@@ -651,7 +662,7 @@ jobs:
   # or the run was canceled: a skipped required check counts as passed on GitHub, so this job never
   # skips. required.mjs passes a job's skip only when changes said that job need not run, from the
   # same output its `if:` reads.
-  # No install and no setup: the runner's own Node runs required.mjs, as it runs changes.mjs.
+  # No install and no setup: the runner's own Node runs required.mjs.
   # On a draft it is named `ci-required (draft)`: GitHub makes a job's check run only when its needs
   # end, so for the whole ready run the draft's green `ci-required` on the same head would be the
   # latest one and would satisfy the ruleset. Under its own name it never does; a draft cannot

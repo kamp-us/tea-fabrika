@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 // log (../ci/fixtures/run-43776563690-next-2.log): one leg's vitest step failed, and that leg's stop
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
+import { TABLE } from "@kalfa/ci/DocsOnly.test-support";
 import { Recorder } from "@kampus/vitest";
 import { Effect, FileSystem, Layer, Match, Schema } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -259,7 +260,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (a docs pull request, only .decisions/, docs/, field/, .glossary/, .runbooks/ files, starts no full run); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as 0544 allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
         );
         expect([...none.github.calls, ...stale.github.calls, ...docs.github.calls]).toEqual([
           ...armedAt,
@@ -523,6 +524,19 @@ const Head = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const automaticFixture = { jobs: shaped("changed"), log: "" };
 
+// The jobs of pull request 1657's automatic run (2026-11-18): a docs-only change skips every heavy job
+// by design, and ci-required passes. GitHub names a job it skips by its expression, so the expression
+// is that job's name here.
+const docsOnlyJobs: ReadonlyArray<Job> = [
+  job(301, "changes", "success"),
+  job(302, "github.event.pull_request.draft && 'lint' || 'check'", "skipped"),
+  job(303, "typecheck", "skipped"),
+  job(304, "next", "skipped"),
+  job(305, "select", "skipped"),
+  job(306, "related", "skipped"),
+  job(307, "ci-required", "success"),
+];
+
 describe("automatic ready CI, with its related tooling legs, as the current-head proof", () => {
   // Plant owed on CI: omit the automatic lookup; older changed/red history would refuse again.
   it.effect.prop(
@@ -708,6 +722,122 @@ describe("automatic ready CI, with its related tooling legs, as the current-head
         yield* Effect.flip(arm(m));
         expect(m.github.calls).toEqual([]);
         expect(m.actions.asked).not.toContain(`runs check.yaml ${branch}`);
+      }),
+  );
+
+  // Plant: arm's docs route turned off (no docs kind), so a docs-only row is refused and no line says docs only.
+  it.effect(
+    "vector: over the fixed table, arm arms a change exactly when it is docs only (@kalfa/ci/DocsOnly), and a docs-only arm's line says so",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+
+        for (const row of TABLE) {
+          const m = memory(
+            { stands: "none", files: row.paths, automatic: [automaticRun(oid)], automaticJobs: docsOnlyJobs },
+            red,
+          );
+
+          const answer = yield* Effect.result(arm(m));
+          const said = `automatic ready check ${RED + 1} green at ${oid.slice(0, 12)}: docs only (@kalfa/ci/DocsOnly), so CI skipped its heavy jobs and ci-required passed`;
+          const line = answer._tag === "Success" ? Arm.line(answer.success) : "";
+
+          expect(answer._tag, row.pr).toBe(row.docsOnly ? "Success" : "Failure");
+          expect(line.includes(said), row.pr).toBe(row.docsOnly);
+          expect(m.github.calls, row.pr).toEqual(row.docsOnly ? armedAt : []);
+        }
+      }),
+  );
+
+  // Plant: the docs route without its ci-required check, so a docs-only change whose ci-required is missing arms.
+  it.effect(
+    "vector: a docs-only change arms on its automatic check only when ci-required passed and every other job ended green or skipped; a failed, missing, draft-named or unfinished job, and a run that did not succeed, do not",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+
+        const replaced = (name: string, change: Partial<Job>): ReadonlyArray<Job> =>
+          docsOnlyJobs.map((found) => (found.name === name ? { ...found, ...change } : found));
+
+        const withoutRequired = docsOnlyJobs.filter((found) => found.name !== "ci-required");
+
+        // `stands` is what fullRunAt says: "red" for a verdict that refuses, "none" for no verdict at all.
+        const cases: ReadonlyArray<{
+          readonly name: string;
+          readonly run: Partial<Run>;
+          readonly jobs: ReadonlyArray<Job>;
+          readonly stands: "red" | "none";
+        }> = [
+          {
+            name: "ci-required failed",
+            run: {},
+            jobs: replaced("ci-required", { conclusion: "failure" }),
+            stands: "red",
+          },
+          { name: "ci-required missing", run: {}, jobs: withoutRequired, stands: "red" },
+          {
+            name: "ci-required unfinished",
+            run: {},
+            jobs: replaced("ci-required", { status: "in_progress", conclusion: null }),
+            stands: "red",
+          },
+          {
+            name: "ci-required (draft) alone",
+            run: {},
+            jobs: [...withoutRequired, job(308, "ci-required (draft)", "success")],
+            stands: "none",
+          },
+          {
+            name: "ci-required beside ci-required (draft)",
+            run: {},
+            jobs: [...docsOnlyJobs, job(309, "ci-required (draft)", "success")],
+            stands: "none",
+          },
+          {
+            name: "lint beside ci-required",
+            run: {},
+            jobs: [...docsOnlyJobs, job(310, "lint", "success")],
+            stands: "none",
+          },
+          { name: "typecheck failed", run: {}, jobs: replaced("typecheck", { conclusion: "failure" }), stands: "red" },
+          {
+            name: "next unfinished",
+            run: {},
+            jobs: replaced("next", { status: "in_progress", conclusion: null }),
+            stands: "red",
+          },
+          {
+            name: "changes unfinished",
+            run: {},
+            jobs: replaced("changes", { status: "in_progress", conclusion: null }),
+            stands: "red",
+          },
+          { name: "the run did not succeed", run: { conclusion: "failure" }, jobs: docsOnlyJobs, stands: "red" },
+        ];
+
+        for (const found of cases) {
+          const m = memory(
+            {
+              stands: "none",
+              files: ["docs/plan/README.md"],
+              automatic: [{ ...automaticRun(oid), ...found.run }],
+              automaticJobs: found.jobs,
+            },
+            red,
+          );
+
+          const full = yield* Arm.fullRunAt(branch, oid, true).pipe(Effect.provide(m.layer));
+
+          expect(full._tag === "at" ? full.verdict._tag : full._tag, found.name).toBe(found.stands);
+
+          const answer = yield* Effect.result(arm(m));
+          const line = answer._tag === "Success" ? Arm.line(answer.success) : "";
+
+          // A refusing verdict refuses the arm; no verdict arms on the 0544 line, which never says docs only.
+          expect(answer._tag === "Failure", found.name).toBe(found.stands === "red");
+          expect(line.includes("docs only (@kalfa/ci/DocsOnly)"), found.name).toBe(false);
+          expect(m.github.calls, found.name).toEqual(found.stands === "red" ? [] : armedAt);
+        }
       }),
   );
 });

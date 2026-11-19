@@ -11,6 +11,7 @@
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
+import * as DocsOnly from "@kalfa/ci/DocsOnly";
 import { Effect, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import * as Arm from "./Arm.ts";
@@ -22,11 +23,12 @@ import * as Queue from "./Queue.ts";
 export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { reason: Schema.String }) {}
 
 /**
- * Whether a changed file keeps a pull request docs only, as 0183 has it: Markdown in a docs folder,
- * or a field row. A script, a config or a `package.json` under `docs/` is not.
+ * Whether a changed file keeps a pull request docs only, as 0183 has it: Markdown that no program or
+ * skill reads, or a field row, by the shared classifier (@kalfa/ci/DocsOnly). Instruction text is not
+ * docs (0183, 0180): skill prose, AGENTS.md, CLAUDE.md and an agent's definition, so a pull request
+ * that changes one is armed, not admin-merged.
  */
-export const isDocsFile = (path: string): boolean =>
-  Arm.isDocs(path) && (path.endsWith(".md") || path.startsWith("field/"));
+export const isDocsFile = (path: string): boolean => DocsOnly.kind(path) === "docs";
 
 /** How the lead merges: through the queue, or past it with an admin merge. */
 export const Route = Schema.TaggedUnion({

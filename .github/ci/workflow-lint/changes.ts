@@ -85,7 +85,11 @@ export const changesJob: Rule = ({ jobs }, require) => {
 
   const sizing = changeSteps.find((s) => s["id"] === "size");
 
-  for (const step of changeSteps.filter(
+  // The steps after the classify step only. The classifier's own Node and link come before it, on
+  // the pinned Node with no `if`, and classify.ts holds them.
+  const afterClassify = changeSteps.slice(changeSteps.findIndex((s) => s["id"] === "diff") + 1);
+
+  for (const step of afterClassify.filter(
     (s) =>
       (Predicate.isString(s["uses"]) && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
       (Predicate.isString(s["run"]) && s["run"].startsWith("pnpm install")),

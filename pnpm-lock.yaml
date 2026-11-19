@@ -403,6 +403,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@kalfa/ci':
+        specifier: workspace:*
+        version: link:kalfa/ci
       '@kalfa/config':
         specifier: workspace:*
         version: link:kalfa/config
@@ -465,6 +468,9 @@ importers:
 
   .github/ci:
     dependencies:
+      '@kalfa/ci':
+        specifier: workspace:*
+        version: link:../../kalfa/ci
       '@kalfa/quality':
         specifier: workspace:*
         version: link:../../kalfa/quality
@@ -661,6 +667,30 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  kalfa/ci:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+      '@kampus/vitest':
+        specifier: workspace:*
+        version: link:../../next/packages/vitest
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.6
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c)
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
 
   kalfa/config:
     dependencies:
