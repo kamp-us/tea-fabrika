@@ -20,8 +20,7 @@ import { SPECS } from "./specs.ts";
 // once: a law that holds only because nothing tried to break it is not a law that holds. A laws
 // file beside its machine holds itself to the same rule, through tea's strict Msg table.
 //
-// `wip`, `legacy` and `docs/tutorials` are left out: the first two only shrink, and a tutorial's
-// machines are there to teach.
+// `wip` and `legacy` are left out: they only shrink.
 //
 // Node's file reads, at this edge only: a test that lists source files. It reads the other parts
 // as files to find machines in, never as code it imports.

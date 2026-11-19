@@ -49,7 +49,7 @@ One comment, while build round 2 runs on ticket 117:
 
 - **`next/`:** all six principles. S1 is time-bound: Tier 1's order of work says "Words and fact
   shapes are settled before real facts get written, which is the first real note"
-  ([Tier 1](../plan/tier-1.md#the-order-of-work), item 6). Nothing from `next/` is on main; PR 223
+  (Tier 1, item 6). Nothing from `next/` is on main; PR 223
   has `saw` on window Msgs.
 - **Today's version:** two tryouts are offered for the self-fix plan's PR 5 (below). Today's ledger
   gets no `seen`: today's quest keeps P5's `during`, and today's ledger goes when `next/` takes over.
@@ -275,7 +275,7 @@ fact that last set that field in the fold.
 - **Why:** Riot logs a value only "on frames where the value changes", because "only the first
   divergence really matters" [g5]. Factorio's report "contains both the player's and server's copy
   of the save game" [g6]. GGPO: "diff the log of the initial frame vs the log of the rollback" [g1].
-- **Tied to P6 and PR 5:** [the self-fix plan's PR 5](../plan/pipeline-self-fix.md#pr-5-a-stuck-quest-restarts-from-the-step-that-broke)
+- **Tied to P6 and PR 5:** the self-fix plan's PR 5
   has the law "the fold of a quest's facts equals its saved `Held`, at every point a quest can stop",
   and a restart that names a field no fact proves. The report is that law's failure message in a
   test, and the same function at a live restart: write both copies before resuming, since the
@@ -362,7 +362,7 @@ Offered for the self-fix plan's PR 5, not filed:
   for the envelope as the log's rev (smaller call 1). PR 223 changes with it.
 - **D3 ([the five layers](./a-local-first-sync-engine.md#layer-2-data-decided-2026-10-30)):** one
   more envelope field. Additive.
-- **[Tier 1 detail](../plan/tier-1-detail.md#what-fact-is-lost-forever-if-we-dont-record-it-now):**
+- **Tier 1 detail:**
   "`saw` on a letter" and "the letter's `by`, `at`, `said` and `saw`" become `seen`.
 - **P5's `during` ([pipeline guidelines](./pipeline-guidelines.md)):** in `next/`, a fold over
   `seen`. Today's quest keeps it as written.

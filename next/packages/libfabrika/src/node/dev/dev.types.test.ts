@@ -1,4 +1,4 @@
-// Ticket 1056, next/: L7 of the Reflect ban plan (docs/plan/quests/reflect-ban-PLAN.md, amendment of
+// Ticket 1056, next/: L7 of the Reflect ban plan (.kalfa/quests/reflect-ban-PLAN.md, amendment of
 // 2026-11-15), written before the build. The local dev client names its methods: `startDev`'s
 // `project(p)` and `process(pid)` answer the calls the control door allows, each with the argument
 // types the Project and Process bindings give, and a name the door refuses is a type error. tsc

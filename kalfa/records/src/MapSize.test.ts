@@ -1,4 +1,4 @@
-// L6 and L7 of docs/plan/quests/rules-and-records-build-PLAN.md (slice 8), as the lead changed them after
+// L6 and L7 of .kalfa/quests/rules-and-records-build-PLAN.md (slice 8), as the lead changed them after
 // slice 6 dropped the byte limit: the map check is advice. Each tracked `AGENTS.md` it reads, the root and each
 // `<folder>/AGENTS.md` one folder down (a symlink is skipped), with more than 200 lines is one `map` finding.
 // The 200 is a constant of MapSize.ts, `maxLines`, cited to https://code.claude.com/docs/en/memory; it is

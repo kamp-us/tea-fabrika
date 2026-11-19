@@ -90,7 +90,6 @@ no local `pnpm typecheck`, and on no local run of more than about five minutes t
 | Markdown that no program reads, or skill prose | `pnpm lint`, which runs `skillscheck.sh`, skill prose's one reader |
 | Code, a skill script, or Markdown that a program or skill reads | the block above |
 | A dependency's version | the block above, with narrow paths in place of `--changed`, which a lockfile change makes the full suite |
-| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 
 A lint finding is fixed in the code, never by switching its rule off:
 [the build skill's Lint findings](./.agents/skills/build/SKILL.md#lint-findings) says what to do with each.
@@ -125,6 +124,19 @@ Write-ups are read by busy people, some of them not native English speakers.
   would settle it.
 - A write-up ends with what it cannot tell us. A run that shows what breaks is as useful as a clean one, so a failure
   is told whole. Guesses that turned out wrong stay in the record, marked as wrong.
+
+## Writing a skill
+
+- Write it by `writing-for-agents`: how a skill, its description and its pointers are written.
+- A skill may reference `.kalfa/kalfa.toml` and the `kalfa` command, never project content:
+  no ADR numbers, no decision links, no paths outside the config layer.
+- Reach for these skills instead of re-explaining their method:
+  - naming words or recording a decision: `domain-modeling`
+  - shaping a module or a seam: `codebase-design`
+  - stress-testing a plan: `grilling`, or `grill-with-docs` to update the docs as you go
+  - answering a question from sources: `research`
+  - testing a design with throwaway code: `prototype`
+  - a hard bug: `diagnosing-bugs`
 
 ## Changing files
 

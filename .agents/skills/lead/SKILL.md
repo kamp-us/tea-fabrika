@@ -96,7 +96,7 @@ After two such resumes on the same step, treat it as stuck and read why.
 Use the plan skill for ticket <id or "to be filed">, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>, made with: <the git worktree add command, or "exists">
 Branch: fabrikalfa/<name>, from <origin/main or the parent branch>
-Plan file: docs/plan/quests/<quest>-PLAN.md
+Plan file: .kalfa/quests/<quest>-PLAN.md
 Read also: <tier rows, notes and code the plan must start from>
 Owner away: <yes or no>
 This quest:
@@ -109,7 +109,7 @@ This quest:
 Use the tests skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
-Approved plan: docs/plan/quests/<quest>-PLAN.md
+Approved plan: .kalfa/quests/<quest>-PLAN.md
 This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
@@ -120,7 +120,7 @@ This quest:
 Use the build skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Head: <short SHA>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
-Approved plan: docs/plan/quests/<quest>-PLAN.md
+Approved plan: .kalfa/quests/<quest>-PLAN.md
 Laws: <the test files the test writer wrote, fast and integration>
 This quest:
 - <facts settled after the plan, what the test writer found, clashes with open PRs>
@@ -133,7 +133,7 @@ was typed for it ran to 5,145 characters; this one carries the same facts:
 Use the tests skill for ticket 1041, pipe plumbing, next/.
 Worktree: ../tf-pipe-plumbing  Branch: fabrikalfa/pipe-plumbing  PR: https://github.com/kamp-us/tea-fabrika/pull/1310
 Start: merge origin/main (the tile slice and docs landed since the branch was cut).
-Approved plan: docs/plan/quests/t1041-PLAN.md
+Approved plan: .kalfa/quests/t1041-PLAN.md
 This quest:
 - Settled after the plan by experiment 295 (https://github.com/kamp-us/tea-fabrika/pull/1311), the lead's calls:
   mail.chunk is 64 KiB, mail.unread is 256, the cap's maximum is 16,384. A law that pins a default pins these.
@@ -476,7 +476,7 @@ visible, and never weaken the rules to hide this message.
    read of that package's decisions, patterns and source; else send it back.
 4. **Start the quest** on a `fabrikalfa/<name>` branch through `drive.ts`, never `box.sh new` by
    hand. Use `origin/main` for an independent ticket. A stacked child starts at the parent's signed build head, before the
-   parent merges, as [Tier 1](../../../docs/plan/tier-1.md#the-pull-requests-one-at-a-time) allows.
+   parent merges.
    Record the child, parent branch and signed head before starting it. Keep the child's tests
    when merging parent work in. Never replace them with the parent's older tests.
    box.sh new checks the approved plan, base and ticket.
@@ -507,7 +507,7 @@ visible, and never weaken the rules to hide this message.
    is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
    this repo's steps, what ran each one, and the dollars, in the order
    [the pr skill](../pr/SKILL.md) gives.
-9. **Land it** by [the plan's rule](../../../docs/plan/README.md#how-a-change-lands): the review says
+9. **Land it:** the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
    [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
    Zero hits from loosening.sh mean no owner read is needed.
@@ -587,8 +587,7 @@ visible, and never weaken the rules to hide this message.
   tests that exist ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
   not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
   the steps by hand, and the lead reads every diff, CI and the leak grep
-  before a merge. [The lead skill](SKILL.md) says how, and
-  [the plan](../../../docs/plan/README.md#how-a-change-lands) says how a change lands.
+  before a merge. [The lead skill](SKILL.md) says how.
   [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed
   law must be, and [the lead skill's "Land it" step](#steps) what a
   loosening.sh hit on one means.

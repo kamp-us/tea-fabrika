@@ -1,5 +1,5 @@
 // Today's lead tooling. The laws of fieldrow.ts, the port of fieldrow.py (ticket 766, slice S3 of
-// docs/plan/quests/port-scripts-0113-PLAN.md, after decision 0113). Written before the port.
+// .kalfa/quests/port-scripts-0113-PLAN.md, after decision 0113). Written before the port.
 //
 // The shape these laws hold fieldrow.ts to:
 // - It exports `fieldrow`, its `effect/cli` command, with fieldrow.py's command line: the flags

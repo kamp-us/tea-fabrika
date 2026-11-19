@@ -1,4 +1,4 @@
-// Program watch (docs/plan/quests/watch-PLAN.md, amendment A-Workerd), next/: laws M13 and M16 on real
+// Program watch (.kalfa/quests/watch-PLAN.md, amendment A-Workerd), next/: laws M13 and M16 on real
 // workerd, sockets, object storage and the private local instance capability, set up the way
 // worker-mail.integration.test.ts sets up its two Process objects. M13: a program in one Process
 // object monitors a program in another by its registered name, is refused for a name nobody

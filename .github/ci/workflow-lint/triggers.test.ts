@@ -61,33 +61,30 @@ it("ticket 988: every path a pull request ignores runs no heavy job in changes.m
     {
       ...options,
       examples: [
-        // Pull request 1248, the waste ticket 988 names: one plan from before the rename (0546),
-        // in the old folder, and two finding rows.
+        // Pull request 1248, the waste ticket 988 names: one plan and two finding rows.
         [
           [
-            "docs/plan/lanes/t290-s2-PLAN.md",
+            ".kalfa/quests/t290-s2-PLAN.md",
             "field/findings/2026-11-14-a-row.json",
             "field/findings/2026-11-14-another-row.json",
           ],
           true,
         ],
-        [["docs/plan/quests/t290-s2-PLAN.md", "field/findings/2026-11-14-a-row.json"], true],
-        [["docs/plan/.md", "field/runs/.json"], false],
+        [[".kalfa/quests/t290-s2-PLAN.md", "field/findings/2026-11-14-a-row.json"], true],
+        [[".kalfa/quests/.md", "field/runs/.json"], false],
       ],
     },
   );
 });
 
-it("0546: a quest plan is ignored in docs/plan/quests/ and, for a pull request still open, in the old docs/plan/lanes/", () => {
-  for (const folder of ["quests", "lanes"]) {
-    const plan = `docs/plan/${folder}/t290-s2-PLAN.md`;
-    expect(ignoredBy(plan), plan).toBe(true);
+it("a quest plan is ignored in .kalfa/quests/", () => {
+  const plan = ".kalfa/quests/t290-s2-PLAN.md";
+  expect(ignoredBy(plan), plan).toBe(true);
 
-    for (const draft of [true, false]) {
-      const { field, ...heavy } = jobs([plan], "pull_request", draft);
-      expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
-      expect(field).toBe(false);
-    }
+  for (const draft of [true, false]) {
+    const { field, ...heavy } = jobs([plan], "pull_request", draft);
+    expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
+    expect(field).toBe(false);
   }
 });
 
@@ -95,14 +92,13 @@ it("pinned: ticket 988's list leaves out what changes.mjs or a reader still chec
   // A folder a program reads, skill prose, the old logs, a row of the wrong kind and a nested plan
   // folder all start the run: each is outside the list.
   for (const path of [
-    "docs/plan/brief/x.md",
-    "docs/plan/quests/prompts/x.md",
-    "docs/plan/lanes/prompts/x.md",
     ".agents/skills/lead/SKILL.md",
+    ".kalfa/quests/brief/x.md",
+    ".kalfa/quests/prompts/x.md",
+    ".kalfa/quests/x.ts",
     "field/runs.jsonl",
     "field/findings/x.md",
     "field/findings/a/b.json",
-    "docs/plan/x.ts",
     "AGENTS.md",
   ]) {
     expect(ignoredBy(path), path).toBe(false);
@@ -142,9 +138,12 @@ const plants: Plant[] = [
     },
   ],
   [
-    "pull requests ignore every plan file, a brief folder's included",
+    "pull requests ignore every quest file, a brief folder's included",
     (w) => {
-      w.on.pull_request["paths-ignore"] = ["docs/plan/**", ...ignored.filter((glob) => !glob.startsWith("docs/plan/"))];
+      w.on.pull_request["paths-ignore"] = [
+        ".kalfa/quests/**",
+        ...ignored.filter((glob) => !glob.startsWith(".kalfa/quests/")),
+      ];
     },
   ],
   [

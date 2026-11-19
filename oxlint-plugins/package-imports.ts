@@ -159,7 +159,7 @@ export const packageImports: CreateRule = {
 
       context.report({
         node: source,
-        message: `${who} may not import "${name}": it ${allowed} (docs/plan/tier-1-detail.md, "Strict layers"). Import through a name the table in .oxlintrc.json gives this part, or by a relative path inside the package.`,
+        message: `${who} may not import "${name}": it ${allowed}. Import through a name the table in .oxlintrc.json gives this part, or by a relative path inside the package.`,
       });
     };
 

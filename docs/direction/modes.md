@@ -54,7 +54,7 @@ escape   global, mode "info"        did {does: "desk.exit", ...}; info off; mode
 ## Which version
 
 - **`next/`:** all of it. Tier 1 has one real mode, the notes tile's reading and editing
-  ([Tier 1's detail](../plan/tier-1-detail.md)), and it is the first test. The desk, its info mode
+  (Tier 1's detail), and it is the first test. The desk, its info mode
   and a resize mode arrive with the desk in Tier 2. *Changed 2026-11-11: the notes tile left Tier 1
   with notes, Tier 2's first real app, so this first test moves to Tier 2; Tier 1's program is the
   checklist.*

@@ -2,7 +2,7 @@
 
 How a step signs what it committed in `next/`, how the lead pushes it, and how the merge reads the
 check. Tier 1's P32 built it, from [a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md).
-The laws are p83 to p87 and p89 in [the detail](../plan/tier-1-detail.md#properties).
+The laws are p83 to p87 and p89 in the tier 1 detail, in the notes.
 
 ```sh
 pnpm commits sign --step build --ticket 229 --key ~/.fabrika/step-keys/build   # a step, after each commit
@@ -101,7 +101,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | Answer | What to do |
 |---|---|
 | `done` | nothing: every commit has a valid step note or person signature, and no exam path changed |
-| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note ([tier 1](../plan/tier-1.md)) |
+| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note (tier 1, in the notes) |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the quest again on a new branch from the last head whose list reads |

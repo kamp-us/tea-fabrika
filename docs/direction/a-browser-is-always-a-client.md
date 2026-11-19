@@ -113,12 +113,12 @@ A written rule does not stop a change that breaks it. Two checks do:
 
 - One more test job in CI, with a browser, once the protocol code exists.
 - A browser client needs its person to grant its key. In `next/`, that flow is
-  designed in [Tier 1's plan](../plan/tier-1.md): a code in the tab, a row in the
+  designed in Tier 1's plan: a code in the tab, a row in the
   menu bar, Approve and a finger. That plan was approved 2026-11-01, and this is
   not built.
 - *Changed 2026-11-07 (owner):* a browser tab can approve or remove a device when the approval is
   signed by a passkey made with user verification required. Then it is a person key, like a Mac.
-  A tab with only its window key cannot approve ([Tier 1's question 19](../plan/tier-1.md#open-questions)).
+  A tab with only its window key cannot approve (Tier 1's question 19).
 
 **How sure:** 80%. The doubt is a protocol need that a browser truly cannot
 meet, such as a client that must hold a file lock. What would settle it: the

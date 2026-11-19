@@ -1,4 +1,4 @@
-// L8 of the Reflect ban (docs/plan/quests/reflect-ban-PLAN.md, slice 10, kind 5; decision 0554), next/.
+// L8 of the Reflect ban (.kalfa/quests/reflect-ban-PLAN.md, slice 10, kind 5; decision 0554), next/.
 // The control door calls exactly the method its request names, on the object its request names, with
 // the arguments that method's own schema decoded from the request. Arguments its schema refuses are
 // refused with `bad_row` before any call, any other name with `unknown_method`, and a Project `commit`

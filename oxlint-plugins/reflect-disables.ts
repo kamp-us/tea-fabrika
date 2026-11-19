@@ -1,4 +1,4 @@
-// L5 of the Reflect ban (decision 0554, docs/plan/quests/reflect-ban-PLAN.md): no ignore comment
+// L5 of the Reflect ban (decision 0554, .kalfa/quests/reflect-ban-PLAN.md): no ignore comment
 // lets a `Reflect.get`, `Reflect.set` or `Reflect.has` through oxlint's `no-restricted-properties`
 // outside the lines the plan names. Oxlint honors any ignore comment with a rule and a reason, so
 // without this rule a later change could bring a call back under one and the ban would not see it.

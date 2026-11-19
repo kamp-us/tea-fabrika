@@ -17,7 +17,7 @@ checked the self-fix plan of [PR 289](https://github.com/usirin/tea-fabrika/pull
 the result. It is reading, not a measurement. It sits under the note
 [Jidoka and andon](./jidoka-and-andon.md), from PR 289, which applies these rules to today's quest,
 row by row. Both PR 289 files named here, that note and the plan
-[pipeline-self-fix](../plan/pipeline-self-fix.md), are on main now.
+pipeline-self-fix, are on main now.
 
 ```ts
 // A sketch. A step still answers in the five verbs. What is new is what each one must carry.
@@ -479,7 +479,7 @@ second half is a lean, 75%.**
 - **The self-fix plan, on PR 289's branch.** If the fold cannot prove a field of ticket 117's carry,
   it falls back to "a fresh lane on ticket 117, every step again". P4 and P7 say: run again only
   from the earliest step whose output cannot be proved.
-- **[The plan's "who decides"](../plan/README.md#who-decides-what).** "A builder's diff to the exam
+- **The plan's "who decides".** "A builder's diff to the exam
   files ends the quest stuck: nothing the build did is kept." That is today's code, and P5 replaces
   it.
 - **[Read fresh, run alone](./read-fresh-run-alone.md).** Kept. A fresh read is still the truth; P7

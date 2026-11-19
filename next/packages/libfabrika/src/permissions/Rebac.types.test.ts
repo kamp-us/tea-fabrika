@@ -1,4 +1,4 @@
-// T953 slice 1, next/: the permission core's type laws L5 to L7 (docs/plan/quests/t953-PLAN.md). Compile
+// T953 slice 1, next/: the permission core's type laws L5 to L7 (.kalfa/quests/t953-PLAN.md). Compile
 // the exact bad lines; never execute them. The lead and CI run the compiler (`pnpm typecheck`);
 // Vitest does not typecheck, so these bodies hold type assertions only (0527).
 //
@@ -80,7 +80,7 @@ const forged = (sender: Sender, tuples: Tuples) => {
 };
 
 /**
- * T1062 slice 1, L3 (docs/plan/quests/error-cause-PLAN.md, decision 0568): all three sites that make
+ * T1062 slice 1, L3 (.kalfa/quests/error-cause-PLAN.md, decision 0568): all three sites that make
  * a `RelationsError` pass a cause (`RelationsLedger.ts:46`, `:64`, `RelationsMemory.ts:39`), so its
  * cause is required and a fourth site cannot leave it out. Never called.
  * Plant: make `Relations.ts:27` optional again; the `@ts-expect-error` goes unused and the typecheck fails.

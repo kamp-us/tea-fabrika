@@ -1,4 +1,4 @@
-// Law Q6 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: the Stryker options for one plant name one
+// Law Q6 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: the Stryker options for one plant name one
 // place and one test file. A `mutate` entry counts lines from 1 and columns from 0 (the same as a
 // found target), and Stryker runs every test of a `testFiles` entry, so a folder there would
 // widen the answer to tests the plant never named.

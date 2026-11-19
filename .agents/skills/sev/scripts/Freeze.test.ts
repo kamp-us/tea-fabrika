@@ -198,7 +198,7 @@ describe("verdict", () => {
     ({ run, allow }) => Freeze.verdict({ ...run, event: "merge_group" }, allow)._tag === "keep",
   );
 
-  // R8 of docs/plan/quests/sev-runbooks-PLAN.md (0611). Plants: the old verdict, with no case for main's `check`
+  // R8 of .kalfa/quests/sev-runbooks-PLAN.md (0611). Plants: the old verdict, with no case for main's `check`
   // run (a `check` push on main is canceled); keep every push run on main, so main's full run is kept too.
   it.prop(
     "property: a run is kept exactly when it is the merge queue's, its branch is allowed, or it is the `check` workflow's push to main; main's full run and every other run is canceled",

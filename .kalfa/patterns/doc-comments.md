@@ -129,7 +129,7 @@ first file. A folder not yet at zero has one line in the `warn` override right a
 (`.oxlintrc.json:2036-2047`), where its fires print as advice and do not fail. The pull request that
 fills a folder deletes its line, and a whole `pnpm lint` fails until it does
 (ticket 948,
-[Plan B, B2](../../docs/plan/effect-rules-big.md#b2-the-docs-rule)). Until then, review holds the
+Plan B, B2). Until then, review holds the
 shape in that folder.
 
 It stops at what is not public: `internal/`, tests, test support (`*.test-support.ts`), shared

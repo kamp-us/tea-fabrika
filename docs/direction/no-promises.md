@@ -84,7 +84,7 @@ request moves them to `crypto`.
 - `useMachine` and `useRuntime` in `@demlik/tea` expect Promise verbs, so the
   window may need its own small hook. *Updated 2026-11-01:* probes on tea's Effect
   engine showed one `useSyncExternalStore` hook working, 90% sure, and
-  [Tier 1's plan](../plan/tier-1.md) uses it. Nothing is built yet.
+  Tier 1's plan uses it. Nothing is built yet.
 
 **How sure: 95%** on the rule. The edge list is gone: an edge is a line with an edge comment,
 and the lead reads each new one (owner, 2026-11-05, and 2026-11-09 for the lead; Tier 1's P35

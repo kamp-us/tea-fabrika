@@ -49,7 +49,7 @@ a reader   -> reads the home; git log is its history; the record says why
   the full run starts by editing `.github/workflows/scheduled.yaml` (`cron: "17 * * * *"`).
 - **Held by:**: a records check in
   `pnpm lint`, in `@kalfa/records`, that fails those headings and lines in `.kalfa/decisions/`. Built by
-  [the build plan](../../docs/plan/quests/rules-and-records-build-PLAN.md).
+  [the build plan](../quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `the merge line runs changed tests a schedule runs all:89`,
   an `## Amendments` section, while its title at `:3` still says "every 3 hours";
   `next follows effects code style:40`, "the rest of this file still holds".
@@ -84,7 +84,7 @@ a reader   -> reads the home; git log is its history; the record says why
 - **Example:** `a pull request lands only on ci that saw main:4`, a whole
   reversal: `status: superseded by [0162](0162-no-friction-before-a-merge.md)`.
 - **Held by:**: the frontmatter
-  Schema in `@kalfa/records`, checked by `pnpm lint`. Built by [the build plan](../../docs/plan/quests/rules-and-records-build-PLAN.md).
+  Schema in `@kalfa/records`, checked by `pnpm lint`. Built by [the build plan](../quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** 116 records say `amended-in-part`, such as
   `the merge line runs changed tests a schedule runs all:4`, with five links;
   `twelve agents at once:4` is patched by a record that is itself superseded.
@@ -100,9 +100,8 @@ a reader   -> reads the home; git log is its history; the record says why
 - **Example:** `node .agents/skills/lead/scripts/records.ts resolve 0146` prints
   `0146  superseded  live: no friction before a merge`.
 - **Held by:**: a link check in
-  `pnpm lint` that resolves each link in those files. Built by [the build plan](../../docs/plan/quests/rules-and-records-build-PLAN.md).
-- **Breaks today:** `docs/plan/README.md:243` links superseded 0146 to say a pull request "now"
-  lands only on CI that saw main; `AGENTS.md:210` says 0023 "lists the differences", and that list
+  `pnpm lint` that resolves each link in those files. Built by [the build plan](../quests/rules-and-records-build-PLAN.md).
+- **Breaks today:** `AGENTS.md:210` says 0023 "lists the differences", and that list
   is stale.
 
 ## R6: the map every agent reads fits its readers' limits
@@ -118,7 +117,7 @@ a reader   -> reads the home; git log is its history; the record says why
 - **Example:** Effect's repo `AGENTS.md` is about 55 lines: layout, the narrowest check for each
   kind of change, and generated files.
 - **Held by:**: `AGENTS.md` follows
-  Claude Code's memory guide and stays under 200 lines. Built by [the build plan](../../docs/plan/quests/rules-and-records-build-PLAN.md).
+  Claude Code's memory guide and stays under 200 lines. Built by [the build plan](../quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `AGENTS.md` is 39,103 bytes; at 32 KiB a reader stops at line 389, before
   "How to write here" (`AGENTS.md:396`). With `next/AGENTS.md` it is 49,516 bytes.
 

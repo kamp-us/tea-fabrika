@@ -1,4 +1,4 @@
-// T1076, slice 1, next/: K1 to K5 of the approved plan (docs/plan/quests/kalfa-config-PLAN.md), for
+// T1076, slice 1, next/: K1 to K5 of the approved plan (.kalfa/quests/kalfa-config-PLAN.md), for
 // `settings/App.ts` and the generic load. Written before the modules. Slice 2 moves this file to
 // kalfa/config/src/App.test.ts with `git mv`.
 //

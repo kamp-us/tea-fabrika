@@ -1,4 +1,4 @@
-// Law Q12 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: the repo's plant catalog (plants.ts) holds at
+// Law Q12 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: the repo's plant catalog (plants.ts) holds at
 // head. Each plant's file holds its target exactly once, found by Stryker's own instrumenter on the
 // file's text (the same call the plant run makes, with no Stryker run after it), and its law file holds
 // a test whose suite chain and title are the plant's `law.name`. A rename of a variable or a law breaks

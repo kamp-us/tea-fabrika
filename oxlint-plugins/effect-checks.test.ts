@@ -1,4 +1,4 @@
-// Law L2 of docs/plan/quests/effect-sweep-PLAN.md, after law 6 of docs/plan/effect-rules-big.md:
+// Law L2 of .kalfa/quests/effect-sweep-PLAN.md, after law 6 of docs/plan/effect-rules-big.md:
 // every folder a slice of the Effect-check sweep locked still ends at `error` for its check of
 // `@effect/tsgo`, in every project that type-checks it. A folder dropped in a merge is silent, since
 // the type check just stops reading it, so the folders each slice locked are saved here.

@@ -6,7 +6,7 @@ summary: "A person's comment goes to that person, a bot's back to the builder. R
 # Ship stage rules
 
 Decided 2026-10-11, while designing the ship machine. One rule added
-2026-10-18. The full design is [`docs/ship-machine.md`](../ship-machine.md).
+2026-10-18. The full design is the ship machine draft, in the notes.
 
 ## What was decided
 

@@ -1,4 +1,4 @@
-// Ticket 1067, next/: laws R1 to R4 of docs/plan/quests/recorder-PLAN.md, the Recorder's types, and
+// Ticket 1067, next/: laws R1 to R4 of .kalfa/quests/recorder-PLAN.md, the Recorder's types, and
 // R14 to R17 of its first fix round (field/runs/2026-11-15-t1067-review1.json)
 // (0579: typed against the service's interface). Only the compiler checks these: the lead's one
 // `pnpm typecheck` reads them, and Vitest does not typecheck, so each body holds type checks only

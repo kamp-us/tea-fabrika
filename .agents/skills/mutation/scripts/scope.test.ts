@@ -207,7 +207,7 @@ describe("the mutation run's file pick (0089)", () => {
   });
 });
 
-// Slice 2 of docs/plan/quests/kalfa-quality-stryker-PLAN.md (decision 0600): the hourly run reaches libfabrika's
+// Slice 2 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (decision 0600): the hourly run reaches libfabrika's
 // laws. A changed product file `d/s.ts` also picks each tracked `d/s.<kind>.test.ts(x)`, its kind
 // siblings, since 61 of libfabrika's product files have only those. The run hands `related` the head's
 // file list as `tracked`; with none, the pick is exactly today's.

@@ -1,4 +1,4 @@
-// Ticket 1067, next/: laws R5 to R10 of docs/plan/quests/recorder-PLAN.md, for `Recorder.layer` and
+// Ticket 1067, next/: laws R5 to R10 of .kalfa/quests/recorder-PLAN.md, for `Recorder.layer` and
 // `Recorder.calls` (0579). Written before the module, on the made-up `Shelf` service beside it.
 //
 // The shape these laws hold the module to: `Recorder.layer(Service, impl, { fails })` provides the

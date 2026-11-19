@@ -11,15 +11,13 @@ on:
   # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11). Adding a label
   # (`labeled`) runs it again, so the `visual` label starts the visual tests (0536): they are
   # opt-in on a pull request, and never run in the merge queue.
-  # A pull request that changes only plan files starts no run (ticket 988). GitHub
+  # A pull request that changes only signed plans starts no run (ticket 988). GitHub
   # compares the whole pull request with its base, so a later push of any other path starts the
   # run. The list is changes.mjs's `ignored`; workflow-lint.ts holds this copy to it.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths-ignore:
-      - docs/plan/*.md
-      - docs/plan/quests/*.md
-      - docs/plan/lanes/*.md
+      - .kalfa/quests/*.md
       - field/findings/*.json
       - field/notes/*.json
       - field/runs/*.json
@@ -381,7 +379,6 @@ jobs:
             packages/*/node_modules/.cache/tsc
             kalfa/*/node_modules/.cache/tsc
             programs/*/node_modules/.cache/tsc
-            docs/tutorials/*/node_modules/.cache/tsc
             oxlint-plugins/node_modules/.cache/tsc
             .github/ci/node_modules/.cache/tsc
             .agents/node_modules/.cache/tsc
@@ -402,7 +399,7 @@ jobs:
           key: ${{ steps.tsc.outputs.cache-primary-key }}
       - *stop
 
-  # next/, the new version (docs/plan/tier-1.md). Every test under next/ runs when affected, or only
+  # next/, the new version (tier 1 of the plan). Every test under next/ runs when affected, or only
   # the reader tests when changes' `filter` names them (the plan for CI paths, slice 2). The exam's
   # tests read files and the later ones start a brain, so vitest's `--changed`, which follows
   # imports, would not pick them up. The e2e legs run the `next-visual` project, which takes no

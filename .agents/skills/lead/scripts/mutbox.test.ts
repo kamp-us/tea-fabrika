@@ -170,7 +170,7 @@ describe("mutbox, the pure parts", () => {
   });
 
   // Plant: let a comma through, so `--mount` reads the rest of the path as its own options.
-  // Q18, slice 2 of docs/plan/quests/kalfa-quality-stryker-PLAN.md (decision 0600): `CI` crosses into the container only
+  // Q18, slice 2 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (decision 0600): `CI` crosses into the container only
   // from CI. The hourly run on GitHub's runner sets `CI`, and the container's host guard (vitest.hostrun.ts)
   // lets `.integration.` laws start there; on the laptop mutbox has no `CI`, passes none, and the guard still
   // refuses. Plants: always pass `CI=true`, or pass the whole environment.

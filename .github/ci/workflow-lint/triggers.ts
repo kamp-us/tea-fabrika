@@ -28,7 +28,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
     "push" in on &&
     JSON.stringify(push["branches"]) === '["main"]', "run every PR and main push");
 
-  // A pull request's one exclusion is changes.mjs's `ignored`: plan files and rows alone start no
+  // A pull request's one exclusion is changes.mjs's `ignored`: signed plans and rows alone start no
   // run. GitHub compares the whole pull request with its base, so one more path starts it again.
   for (const trigger of [on, push, pr, queue]) {
     require(!["paths", "branches-ignore", "tags", "tags-ignore"].some((key) => key in trigger) &&

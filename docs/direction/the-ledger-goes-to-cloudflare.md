@@ -5,7 +5,7 @@ summary: "Two people share one fabrika, and their agents talk across two machine
 
 # The ledger goes to Cloudflare, for two people
 
-*Changed 2026-11-01, for `next/`, from [the tiers](../plan/tiers.md), proposed. This note
+*Changed 2026-11-01, for `next/`, from the tiers, proposed. This note
 is built in today's version, invites included. In `next/`, invite and join are Tier 3. GitHub
 is never a keys source there: no key is let in because GitHub lists it, and a second person joins
 by invite and approval ([a key per client](./a-key-per-client-and-no-github-trust.md), decided by
@@ -1226,7 +1226,7 @@ apart, or whether GitHub's keys list answers a Worker reliably.
 None of these is in the first version.
 
 - Roles: in `next/`, decided by the owner on 2026-11-07: one owner, admins and members, recorded
-  from day one with who invited whom ([Tier 3's roles](../plan/tiers.md#tier-3s-roles-owner-2026-11-07)).
+  from day one with who invited whom (Tier 3's roles).
   Finer roles, such as read-only members, wait for Tier 7, if they come at all.
 - More than one repository on a ledger.
 - One Durable Object per quest (section 9), and quest tokens at the door.

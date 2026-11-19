@@ -53,10 +53,10 @@ same checklist back; notes, drawn as Markdown, is Tier 2's first real app.*
 - **Thin is fine. Fake is not.** The door really refuses. The key really cannot be
   read out. A layer may do little, but what it does is what it will keep doing.
 - **"Every layer" has one way out.** If a layer gets nothing new in a tier, the tier
-  says so and says why ([the tiers](../plan/tiers.md)).
+  says so and says why (the tiers).
 - **A pass can land as several pull requests.** Each one is whole, and its demo
   works. More than 9,700 lines in one review is not a review, so Tier 1 is six
-  pieces, and since 2026-11-05 [smaller pull requests](../plan/tier-1.md#the-pull-requests-one-at-a-time)
+  pieces, and since 2026-11-05 smaller pull requests
   inside them, 36 as of 2026-11-06.
 - **Debugging tools come in the first pass, not after.** A program that breaks
   things on purpose is part of the foundation, so failures are seen from day one.
@@ -74,7 +74,7 @@ smallest version that really works end to end, before any part gets thick.
 The first-pass plan was approved 2026-11-01. Nothing from it is built, and
 nothing from `next/` is on main. *Changed 2026-11-05:* it no longer waits on today's
 pipeline; it is built now, by hand, one small pull request at a time
-([the plan](../plan/README.md), [Tier 1's split](../plan/tier-1.md#the-pull-requests-one-at-a-time)).
+(the plan, Tier 1's split).
 
 ## Why
 
@@ -91,7 +91,7 @@ pipeline; it is built now, by hand, one small pull request at a time
 ## What it costs
 
 - More at once. The first pass is 5,360 to 7,440 lines of product code and 4,940 to
-  7,200 lines of tests, 50% sure. The hours are [Tier 1's](../plan/tier-1.md): about 17
+  7,200 lines of tests, 50% sure. The hours are Tier 1's: about 17
   to 24 agent hours at the measured 600 lines an agent hour, restated 2026-11-01 by
   [agent hours](./agent-hours.md), and its split into pull requests adds up to more. Its
   first pull request will give real numbers. *Old guess, wrong: 44 to 70 builder agent

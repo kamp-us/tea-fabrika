@@ -198,7 +198,7 @@ For `traceId`, open: what a hand run writes.
   fails") is replaced by this check. The build stage's own half, `ask:owner:check_change` on a draft
   that touches the exam, and the one list of exam paths both stay.
 - **Tier 1:** the small exam rows fold back into their build pull requests as the test writer's
-  commit, and P32 builds this check for `next/` ([the plan](../plan/tier-1.md#how-it-is-built-now)).
+  commit, and P32 builds this check for `next/` (the plan).
 - **Today's version:** nothing yet. Its quest already ends `stuck` with `exam_touched` when a builder
   touches the exam. Moving its CI to this check is a later change.
 

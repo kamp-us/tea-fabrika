@@ -164,9 +164,9 @@ import * as Effect from "effect/Effect";    // passes, and so does `import type 
 import * as Schema from "effect/Schema";
 ```
 
-The override sets `namespaceImportPackages: ["effect"]` and `preferNamespaceImport` to `error` for a list of folders, tests included. Its message names the module path for each name. Plan B of the Effect rules ([`docs/plan/effect-rules-big.md`](../docs/plan/effect-rules-big.md), B3) closes the list folder by folder: each slice fixes one group of modules and adds its folders in the same pull request, so there is no list of known breaks. The last slice, `runtime/`, replaces the list with `next/packages/**/*.ts` and `next/packages/**/*.tsx`.
+The override sets `namespaceImportPackages: ["effect"]` and `preferNamespaceImport` to `error` for a list of folders, tests included. Its message names the module path for each name. Plan B of the Effect rules (`docs/plan/effect-rules-big.md`, B3) closes the list folder by folder: each slice fixes one group of modules and adds its folders in the same pull request, so there is no list of known breaks. The last slice, `runtime/`, replaces the list with `next/packages/**/*.ts` and `next/packages/**/*.tsx`.
 
-Listed today: `next/packages/libfabrika/src/ci/` and `next/packages/libfabrika/src/codehost/`, from B3.0 (ticket 912), and `next/packages/vitest`, from E0 of the Effect-check sweep (ticket 1075), in that package's own tsconfig. `effect-checks.test.ts` keeps the saved list, with every other check the sweep locks (law L2 of [`docs/plan/quests/effect-sweep-PLAN.md`](../docs/plan/quests/effect-sweep-PLAN.md)). It walks the files each project in `next/` and our tooling type-checks, as the checker does: what the tsconfig's `include` names less its `exclude`, then its `files`, then every file those reach by a relative import. It fails when a relative import names no file it can find, so a file the checker reaches cannot slip past the walk. It does not read `references` or `paths`, which no scope tsconfig sets today. It merges the checker's plugin block as the checker does (base, then the package's tsconfig, then each override a file matches, in order), and fails when a locked file no longer ends at `error`: dropped from a glob, excluded, set to `warning`, or turned off by a later override. It also fails when a locked glob reads no file. Each slice adds its check's row there.
+Listed today: `next/packages/libfabrika/src/ci/` and `next/packages/libfabrika/src/codehost/`, from B3.0 (ticket 912), and `next/packages/vitest`, from E0 of the Effect-check sweep (ticket 1075), in that package's own tsconfig. `effect-checks.test.ts` keeps the saved list, with every other check the sweep locks (law L2 of [`.kalfa/quests/effect-sweep-PLAN.md`](../.kalfa/quests/effect-sweep-PLAN.md)). It walks the files each project in `next/` and our tooling type-checks, as the checker does: what the tsconfig's `include` names less its `exclude`, then its `files`, then every file those reach by a relative import. It fails when a relative import names no file it can find, so a file the checker reaches cannot slip past the walk. It does not read `references` or `paths`, which no scope tsconfig sets today. It merges the checker's plugin block as the checker does (base, then the package's tsconfig, then each override a file matches, in order), and fails when a locked file no longer ends at `error`: dropped from a glob, excluded, set to `warning`, or turned off by a later override. It also fails when a locked glob reads no file. Each slice adds its check's row there.
 
 Tools looked at: the same check's quick fix in an editor, one import at a time; its oxlint form, `effecttsgo/prefer-namespace-import`, run by `effect-tsgo oxlint --type-aware`, which needs `oxlint-tsgolint` (not in the lockfile), and which B3.0 tried once in a scratch copy; ast-grep and jscodeshift, neither in the lockfile. The tryout's result: at `@effect/tsgo` 0.63.0 with oxlint 1.90.0 and `oxlint-tsgolint` 7.0.2005, `effect-tsgo oxlint --type-aware` lists the hits from the command line, but `--fix`, `--fix-suggestions` and `--fix-dangerously` each changed 0 files, so later slices fix imports by hand.
 
@@ -419,7 +419,7 @@ which the plan does not name. Report any miss.
 
 ### The docs rule, E6
 
-Ticket 913, slice B2.1 of [Plan B](../docs/plan/effect-rules-big.md#b2-the-docs-rule), for `next/`: `fabrika/jsdocs` asks every public export of a `next/` library for a doc block in Effect's shape, and its file for a module block (E6). `jsdocs.ts` finds the exports and their blocks through oxlint's syntax tree. Whether a block is right is Effect's own grammar: `effect-jsdocs.ts` is lines 973 to 1608 of `packages/tools/jsdocs/src/Jsdocs.ts` in [Effect-TS/effect at `effect@4.1.2`](https://github.com/Effect-TS/effect/blob/effect%404.1.2/packages/tools/jsdocs/src/Jsdocs.ts), with what those lines call, copied with Effect's MIT notice; its head lists every line taken and every change. On an Effect bump, diff those lines again.
+Ticket 913, slice B2.1 of Plan B, for `next/`: `fabrika/jsdocs` asks every public export of a `next/` library for a doc block in Effect's shape, and its file for a module block (E6). `jsdocs.ts` finds the exports and their blocks through oxlint's syntax tree. Whether a block is right is Effect's own grammar: `effect-jsdocs.ts` is lines 973 to 1608 of `packages/tools/jsdocs/src/Jsdocs.ts` in [Effect-TS/effect at `effect@4.1.2`](https://github.com/Effect-TS/effect/blob/effect%404.1.2/packages/tools/jsdocs/src/Jsdocs.ts), with what those lines call, copied with Effect's MIT notice; its head lists every line taken and every change. On an Effect bump, diff those lines again.
 
 | Rule | Asks | Edges | Tests |
 |---|---|---|---|
@@ -816,7 +816,7 @@ The box refused `nice`'s priority change, so subsequent test commands ran withou
 `fabrika/written-service-type` blocks in `next/` product code. A service's type is the contract a
 reader looks up, so it is written out and never taken from the implementation
 ([the Effect code guidelines](../docs/direction/effect-code-guidelines.md)). Slice A2 of
-[the plan](../docs/plan/effect-rules-small.md) fixes every site and turns the rule on in one pull
+the plan fixes every site and turns the rule on in one pull
 request, so it starts at zero with no list file.
 
 It reads the last type argument of Effect's `Context.Service`, in the class form
@@ -1200,7 +1200,7 @@ gets it the day it appears, with no line to add. The tooling has one block of it
 base block covers only the tooling. Each folder joined the ban the day its own slice brought it to
 zero, in lists of folders; the last slice folded the lists into the base blocks and deleted them,
 so no list of folders at zero is left
-([the plan](../docs/plan/quests/reflect-ban-PLAN.md)).
+([the plan](../.kalfa/quests/reflect-ban-PLAN.md)).
 
 An override replaces a rule's options, and a file takes the last override that matches it. So each
 base block for `next/` writes out again what the rule held there, then the four entries: `next/**/*`
@@ -1339,7 +1339,7 @@ Each count is at the swap: ours fired 0 times, since `pnpm lint` was green.
   and `InstanceType<ReturnType<typeof Data.TaggedError<"X">>>`. No trusted rule does: oxlint's
   `no-restricted-properties` reads only value members, `typescript/no-restricted-types` names
   types, and the Effect checker's `preferSchemaTaggedError` reads only a class's `extends`
-  (the plan's amendment of 2026-11-15, `docs/plan/quests/trusted-rules-0573-PLAN.md`).
+  (the plan's amendment of 2026-11-15, `.kalfa/quests/trusted-rules-0573-PLAN.md`).
 - **The two beside it.** The checker's `preferSchemaTaggedError` (`error` in `tsconfig.base.json`)
   catches `class X extends Data.TaggedError(...)`, an aliased import included, in every type-checked
   file. oxlint's `no-restricted-properties` refuses the value forms (a bare reference, a call,

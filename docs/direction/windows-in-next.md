@@ -29,7 +29,7 @@ already work against the cloud brain,** which is what "a browser is always a cli
 - **Words before facts. Decided by the owner, 2026-11-02.** Facts live forever, and a
   Windows PC must not write `touch-id`. The capabilities are renamed `touch-id` to `verify`
   and `keychain` to `seal`, and the hello records the OS, before PR D of
-  [Tier 1](../plan/tier-1.md) writes real facts. `verify` is WebAuthn's word ("user
+  Tier 1 writes real facts. `verify` is WebAuthn's word ("user
   verification"); this note first said `check`, which the Tier 1 plan already uses for three
   other things. A menu may still show the vendor's name, such as Touch ID or Windows Hello:
   that is a label, not a fact.
@@ -60,7 +60,7 @@ Windows. Windows hands in Tier 4. Agents in Tier 5.
 slice's `layers.test.ts` does exactly that on Windows paths, in a simulation.
 
 **What it costs:** about 320 lines, a guess at 50%, which is about 0.5 agent hours at 600 lines an
-hour, the number [Tier 1's plan](../plan/tier-1.md#open-questions) uses. *Old guess, wrong: 3 to
+hour, the number Tier 1's plan uses. *Old guess, wrong: 3 to
 5 agent hours.* What is left in Tier 1 is the words and the OS field, a few lines inside P10.
 
 **How sure:** 70% on the shape. The doubt is everything a real run would show.
