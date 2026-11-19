@@ -1,3 +1,4 @@
+import { fromTransport, setWarn } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import type { CodeHost } from "@kampus/libfabrika";
 import { type Recorder, runsFor } from "@kampus/vitest";
@@ -212,9 +213,26 @@ const printed = Effect.gen(function* () {
 });
 
 /**
- * What S2 provides around a world, at the one place: its logger and Effect's own test console. The
- * console is fresh: `TestConsole.layer` is one value, which Effect memoizes across the provides of
- * one test, so without it a world would read the lines of the world before it.
+ * Where tea's own warnings go while a law runs: into `into`, in the scope of the layer that holds
+ * this. tea writes them past Effect's Console, to a hook a host sets (`setWarn`, from
+ * patches/@demlik__tea@0.29.0.patch), so Effect's test console cannot see them.
+ */
+const teaWarnings = (into: Array<string>) =>
+  Layer.effectDiscard(
+    Effect.acquireRelease(
+      Effect.sync(() =>
+        setWarn((...args) => {
+          into.push(Arr.join(Arr.map(args, line), " "));
+        }),
+      ),
+      (restore) => Effect.sync(restore),
+    ),
+  );
+
+/**
+ * What S2 provides around a world, at the one place: its logger, Effect's own test console and
+ * tea's warning hook. The console is fresh: `TestConsole.layer` is one value, which Effect memoizes
+ * across the provides of one test, so without it a world would read the lines of the world before it.
  */
 const watching = (logs: Array<string>) =>
   Layer.mergeAll(
@@ -224,6 +242,7 @@ const watching = (logs: Array<string>) =>
       }),
     ]),
     Layer.fresh(TestConsole.layer),
+    teaWarnings(logs),
   );
 
 const print = { log: Console.log, error: Console.error, warn: Console.warn, info: Console.info, debug: Console.debug };
@@ -638,6 +657,73 @@ export const suite = (driver: Driver) =>
           },
           { discard: true, concurrency: 1 },
         ),
+      { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
+    );
+    // L8 (ticket 1067): S2 sees tea's own warnings, which tea writes past Effect's Console, so no
+    // test console reads them. With the hook of `watching` set, a warning with the secret in it
+    // reaches the records S2's leak check reads; with no hook set, tea still writes it to the global
+    // `console.warn`, as before the patch. `fromTransport(...).send` with no live transport is the
+    // plainest tea call that warns: its seam name is in the message.
+    // Plants: drop `teaWarnings` from `watching`: the first half is red, since the warning goes to the
+    // global console unseen. Make the patch's default hook a no-op: the second half is red.
+    it.effect.prop(
+      "L8: [secrets] S2 reads a secret in a warning tea writes itself, and tea still writes to console.warn when no hook is set",
+      [secret],
+      ([value]) =>
+        Effect.gen(function* () {
+          const seam = fromTransport<string, string, string, string, string, unknown>({
+            name: value.token,
+            // Never opened: a `send` with no live transport is dropped, which is the warning.
+            openTransport: () => ({
+              send: () => undefined,
+              onMessage: () => () => undefined,
+              onClose: () => () => undefined,
+              close: () => undefined,
+            }),
+            parseInbound: () => null,
+            onInbound: () => null,
+            lostMsg: () => "lost",
+            serializeOutbound: (outbound) => outbound,
+          });
+
+          const logs: Array<string> = [];
+
+          yield* Effect.sync(() => {
+            seam.send("key", "outbound");
+          }).pipe(Effect.provide(watching(logs)));
+
+          expect(
+            Arr.some(logs, (record) => record.includes(value.token)),
+            "the hook's records hold the warning",
+          ).toBe(true);
+
+          // No hook set: tea writes to the global console, so the law stands one in for its own scope.
+          const written: Array<string> = [];
+
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              const before = console.warn;
+              console.warn = (...args) => {
+                written.push(Arr.join(Arr.map(args, line), " "));
+              };
+
+              return before;
+            }),
+            (before) =>
+              Effect.sync(() => {
+                console.warn = before;
+              }),
+          );
+
+          yield* Effect.sync(() => {
+            seam.send("key", "outbound");
+          });
+
+          expect(
+            Arr.some(written, (record) => record.includes(value.token)),
+            "tea writes to console.warn with no hook",
+          ).toBe(true);
+        }).pipe(Effect.scoped),
       { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 10 }) } },
     );
   });
