@@ -656,6 +656,8 @@ describe("each rule refuses what it is there to refuse", () => {
         // The Reflect ban's L5 counts ignore comments per file, so reflect-disables.test.ts generates
         // its files at next/ and tooling paths and runs them with the real lint config.
         "reflect-disables",
+        // R10's rule reads only .agents/skills/, so no-run-rerun.test.ts plants it there with the real lint config.
+        "no-run-rerun",
       ];
 
       const missing = Arr.filter(

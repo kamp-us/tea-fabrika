@@ -4395,6 +4395,12 @@
           }
         ]
       }
+    },
+    {
+      // R10 of the sev runbooks plan (0542, 0611): lead tooling starts no rerun. A rerun tests the old merge
+      // of main, and leaving a sev starts a fresh run on current main instead (`oxlint-plugins/no-run-rerun.ts`).
+      "files": [".agents/skills/**"],
+      "rules": { "fabrika/no-run-rerun": "error" }
     }
   ]
 }
