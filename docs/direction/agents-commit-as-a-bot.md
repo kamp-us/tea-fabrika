@@ -25,7 +25,7 @@ summary: "Both versions. An agent's commit is authored by a GitHub App's bot ide
   GitHub's squash commit, which GitHub signs. Commits on a pull request's branch carry no GitHub
   badge. Replaying pushes through GitHub's API was turned down, since it rewrites the agent's
   commits under new hashes; so was a machine user holding the keys, since every person would need
-  a second GitHub account ([experiment 212](../../experiments/212-fabrika-bot-commits.md),
+  a second GitHub account (experiment 212 (in the notes),
   calls 2 and 4).
 
 - **Decided 2026-11-06, the bot is `fabrikalfa`,** owned by the kamp-us organization and public.
@@ -49,14 +49,14 @@ summary: "Both versions. An agent's commit is authored by a GitHub App's bot ide
   a wall would stop every ticket that touches CI. The app was first made without the permission;
   it was added on 2026-11-07.
 - **Step proofs go in git notes,** not in the commit's signature slot, so GitHub shows no
-  "Unverified" (the Tier 1 plan's P32). [Experiment 212](../../experiments/212-fabrika-bot-commits.md)
+  "Unverified" (the Tier 1 plan's P32). Experiment 212 (in the notes)
   section 10 has what the first real app showed.
 
 Its decided rules are in:,,,,,,.
 
 Not walked yet: the branch rules on a repo other than this one (under Open, below).
 
-Built from [experiment 211](../../experiments/211-started-claude-sandbox.md), which asked what the
+Built from experiment 211 (in the notes), which asked what the
 claude `@claude` starts may do in the person's repo. It is not a measurement.
 
 ```text
@@ -74,7 +74,7 @@ Fabrika-Input: in-3f9a12c0-44
 
 The email's number is the bot user's id, not the app's id, and a commit made from two inputs
 carries one `Fabrika-Input` line for each
-([experiment 212](../../experiments/212-fabrika-bot-commits.md)).
+(experiment 212 (in the notes)).
 
 **On Tier 1 pull requests** (owner, 2026-11-07, in use from 2026-11-08). From T246 and P10 on,
 step commits are authored by `fabrikalfa[bot]`, with the person as `Co-authored-by`. The lead
@@ -108,7 +108,7 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 
 - Every commit an agent has made in this repo so far is authored by the owner's account. They stay
   as they are; history is not rewritten.
-- [Experiment 211](../../experiments/211-started-claude-sandbox.md)'s option A, "the person commits
+- Experiment 211 (in the notes)'s option A, "the person commits
   what they keep", does not match daily use: agents make the commits. The lean moves toward its
   option B, where code commits and pushes the agent's work to its own branch.
 
@@ -117,9 +117,9 @@ keys are a sketch until a plan checks them against git's trailer rules and the i
 1. **The box's edge and a remote brain.** The stand-in token is swapped at the box's edge, which
    asks the brain for a real token. How the edge reaches a brain on Cloudflare, and proves which
    agent asks, is not designed. Two runs show the swap itself works on a Cloudflare Container:
-   in [experiment 148](../../experiments/148-remote-programs.md) the box's outbound handler
+   in experiment 148 (in the notes) the box's outbound handler
    (`interceptOutboundHttp`) sent each model call to a relay that added the starter's key on the
-   way out, and in [experiment 157](../../experiments/157-login-stays-home.md)'s round 1 the same
+   way out, and in experiment 157 (in the notes)'s round 1 the same
    kind of handler (`interceptOutboundHttps`) added the person's Claude token on the way out, with
    0 copies in 18 boxes. 157's ruled round 2 put the Claude token in the box instead, so this is
    evidence for the swap, not a decided shape.
@@ -138,6 +138,6 @@ new paid accounts, and nothing that needs a second server to start.
 
 ## What it cannot tell us
 
-The first pushes with the real app ran on 2026-11-06 ([experiment 212](../../experiments/212-fabrika-bot-commits.md)
+The first pushes with the real app ran on 2026-11-06 (experiment 212 (in the notes)
 section 10). Whether `Co-authored-by` with the bot as author shows the person on the commit page
 the way the owner expects was not looked at on the page yet.

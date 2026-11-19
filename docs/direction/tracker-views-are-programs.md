@@ -444,7 +444,7 @@ yield* tickets.write(43, {type: "ended", run: "h-43-1", stage: "build",
   has its numbers. A hand run often does not. The lean: `usd`, `input`,
   `output` and `turns` become `null` when not measured, and the panel says
   "cost not reported". A made-up number is worse than none:
-  [`field/README.md`](../../field/README.md) already records an agent that
+  the field log (in the notes) already records an agent that
   wrote `minutes: 0` on every run. Question 2.
 - **What this changes in a decided note.** Section 4 of
   [what a ticket shows](./what-a-ticket-shows.md) dropped the bridge: hooks,

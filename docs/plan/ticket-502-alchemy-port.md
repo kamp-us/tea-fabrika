@@ -52,7 +52,7 @@ if it cannot.
 
 0041 names "PR 7 and PR 8" and no full list. The first plan for this ticket was a file in a
 step's working folder and is not in git (see [Findings](#findings)). This list is rebuilt from the
-three pull requests, 0041, 0042 and [experiment 248](../../experiments/248-effect-object-spike.md).
+three pull requests, 0041, 0042 and experiment 248 (in the notes).
 
 | 0041's pull request | What it is | State | Here |
 |---|---|---|---|

@@ -53,7 +53,7 @@ Your commits need no step note. The check verifies their Git signature against t
 keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
 A person's signed commit is itself a link, from its parent's tree to its own. After the squash, the
 lead writes it as a row with `step: "person"`, as for every other link
-([a step's links](../../field/README.md#a-steps-links)).
+(a step's links (in the notes)).
 Squash drops the person's signature, so this verification runs on the pull request's commits.
 
 ## A step signs
@@ -67,7 +67,7 @@ pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 - It signs the link from the commit's first parent's tree to its tree, with the step, the ticket and
   a `version`: the step's highest for that ticket, plus one. Only the newest counts.
 - It adds the note on `refs/notes/fabrika` and prints the link as one JSON line. Keep that line: it
-  goes into the step's `field/` row (see [A step's links](../../field/README.md#a-steps-links)).
+  goes into the step's `field/` row (see A step's links (in the notes)).
 - It refuses a key that does not verify as the step in `HEAD`'s `allowed_signers`, and adds nothing.
 - After the mutation step, a test writer that commits again signs again. Its new link gets the next
   `version`, and must come after the old one on the branch.

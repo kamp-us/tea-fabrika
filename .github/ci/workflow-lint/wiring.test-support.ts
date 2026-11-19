@@ -101,12 +101,6 @@ export const probe = "steps.diff.outputs.probe == 'true'";
 // The check job's steps, each on its own flag (ticket 985): lint on check, the rows on field.
 export const checkFlag = `\${{ needs.changes.outputs.check != 'false' }}`;
 
-const rowsFlag = `\${{ !cancelled() && needs.changes.outputs.field != 'false' }}`;
-
-const rowsAlone = `\${{ needs.changes.outputs.check == 'false' }}`;
-
-const rowInstall = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
-
 const name = fc.string({ maxLength: 20 });
 
 // T967: the next job's legs are `e2e-1` to `e2e-N`, then "1" to "5". Only the shape is the lint's;
@@ -379,7 +373,6 @@ const valid = (label: string, extra: string) => ({
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
         { name: "install", if: checkFlag, run: "pnpm install --frozen-lockfile" },
-        { name: "install the row check", if: rowsAlone, run: rowInstall },
         {
           name: "copies (advice)",
           if: checkFlag,
@@ -390,7 +383,6 @@ const valid = (label: string, extra: string) => ({
         { name: "lint", if: checkFlag, run: "pnpm lint" },
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", if: checkFlag, env: testEnv, run: ratchet },
-        { name: "field rows", if: rowsFlag, env, run: "node .github/ci/field-check.ts" },
       ] as Record<string, unknown>[],
     },
     typecheck: {

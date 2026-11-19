@@ -31,7 +31,7 @@ const forAgent = brief(state, facts); // the same rows as text, typed facts as s
 - **It is also the agents' main context.** An agent working the quest reads the
   same timeline a person reads, as text.
   - Triage reads it whole, comments included (decided 2026-10-24).
-  - [Experiment 138](../../experiments/138-tracker-on-demlik.md) ran 20 demlik
+  - Experiment 138 (in the notes) ran 20 demlik
     tickets with and without their comments. On 3, the comments changed
     triage's answer, each time toward what really happened.
 - **Proposed: machine state is a fact, never a comment.**

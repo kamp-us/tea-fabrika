@@ -34,9 +34,8 @@ clauses = [
     ("build", "Go easy on the machine", "K9", caps),
     ("mutation", "Go easy on the machine", "K9", caps),
     ("tests", "Steps", "K20", effect),
-    # Decision 0035. The fields and the closed rule list are field/README.md's; field-schema.ts
-    # checks a row's shape. The lead skill is this clause's one home: it writes the one line every
-    # brief carries. Each step skill links field/README.md and keeps only its own judgment.
+    # Decision 0035. The lead skill is this clause's one home: it writes the one line every
+    # brief carries. Each step skill keeps only its own judgment.
     ("lead", "Outside your task", "K21", outside),
 ]
 def normalized(text):
@@ -119,8 +118,8 @@ answer = (
     "n counts blocking classes. Each class lists every affected case. m counts the finding rows in this answer.",
     "Give every finding in that answer, grouped by class, most serious first.",
     "Name each checked decided note and say where the change follows or breaks it.",
-    "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-    "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
+    "Any other actionable finding is one finding with proof: never a ticket, a fix or only a mention, and never a security hole.",
+    "Give each one in the answer. The lead records it in the notes. Do not start another review round for it.",
     "End with exactly one answer: line, as the last line.",
 )
 cleanup = (

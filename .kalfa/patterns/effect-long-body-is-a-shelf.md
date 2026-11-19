@@ -73,7 +73,7 @@ at a tea machine's `update`, which shapes.
 - `next/packages/libfabrika/src/runtime/Runner.ts:211-1733` is one `Layer.effect` closure with one
   banner (`:1086`, `// --- Cmds ---`) and nine `let`s shared by every piece (`:215-239`). 0043's
   rule 9 splits it move-only into a front file and `internal/` files; the shared `let`s need the holder machine of
-  [experiment 246](../../experiments/246-implicit-state-machines-in-next.md) to cut cleanly.
+  experiment 246 (in the notes) to cut cleanly.
 - `next/packages/libfabrika/src/gateway/Gateway.ts` (one `make` used at `:1625`) and the project
   logic in `next/packages/libfabrika/src/cloudflare/runtime.ts` have the same shape.
 

@@ -46,12 +46,10 @@ for the product code.
 
 ## Outside your task
 
-Something wrong outside your task is one finding row, never a fix:
-[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
+Something wrong outside your task is one finding with proof, never a fix.
 Outside means the approved plan does not name it. A red law the plan names is your work, and a
-file you need but may not touch goes in your report: neither is a finding. Put the row in your
-report as one JSON line, its `id` the date and a short slug. The lead saves it unchanged as its own
-file in `field/findings/`.
+file you need but may not touch goes in your report: neither is a finding. Put it in your
+report. The lead records it in the notes.
 
 ## Go easy on the machine
 
@@ -94,9 +92,6 @@ These hold in every build round, so the brief does not repeat them.
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"`, exits 0;
   one `pnpm typecheck`; then `sh .agents/skills/lead/scripts/loosening.sh <the brief's head> HEAD`,
   with your reading of each hit.
-- **Run row:** write the file the brief's `Run row:` field names, in the shape of the newest build
-  rows (`ls field/runs | grep build | tail -3`), with real start and end times from
-  `TZ=America/Los_Angeles date`. CI's `field` job checks its shape.
 - **Commit and push:** commit your own paths by name with plain `git commit`, in a few commits that
   each read whole, plain-word subjects, no trailer naming a chat tool and no session link. Then
   `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/<branch>..HEAD` (never with no

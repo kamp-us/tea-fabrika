@@ -194,11 +194,11 @@ root; `pnpm lint` checks it).
 
 ### See also
 
-- [Experiment 103](../../experiments/103-move-without-loss.md): the move into this package, and
+- Experiment 103 (in the notes): the move into this package, and
   what it checked.
-- [Experiment 108](../../experiments/108-install-from-a-tarball.md): the build, and the package
+- Experiment 108 (in the notes): the build, and the package
   installed from a tarball with npm and pnpm.
-- [Experiment 114](../../experiments/114-the-pipeline-moves-out.md): the pipeline moved out into
+- Experiment 114 (in the notes): the pipeline moved out into
   its own package, and what it checked.
-- Experiment 82 in the [experiments index](../../experiments/README.md): the workspace split it
+- Experiment 82 in the experiments index (in the notes): the workspace split it
   replaces.

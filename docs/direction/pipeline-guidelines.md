@@ -11,7 +11,7 @@ Linear clashes after a walk of each part. The confidence numbers stay as written
 test the least sure: the bounds in P8 (65%) and two nudges in P11 (60%). P9 was decided on
 2026-10-05 and P12 on 2026-10-22, in their own notes.
 
-Built from [experiment 186](../../experiments/186-pipeline-guidelines.md), which read how
+Built from experiment 186 (in the notes), which read how
 factories, supervisors, durable workflows, CI systems and build caches handle a stop, and
 checked the self-fix plan of [PR 289](https://github.com/usirin/tea-fabrika/pull/289) against
 the result. It is reading, not a measurement. It sits under the note
@@ -95,7 +95,7 @@ Linear has built this product. Since June 2026 its own agent takes a delegated i
 code in a cloud box, and returns a draft pull request; Loops start that work on a trigger, and
 Reviews is where a person reads the diff. Each principle below has a line on what Linear does. The
 full reading, with every page and date, is in
-[experiment 186](../../experiments/186-pipeline-guidelines.md#how-linear-would-do-it).
+experiment 186 (in the notes).
 
 ```ts
 // Linear's agent session states, beside our five verbs. Linear sets the state from the last activity.
@@ -399,7 +399,7 @@ Restated for the quest.
   leaves the ask open. A quest's next step is never an agent's guess.
 - **On ticket 117.** The plan's yes had picks, approve and no. The rehearsals found the other side:
   a person saw `test_writer asks: ask:owner:cannot_test` with `again`, `go_on`, `stop` and no
-  reason ([experiment 178](../../experiments/178-lane-rehearsal.md)).
+  reason (experiment 178 (in the notes)).
 - **What holds it.** An ask kind is defined with its picks, and each pick with its `resume`. The
   window draws only `shows` and `picks`. A law: each pick routes to its own `resume.step`.
 
@@ -414,7 +414,7 @@ unanswered ask, 60%, added 2026-11-01 from Linear.**
   too.
 - **The known way.** SRE caps toil at half of a person's time, and says: "I can only react with a
   sense of urgency a few times a day before I become fatigued." The DeepSeek study
-  ([experiment 185](../../experiments/185-dsh-superagent-study.md)): "Every part of the project is
+  (experiment 185 (in the notes)): "Every part of the project is
   judged by the attention it costs."
 - **How Linear would do it. Agree on money, go further on attention, and one new lean.** Linear
   counts dollars per session, per person and per loop, and caps them with spend limits that reset
@@ -489,7 +489,7 @@ second half is a lean, 75%.**
   `stuck` is the andon stop, whatever the line could not fix.
 
 The full check of PR 289, 35 places in 17 groups, is in
-[experiment 186](../../experiments/186-pipeline-guidelines.md#where-the-self-fix-plan-breaks-a-principle).
+experiment 186 (in the notes).
 
 ## What it costs
 

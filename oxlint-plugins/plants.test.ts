@@ -1654,16 +1654,6 @@ describe("rules that apply by path", () => {
     }
   });
 
-  it.each([
-    ["eslint(prefer-template)", 'export const f = (a: string) => a + "b";\n'],
-    ["eslint(prefer-arrow-callback)", "export const a = [1].map(function (x) { return x; });\n"],
-    ["eslint(require-yield)", "export const a = function* () { return 1; };\n"],
-  ])("experiments/ is under %s", (code, text) => {
-    const { at, file } = plantIn("experiments", text);
-    made.push(at);
-    expect(fires(file, code)).toEqual([1]);
-  });
-
   const HOOK = 'import {useState} from "react";\nexport const f = (x: number) => { if (x) useState(0); };\n';
 
   it.each(["apps", "programs"])("a hook in a .ts file under %s/ is checked", (folder) => {

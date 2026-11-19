@@ -150,7 +150,7 @@ run. What would settle it: building the form and seeing how small it is.
   - Stages read the ticket from the quest's own fact, never from a pull
     request's body. Today `ticketIn` and review's `no_ticket` check read
     `Closes #N` from the body, so they change.
-  - [Experiment 138](../../experiments/138-tracker-on-demlik.md) found no
+  - Experiment 138 (in the notes) found no
     outsider ever wrote a demlik issue or comment, and demlik's CI reads none
     of the link.
   - The earlier lean, a one-time copy on GitHub (70%), was wrong: comments on

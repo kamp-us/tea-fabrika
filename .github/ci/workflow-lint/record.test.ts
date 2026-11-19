@@ -124,7 +124,7 @@ const plants: Plant[] = [
     "Q1: check uploads an artifact with another owner's action",
     (w) => {
       const upload = { name: "upload", uses: "someone/upload-artifact@v1", with: { name: "tested-a-b", path: "x" } };
-      stepsOf(w, "check").splice(place(w, "check", "field rows"), 0, upload);
+      stepsOf(w, "check").splice(place(w, "check", "lists only shrink"), 0, upload);
     },
   ],
   // Q1 beside TT2: the one other upload is a test leg's timings file, exactly TT2's, in a test job.

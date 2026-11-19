@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-11-05; fetch signing changed 2026-11-08; hand-run signing dropped 2026-11-13"
-summary: "Both versions, `next/` first. An exam change is its own commit by an agent that is not the builder, inside the same pull request. Each step's agent signs its commits with its own key, into a git note on `refs/notes/fabrika` so GitHub shows no \"Unverified\", and CI decides from that signature: no valid signature from a known step key is `stuck: unsigned_commit`, a `build` commit on an exam path `stuck: build_touched_exam`; a trailer is for people only. Each step still records its commit as a `committed` entry (in Tier 1, its `field/` row). Any exam path touched gets the lead's check, and only real loosening asks the owner (it said: asks the owner to read it). Replaces the CI half of nobody writes their own exam. *Changed 2026-11-07: a step signs the link (step, ticket, version, tree before, tree after), not the commit ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).* *Changed 2026-11-08 (owner): today's tooling signs missing links at fetch in MAIN after checking run bounds and owners; agents still commit, and keys stay out of boxes. A catch-up conflict on exam paths goes through a tests run and is signed tests; other catch-up merges stay lead links (lead).* *Changed 2026-11-13 (owner): today's hand-run tooling stops signing; this stays the design for `next/`'s own pipeline.*"
+summary: "Both versions, `next/` first. An exam change is its own commit by an agent that is not the builder, inside the same pull request. Each step's agent signs its commits with its own key, into a git note on `refs/notes/fabrika` so GitHub shows no \"Unverified\", and CI decides from that signature: no valid signature from a known step key is `stuck: unsigned_commit`, a `build` commit on an exam path `stuck: build_touched_exam`; a trailer is for people only. Each step still records its commit as a `committed` entry (in Tier 1, its `field/` row). Any exam path touched gets the lead's check, and only real loosening asks the owner (it said: asks the owner to read it). Replaces the CI half of nobody writes their own exam. *Changed 2026-11-07: a step signs the link (step, ticket, version, tree before, tree after), not the commit (experiment 221 (in the notes)).* *Changed 2026-11-08 (owner): today's tooling signs missing links at fetch in MAIN after checking run bounds and owners; agents still commit, and keys stay out of boxes. A catch-up conflict on exam paths goes through a tests run and is signed tests; other catch-up merges stay lead links (lead).* *Changed 2026-11-13 (owner): today's hand-run tooling stops signing; this stays the design for `next/`'s own pipeline.*"
 ---
 
 # A unit of work is a commit
@@ -64,8 +64,8 @@ const check = (commit: Commit, stepKeys: StepKeys): Outcome => {
 - **The signature goes in a git note, not in the commit.** *Changed 2026-11-06, the owner asking
   for no "Unverified" on GitHub.* Each step adds a note on `refs/notes/fabrika` to its commit,
   holding what it signs, the link (its step, the ticket, a version, the tree before and the tree
-  after), the key's fingerprint and the signature. *Changed 2026-11-07 (owner, from [experiment
-  221](../../experiments/221-signed-steps-and-rebases.md)): a step signs the link, not the commit,
+  after), the key's fingerprint and the signature. *Changed 2026-11-07 (owner, from experiment
+  221 (in the notes)): a step signs the link, not the commit,
   so a rebase can later carry it by replay, and only a step's newest signature for the ticket
   counts. Tier 1 stays merge-only. It said: "holding what it signs (its step, the commit, its tree,
   its parent)".* GitHub labels a commit signed with a key it does not know "Unverified"
@@ -146,7 +146,7 @@ and CI checks the chain of links from `main`'s tree to the squash commit's tree.
   request merges only when it is up to date. *Changed 2026-11-07 (owner): in Tier 1 this is the only
   way. A branch catches up by merging `main` in, with no rebases and no native stacks yet. The row
   that first allows a rebase carries each link across it by replay, Gerrit's trivial-rebase check
-  ([experiment 221](../../experiments/221-signed-steps-and-rebases.md)).*
+  (experiment 221 (in the notes)).*
   Lead, 2026-11-08: a catch-up merge of main whose conflict touches exam paths is resolved by a
   tests run and signed tests, not lead; every other catch-up merge stays a lead link.
   *Changed 2026-11-11 by:
@@ -221,7 +221,7 @@ How sure: 85%. The owner decided it. The doubts are in the next section.
   `notes.rewriteRef` carries it over, but the signature still names the old commit, so the step
   would have to sign again. A lean, not tried: update a branch by merging main in, as a `lead`
   commit, and never rebase a step's commits. P32's plan settles it. *Changed 2026-11-07 (owner,
-  from [experiment 221](../../experiments/221-signed-steps-and-rebases.md)): the note signs the link,
+  from experiment 221 (in the notes)): the note signs the link,
   which names no commit, so a rebase can later carry it by replay. Tier 1 stays merge-only, and P32
   reads a rebased commit as `unsigned_commit` until the replay check is built.*
 - **Branch rules do not cover notes.** The bot, or anyone who can push as it, can overwrite or delete

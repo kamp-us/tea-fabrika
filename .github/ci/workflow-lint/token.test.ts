@@ -32,11 +32,6 @@ const plants: Plant[] = [
     // SAFETY: the parser pass step spreads `diff`, so it has `diff`'s `env` map of strings.
     (w) => ((step(w, "changes", "parser pass").env as Record<string, string>)["GITHUB_TOKEN"] = token),
   ],
-  [
-    "M1: the row check gets the token too",
-    // SAFETY: check's field rows step in `valid` takes the shared `env` map.
-    (w) => ((step(w, "check", "field rows").env as Record<string, string>)["GITHUB_TOKEN"] = token),
-  ],
   // M1: the time table's exact step, in a test job, is the one test step that gets the token. The
   // same command elsewhere, or with one more variable, does not. The typecheck plant passed the M1
   // that let any step whose command is the time table's have the token.

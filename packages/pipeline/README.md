@@ -125,7 +125,7 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - `handlers.ts`: its handlers and the runners of its two Listens, the reads kept apart from the writes.
   - `look.ts`: the machine stepped as far as its first write or wait, with that write handed back, never sent.
   - `program.ts`: the `ship` program, the thing you start. A mode as its flag, pull requests told on its input `pr` at any time, a fresh run of the machine per pull request, one at a time. `CodeHost` and `CodeHostWrites` come through Effect's context.
-  - Its live runs: [experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md), and [63](../../experiments/63-ship-as-a-program.md) for ship as a program.
+  - Its live runs: experiment 56 (in the notes), and 63 (in the notes) for ship as a program.
 - `stages/review/`: one pull request at one head commit in, one typed outcome and a report out ([`docs/review-machine.md`](../../docs/review-machine.md), last section).
   - `pack.ts`: code reads everything a reviewer needs. `gate.ts`: stops before any agent when a required check is red or the pack is not whole.
   - `reviewer.ts`: the one agent. It gets a copy of the code at the commit, three read tools (Read, Grep, Glob) and the tools its machine opens to it (`tools.ts`, such as filing a note), and fills a form of rows and findings.
@@ -187,6 +187,6 @@ Tests run on scripted services and recorded answers under `fixtures/`. None need
 - [`docs/direction/packs-are-programs.md`](../../docs/direction/packs-are-programs.md): the core side of packs.
 - [`docs/direction/where-each-piece-lives.md`](../../docs/direction/where-each-piece-lives.md): why the pipeline is its own package.
 - [`docs/ship-machine.md`](../../docs/ship-machine.md) and [`docs/review-machine.md`](../../docs/review-machine.md): the ship and review stages.
-- Experiment 82 in the [experiments index](../../experiments/README.md): what moved into the pipeline and why.
-- [Experiment 103](../../experiments/103-move-without-loss.md): moved into `@kampus/fabrika-old`.
-- [Experiment 114](../../experiments/114-the-pipeline-moves-out.md): moved out again, into this package.
+- Experiment 82 in the experiments index (in the notes): what moved into the pipeline and why.
+- Experiment 103 (in the notes): moved into `@kampus/fabrika-old`.
+- Experiment 114 (in the notes): moved out again, into this package.

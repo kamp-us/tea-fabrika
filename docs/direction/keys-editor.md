@@ -23,7 +23,7 @@ app and shot next to Linear:
 
 Its decided rules are in:,,.
 
-Built from [experiment 233](../../experiments/233-keys-editor-guidelines.md), which read how
+Built from experiment 233 (in the notes), which read how
 about fifteen makers do a keys editor and shot four designs in today's app, and a private Design
 canvas, "Keys editor guidelines". Neither is a measurement. It builds on
 [keybindings are configurable](./keybindings-are-configurable.md), decided 2026-11-01, and changes
@@ -76,7 +76,7 @@ physical = "corne"       # the physical layout: where the keys sit
 ```
 
 Neither pick changes what a key does. A key still matches by the character it types
-([experiment 182](../../experiments/182-keybindings.md)).
+(experiment 182 (in the notes)).
 
 ## The seven principles
 
