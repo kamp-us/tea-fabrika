@@ -1,5 +1,3 @@
-<!-- Matt Pocock's GLOSSARY-FORMAT.md, kept as he wrote it (MIT, see ../../UPSTREAM-mattpocock-skills-LICENSE). The one change for this repo: his GLOSSARY-MAP.md is our `.glossary/TERMS.md` (0617). -->
-
 # GLOSSARY.md Format
 
 ## Structure
@@ -35,7 +33,7 @@ _Avoid_: Client, buyer, account
 
 **Single context (most repos):** One `GLOSSARY.md` at the repo root.
 
-**Multiple contexts:** A `.glossary/TERMS.md` (his `GLOSSARY-MAP.md`) at the repo root lists the contexts, where they live, and how they relate to each other:
+**Multiple contexts:** A `GLOSSARY-MAP.md` at the repo root lists the contexts, where they live, and how they relate to each other:
 
 ```md
 # Glossary Map
@@ -55,7 +53,7 @@ _Avoid_: Client, buyer, account
 
 The skill infers which structure applies:
 
-- If `.glossary/TERMS.md` (his `GLOSSARY-MAP.md`) exists, read it to find contexts
+- If `GLOSSARY-MAP.md` exists, read it to find contexts
 - If only a root `GLOSSARY.md` exists, single context
 - If neither exists, create a root `GLOSSARY.md` lazily when the first term is resolved
 
