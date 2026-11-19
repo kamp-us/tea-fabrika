@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-mock-group-1-review1-recheck1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1665",
+  "started": "2026-11-18T17:51:52-08:00",
+  "ended": "2026-11-18T17:56:00-08:00",
+  "parent": "2026-11-19-mock-group-1-fix1",
+  "active": null,
+  "role": "step",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Recheck (0177) of review1's one blocking class for mock group 1, ticket 1067, in next/ and our lint tooling, at 264aea670 on fabrikalfa/mock-group-1 (fix 67cb66b13 and its run row), merge base 2ecb19720: merge-ready. next/packages/libfabrika/src/processes/ProcessIdGenerator.ts is byte for byte main's again, so the static layerWithGenerator that broke decision 0095 is gone and no product file changes. Law M3 provides ProcessIdGenerator.layer and outside it WebCrypto.layer(crypto), where crypto is cryptoFilling, a Stub.make<Crypto> with no cast whose getRandomValues fills 255 or throws the marker; Time, Count, marker, the options, the three cases and every check are as on main. The pattern doc's changed lines match the source: Gateway.ts fingerprint and hash at 2301-2326 and the global getRandomValues at 828 and 2299; SecureRandom.layerWebCrypto reads the WebCrypto reference inside Layer.effect, so it is read when Id.Generator.layer is built; cryptoFilling is the name in the test. The build's finding row now names the fix, the build row carries the pull request, and review1's line-drift finding is its own row. No new finding.",
+  "note": "Node 22.23.5 first on PATH (the repo pins 26.13.0), TYPESAFE_API_KEY unset. Read git diff 359a1c519 264aea670 whole. git diff origin/main HEAD on ProcessIdGenerator.ts: empty. CI=1 nice -n 15 pnpm exec vitest run --maxWorkers=3 on ProcessIdGenerator.test.ts and runtime/EffectFunctions.test.ts: 2 files, 18 passed. pnpm typecheck inside next/packages/libfabrika: exit 0. pnpm lint: 20 of 21 parts passed, field check 5 added rows, oxlint 0 blocking and 1224 advice; lint:promise-types died with EPIPE in the parallel run, as in review1 (the memory cgroup kills tsc, already recorded in field/findings/2026-11-18-parallel-lint-oom-kills-promise-types.json), and passed alone with 0 findings. The plant was put back with git checkout and git status was clean after. Not run: the full suite, the changed-files run, any integration, launchd, Electron or process-signal law.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "M3, next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts",
+      "plant": "the Effect.provide(WebCrypto.layer(crypto)) line deleted, so the real crypto answers",
+      "result": "red"
+    }
+  ]
+}
