@@ -1,5 +1,5 @@
 ---
-summary: GitHub's REST limit for the shared login reaches 0, or sev.ts logs a limited call; stop spending it, let the loop wait it out, and read the log before calling a line harmless
+summary: GitHub's REST limit for the shared login reaches 0, or sev.ts logs a limited call; the loop waits it out, and the log names each call that did not land
 follows: ["0532", "0611"]
 ---
 
@@ -18,23 +18,19 @@ Every agent on the login shares the limit.
 
 ## Roles
 
-- Incident commander: the lead session. It stops what spends the limit and reads the log.
-- Every agent on the login: asks GitHub nothing more than the fix it owns needs, until the limit resets.
+- Incident commander: the lead session. It reads the limit and the log.
+- Every agent on the login: its GitHub calls spend the same limit as everyone else's.
 
 ## Steps
 
-- [ ] Read the limit: `gh api rate_limit`, which does not spend it. It names when the limit resets.
-- [ ] Read the sev log, `runs/sev/log.jsonl`, for the `limited` line's `until`, and for `refused` and `failed` lines.
-  The loop asks nothing before `until`, and asks each run GitHub refused with a 4xx only once in a sev0
-  ([0532](../.decisions/0532-a-sev0-freezes-ci.md) holds the loop). Read those lines before you call them harmless:
-  on 2026-11-18 the lead did, and was wrong.
-- [ ] Stop what polls GitHub by hand: watchers, repeated `gh pr checks` and `gh run list` loops. A second loop
-  started on top of the first only spends more.
-- [ ] If the loop died with its shell, `sev.ts loop` starts it again; it reads the log and waits out any limit in it.
-- [ ] Land nothing until the limit resets: `land.ts merge` reads GitHub too. After the reset, go on from the step the
-  runbook you were in had reached.
-- [ ] A cancel GitHub keeps refusing is a run to leave alone and note; the freeze asks it once. A refused cancel
-  changes nothing about the fixes.
+- [ ] Read the limit with `gh api rate_limit`, which does not count against it. It names when the limit resets.
+- [ ] Read the sev log, `runs/sev/log.jsonl`. `Freeze.ts` writes three kinds of line:
+  - `limited` holds `until`, the time GitHub takes calls again. The loop asks nothing before it.
+  - `refused` is a cancel GitHub answered with a 4xx that is not its rate limit. The loop asks that run only once in a sev0.
+  - `failed` is a call with no answer, or a 5xx. The loop asks again on its next beat.
+- [ ] `sev.ts loop` starts the loop again when the one before died. A loop started inside a rate limit waits it out
+  before its first call.
+- [ ] `land.ts merge` reads GitHub too, so it spends the same limit.
 
 ## Exit
 
@@ -43,4 +39,4 @@ The limit has reset and the loop's next beat answers. Back to the runbook you we
 
 ## Comms
 
-One line to the owner when the limit runs out (until when), and one when it is back. The log's lines are the record.
+The log's `limited` and `refused` lines are the record of each call that did not land.
