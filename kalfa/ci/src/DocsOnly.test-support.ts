@@ -3,7 +3,7 @@
 // CI skips its heavy jobs on and what arm accepts. `adminDocs` is the admin merge's answer: `isAdminDocs`
 // holds for every path (0183), so instruction text, and a README outside the admin merge's folders, is not.
 //
-// The rows 1657, 1650 and 1641 are the file lists of those pull requests on 2026-11-18, as GitHub
+// The rows 1657 and 1650 are the file lists of those pull requests on 2026-11-18, as GitHub
 // listed them. The other rows are one path each, pinned: each names a kind of path a rule must not get wrong.
 
 interface Row {
@@ -39,16 +39,6 @@ export const TABLE: readonly Row[] = [
     docsOnly: true,
     adminDocs: false,
   },
-  {
-    pr: "1641",
-    paths: [
-      "field/findings/2026-11-18-merge-queue-settings-drift-from-0162.json",
-      "field/findings/2026-11-18-sev0-freeze-cancels-mains-own-runs.json",
-      "field/notes/2026-11-18-ci-sev0-integration-and-visual-laws-left-the-merge-line.json",
-    ],
-    docsOnly: true,
-    adminDocs: true,
-  },
   // A root README is docs for CI, but the admin merge takes docs only in its own folders (0183), so it refuses this.
   { pr: "README.md", paths: ["README.md"], docsOnly: true, adminDocs: false },
   {
@@ -71,7 +61,11 @@ export const TABLE: readonly Row[] = [
     docsOnly: false,
     adminDocs: false,
   },
+  // pnpm pack ships this README in @kalfa/config's archive, which Package.integration.test.ts installs.
   { pr: "kalfa/config/README.md", paths: ["kalfa/config/README.md"], docsOnly: false, adminDocs: false },
+  // No program reads any other Markdown of kalfa/, a context's GLOSSARY.md included: docs.
+  { pr: "kalfa/ci/README.md", paths: ["kalfa/ci/README.md"], docsOnly: true, adminDocs: false },
+  { pr: "kalfa/identity/GLOSSARY.md", paths: ["kalfa/identity/GLOSSARY.md"], docsOnly: true, adminDocs: false },
   { pr: "docs/direction/briefs/x.md", paths: ["docs/direction/briefs/x.md"], docsOnly: false, adminDocs: false },
   // Skill prose in a brief folder is an input, as changes.mjs read it before 810.
   {
@@ -81,7 +75,6 @@ export const TABLE: readonly Row[] = [
     adminDocs: false,
   },
   { pr: "fixtures/repo/AGENTS.md", paths: ["fixtures/repo/AGENTS.md"], docsOnly: false, adminDocs: false },
-  { pr: "field/other.txt", paths: ["field/other.txt"], docsOnly: false, adminDocs: false },
   {
     pr: "docs/tutorials/one/package.json",
     paths: ["docs/tutorials/one/package.json"],

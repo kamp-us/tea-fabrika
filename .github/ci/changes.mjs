@@ -1,4 +1,4 @@
-// Today's CI for both versions. changes and field can decide what to run before pnpm setup or cache
+// Today's CI for both versions. changes can decide what to run before pnpm setup or cache
 // restoration. The one module this imports, @kalfa/ci/DocsOnly, has no dependencies of its own, and
 // check.yaml's changes job links it before this runs, so no install comes first. Only the `--same`
 // pass loads program.ts and its parser, after their own install, and a failed load runs all of next/.
@@ -8,16 +8,16 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { isRow, kind, reads } from "@kalfa/ci/DocsOnly";
+import { kind, reads } from "@kalfa/ci/DocsOnly";
 
 // Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
 // is no such flag, on any event. No flag starts the tooling tests either: the merge line runs none of
 // them, and the schedule (scheduled.yaml) runs them all (0539).
-/** @typedef {{check: boolean, typecheck: boolean, next: boolean, field: boolean, build: boolean}} Flags */
+/** @typedef {{check: boolean, typecheck: boolean, next: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
-const all = { check: true, typecheck: true, next: true, field: true, build: true };
+const all = { check: true, typecheck: true, next: true, build: true };
 
-const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
+const trees = ["apps/", "programs/", "packages/"];
 
 /** @param {string} path */
 const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
@@ -26,8 +26,8 @@ const script = (path) => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);
 const old = (path) => trees.some((tree) => path.startsWith(tree)) && !path.startsWith("packages/fabrika-design/");
 
 /**
- * Paths no heavy job reads: a docs or instructions kind (DocsOnly.ts: field rows, Markdown no program
- * reads, skill prose, AGENTS.md, CLAUDE.md and agent definitions), and a path `shown` lists: the paths
+ * Paths no heavy job reads: a docs or instructions kind (DocsOnly.ts: Markdown no program reads,
+ * skill prose, AGENTS.md, CLAUDE.md and agent definitions), and a path `shown` lists: the paths
  * `displayOnly` proved change nothing but how GitHub shows a diff.
  * @param {string} path
  * @param {readonly string[]} shown
@@ -36,12 +36,12 @@ const quiet = (path, shown) => kind(path) !== "code" || shown.includes(path);
 
 /**
  * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
- * run at all (ticket 988). Signed plans and row files, a few of the quiet paths above. Each `*`
- * stands for any name without a `/`, as in GitHub's filters, and no other wildcard is used, so a folder named `brief` under .kalfa/quests/ is never matched. Skill prose stays out: the changes job's
- * skills check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds
- * every path the list matches to no heavy job here. `pnpm lint` checks the rows instead, with
- * field-check.ts's `--local`. */
-export const ignored = [".kalfa/quests/*.md", "field/findings/*.json", "field/notes/*.json", "field/runs/*.json"];
+ * run at all (ticket 988). Signed plans, a few of the quiet paths above. Each `*` stands for any
+ * name without a `/`, as in GitHub's filters, and no other wildcard is used, so a folder named
+ * `brief` under .kalfa/quests/ is never matched. Skill prose stays out: the changes job's skills
+ * check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds every
+ * path the list matches to no heavy job here. */
+export const ignored = [".kalfa/quests/*.md"];
 
 /**
  * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script
@@ -49,15 +49,6 @@ export const ignored = [".kalfa/quests/*.md", "field/findings/*.json", "field/no
  * @param {string} path
  */
 const skill = (path) => path.startsWith(".agents/skills/");
-
-/** The one experiments folder a test reads: apps/fabrika/src/pipes.test.ts reads its color scheme. */
-const read = ["experiments/177-themes/schemes/"];
-
-/**
- * A file under experiments/ that no test reads and CI does not type-check, so only lint reads it.
- * @param {string} path
- */
-const experiment = (path) => path.startsWith("experiments/") && !read.some((folder) => path.startsWith(folder));
 
 /**
  * A file of today's version: its trees, the design package today's app imports, and the toy
@@ -124,7 +115,7 @@ const needs = (path, proven, shown) => {
     return "all";
   }
 
-  if (quiet(path, shown) || script(path) || old(path) || experiment(path) || skill(path) || ci(path)) {
+  if (quiet(path, shown) || script(path) || old(path) || skill(path) || ci(path)) {
     return "none";
   }
 
@@ -166,8 +157,6 @@ export const scope = (paths, event, proven = [], shown = []) => {
 
 /**
  * A scoped event skips a job only when every path is explicitly safe for that job.
- * Amendment 3: field's runner starts on every event; this flag gates its install
- * and row check, so Markdown in field/ alone does not install Effect.
  * `build` is true only when a path is one of today's version's files: it gates check's
  * `pnpm build`, the slow half of check. No flag starts a tooling test: the merge line runs none
  * (0539). History that cannot be read, no path at all, or an event that is not scoped runs everything.
@@ -187,23 +176,22 @@ export const classify = (paths, event, _proven = [], shown = []) => {
   const touched = paths.some(todays);
 
   if (paths.some(reads)) {
-    return { ...all, field: paths.some(isRow), build: touched };
+    return { ...all, build: touched };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
-  // reads, less the experiments, which the root tsconfig leaves out.
+  // reads.
   return {
     check: !paths.every((path) => quiet(path, shown)),
-    typecheck: !paths.every((path) => quiet(path, shown) || experiment(path)),
+    typecheck: !paths.every((path) => quiet(path, shown)),
     next: scope(paths, event, [], shown) !== "none",
-    field: paths.some(isRow),
     build: touched,
   };
 };
 
 /**
  * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes,
- * field, typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
+ * typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
  * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
  * request can be a draft; on any other event, a merge queue's group and a push included, the flag
  * is ignored. No event starts a tooling test (0539): their author runs the narrow ones on the
@@ -565,7 +553,7 @@ const skipTested = (flags) => ({ ...flags, next: false });
 /** @typedef {Flags & {scope: Scope}} Selection */
 
 /** The jobs whose flags a selection holds beside next, which `covers` judges with its scope. */
-const flagged = /** @type {const} */ (["check", "typecheck", "field", "build"]);
+const flagged = /** @type {const} */ (["check", "typecheck", "build"]);
 
 /**
  * The record's artifact name: the tree a pull request run tested and the tree of its base.
@@ -586,7 +574,6 @@ export const selectionOf = (printed) => ({
   check: printed["check"] === "true",
   typecheck: printed["typecheck"] === "true",
   next: printed["next"] === "true",
-  field: printed["field"] === "true",
   build: printed["build"] === "true",
   scope: printed["filter"] === "next/ kalfa/" ? "all" : printed["filter"] === readers.join(" ") ? "readers" : "none",
 });
@@ -653,7 +640,6 @@ export const record = (env, run = git) => {
     check: env["CHECK"],
     typecheck: env["TYPECHECK"],
     next: env["NEXT"],
-    field: env["FIELD"],
     build: env["BUILD"],
     filter: env["FILTER"],
   });
@@ -728,7 +714,7 @@ const matched = async (base, head, run, api) => {
 };
 
 /** A group a pull request run already tested runs no job but changes and ci-required. @type {Flags} */
-const none = { check: false, typecheck: false, next: false, field: false, build: false };
+const none = { check: false, typecheck: false, next: false, build: false };
 
 /** What the next job runs: its path arguments, the reader tests or both roots of the `next` project. @param {Scope} need */
 const filterOf = (need) => (need === "readers" ? readers.join(" ") : "next/ kalfa/");

@@ -358,7 +358,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
             state,
             base,
             title: plan ? "Plan: per-program quotas" : "Per-program quotas",
-            files: docsOnly ? [".kalfa/decisions/0573-x.md", "field/notes/x.json"] : ["docs/x.md", "next/x.ts"],
+            files: docsOnly ? [".kalfa/decisions/0573-x.md", "docs/y.md"] : ["docs/x.md", "next/x.ts"],
             jobs: isRed ? red.jobs : withSkip,
           },
           red,

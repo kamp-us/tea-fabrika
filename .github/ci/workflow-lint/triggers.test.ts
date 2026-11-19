@@ -11,13 +11,10 @@ import { options, type Plant, rejects, type Workflow } from "./wiring.test-suppo
 
 // Ticket 988. A pull request whose every path matches check.yaml's `paths-ignore` starts no run, so
 // each such path must be one changes.mjs already runs no heavy job for: every job changes.mjs
-// names stays off, on a draft and on a ready pull request. Only the field flag
-// may be on, for a row, The paths are made
-// from each pattern, each `*` any name without a `/` as in GitHub's filters (the lint allows no
-// other wildcard), with the repo's own tracked files that match. Plants, each run once on
-// changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
-// A field row (today none remain in this repo): the paths changes.mjs still flags as rows.
-const isFieldPath = (path: string) => /^field\/([^/]+\.jsonl|(findings|notes|runs)\/[^/]*\.json)$/.test(path);
+// names stays off, on a draft and on a ready pull request. The paths are made from each pattern,
+// each `*` any name without a `/` as in GitHub's filters (the lint allows no other wildcard), with
+// the repo's own tracked files that match. Plants, each run once on changes.mjs and restored: `plan`
+// as a folder a program reads (red); `docs/` as a read tree (red).
 
 const globOf = (glob: string) =>
   new RegExp(
@@ -51,27 +48,18 @@ it("ticket 988: every path a pull request ignores runs no heavy job in changes.m
       fc.boolean(),
       (paths, draft) => {
         expect(paths.every(ignoredBy)).toBe(true);
-        // Every job but the field rows' is off, whatever jobs changes.mjs grows or drops.
-        const { field, ...heavy } = jobs(paths, "pull_request", draft);
+        // Every job is off, whatever jobs changes.mjs grows or drops.
+        const heavy = jobs(paths, "pull_request", draft);
         expect(Rec.keys(heavy).length).toBeGreaterThan(0);
         expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
-        expect(field).toBe(paths.some(isFieldPath));
       },
     ),
     {
       ...options,
       examples: [
-        // Pull request 1248, the waste ticket 988 names: one plan and two finding rows.
-        [
-          [
-            ".kalfa/quests/t290-s2-PLAN.md",
-            "field/findings/2026-11-14-a-row.json",
-            "field/findings/2026-11-14-another-row.json",
-          ],
-          true,
-        ],
-        [[".kalfa/quests/t290-s2-PLAN.md", "field/findings/2026-11-14-a-row.json"], true],
-        [[".kalfa/quests/.md", "field/runs/.json"], false],
+        // Pull request 1248, the waste ticket 988 names, less its two finding rows, whose folder is gone.
+        [[".kalfa/quests/t290-s2-PLAN.md"], true],
+        [[".kalfa/quests/.md"], false],
       ],
     },
   );
@@ -82,23 +70,19 @@ it("a quest plan is ignored in .kalfa/quests/", () => {
   expect(ignoredBy(plan), plan).toBe(true);
 
   for (const draft of [true, false]) {
-    const { field, ...heavy } = jobs([plan], "pull_request", draft);
+    const heavy = jobs([plan], "pull_request", draft);
     expect(Rec.toEntries(heavy).filter(([, on]) => on)).toEqual([]);
-    expect(field).toBe(false);
   }
 });
 
 it("pinned: ticket 988's list leaves out what changes.mjs or a reader still checks", () => {
-  // A folder a program reads, skill prose, the old logs, a row of the wrong kind and a nested plan
-  // folder all start the run: each is outside the list.
+  // A folder a program reads, skill prose, a plan's other files and a nested plan folder all start
+  // the run: each is outside the list.
   for (const path of [
     ".agents/skills/lead/SKILL.md",
     ".kalfa/quests/brief/x.md",
     ".kalfa/quests/prompts/x.md",
     ".kalfa/quests/x.ts",
-    "field/runs.jsonl",
-    "field/findings/x.md",
-    "field/findings/a/b.json",
     "AGENTS.md",
   ]) {
     expect(ignoredBy(path), path).toBe(false);

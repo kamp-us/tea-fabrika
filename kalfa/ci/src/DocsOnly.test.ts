@@ -18,7 +18,7 @@ const ext = fc.constantFrom("md", "ts", "sh", "py", "mjs", "json");
 
 // Markdown under a tree a program or a test reads: code.
 const readMarkdown = fc
-  .tuple(fc.constantFrom("next", "kalfa", "programs", "packages", "fixtures", "vendor"), folders, word)
+  .tuple(fc.constantFrom("next", "programs", "packages", "fixtures", "vendor"), folders, word)
   .map(([tree, dirs, name]) => [tree, ...dirs, `${name}.md`].join("/"));
 
 // A skill's script, with any extension, Markdown included: code.
@@ -59,12 +59,11 @@ const anyPath = fc.oneof(
     ".agents/skills/lead/SKILL.md",
   ),
   fc.tuple(folders, word).map(([dirs, name]) => ["docs", ...dirs, `${name}.md`].join("/")),
-  fc.tuple(word, fc.constantFrom("json", "jsonl")).map(([name, e]) => `field/notes/${name}.${e}`),
   word.map((name) => `apps/${name}.ts`),
 );
 
 // vector: the fixed table's answers, for CI and for the lead's tools, row by row.
-// Plant: `isRow` answers false for a field row, so the 1641 row's files count as code.
+// Plant: `reads` answers true for every path under kalfa/, so the kalfa/ci/README.md row counts as code.
 it("vector: every row of the fixed table gets its docsOnly answer, and its adminDocs answer from isAdminDocs", () => {
   for (const row of TABLE) {
     expect(docsOnly(row.paths), row.pr).toBe(row.docsOnly);
@@ -133,11 +132,10 @@ it("property: an AGENTS.md or CLAUDE.md under the root, next/, kalfa/ or docs/ i
 });
 
 // Plant: `isAdminDocs` answers the docs kind alone, so a README or a `.kalfa/patterns/` Markdown counts as admin docs.
-it("property: isAdminDocs is the docs kind under the admin merge's six folders, and no path outside them is admin docs", () => {
+it("property: isAdminDocs is the docs kind under the admin merge's five folders, and no path outside them is admin docs", () => {
   const adminFolder = fc.constantFrom(
     ".kalfa/decisions",
     "docs",
-    "field",
     ".kalfa/glossary",
     ".kalfa/runbooks",
     ".kalfa/guidelines",
@@ -151,7 +149,6 @@ it("property: isAdminDocs is the docs kind under the admin merge's six folders, 
     "vendor",
     ".github",
     ".claude",
-    "experiments",
   );
 
   // Markdown under one of the admin merge's folders: admin docs exactly when its kind is docs.
@@ -180,14 +177,46 @@ it("property: isAdminDocs is the docs kind under the admin merge's six folders, 
   );
 });
 
-it("property: a GLOSSARY.md is code in any folder, since a tool reads it", () => {
-  const dirs = fc.array(word, { maxLength: 4 }).map((below) => below.map((dir) => `${dir}/`).join(""));
+// A folder name that is no read tree and no input, fixtures or skill folder, so nothing reads what is in it.
+const unread = word.filter(
+  (dir) =>
+    !["next", "programs", "packages", "fixtures", "vendor", "brief", "briefs", "prompt", "prompts"].includes(dir),
+);
+
+// Plant: `reads` answers true for every GLOSSARY.md again, as it did before.
+it("property: a GLOSSARY.md outside the read trees is docs in any folder, since no program reads it", () => {
+  const dirs = fc.array(unread, { maxLength: 4 }).map((below) => below.map((dir) => `${dir}/`).join(""));
 
   fc.assert(
     fc.property(dirs, (dir) => {
-      expect(kind(`${dir}GLOSSARY.md`), dir).toBe("code");
-      expect(docsOnly([`${dir}GLOSSARY.md`]), dir).toBe(false);
+      expect(kind(`${dir}GLOSSARY.md`), dir).toBe("docs");
+      expect(docsOnly([`${dir}GLOSSARY.md`]), dir).toBe(true);
     }),
     options,
   );
+});
+
+// Plant: put "kalfa/" back among the read trees, so a kalfa/ README or GLOSSARY.md is code.
+it("property: Markdown that no reader names is docs, under kalfa/ and anywhere else outside the read trees", () => {
+  const top = fc.constantFrom<readonly string[]>([], ["kalfa"], ["docs"], [".kalfa", "glossary"]);
+
+  const name = fc.oneof(
+    word.map((file) => `${file}.md`),
+    fc.constantFrom("README.md", "GLOSSARY.md"),
+  );
+
+  const path = fc
+    .tuple(top, fc.array(unread, { maxLength: 3 }), name)
+    .map(([root, dirs, file]) => [...root, ...dirs, file].join("/"))
+    .filter((named) => named !== "kalfa/config/README.md");
+
+  fc.assert(
+    fc.property(path, (named) => {
+      expect(kind(named), named).toBe("docs");
+    }),
+    options,
+  );
+
+  // The one Markdown file of kalfa/ a program reads: pnpm pack ships it in @kalfa/config's archive.
+  expect(kind("kalfa/config/README.md")).toBe("code");
 });

@@ -98,7 +98,7 @@ export const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE
 
 export const probe = "steps.diff.outputs.probe == 'true'";
 
-// The check job's steps, each on its own flag (ticket 985): lint on check, the rows on field.
+// The check job's steps, each on the check flag (ticket 985).
 export const checkFlag = `\${{ needs.changes.outputs.check != 'false' }}`;
 
 const name = fc.string({ maxLength: 20 });
@@ -251,9 +251,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       // SAFETY: every value below is a string, and the wider map type lets a plant add or remove an output.
       outputs: {
-        ...Rec.fromEntries(
-          ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
-        ),
+        ...Rec.fromEntries(["check", "typecheck", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`])),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
         // prints next once more.
         next: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
@@ -338,10 +336,7 @@ const valid = (label: string, extra: string) => ({
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
             ...Rec.fromEntries(
-              ["check", "typecheck", "field", "build"].map((key) => [
-                key.toUpperCase(),
-                `\${{ steps.diff.outputs.${key} }}`,
-              ]),
+              ["check", "typecheck", "build"].map((key) => [key.toUpperCase(), `\${{ steps.diff.outputs.${key} }}`]),
             ),
             NEXT: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
             FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
@@ -367,7 +362,7 @@ const valid = (label: string, extra: string) => ({
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
       needs: "changes",
-      if: `${guard("check").slice(0, -4)} || needs.changes.outputs.field != 'false') }}`,
+      if: guard("check"),
       "timeout-minutes": 10,
       // SAFETY: check's steps are object literals, widened to plain maps so plants can edit any field.
       steps: [

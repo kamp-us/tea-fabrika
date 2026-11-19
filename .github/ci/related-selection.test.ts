@@ -447,7 +447,7 @@ const included = (name: string, file: string) => {
 };
 
 it.prop(
-  "D1 the package's ordinary laws are in next alone, built files in no project, P2 in next-integration alone and P1 in tooling alone; a package path runs check and typecheck, never today's build, and no package Markdown is skipped",
+  "D1 the package's ordinary laws are in next alone, built files in no project, P2 in next-integration alone and P1 in tooling alone; a package path runs check and typecheck, never today's build, and of its Markdown only the README, which its archive ships, is not skipped",
   { word, event: Schema.Literals(["pull_request", "merge_group", "push"]) },
   ({ word, event }) => {
     for (const file of [`kalfa/config/src/${word}.test.ts`, "kalfa/config/src/App.test.ts"]) {
@@ -469,9 +469,12 @@ it.prop(
     expect(included("next", CONSUMER)).toBe(false);
     expect(included("next-integration", CONSUMER)).toBe(false);
 
-    for (const path of [`kalfa/config/src/${word}.ts`, "kalfa/config/README.md", `kalfa/config/${word}.md`]) {
+    for (const path of [`kalfa/config/src/${word}.ts`, "kalfa/config/README.md"]) {
       expect(classify([path], event), path).toMatchObject({ check: true, typecheck: true, build: false });
     }
+
+    // Any other Markdown of the package is docs: no program reads it (@kalfa/ci/DocsOnly).
+    expect(classify([`kalfa/config/${word}.md`], event)).toMatchObject({ check: false, typecheck: false });
   },
   options,
 );

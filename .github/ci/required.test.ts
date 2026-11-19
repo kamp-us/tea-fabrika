@@ -102,30 +102,9 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
   );
 });
 
-it("10: check, which also holds the field row check, skips only when check and field both said exactly false", () => {
-  // Field rows alone start check for its row step. Plant, run once on required.mjs and restored:
-  // gates.check as ["check"] alone (red: a skip with field "true" passed).
-  fc.assert(
-    fc.property(green, flag, flag, (needs, check, rows) => {
-      needs["changes"]!.outputs!["check"] = check;
-      needs["changes"]!.outputs!["field"] = rows;
-      needs["check"] = { result: "skipped", outputs: {} };
-      const others = gated.filter((other) => other !== "check" && needs[other]!.result === "skipped");
-      const meant = check === "false" && rows === "false";
-      expect(judge(needs).pass).toBe(
-        meant && others.every((job) => gates[job].every((flag) => needs["changes"]!.outputs![flag] === "false")),
-      );
-      expect(judge(needs).lines).toContain(
-        meant ? "check: skipped, as changes said, pass" : "check: skipped, but it should have run, fail",
-      );
-    }),
-    options,
-  );
-});
-
-it("scenario: the gates are the jobs check.yaml gates, with check on its own flag and field", () => {
+it("scenario: the gates are the jobs check.yaml gates, each on its own flag", () => {
   expect(gates).toEqual({
-    check: ["check", "field"],
+    check: ["check"],
     typecheck: ["typecheck"],
     next: ["next"],
     select: ["related"],
@@ -172,34 +151,26 @@ it("7: changes or a gated job missing from needs fails, and is named", () => {
 it("the verdict passes exactly when every job passes on its own", () => {
   // An oracle written apart from the judge: random results and flags for every job.
   fc.assert(
-    fc.property(
-      fc.record({ changes: result, field: flag }),
-      fc.tuple(...gated.map(() => fc.tuple(result, flag))),
-      (top, rows) => {
-        const outputs: Record<string, string | undefined> = {
-          ...Rec.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
-          field: top.field,
-        };
+    fc.property(fc.record({ changes: result }), fc.tuple(...gated.map(() => fc.tuple(result, flag))), (top, rows) => {
+      const outputs: Record<string, string | undefined> = Rec.fromEntries(gated.map((name, i) => [name, rows[i]![1]]));
 
-        const needs: Record<string, Job> = {
-          changes: { result: top.changes, outputs },
-          ...Rec.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
-        };
+      const needs: Record<string, Job> = {
+        changes: { result: top.changes, outputs },
+        ...Rec.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
+      };
 
-        const passes = (name: string) =>
-          needs[name]!.result === "success" ||
-          (needs[name]!.result === "skipped" &&
-            // SAFETY: `gated` is a tuple of job names; it is read as a plain string list only to ask if it holds `name`.
-            (gated as readonly string[]).includes(name) &&
-            top.changes === "success" &&
-            (Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? []).every(
-              (flag) => outputs[flag] === "false",
-            ) &&
-            (name !== "check" || top.field === "false"));
+      const passes = (name: string) =>
+        needs[name]!.result === "success" ||
+        (needs[name]!.result === "skipped" &&
+          // SAFETY: `gated` is a tuple of job names; it is read as a plain string list only to ask if it holds `name`.
+          (gated as readonly string[]).includes(name) &&
+          top.changes === "success" &&
+          (Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? []).every(
+            (flag) => outputs[flag] === "false",
+          ));
 
-        expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
-      },
-    ),
+      expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
+    }),
     options,
   );
 });
@@ -217,7 +188,7 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", field: "false", typecheck: "false", next: "true", related: "false" },
+      outputs: { check: "false", typecheck: "false", next: "true", related: "false" },
     },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
@@ -260,7 +231,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
 
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
-  // A job runs when any of its flags is on: check for lint or for field rows.
+  // A job runs when any of its flags is on.
   for (const name of gated) {
     needs[name] = { result: needed(flags, name) ? "success" : "skipped" };
   }

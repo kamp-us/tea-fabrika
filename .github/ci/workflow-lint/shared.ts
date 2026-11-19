@@ -161,7 +161,7 @@ export const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next
 // changes' flags from its first pass, each a job's or a step's.
 // No flag starts today's tests or its app end to end, which run on no event (0525, 0533), and none
 // starts the tooling tests, which only the schedule runs (0539).
-export const FLAGS = ["check", "typecheck", "field", "build"];
+export const FLAGS = ["check", "typecheck", "build"];
 
 export const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";
 

@@ -18,9 +18,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths-ignore:
       - .kalfa/quests/*.md
-      - field/findings/*.json
-      - field/notes/*.json
-      - field/runs/*.json
   # GitHub's merge queue tests each group on a temporary branch and takes a required check only from
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
@@ -55,20 +52,18 @@ permissions:
 # Every job has a time limit, so a stuck step fails instead of holding a pull request for the 360
 # minute default (pull request 696, ticket 496). The four set with ticket 496 are about twice the
 # slowest of that job's last 20 green runs on 2026-11-10 UTC, and at least 5: changes 39 s,
-# field 43 s, check 166 s, test 944 s. e2e (333 s) had its own before. next has one per shard,
-# sized at its job.
+# field 43 s (a job since removed), check 166 s, test 944 s. e2e (333 s) had its own before. next
+# has one per shard, sized at its job.
 # workflow-lint.ts fails a job without one.
 jobs:
   # Today's CI, both versions. One classifier holds every path rule: @kalfa/ci/DocsOnly, which the
   # changes job links below, so it runs with no install.
-  # Safe Markdown and direct field JSONL skip the heavy jobs, on a pull request, in the merge queue
+  # Safe Markdown skips the heavy jobs, on a pull request, in the merge queue
   # and on a push to main; unknown paths run the rest. History that cannot be read runs everything.
   # Today's version is frozen (0525, 0533): its tests, its promise checks and its app end to end run
   # on no event, so no output here starts them. Its build starts only when a file of today's
   # version changed, on every event: the `build` output (0175).
-  # A change only to experiments/ runs check alone, and one only to .agents/skills/ skips next:
-  # no next/ test reads either. experiments/177-themes/schemes/, which a test reads, runs as an
-  # unknown path does.
+  # A change only to .agents/skills/ skips next: no next/ test reads it.
   # These small checks still run when pnpm setup and the heavy jobs skip.
   # `filter` is the next job's path: the next/ tests that read source as text, lint it or bundle
   # it, when only lint rule files changed or every next/ file is the same program with other
@@ -111,7 +106,6 @@ jobs:
       e2e-legs: ${{ steps.size.outputs.e2e }}
       # The commit a sized run's end-to-end legs narrow from, `--changed`; empty on any other run.
       base: ${{ steps.size.outputs.base }}
-      field: ${{ steps.diff.outputs.field }}
       build: ${{ steps.diff.outputs.build }}
       related: ${{ (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && !github.event.pull_request.draft)) && steps.diff.outputs.check != 'false' }}
     steps:
@@ -239,7 +233,6 @@ jobs:
           TESTED: ${{ github.sha }}
           CHECK: ${{ steps.diff.outputs.check }}
           TYPECHECK: ${{ steps.diff.outputs.typecheck }}
-          FIELD: ${{ steps.diff.outputs.field }}
           BUILD: ${{ steps.diff.outputs.build }}
           NEXT: ${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}
           FILTER: ${{ steps.same.outputs.filter || steps.diff.outputs.filter }}
@@ -278,8 +271,7 @@ jobs:
     if: >-
       ${{ !cancelled() &&
           (needs.changes.result != 'success' ||
-           needs.changes.outputs.check != 'false' ||
-           needs.changes.outputs.field != 'false') }}
+           needs.changes.outputs.check != 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -343,8 +335,7 @@ jobs:
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides
   # lint's answer, and a quest reads this one job's conclusion for its head the moment it ends
-  # (chain.ts's `typechecking` phase). It runs where check runs, less a change only to
-  # experiments/, which the root tsconfig leaves out.
+  # (chain.ts's `typechecking` phase). It runs where check runs.
   typecheck:
     needs: changes
     if: >-

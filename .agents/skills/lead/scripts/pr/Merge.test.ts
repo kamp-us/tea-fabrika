@@ -59,7 +59,7 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
 const Files = Schema.Literals(["docs", "code", "none"]);
 
 const FILES = {
-  docs: [".kalfa/decisions/0583-a-room.md", "field/notes/2026-11-15-x.json", "docs/plan/README.md"],
+  docs: [".kalfa/decisions/0583-a-room.md", "docs/plan/README.md"],
   // One file that is not docs is enough, even in a docs folder.
   code: [".kalfa/decisions/0583-a-room.md", "docs/tutorials/one/package.json"],
   none: [],

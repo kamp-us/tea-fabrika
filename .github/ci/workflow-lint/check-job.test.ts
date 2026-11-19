@@ -76,7 +76,10 @@ const plants: Plant[] = [
   // F1: the check job's flags. Plants on the check job's own steps.
   ...(
     [
-      ["check runs only on the check flag", (w) => (w.jobs.check.if = guard("check"))],
+      [
+        "check skips when the classifier failed",
+        (w) => (w.jobs.check.if = "${{ !cancelled() && needs.changes.outputs.check != 'false' }}"),
+      ],
       ["the full install runs for no flag", (w) => (step(w, "check", "install")["if"] = build)],
       ["lint runs for no flag", (w) => (step(w, "check", "lint")["if"] = build)],
       ["the ratchet runs for no flag", (w) => Reflect.deleteProperty(step(w, "check", "lists only shrink"), "if")],

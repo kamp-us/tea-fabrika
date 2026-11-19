@@ -18,8 +18,6 @@
 // 7. A gated job, or changes, absent from `needs`: fails.
 // 8. `needs` that is not an object, or JSON that does not parse: fails.
 // 9. A matrix job (next) is one `needs` entry; GitHub folds its shards into one result.
-// 10. A job with two outputs (check, which also holds the field row check) skips only when both
-//     are exactly "false": field rows alone start it.
 import { fileURLToPath } from "node:url";
 
 /** The jobs that may skip, each a key of `gates`. */
@@ -27,13 +25,13 @@ export const gated = /** @type {const} */ (["check", "typecheck", "next", "selec
 
 /**
  * Each job that may skip, and the changes outputs it runs on: its `if:` starts it when any of them
- * is not "false", so its skip passes only when every one is. check also holds the field row check.
+ * is not "false", so its skip passes only when every one is.
  * next's `next` already holds the sizing: changes prints it false when no next/ test file is picked.
  * workflow-lint.ts reads this map, and `gated` lists its jobs.
  * @type {Readonly<Record<(typeof gated)[number], readonly string[]>>}
  */
 export const gates = {
-  check: ["check", "field"],
+  check: ["check"],
   typecheck: ["typecheck"],
   next: ["next"],
   select: ["related"],
