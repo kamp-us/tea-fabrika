@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds ticket 1170; body 8ca16161e716
 Plancheck-Version: 3
 # Plan: ticket 1170, second sighting: the P8 SIGKILL law's journal never shows the blocked test, because installed Vitest 5.0.5 can hold a worker's last task update forever
 
