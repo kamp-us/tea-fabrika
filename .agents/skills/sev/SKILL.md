@@ -42,7 +42,7 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 Open the one for what happened. Each has a trigger, roles, steps, an exit and comms.
 
 - [Main is red](../../../.runbooks/sev-main-is-red.md): a sev1, "Scheduled CI is red on main", or main looks red with no issue.
-- [CI is slow](../../../.runbooks/sev-ci-is-slow.md): a sev1, "CI speed: a stage is over its goal".
+- A sev1 "CI speed: a stage is over its goal" has no runbook yet; one is written after the first speed sev1 is worked and written up.
 - [Nothing lands](../../../.runbooks/sev-nothing-lands.md): a sev0, on the owner's word.
 - [A fix is red](../../../.runbooks/sev-a-fix-is-red.md): a fix's `ci-required` or its review comes back red.
 - [Two fixes at once](../../../.runbooks/sev-two-fixes-at-once.md): a second fix is ready while one lands.
@@ -52,6 +52,15 @@ Open the one for what happened. Each has a trigger, roles, steps, an exit and co
 
 `pnpm lint` checks that each runbook has its parts and that this list links every one
 (`records check runbook`).
+
+## Judgment
+
+- **A fix makes CI land again, faster, cheaper or green;** a feature almost done is not one.
+- **A full run's word is its verdict.** A red full run ends `failure`. `cancelled` means a person, the freeze or a
+  leg's limit stopped it, so read its report job's line first. On 2026-11-15 a red full run read as cut off, and its
+  pull request merged with two red laws.
+- **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped cause as a ticket. A
+  loosened or removed law goes to the owner ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
 
 ## When unsure which level
 

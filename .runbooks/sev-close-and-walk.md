@@ -38,7 +38,7 @@ open in name for about two and a half hours after its fixes merged, and a rerun 
   main locally and push.
 - [ ] Tell every agent that stopped for the sev0 that it may go on.
 - [ ] The level now: a sev1 if a `ci-scheduled` issue is open, else none (0542). In that sev1 the runbook is
-  `sev-main-is-red.md` or `sev-ci-is-slow.md`. Main's full run starts on a push and hourly
+  `sev-main-is-red.md`; a speed issue has no runbook yet (the sev skill says so). Main's full run starts on a push and hourly
   ([0581](../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)), and `close` has started one now.
 - [ ] A sev1 needs no close command: its issue closes itself, and `sev.ts status` reads none. A fix still named after
   its pull request merged is replaced by the next `sev.ts fix`.
