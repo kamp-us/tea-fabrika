@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -34,15 +35,18 @@ export type ChangeData = typeof Change.cases.found.Type & {
   readonly conflict: ReadonlyArray<string> | null;
 };
 
-export type Method = "change" | "update" | "merge";
+/** A method of the code host: "change", "update" or "merge". */
+export type Method = Recorder.Method<CodeHost["Service"]>;
 
 export type Fault =
   | { readonly kind: "fault"; readonly reason: "unavailable" | "rate_limited" | "refused" }
   | { readonly kind: "defect" }
   | { readonly kind: "interrupt" };
 
-export type Call = { readonly method: Method; readonly change: number; readonly head?: typeof Commit.Type };
-
+/**
+ * The scripted host's own state, beside it (0538). Its calls are not kept here: the layer hands the
+ * fake to `Recorder.layer`, and a law reads them with `Recorder.calls(CodeHost, method)` (0579).
+ */
 export class Control extends Context.Service<
   Control,
   {
@@ -50,7 +54,6 @@ export class Control extends Context.Service<
     readonly main: (head: typeof Commit.Type) => Effect.Effect<void>;
     readonly fail: (method: Method, fault: Fault) => Effect.Effect<void>;
     readonly crashMerge: Effect.Effect<void>;
-    readonly calls: () => ReadonlyArray<Call>;
     readonly read: (change: number) => Effect.Effect<ChangeData | undefined>;
   }
 >()("@kampus/libfabrika/codehost/CodeHostTest.Control") {}
@@ -61,14 +64,20 @@ export const tree = (hex: string) => Schema.decodeSync(Tree)(hex);
 
 const reasons = { unavailable: Unavailable, rate_limited: RateLimited, refused: Refused };
 
-export const layer = (options: { readonly token?: Redacted.Redacted<string> } = {}): Layer.Layer<CodeHost | Control> =>
-  Layer.effectContext(
+/**
+ * The scripted code host, watched by a Recorder: each run of `change`, `update` or `merge` is
+ * recorded with its args before its scripted fault, a crashed merge included. The fault queue stays
+ * the fake's own state, since each fault is used once and the Recorder's `fails` fails every call.
+ */
+export const layer = (
+  options: { readonly token?: Redacted.Redacted<string> } = {},
+): Layer.Layer<CodeHost | Control | Recorder.Recorded<CodeHost>> =>
+  Layer.unwrap(
     Effect.sync(() => {
       const changes = new Map<number, ChangeData>();
       const updates = new Map<string, typeof Updated.cases.updated.Type>();
       const merges = new Map<string, typeof Merged.cases.merged.Type>();
       const faults: Record<Method, Array<Fault>> = { change: [], update: [], merge: [] };
-      const calls: Array<Call> = [];
       let main = commit(Str.repeat(40)("0"));
       let serial = 1;
       const used = new Set<string>([main]);
@@ -89,10 +98,9 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       // A host refuses a change it does not know with an answer of its own, never with nothing (0568).
       const missing = (change: number) => new Error(`the scripted host has no change ${change}`);
 
-      const failure = (call: Call) =>
+      const failure = (method: Method) =>
         Effect.suspend(() => {
-          calls.push(call);
-          const fault = faults[call.method].shift();
+          const fault = faults[method].shift();
           const cause = new Error(options.token === undefined ? "scripted host failure" : reveal(options.token));
 
           if (fault?.kind === "fault") {
@@ -112,7 +120,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
 
       const host = CodeHost.of({
         change: (change) =>
-          failure({ method: "change", change }).pipe(
+          failure("change").pipe(
             Effect.andThen(
               Effect.sync(() => {
                 const found = changes.get(change);
@@ -124,7 +132,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
             ),
           ),
         update: (change, head) =>
-          failure({ method: "update", change, head }).pipe(
+          failure("update").pipe(
             Effect.andThen(
               Effect.suspend((): Effect.Effect<typeof Updated.Type, CodeHostError> => {
                 const found = changes.get(change);
@@ -169,7 +177,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
             ),
           ),
         merge: (change, head) =>
-          failure({ method: "merge", change, head }).pipe(
+          failure("merge").pipe(
             Effect.andThen(
               Effect.suspend((): Effect.Effect<typeof Merged.Type, CodeHostError> => {
                 const previous = merges.get(Formatter.formatJson([change, head]));
@@ -213,8 +221,9 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           ),
       });
 
-      return Context.make(CodeHost, host).pipe(
-        Context.add(Control, {
+      return Layer.merge(
+        Recorder.layer(CodeHost, host),
+        Layer.succeed(Control, {
           put: (data: ChangeData) =>
             Effect.sync(() => {
               changes.set(data.change, data);
@@ -234,7 +243,6 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           crashMerge: Effect.sync(() => {
             crash = true;
           }),
-          calls: () => [...calls],
           read: (change: number) => Effect.sync(() => changes.get(change)),
         }),
       );

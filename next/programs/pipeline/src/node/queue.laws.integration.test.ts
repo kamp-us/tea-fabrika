@@ -33,6 +33,7 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Recorder } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import type { Redacted } from "effect";
 import {
@@ -528,7 +529,7 @@ const open = Effect.fnUntraced(function* (
   });
 
   return {
-    host,
+    host: { ...host, calls: (method) => Effect.provideContext(Recorder.calls(CodeHost, method), services) },
     ci,
     snapshot,
     step,
