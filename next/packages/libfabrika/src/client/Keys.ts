@@ -88,7 +88,10 @@ export const Routed = Schema.TaggedUnion({
  */
 export type Routed = typeof Routed.Type;
 
-/** The prefix key, from the glossary's `prefix` row; a person's file may change it later (K2). */
+/**
+ * The prefix key, from the old glossary's `prefix` row (git history at 52aebb8). A person's file may
+ * change it later (K2).
+ */
 const PREFIX = "ctrl+b";
 
 const AFTER = "<prefix>";
