@@ -47,7 +47,7 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
 | Understand a design that is still a draft | `docs/` | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
 | Build the new version, or change today's machines (`packages/fabrika`, `packages/pipeline`, `programs/*`) | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/`; today's machines are frozen, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as their map and each part's own README | Code in `next/`, with its test beside it as `name.test.ts`: all new work goes there. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
 | Do an operation by hand: a sev, a wipe of the dev and test homes | [`.kalfa/runbooks/`](./.kalfa/runbooks/), the one file for that operation | One file there, the first time the operation is done for real |
-| Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | What happened, in the notes |
+| Run a real ticket through the pipeline | [the how-to](./.kalfa/runbooks/run-a-pipeline-ticket.md) and [its rules](./.kalfa/runbooks/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | What happened, in the notes |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
 
 Tickets go in the app's own tracker, never a GitHub issue on this repo

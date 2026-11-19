@@ -1,3 +1,7 @@
+---
+summary: Write a program for next/, a pure tea machine plus what it declares
+---
+
 # Write a program for `next/`
 
 For anyone writing a program for `next/`, the new version of fabrika. **Every claim here is about
@@ -234,7 +238,7 @@ planned with the pack work.
 | Let an agent call it | The runner knows an agent sender, but `next/` has no door an agent can dial | Agents through MCP (the plan, in the notes) |
 | Answer a read port | Declared and checked; nothing in `next/` calls one yet | With the window and the agent's door |
 | Send an output to another program | Declared only; the runner sends no outputs yet | Pipes are decided in [0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md), not built |
-| Build in the shape that will last | `Program.make` above is today's shape | A new shape is decided in [program-shape](../direction/program-shape.md), not built. Expect to rewrite the declaration when it lands |
+| Build in the shape that will last | `Program.make` above is today's shape | A new shape is decided in [program-shape](../../docs/direction/program-shape.md), not built. Expect to rewrite the declaration when it lands |
 
 ## What this page cannot tell you
 
