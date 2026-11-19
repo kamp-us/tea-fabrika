@@ -1,6 +1,6 @@
 ---
 id: 0582
-title: In next/, mail as a noun goes: a name's queue is its mailbox, what lands in it is a message, and the settings are mailbox.chunk and mailbox.capacity
+title: "In next/, mail as a noun goes: a name's queue is its mailbox, what lands in it is a message, and the settings are mailbox.chunk and mailbox.capacity"
 status: accepted
 date: 2026-11-15
 tags: [names, mail, mailbox, message, settings, glossary, next]

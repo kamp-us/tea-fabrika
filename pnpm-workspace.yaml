@@ -204,6 +204,10 @@ patchedDependencies:
   # built from 0.29.0's release commit with those two pulls only. demlik merged both after 0.29.0.
   # Drop this at the release that carries them (decision 0569).
   '@demlik/tea@0.29.0': patches/@demlik__tea@0.29.0.patch
+  # A worker's task-update throttle (dist/chunks/run.BPv-BBRv.js) re-arms a trailing timer that
+  # runs early, so a test that never ends still has its start and hooks sent to the reporters.
+  # Vitest 5.1.0 ships the same change. Drop this at the bump to 5.1.0 or later.
+  vitest@5.0.5: patches/vitest@5.0.5.patch
 
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.25.0'

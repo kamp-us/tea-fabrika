@@ -48,7 +48,7 @@ export const Chat: Layer.Layer<Chat, never, Credentials> // a comment that menti
 **What this decides:** that a protocol package holds only interfaces and a test Layer, that each
 provider is one package holding all its Layers, that `@kalfa/chat` is a new protocol package, and
 that fabrikalfa is an app that composes them. Each provider package is named
-`@kalfa/provider-<name>`, and `Journal` lives in `@kalfa/program` while `@kalfa/ledger` builds on it.
+`@kalfa/provider-<name>`. The journal is tea's, and `@kalfa/ledger` provides one driver for it.
 
 ## Context
 
@@ -103,10 +103,19 @@ that composes them.**
     Terraform's `terraform-provider-{NAME}` is. Others named so far: `@kalfa/provider-cloudflare`
     (the Ledger on Durable Objects, and program hosting on Workers), `@kalfa/provider-discord` and
     `@kalfa/provider-slack` (chat).
-- **The Journal and the ledger.** The `Journal` interface and its memory test Layer live in
-  `@kalfa/program`. `@kalfa/ledger` exports a `journal` Layer that builds a Journal on any `Ledger`.
-  So ledger depends on program's interface, never the reverse. `@kalfa/ledger` names no storage.
-  The storage is a provider's Ledger Layer, such as `@kalfa/provider-cloudflare`'s.
+- **The journal and the ledger.** tea defines the journal driver interface and ships its
+  conformance tests (owner, 2026-11-18). `@kalfa/program` defines no Journal of its own.
+  `@kalfa/ledger` provides one tea journal driver, built on a ledger stream, and it must pass tea's
+  journal conformance tests. Other drivers, such as SQLite or memory, are other providers of tea's
+  interface. `@kalfa/ledger` names no storage. The storage is a provider's Ledger Layer, such as
+  `@kalfa/provider-cloudflare`'s.
+- **A tea Cmd is one bounded Effect whose answer is a recorded Msg.** It plays the role Effect
+  Workflow's Activity plays, but "Activity" is not our name for it. Replay never re-runs a Cmd. A Cmd
+  still in flight is tracked by tea's `owed()`. Effect's `Workflow` and `Activity` stay banned as
+  code ([0254](0254-tea-is-the-one-engine.md)).
+- **A program's trace is not in the journal.** Its spans and measurements live in their own record
+  objects, as [0202](0202-spans-and-measurements-kept-forever.md) and
+  [0204](0204-process-record-rolls-in-parts.md) decide.
 - **fabrikalfa is an app,** the same tier as fabrika: a tiny fabrika (one server, many clients)
   that composes kalfa packages into a bot usable from anywhere: this terminal, Discord, Slack or a
   fabrika tile.
