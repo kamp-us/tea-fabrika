@@ -363,15 +363,21 @@ const note = (path: string, title: string, summary: string) =>
   [path, `---\nsummary: ${JSON.stringify(summary)}\n---\n\n# ${title}\n\nA long body about migration.\n`] as const;
 
 const glossary = [
-  ".glossary/TERMS.md",
+  "next/GLOSSARY.md",
   Arr.join(
     [
-      "# Terms",
+      "# Next",
       "",
-      "| Term | Definition | Not |",
-      "|---|---|---|",
-      "| upgrade (saved state) | One named step that moves saved state to the next shape. | Not a migration tool. |",
-      "| ledger | The log every fact goes to. | |",
+      "A context.",
+      "",
+      "## Language",
+      "",
+      "**upgrade (saved state)**:",
+      "One named step that moves saved state to the next shape.",
+      "_Avoid_: migration tool",
+      "",
+      "**ledger**:",
+      "The log every fact goes to.",
     ],
     "\n",
   ),
@@ -415,12 +421,12 @@ const shortlist = (found: Found) =>
   });
 
 describe("readEntries", () => {
-  it("format: one entry per record and one per glossary row, header rows left out, a decision with its id and status", () => {
+  it("format: one entry per record and one per glossary term, the title and the description left out, a decision with its id and status", () => {
     expect(Arr.map(entries, (e) => e.title)).toContain("upgrade (saved state)");
     expect(
       pipe(
         entries,
-        Arr.filter((e) => e.path === ".glossary/TERMS.md"),
+        Arr.filter((e) => e.path === "next/GLOSSARY.md"),
         Arr.map((e) => e.title),
       ),
     ).toEqual(["upgrade (saved state)", "ledger"]);
@@ -486,7 +492,7 @@ describe("find", () => {
     const round = (n: number) => Math.round(n * 100) / 100;
     const hits = shortlist(find("saved shape migration", entries, { limit: 8, all: false }));
     expect(Arr.map(hits, (h) => [h.path, h.score, h.words])).toEqual([
-      [".glossary/TERMS.md", round(idf(4) + idf(5) + idf(2)), ["saved", "shape", "migration"]],
+      ["next/GLOSSARY.md", round(idf(4) + idf(5) + idf(2)), ["saved", "shape", "migration"]],
       [".decisions/0011-x.md", round(idf(5) + idf(2)), ["shape", "migration"]],
       [".decisions/0001-x.md", round(idf(4) + idf(5)), ["saved", "shape"]],
       [".runbooks/migrate-stored-data.md", round(idf(4) + idf(5)), ["saved", "shape"]],

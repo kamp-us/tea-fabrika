@@ -18,7 +18,7 @@ describe.
 flowchart TD
   start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .patterns/ own it?"}
   owns -- "it is a why" --> routed["routed: .decisions/ via the adr skill"]
-  owns -- "it is a word" --> routedWord["routed: .glossary/TERMS.md"]
+  owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .glossary/TERMS.md"]
   owns -- "it is a measurement" --> routedExp["routed: experiments/"]
   owns -- "it is a shape" --> bar{"clears the bar in .patterns/README.md?"}
   bar -- no --> declined["declined: write nothing"]
@@ -37,7 +37,7 @@ Four places sit next to each other, and material often arrives in the wrong one'
 |---|---|
 | `.patterns/` | how the code is shaped now |
 | `.decisions/` and `docs/direction/` | why, and its history |
-| `.glossary/TERMS.md` | what a word means |
+| `.glossary/TERMS.md` and each context's `GLOSSARY.md` | what a word means |
 | `experiments/` and `field/` | what was measured, on a date |
 
 The mix-up that really happens is **the why**. A pattern doc that argues why a choice was made has

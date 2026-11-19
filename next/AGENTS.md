@@ -81,8 +81,7 @@ has nothing, marked as an edge with its reason
   a path, a ref, a state, a reason or a total gets its own word (`location`, `path`, `ref`, `state`,
   `reason`, `total`). `rg` the word under `docs/direction/` and `next/` before you use it.
 - An entry's two clocks are `arrivedAt`, the referee's, and `sentAt`, the writer's own. A ledger
-  entry keeps `sentAt` from day one, but leases and limits use only `arrivedAt`
-  ([`.glossary/TERMS.md`](../.glossary/TERMS.md)).
+  entry keeps `sentAt` from day one, but leases and limits use only `arrivedAt`.
 - `kind` on ledger entries is `_tag` here too
   ([0214](../.decisions/0214-unions-are-tagged-with-tag.md)). Today's code keeps `kind` and `why`
   until that code goes.

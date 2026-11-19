@@ -109,7 +109,7 @@ one line of checks.
   change. When there is none, say "Nothing." in one line.
 - **New names.** Each name the diff adds, a type, a service, a function, a file, a setting or a
   record field, gets one line: the name, what the industry calls it, and a link to a source that
-  says so, such as a maker's docs or `.glossary/TERMS.md`. A name we coined says what it was
+  says so, such as a maker's docs or the context's `GLOSSARY.md`. A name we coined says what it was
   searched against and why no industry word fits
   ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md)).
   `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does

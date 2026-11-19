@@ -12,12 +12,13 @@
 // <folder> is `.decisions`, `experiments`, `.patterns`, `docs/direction` or `.runbooks`, with or
 // without a trailing slash. It runs in the checkout it is started in.
 //
-// `find` searches those five folders and each row of `.glossary/TERMS.md`, and ranks them the way
+// `find` searches those five folders and each term of every `GLOSSARY.md` (one per context, found
+// by name anywhere in the tree; `.glossary/TERMS.md` is only the map and holds no term), and ranks them the way
 // phoenix's `fabrika adr sweep` does (experiment 270): each word the query shares with a record is
 // worth its rarity, ln(N / records that hold it), over the live records. It reads only the text
 // that says what a record is: a decision's title, its "What this decides" line and its
 // `## Decision` section; a note's title and its `summary` (`where` and `when` for a pattern); a
-// glossary row whole. Context sections and long bodies are left out on purpose: experiment 270
+// glossary term whole (its line and the lines under it). Context sections and long bodies are left out on purpose: experiment 270
 // found that whole notes swamp the ranking. A superseded decision is shown as the live decision it
 // lands on, so a citation lands on what is in force; `--all` shows each record as itself. A
 // shortlist is never a clearance: a record that says the same thing in other words is not found.
@@ -270,7 +271,8 @@ export const inOrder = (folder: Folder, paths: ReadonlyArray<string>): ReadonlyA
 /** The folders `find` searches, and the one file whose table rows it searches too. */
 const searched: ReadonlyArray<Folder> = [".decisions", ".runbooks", ".patterns", "docs/direction", "experiments"];
 
-const GLOSSARY = ".glossary/TERMS.md";
+/** A context's glossary: a file named `GLOSSARY.md`, at the root or in any folder. */
+const isGlossary = (path: string): boolean => path === "GLOSSARY.md" || pipe(path, Str.endsWith("/GLOSSARY.md"));
 
 /** Below this many live records, every word looks common, so a ranking says nothing (phoenix's floor). */
 const FLOOR = 10;
@@ -334,7 +336,7 @@ export const readStatus = (raw: string | undefined, successor?: string): Status 
     : Status.cases.other.make({ status: status === "" ? "(no status)" : status });
 };
 
-/** One thing `find` ranks: a record, or one row of the glossary. A decision carries its id and status. */
+/** One thing `find` ranks: a record, or one term of a glossary. A decision carries its id and status. */
 export type Entry = {
   readonly path: string;
   readonly title: string;
@@ -356,25 +358,20 @@ const decidingText = (text: string): string => {
   return `${gloss}\n${decision}`;
 };
 
-/** A glossary table's rows, header rows left out: the first cell is the term, the row is its words. */
-const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> => {
-  const lines = Str.split(text, "\n");
-  const separator = (line: string | undefined) => line !== undefined && /^\|\s*:?-{3}/.test(line);
+/**
+ * A glossary's terms: each `**Term**:` line starts one, and the term runs to the next blank line,
+ * so its meaning and its `_Avoid_` line are its words. The first line is the title.
+ */
+const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> =>
+  Arr.flatMap(Str.split(text, /\n\s*\n/), (block) => {
+    const term = /^\*\*([^*\n]+)\*\*:/.exec(Str.trim(block))?.[1];
 
-  return Arr.flatMap(lines, (line, i) => {
-    if (!pipe(line, Str.startsWith("|")) || separator(line) || separator(lines[i + 1])) {
-      return [];
-    }
-
-    const term = Str.trim(Str.split(line, /(?<!\\)\|/)[1] ?? "");
-
-    return term === "" ? [] : [{ path, title: term, words: wordsIn(line), decision: undefined }];
+    return term === undefined ? [] : [{ path, title: Str.trim(term), words: wordsIn(block), decision: undefined }];
   });
-};
 
-/** What `find` ranks in one file from main: one entry for a record, one per row for the glossary. */
+/** What `find` ranks in one file from main: one entry for a record, one per term for a glossary. */
 export const readEntries = (path: string, text: string): ReadonlyArray<Entry> => {
-  if (path === GLOSSARY) {
+  if (isGlossary(path)) {
     return glossaryEntries(path, text);
   }
 
@@ -788,12 +785,12 @@ const filesAt = Effect.fn("records.filesAt")(function* (
 /** The folder's records on origin/main, in the order a reader expects. */
 const recordsAt = (repo: string, folder: Folder) => filesAt(repo, [`${folder}/`], (paths) => inOrder(folder, paths));
 
-/** Every entry `find` ranks, from origin/main: the searched folders' records and the glossary's rows. */
+/** Every entry `find` ranks, from origin/main: the searched folders' records and every glossary's terms. */
 const entriesAt = (repo: string, readOnly: boolean) =>
   filesAt(
     repo,
-    [...Arr.map(searched, (folder) => `${folder}/`), GLOSSARY],
-    (paths) => Arr.filter(paths, (path) => path === GLOSSARY || Arr.some(searched, (folder) => isRecord(folder, path))),
+    [],
+    (paths) => Arr.filter(paths, (path) => isGlossary(path) || Arr.some(searched, (folder) => isRecord(folder, path))),
     readOnly,
   ).pipe(Effect.map((files) => Arr.flatMap(files, (file) => readEntries(file.path, file.text))));
 

@@ -73,6 +73,9 @@ when to keep going and how to write for a reader who saw none of the work.
   each new one a line under `## Existing tools`: the path or name, what you searched, and the one
   you found or why none fits. A new function inside a file that exists gets its line too.
   `plancheck.sh --draft` holds the line for a new code file in the files table.
+- **New domain words go in the glossary.** List each new word the plan coins (code names, plan
+  text, examples) under its context in `.glossary/TERMS.md`, with its `_Avoid_` words. The word is
+  the industry's where one exists, else a short everyday word. The review checks it.
 - Ask "is this a setting?" of each new choice, and say why not when it is not
   ([0069](../../../.decisions/0069-choices-are-settings.md)).
 - Say what fact is lost if it is not recorded now.

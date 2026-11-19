@@ -29,13 +29,11 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   is a bug to fix.
 - **The same word may mean different things in two contexts.** That is normal, not a clash, as
   long as the context map names the boundary and says how the word translates across it.
-- **The contexts and the map live in the glossary,** `.glossary/TERMS.md`: one section per
-  context, then a context map section, then the clashes still open inside one context.
-- **The glossary is `next/`'s language, split by version.** Its sections hold `next/`'s words,
-  from the decided notes, and a word that means the same in both versions lives only there. Its
-  last section, "Today's version says", is the anticorruption layer for today's code: one row per
-  place where today's code says another word, deleted with that code. It is a section, not a
-  file, because `fabrika glossary check` reads only `TERMS.md` and `LANGUAGE.md`.
+- **The map is `.glossary/TERMS.md`; each context's words live in its own `GLOSSARY.md`,** written
+  when they are decided. The map names the contexts and how they relate.
+- **The old glossary is gone from the tree** (reset 2026-11-18, it stays in git history). It was
+  one 650-line file and read as noise. Words are decided again, one context at a time, and today's
+  code's words are translated in the context that meets them.
 - **First case: inbox keeps both meanings.** In the ledger context it is a stream others write to
   (`build:7/inbox`, the transactional inbox pattern). In the tracker context it is a person's list
   of things waiting (Linear's Inbox). The asks program is named `inbox`, and the owner's desk is
@@ -100,16 +98,14 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   analogy.*
 
 - **The package.** A package belongs to one context, or to the shared names.
-- **The glossary section.** A row sits in the section of the context that owns the word. A word
-  used in two contexts has a row in each, and its context in parentheses in the key, such as
-  `inbox (ledger)` and `inbox (tracker)`.
+- **The glossary.** A term sits in the `GLOSSARY.md` of the context that owns the word. A word
+  used in two contexts has a term in each, and a line in the map.
 
 ## What holds it
 
-- **The glossary's sections and its context map.** `fabrika glossary check` refuses one key in
-  two sections (`duplicate-key ... also declared in "<section>"`), so a word in two contexts must
-  carry its context in its key. That is the glossary skill's own answer to a word with two
-  senses: qualify both by namespace and keep the word.
+- **The map and each context's glossary.** Review checks that a new domain word is in its
+  context's `GLOSSARY.md` with an `_Avoid_` line (the review skill). No program checks the glossary's
+  shape yet.
 - **Later, a drift check.** A weekly `fabrika glossary drift` run that files a ticket for each new
   word without a row. Not built; its own change.
 - **Review.** Names are checked on every pull request, prose included (AGENTS.md, "Names").
