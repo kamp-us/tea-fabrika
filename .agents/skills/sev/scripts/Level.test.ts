@@ -333,9 +333,13 @@ describe("the sev0's fixes (0603, 0611)", () => {
   );
 });
 
-/** A route's inputs: an open sev0's log, or else the fix lines of a closed one, and the issue list it reads or fails to. */
+/**
+ * A route's inputs: an open sev0's log, with the fix lines a log may hold before it (a sev0 outranks a
+ * sev1), or else the fix lines of a closed one; and the issue list the route reads, or fails to.
+ */
 const Given = Schema.Struct({
   sev0Open: Schema.Boolean,
+  before: Schema.Array(FixLine),
   sev0: Sev0Log,
   fixes: Schema.Array(FixLine),
   issues: Schema.Array(NUMBER),
@@ -343,16 +347,23 @@ const Given = Schema.Struct({
 });
 
 const routeLog = (given: typeof Given.Type): ReadonlyArray<Level.Entry> =>
-  given.sev0Open ? sev0Log(given.sev0) : given.fixes.map((f) => fixLine(f.branch, f.issues));
+  given.sev0Open
+    ? [...given.before.map((f) => fixLine(f.branch, f.issues)), ...sev0Log(given.sev0)]
+    : given.fixes.map((f) => fixLine(f.branch, f.issues));
 
 const readIssues = (given: typeof Given.Type) =>
   given.unreadable ? Result.fail("gh issue list exited 1") : Result.succeed(distinct(given.issues).map(issue));
 
-const ROUTE_CASES = ["a sev0 open", "a sev1 fix named", "an unreadable list with a fix line"];
+const ROUTE_CASES = [
+  "a sev0 open",
+  "a sev0 open over a fix line",
+  "a sev1 fix named",
+  "an unreadable list with a fix line",
+];
 
 const routeReaches = (given: typeof Given.Type): ReadonlyArray<string> => {
   if (given.sev0Open) {
-    return ["a sev0 open"];
+    return given.before.length > 0 ? ["a sev0 open", "a sev0 open over a fix line"] : ["a sev0 open"];
   }
 
   if (given.unreadable) {
