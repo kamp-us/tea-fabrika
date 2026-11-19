@@ -725,8 +725,8 @@ what counts as a hit.
 - One Electron test app and one Docker box at a time. Every wait or poll loop runs in the background.
 
 These run on a laptop a person is using. A prompt can't see the load, so every agent brief carries
-these caps. Each one came from a laptop that became unusable. The caps in
-[`AGENTS.md`](../../../AGENTS.md#go-easy-on-the-machine) are the short form. The full caps, moved from there word for word:
+these caps. Each one came from a laptop that became unusable. This list is their one home, and
+[`AGENTS.md`](../../../AGENTS.md#go-easy-on-the-machine) points every agent here:
 
 - **Tests:** `nice -n 15 pnpm exec vitest run --maxWorkers=3`, a narrow path while you work, then
   `--changed origin/main` once at the end. Never the full suite locally: the test config refuses it. When a change makes `--changed` the
