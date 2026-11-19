@@ -1,7 +1,11 @@
 # The box an agent runs in is its only fence
 
-What an agent may touch is enforced by the box it runs in, outside the agent's harness; a harness's own hooks, tool lists and permission rules count for nothing. A harness's guard can be switched off by the harness, a setting or a prompt, so only a fence the agent cannot reach is a fence.
+The box is the fence: what a program may read, write or reach is set by its box, and the box goes around the fabrika program, not around an agent harness. A Claude Code hook, the Agent SDK's Bash sandbox or a harness's own tool list works for that harness only, and every harness reaches ours through ACP; a harness fence may stay as a second layer, but nothing counts on it.
 
 ## Considered Options
 
-- Trusting the harness's own permission rules: rejected, because the agent runs inside them.
+- Trusting the harness's own permission request (ACP's `session/request_permission`): rejected, because it is not a wall. It lets our side see and answer a tool call, but the agent decides when to ask.
+
+## Consequences
+
+No harness needs box code of its own, and a new harness works in every box the day it works at all.

@@ -1,3 +1,7 @@
 # Every protocol is one a browser tab can speak
 
-Every protocol between fabrika's pieces must be one a browser tab can speak: no raw TCP, no Unix socket, and nothing that only Node can call. A tab is the one client every person already has, so a protocol only a desktop process can speak would split fabrika into two apps, one of which a person may not be able to run.
+Every protocol fabrika speaks is written so that a browser tab could speak it, so a protocol may not need anything a browser lacks: no Node, no Unix socket, no files, and no ping at the WebSocket level. The browser is the narrowest place a client can run, so a protocol a browser can speak runs in Node, in workerd, in a test, and on a phone, without changes. The backbone is cheap to keep open now and expensive to open later: a protocol that leans on a Unix socket or a key file works until the first browser client, and then every layer above it changes.
+
+## Consequences
+
+When a browser tab could not be a client of a design, the protocol changes, not the browser. CI gets one more test job, with a browser, once the protocol code exists, and a browser client needs its person to grant its key.

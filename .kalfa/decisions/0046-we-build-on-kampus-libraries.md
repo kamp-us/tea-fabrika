@@ -1,8 +1,12 @@
-# We build on kampus libraries and fix them upstream
+# We build on kampus libraries and contribute our fixes back
 
-fabrika builds on the kampus community's own libraries, tea for programs and Manti for the UI, and when one falls short we fix it upstream instead of wrapping or forking it. They are made by people we work with, so a fix lands where every user of the library gets it, and the price is waiting on their releases.
+fabrika builds its programs on tea and its UI on Manti. When tea or Manti falls short of what our work needs, we patch our installed copy with `pnpm patch` and keep building, and we file the same change upstream the same day, because a fix we keep only for ourselves helps nobody else and drifts on each release.
 
 ## Considered Options
 
-- Widely used libraries from outside kampus for state machines and UI: rejected, because we could not shape them to fabrika.
-- A wrapper of our own around tea or Manti: rejected, because it hides the library and drifts from it.
+- Waiting for upstream's release: rejected, because a release is someone else's schedule and our own work should not wait on it.
+- A wrapper of our own over Manti: rejected, because it would work around Manti.
+
+## Consequences
+
+The pull request that bumps to the version with the fix deletes the patch. Each patch is re-applied on every install and can break on a version bump; pnpm fails the install when a patch no longer applies, so the break is loud. A pull request to Manti brings evidence from the patch and asks the owner first. Manti is 0.x, so a minor can break: the catalog pins it exact, and the bundle cost is the one real price.
