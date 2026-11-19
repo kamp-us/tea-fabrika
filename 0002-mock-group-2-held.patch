@@ -1,0 +1,473 @@
+diff --git a/.oxlintrc.json b/.oxlintrc.json
+index da0b03ca4..5dc655e7c 100644
+--- a/.oxlintrc.json
++++ b/.oxlintrc.json
+@@ -2956,10 +2956,11 @@
+       // reach zero, as a pair of blocks, since these folders took two different lists of this rule before and an
+       // override replaces a rule's options. A folder joins `files` of both blocks in the slice that takes it to
+       // zero, and leaves the JSON.parse warn blocks above for these two, so its JSON.parse is a blocking line from
+-      // then on: a warn line with no fire left in its folder fails `pnpm lint` (advice.ts, `stale`).
++      // then on: a warn line with no fire left in its folder fails `pnpm lint` (advice.ts, `stale`). `node/*` is
++      // the top files of `node/` alone (a `*` does not cross a folder), which hold no JSON.parse fire.
+       // This one is for every file of the folder: the entries the folder's test files took from the JSON.parse
+       // warn block (the same six, at error now), then the `vi` ones. The vitest rule is set here only.
+-      "files": ["next/packages/libfabrika/src/node/repositories/**"],
++      "files": ["next/packages/libfabrika/src/node/repositories/**", "next/packages/libfabrika/src/node/*"],
+       "rules": {
+         "vitest/no-restricted-vi-methods": [
+           "error",
+@@ -3019,7 +3020,7 @@
+       // The copy of the block above for the folder's files but its `*.test.ts`, with the two `process` entries
+       // added, as M13's blocks do for libfabrika (the entries the folder's product files took). It comes after
+       // the block above, so a product file takes this one.
+-      "files": ["next/packages/libfabrika/src/node/repositories/**"],
++      "files": ["next/packages/libfabrika/src/node/repositories/**", "next/packages/libfabrika/src/node/*"],
+       "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+       "rules": {
+         "eslint/no-restricted-properties": [
+@@ -3484,9 +3485,9 @@
+       }
+     },
+     {
+-      // The same lock for the e2e folder's node/ files, which take the `next/**/*` error block
+-      // above: its Data.TaggedError, JSON.parse and four Reflect entries are written out again.
+-      "files": ["next/apps/fabrika/e2e/node/**"],
++      // The same lock for the e2e folder's node/ files and the pipeline program, which take the `next/**/*`
++      // error block above: its Data.TaggedError, JSON.parse and four Reflect entries are written out again.
++      "files": ["next/apps/fabrika/e2e/node/**", "next/programs/pipeline/**"],
+       "rules": {
+         "vitest/no-restricted-vi-methods": [
+           "error",
+diff --git a/oxlint-plugins/builtin-plants.ts b/oxlint-plugins/builtin-plants.ts
+index 9a70ba3a1..029b37806 100644
+--- a/oxlint-plugins/builtin-plants.ts
++++ b/oxlint-plugins/builtin-plants.ts
+@@ -139,6 +139,10 @@ const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: bo
+   // rule misses the chain (oxc#29656) and the properties rule misses the alias, so neither refuses it.
+   // When oxc fixes the first, this line turns `true` in `VI_METHODS`, and the comment goes.
+   ['v.spyOn(console, "warn").mockImplementation(() => undefined);', false, false],
++  // Documented gaps of the pair, not lines it holds (the pipeline plan, L1): `vi` reached through a namespace
++  // import. Neither rule follows `V.vi`. A destructure of `vi` is read through by the properties rule.
++  ['V.vi.spyOn(console, "log");', false, false],
++  ["const { spyOn } = vi;", false, true],
+   // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
+   ["const n = vi.hoisted(() => 1);", false, false],
+   ["const o = vi.waitFor(() => 1);", false, false],
+@@ -151,7 +155,12 @@ const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: bo
+ const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean): Plant => ({
+   code,
+   file: "planted.test.ts",
+-  prelude: [TEST, 'import { vi as v } from "vitest";', "declare const other: { fn: () => void };"],
++  prelude: [
++    TEST,
++    'import { vi as v } from "vitest";',
++    'import * as V from "vitest";',
++    "declare const other: { fn: () => void };",
++  ],
+   lines: VI_LOCK.map((line) => [line[0], pick(line)]),
+ });
+ 
+diff --git a/oxlint-plugins/plants.test.ts b/oxlint-plugins/plants.test.ts
+index e99130455..82d620fdc 100644
+--- a/oxlint-plugins/plants.test.ts
++++ b/oxlint-plugins/plants.test.ts
+@@ -1001,10 +1001,15 @@ describe("M1 of the mock sweep: every folder a vi-methods block lists refuses th
+   it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
+     inConfigCopy(({ printed, lint }) => {
+       const globs = viGlobs(printed);
+-      // Coverage: the app's e2e folder, the first to reach zero in this slice, in both of its
+-      // blocks, and every block blocks.
++      // Coverage: the app's e2e folder, in both of its blocks, the pipeline program, and the top files of
++      // libfabrika's `node/`, and every block blocks.
+       expect(globs.map(({ glob }) => glob)).toEqual(
+-        expect.arrayContaining(["next/apps/fabrika/e2e/*", "next/apps/fabrika/e2e/node/**"]),
++        expect.arrayContaining([
++          "next/apps/fabrika/e2e/*",
++          "next/apps/fabrika/e2e/node/**",
++          "next/programs/pipeline/**",
++          `${LIBFABRIKA_SRC}/node/*`,
++        ]),
+       );
+ 
+       for (const { glob, level } of globs) {
+@@ -1114,12 +1119,14 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
+       // base blocks has one copy right after it for libfabrika's files but its tests, with the two
+       // `process` entries added (M13), so the order is each block and then its copy, and client/'s
+       // copy comes after the warn block's. Between the warn blocks and client/ sit the `vi` lock's four blocks
+-      // for libfabrika (V1): the pair for the folders at zero writes out again the entries its folders took, at
++      // for libfabrika (V1): the pair for the folders at zero (`node/repositories/**` and the top files of
++      // `node/`, two globs each) writes out again the entries its folders took, at
+       // error, and the pair for the top files and `gateway/`, `processes/` and `telemetry/`, which still advise on
+       // JSON.parse, writes them out again at warn. A list of folders after the warn blocks is that second pair,
+       // so no list of leftovers is among them. The two last are the mock sweep's `vi` lock for the
+-      // app's e2e folder (ticket 1067), which write out the ban's entries again for the set each of its
+-      // file sets takes: the warn block's for the folder's own files, `next/**/*`'s for `node/`.
++      // app's e2e folder and the pipeline program (ticket 1067), which write out the ban's entries again for the
++      // set each of its file sets takes: the warn block's for the e2e folder's own files, `next/**/*`'s for its
++      // `node/` and for the pipeline program, which share one block.
+       expect(
+         Arr.map(blocks, ({ files: globs }) => (globs.length === 1 ? globs[0] : "a list of folders")),
+         "the blocks that hold the ban for next/, in the order oxlint applies them",
+@@ -1128,14 +1135,14 @@ describe("L10 of the Reflect ban: after the fold the base blocks hold it for all
+         "next/packages/libfabrika/src/**",
+         "a list of folders",
+         "a list of folders",
+-        "next/packages/libfabrika/src/node/repositories/**",
+-        "next/packages/libfabrika/src/node/repositories/**",
++        "a list of folders",
++        "a list of folders",
+         "a list of folders",
+         "a list of folders",
+         "next/packages/libfabrika/src/client/**",
+         "next/packages/libfabrika/src/client/**",
+         "next/apps/fabrika/e2e/*",
+-        "next/apps/fabrika/e2e/node/**",
++        "a list of folders",
+       ]);
+ 
+       // The list is the JSON.parse warn block and its copy: they advise for that entry alone, and the
+@@ -1302,12 +1309,14 @@ describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block
+         ),
+       );
+ 
+-      // Coverage: the tooling's folder, the libfabrika folder that joined with node/repositories, and the top
+-      // files and three folders that joined at warn.
++      // Coverage: the tooling's folder, the libfabrika folders that joined at zero (node/repositories and the
++      // top files of node/), the pipeline program, and the top files and three folders that joined at warn.
+       expect(globs).toEqual(
+         expect.arrayContaining([
+           "oxlint-plugins/**",
+           `${LIBFABRIKA_SRC}/node/repositories/**`,
++          `${LIBFABRIKA_SRC}/node/*`,
++          "next/programs/pipeline/**",
+           ...Arr.map(ADVISING_FOLDERS, (folder) => (folder === LIBFABRIKA_SRC ? `${folder}/*` : `${folder}/**`)),
+         ]),
+       );
+diff --git a/patches/@demlik__tea@0.29.0.patch b/patches/@demlik__tea@0.29.0.patch
+index 76b154c3d..c9ad28a56 100644
+--- a/patches/@demlik__tea@0.29.0.patch
++++ b/patches/@demlik__tea@0.29.0.patch
+@@ -494,7 +494,7 @@ index 0000000000000000000000000000000000000000..1cc067e386727ed8c4058b52aacbb87c
+ +
+ +export { checkpointState, decide, decideAnswer, decodeCheckpoint, decodeFrame, encodeCheckpoint, encodeFrame, integer, isRefusal, ok, refusalMessage, response };
+ diff --git a/dist/chunk-BGEVMZVA.js b/dist/chunk-BGEVMZVA.js
+-index a8fdab085e6ef16029f1ed6597eae4b5607859b1..a947e7187ecaadfe091993996120995061341ea6 100644
++index a8fdab085e6ef16029f1ed6597eae4b5607859b1..4c6449ed9bdfbcc636b2236206cdebf8b6c141a8 100644
+ --- a/dist/chunk-BGEVMZVA.js
+ +++ b/dist/chunk-BGEVMZVA.js
+ @@ -1,6 +1,7 @@
+@@ -503,7 +503,7 @@ index a8fdab085e6ef16029f1ed6597eae4b5607859b1..a947e7187ecaadfe0919939961209950
+ -import { consumedSources, committedState, pendingMessages, logLedger, messageId } from './chunk-EYYLIM3D.js';
+ -import { RuntimeDiscardNotice, detachWork, DispatchDiscardedError, QuiescenceTimeoutError, isLoggedStore, StoreRefusedError, RuntimeDiscardedError, desiredSub, followUps, DrainTimeoutNotice, DisposeTimeoutNotice, deliveryId } from './chunk-MTKYWRTQ.js';
+ +import { consumedSources, committedState, pendingMessages, logLedger, deliveryIsOwed, messageId } from './chunk-EYYLIM3D.js';
+-+import { RuntimeDiscardNotice, detachWork, DispatchDiscardedError, owed, QuiescenceTimeoutError, isLoggedStore, StoreRefusedError, RuntimeDiscardedError, desiredSub, followUps, DrainTimeoutNotice, DisposeTimeoutNotice, deliveryId } from './chunk-MTKYWRTQ.js';
+++import { RuntimeDiscardNotice, detachWork, DispatchDiscardedError, owed, QuiescenceTimeoutError, isLoggedStore, StoreRefusedError, RuntimeDiscardedError, desiredSub, followUps, DrainTimeoutNotice, DisposeTimeoutNotice, deliveryId, warn } from './chunk-MTKYWRTQ.js';
+  
+  // src/internal/engine/installed-state.ts
+  var installedState = /* @__PURE__ */ Symbol(
+@@ -523,6 +523,15 @@ index a8fdab085e6ef16029f1ed6597eae4b5607859b1..a947e7187ecaadfe0919939961209950
+      async read() {
+        try {
+          return await logged.readLog();
++@@ -59,7 +69,7 @@ var liveWork = /* @__PURE__ */ Symbol("demlik-tea.liveWork");
++ var post = /* @__PURE__ */ Symbol("demlik-tea.post");
++ function defaultOnError(error, _context) {
++   if (error instanceof RuntimeDiscardNotice) {
++-    console.warn(error);
+++    warn(error);
++     return;
++   }
++   setTimeout(() => {
+ @@ -151,6 +161,7 @@ function startLoop(config) {
+    });
+    admissionReady.catch(() => {
+@@ -819,7 +828,7 @@ index fcea5db952bb60f48b693f7d3215f0dae66b7e37..b4953e46cb4070b55ee8b39d734caa8a
+ -//# sourceMappingURL=chunk-JEXGQ74S.js.map
+ \ No newline at end of file
+ diff --git a/dist/chunk-MTKYWRTQ.js b/dist/chunk-MTKYWRTQ.js
+-index 7ff81d9878f696ea81406eb79e6275c1d9845ac5..1cd32c7c8382b7b396e5aa15b884adf4471f00e0 100644
++index 7ff81d9878f696ea81406eb79e6275c1d9845ac5..c72c80b7dd0af6acc8fef91f8d2ca66cf05206f1 100644
+ --- a/dist/chunk-MTKYWRTQ.js
+ +++ b/dist/chunk-MTKYWRTQ.js
+ @@ -58,6 +58,14 @@ function without(rec, key) {
+@@ -868,7 +877,7 @@ index 7ff81d9878f696ea81406eb79e6275c1d9845ac5..1cd32c7c8382b7b396e5aa15b884adf4
+      settle: (cmd, returned) => {
+        const def = byType.get(cmd._tag);
+        if (def === void 0) return returned;
+-@@ -814,6 +846,4 @@ function tryInterpret(work, onOk, onErr) {
++@@ -814,6 +846,17 @@ function tryInterpret(work, onOk, onErr) {
+    };
+  }
+  
+@@ -876,7 +885,97 @@ index 7ff81d9878f696ea81406eb79e6275c1d9845ac5..1cd32c7c8382b7b396e5aa15b884adf4
+ -//# sourceMappingURL=chunk-MTKYWRTQ.js.map
+ -//# sourceMappingURL=chunk-MTKYWRTQ.js.map
+ \ No newline at end of file
+-+export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, assertDistinctCmdNames, checkedStep, cmdContractOver, cmdEdge, cmdEdgeOf, defineMachine, definePort, deliveryId, deliveryIdOf, describeError, describeMachine, desiredSub, detachWork, detachWorkOf, detectUpdateForm, foldMsgs, foldUpdates, followUps, formOf, isFencedStore, isLoggedStore, lookupCell, malformedResult, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subEntriesOf, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, validateSync, without, wrapDetached };
+++// A host may set where tea's own warnings go; unset, they go to console.warn as before.
+++var warnHook = (...args) => console.warn(...args);
+++function warn(...args) {
+++  warnHook(...args);
+++}
+++function setWarn(next) {
+++  const before = warnHook;
+++  warnHook = next;
+++  return () => {
+++    warnHook = before;
+++  };
+++}
+++
+++export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, assertDistinctCmdNames, checkedStep, cmdContractOver, cmdEdge, cmdEdgeOf, defineMachine, definePort, deliveryId, deliveryIdOf, describeError, describeMachine, desiredSub, detachWork, detachWorkOf, detectUpdateForm, foldMsgs, foldUpdates, followUps, formOf, isFencedStore, isLoggedStore, lookupCell, malformedResult, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subEntriesOf, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, validateSync, without, wrapDetached, setWarn, warn };
++diff --git a/dist/chunk-MXYW7N7R.js b/dist/chunk-MXYW7N7R.js
++index 6c9093e39877d540321f016f671bb7d71b4853e0..a1a8361432c1826fd3fc87e01f002b64d2c868df 100644
++--- a/dist/chunk-MXYW7N7R.js
+++++ b/dist/chunk-MXYW7N7R.js
++@@ -1,4 +1,4 @@
++-import { foldMsgs, structuralHash } from './chunk-MTKYWRTQ.js';
+++import { foldMsgs, structuralHash, warn } from './chunk-MTKYWRTQ.js';
++ 
++ // src/compose/index.ts
++ function liftSlice(key, state, [slice, cmds]) {
++@@ -392,7 +392,7 @@ function fromTransport(opts) {
++       try {
++         t.close();
++       } catch (closeErr) {
++-        console.warn(
+++        warn(
++           `[fromTransport:${opts.name}] close during failed wiring failed`,
++           closeErr
++         );
++@@ -407,7 +407,7 @@ function fromTransport(opts) {
++       try {
++         t.close();
++       } catch (err) {
++-        console.warn(`[fromTransport:${opts.name}] close failed`, err);
+++        warn(`[fromTransport:${opts.name}] close failed`, err);
++       }
++     };
++   };
++@@ -421,7 +421,7 @@ function fromTransport(opts) {
++     send: (key, outbound) => {
++       const t = live.get(keyString(key));
++       if (t === void 0) {
++-        console.warn(
+++        warn(
++           `[fromTransport:${opts.name}] send dropped \u2014 no live transport for key`,
++           keyString(key)
++         );
++diff --git a/dist/chunk-SNGMBBFF.js b/dist/chunk-SNGMBBFF.js
++index 1e8c70e636b3706f257648c5c5d3acb228e4ab5a..5ce2efd39b65e33d7f1ffe725a6a2cfe5c89f149 100644
++--- a/dist/chunk-SNGMBBFF.js
+++++ b/dist/chunk-SNGMBBFF.js
++@@ -4,7 +4,7 @@ import { createResilientCall } from './chunk-HQAKC7X2.js';
++ import { deadlinesSub, subscribeDeadline } from './chunk-V6YFN77J.js';
++ import { rejectAll, unchecked } from './chunk-4LPY67E4.js';
++ import { run, driveToDone } from './chunk-TMA4VOTM.js';
++-import { Cmd, absurd, Outcome, assertDistinctCmdNames, cmdEdgeOf, detachWorkOf, defineMachine, validateSync, malformedResult, describeError, DriveFailedError } from './chunk-MTKYWRTQ.js';
+++import { Cmd, absurd, Outcome, assertDistinctCmdNames, cmdEdgeOf, detachWorkOf, defineMachine, validateSync, malformedResult, describeError, DriveFailedError, warn } from './chunk-MTKYWRTQ.js';
++ 
++ // src/internal/llm-call/index.ts
++ function createLlmCall(config, rng = Math.random) {
++@@ -1038,7 +1038,7 @@ function contained(what, listener) {
++     try {
++       listener(event);
++     } catch (err) {
++-      console.warn(`@demlik/tea: a run's ${what} listener threw`, err);
+++      warn(`@demlik/tea: a run's ${what} listener threw`, err);
++     }
++   };
++ }
++@@ -1162,7 +1162,7 @@ function forwardLadderErrors(handle, router, onToolError) {
++           name: call.name
++         })
++       ).catch((err) => {
++-        console.warn("@demlik/tea: a run's onToolError hook threw", err);
+++        warn("@demlik/tea: a run's onToolError hook threw", err);
++       });
++     }
++   });
++@@ -1184,7 +1184,7 @@ function withToolErrorHook(router, onToolError) {
++           name: calledName(cmd)
++         });
++       } catch (err) {
++-        console.warn("@demlik/tea: a run's onToolError hook threw", err);
+++        warn("@demlik/tea: a run's onToolError hook threw", err);
++       }
++       return returned;
++     };
+ diff --git a/dist/core-PxoTxrNB.d.ts b/dist/core-PxoTxrNB.d.ts
+ index 0d2e4ad3bac88e38de2382d6a1b3bddd6558574c..fd4885a5a941d0e78665cdbbb89c30c5e94ce7ef 100644
+ --- a/dist/core-PxoTxrNB.d.ts
+@@ -1034,7 +1133,7 @@ index 160cf4a8e33a10b02bc5fccec836755cd78c6889..8429789a9605610ada6796e6c9a005ab
+ -//# sourceMappingURL=index.js.map
+ \ No newline at end of file
+ diff --git a/dist/index.d.ts b/dist/index.d.ts
+-index 4df6b072702dae880dd30d65fa440fe616b395f0..a45ee18d7837427ec4beb94295a603b04c180bc1 100644
++index 4df6b072702dae880dd30d65fa440fe616b395f0..ad2a6d40a431cc16e359cca442eeb429269802b4 100644
+ --- a/dist/index.d.ts
+ +++ b/dist/index.d.ts
+ @@ -1,8 +1,8 @@
+@@ -1058,14 +1157,23 @@ index 4df6b072702dae880dd30d65fa440fe616b395f0..a45ee18d7837427ec4beb94295a603b0
+  /** Query applied sources in commit order with inclusive, gap-free query positions. */
+  declare function logUpdates<S, M, C>(log: LogRead<S, M, C>, range?: {
+      readonly fromSeq?: number;
+-@@ -758,4 +760,4 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
++@@ -758,4 +760,13 @@ interface TransportBattery<N extends string, TKey, Outbound, M, Ctx> {
+   */
+  declare function fromTransport<N extends string, TKey, Inbound, Outbound, M, Ctx>(opts: FromTransportOpts<N, TKey, Inbound, Outbound, M, Ctx>): TransportBattery<N, TKey, Outbound, M, Ctx>;
+  
+ -export { type Ack, type AckPartition, BootingRuntime, type CancelTimer, Cmd, type DefineManagedResourceOpts, DepKeyedSub, Dispose, type EventSourceFactoryOpts, type FromTransportOpts, type HistoryTracker, type ListenerTarget, LogRead, Machine, type ManagedResourceBattery, type ManagedResourceSub, NO_ACK, Port, type ReadStep, type ReconnectingWebSocketFactoryOpts, Runtime, type Seq, type SeqTagged, Sub, SubscribeHandler, type Transport, type TransportBattery, type TransportFactory, type TransportSub, type WebSocketFactoryOpts, type WebSocketSubData, ack, defineListener, defineManagedResource, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, initAck, liftSlice, logUpdates, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq };
+-+export { type Ack, type AckPartition, BootingRuntime, type CancelTimer, Cmd, type DefineManagedResourceOpts, DepKeyedSub, Dispose, type EventSourceFactoryOpts, type FromTransportOpts, type HistoryTracker, type ListenerTarget, LogRead, Machine, type ManagedResourceBattery, type ManagedResourceSub, NO_ACK, PendingEffectsRecorder, Port, type ReadStep, type ReconnectingWebSocketFactoryOpts, Runtime, type Seq, type SeqTagged, Sub, SubscribeHandler, type Transport, type TransportBattery, type TransportFactory, type TransportSub, type WebSocketFactoryOpts, type WebSocketSubData, ack, defineListener, defineManagedResource, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, initAck, liftSlice, logLedger, logUpdates, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq };
+++/**
+++ * Where tea's own warnings go: the seven places it wrote to `console.warn` past the runtime's
+++ * `OnError` sink (a run listener or an `onToolError` hook that threw, a transport that failed to
+++ * close or dropped a send, a `RuntimeDiscardNotice` with no sink). A host sets one function; unset,
+++ * they go to `console.warn` as before. It returns a function that puts the earlier one back.
+++ */
+++type Warn = (...args: ReadonlyArray<unknown>) => void;
+++declare function setWarn(next: Warn): () => void;
+++
+++export { type Ack, type AckPartition, BootingRuntime, type CancelTimer, Cmd, type DefineManagedResourceOpts, DepKeyedSub, Dispose, type EventSourceFactoryOpts, type FromTransportOpts, type HistoryTracker, type ListenerTarget, LogRead, Machine, type ManagedResourceBattery, type ManagedResourceSub, NO_ACK, PendingEffectsRecorder, Port, type ReadStep, type ReconnectingWebSocketFactoryOpts, Runtime, type Seq, type SeqTagged, Sub, SubscribeHandler, type Transport, type TransportBattery, type TransportFactory, type TransportSub, type WebSocketFactoryOpts, type WebSocketSubData, ack, defineListener, defineManagedResource, fromBroadcastChannel, fromEventSource, fromEventTarget, fromInterval, fromPort, fromReconnectingWebSocket, fromTimeout, fromTransport, fromWebSocket, historyTracker, initAck, liftSlice, logLedger, logUpdates, nextSeq, partitionByAck, readInOrder, reconcile, tagSeq, type Warn, setWarn };
+ diff --git a/dist/index.js b/dist/index.js
+-index 950705f8bbcf5f59c026b738cbfed30d610b265a..2a8b28fe4e1d5286fccb8631b4302a048cb7f650 100644
++index 950705f8bbcf5f59c026b738cbfed30d610b265a..a636987b007293a84260c3f9b99e167da9c52fe9 100644
+ --- a/dist/index.js
+ +++ b/dist/index.js
+ @@ -1,5 +1,5 @@
+@@ -1073,7 +1181,7 @@ index 950705f8bbcf5f59c026b738cbfed30d610b265a..2a8b28fe4e1d5286fccb8631b4302a04
+ -export { applyEffectEvent, emptyLedger, foldLedger, isOwed, logUpdates, pendingEffectsLedger, survivingEffects } from './chunk-EYYLIM3D.js';
+ -export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, defineMachine, definePort, deliveryIdOf, describeMachine, detectUpdateForm, foldMsgs, foldUpdates, formOf, isFencedStore, isLoggedStore, matchesIdentity, msgKeysOf, noop, refuse, replay, schemaMigrate, structuralHash, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, wrapDetached } from './chunk-MTKYWRTQ.js';
+ +export { applyEffectEvent, emptyLedger, foldLedger, isOwed, logLedger, logUpdates, pendingEffectsLedger, survivingEffects } from './chunk-EYYLIM3D.js';
+-+export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, defineMachine, definePort, deliveryIdOf, describeMachine, detectUpdateForm, foldMsgs, foldUpdates, formOf, isFencedStore, isLoggedStore, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, wrapDetached } from './chunk-MTKYWRTQ.js';
+++export { AsyncSchemaError, Cmd, CmdNameCollisionError, DispatchDiscardedError, DisposeTimeoutNotice, DrainTimeoutNotice, DriveFailedError, DriveStalledError, IdentityDropNotice, NoCellError, Outcome, OutcomeContractError, PortNameCollisionError, QuiescenceTimeoutError, Refusal, RuntimeDiscardNotice, RuntimeDiscardedError, StoreConflictError, StoreRefusedError, SubFailedError, UndeclaredFailureError, __resetPortRegistry, absurd, acceptedTypes, acceptsOf, applyCell, applyCellChecked, asReducer, defineMachine, definePort, deliveryIdOf, describeMachine, detectUpdateForm, foldMsgs, foldUpdates, formOf, isFencedStore, isLoggedStore, matchesIdentity, msgKeysOf, noop, owed, refuse, replay, schemaMigrate, structuralHash, subId, subIdOf, tryApplyCell, tryFoldMsgs, tryInterpret, wrapDetached, setWarn } from './chunk-MTKYWRTQ.js';
+  //# sourceMappingURL=index.js.map
+  //# sourceMappingURL=index.js.map
+ \ No newline at end of file
+@@ -1814,7 +1922,7 @@ index 0b369d727c03e71ff83a59a7cab69a79ebd6e175..07443913e5f535a88321075b9522b2c6
+  /**
+   * The dispatch-only view of a runtime. Use it as the type of a handle one
+ diff --git a/dist/testing/effect/index.js b/dist/testing/effect/index.js
+-index 36a39c2877d66a22508c1048e77ab0cd4fad6e09..ca68b515b8c660cc0476e376ccb73e773795f80b 100644
++index 36a39c2877d66a22508c1048e77ab0cd4fad6e09..1feb83645222190b2bf9b45f30986d24a25b968e 100644
+ --- a/dist/testing/effect/index.js
+ +++ b/dist/testing/effect/index.js
+ @@ -7,6 +7,7 @@ import '../../chunk-C7TIYIYD.js';
+@@ -1829,5 +1937,6 @@ index 36a39c2877d66a22508c1048e77ab0cd4fad6e09..ca68b515b8c660cc0476e376ccb73e77
+  }
+  
+  export { NoCmdsError, NotEffectSchemaError, NothingToDrawError, arbSchemaGuidedSequence, drive };
++\ No newline at end of file
+ -//# sourceMappingURL=index.js.map
+ -//# sourceMappingURL=index.js.map
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 7a7801172..a8be70f2a 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -364,7 +364,7 @@ patchedDependencies:
+   '@alchemy.run/cloudflare@2.0.0-beta.85': 54f0ba306cb70c8383a3b53bf22114369d5dd5ed10aeb0cd09b4d89cbc1d1878
+   '@demlik/code-graph@0.15.0': 2dd91ed537dd68f4b8b860974cedfdc84fa8e9dae3480db9a410d99734f3b59d
+   '@demlik/tea@0.25.0': a0705fe157e523553033f02a0e50155c9c1599c28f3825dc262e53089c5f75d3
+-  '@demlik/tea@0.29.0': 75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48
++  '@demlik/tea@0.29.0': 74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f
+   '@effect/platform-node@4.1.3': 01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01
+   '@manti-ui/react@0.13.0': 520d7a5a9bd1d87685cc28543cfe91901c23e101a365e53cdeff7f40c031eeef
+   '@manti-ui/styles@0.13.0': 09f034efa447d755f779db1008ce64ea7787a3b2407951fd8c94b46513bba91e
+@@ -380,7 +380,7 @@ importers:
+         version: 0.15.0(patch_hash=2dd91ed537dd68f4b8b860974cedfdc84fa8e9dae3480db9a410d99734f3b59d)
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@effect/platform-node':
+         specifier: 'catalog:'
+         version: 4.1.3(patch_hash=01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(redis@6.3.0(@opentelemetry/api@1.9.1))
+@@ -822,7 +822,7 @@ importers:
+         version: 5.20261027.1
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@effect/vitest':
+         specifier: 'catalog:'
+         version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))
+@@ -885,7 +885,7 @@ importers:
+         version: 2.0.0-beta.85(patch_hash=14384a567c64fa21b5aa3aff50ba52e0f3e5c8ac403e5ad4e5b572fee1c62dc1)(@distilled.cloud/cloudflare@1.0.0-rc.18(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c)))(@effect/platform-node@4.1.3(patch_hash=01679769b2c1a2b1cae15e9ee60052a73da7099390b5489b08ba2a49ef8cbc01)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(redis@6.3.0(@opentelemetry/api@1.9.1)))(@types/node@26.6.6)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(rolldown@1.2.13)(typescript@7.0.2)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kalfa/config':
+         specifier: workspace:*
+         version: link:../../../kalfa/config
+@@ -946,7 +946,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@effect/platform-browser':
+         specifier: 'catalog:'
+         version: 4.1.3(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))
+@@ -1032,7 +1032,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -1063,7 +1063,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -1109,7 +1109,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -1152,7 +1152,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -1180,7 +1180,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -1220,7 +1220,7 @@ importers:
+     dependencies:
+       '@demlik/tea':
+         specifier: 'catalog:'
+-        version: 0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
++        version: 0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)
+       '@kampus/libfabrika':
+         specifier: workspace:*
+         version: link:../../packages/libfabrika
+@@ -7090,7 +7090,7 @@ snapshots:
+       vitest: 5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1))
+       ws: 8.22.1
+ 
+-  '@demlik/tea@0.29.0(patch_hash=75ae7095088c4bc7a9aa54c15f47e41c6612af5953b6b1366af42b24889a6a48)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
++  '@demlik/tea@0.29.0(patch_hash=74c59e9f8253dc1c714c7d4600b3226e6cb96a0ec8ea114d0bf364064483e16f)(@opentelemetry/api@1.9.1)(effect@4.1.3(patch_hash=0bca9e617b753d0b6f5e035eda46ff2b33228477424c311c425f5097f4212b0c))(fast-check@4.10.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.0.5(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(vite@8.3.2(@types/node@26.6.6)(esbuild@0.28.2)(yaml@2.9.1)))(ws@8.22.1)':
+     dependencies:
+       '@standard-schema/spec': 1.1.0
+     optionalDependencies:
