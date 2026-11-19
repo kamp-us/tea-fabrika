@@ -60,7 +60,7 @@ const left = ticket.criteria.filter((c) => c.deliveredBy === null);
   what is left. With a criterion as data, a landing writes `deliveredBy`.
 - **It removes a whole kind of work.** Finding out why 500 reviews failed
   meant fetching their verdicts and sorting the prose with a classifier
-  ([experiment 54](../../experiments/README.md)). With a finding as data, that
+  (experiment 54 (in the notes)). With a finding as data, that
   is a query.
 - **It makes the ledger portable.** A local ledger stores these shapes as they
   are. The GitHub ledger stores them and also shows the view. See

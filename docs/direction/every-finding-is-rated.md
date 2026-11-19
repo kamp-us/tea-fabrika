@@ -50,7 +50,7 @@ const noise = (rule: Rule) => count(rule, "noise") / (count(rule, "fix") + count
 - **Google counts the same way.** A warning a person saw and did not act on is
   an "effective false positive" (Sadowski et
   al., "Lessons from Building Static Analysis Tools at Google", CACM 2018,
-  as quoted in [experiment 125](../../experiments/125-check-audit.md)). Its
+  as quoted in experiment 125 (in the notes)). Its
   Tricorder turns a check off when its "Not useful" clicks pass 10%.
 - **People skip noise instead of marking it.** If a skip counted for nothing,
   a noisy check would look clean, and could earn the right to block.

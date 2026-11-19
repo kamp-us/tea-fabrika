@@ -32,7 +32,7 @@ open = [f2]          // the same → stop, and tell a person
 
 The loop ends by itself. The first draft also said here that no number is
 chosen anywhere. **That was wrong.**
-[Experiment 58](../../experiments/58-shrinking-list-replay.md) found the
+Experiment 58 (in the notes) found the
 number. The usual list has one finding, and a list of one cannot get shorter
 without passing. So "stop when the list is not shorter" means one repair try.
 That is a number, and it is lower than today's cap of 2 or 3.
@@ -48,7 +48,7 @@ A cap in dollars or hours is the same guard in another unit. It is still a
 number someone has to guess.
 
 What a cap hides is why the loop runs.
-[Experiment 54](../../experiments/54-why-reviews-fail.md) read 218 second and
+Experiment 54 (in the notes) read 218 second and
 later failed reviews, and placed 312 of their findings by a rule of thumb.
 
 ```text
@@ -67,7 +67,7 @@ read by hand since
 
 **The 58% was a guess that turned out wrong.** Only six cases had been read
 when this note was written.
-[Experiment 57](../../experiments/57-repeat-findings-read-by-hand.md) drew 60
+Experiment 57 (in the notes) drew 60
 of the 181 and read each against the code at both commits. 32 were missed, 18
 were new since the earlier review, 3 had been raised before and 7 were not
 problems. For half of the 181 no quote is in any file, so the rule placed

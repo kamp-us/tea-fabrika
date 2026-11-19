@@ -17,7 +17,7 @@ the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked de
   started, and with none running, the line that starts one (walked back 2026-11-06: `summon` starts it, below). It is read off the line before tsh's
   shell words, like Claude Code's `!`. The log keeps the line as typed, the job the name meant then,
   and that the cost line was shown
-  ([experiment 210](../../experiments/210-at-claude-wrapper-or-primitive.md)). A Claude Code the
+  (experiment 210 (in the notes)). A Claude Code the
   person started themselves is out: reaching it would need a new push.
 - **Decided 2026-11-06, `summon` starts an agent, by name.** Starting an agent is its own line:
   `summon <agent> [model] [effort] as <name>`, such as `summon claude haiku as scout` or
@@ -43,7 +43,7 @@ the owner set three points, and more on 2026-11-05 to 2026-11-07, each marked de
 
 - **Decided 2026-11-05, the started claude works in the repo.** The agent `@claude` starts gets the
   person's repo folder and the fabrika connection, not today's scratch folder. It still has no
-  `answer` tool ([experiment 211](../../experiments/211-started-claude-sandbox.md)).
+  `answer` tool (experiment 211 (in the notes)).
 - **Decided 2026-11-05, its network is an allow list.** Not fully off: it reaches the hosts the
   repo's `.fabrika/fabrika.toml` names (the package registry, GitHub, docs) and nothing else, the
   way GitHub's coding agent has a firewall. The agent cannot write `.fabrika/`, so it cannot widen
@@ -122,7 +122,7 @@ chat program, since it cannot open without a spot. Nothing else above changes.
 Proposed: clicking a presence label as one way to talk at a spot, the syntax, the frame owning the
 box, the keys, and the accessibility wiring.
 
-Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md) and the Design
+Built from experiment 209 (in the notes) and the Design
 canvas "Shared tile guidelines". Neither is a measurement.
 
 ```text

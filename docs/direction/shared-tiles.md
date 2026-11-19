@@ -45,14 +45,14 @@ Its decided rules are in:,,,,.
 - **Changed 2026-11-08 (owner): it is a message, not a line.** What an agent, or a person, sends you
   is a message, and the inbox groups those rows under **Messages**, below Your turn. "Line" stays
   what a person types in the shell and what a writer hands the ledger
-  ([experiment 206](../../experiments/206-customization.md), step 5).
+  (experiment 206 (in the notes), step 5).
 
 Still proposed: the wording of [the rules](#the-rules-proposed).
 
 - **Walked back 2026-11-07:** "Proposed, leaned in the walk but not settled: the presence design
   (P2 plus P4, below), its color, and the per-writer swatch." All three are decided above.
 
-Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md), the shared tile
+Built from experiment 209 (in the notes), the shared tile
 study behind it, and the Design canvas "Shared tile guidelines", where every design was drawn.
 Neither is a measurement.
 

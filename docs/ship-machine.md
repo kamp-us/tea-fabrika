@@ -22,7 +22,7 @@ request, up to its first write. On real open pull requests it now reaches
 The write side is built, and **one of its two writes has run twice against a
 real repository**: one enqueue each on two pull requests, one docs-only and
 one code
-([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
+(experiment 56 (in the notes)).
 The other write, the re-run of red checks, has never run for real. A second
 service, `CodeHostWrites`, holds the two writes: put a head in the merge
 queue, and start red checks again. Its GitHub Layer is
@@ -92,7 +92,7 @@ ship enqueue  → exit 0   armed, go on to watch the queue
 ```
 
 What 961 real shipper runs showed
-([experiment 53](../experiments/53-lane-logs.md)): they end in one of seven
+(experiment 53 (in the notes)): they end in one of seven
 ways and no eighth. A run lasts about 8 minutes at the median, which is also
 the length of its wait limit, and in about a third of runs the watch ran out
 while the pull request was still in the queue.
@@ -772,9 +772,9 @@ What to know:
   is one Cmd that asks ship under its intent and waits for the answer under
   it, then one that tells ship to forget it. Killed at five points and started
   again, on fakes, it ends right at every one, as the child does
-  ([experiment 66](../experiments/66-operate-starts-ship.md)), and at four more
+  (experiment 66 (in the notes)), and at four more
   that tear a storage write in half
-  ([experiment 68a](../experiments/68a-storage.md)). It has never run live.
+  (experiment 68a (in the notes)). It has never run live.
 - **The field log says who shipped.** A stage the machine ran leaves a
   `shipper` row with no model and no cost, whose note names each phase the
   child stood in and how it ended. On both real runs that row said 0
@@ -786,7 +786,7 @@ What to know:
   or the gate's answer (field note 2026-10-12-05).
 
 Checked twice, on one line. In
-[experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)
+experiment 56 (in the notes)
 fabrika's `lane report` took `LANDED` from the driver when no shipper shell
 was started, on both runs: exit 0, the quest folded to complete, the record
 posted. Fabrika checked the word against GitHub before it wrote it, as its
@@ -798,7 +798,7 @@ written for real, and `QUEUED` is never written in this mode.
 Everything is built. Every part is tested against scripted answers. The reads
 have been run against a real repository. **One write has, twice**: one
 enqueue each on two pull requests in one repo, one docs-only and one code
-([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
+(experiment 56 (in the notes)).
 The other write, the re-run of red checks, has never run for real.
 
 | Part | What it does on GitHub | Built | Tested on scripted answers | Run on a real repository |
@@ -905,7 +905,7 @@ Three things to know before a real run. None of them came up in the first:
 
   In the real logs 31 single-ticket runs stopped for this. Ten then shipped
   from the stop with nothing else recorded
-  ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
+  (experiment 55 (in the notes)).
 - **Its reads come from the code host, not the ledger.** Checks, "can it
   merge" and the queue belong to wherever the code lives. See
   [`direction/ledger-behind-a-service.md`](./direction/ledger-behind-a-service.md).
@@ -980,7 +980,7 @@ Three things to know before a real run. None of them came up in the first:
 - **The set of outcomes.** The names above are a first list. Today's shipper
   has 13 ending words; the real logs show 7 endings in use. On the 961
   recorded runs no eighth ending came up, but three things did not fit
-  ([experiment 55](../experiments/55-ship-outcomes-on-recorded-runs.md)).
+  (experiment 55 (in the notes)).
   All three are now settled above or done: a closed or draft pull request, a
   limit on the queue wait, and two different waits sharing one kind (`for`
   is now a tag, and so is the `why` of `stuck`, so a parent can `switch`
@@ -1003,7 +1003,7 @@ Three things to know before a real run. None of them came up in the first:
 - **Does today's fabrika accept a "queued" fact written by code** instead of
   by a shipper agent? Still unchecked. Both real runs wrote `LANDED`,
   which fabrika took
-  ([experiment 56](../experiments/56-first-live-run-of-the-ship-machine.md)).
+  (experiment 56 (in the notes)).
   The machine never writes `QUEUED`, so neither run could ask.
 - **Does fabrika take the other nine lines from a driver?** `LANDED` is the
   only one written for real so far. Each of the others still needs a first

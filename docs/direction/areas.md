@@ -26,7 +26,7 @@ summary: "Today's version first. An area is a person's data on the project's led
 
 Its decided rules are in:,,,,,,,.
 
-Built from [experiment 205](../../experiments/205-organizing-work.md), which read about 40 makers
+Built from experiment 205 (in the notes), which read about 40 makers
 and tools and built four designs and three rounds in today's tracker, and a Design canvas, "Area
 guidelines", which is not published yet. Neither is a measurement. A tag such as `[l10]` points at
 that experiment's links.

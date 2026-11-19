@@ -107,11 +107,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       errors.push("pnpm lint must run workflow-lint.ts");
     }
 
-    // A pull request of ignored paths starts no run, so its rows are checked only here.
-    if (!lint.includes("node .github/ci/field-check.ts --local")) {
-      errors.push("pnpm lint must run field-check.ts --local: a pull request of rows alone starts no CI run");
-    }
-
     if (!read("oxlint-plugins/lint.ts").includes('import { checkTracked } from "./gitignore.mjs"')) {
       errors.push("full lint must use the shared tracked-file check");
     }

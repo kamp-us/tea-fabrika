@@ -1,7 +1,7 @@
 # Where we follow Kubernetes
 
 We take a few behaviors from Kubernetes: its restart backoff
-([experiment 100](../../../experiments/100-supervision-tree.md), C4 in
+(experiment 100 (in the notes), C4 in
 [the five layers](../a-local-first-sync-engine.md#layer-3-coordination-decided-2026-10-31)), its
 `resourceVersion` ([saved state](../saved-state.md)), its limits ([tea-program](../tea-program.md)),
 its labels and `status` ([label guidelines](../label-guidelines.md)), its node affinity
@@ -15,7 +15,7 @@ Seeded 2026-11-09 from the notes above, checked against main at `5b1171ed`.
 
 | Behavior | What Kubernetes does | What we do | Same or differs |
 |---|---|---|---|
-| Restart backoff | Doubling from 10 s, capped at 5 minutes ([restart policy][restart]) | Doubling from 100 ms, capped at 800 ms (`app/supervisor.ts:11`, `:103-107`) | differs, because a restart here is a wake in the same object, so the shape is Kubernetes' and the scale is not ([experiment 100](../../../experiments/100-supervision-tree.md)) |
+| Restart backoff | Doubling from 10 s, capped at 5 minutes ([restart policy][restart]) | Doubling from 100 ms, capped at 800 ms (`app/supervisor.ts:11`, `:103-107`) | differs, because a restart here is a wake in the same object, so the shape is Kubernetes' and the scale is not (experiment 100 (in the notes)) |
 | Backoff reset | Reset after 10 minutes running without a problem ([restart]) | Reset after 5 s live (`app/supervisor.ts:147-149`) | differs, because the scale follows the 800 ms cap |
 | A crash loop never gives up | `restartPolicy: Always` keeps trying at the capped wait ([restart]) | Past the brake, `down` until the window has room, then a new start, forever (`app/supervisor.ts:116-136`) | differs, because our wait between brakes stays near 5 s; 0016 picks OTP's give-up instead |
 | Which exits restart | `Always`, `OnFailure` or `Never`, picked per pod ([restart]) | Only a throw restarts, like `OnFailure`, with no choice (`app/supervisor.ts:84-131`) | differs, because restart types wait for Tier 4 ([OTP table](./otp.md)) |

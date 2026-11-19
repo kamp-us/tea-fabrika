@@ -19,7 +19,7 @@ operator" in [`../ship-machine.md`](../ship-machine.md).*
 *2026-10-12 (UTC): the first swap has run once, on one docs-only pull request.
 kamp-us/demlik#561 merged with the ship machine in the ship stage and no
 shipper agent, and fabrika took the one line the driver wrote for it. See
-[experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md).
+experiment 56 (in the notes).
 The swap stays off by default.*
 
 *2026-10-17: decided that `operate` becomes a small program: a loop that

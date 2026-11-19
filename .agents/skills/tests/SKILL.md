@@ -114,11 +114,9 @@ with its reason.
 
 ## Outside your task
 
-Something wrong outside your task is one finding row, never a fix:
-[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
+Something wrong outside your task is one finding with proof, never a fix.
 Outside means no law in the approved plan covers it. Something wrong in the plan is not a
-finding: it goes back to plan (step 5). Put the row in your report as one JSON line, its `id` the
-date and a short slug. The lead saves it unchanged as its own file in `field/findings/`.
+finding: it goes back to plan (step 5). Put it in your report. The lead records it in the notes.
 
 ## Go easy on the machine
 
@@ -158,10 +156,6 @@ These hold in every tests round, so the brief does not repeat them.
 - **Checks before the commit:** `pnpm format`, `pnpm lint` once, and the list ratchet CI runs that
   local lint does not:
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"` exits 0.
-- **Run row:** write the file the brief's `Run row:` field names, in the shape of the newest tests
-  rows (`ls field/runs | grep tests | tail -3`), with real start and end times from
-  `TZ=America/Los_Angeles date`, every law with its red reason, and every plant as
-  `{law, plant, result}` with `result` `red` or `green`. CI's `field` job checks its shape.
 - **Commit and push:** commit your own paths by name with plain `git commit`, a plain-word subject,
   no trailer naming a chat tool and no session link. Then
   `sh .agents/skills/lead/scripts/leakgrep.sh --commits origin/<branch>..HEAD` (never with no

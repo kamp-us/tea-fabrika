@@ -16,7 +16,7 @@ Its decided rules are in:,,,.
 
 Gathered from the notes in `docs/direction/` (the desktop layer, tile guidelines, the top bar's
 name, popovers, modes, keybindings, the ask desk, fold not tabs, tracker views), from
-[experiment 196](../../experiments/196-ask-desk.md), from
+experiment 196 (in the notes), from
 program guidelines (pull request 332, proposed, `docs/direction/program-guidelines.md` on its own
 branch), from the naming sweep's app rows (proposed), from
 the old glossary (git history at 52aebb8), and from today's
@@ -140,7 +140,7 @@ README have it, and no direction note owns the word.
 | keycap | One key drawn as a cap, with the Mac's glyphs: `⌃B` `A`. The bars write `C-b a`. | `kbd` (HTML); keycaps (Linear's stylesheet, [popovers](./popovers.md)) | [Popovers](./popovers.md#3-the-rule) | `pop.tsx:47` (`Caps`) |
 | footer | A popover's last row only: the key hints its rows do not show. Once the inbox list is a program, its footer is that program's toolbar. | none in the list | [Popovers](./popovers.md#3-the-rule) (a key no row shows sits in the footer) | `pop.tsx:157-170`; typed by hand in `frame.tsx:421-426` (`ASKS_FOOT`) |
 | glance | `next/`: a program's small view in the top bar's popover; the inbox list becomes the inbox program's glance. Keeps this meaning (decided). | none found; Linear's peek is the nearest (program guidelines, call 7, now moved to experiment 206) | [Ask desk](./ask-desk.md#one-asks-program-two-views); "any program may have one" moved to experiment 206 | Not built: today the inbox list is the frame's own menu |
-| toolbar | A row of buttons built from a program's `commands`, each with its key printed on it, `role="toolbar"`. It is the action bar and the keys line in one. | toolbar ([APG][apg-toolbar]; view toolbar, [VS Code][vsc-ux]) | old glossary (git history at 52aebb8); proposed in [experiment 196](../../experiments/196-ask-desk.md#patterns-found) P8 (75%), program guidelines G7 R1 and C11 | Not built |
+| toolbar | A row of buttons built from a program's `commands`, each with its key printed on it, `role="toolbar"`. It is the action bar and the keys line in one. | toolbar ([APG][apg-toolbar]; view toolbar, [VS Code][vsc-ux]) | old glossary (git history at 52aebb8); proposed in experiment 196 (in the notes) P8 (75%), program guidelines G7 R1 and C11 | Not built |
 | key hints | Words that name keys and cannot be pressed: the prefix line, a mode's keys on the status bar. | none needed | old glossary (git history at 52aebb8) | `frame.tsx:801-820` |
 
 That is 50 parts in four tables.

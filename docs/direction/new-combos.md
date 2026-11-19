@@ -109,7 +109,7 @@ const controls = (onBad: Result, onGood: Result): Controlled =>
   role. What the schema has no slot for cannot reach the agent.
 - **Writers get a full brief:** the ticket, the plan, and what triage or an
   earlier agent already found.
-  - In [experiment 140](../../experiments/140-clairic-ticket-mentions.md),
+  - In experiment 140 (in the notes),
     about two thirds of the files the planner cited are not named in the
     ticket. Only an earlier agent's finds can point at them.
   - Anthropic's research agents did each other's work twice when the brief
@@ -143,7 +143,7 @@ const ReviewBrief = Schema.Struct({diff: Diff, criteria: Criteria, plan: Plan});
     open pull request on an alarm and writes a `pr` fact when something
     changed ([tickets start in our tracker](./tickets-start-in-our-tracker.md));
   - [scheduled jobs](./scheduled-jobs-on-the-host.md);
-  - the drift job [experiment 139](../../experiments/139-tla-trace-validation.md)
+  - the drift job experiment 139 (in the notes)
     proposes, which checks a kept spec against real runs.
 
 ```ts

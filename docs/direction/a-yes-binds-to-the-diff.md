@@ -14,7 +14,7 @@ Its decided rules are in:,.
 
 **Proposed.** Decided by the owner on 2026-11-02 to build, in today's version and in `next/`
 alike. It is settled when it is built. From
-[experiment 165](../../experiments/165-review-binds-to-diff.md), whose lean was never written down
+experiment 165 (in the notes), whose lean was never written down
 as a decision until now.
 
 ```ts

@@ -204,7 +204,7 @@ PR 11b.
 | | `docs/` | Real shots from the built app, taken by `apps/fabrika/lane-e2e.ts`. |
 
 The lane's logic is in `packages/pipeline/src/stages/pipeline/`. The write-up is
-[experiment 175](../../experiments/175-pipeline-v0.md).
+experiment 175 (in the notes).
 
 ## Shots
 

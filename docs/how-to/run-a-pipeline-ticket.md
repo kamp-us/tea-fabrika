@@ -27,7 +27,7 @@ A live run changes a real repository. Each rule was learned from a run.
   say exactly what.
 - In every report and write-up, say which parts were this repo's machine and which were today's
   fabrika (its agents and its ledger behind the wrapper).
-- Log the run in [`field/`](../../field/README.md) the same day, with dollars and both token
+- Log the run in the field log (in the notes) the same day, with dollars and both token
   measures.
 
 ## The ticket
@@ -206,8 +206,8 @@ names and account names. Do not give the merge yes until that is clean.
 
 ## What to log
 
-The same day, in [`field/`](../../field/README.md), each row its own file named
-`<date>-<slug>.json` ([how to write a row](../../field/README.md#how-to-write-a-row)):
+The same day, in the field log (in the notes), each row its own file named
+`<date>-<slug>.json` (how to write a row (in the notes)):
 
 - **`runs/`, one `pipeline` row:** the quest as a whole, with `ticket` as `<owner>/<repo>#117`,
   `pr` as the PR it opened (or `null`), and `started` and `ended`. New rows write `ticket` and `pr`,

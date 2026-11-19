@@ -135,7 +135,7 @@ criterion for `serves`:
   adopt TLA+ now": its spec was a hand copy, and it is worth it only with trace
   validation.
 - **The planner picks `tool`** (decided 2026-10-25, from
-  [experiment 139](../../experiments/139-tla-trace-validation.md)).
+  experiment 139 (in the notes)).
   `"tla"` is only for a design with no code yet, about the order things
   happen in between actors or about "it ends". Everything else is `"test"`.
   A Property that names code that exists and says `"tla"` is sent back to the

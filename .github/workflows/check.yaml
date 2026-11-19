@@ -11,8 +11,7 @@ on:
   # the same head (changes.mjs's `jobs`, 0134's amendment of 2026-11-11). Adding a label
   # (`labeled`) runs it again, so the `visual` label starts the visual tests (0536): they are
   # opt-in on a pull request, and never run in the merge queue.
-  # A pull request that changes only plan files and field rows starts no run (ticket 988): CI runs
-  # nothing on them but the row check, which `pnpm lint` runs on the writer's laptop. GitHub
+  # A pull request that changes only plan files starts no run (ticket 988). GitHub
   # compares the whole pull request with its base, so a later push of any other path starts the
   # run. The list is changes.mjs's `ignored`; workflow-lint.ts holds this copy to it.
   pull_request:
@@ -275,10 +274,6 @@ jobs:
 
   # On a draft this job is lint alone, and it says so in its name: a draft's `lint` never stands in
   # for the ready run's `check` on the same head, which catchup.sh waits for.
-  # It also checks the field rows (field-check.ts), on changes' `field` flag: it runs when either
-  # flag is on, each step on its own flag, so field rows alone install only the CI package and run
-  # the row check. The rows had their own job, field, until each small job's about 30 s of setup and
-  # its machine slot were counted (ticket 985).
   check:
     name: ${{ github.event.pull_request.draft && 'lint' || 'check' }}
     needs: changes
@@ -290,7 +285,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # The row check diffs the change's base with its head. Blobless, as in changes.
+      # Blobless, as in changes.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -303,10 +298,6 @@ jobs:
       - name: install
         if: ${{ needs.changes.outputs.check != 'false' }}
         run: pnpm install --frozen-lockfile
-      # Field rows alone: the CI package and the root lockfile's supply-chain rules, nothing else.
-      - name: install the row check
-        if: ${{ needs.changes.outputs.check == 'false' }}
-        run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
       # The clones this change adds, as advice only (0587): jscpd with .jscpd.json, its baseline
       # built from the pull request's base. It prints warnings and never fails the job; with no base
       # (the merge queue, a push) it checks nothing. Before lint, so a red lint still shows it.
@@ -350,14 +341,6 @@ jobs:
       # packages. Nothing above needs them.
       - run: pnpm build
         if: ${{ needs.changes.outputs.build != 'false' }}
-      # Last, and after any failure above, so a red lint and red rows each show.
-      - name: field rows
-        if: ${{ !cancelled() && needs.changes.outputs.field != 'false' }}
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          EVENT: ${{ github.event_name }}
-        run: node .github/ci/field-check.ts
       - *stop
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides

@@ -547,7 +547,7 @@
       }
     },
     {
-      // In `packages/` and `experiments/`, a `.ts` file's `use` or `useKey` is Effect's or vitest's,
+      // In `packages/`, a `.ts` file's `use` or `useKey` is Effect's or vitest's,
       // not a hook: 19 of 19 fires there were false alarms. So hooks are checked in every window
       // file, and in `.ts` only where windows live.
       "files": ["**/*.tsx", "apps/**/*.ts", "programs/**/*.ts"],
@@ -586,12 +586,6 @@
       // `ownRules` is the one place that says where a Claude run's settings come from.
       "files": ["packages/fabrika/src/agents/claude/rules.ts"],
       "rules": { "fabrika/no-project-settings": "off" }
-    },
-    {
-      // no-secret-env and no-redacted-value are outside experiments, as they were under Biome:
-      // those two rules' first change left them out, and the README counts what they would find.
-      "files": ["experiments/**"],
-      "rules": { "fabrika/no-secret-env": "off", "fabrika/no-redacted-value": "off" }
     },
     {
       // The bearer token as a WebSocket subprotocol: a browser socket sends no header.

@@ -21,7 +21,7 @@ It builds on points the owner decided earlier, each named where it is used:
 
 Its decided rules are in:,,,,,,,.
 
-Built from [experiment 218](../../experiments/218-label-guidelines.md), which read about 20
+Built from experiment 218 (in the notes), which read about 20
 makers and counted labels on the 3,000 newest issues of kamp-us/phoenix, and a Design canvas,
 "Label guidelines", not drawn yet. Neither is a measurement. A tag such as `[l1]` points at that
 experiment's links.

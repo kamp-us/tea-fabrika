@@ -9,7 +9,7 @@ from experiment 186, merged in [PR 290](https://github.com/usirin/tea-fabrika/pu
 number is one of its principles. Revised again the same day with the owner's decisions on its
 three Linear clashes and on "record wide": PRs 3 and 5 grow, and PRs 7, 8 and 9 are new.
 Grown 2026-11-02 with PRs 10 and 11, from ticket 117's live run and
-[experiment 193](../../experiments/193-lane-holes.md): their scope is the owner's decision, their
+experiment 193 (in the notes): their scope is the owner's decision, their
 text waits on the owner's yes.
 
 ```text
@@ -529,7 +529,7 @@ P11, decided 2026-11-01: count now, no cap, at most two nudges.
 **Scope decided by the owner 2026-11-02; approved by the owner 2026-11-02, with every lean.** Today's version:
 `packages/pipeline`. From ticket 117's live run on 2026-11-02 and its exam pull request,
 [PR 313](https://github.com/usirin/tea-fabrika/pull/313), and from
-[experiment 193](../../experiments/193-lane-holes.md). It builds
+experiment 193 (in the notes). It builds
 [a yes binds to the diff](../direction/a-yes-binds-to-the-diff.md) (proposed, decided to build)
 and the exam pull request's rows of [the jidoka table](../direction/jidoka-and-andon.md#push-and-ship).
 PR 11 builds on it.
@@ -849,7 +849,7 @@ exam -> exam_review -> (yes) -> exam_merge -> test_writer
 row 9's cure, every machine-fixable and preventable row of
 [the jidoka table](../direction/jidoka-and-andon.md#every-place-todays-quest-stops-or-asks) that
 PRs 1 to 10 left, row 13's dead ends, and the new holes and record holes
-[experiment 193](../../experiments/193-lane-holes.md) found.
+experiment 193 (in the notes) found.
 
 ```text
 today:  after(step, outcome) is a switch; 99 of 153 pairs stop: 83 say only step_stuck, 14 sent_back
@@ -1116,7 +1116,7 @@ grep.
 
 The agent hours are restated 2026-11-01 at the measured rate, as
 [agent hours](../direction/agent-hours.md) decided, from
-[experiment 187](../../experiments/187-agent-hours.md). The rate that leads is 600 lines an agent
+experiment 187 (in the notes). The rate that leads is 600 lines an agent
 hour, demlik's full quests, since a quest here runs every step. This repo's median of about 1,660
 is beside it; it was mostly builders working alone. Each PR's step is the one on the doubling
 scale (0.25 to 8) that holds the middle of its range at that rate. The old hours stay, struck,

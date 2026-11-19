@@ -176,13 +176,11 @@ record: keep no other file. No script holds this yet, so do these steps by hand.
 
 ## Outside your task
 
-Something wrong outside your task is one finding row, never a fix:
-[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
+Something wrong outside your task is one finding with proof, never a fix.
 
-A survivor is this step's own answer and stays in its report, never a finding row. Outside
+A survivor is this step's own answer and stays in its report, never a finding. Outside
 means anything else you meet that is wrong.
-Put the row in your report as one JSON line, its `id` the date and a short slug. The lead saves it
-unchanged as its own file in `field/findings/`.
+Put it in your report. The lead records it in the notes.
 
 ## Go easy on the machine
 

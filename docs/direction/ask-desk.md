@@ -18,13 +18,13 @@ owner are fine, even many; the owner's call of 2026-10-30 stands
 a week, with no ask budget set yet); the owner makes every decision the system thinks needs them. What is needed is a desk where
 most asks are one key in one sitting ("approve", "do your rec", or "no, with a note"), and a desk
 that learns from the owner's answers so the system automates better over time. Folded in the same
-day, from [experiment 185](../../experiments/185-dsh-superagent-study.md)'s "steal 1": attention is
+day, from experiment 185 (in the notes)'s "steal 1": attention is
 a counted cost, per merged ticket, and a design that asks a person says what it costs them a week.
 It is data the desk records, not a budget that cuts asks. **Decided 2026-11-02**, later the same day,
 after a look step of six rounds: [the look](#the-look) (the selected row, one quiet box, the rec as a
 labeled row, two text grays) and five calls, Q1 to Q5, with their leans' numbers kept.
 
-Built from [experiment 196](../../experiments/196-ask-desk.md), which read about 18 makers and
+Built from experiment 196 (in the notes), which read about 18 makers and
 papers and checked ticket 117's real asks against them, and a private page, "Ask desk guidelines",
 with a small desk you can click and key through. Neither is a measurement. Round 2, the same day,
 after the owner's review: the desk is one asks program with two views, a glance in the top bar and a
@@ -189,7 +189,7 @@ Today nothing in the app opens a tile with content: the asks list only jumps to 
 the ticket, turns the tracker to it, or says no tile shows it (`apps/fabrika/src/window/frame.ts:357-382`),
 and [popovers](./popovers.md) records that it "never opens a new tile: the app has no path for that
 yet". "Open all" is the first. It needs five rules, each tried in the page's demo and written up in
-[experiment 196's patterns found](../../experiments/196-ask-desk.md#patterns-found).
+experiment 196's patterns found (in the notes).
 
 | Rule | Lean |
 |---|---|
@@ -204,7 +204,7 @@ yet". "Open all" is the first. It needs five rules, each tried in the page's dem
 **Decided 2026-11-02.** The owner said yes after a look step
 ([guidelines skill](../../.claude/skills/guidelines/SKILL.md), step 5): six rounds of shots of the
 desk built in today's app, each beside today's app and the closest Linear docs image
-([experiment 196, round 3](../../experiments/196-ask-desk.md#round-3-the-look-step)). The chassis (the
+(experiment 196, round 3 (in the notes)). The chassis (the
 top bar, the bottom line, each tile's title bar) is unchanged.
 
 ```ts

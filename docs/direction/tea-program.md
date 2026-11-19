@@ -424,14 +424,14 @@ defaults.
 ## Why
 
 - A machine and a program are different things, like an array and a function.
-  [Experiment 62](../../experiments/62-tea-program-on-unchanged-tea.md) put a
+  Experiment 62 (in the notes) put a
   machine's fields inside the program, and every program had to be written as
   one machine. The ship stage, the review stage and `operate` were already
   programs written by hand, and `operate` uses two machines.
 - A desktop host like Tuval keeps programs running and keeps feeding them, like
   a shell takes prompt after prompt, and its screen keeps listening. Inputs
   taken once at start lose that; live inputs and a run handle keep it.
-- [Experiment 63](../../experiments/63-ship-as-a-program.md) made the ship stage
+- Experiment 63 (in the notes) made the ship stage
   a program with no change to tea or the ship machine. On 10 real pull
   requests, the new `run.ts` printed the same bytes as the old one, in both
   the start-once and the live-input versions.
@@ -445,12 +445,12 @@ defaults.
   person, a window). If any writer could close it, one pipe ending would cut
   off the rest. A pipe only ends its own writer; the input closes after the
   last one, as Unix does. Two review runs piped into one ship both got through,
-  whichever ended first ([experiment 66](../../experiments/66-operate-starts-ship.md)).
+  whichever ended first (experiment 66 (in the notes)).
 - Only the starter stops, for the same reason. A run handed on is how others
   tell it and listen to it, and a holder of a run that could stop it would cut
   off every other writer at once. `stop` moved off the run in experiment 66;
   `"stop" in run` is `false`, not only hidden by the type.
-- [Experiment 64](../../experiments/64-outputs-are-events.md) piped a stand-in
+- Experiment 64 (in the notes) piped a stand-in
   review program into the real ship program: five pull requests through,
   outcomes in order, and the pipe ended on its own when review did. `launch.ts`
   stopped counting answers, and the 10 real pull requests printed the same
@@ -466,7 +466,7 @@ defaults.
 - The keeping argument is required by type, not by a rule written down,
   because a run that forgets it works in every test until the first crash.
 - Storage is atomic and fenced because the folder outlives the process in
-  every way a crash can leave it: [experiment 68a](../../experiments/68a-storage.md)
+  every way a crash can leave it: experiment 68a (in the notes)
   ran experiment 66's table on a real folder and added four kills that tear a
   write in half (the record as the run opens, as an ask is indexed, as an
   answer is forgotten, and the state as the pull request enters the queue).
@@ -509,8 +509,8 @@ defaults.
 - A pipe into an input that does not ack can lose a value: when the sender
   keeps that its work ended before the receiver has kept the value, a kill
   between the two loses it.
-  [Experiment 75c](../../experiments/75c-pipe-ids.md) found it; with ship's
-  `pr` acking, [experiment 75d](../../experiments/75d-pipe-ack.md) kills
+  Experiment 75c (in the notes) found it; with ship's
+  `pr` acking, experiment 75d (in the notes) kills
   `review | ship` before each of its writes in turn and loses none.
 - An outbox line for an output nobody wires at the next start stays in the
   record, unsent, until the run is removed. A `manual` reader that acks only
