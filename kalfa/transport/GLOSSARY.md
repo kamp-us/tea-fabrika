@@ -1,0 +1,38 @@
+# Transport
+
+How values move between two places: the socket, the connection and the gateway, and the frames that cross them.
+Who is talking belongs to Identity, and mail and pipes between programs belong to Program.
+
+## Language
+
+**Transport**:
+A protocol for moving frames between two places, plus the Layers that make its sockets, such as WebSocket and WebRTC.
+_Avoid_: link, channel, network layer, Rpc
+
+**Socket**:
+One end of a two-way stream of frames between two places.
+_Avoid_: pipe, port
+
+**Connection**:
+One client's socket, held open at the gateway.
+_Avoid_: link, session, line
+
+**Gateway**:
+The front door every client connects to; it admits or refuses each one.
+_Avoid_: door, server, proxy, broker
+
+**Connect**:
+A client opening a connection to the gateway; the client always connects, and the brain never calls out.
+_Avoid_: dial, call, knock, link
+
+**Ping**:
+The check that a connection is still alive; a connection that sends no pong back counts as dead.
+_Avoid_: heartbeat, keepalive, beat
+
+**Relay**:
+Passing frames along for two places that cannot reach each other directly.
+_Avoid_: proxy, bounce, tunnel
+
+**Frame**:
+One piece of text on a socket, holding one JSON-RPC message.
+_Avoid_: message, packet, letter
