@@ -1,9 +1,12 @@
-// Today's lead tooling. The laws of the levels (decision 0532 for sev0; the sev1 rule is being
-// recorded): how the log folds to one sev0, and how the level comes out of it and the open issues.
-// Pure, apart from one law on the log file in a temporary folder.
+// Today's lead tooling. The laws of the levels (decision 0532 for sev0; 0611 for the sev1 fix, the
+// sev0's fixes and the admin route): how the log folds to one sev0, and how the level comes out of it
+// and the open issues. Pure, apart from one law on the log file in a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path, Result, Schema, Array as Arr, pipe } from "effect";
+import { runsFor } from "@kampus/vitest";
+import { Effect, FileSystem, Option, Path, Result, Schema, Array as Arr, pipe } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Land from "../../lead/scripts/land.ts";
 import * as Level from "./Level.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
@@ -131,6 +134,285 @@ describe("level", () => {
             ) === Arr.join(Arr.map(numbers, String), ",");
     },
   );
+});
+
+// ---------------------------------------------------------------- 0611: the sev1 fix, the sev0's fixes, the admin route
+
+/** The laws of this part run 100 cases on seed 119120, as the plan's laws do (0611). */
+const LAW = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 100 }) } };
+
+const NUMBER = Schema.Int.check(Schema.isBetween({ minimum: 1330, maximum: 1340 }));
+
+/** A fix line as `sev.ts fix` writes it: the branch it names (null for a drop) and the issues it answers. */
+const FixLine = Schema.Struct({ branch: Schema.NullOr(BRANCH), issues: Schema.Array(NUMBER) });
+
+/** The fix lines of a log, oldest first, and the open ci-scheduled issues the sev1 has now. */
+const Fixes = Schema.Struct({ fixes: Schema.Array(FixLine), open: Schema.Array(NUMBER) });
+
+const fixLine = (branch: string | null, issues: ReadonlyArray<number>): Level.Entry =>
+  Level.Entry.cases.fix.make({ at: AT, branch, issues: [...issues] });
+
+/** Each number once, in the order given: a list of open issues names each one once. */
+const distinct = (numbers: ReadonlyArray<number>): ReadonlyArray<number> => [...new Set(numbers)];
+
+/**
+ * The branch a sev1 fix has to be named as, from the fix lines and the open issues: the newest line's
+ * branch, while an issue that line answers is open and no open issue is above every number it answered.
+ * Issue numbers only grow, so an issue above them was opened after the fix was named (0611).
+ */
+const namedBy = (fixes: ReadonlyArray<typeof FixLine.Type>, open: ReadonlyArray<number>): string | null => {
+  const last = Arr.last(fixes);
+
+  if (Option.isNone(last) || last.value.branch === null) {
+    return null;
+  }
+
+  const answered = last.value.issues;
+
+  return open.some((n) => answered.includes(n)) && open.every((n) => n <= Math.max(...answered))
+    ? last.value.branch
+    : null;
+};
+
+/** The cases the sev1 fix law must reach, each named as `sev1Reaches` names the generated value it reaches. */
+const SEV1_CASES = [
+  "no fix line",
+  "a drop",
+  "a fix named",
+  "an answer open with a newer issue",
+  "answers closed, nothing newer",
+  "answers closed, a newer issue open",
+];
+
+const sev1Reaches = (given: typeof Fixes.Type): ReadonlyArray<string> => {
+  const last = Arr.last(given.fixes);
+
+  if (Option.isNone(last)) {
+    return ["no fix line"];
+  }
+
+  if (last.value.branch === null) {
+    return ["a drop"];
+  }
+
+  const answered = last.value.issues;
+  const answersOpen = given.open.some((n) => answered.includes(n));
+  const newer = given.open.some((n) => n > Math.max(...answered));
+
+  if (answersOpen && !newer) {
+    return ["a fix named"];
+  }
+
+  if (answersOpen) {
+    return ["an answer open with a newer issue"];
+  }
+
+  return newer ? ["answers closed, a newer issue open"] : ["answers closed, nothing newer"];
+};
+
+describe("the sev1 fix (0611)", () => {
+  // Issue numbers only grow, so "opened after the fix was named" is "above every number the fix answered": no clock.
+  it.prop(
+    "property: a sev1 fix is named while an issue it answered is open and no open issue opened after it; a drop, or no fix line, names none",
+    Fixes.fields,
+    ({ fixes, open }) => {
+      expect(
+        Level.sev1Fix(
+          fixes.map((f) => fixLine(f.branch, f.issues)),
+          distinct(open).map(issue),
+        ),
+      ).toBe(namedBy(fixes, distinct(open)));
+    },
+    LAW,
+  );
+
+  it.effect(
+    "scenario: the sev1 fix law's generator reaches every case it must hold on, with the law's seed and count",
+    () =>
+      Effect.gen(function* () {
+        const sample = yield* Arbitrary.sampleEffect(Arbitrary.schema(Fixes), {
+          count: LAW.arbitrary.runs,
+          seed: LAW.arbitrary.seed,
+        });
+
+        const reached = new Set(sample.flatMap(sev1Reaches));
+
+        expect(SEV1_CASES.filter((c) => !reached.has(c))).toEqual([]);
+      }).pipe(Effect.orDie),
+  );
+
+  it("pinned: fabrikalfa/x answered 1333 and 1700; with 1333 still open and 1700 closed, an issue opened at 1800 expires it, so no fix is named (0611; the 2026-11-19 review)", () => {
+    const named = fixLine("fabrikalfa/x", [1333, 1700]);
+
+    expect(Level.sev1Fix([named], [issue(1333), issue(1800)])).toBeNull();
+    expect(Level.sev1Fix([named], [issue(1333)])).toBe("fabrikalfa/x");
+    expect(Level.sev1Fix([named], [issue(1333), issue(1700)])).toBe("fabrikalfa/x");
+    expect(Level.sev1Fix([named, fixLine(null, [])], [issue(1333)])).toBeNull();
+    expect(Level.sev1Fix([named], [])).toBeNull();
+  });
+});
+
+/** A move of an open sev0 that names a branch: `next` makes it the only one, `allow` adds a ready pull request. */
+const Step = Schema.Struct({ tag: Schema.Literals(["next", "allowed"]), branch: BRANCH });
+
+/** A log: an earlier sev0 (its steps, then a close) when `earlier` has steps, then the latest one, begun by `open --allow`. */
+const Sev0Log = Schema.Struct({ earlier: Schema.Array(Step), allow: Schema.Array(BRANCH), steps: Schema.Array(Step) });
+
+const stepLine = (step: typeof Step.Type): Level.Entry =>
+  step.tag === "next"
+    ? Level.Entry.cases.next.make({ at: AT, branch: step.branch, before: [] })
+    : Level.Entry.cases.allowed.make({ at: AT, branch: step.branch });
+
+const openedLine = (allow: ReadonlyArray<string>): Level.Entry =>
+  Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [...allow], issues: [] });
+
+const sev0Log = (given: typeof Sev0Log.Type): ReadonlyArray<Level.Entry> => [
+  ...(given.earlier.length === 0
+    ? []
+    : [openedLine([]), ...given.earlier.map(stepLine), Level.Entry.cases.closed.make({ at: AT, by: "lead" })]),
+  openedLine(given.allow),
+  ...given.steps.map(stepLine),
+];
+
+/** The fixes a sev0's lines name: the list its latest `open --allow` or `next` sets. A plain `allow` sets none. */
+const setBy = (lines: ReadonlyArray<Level.Entry>): ReadonlyArray<string> => {
+  const sets = lines.flatMap((e) =>
+    Level.Entry.guards.opened(e) ? [e.allow] : Level.Entry.guards.next(e) ? [[e.branch]] : [],
+  );
+
+  return Option.getOrElse(Arr.last(sets), () => []);
+};
+
+const SEV0_CASES = ["an earlier sev0", "a next", "an open --allow with branches", "a plain allow"];
+
+const sev0Reaches = (given: typeof Sev0Log.Type): ReadonlyArray<string> => [
+  ...(given.earlier.length > 0 ? ["an earlier sev0"] : []),
+  ...(given.steps.some((s) => s.tag === "next")
+    ? ["a next"]
+    : given.allow.length > 0
+      ? ["an open --allow with branches"]
+      : []),
+  ...(given.steps.some((s) => s.tag === "allowed") ? ["a plain allow"] : []),
+];
+
+describe("the sev0's fixes (0603, 0611)", () => {
+  // `open --allow` and `next` name the fixes of a sev0, the latest one; a plain `allow` names a ready pull request,
+  // and a sev0 before the latest one counts for none.
+  it.prop(
+    "property: an open sev0's fixes are the list its latest `open --allow` or `next` set; a plain `allow` names none, and an earlier sev0 counts for none",
+    Sev0Log.fields,
+    (given) => {
+      const lines = sev0Log(given);
+
+      const latest = lines.slice(
+        Option.getOrElse(
+          Arr.findLastIndex(lines, (e) => e._tag === "opened"),
+          () => 0,
+        ),
+      );
+
+      expect(Level.sev0Fixes(latest)).toEqual(setBy(latest));
+      expect(Level.sev0Fixes(lines)).toEqual(setBy(latest));
+    },
+    LAW,
+  );
+
+  it.effect(
+    "scenario: the sev0 law's generator reaches every case it must hold on, with the law's seed and count",
+    () =>
+      Effect.gen(function* () {
+        const sample = yield* Arbitrary.sampleEffect(Arbitrary.schema(Sev0Log), {
+          count: LAW.arbitrary.runs,
+          seed: LAW.arbitrary.seed,
+        });
+
+        const reached = new Set(sample.flatMap(sev0Reaches));
+
+        expect(SEV0_CASES.filter((c) => !reached.has(c))).toEqual([]);
+      }).pipe(Effect.orDie),
+  );
+});
+
+/** A route's inputs: an open sev0's log, or else the fix lines of a closed one, and the issue list it reads or fails to. */
+const Given = Schema.Struct({
+  sev0Open: Schema.Boolean,
+  sev0: Sev0Log,
+  fixes: Schema.Array(FixLine),
+  issues: Schema.Array(NUMBER),
+  unreadable: Schema.Boolean,
+});
+
+const routeLog = (given: typeof Given.Type): ReadonlyArray<Level.Entry> =>
+  given.sev0Open ? sev0Log(given.sev0) : given.fixes.map((f) => fixLine(f.branch, f.issues));
+
+const readIssues = (given: typeof Given.Type) =>
+  given.unreadable ? Result.fail("gh issue list exited 1") : Result.succeed(distinct(given.issues).map(issue));
+
+const ROUTE_CASES = ["a sev0 open", "a sev1 fix named", "an unreadable list with a fix line"];
+
+const routeReaches = (given: typeof Given.Type): ReadonlyArray<string> => {
+  if (given.sev0Open) {
+    return ["a sev0 open"];
+  }
+
+  if (given.unreadable) {
+    return given.fixes.length > 0 ? ["an unreadable list with a fix line"] : [];
+  }
+
+  return namedBy(given.fixes, distinct(given.issues)) === null ? [] : ["a sev1 fix named"];
+};
+
+describe("the admin route names a fix as Level says (0611)", () => {
+  it.prop(
+    "property: the admin route names a sev0's fixes as Level.sev0Fixes does and a sev1 fix as Level.sev1Fix does over the open issues; an unreadable list names no sev1 fix and still builds the route",
+    Given.fields,
+    (given) => {
+      const entries = routeLog(given);
+      const folded = Level.fold(entries);
+
+      expect(Result.isSuccess(folded)).toBe(true);
+
+      const sev0 = Result.getOrThrow(folded);
+      const read = readIssues(given);
+
+      expect(Land.routeFromLog(entries, sev0, read)).toEqual(
+        sev0._tag === "open"
+          ? { _tag: "admin", sev0: [...sev0.allow], sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)), sev1: null }
+          : {
+              _tag: "admin",
+              sev0: [],
+              sev0Fixes: [],
+              sev1: Result.isSuccess(read) ? Level.sev1Fix(entries, read.success) : null,
+            },
+      );
+    },
+    LAW,
+  );
+
+  it.effect(
+    "scenario: the route law's generator reaches every case it must hold on, with the law's seed and count",
+    () =>
+      Effect.gen(function* () {
+        const sample = yield* Arbitrary.sampleEffect(Arbitrary.schema(Given), {
+          count: LAW.arbitrary.runs,
+          seed: LAW.arbitrary.seed,
+        });
+
+        const reached = new Set(sample.flatMap(routeReaches));
+
+        expect(ROUTE_CASES.filter((c) => !reached.has(c))).toEqual([]);
+      }).pipe(Effect.orDie),
+  );
+
+  it("pinned: an unreadable issue list names no sev1 fix and still builds the admin route, so a docs-only merge is not refused (0611, fail closed; the 2026-11-19 review)", () => {
+    expect(
+      Land.routeFromLog(
+        [fixLine("fabrikalfa/x", [1333])],
+        Level.Sev0.cases.closed.make({}),
+        Result.fail("gh issue list exited 1"),
+      ),
+    ).toEqual({ _tag: "admin", sev0: [], sev0Fixes: [], sev1: null });
+  });
 });
 
 describe("the log file", () => {

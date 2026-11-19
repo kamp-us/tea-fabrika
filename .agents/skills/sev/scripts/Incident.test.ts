@@ -475,6 +475,37 @@ describe("fix", () => {
       ),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 60 }) } },
   );
+
+  // 0611, fail closed (the 2026-11-19 review): whether the named fix still stands depends on the open issues, so an
+  // unreadable list refuses `drop` and writes nothing. It is never read as no open issues, which names nothing.
+  it.effect.prop(
+    "property: with the open issues unreadable, drop refuses and says they could not be read, and the log is unchanged; once they read again the fix is still named",
+    { branch: Schema.Literals(["fabrikalfa/x", "fabrikalfa/y"]), reason: Schema.NonEmptyString },
+    ({ branch, reason }) =>
+      law(
+        Effect.gen(function* () {
+          const dir = yield* home;
+          yield* Incident.fix(dir, branch).pipe(Effect.provide(services({ issues: [red] })));
+          const before = yield* Level.log(dir);
+
+          const dropped = yield* Effect.result(
+            Incident.drop(dir).pipe(Effect.provide(services({ issues: { failing: reason } }))),
+          );
+
+          expect(dropped._tag).toBe("Failure");
+          expect(dropped._tag === "Failure" ? dropped.failure : null).toMatchObject({
+            _tag: "Refused",
+            reason: expect.stringContaining("could not be read"),
+          });
+          expect(yield* Level.log(dir)).toEqual(before);
+
+          expect(yield* Incident.status(dir).pipe(Effect.provide(services({ issues: [red] })))).toEqual(
+            Level.Level.cases.sev1.make({ issues: [red], fix: branch }),
+          );
+        }),
+      ),
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 60 }) } },
+  );
 });
 
 describe("open, next, allow and status", () => {

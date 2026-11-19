@@ -78,7 +78,7 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Result, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { Alerts } from "../../sev/scripts/Alerts.ts";
@@ -729,10 +729,39 @@ const armCommand = Command.make(
 );
 
 /**
- * The admin route the sev log gives, read in the main checkout. An open sev0 lists its branches and
- * which of them are fixes; with none open, a sev1 has the one fix `sev.ts fix` named while a
- * `ci-scheduled` issue is open. A branch the log does not name is no fix.
+ * The pure part of adminRoute: the admin route the sev log gives, from its lines, its folded sev0 and
+ * the read of the open ci-scheduled issues. An open sev0 lists its branches and which of them are
+ * fixes; with none open, a sev1 has the one fix `sev.ts fix` named while a `ci-scheduled` issue it
+ * answers is open. A branch the log does not name is no fix. A failed read refuses here.
  */
+export const routeFromLog = (
+  entries: ReadonlyArray<Level.Entry>,
+  sev0: Level.Sev0,
+  issues: Result.Result<ReadonlyArray<Level.Alert>, string>,
+): Result.Result<Merge.Route, string> => {
+  if (sev0._tag === "open") {
+    return Result.succeed(
+      Merge.Route.cases.admin.make({
+        sev0: sev0.allow,
+        sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)),
+        sev1: null,
+      }),
+    );
+  }
+
+  // Only a fix line names a sev1 fix, and it counts only while an issue it answers is open.
+  if (!entries.some(Level.Entry.guards.fix)) {
+    return Result.succeed(Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: null }));
+  }
+
+  return Result.isFailure(issues)
+    ? Result.fail(`the open ci-scheduled issues do not read: ${issues.failure}`)
+    : Result.succeed(
+        Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: Level.sev1Fix(entries, issues.success) }),
+      );
+};
+
+/** The admin route the sev log gives, read in the main checkout (see routeFromLog). */
 const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
   const unread = (reason: string) => new Refused({ check: "merge", reason, output: "" });
 
@@ -740,26 +769,24 @@ const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
     Effect.mapError((e) => unread(`the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`)),
   );
 
-  if (sev0._tag === "open") {
-    return Merge.Route.cases.admin.make({
-      sev0: sev0.allow,
-      sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)),
-      sev1: null,
-    });
+  // The issues are read only when a sev1 fix could be named: no open sev0, and a fix line in the log.
+  const mayName = sev0._tag === "closed" && entries.some(Level.Entry.guards.fix);
+
+  const issues: Result.Result<ReadonlyArray<Level.Alert>, string> = mayName
+    ? yield* (yield* Alerts).open.pipe(
+        Effect.provide(AlertsGh.layer(env.GH_REPO, env.MAIN)),
+        Effect.mapError((e) => e.reason),
+        Effect.result,
+      )
+    : Result.succeed([]);
+
+  const route = routeFromLog(entries, sev0, issues);
+
+  if (Result.isFailure(route)) {
+    return yield* unread(route.failure);
   }
 
-  // Only a fix line names a sev1 fix, and it counts only while an issue it answers is open.
-  const named = entries.some(Level.Entry.guards.fix)
-    ? yield* Effect.gen(function* () {
-        return yield* (yield* Alerts).open;
-      }).pipe(
-        Effect.provide(AlertsGh.layer(env.GH_REPO, env.MAIN)),
-        Effect.map((issues) => Level.sev1Fix(entries, issues)),
-        Effect.mapError((e) => unread(`the open ci-scheduled issues do not read: ${e.reason}`)),
-      )
-    : null;
-
-  return Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: named });
+  return route.success;
 });
 
 const mergeCommand = Command.make(
