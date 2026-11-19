@@ -3,7 +3,8 @@
 The map for any agent picking up work here. [`README.md`](./README.md) says what the repo holds, and
 [`docs/direction/README.md`](./docs/direction/README.md) says why it is built this way. What is next lives on the
 tracker: the app's own, through its `tracker_file`, `tracker_comment` and `tracker_close` tools. A ticket for this repo
-goes there, never in a GitHub issue ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)).
+goes there ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)). The one exception is a
+wayfinder map and its tickets, which live in GitHub issues, as [`.kalfa/issue-tracker.md`](./.kalfa/issue-tracker.md) says.
 
 ## Two versions, side by side
 
