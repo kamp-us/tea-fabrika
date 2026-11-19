@@ -81,15 +81,15 @@ export const env = {
   EVENT: `\${{ github.event_name }}`,
 };
 
-// The classifier also reads whether the pull request is a draft (0134's amendment of 2026-11-11).
+// The classifier also reads whether the pull request is a draft (the push-every-commit rule's amendment of 2026-11-11).
 export const classifier = { ...env, DRAFT: `\${{ github.event.pull_request.draft }}` };
 
-// A pull request that asked for its visual tests (0536). Only a pull request has labels, so this is
+// A pull request that asked for its visual tests (a test that needs a real resource runs only in main's full run). Only a pull request has labels, so this is
 // false in the merge queue and on main.
 export const VISUAL_LABEL = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
 // Where next's full fallback starts the visual legs: a push to main, and a pull request that asked
-// for them. A pull request without the label and a merge queue group never start them (0536).
+// for them. A pull request without the label and a merge queue group never start them (a test that needs a real resource runs only in main's full run).
 export const VISUAL_ROUTE = `(github.event_name == 'push' || ${VISUAL_LABEL})`;
 
 export const RELATED =
@@ -114,7 +114,7 @@ export const chromium =
 // The end-to-end legs `e2e-1` to `e2e-N` come first; the lint pins their shape, and the count law in
 // vitest.shards.test.ts (E4) pins N from measured seconds. The matrix is changes' size step's
 // `shards`, else its fallback: the full matrix on a push to main and on a pull request with the
-// `visual` label, and the vitest legs alone everywhere else, the merge queue among them (0536,
+// `visual` label, and the vitest legs alone everywhere else, the merge queue among them (a test that needs a real resource runs only in main's full run,
 // legs.ts).
 export const E2E_PREFIX = "e2e-";
 
@@ -159,8 +159,8 @@ export const ends = (all: readonly unknown[]): string[] =>
 export const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 
 // changes' flags from its first pass, each a job's or a step's.
-// No flag starts today's tests or its app end to end, which run on no event (0525, 0533), and none
-// starts the tooling tests, which only the schedule runs (0539).
+// No flag starts today's tests or its app end to end, which run on no event (today's version is frozen and takes no new work; CI runs none of today's version's tests), and none
+// starts the tooling tests, which only the schedule runs (the merge line runs no tooling tests, and the schedule runs them all).
 export const FLAGS = ["check", "typecheck", "build"];
 
 export const ROW_INSTALL = "pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts";

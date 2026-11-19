@@ -1,5 +1,5 @@
 /**
- * Declares a setting once, and the declaration is the Config that reads it (0086).
+ * Declares a setting once, and the declaration is the Config that reads it (a setting is declared once and read through Effect's ConfigProvider, flag, env, repo, then person).
  *
  * **Details**
  *

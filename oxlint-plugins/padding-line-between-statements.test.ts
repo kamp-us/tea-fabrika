@@ -27,7 +27,7 @@ const plant = mkdtempSync(join(import.meta.dirname, ".plant-"));
 afterAll(() => rmSync(plant, { recursive: true, force: true }));
 
 // The fix pass runs this rule alone. In `oxlint-plugins/` the repo's config also runs anti-slop's
-// `require-readable-spacing` (0563), whose fix adds lines of its own, and this law is about ours.
+// `require-readable-spacing` (we use the anti-slop plugin as it ships, never our own copy of its rules), whose fix adds lines of its own, and this law is about ours.
 const ours = join(plant, "ours.json");
 
 writeFileSync(

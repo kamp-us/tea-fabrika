@@ -1,5 +1,5 @@
 // mutbox.ts: run the mutation step's Stryker sample in a container with its own network, so
-// nothing is opened in the laptop sandbox (decision 0045). Today's lead tooling, not product.
+// nothing is opened in the laptop sandbox (a step that needs ports or its own processes and network isolation runs in a container). Today's lead tooling, not product.
 //
 //   node mutbox.ts run --checkout <repo> --ticket <n> --build <commit> --related <a.test.ts,b.test.ts>
 //                      --out <folder> --lock <file> [--base <commit>] [--seconds <n>] [--plan <file>]
@@ -9,7 +9,7 @@
 // 0), `skip` (40: the sampler found no product line) or `stuck` (30). It never runs the sample on
 // the host: Docker missing, stopped or not linux/arm64 is `stuck`.
 //
-// Existing tools first (0040). The fence is Docker's own flags (`--network none`, `--cap-drop
+// Existing tools first (an existing, widely used tool comes before a hand-written one). The fence is Docker's own flags (`--network none`, `--cap-drop
 // ALL`, `--memory`, `--cpus`, `--pids-limit`, `--rm`), the image is pnpm's own Docker recipe
 // (https://pnpm.io/docker: `pnpm fetch` from the lockfile, an offline install later), the copy of
 // the commit is `git fetch --depth 2`, and cleanup is `docker image prune`. Looked at and not
@@ -60,7 +60,7 @@
 // 24. the host has CI set (GitHub's runner does)  `--env CI=<value>` is passed, the one host
 //                                                  variable that crosses, so the container's host
 //                                                  guard (vitest.hostrun.ts) lets `.integration.`
-//                                                  laws start on that disposable runner (0594);
+//                                                  laws start on that disposable runner (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI);
 //                                                  with no CI, or an empty one, none is passed and
 //                                                  the guard refuses, as on the laptop
 // Every report carries `reach`, the line "the sample reached N of M changed files", naming each
@@ -694,7 +694,7 @@ const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
 /**
  * Run one command to its end. A command that cannot start answers 127. The child lives in this
  * call's scope: interrupted (a time limit), its process group gets SIGTERM, then SIGKILL after
- * KILL_GRACE_SECONDS, and the scope closes only once it is gone (0061).
+ * KILL_GRACE_SECONDS, and the scope closes only once it is gone (anything that holds a resource is acquired in a scope, so the scope releases it).
  */
 const sh = Effect.fnUntraced(
   function* (cmd: string, args: ReadonlyArray<string>, stdin?: string | Stream.Stream<Uint8Array>) {
@@ -760,7 +760,7 @@ const heldBy = Effect.fnUntraced(function* (lock: string) {
   return null;
 });
 
-/** One Docker box at a time (0012): a lock file outside the container, holding our pid. */
+/** One Docker box at a time (one type check, one Electron test app and one Docker box run at a time across all agents): a lock file outside the container, holding our pid. */
 const takeLock = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
   const write = fs.writeFileString(lock, String(process.pid), { flag: "wx" });

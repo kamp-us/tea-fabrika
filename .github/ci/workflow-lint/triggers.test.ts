@@ -90,8 +90,8 @@ it("pinned: ticket 988's list leaves out what changes.mjs or a reader still chec
 });
 
 const plants: Plant[] = [
-  // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
-  // 0536: `labeled` is how the `visual` label starts the visual legs.
+  // The push-every-commit rule's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
+  // A test that needs a real resource runs only in main's full run: `labeled` is how the `visual` label starts the visual legs.
   ...["opened", "synchronize", "reopened", "ready_for_review", "labeled"].map(
     (type): [string, (w: Workflow) => void] => [
       `pull requests lose the ${type} trigger`,

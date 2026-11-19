@@ -1,4 +1,4 @@
-// Beat.ts: a quest's heartbeat (ticket 685). Today's lead tooling (0064), read through its module:
+// Beat.ts: a quest's heartbeat (ticket 685). Today's lead tooling (the lead drives work by writing a flow that one program runs, and no agent holds a loop), read through its module:
 // `Beat.enter(...)`, `Beat.says(...)`.
 //
 // While a quest runs, the chain keeps one beat in the quest's chain record: what the chain is doing
@@ -17,7 +17,7 @@ import { Schema, String as Str, pipe } from "effect";
 
 /**
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
- * start's checks, or the box's removal at the end; the box sweep left the start with 0101), `wait` (a slot, the Electron
+ * start's checks, or the box's removal at the end; the box sweep left the start with the cleanup-timer rule), `wait` (a slot, the Electron
  * lock or a free typecheck), `box` (the box made), `agent` (the agent's turn), `collect` (the tree
  * read and signed) and `commit` (the backup push). The rest are the chain's own moves; `typecheck`
  * is the wait for CI's typecheck job at the pushed head.
@@ -58,7 +58,7 @@ export const EVERY = 30_000;
  * How long a beat, or an agent in its turn, may stay quiet before `says` calls the quest stuck.
  * A guess, to tune from the beats themselves: the longest quiet part of a start we measured was
  * 100 to 180 s before the agent acted (ticket 673), and one box sweep took about 22 s (2026-11-11),
- * before the sweep left the start (0101).
+ * before the sweep left the start (box cleanup runs on a timer and after a merge, never on a step's start path).
  */
 export const QUIET = 10 * 60_000;
 

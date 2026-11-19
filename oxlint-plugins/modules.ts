@@ -1,6 +1,6 @@
-// Ticket 477, next/. Decision 0043: a folder in libfabrika's `src/` is a module, one subject.
+// Ticket 477, next/. The rule that libfabrika has one folder per subject, and the rule file says who may import whom: a folder in libfabrika's `src/` is a module, one subject.
 //
-// Four laws, the ones no existing rule says (decision 0040). Two more laws of a module are oxlint's
+// Four laws, the ones no existing rule says (an existing, widely used tool comes before a hand-written one). Two more laws of a module are oxlint's
 // own, set in `.oxlintrc.json`: `eslint/no-restricted-imports` refuses another module's `internal/`,
 // and `unicorn/filename-case` holds a front file to PascalCase and an `internal/` file to camelCase.
 //
@@ -212,7 +212,7 @@ export const modules: CreateRule = {
       if (what !== null) {
         context.report({
           node: statement,
-          message: `${top} is a shared name and holds values only (0043, rule 13). This is ${what}: it belongs in the module that owns it.`,
+          message: `${top} is a shared name and holds values only (libfabrika has one folder per subject, and the rule file says who may import whom, rule 13). This is ${what}: it belongs in the module that owns it.`,
         });
       }
     };
@@ -223,8 +223,8 @@ export const modules: CreateRule = {
           context.report({
             loc: { start: START, end: START },
             message: isTopFile
-              ? `${given.src}/ holds no top file named ${top} (0043). A shared name is on the rule's list, and anything else goes in its module.`
-              : `${given.src}/ holds no folder named ${top}/ (0043). A file goes in the module of its subject, never a folder by kind.`,
+              ? `${given.src}/ holds no top file named ${top} (libfabrika has one folder per subject, and the rule file says who may import whom). A shared name is on the rule's list, and anything else goes in its module.`
+              : `${given.src}/ holds no folder named ${top}/ (libfabrika has one folder per subject, and the rule file says who may import whom). A file goes in the module of its subject, never a folder by kind.`,
           });
         }
 
@@ -252,7 +252,7 @@ export const modules: CreateRule = {
             context.report({
               node: statement,
               message:
-                "Every export in a module's internal/ file is @internal (0032, 0043). Put `/** @internal */` above it.",
+                "Every export in a module's internal/ file is @internal (libraries take Effect's file layout: PascalCase files, internal/ for private parts; libfabrika has one folder per subject, and the rule file says who may import whom). Put `/** @internal */` above it.",
             });
           }
 
@@ -278,7 +278,7 @@ export const modules: CreateRule = {
             if (other != null) {
               context.report({
                 node: statement,
-                message: `${module}/ re-exports a name of ${other}/. No module re-exports another module's names (0043, rule 8): the caller imports ${other}/'s front file.`,
+                message: `${module}/ re-exports a name of ${other}/. No module re-exports another module's names (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8): the caller imports ${other}/'s front file.`,
               });
             }
           }

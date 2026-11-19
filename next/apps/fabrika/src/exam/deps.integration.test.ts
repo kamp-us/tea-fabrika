@@ -1,7 +1,7 @@
 // p65, `next/` stands alone (docs/plan/tier-1-detail.md, "Packages" and p65). `package.json` alone
 // stops no Node import at a top level, so this test bundles the top levels for a browser. Item 9 of
 // the detail's exam; written by the exam (Tier 1, P1). Its manifest and import halves were lint
-// all along, so 0591 made them `pnpm lint:manifests` (oxlint-plugins/next-manifests.ts) and the rule
+// all along, so the exam-to-lint rule made them `pnpm lint:manifests` (oxlint-plugins/next-manifests.ts) and the rule
 // `fabrika/package-deps` (oxlint-plugins/package-deps.ts), with this file's planted trees as their
 // laws; what stays here is bundle output, which no lint rule sees. With `pnpm lint:layers` and
 // `fabrika/package-imports`.
@@ -133,7 +133,7 @@ const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string)
 const shown = (from: string, file: string): string => Arr.join(Str.split(relative(from, file), sep), "/");
 
 // Planted trees: each scan is seen to fire on a planted break before it is trusted on `next/`.
-// A tree is planted in the scope of the test that reads it, which removes it when the test ends (0061).
+// A tree is planted in the scope of the test that reads it, which removes it when the test ends (anything that holds a resource is acquired in a scope, so the scope releases it).
 const plant = (files: Readonly<Record<string, string | object>>) =>
   Effect.acquireRelease(
     Effect.sync(() => {
@@ -361,7 +361,7 @@ describe("the real next/", () => {
 
     expect(missing).toEqual([]);
   });
-  // pinned: one named public contract (0095, ticket 702). Bundled alone for a browser, the Ledger
+  // pinned: one named public contract (a service file holds only its contract, and each layer is its own file, ticket 702). Bundled alone for a browser, the Ledger
   // contract loads none of its implementation, so a tab that yields `Ledger` never carries SQL.
   // The entry must exist and the bundle must build: a missing entry or a failed bundle is red.
   it.live("pinned: contract only Ledger reaches no store", () =>

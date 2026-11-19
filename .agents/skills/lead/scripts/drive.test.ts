@@ -74,7 +74,7 @@ import {
 import { boxTree } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
-/** The answers these laws hand drive's cells, keyed by their schema's maker (0569, 0562). Each law
+/** The answers these laws hand drive's cells, keyed by their schema's maker (a tea Msg, Cmd and Sub are keyed on _tag; nothing shows an agent a banned shape, so shape rules cover tests and tooling too). Each law
  *  sets only the fields the cell reads, so a case holds the key alone. */
 const Reply = Schema.TaggedUnion({ step_read_ok: {}, backup_push_ok: {}, box_new_ok: {} });
 
@@ -197,7 +197,7 @@ describe("drive keeps a box that holds work, today's tooling", () => {
     );
   });
 
-  // 0093: the plants a step's typed answer names reach its record, so its field row, whatever the
+  // Each law is a property that walks the machine, and each plant is run once, never kept: the plants a step's typed answer names reach its record, so its field row, whatever the
   // outcome. Plants run once, both red: drop them on the backup push; drop them on a failed push.
   it("records the plants the typed answer names, through a push or a failed one, and none when it names none", () => {
     const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
@@ -679,7 +679,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   });
 });
 
-describe("the agent cap refuses a start once 12 agents run (0012), today's tooling", () => {
+describe("the agent cap refuses a start once 12 agents run (one type check, one Electron test app and one Docker box run at a time across all agents), today's tooling", () => {
   // Plants: compare with > instead of >=; keep the old cap of 8.
   it("property: a start is refused exactly when the agents running reach AGENT_CAP", () => {
     fc.assert(
@@ -690,7 +690,7 @@ describe("the agent cap refuses a start once 12 agents run (0012), today's tooli
     );
   });
 
-  it("pinned: the cap is 12, decision 0012's at most 12 code agents at once", () => {
+  it("pinned: the cap is 12, at most 12 code agents at once", () => {
     expect(AGENT_CAP).toBe(12);
     expect(agentCapFull(11)).toBe(false);
     expect(agentCapFull(12)).toBe(true);
@@ -816,9 +816,9 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
   });
 });
 
-// Decision 0161: a hand-run commit is plain, and no hand-run script refuses a step for a missing
+// Today's tooling signs no commit with a step key: a hand-run commit is plain, and no hand-run script refuses a step for a missing
 // signature. p34cs4, 2026-11-13: a quest of ten plain commits ended stuck:unsigned.
-describe("0161 a missing signature never holds a step, and the kept checks still do, today's tooling", () => {
+describe("a missing signature never holds a step, since today's tooling signs no commit with a step key, and the kept checks still do, today's tooling", () => {
   const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
   const quest = fc.uniqueArray(fc.constantFrom("tests", "build", "lead")).map((steps) => new Set<string>(steps));
 
@@ -962,7 +962,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
           return;
         }
 
-        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (0081)
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (a question word is never a name)
         expect(s.outcome).toEqual({ kind: "ask", who: "lead", for: "lockfile" });
 
         for (const p of paths) {
@@ -982,7 +982,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
         const s = read(report, []);
         expect(["pushing", "recording"]).toContain(s.phase);
         const outcome = s.phase === "pushing" || s.phase === "recording" ? s.outcome : null;
-        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (0081)
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome keeps its who key until that shape changes (a question word is never a name)
         expect(outcome).not.toEqual({ kind: "ask", who: "lead", for: "lockfile" });
       }),
       options,
@@ -1488,7 +1488,7 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
   });
 
   // Plant: refuse or start over a state file that says `lane`, so an old one's boxes are taken again.
-  it("scenario: a state file drive wrote before decision 0546, naming the quest `lane`, still holds its boxes' run ids", () => {
+  it("scenario: a state file drive wrote before the rule that a lane is called a quest, naming the quest `lane`, still holds its boxes' run ids", () => {
     const boxes = mkdtempSync(join(tmpdir(), "drive-names-"));
     mkdirSync(join(boxes, "state"));
     const old = { lane: "p12", ticket: "12", branch: "fabrikalfa/p12", steps: [{ step: "build", box: "p12-build4" }] };
@@ -1925,7 +1925,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     writeFileSync(join(out, "mutbox.json"), summary);
   };
 
-  // Decision 0045: Docker missing, a second Docker box or a failed run ends the step stuck, and the
+  // A step that needs ports or its own processes and network isolation runs in a container: Docker missing, a second Docker box or a failed run ends the step stuck, and the
   // sample never runs anywhere else. The report file is what the chain's judgment reads.
   // Plants: start the agent after a stuck run; trust exit 0 over a stuck line; read a run that
   // printed nothing as done; drop mutbox's own reason.
@@ -2124,7 +2124,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
 });
 
 describe("T673 a step's start is timed, today's tooling", () => {
-  // The start's sweep left with 0101: no start runs box.sh gc, so gcDue and its two laws went.
+  // The start's sweep left with the cleanup-timer rule: no start runs box.sh gc, so gcDue and its two laws went.
   // Plant: drop a phase line, reorder them, or read a line that only starts like one.
   it("T673 phasesIn reads every phase line box.sh prints, in order, and nothing else", () => {
     const name = fc.stringMatching(/^[a-z_]{1,12}$/);

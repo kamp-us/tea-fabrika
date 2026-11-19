@@ -12,7 +12,7 @@ sources = root / ".agents/skills"
 bad = []
 # Today's tooling, T321 slice 1a and T325 slice 1b: one clause table, one parser.
 # Each clause has one source and one section. An empty section means the whole skill.
-# A clause has one home (0130, experiment 283): another skill that needs it links the home.
+# A clause has one home (every piece of knowledge has one home, experiment 283): another skill that needs it links the home.
 # No spelling aliases or legacy phrase list. Source: approved skills-friction plan, Amendment 1,
 # required clauses. K20's source is the dated addition to five-steps-for-every-check.md.
 leak = "leakgrep.sh checks added text; private words stay outside the repo."
@@ -34,7 +34,7 @@ clauses = [
     ("build", "Go easy on the machine", "K9", caps),
     ("mutation", "Go easy on the machine", "K9", caps),
     ("tests", "Steps", "K20", effect),
-    # Decision 0035. The lead skill is this clause's one home: it writes the one line every
+    # The rule that an agent that finds work outside its task writes one finding and keeps going. The lead skill is this clause's one home: it writes the one line every
     # brief carries. Each step skill keeps only its own judgment.
     ("lead", "Outside your task", "K21", outside),
 ]
@@ -101,7 +101,7 @@ exam = (
 )
 # The lead's landing duty, in the lead skill's "Land it" step.
 landing = (
-    # 0066: mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
+    # Mutation testing runs on a schedule against main, not in a pull request: mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
     "Zero hits from loosening.sh mean no owner read is needed.",
     "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 )
@@ -199,7 +199,7 @@ for path, sections in rules.items():
             if re.search(pattern, body, re.I):
                 bad.append(f"{path}: forbidden review restriction: {pattern}")
         # Ticket 652: no brief template hands an agent a lead-only step. The permission check
-        # refuses a subagent the lead key, so a quest that is told to sign as lead stops (0056).
+        # refuses a subagent the lead key, so a quest that is told to sign as lead stops (the lead runs a refused push or merge of a step itself only in the named cases).
         # stepcommit.sh --commit-only lead stays allowed: it commits and signs nothing.
         lead_only = (
             r"commits\s+sign", r"step-keys", r"botpush", r"land\.ts\s+(?:run|queue|merged)",

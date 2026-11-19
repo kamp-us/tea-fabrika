@@ -191,7 +191,7 @@ it.live("multiline imports use the module string's line; strings and neighboring
   }),
 );
 
-// L4 of the trusted-rules swap (0573): `fabrika/no-node-filesystem` is gone, so this rule holds every
+// L4 of the trusted-rules swap (a trusted lint rule replaces ours where it catches as much): `fabrika/no-node-filesystem` is gone, so this rule holds every
 // form it held. Its 8 module names and 10 import forms, at its paths: fired in product code, and now
 // at an `exam/` path and a `.d.ts` too, which the old rule skipped; never in a test, a test-support
 // file or `e2e/`; and a line with `// edge: <why>` on it passes. Every run checks all 8 names: a draw

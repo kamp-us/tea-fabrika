@@ -9,7 +9,7 @@
 //   pnpm commits sign --step <role> --ticket <n> --key <path>
 //   pnpm commits push
 //
-// Build commits use their first parent’s exam list (0053). Scope and the owner read use main.
+// Build commits use their first parent’s exam list (a build commit is judged by the exam list in its own parent commit). Scope and the owner read use main.
 // `allowed_signers` and the trusted exam list are read from main as CI checked it out (`--main`,
 // else the base), never from the change under test. After a merge, a logged link's keys commit counts
 // only when it was on main before its squash. `--keys-from head` reads both from the head instead: only for the pull request that adds them,
@@ -272,7 +272,7 @@ export interface Commit {
   readonly person?: true | undefined;
 }
 
-/** A branch behind main is judged as one that is not: only what it added counts (0098). */
+/** A branch behind main is judged as one that is not: only what it added counts (the signed chain covers a branch's own change, not main). */
 export interface PullRequest {
   readonly head: string;
   /** The pull request's own change, `base...head`, from the merge base. */
@@ -385,14 +385,14 @@ interface Placed {
   /**
    * The pull request head's tree, when the squash is that head merged onto main before it: the last
    * link's commit, whose clean merge with the squash's first parent gives the squash's tree. Null
-   * when no such commit is known. A squash that landed behind main has a tree no link names (0098).
+   * when no such commit is known. A squash that landed behind main has a tree no link names (the signed chain covers a branch's own change, not main).
    */
   readonly head: string | null;
 }
 
 /**
  * p86 and p89 after the merge: the links logged for one squash run from its base's tree to the pull
- * request head's tree, which is the squash's tree when it landed up to date (0098). `trees` maps a
+ * request head's tree, which is the squash's tree when it landed up to date (the signed chain covers a branch's own change, not main). `trees` maps a
  * commit to its tree, for the squash and the first link's base. The squash must be on main, and every
  * link's base on main before it: a base off main could start the chain anywhere. A link's `base` is
  * main when its step started, so after a `lead` merge of a moved main it is older than the squash's
@@ -894,7 +894,7 @@ const ancestor = Effect.fnUntraced(function* (older: string, newer: string) {
 
 /**
  * The tree of `commit`, the last link's, when its clean merge onto the squash's first parent gives the
- * squash's tree: the squash is then that pull request head, landed behind main (0098). Else null.
+ * squash's tree: the squash is then that pull request head, landed behind main (the signed chain covers a branch's own change, not main). Else null.
  * The merge base is pinned to `base`, the first link's, which `chain` proves is on main with the
  * signed starting tree. A row's `commit` is not signed, so its own parents must never pick the base:
  * a commit forged with the head's tree and a newer main parent would undo main's newer work.

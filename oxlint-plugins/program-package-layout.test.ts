@@ -155,7 +155,7 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
   try {
     copyFileSync(join(ROOT, ".oxlintrc.json"), join(scratch, ".oxlintrc.json"));
     symlinkSync(join(ROOT, "oxlint-plugins"), join(scratch, "oxlint-plugins"));
-    // The config loads the vendored anti-slop plugins from here (0563).
+    // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
     symlinkSync(join(ROOT, "vendor"), join(scratch, "vendor"));
     const linted = write(scratch, plants).flat();
 
@@ -239,7 +239,7 @@ describe("fabrika/program-package-layout", () => {
     { line: 'export {x} from "dep-c";', manifest: { peerDependencies: { "dep-c": "1.0.0" } } },
     { line: 'import "dep-d";', manifest: { optionalDependencies: { "dep-d": "1.0.0" } } },
     { line: 'import "#path";', manifest: { imports: { "#path": "node:path" } } },
-    // Review 7 of P16b: the platform's types stay fine as types, whatever 0042's list holds.
+    // Review 7 of P16b: the platform's types stay fine as types, whatever ADR 0018's list holds (Cloudflare is reached only through Alchemy).
     {
       line: 'import type {DurableObjectState} from "@cloudflare/workers-types"; export type {DurableObjectState};',
       manifest: { devDependencies: { "@cloudflare/workers-types": "1.0.0" } },
@@ -679,7 +679,7 @@ describe("fabrika/program-package-layout", () => {
       defines: true,
       pure: [],
     },
-    // Review 7 of P16b: two more of 0042's platform names, each a package the manifest declares
+    // Review 7 of P16b: two more of ADR 0018's platform names (Cloudflare is reached only through Alchemy), each a package the manifest declares
     // (23, 24). Cloudflare's Container is a Durable Object class by another name.
     {
       text: (c) => `import {Container} from "@cloudflare/containers"; export class ${c} extends Container {}`,
@@ -1176,7 +1176,7 @@ describe("fabrika/program-package-layout", () => {
           ],
           // pinned: review 7 of P16b, `import {Container} from "@cloudflare/containers"; export
           // class C extends Container {}` at '.', with the package in `dependencies`, gave no
-          // finding: worker() left out two of 0042's platform names.
+          // finding: worker() left out two of ADR 0018's platform names (Cloudflare is reached only through Alchemy).
           [
             "program0",
             ["./server", "./ui", "./lib"],

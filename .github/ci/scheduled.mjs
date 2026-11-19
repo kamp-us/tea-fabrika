@@ -1,11 +1,11 @@
-// Today's CI, serving both versions. The full run's report (0534): scheduled.yaml runs all of
+// Today's CI, serving both versions. The full run's report (the merge line runs only the tests a change reaches, and a schedule runs every test): scheduled.yaml runs all of
 // next/ and every tooling test on main, started by a push to main or the hourly catch-up at most
-// once an hour through its gate (0581, gate.mjs), and its report job runs this. A run whose gate
+// once an hour through its gate (main's full run starts on a push to main and an hourly catch-up, gate.mjs), and its report job runs this. A run whose gate
 // said `false` skips the report, so it leaves the issue as it was. A red run opens
 // one GitHub issue labeled `ci-scheduled` naming the commits since the last green scheduled run and
 // the failing tests, or comments on the open one; a green run closes it. Those are the only issues
-// automation opens on this repository (0534's exception to "no GitHub issues here"), with the
-// daily speed check's (0541). That one carries the same label, so the report's own issue is the
+// automation opens on this repository (the changed-tests rule's exception to "no GitHub issues here"), with the
+// daily speed check's (CI speed has a goal, and a daily job measures it). That one carries the same label, so the report's own issue is the
 // open one with the label and its exact `TITLE`.
 //
 //   the run           its own open issue           what happens
@@ -233,11 +233,11 @@ export const verdict = ({ needs, jobs, failed, limits: limit }) => {
 };
 
 /**
- * The jobs a run skips on purpose, by what its `select` job did (0590). `select` runs only on a
+ * The jobs a run skips on purpose, by what its `select` job did (a branch's proof run runs only the tests its change reaches). `select` runs only on a
  * branch's hand start. Skipped, the run is main's or a hand start on main, which runs the full set,
  * so `changed` skips. Run and passed, it said `full`, so `changed` skips, or `changed`, so `tests`
  * skips, and `changed` too when its set has no file (`legs` is `[]`): that run is green with no test
- * leg. A `needs` with no `select`, the shape before 0590, or a `select` that failed or said anything
+ * leg. A `needs` with no `select`, the shape before the proof-run rule, or a `select` that failed or said anything
  * else, skips nothing: every job must pass.
  * @param {unknown} needs
  * @returns {ReadonlySet<string>}
@@ -433,7 +433,7 @@ export const body = (run) => {
     ...legs,
     ...tests,
     "",
-    `A green scheduled run closes this issue (decision 0534).`,
+    `A green scheduled run closes this issue (the merge line runs only the tests a change reaches, and a schedule runs every test).`,
   ].join("\n");
 };
 
@@ -542,7 +542,7 @@ export const github = (env, send = globalThis.fetch) => {
     // The latest attempt's jobs, every leg its own; the run has 10, well under one page of 100.
     jobs: async () => jobsOf(await call("GET", `actions/runs/${id}/jobs?filter=latest&per_page=100`)),
     // Main's newest green run whose test legs ran: a run whose gate said `false` ends `success`
-    // too, and names no tested commit (0581). One jobs call per green run stepped over.
+    // too, and names no tested commit (main's full run starts on a push to main and an hourly catch-up). One jobs call per green run stepped over.
     lastGreen: async () => {
       const answer = await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=100`);
       const runs = isMap(answer) && Array.isArray(answer["workflow_runs"]) ? answer["workflow_runs"].filter(isMap) : [];
@@ -559,7 +559,7 @@ export const github = (env, send = globalThis.fetch) => {
       const issues = await call("GET", `issues?labels=${LABEL}&state=open&sort=created&direction=asc&per_page=20`);
 
       // The issues list holds pull requests too; one with the label is not this report's. The daily
-      // speed check keeps an issue with the same label (0541), so the report's own is the one with
+      // speed check keeps an issue with the same label (CI speed has a goal, and a daily job measures it), so the report's own is the one with
       // its own title: taking the first put a red main's report on the speed issue (2026-11-15).
       const issue = (Array.isArray(issues) ? issues : [])
         .filter(isMap)
@@ -572,7 +572,12 @@ export const github = (env, send = globalThis.fetch) => {
       await call(
         "POST",
         "labels",
-        { name: LABEL, color: "b60205", description: "The scheduled run of every test is red (decision 0534)" },
+        {
+          name: LABEL,
+          color: "b60205",
+          description:
+            "The scheduled run of every test is red (the merge line runs only the tests a change reaches, and a schedule runs every test)",
+        },
         [422],
       );
     },

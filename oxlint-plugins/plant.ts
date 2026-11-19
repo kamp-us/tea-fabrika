@@ -62,7 +62,7 @@ const lint = Effect.fnUntraced(function* (files: Readonly<Record<string, string>
   const at = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "exam-" }));
   yield* fs.copyFile(path.join(ROOT, ".oxlintrc.json"), path.join(at, ".oxlintrc.json"));
   yield* fs.symlink(path.join(ROOT, "oxlint-plugins"), path.join(at, "oxlint-plugins"));
-  // The config loads the vendored anti-slop plugins from here (0563).
+  // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
   yield* fs.symlink(path.join(ROOT, "vendor"), path.join(at, "vendor"));
 
   for (const [file, text] of Rec.toEntries(files)) {

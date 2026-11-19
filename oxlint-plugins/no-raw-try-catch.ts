@@ -17,9 +17,9 @@
 // to `error` is the Phase-3 capstone #2753).
 //
 // In this repo it blocks in every folder at zero, and advises only in a folder that the config's
-// warn override at the end still names (0523). Experiment 125 read its 21 fires on main when it was
+// warn override at the end still names (a lint rule blocks wherever its code is clean). Experiment 125 read its 21 fires on main when it was
 // written: all 21 kept their code, 18 of them in `experiments/`, mostly plain Node calls at the
-// edge, in functions with no Effect in them. 0523 sets that count aside: a pull request that makes
+// edge, in functions with no Effect in them. The block-where-clean rule sets that count aside: a pull request that makes
 // a folder block reports the fires it met and each disable line.
 import type { CreateRule } from "@oxlint/plugins";
 import { Array as Arr } from "effect";

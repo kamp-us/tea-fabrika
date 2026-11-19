@@ -4,9 +4,9 @@
 //
 //   queue   as Queue.add: open, ready, into main -> the leak gate -> ci-required green -> one
 //           pinned squash, which adds it to the merge queue
-//   admin   open, ready, into main, no `Plan:` title -> every file docs (0183), or the branch is a sev
+//   admin   open, ready, into main, no `Plan:` title -> every file docs (the lead admin-merges a docs-only pull request after checking it is not broken), or the branch is a sev
 //           fix at either level (the sev1's named fix, or a sev0's `open --allow` or `next` branch,
-//           0611), or a ready pull request an open sev0 allows (0603) -> the leak gate -> for a fix
+//           a sev fix is admin-merged one at a time on current main), or a ready pull request an open sev0 allows (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order) -> the leak gate -> for a fix
 //           or a ready one, ci-required green, and for a fix also origin/main's head in its history
 //           -> one pinned squash with --admin, past the queue
 //
@@ -26,9 +26,9 @@ import * as Queue from "./Queue.ts";
 export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { reason: Schema.String }) {}
 
 /**
- * Whether a changed file keeps a pull request docs only for the admin merge, as 0183 has it: a docs file
+ * Whether a changed file keeps a pull request docs only for the admin merge, as the docs-only admin-merge rule has it: a docs file
  * in one of the admin merge's folders, by the shared classifier's `isAdminDocs` (@kalfa/ci/DocsOnly).
- * Instruction text is not docs (0183, 0180): skill prose, AGENTS.md, CLAUDE.md and an agent's definition.
+ * Instruction text is not docs (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first): skill prose, AGENTS.md, CLAUDE.md and an agent's definition.
  * A README and `.kalfa/patterns/` Markdown are not docs for it either, so a pull request that changes one is
  * armed, not admin-merged.
  */
@@ -40,7 +40,7 @@ export const Route = Schema.TaggedUnion({
   admin: {
     /** Every branch an open sev0 allows (a fix or a ready pull request), and none when no sev0 is open. */
     sev0: Schema.Array(Schema.String),
-    /** The ones of `sev0` that `open --allow` and `next` named, the fixes; `allow` added the rest (0603). */
+    /** The ones of `sev0` that `open --allow` and `next` named, the fixes; `allow` added the rest (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order). */
     sev0Fixes: Schema.Array(Schema.String),
     /** The one branch the sev log names as a sev1's fix now landing, or `null`. */
     sev1: Schema.NullOr(Schema.String),
@@ -100,7 +100,7 @@ const adminFor = (head: string, files: ReadonlyArray<string>, route: AdminRoute)
     refused:
       files.length === 0
         ? "it changes no files, so it is not docs only; refused"
-        : `not docs only (0183), and ${head} is no sev fix (0611) and no open sev0 allows it (0532); --admin refused: ${shown.join(", ")}`,
+        : `not docs only (the lead admin-merges a docs-only pull request after checking it is not broken), and ${head} is no sev fix (a sev fix is admin-merged one at a time on current main) and no open sev0 allows it (a sev0 is the owner's call, and it freezes CI and lands ready pull requests one at a time); --admin refused: ${shown.join(", ")}`,
   };
 };
 
@@ -139,8 +139,8 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
     }
   }
 
-  // A fix holds main's head (0611): the next fix is tested on top of it. A ready pull request in a sev0
-  // lands with no catch-up first (0603).
+  // A fix holds main's head (a sev fix is admin-merged one at a time on current main): the next fix is tested on top of it. A ready pull request in a sev0
+  // lands with no catch-up first (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order).
   if (allowed.for === "fix") {
     const branches = yield* Branches;
 
@@ -182,10 +182,10 @@ export const line = (done: Done): string =>
     admin: (d) =>
       `pr ${d.pr}: admin-merged at ${d.oid}, ${
         d.for === "docs"
-          ? "docs only (0183)"
+          ? "docs only (the lead admin-merges a docs-only pull request after checking it is not broken)"
           : d.for === "fix"
-            ? `a ${d.level} fix (0611)`
-            : "a ready pull request in a sev0 (0603)"
+            ? `a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
+            : "a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
       }; read the push run on main next`,
     merged: (d) => `pr ${d.pr}: already merged at ${d.commit}`,
   });

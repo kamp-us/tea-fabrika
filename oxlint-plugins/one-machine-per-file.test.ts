@@ -1,4 +1,4 @@
-// Decision 0046's syntax laws. Generated code is tested through oxlint's public RuleTester;
+// The one-tea-machine-per-file rule's syntax laws. Generated code is tested through oxlint's public RuleTester;
 // config and real-file copies go through the same lint command as the exam.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

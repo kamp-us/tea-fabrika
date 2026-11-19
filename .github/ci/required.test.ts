@@ -207,7 +207,7 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   expect(run(undefined).status).toBe(1);
 });
 
-// 0134's amendment (2026-11-11): changes.mjs's `jobs` decides what a draft and a ready pull request
+// The push-every-commit rule's amendment (2026-11-11): changes.mjs's `jobs` decides what a draft and a ready pull request
 // run, and this judge reads the same outputs. A draft's skips pass; on a ready pull request, any
 // job its flags said must run that skips or fails cannot pass, so the heavy jobs a draft skipped
 // cannot be skipped again once it is ready.
@@ -239,7 +239,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   return needs;
 };
 
-// 0174: a merge queue's group skips jobs by its paths, and the queue takes this one check from it.
+// A merge queue's run starts only the checks its changed files need: a merge queue's group skips jobs by its paths, and the queue takes this one check from it.
 it("property: a merge queue's group passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -260,7 +260,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips the jobs its paths do not need.
+// Every run that can read its changed paths picks its jobs from them: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -281,9 +281,9 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
   );
 });
 
-// 0534: on the merge queue's group and a push to main, next runs the tests their change reaches, so
+// On the merge queue's group and a push to main, next runs the tests their change reaches, so
 // it skips when the size step picked none (changes' `next`, which the size step prints first). That
-// skip passes, as changes said. No run has a test job to skip since 0539.
+// skip passes, as changes said. No run has a test job to skip since the no-tooling-tests-on-the-merge-line rule.
 it("property: on the merge line past the pull request a skipped next passes only when changes said so", () => {
   // Plant: let a skip pass on any flag but "true" (red: next skipped with the size step's output
   // empty passed).

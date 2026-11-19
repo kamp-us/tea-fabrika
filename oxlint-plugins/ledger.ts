@@ -2,11 +2,11 @@
 // on its first day are named in a ledger, which only shrinks. `lint.ts` waives a finding a ledger
 // names, writes back only the entries a finding still matched, and CI fails until that pruned file is
 // committed. Nothing here adds an entry, and no pull request may: CI's ratchet
-// (`next/apps/fabrika/src/exam/ratchet.ts`) refuses an added row (0524).
+// (`next/apps/fabrika/src/exam/ratchet.ts`) refuses an added row (no check reads a list that lets broken code pass).
 //
 // Two ledgers, each for one folder. `agents-ledger.json` holds what `.agents/` broke the day it was
-// held to next/'s rules (0033). `next-ledger.json` holds what `next/` broke the day a rule joined it:
-// question-word names (0081), a module two layers down (0043) and a clock or an after-hook (0061).
+// held to next/'s rules (lead tooling under .agents/ follows next/'s code rules). `next-ledger.json` holds what `next/` broke the day a rule joined it:
+// question-word names, a module two layers down (libfabrika has one folder per subject, and the rule file says who may import whom) and a clock or an after-hook (anything that holds a resource is acquired in a scope, so the scope releases it).
 //
 // An entry is keyed by file, rule and the finding's line of code with its spaces collapsed, never a
 // line number, so code moving up or down keeps its entry and a changed line loses it.

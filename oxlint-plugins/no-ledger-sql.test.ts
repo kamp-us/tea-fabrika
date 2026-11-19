@@ -1,5 +1,5 @@
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
-// They were the exam's (next/apps/fabrika/src/exam/ledger-sql.integration.test.ts) until 0591 moved them
+// They were the exam's (next/apps/fabrika/src/exam/ledger-sql.integration.test.ts) until the exam-to-lint rule moved them
 // here. Plant: stop reading bracket-quoted table names (`main.[entries]`), and line 3 stops firing.
 
 import { String as Str, Array as Arr, pipe } from "effect";

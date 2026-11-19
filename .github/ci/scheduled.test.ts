@@ -17,14 +17,14 @@ const promised = <A>(run: () => PromiseLike<A>) =>
 type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 
 // Today's CI, serving both versions. Covers scheduled.mjs, the report of the scheduled run of every
-// test (0534): a red run opens one `ci-scheduled` issue or comments on the open one, a green run
+// test (the merge line runs only the tests a change reaches, and a schedule runs every test): a red run opens one `ci-scheduled` issue or comments on the open one, a green run
 // closes it, a run stopped by hand does nothing. GitHub is a fake that records each call. Each plant
 // was run once on scheduled.mjs and restored; each turned its law red.
 const options = { seed: 119120, numRuns: 100 };
 
 const result = fc.constantFrom("success", "failure", "cancelled", "skipped", "", undefined);
 
-// Any job but `select`, whose result and outputs say which jobs a run skips on purpose (0590): the
+// Any job but `select`, whose result and outputs say which jobs a run skips on purpose (a branch's proof run runs only the tests its change reaches): the
 // laws on `skippable` below give it its own shapes.
 const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/).filter((name) => name !== "select");
 
@@ -308,7 +308,7 @@ it("property: when every leg passed or was skipped and every need passed, the ru
   );
 });
 
-// 0590: a branch's proof run starts `select`, then `tests` for the full set or `changed` for a
+// A branch's proof run runs only the tests its change reaches: a branch's proof run starts `select`, then `tests` for the full set or `changed` for a
 // changed set; main's runs skip `select` and run `tests`. `needs` as the report gets it, with the
 // select's outputs, for each shape a run can end in.
 const ended = (select: unknown, tests: string, changed: string) => ({
@@ -348,8 +348,8 @@ it("pinned: each way a run with select ends is judged by what select chose, and 
     ["branch: select failed", ended({ result: "failure", outputs: {} }, "skipped", "skipped"), "red"],
     ["branch: select said nothing", ended({ result: "success", outputs: {} }, "skipped", "skipped"), "stopped"],
     ["branch: select said another word", ended(chose("some", "[]"), "skipped", "skipped"), "stopped"],
-    ["the shape before 0590: no select, tests green", ended(undefined, "success", ""), "green"],
-    ["the shape before 0590: no select, tests skipped", ended(undefined, "skipped", ""), "stopped"],
+    ["the shape before the proof-run rule: no select, tests green", ended(undefined, "success", ""), "green"],
+    ["the shape before the proof-run rule: no select, tests skipped", ended(undefined, "skipped", ""), "stopped"],
   ];
 
   for (const [shape, given, expected] of shapes) {
@@ -358,7 +358,7 @@ it("pinned: each way a run with select ends is judged by what select chose, and 
 });
 
 it("property: a run is green only when the test job select chose passed, whatever the other jobs did", () => {
-  // The rule at the heart of 0590's report: main's run (select skipped) and a full branch run need
+  // The rule at the heart of the proof-run rule's report: main's run (select skipped) and a full branch run need
   // `tests`, a changed run with legs needs `changed`, and only a zero-file set needs neither.
   // Plant, run once on scheduled.mjs and restored: `skippable` returns every job (red: a run whose
   // chosen job was skipped reads green).
@@ -788,7 +788,7 @@ type Call = { method: string; url: string; body: unknown; auth: string | undefin
 /** An open issue as the issues list gives it, cut to the fields the report reads. */
 type Listed = { number: number; title: string };
 
-/** The last green run's id in `fake`, and its jobs: a full run's, whose test legs ran (0581). */
+/** The last green run's id in `fake`, and its jobs: a full run's, whose test legs ran (main's full run starts on a push to main and an hourly catch-up). */
 const LAST_GREEN = 41;
 
 const fullJobs = {
@@ -802,7 +802,7 @@ const fullJobs = {
 /**
  * A fake GitHub: the run's jobs as the jobs API answers them, the report's own open issue or none,
  * a last green run or none, a full run, and every call recorded. `others` are open issues with the same label
- * that are not the report's, as the daily speed check's (0541), listed before the report's own.
+ * that are not the report's, as the daily speed check's (CI speed has a goal, and a daily job measures it), listed before the report's own.
  */
 const fake = (
   jobs: unknown,
@@ -1096,7 +1096,7 @@ it.live(
     }),
 );
 
-// The daily speed check's issue carries the same label (0541), with its own title (`TITLE` in
+// The daily speed check's issue carries the same label (CI speed has a goal, and a daily job measures it), with its own title (`TITLE` in
 // `.agents/skills/lead/scripts/ci/Speed.ts`, written here again so this file reads no lead script).
 const SPEED = "CI speed: a stage is over its goal";
 
@@ -1187,7 +1187,7 @@ it("scenario: with no token, repository, workflow file or run id, no GitHub read
   }
 });
 
-// ---------------------------------------------------------------- L1, full runs (0581)
+// ---------------------------------------------------------------- L1, full runs (main's full run starts on a push to main and an hourly catch-up)
 
 // A run of scheduled.yaml whose gate said `false` ends `success` with its tests skipped, and GitHub
 // lists a skipped matrix as one job named `tests`, with no shard. So a run is full only when a test

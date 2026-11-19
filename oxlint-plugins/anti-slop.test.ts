@@ -1,4 +1,4 @@
-// The anti-slop rules the owner took (0563) are the exam, so each is seen to fire through the
+// The anti-slop rules the owner took (we use the anti-slop plugin as it ships, never our own copy of its rules) are the exam, so each is seen to fire through the
 // repository's own .oxlintrc.json, everywhere in the scope but the folders its block excludes (L2,
 // L3). The config names no other rule of the two plugins, and never turns a taken one down (L3, L5).
 // The zero lock in anti-slop.ts is a property of its own (L4). The config loads the two plugins from
@@ -166,7 +166,7 @@ const PLANTS: Readonly<Record<string, ReadonlyArray<string>>> = {
     "",
     'export type Plain = { readonly tag: "Ready" }; // taken',
   ],
-  // 0567's two Match rules.
+  // The match rule's two Match rules.
   "anti-slop-effect/no-manual-tag-comparison": [
     "declare const value: { readonly _tag: string; readonly status: string };",
     "",

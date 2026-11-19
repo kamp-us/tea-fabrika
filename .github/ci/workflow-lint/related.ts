@@ -1,5 +1,5 @@
 // Today's automatic related checks take no job group, so the merge line never waits on a scheduled
-// run's groups (0598).
+// run's groups (the merge line leaves the scheduled job groups).
 import { compact, map, type Rule, steps, uses } from "./shared.ts";
 
 const FILES = "fromJSON(needs.select.outputs.files)[matrix.shard]";
@@ -10,7 +10,7 @@ const INTEGRATION =
 const TOOLING =
   'pnpm exec vitest run --project tooling $FILES --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/related.json"';
 
-/** No job-level group at all, in any form: 0598 takes the merge line out of the scheduled groups. */
+/** No job-level group at all, in any form: the scheduled-groups rule takes the merge line out of the scheduled groups. */
 const ungrouped = (job: Record<string, unknown>) => job["concurrency"] === undefined;
 
 /** The name of a job's group, whether `concurrency` is the bare name or a map with a `group`. */
@@ -51,7 +51,7 @@ const FAULT_IF = "success()&&needs.select.outputs.consumer==matrix.shard";
  * The related job's one delivery-lane step: P1's source fault, on the leg that owns P1, right in the
  * tooling limit, at full depth and with nothing else (no token, no soft failure). The command list holds
  * its place, once, after `tooling`. The job keeps no receipt and no archive upload: main's full run
- * keeps the archive (0602).
+ * keeps the archive (integration laws run only in main's full run).
  */
 const consumerFault = (job: Record<string, unknown>): boolean => {
   const fault = steps(job).find((candidate) => candidate["run"] === FAULT);
@@ -92,7 +92,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
   const related = map(jobs["related"]);
   require(selector(
     workflow,
-  ), "R1: related selection takes no job group (0598), and uses the tested source and exact outputs");
+  ), "R1: related selection takes no job group (the merge line leaves the scheduled job groups), and uses the tested source and exact outputs");
   require(select["timeout-minutes"] === 10, "R1: related selection keeps its ten-minute job limit");
 
   const set = steps(select).find((step) => step["id"] === "set");
@@ -113,7 +113,7 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
       map(step["with"])["persist-credentials"] === false &&
       !("ref" in map(step["with"])),
   ), "R1: selection checks out this check's tested commit with history");
-  require(ungrouped(related), "R1: related tests take no job group (0598)");
+  require(ungrouped(related), "R1: related tests take no job group (the merge line leaves the scheduled job groups)");
   require(JSON.stringify(related["needs"]) === JSON.stringify(["changes", "select"]) &&
     compact(related["if"]) ===
       "!cancelled()&&needs.select.result=='success'&&needs.select.outputs.run=='true'", "R1: related tests follow a successful nonempty selector");
@@ -167,8 +167,9 @@ export const relatedChecks: Rule = ({ workflow, jobs }, require) => {
 
   const next = map(jobs["next"]);
 
-  require(ungrouped(next), "R1: next takes no job group (0598)");
+  require(ungrouped(next), "R1: next takes no job group (the merge line leaves the scheduled job groups)");
 
   const scheduled = Object.entries(jobs).filter(([, job]) => groupOf(map(job)).toLowerCase().startsWith("scheduled-"));
-  require(scheduled.length === 0, "R2: no check.yaml job holds a scheduled- group (0598)");
+  require(scheduled.length ===
+    0, "R2: no check.yaml job holds a scheduled- group (the merge line leaves the scheduled job groups)");
 };

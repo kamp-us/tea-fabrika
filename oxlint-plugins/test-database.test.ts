@@ -172,7 +172,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s tests, suites
   }
 });
 
-it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)", () => {
+it("scenario: next/'s tree is at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
   // The real tree is the input: 62 calls in 53 files fired on `86a7668d6`, and ticket 1029 moved
   // each one to `TestDatabase.make` or `TestDatabase.open`.
   expect(Object.fromEntries(fires(committed()))).toEqual({});

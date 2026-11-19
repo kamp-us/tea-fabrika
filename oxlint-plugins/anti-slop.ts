@@ -1,4 +1,4 @@
-// The anti-slop lint plugin, taken as it ships (decision 0563): the fork's `src/` sits unchanged in
+// The anti-slop lint plugin, taken as it ships (we use the anti-slop plugin as it ships, never our own copy of its rules): the fork's `src/` sits unchanged in
 // vendor/anti-slop/ (vendored.ts holds that), and `.oxlintrc.json` loads its two plugins. The owner
 // took ten of its rules. Each is on as an error across the whole scope, from its own block at the
 // end of the config, and that block's `excludeFiles` names the folders that still have hits. A new
@@ -20,8 +20,8 @@ import { Array as Arr, Exit, pipe, Option, Predicate, Record as Rec, Schema } fr
 import { verify } from "./vendored.ts";
 
 /**
- * The ten rules the owner took, as the config names them: eight by 0558, 0561, 0562 and 0563, and the
- * two Match rules by 0567.
+ * The ten rules the owner took, as the config names them: eight by the ternary-depth rule, the cast-comment rule, the no-wrong-shape rule and the anti-slop rule, and the
+ * two Match rules by the match rule.
  */
 export const TAKEN: ReadonlyArray<string> = [
   "anti-slop/max-ternary-depth",
@@ -256,7 +256,7 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
     return Option.isNone(pinned) || from === pinned.value.specifier
       ? []
       : [
-          `.oxlintrc.json: ${pinned.value.name} is loaded from ${from}, and only ${pinned.value.specifier} is the pinned copy (0563)`,
+          `.oxlintrc.json: ${pinned.value.name} is loaded from ${from}, and only ${pinned.value.specifier} is the pinned copy (we use the anti-slop plugin as it ships, never our own copy of its rules)`,
         ];
   });
 };
@@ -319,7 +319,7 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
       ...Arr.map(
         remove,
         (folder) =>
-          `.oxlintrc.json: ${rule} has no hit left in ${folder}: remove the folder from its block's excludeFiles (0563)`,
+          `.oxlintrc.json: ${rule} has no hit left in ${folder}: remove the folder from its block's excludeFiles (we use the anti-slop plugin as it ships, never our own copy of its rules)`,
       ),
       ...Arr.map(
         missing,

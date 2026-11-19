@@ -149,7 +149,7 @@ const moveMain = (r: Repo, n: number, path = "docs/other.md") => {
   return main;
 };
 
-describe("a branch behind main at pull request time (0098)", () => {
+describe("a branch behind main at pull request time (the signed chain covers a branch's own change, not main)", () => {
   // scenario: two diverged branches distinguish a three-dot diff from a two-dot diff.
   it("scenario: the branch is behind main, whose own exam change asks nothing (a three-dot diff)", () => {
     const r = new Repo();
@@ -480,7 +480,7 @@ describe("person commits between step links (p86b)", () => {
   });
 
   // scenario: native signed merge ancestry is checked before and after catching up.
-  // 0098 changed it: the head behind main was broken_chain, and is now judged as it stands, done.
+  // The signed-chain rule changed it: the head behind main was broken_chain, and is now judged as it stands, done.
   it("scenario: counts a person's signed merge of main, and the head before it is done too", () => {
     const r = new Repo(PERSON_KEYS);
     r.change("a.ts");
@@ -513,7 +513,7 @@ describe("person commits between step links (p86b)", () => {
   });
 });
 
-describe("0053 historical exam lists", () => {
+describe("historical exam lists: a build commit is judged by the exam list in its own parent", () => {
   // Plant: read --main or head for the old build. Pinned: P14 a7ff4ee8 before PR 687.
   it("g1: old tsconfig build passes after main adds its row", () => {
     fc.assert(

@@ -107,15 +107,15 @@ const path = fc.oneof(
 
 const list = fc.array(path, { maxLength: 12 });
 
-// 0175: a file of today's version, written apart from changes.mjs. Only these start today's build,
-// on every event; its tests and e2e start on none (0525, 0533). No generator above makes a quiet path,
+// Every run that can read its changed paths picks its jobs from them: a file of today's version, written apart from changes.mjs. Only these start today's build,
+// on every event; its tests and e2e start on none (today's version is frozen and takes no new work; CI runs none of today's version's tests). No generator above makes a quiet path,
 // plain Markdown, under these trees; the scenario near the end pins that case.
 const todays = (p: string) => /^(?:apps|programs|packages|fixtures)\//.test(p);
 
 const touched = (paths: readonly string[]) => paths.some(todays);
 
-// 0174 narrowed this law: a merge queue's group left it, and follows its paths (below).
-// 0175 narrowed it again: a push to main left it too. What stays is every event that has no
+// The queue-follows-its-paths rule narrowed this law: a merge queue's group left it, and follows its paths (below).
+// The every-run-follows-its-paths rule narrowed it again: a push to main left it too. What stays is every event that has no
 // changed paths of its own to read.
 it("every event that is no pull request, merge queue's group or push enables every job for every path list", () => {
   fc.assert(
@@ -126,7 +126,7 @@ it("every event that is no pull request, merge queue's group or push enables eve
   );
 });
 
-// 0174: a merge queue's run starts only the checks its changed files need. 0175: so does a push.
+// A merge queue's run starts only the checks its changed files need. The every-run-follows-its-paths rule: so does a push.
 it("property: a merge queue's group and a push get the flags a pull request gets for the same paths", () => {
   fc.assert(
     fc.property(fc.option(list, { nil: null }), fc.constantFrom("merge_group", "push"), (paths, event) => {
@@ -147,11 +147,11 @@ it("property: a merge queue's group and a push get the flags a pull request gets
 });
 
 it("scenario: a merge queue's group of Markdown skips the heavy jobs, and one of next/ files runs check and next", () => {
-  // scenario: the two cases named in 0174, written out so the flags are read here and not only
+  // scenario: the two cases named in the queue-follows-its-paths rule, written out so the flags are read here and not only
   // compared with a pull request's.
   const quiet = { check: false, typecheck: false, next: false, build: false };
   expect(ci.jobs(["docs/a.md"], "merge_group", false)).toEqual(quiet);
-  // 0175: the build is today's library, so a group of next/ files alone no longer builds.
+  // Every run that can read its changed paths picks its jobs from them: the build is today's library, so a group of next/ files alone no longer builds.
   expect(ci.jobs(["next/packages/libfabrika/src/a.ts"], "merge_group", false)).toEqual({
     ...heavy,
     build: false,
@@ -203,7 +203,7 @@ it("skill scripts run check and typecheck; other version flags follow their read
   );
 });
 
-// 0175 narrowed this law: the build is today's library, so a skill-tree path no longer starts it.
+// The every-run-follows-its-paths rule narrowed this law: the build is today's library, so a skill-tree path no longer starts it.
 // The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): a file
 // under .agents/skills/ no longer starts next, since no next/ test reads one, so this law says
 // nothing of next for a list of those alone (the case 4 law below does). Next still starts when a
@@ -237,7 +237,7 @@ const readMarkdown = fc.oneof(
     .map(([above, dir, below, name]) => [...above, dir, ...below, `${name}.md`].join("/")),
 );
 
-// 0175 narrowed this law: today's build starts only when the Markdown is under today's trees.
+// The every-run-follows-its-paths rule narrowed this law: today's build starts only when the Markdown is under today's trees.
 it("Markdown a check reads runs check, typecheck and next, alone or beside safe paths, and today's build by its tree", () => {
   fc.assert(
     fc.property(readMarkdown, fc.array(safe, { maxLength: 6 }), (read, paths) => {
@@ -257,7 +257,7 @@ it("Markdown a check reads runs check, typecheck and next, alone or beside safe 
   );
 });
 
-// 0175 narrowed this law: a shared path that is no file of today's version, the lockfile among
+// The every-run-follows-its-paths rule narrowed this law: a shared path that is no file of today's version, the lockfile among
 // them, no longer starts today's build.
 // The plan for CI paths narrowed it again, with the owner's yes (its answered question 2): lint rule
 // files (`.oxlintrc.json`, `oxlint-plugins/`) are no longer shared paths. They give scope readers,
@@ -284,7 +284,7 @@ it("shared paths run check, typecheck and next, and today's build by the paths; 
   );
 });
 
-// 0539: the exam's plant helper and signer, which started the tooling tests, are next/ paths like
+// The merge line runs no tooling tests, and the schedule runs them all: the exam's plant helper and signer, which started the tooling tests, are next/ paths like
 // any other now that no event runs a tooling test.
 it("today, next and mixed paths have separate version flags", () => {
   fc.assert(
@@ -418,7 +418,7 @@ it("skill script and prose rules apply only at the repo root", () => {
       for (const root of ["next", "docs"]) {
         expect(ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request")).toEqual({
           ...heavy,
-          // 0175: neither root is today's version, so the build stays off for both.
+          // Every run that can read its changed paths picks its jobs from them: neither root is today's version, so the build stays off for both.
           build: false,
         });
       }
@@ -427,7 +427,7 @@ it("skill script and prose rules apply only at the repo root", () => {
   );
 });
 
-// 0134's amendment (2026-11-11): a draft pull request runs only the fast jobs; marking it ready
+// The push-every-commit rule's amendment (2026-11-11): a draft pull request runs only the fast jobs; marking it ready
 // runs the rest on the same head. Plants caught: a draft that still runs test, main honoring the
 // draft flag, a draft that skips typecheck, and a ready docs-only PR that builds (that one survived
 // until the pinned example below).
@@ -435,9 +435,9 @@ const events = fc.constantFrom("pull_request", "push", "merge_group", "workflow_
 
 const paths = fc.option(list, { nil: null });
 
-// 0175 narrowed this law: the build is today's library, so it follows today's files, no longer
-// `check`. Since 0533 that rule is classify's own `build` flag. 0534 kept the test job to a pull
-// request alone, and 0539 took it off every event, so the law is classify's flags again.
+// The every-run-follows-its-paths rule narrowed this law: the build is today's library, so it follows today's files, no longer
+// `check`. Since the rule that CI runs none of today's tests, that rule is classify's own `build` flag. The changed-tests rule kept the test job to a pull
+// request alone, and the no-tooling-tests-on-the-merge-line rule took it off every event, so the law is classify's flags again.
 it("property: a ready pull request and every other event run what classify says", () => {
   fc.assert(
     fc.property(paths, events, fc.boolean(), (paths, event, draft) => {
@@ -466,8 +466,8 @@ it("property: a draft keeps lint and typecheck as ready, and skips build and nex
   );
 });
 
-// 0175 narrowed this law: main no longer runs every job. A push is still never a draft. 0534
-// narrowed it again, to less the test job, and 0539 took that job off every event.
+// The every-run-follows-its-paths rule narrowed this law: main no longer runs every job. A push is still never a draft. The changed-tests rule
+// narrowed it again, to less the test job, and the no-tooling-tests-on-the-merge-line rule took that job off every event.
 it("property: a push runs what a ready pull request runs for the same paths, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
@@ -481,7 +481,7 @@ it("property: a push runs what a ready pull request runs for the same paths, and
   );
 });
 
-// 0175: the fallbacks. A run that cannot say what changed runs everything. Since 0539 that holds
+// Every run that can read its changed paths picks its jobs from them: the fallbacks. A run that cannot say what changed runs everything. Since the no-tooling-tests-on-the-merge-line rule that holds
 // no tooling test: no job of the merge line runs one.
 it("property: unreadable history, no path at all, or an event with no paths of its own runs every job", () => {
   fc.assert(
@@ -523,9 +523,9 @@ it("property: a push of Markdown no check reads or skill prose starts no heavy j
   );
 });
 
-// 0175: today's build starts only when a file of today's version changed, on every event. A file
-// that reruns every test is not one. Its tests and e2e, which 0175 started the same way, start on
-// no event since 0533 (the law at the end).
+// Every run that can read its changed paths picks its jobs from them: today's build starts only when a file of today's version changed, on every event. A file
+// that reruns every test is not one. Its tests and e2e, which the every-run-follows-its-paths rule started the same way, start on
+// no event since the rule that CI runs none of today's tests (the law at the end).
 const rerun = fc.constantFrom("pnpm-lock.yaml", "package.json", "tsconfig.json", "pnpm-workspace.yaml");
 
 const tooling = fc.oneof(
@@ -585,7 +585,7 @@ it("property: a pull request, a merge queue's group or a push of next/ files alo
   );
 });
 
-// 0534 narrowed this law: the tooling tests left the merge queue and main. 0539 took them off pull
+// The changed-tests rule narrowed this law: the tooling tests left the merge queue and main. The no-tooling-tests-on-the-merge-line rule took them off pull
 // requests too: no flag starts one, and the schedule runs them all. The flag law at the end holds
 // that for every path; this one pins the tooling files themselves.
 it("property: a tooling file starts no tooling test and not today's build, on a pull request, a merge queue's group and a push", () => {
@@ -603,7 +603,7 @@ it("property: a tooling file starts no tooling test and not today's build, on a 
   );
 });
 
-// 0534: no next/ test reads a file under .github/ (`rg '\.github' next --glob '*.test.ts'` finds
+// The merge line runs only the tests a change reaches, and a schedule runs every test: no next/ test reads a file under .github/ (`rg '\.github' next --glob '*.test.ts'` finds
 // only commits.test.ts, naming the glob as a string), so CI's own files need none of next/, on every
 // event that follows its paths. Beside a next/ file, that file decides.
 const ciFile = fc.oneof(
@@ -659,8 +659,8 @@ it("vector: the fixed table (@kalfa/ci/DocsOnly.test-support) gets the same answ
   }
 });
 
-// 0174 narrowed this law: the group no longer runs every job, and it is still never a draft. 0534
-// narrowed it again, to less the test job, and 0539 took that job off every event.
+// The queue-follows-its-paths rule narrowed this law: the group no longer runs every job, and it is still never a draft. The changed-tests rule
+// narrowed it again, to less the test job, and the no-tooling-tests-on-the-merge-line rule took that job off every event.
 it("property: a merge queue's group runs what a ready pull request runs, and ignores the draft flag", () => {
   fc.assert(
     fc.property(paths, fc.boolean(), (paths, draft) => {
@@ -852,8 +852,8 @@ it("property: lint rule files alone run check and typecheck, with scope readers"
 it("format: each entry of readers is a tracked path that holds a test file", () => {
   // format: the next job's path argument is this list, so a renamed folder would leave the reader
   // run empty. The six entries the plan and experiment 288 found are all on it. build.test.ts, the
-  // format law split from build.integration.test.ts (0536), left the list when its law became the
-  // lint rule fabrika/one-page-runtime (0591).
+  // format law split from build.integration.test.ts (a test that needs a real resource runs only in main's full run), left the list when its law became the
+  // lint rule fabrika/one-page-runtime (a test that reads files as text declares its reads, and shape checks are lint rules).
   expect(Array.isArray(ci.readers)).toBe(true);
   expect(ci.readers).toEqual(
     expect.arrayContaining([
@@ -2032,7 +2032,7 @@ it.live(
     }),
 );
 
-// 0533: CI runs none of the tests of today's version, and 0539: the merge line runs no tooling test.
+// CI runs none of the tests of today's version, and the no-tooling-tests-on-the-merge-line rule: the merge line runs no tooling test.
 // No event, path list or draft flag turns today's tests, its app end to end or the tooling tests
 // back on: there is no flag for them, in the flags or in what the script prints for check.yaml.
 // workflow-lint.ts holds the other half: no job runs them (T1).
@@ -2055,7 +2055,7 @@ it("property: on every event, for any paths and either draft flag, no flag and n
     {
       ...options,
       examples: [
-        // pinned: a push of today's app, which ran its six test machines and its e2e before 0533.
+        // pinned: a push of today's app, which ran its six test machines and its e2e before the rule that CI runs none of today's tests.
         [["apps/fabrika/src/a.ts"], "push", false],
         // pinned: a hand-started run, which ran every job.
         [null, "workflow_dispatch", false],

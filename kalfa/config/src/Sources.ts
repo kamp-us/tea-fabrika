@@ -1,5 +1,5 @@
 /**
- * The four sources of a setting in their order: flag, env, repo, person, with each declaration's default last (0086).
+ * The four sources of a setting in their order: flag, env, repo, person, with each declaration's default last (a setting is declared once and read through Effect's ConfigProvider, flag, env, repo, then person).
  *
  * **Details**
  *

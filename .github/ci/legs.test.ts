@@ -34,7 +34,7 @@ const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
-// request, a merge queue group and a push to main (0534). Paths are the real next/ files Vitest
+// request, a merge queue group and a push to main (the merge line runs only the tests a change reaches, and a schedule runs every test). Paths are the real next/ files Vitest
 // selects; seconds come from a scratch table, so a law holds for any table, not only today's. Each
 // plant was run once on legs.ts and restored; each turned its law red.
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -52,14 +52,14 @@ const options = { seed: 119120, numRuns: 100 };
 
 const base = "b".repeat(40);
 
-// A pull request that asked for its visual tests with the `visual` label, and one that did not (0536).
+// A pull request that asked for its visual tests with the `visual` label, and one that did not (a test that needs a real resource runs only in main's full run).
 const pr: Run = { event: "pull_request", scope: "all", base, visual: true };
 
 const plainPr: Run = { ...pr, visual: false };
 
-// A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (0534), with
+// A merge line run that tests all of next/ from a base commit, the runs legs.ts sizes (the merge line runs only the tests a change reaches, and a schedule runs every test), with
 // the visual flag either way: only a pull request's counts, and a push to main runs the visual files
-// it reaches without one (0536).
+// it reaches without one (a test that needs a real resource runs only in main's full run).
 const line = fc
   .tuple(fc.constantFrom("pull_request", "merge_group", "push"), fc.stringMatching(/^[a-f0-9]{40}$/), fc.boolean())
   .filter(([, sha]) => !/^0+$/.test(sha))
@@ -170,11 +170,11 @@ it("scenario: every next/ file selected, with today's table, gives exactly today
   expect(shards(full)).toEqual([...e2eLegs(workflow), ...vitestLegs(workflow)]);
 });
 
-// 0534 narrowed this law: the merge queue and a push to main left it. They size their legs as a pull
+// The changed-tests rule narrowed this law: the merge queue and a push to main left it. They size their legs as a pull
 // request does, so none of the three runs the whole suite; the schedule does. Ticket 997 narrowed it
 // again: a run of the reader tests alone left it, and is sized (the law below).
 it("property: a run of all of next/ with no base commit, or an event off the merge line, gives the full vitest legs, and visual legs only on a push to main or a pull request that asked", () => {
-  // Plant: drop the base check (red on no base). 0536 and the owner's ruling of 2026-11-18, plants,
+  // Plant: drop the base check (red on no base). The real-resource rule and the owner's ruling of 2026-11-18, plants,
   // each run once on legs.ts and restored: `visual` always true (red: the merge queue got e2e legs);
   // `visual` without the pull request check (red: a queue group with the flag got them); PR 1581's
   // `LINE.has(run.event) || run.visual` back (red: a pull request without the label and the merge
@@ -222,7 +222,7 @@ it("property: a run of all of next/ with no base commit, or an event off the mer
 });
 
 it("property: a merge queue group sizes its legs as a pull request without the visual label does, and a push to main as one with it", () => {
-  // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push). 0536,
+  // Plant: the old `run.event === "pull_request"` in `sizes` (red on merge_group and push). The real-resource rule,
   // plants, each run once on legs.ts and restored: `visual` without the pull request check (red: a
   // queue group with the flag got e2e legs); the push dropped (red: a push lost its e2e legs).
   fc.assert(
@@ -239,7 +239,7 @@ it("property: a merge queue group sizes its legs as a pull request without the v
     ),
     {
       ...options,
-      // pinned: an empty selection in the queue, which ran seven machines on nothing before 0534.
+      // pinned: an empty selection in the queue, which ran seven machines on nothing before the changed-tests rule.
       examples: [
         [
           { selected: { vitest: [], e2e: [] }, table: {} },
@@ -254,7 +254,7 @@ it("property: a merge queue group sizes its legs as a pull request without the v
 const group = line.filter((run) => run.event === "merge_group");
 
 it("property: a sized pull request without the visual label, and every merge queue group, start no end-to-end leg, whatever they selected", () => {
-  // 0536 and the owner's ruling of 2026-11-18: a visual law needs a browser or Electron, so it stays
+  // The real-resource rule and the owner's ruling of 2026-11-18: a visual law needs a browser or Electron, so it stays
   // off the pull request and the merge queue unless a pull request asks. Plants, each run once on
   // legs.ts and restored: size e2e as if every pull request asked (red); PR 1581's
   // `LINE.has(run.event) || run.visual` back (red: both got e2e legs).
@@ -460,7 +460,7 @@ it("property: the size step's BUDGET is a positive number of seconds, and anythi
   );
 });
 
-// 0536: the merge queue never starts the visual legs; a push to main keeps them.
+// A test that needs a real resource runs only in main's full run: the merge queue never starts the visual legs; a push to main keeps them.
 it.each([
   ["the merge queue", "merge_group", 'shards=["1","2","3","4","5"]\nvitest=5\ne2e=0\nnext=true\n'],
   ["a push to main", "push", 'shards=["e2e-1","e2e-2","1","2","3","4","5"]\nvitest=5\ne2e=2\nnext=true\n'],
@@ -573,7 +573,7 @@ it("property: the size step prints files only on a sized run with a vitest leg, 
 });
 
 it("property: the size step prints the base only on a sized run with an end-to-end leg, so no other run narrows them", () => {
-  // 0534: the end-to-end legs narrow with `--changed` from changes' `base`, the commit they were
+  // The merge line runs only the tests a change reaches, and a schedule runs every test: the end-to-end legs narrow with `--changed` from changes' `base`, the commit they were
   // sized from. Plants: print `base` on every run (red: a run with no base, and the reader tests,
   // narrowed); drop the line (red: a sized run's end-to-end legs ran every file). Ticket 997, plant,
   // run once on legs.ts and restored: drop `run.scope === "all"` from `narrowed` (red: a sized

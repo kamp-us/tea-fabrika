@@ -1,6 +1,6 @@
-// Ticket 1029, decision 0538: a next/ test opens a SQLite file through one module of the test
+// Ticket 1029, the rule that the shared test primitives live in one workspace package: a next/ test opens a SQLite file through one module of the test
 // primitives, `TestDatabase` in `@kampus/vitest/TestDatabase`. `make(file)` opens a file the test
-// owns with its journal in memory and no disk sync, so a law never waits on the disk (0052, ticket
+// owns with its journal in memory and no disk sync, so a law never waits on the disk (a test never depends on the person's machine, ticket
 // 1028); `open(file)` opens a file another party owns and changes nothing in it. So a test file, a
 // shared suite (`*Test.ts`) or a test kit (`*.test-support.ts`) in next/ may not write
 // `new DatabaseSync(file)` itself:

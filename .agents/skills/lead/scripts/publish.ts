@@ -1,5 +1,5 @@
 // publish.ts: push the checkout's HEAD to its branch and give the branch a draft pull request when it
-// has none (0134). Today's lead tooling, run on our own laptop; it is not product. stepcommit.sh runs
+// has none (every commit is pushed when it is made, with a draft pull request from the first commit). Today's lead tooling, run on our own laptop; it is not product. stepcommit.sh runs
 // it right after each commit it signs; a person runs it where a commit step could not push.
 //
 //   node publish.ts <branch>    run in the checkout; one line on stdout, exit 0 pushed, 1 refused

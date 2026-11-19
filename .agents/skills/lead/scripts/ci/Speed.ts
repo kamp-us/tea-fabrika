@@ -276,7 +276,7 @@ export const markdown = (r: Report): string => {
 /** An open issue as GitHub lists it. */
 export type Issue = { readonly number: number; readonly title: string };
 
-/** The one label automation may open issues with here (0534, 0541), and the title this measure's issue starts with. */
+/** The one label automation may open issues with here (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it), and the title this measure's issue starts with. */
 export const LABEL_NAME = "ci-scheduled";
 
 export const TITLE = "CI speed: a stage is over its goal";

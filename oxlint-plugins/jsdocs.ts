@@ -1,4 +1,4 @@
-// E6 (0023, 0120): every public export of a `next/` library has an Effect-shaped doc block, and its
+// E6 (next/ follows Effect's code style and doc comments; Effect code in next/ follows the eight Effect guidelines): every public export of a `next/` library has an Effect-shaped doc block, and its
 // file a module block. Ticket 913, slice B2.1 of `docs/plan/effect-rules-big.md`.
 //
 // This file finds the blocks, through oxlint's syntax tree. Whether a block is right is Effect's own
@@ -7,7 +7,7 @@
 // off for the six kinds that are not public (`internal/`, tests, test support, shared suites,
 // fixtures, declaration files).
 //
-// The one option, `since`: `absent` until libfabrika ships a version (0118), so a `@since` tag fires
+// The one option, `since`: `absent` until libfabrika ships a version (doc comments carry no @since tag until libfabrika has a released version), so a `@since` tag fires
 // and its absence does not; `required` asks for it as Effect does. Nothing else changes with it.
 //
 // Which statements, at the top level of a file (the draft's edge cases 6 to 14):
@@ -21,7 +21,7 @@
 // - Ours, the owner's answer of 2026-11-13: a type directly under its same-name schema, as
 //   `export const Sent = ...` then `export type Sent = typeof Sent.Type;`, shares the schema's block
 //   and needs none of its own. "Directly" means the statement right before it. A kept difference
-//   from Effect's style, listed in 0023.
+//   from Effect's style, listed in the rule that next/ follows Effect's code style.
 //
 // Which comment is the block: the last `/** */` among the comments right before the node, so a `//`
 // line between (an ignore comment, `@ts-expect-error`) is skipped, and of two blocks only the last
@@ -33,7 +33,7 @@
 // else, an `export { a }` list or a plain statement included, one block above it is the statement's
 // own, as TypeScript attaches it and Effect's checker reads it, and with two the first is the
 // module's. So a file that opens with no import puts two blocks above its first statement. It needs
-// no `@category` (and no `@stability`, 0574); its prose is not judged, as in Effect.
+// no `@category` (and no `@stability`, no @stability tag until the first release, and each unstable Effect part is named once); its prose is not judged, as in Effect.
 //
 // A block on a member of an interface, a class or a type literal is optional. When there is one, it
 // is judged with Effect's member tags (no `@category`; `@default` allowed). As in Effect, members are
@@ -111,7 +111,9 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
   const messages = Arr.map(kept, (d) => d.message);
 
   if (since === "absent" && Arr.some(block.tags, (tag) => tag.name === "since")) {
-    messages.push("@since is not written until libfabrika's first release (0118)");
+    messages.push(
+      "@since is not written until libfabrika's first release (doc comments carry no @since tag until libfabrika has a released version)",
+    );
   }
 
   return [...new Set(messages)];
@@ -334,7 +336,7 @@ export const jsdocs: CreateRule = {
       if (doc === undefined) {
         context.report({
           node,
-          message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @category (E6, 0023).`,
+          message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @category (E6, next/ follows Effect's code style and doc comments).`,
         });
 
         return "reported";
@@ -354,7 +356,7 @@ export const jsdocs: CreateRule = {
       if (all.length > 0) {
         context.report({
           node,
-          message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${Arr.join(all, "; ")}.`,
+          message: `\`${name}\`'s doc block is out of Effect's shape (E6, next/ follows Effect's code style and doc comments): ${Arr.join(all, "; ")}.`,
         });
 
         return "reported";
@@ -486,7 +488,7 @@ export const jsdocs: CreateRule = {
         context.report({
           loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
           message:
-            "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description, above the imports (E6, 0023).",
+            "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description, above the imports (E6, next/ follows Effect's code style and doc comments).",
         });
 
         return;
@@ -510,7 +512,7 @@ export const jsdocs: CreateRule = {
       if (problems.length > 0) {
         context.report({
           node: block,
-          message: `The module block is out of Effect's shape (E6, 0023): ${Arr.join(problems, "; ")}.`,
+          message: `The module block is out of Effect's shape (E6, next/ follows Effect's code style and doc comments): ${Arr.join(problems, "; ")}.`,
         });
       }
     }

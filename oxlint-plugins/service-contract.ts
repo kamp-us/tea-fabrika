@@ -1,4 +1,4 @@
-// 0095, P19 next/. Scope is the three new desktop contracts. Existing services migrate separately.
+// The service-contract rule, P19 next/. Scope is the three new desktop contracts. Existing services migrate separately.
 // Edge cases: renamed Context/Schema imports, namespace imports, computed static members,
 // methods and fields, runtime exports, type-only imports, schema declarations, sibling layers.
 // Oxlint's restricted-imports cannot distinguish a service class from its implementation.
@@ -8,7 +8,7 @@ import { dotted, pathIn, type Node } from "./match.ts";
 const CONTRACT = /\/desktop\/(BrainService|BrainControl|BrainProbe)\.ts$/;
 
 const MESSAGE =
-  "A service file holds only its written contract, schemas and errors; put running code in a sibling Layer (0095).";
+  "A service file holds only its written contract, schemas and errors; put running code in a sibling Layer.";
 
 export const serviceContract: CreateRule = {
   create(context) {

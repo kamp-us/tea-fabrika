@@ -17,12 +17,12 @@
 //   3. links the main checkout's node_modules there          the scripts' imports resolve
 //   4. runs the chain again from that folder, FABRIKA_PIN    every import.meta.dirname, and so
 //      naming the commit and the folder                      every script it spawns, is the pin's
-//   5. removes the folder when the quest ends                 the scope's release (0061)
+//   5. removes the folder when the quest ends                 the scope's release (anything that holds a resource is acquired in a scope, so the scope releases it)
 //
 // The pinned chain writes the commit into its chain record (`scripts`) and prints it, with the
 // commit its last process ran on, so a restart is a new choice anyone can see. A quest killed with
 // SIGKILL runs no release: the box cleanup removes a pin no running process names once it is 2 h old
-// (`decidePin`; 0101's timer runs it).
+// (`decidePin`; the cleanup-timer rule's timer runs it).
 //
 // What the pin does not hold: files the scripts read through MAIN (the exam signer
 // `next/apps/fabrika/src/exam/commits.ts`, `exam-paths.json`, `local.env`'s settings) and the

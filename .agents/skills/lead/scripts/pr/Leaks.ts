@@ -1,4 +1,4 @@
-// Leaks: the leak gate every merge path runs before it asks GitHub anything (0048, 0183). It runs
+// Leaks: the leak gate every merge path runs before it asks GitHub anything (the leak check reads each pushed commit on its own; the lead admin-merges a docs-only pull request after checking it is not broken). It runs
 // leakgrep.sh, through the Pushes service, on what a merge makes public on main: the net change, each
 // commit since main, and the title and description a squash writes. Any refusal, and a grep that
 // could not run, fails the gate; nothing here reads an exit code loosely. On 2026-11-15 a merge ran

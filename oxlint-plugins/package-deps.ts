@@ -12,7 +12,7 @@
 // A package is a child folder of `next/packages`, `next/programs` or `next/apps` (pnpm-workspace.yaml's
 // next/ globs) that holds a `package.json`. An `exports` map is read the way Node reads it (ticket 477,
 // PR 9). The platform's own modules (`node:fs`, `fs`, `cloudflare:workers`) are no package anyone
-// lists. This was the import half of the exam's `deps.integration.test.ts` until 0591 made it a lint
+// lists. This was the import half of the exam's `deps.integration.test.ts` until the exam-to-lint rule made it a lint
 // rule; the manifest half is `pnpm lint:manifests` (`next-manifests.ts`). `package-deps.test.ts` plants
 // the exam's trees with the repo's own config.
 //

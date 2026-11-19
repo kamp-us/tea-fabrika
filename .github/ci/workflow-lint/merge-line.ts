@@ -1,7 +1,7 @@
 import { Predicate, Record as Rec } from "effect";
-// Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
+// Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, the merge line runs no tooling tests, and the schedule runs them all),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
-// today's app (T2) or today's promise checks (T6, 0525, 0533).
+// today's app (T2) or today's promise checks (T6, today's version is frozen and takes no new work; CI runs none of today's version's tests).
 import { parse } from "yaml";
 import { relatedWorkload } from "./related.ts";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
@@ -10,10 +10,10 @@ import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, step
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
 
 // Today's promise checks: `pnpm promises`, however spelled, or its program by path. Their checks
-// and planted breaks test today's pipeline code, so no command in check.yaml runs them (0533).
+// and planted breaks test today's pipeline code, so no command in check.yaml runs them (CI runs none of today's version's tests).
 const TODAYS_PROMISES = /\bpnpm\s+(?:-\S+\s+|run\s+)*promises\b|packages\/promises\//;
 
-// T1 (0539). A shell command that starts vitest: the binary, however reached (`pnpm exec`, `npx`,
+// T1 (the merge line runs no tooling tests, and the schedule runs them all). A shell command that starts vitest: the binary, however reached (`pnpm exec`, `npx`,
 // `pnpm dlx`, a path into node_modules), but not a file named `vitest.*`; or a package manager's
 // test script, by any of its names (`t`, `tst`, `test`, `test:…`) and after any flags with their
 // values: the root `test` script is `vitest run`.
@@ -47,7 +47,7 @@ const shellCommands = (script: string) =>
     .filter((part) => part !== "");
 
 /**
- * T1 (0539): the jobs of a pull request or merge queue workflow that run a tooling test. A vitest
+ * T1 (the merge line runs no tooling tests, and the schedule runs them all): the jobs of a pull request or merge queue workflow that run a tooling test. A vitest
  * call passes in one of two ways. Either it names its projects, each one of next/'s, and no other
  * config or root: a call with no `--project` runs every project, the tooling one and today's among
  * them. Or its step runs it inside next/ (`working-directory`, with no `..` and no `cd`), and no
@@ -112,20 +112,21 @@ export const lintNoTooling = (path: string, text: string): string[] => {
 
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow, path === ".github/workflows/check.yaml").map(
-        (job) => `${path}: T1: ${job} runs no tooling test (0539)`,
+        (job) =>
+          `${path}: T1: ${job} runs no tooling test (the merge line runs no tooling tests, and the schedule runs them all)`,
       )
     : [];
 };
 
 export const mergeLine: Rule = ({ workflow, jobs }, require) => {
-  // T1 (0539). No event here runs a tooling test: their author runs the narrow ones on the laptop,
+  // T1 (the merge line runs no tooling tests, and the schedule runs them all). No event here runs a tooling test: their author runs the narrow ones on the laptop,
   // and the schedule runs them all (scheduled.yaml's tooling job, SC8). Today's version is frozen
-  // (0525, 0533), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
+  // (today's version is frozen and takes no new work; CI runs none of today's version's tests), so its tests run on no event either. `toolingJobs` says how a vitest call passes.
   for (const name of toolingJobs(workflow, true)) {
-    require(false, `T1: ${name} runs no tooling test (0539)`);
+    require(false, `T1: ${name} runs no tooling test (the merge line runs no tooling tests, and the schedule runs them all)`);
   }
 
-  // T2 (0525, 0533). No job runs today's app, end to end or otherwise. T6 (0533): no step runs
+  // T2 (today's version is frozen and takes no new work; CI runs none of today's version's tests). No job runs today's app, end to end or otherwise. T6 (CI runs none of today's version's tests): no step runs
   // today's promise checks.
   for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of steps(map(job))) {

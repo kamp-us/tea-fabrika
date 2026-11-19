@@ -10,9 +10,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { kind, reads } from "@kalfa/ci/DocsOnly";
 
-// Today's version is frozen (0525, 0533), so no flag here starts its tests or its app end to end: there
+// Today's version is frozen (today's version is frozen and takes no new work; CI runs none of today's version's tests), so no flag here starts its tests or its app end to end: there
 // is no such flag, on any event. No flag starts the tooling tests either: the merge line runs none of
-// them, and the schedule (scheduled.yaml) runs them all (0539).
+// them, and the schedule (scheduled.yaml) runs them all (the merge line runs no tooling tests, and the schedule runs them all).
 /** @typedef {{check: boolean, typecheck: boolean, next: boolean, build: boolean}} Flags */
 /** @typedef {(args: string[]) => {status: number | null, stdout: string}} Runner */
 const all = { check: true, typecheck: true, next: true, build: true };
@@ -52,8 +52,8 @@ const skill = (path) => path.startsWith(".agents/skills/");
 
 /**
  * A file of today's version: its trees, the design package today's app imports, and the toy
- * projects its tests read. Only these start today's build (0175), `pnpm build`. Its tests, its
- * promise checks and its e2e run on no event (0525, 0533). A file that reruns every test, such as
+ * projects its tests read. Only these start today's build (every run that can read its changed paths picks its jobs from them), `pnpm build`. Its tests, its
+ * promise checks and its e2e run on no event (today's version is frozen and takes no new work; CI runs none of today's version's tests). A file that reruns every test, such as
  * the lockfile or a root config, is not one.
  * @param {string} path
  */
@@ -62,7 +62,7 @@ const todays = (path) =>
 
 /**
  * An event whose jobs follow its changed paths, because it can read them: a pull request, a merge
- * queue's group (0174) and a push to main, whose paths are what that push brought (0175). Any
+ * queue's group (a merge queue's run starts only the checks its changed files need) and a push to main, whose paths are what that push brought (every run that can read its changed paths picks its jobs from them). Any
  * other event runs every job.
  * @param {string} event
  */
@@ -93,7 +93,7 @@ const provable = (path) => path.startsWith("next/") && /\.tsx?$/.test(path);
 
 /**
  * CI's own files: the workflows, the shared setup, and CI's scripts with their tests. No next/ test
- * reads one (0534; `rg '\.github' next --glob '*.test.ts'` finds only commits.test.ts, which names
+ * reads one (the merge line runs only the tests a change reaches, and a schedule runs every test; `rg '\.github' next --glob '*.test.ts'` finds only commits.test.ts, which names
  * the glob as a string), so a change here needs none of next/. The tooling tests that read them as
  * text reach them through vitest.config.ts's `githubReads` in a local `--changed` run, and the
  * schedule runs them and all of next/.
@@ -159,7 +159,7 @@ export const scope = (paths, event, proven = [], shown = []) => {
  * A scoped event skips a job only when every path is explicitly safe for that job.
  * `build` is true only when a path is one of today's version's files: it gates check's
  * `pnpm build`, the slow half of check. No flag starts a tooling test: the merge line runs none
- * (0539). History that cannot be read, no path at all, or an event that is not scoped runs everything.
+ * (the merge line runs no tooling tests, and the schedule runs them all). History that cannot be read, no path at all, or an event that is not scoped runs everything.
  * `proven` is taken so a caller can pass what it has, and never changes a flag: a proof only narrows
  * which next/ tests run (`scope`), never whether next runs.
  * @param {readonly string[] | null} paths
@@ -191,11 +191,11 @@ export const classify = (paths, event, _proven = [], shown = []) => {
 
 /**
  * What one event runs: classify's flags. A draft pull request runs only the fast jobs: changes,
- * typecheck and check's lint (owner, 2026-11-11, 0134's amendment). Marking it ready starts
+ * typecheck and check's lint (owner, 2026-11-11, the push-every-commit rule's amendment). Marking it ready starts
  * a run with `draft` false, so the full set runs on that head before it can merge. Only a pull
  * request can be a draft; on any other event, a merge queue's group and a push included, the flag
- * is ignored. No event starts a tooling test (0539): their author runs the narrow ones on the
- * laptop, and the full run (scheduled.yaml) runs them all, at most once an hour (0581).
+ * is ignored. No event starts a tooling test (the merge line runs no tooling tests, and the schedule runs them all): their author runs the narrow ones on the
+ * laptop, and the full run (scheduled.yaml) runs them all, at most once an hour (main's full run starts on a push to main and an hourly catch-up).
  * @param {readonly string[] | null} paths
  * @param {string} event
  * @param {boolean} draft

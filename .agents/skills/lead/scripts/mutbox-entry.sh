@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs inside the mutation container (0045), as an unprivileged user with no network.
+# Runs inside the mutation container (a step that needs ports or its own processes and network isolation runs in a container), as an unprivileged user with no network.
 # /in/repo.git is the commit under test, read-only. /out is the only folder that leaves the box.
 # Exit: 70 the offline install failed, 71 a related test fails before any mutant, 72 no test left,
 # else run.sh's own (124 when its five minutes ran out).

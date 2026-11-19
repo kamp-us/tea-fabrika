@@ -23,10 +23,10 @@ import {
 } from "./shared.ts";
 import { TIME_TABLE, timed } from "./time-tables.ts";
 
-// The full run (0534, 0581): scheduled.yaml runs all of next/ and every tooling test on main, and a
+// The full run (the merge line runs only the tests a change reaches, and a schedule runs every test; main's full run starts on a push to main and an hourly catch-up): scheduled.yaml runs all of next/ and every tooling test on main, and a
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
-// requests keep theirs (0595). The ten jobs are MAIN_SLOTS groups for main's full run, PROOF_SLOTS for
-// branch proofs and one control group (0598); the merge line, check.yaml, holds none.
+// requests keep theirs (scheduled runs share ten job slots). The ten jobs are MAIN_SLOTS groups for main's full run, PROOF_SLOTS for
+// branch proofs and one control group (the merge line leaves the scheduled job groups); the merge line, check.yaml, holds none.
 const BUDGET = 10;
 
 const CONTROL_GROUP = "scheduled-control";
@@ -35,10 +35,10 @@ const MAIN_GROUP = "scheduled-main-";
 
 const PROOF_GROUP = "scheduled-proof-";
 
-// 0595's names, which no group of this workflow holds any more.
+// The shared-slots rule's names, which no group of this workflow holds any more.
 const OLD_GROUP = "scheduled-test-";
 
-// The two counts (0069): how many groups main's full run takes and how many a branch proof takes.
+// The two counts (a choice that makes sense as a setting is a setting, declared once): how many groups main's full run takes and how many a branch proof takes.
 // GitHub allows no `env` in `strategy` or a job's `concurrency`, so the copies are held equal here.
 const MAIN_SLOTS = "MAIN_SLOTS";
 
@@ -125,7 +125,7 @@ const TOOLING_LEG = "tooling-";
 
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
 
-// Main's full run keeps the tested @kalfa/config archive (0602's amendment, SC22). Every numbered
+// Main's full run keeps the tested @kalfa/config archive (the integration-laws rule's amendment, SC22). Every numbered
 // vitest leg checks its own report with the receipt; the one whose report holds the package law
 // (the receipt says `kept`) uploads exactly the two files that law's run wrote.
 const RECEIPT = "node .github/ci/related.ts --receipt";
@@ -148,12 +148,12 @@ const ARCHIVE_PATHS = [`${DELIVERY}/kalfa-config-0.0.0.tgz`, `${DELIVERY}/receip
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
 // A run whose gate said `false` skips the report too, so it leaves the issue as it was; a gate that
-// failed leaves `start` empty, and the report judges that run red (0581).
+// failed leaves `start` empty, and the report judges that run red (main's full run starts on a push to main and an hourly catch-up).
 const REPORT_IF = "always() && needs.gate.outputs.start != 'false'";
 
 const REPORT = "node .github/ci/scheduled.mjs";
 
-// The gate (0581): the first job, which says whether this run starts the tests. A push to main or
+// The gate (main's full run starts on a push to main and an hourly catch-up): the first job, which says whether this run starts the tests. A push to main or
 // the hourly catch-up starts them only when no full run on main started within the gap, and the
 // catch-up only on a head that has had none; a hand start always does.
 const GATE_JOB = "gate";
@@ -166,7 +166,7 @@ const GATE_OUTPUTS = { start: `\${{ steps.${GATE_STEP}.outputs.start }}` };
 
 const STARTED = `needs.${GATE_JOB}.outputs.start == 'true'`;
 
-// A branch's proof run (0590): `select` runs proof.ts on a hand start on a branch other than main
+// A branch's proof run (a branch's proof run runs only the tests its change reaches): `select` runs proof.ts on a hand start on a branch other than main
 // alone, so main's push, catch-up and hand start run the full set on `tests` (SC15, SC17). It says
 // `full` or `changed`, and a changed set runs on `changed`'s legs, each its own list (SC18).
 const SELECT_JOB = "select";
@@ -187,9 +187,9 @@ const RUN_NUMBER = `\${{ github.run_number }}`;
 
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
 
-// The hand start's two inputs (0590, ticket 1161): `scope`, `changed` by default, and `law`, empty by
+// The hand start's two inputs (a branch's proof run runs only the tests its change reaches, ticket 1161): `scope`, `changed` by default, and `law`, empty by
 // default, which only select's set step reads, as `SCOPE` and `LAW` (SC17, SC21). The default is
-// 0590's ruling, not a free setting (0069): a default of `full` would make every hand start the full
+// The proof-run rule's ruling, not a free setting (a choice that makes sense as a setting is a setting, declared once): a default of `full` would make every hand start the full
 // set, so the lint holds it the way SC16 holds the gap's floor.
 const SELECT_READS = { SCOPE: "inputs.scope", LAW: "inputs.law" };
 
@@ -227,7 +227,7 @@ const CHANGED_LEGS = `\${{ fromJSON(needs.${SELECT_JOB}.outputs.legs) }}`;
 
 const LEG_FILES = `fromJSON(needs.${SELECT_JOB}.outputs.files)[matrix.shard]`;
 
-// The gap (0581, 0069): a setting in the workflow's own env, beside the cron line. 0581's binding
+// The gap (main's full run starts on a push to main and an hourly catch-up; a choice that makes sense as a setting is a setting, declared once): a setting in the workflow's own env, beside the cron line. The full-run timing rule's binding
 // constraint is an hour at least.
 const GAP = "GAP_MINUTES";
 
@@ -247,29 +247,29 @@ const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
 
 const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts ${RESULTS}`;
 
-// Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
+// Every layer of next/ (a test that needs a real resource runs only in main's full run): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
 // `next-visual` on legs with no Chromium, and a project ignores `--exclude`. The vitest legs read
 // their projects from the ref (NEXT_PROJECTS): main's full run never drops a real-resource law, and
-// a branch's full set, a proof run, starts none (0602).
+// a branch's full set, a proof run, starts none (integration laws run only in main's full run).
 const WHOLE_NEXT = `pnpm exec vitest run $PROJECTS --shard "$SHARD" ${REPORTERS}`;
 
 const NEXT_PROJECTS = `\${{ ${ON_MAIN} && '--project next --project next-integration' || '--project next' }}`;
 
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
 
-// Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
+// Today's version is frozen (today's version is frozen and takes no new work; CI runs none of today's version's tests), so the schedule's vitest call of the tooling tests runs the
 // tooling projects alone: next/ and the three trees of today's tests are projects of their own, and
 // a project ignores `--exclude` (vitest.config.ts; merge-line.test.ts holds the tooling projects'
 // globs). The tooling legs read their projects from the ref (TOOLING_PROJECTS), as the vitest legs
 // do: main's full run runs `tooling` and `tooling-integration`, the tooling laws that start a
-// process (0584), and a branch's full set, a proof run, runs `tooling` alone (0602).
+// process (a test's kind follows what it uses, never its name), and a branch's full set, a proof run, runs `tooling` alone (integration laws run only in main's full run).
 const WHOLE_TOOLING = `pnpm exec vitest run $PROJECTS --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
 
 const TOOLING_PROJECTS = `\${{ ${ON_MAIN} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
 
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project proof.ts
-// lists: today's left out (0533), and `next-integration`, which only main's full run runs (0602). No
+// lists: today's left out (CI runs none of today's version's tests), and `next-integration`, which only main's full run runs. No
 // `--changed` and no `--shard`: the list is the leg.
 const CHANGED_RUN = `pnpm exec vitest run --project next --project next-visual --project tooling $FILES ${REPORTERS}`;
 
@@ -331,7 +331,7 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
     ), "SC19: every admitted job is one of the five jobs with shared slots");
 
   // SC16, the counts. Two settings, whole numbers of 1 or more, that with the control group make the
-  // budget (0598); the workflow's env holds them beside the gap.
+  // budget (the merge line leaves the scheduled job groups); the workflow's env holds them beside the gap.
   const settings = map(workflow["env"]);
   const main = count(settings[MAIN_SLOTS]);
   const proof = count(settings[PROOF_SLOTS]);
@@ -339,7 +339,7 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
     proof !==
       undefined, `SC16: ${MAIN_SLOTS} and ${PROOF_SLOTS} are each a whole number of 1 or more, written as a number`);
 
-  // SC19. The two counts and the control group are the whole budget (0595, 0598).
+  // SC19. The two counts and the control group are the whole budget (scheduled runs share ten job slots; the merge line leaves the scheduled job groups).
   require(main !== undefined &&
     proof !== undefined &&
     main + proof + 1 ===
@@ -401,10 +401,10 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
   require(typeof concurrency["group"] === "string" &&
     !reserved.includes(concurrency["group"].toLowerCase()), "SC19: the workflow group never holds a shared job group");
 
-  // 0595's groups are gone: no job group of this workflow, nor its own, starts with their prefix.
+  // The shared-slots rule's groups are gone: no job group of this workflow, nor its own, starts with their prefix.
   require(![concurrency, ...names.map((name) => map(map(jobs[name])["concurrency"]))].some(
     (held) => typeof held["group"] === "string" && held["group"].toLowerCase().includes(OLD_GROUP),
-  ), `SC19: no group holds 0595's ${OLD_GROUP} names`);
+  ), `SC19: no group holds the shared-slots rule's ${OLD_GROUP} names`);
 
   // SC20. The matrix lists the legs in the order they should start. A group is a first in, first out
   // queue and the matrix makes its jobs in list order, so the first MAIN_SLOTS legs take main's groups
@@ -429,7 +429,7 @@ const jobSlots = (workflow: Record<string, unknown>, require: Require): void => 
 };
 
 /**
- * SC21. The hand start's two inputs, and who reads them (0590, ticket 1161). On main `select` never
+ * SC21. The hand start's two inputs, and who reads them (a branch's proof run runs only the tests its change reaches, ticket 1161). On main `select` never
  * runs (SC17), so `scope` does nothing there: no other step, `if`, group or env may read the inputs.
  */
 const dispatchInputs = (workflow: Record<string, unknown>, require: Require): void => {
@@ -466,7 +466,7 @@ const dispatchInputs = (workflow: Record<string, unknown>, require: Require): vo
 
 /**
  * SC22. Main's full run keeps the tested @kalfa/config archive, once, on the leg that ran the package
- * law (0602's amendment). In `tests` one `package receipt` step runs right after the vitest step, on
+ * law (the integration-laws rule's amendment). In `tests` one `package receipt` step runs right after the vitest step, on
  * main's ref and the numbered legs, and one `package archive` upload runs right after it, on main's
  * ref and the receipt's `kept`: each with `success()`, a one-minute limit and no key beyond the ones
  * named, so no env, token or `continue-on-error` can reach them. No other step of any job runs the
@@ -582,7 +582,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     }
   };
 
-  // SC1. A push to main, the hourly catch-up and a hand start, nothing else (0581): no pull request
+  // SC1. A push to main, the hourly catch-up and a hand start, nothing else (main's full run starts on a push to main and an hourly catch-up): no pull request
   // or queue runs the whole suite, and a push to any other branch does not either. The push takes
   // every path, since the gate, not a path filter, decides. The catch-up is hourly at a fixed minute.
   const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
@@ -595,7 +595,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       String(map(crons[0])["cron"]),
     ), "SC1: it runs on a push to main, on one hourly schedule at a minute from 1 to 59, and by hand, on no other event");
   // SC16. The workflow's env is its three settings, nothing else: the gap, a whole number of
-  // minutes, an hour at least (0581's binding constraint), and the two group counts (0598, checked in
+  // minutes, an hour at least (the full-run timing rule's binding constraint), and the two group counts (the merge line leaves the scheduled job groups, checked in
   // jobSlots). A person changes each in one line beside the cron line.
   const gap = map(workflow["env"])[GAP];
   require(JSON.stringify(Rec.keys(map(workflow["env"])).toSorted()) ===
@@ -743,7 +743,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC15. The tests run only when the gate said `true`: a gate that said `false` or failed starts
   // none. They run the full set wherever `select` did not run, which is every run on main, and on a
-  // branch whose `select` said `full` (0590). A select that failed starts no full set.
+  // branch whose `select` said `full` (a branch's proof run runs only the tests its change reaches). A select that failed starts no full set.
   const testsJob = map(jobs[TESTS_JOB]);
   require(JSON.stringify(testsJob["needs"]) === JSON.stringify([GATE_JOB, SELECT_JOB]) &&
     compact(testsJob["if"]) ===
@@ -752,7 +752,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), `SC15: ${TESTS_JOB} needs the ${GATE_JOB} and ${SELECT_JOB}, and runs only when the gate said start=true and ${SELECT_JOB} was skipped or said full`);
 
   // SC17. `select` runs only on a hand start on a branch other than main, after the gate said
-  // `true` (0590): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
+  // `true` (a branch's proof run runs only the tests its change reaches): a push to main, the catch-up and a hand start on main skip it, so SC15's `tests`
   // runs every test there. It runs proof.ts once, in a step whose outputs are the job's,
   // with the most legs at once (`MOST`, the `changed` matrix's `max-parallel` and PROOF_SLOTS, SC6, SC19), the legs' test
   // step limit (`LIMIT`, next's, SC18), where its record goes and the hand start's two inputs (`SCOPE`
@@ -793,9 +793,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
         selectRuns[0] ?? {},
       ), `SC17: ${SELECT_JOB} runs ${SELECT} once, only on a hand start on a branch other than main, after the gate said start=true, with the whole history, and keeps its record as proof-set`);
 
-  // SC18. `changed` runs a changed set's legs (0590): only when `select` said `changed` with a leg,
+  // SC18. `changed` runs a changed set's legs (a branch's proof run runs only the tests its change reaches): only when `select` said `changed` with a leg,
   // so it and `tests` never run in one run, each leg exactly its own list over every project
-  // proof.ts lists, `next-integration` not among them (0602), at next's test step limit with the
+  // proof.ts lists, `next-integration` not among them (integration laws run only in main's full run), at next's test step limit with the
   // same backstop, chromium first when its list holds a visual file, and nothing else.
   const changed = map(jobs[CHANGED_JOB]);
   const changedSteps = steps(changed);
@@ -820,7 +820,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(commandsOf(changed).toSorted()) ===
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
-      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (0602), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+      ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (integration laws run only in main's full run), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
 
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
@@ -945,7 +945,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(compact(map(vitest[0]?.["env"])["PROJECTS"]) ===
     compact(
       NEXT_PROJECTS,
-    ), "SC7: next's vitest legs run the next and next-integration projects on main, and next alone on a branch's full set, which runs no real-resource law (0602)");
+    ), "SC7: next's vitest legs run the next and next-integration projects on main, and next alone on a branch's full set, which runs no real-resource law");
   require(e2e.length === 1 &&
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
@@ -967,7 +967,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(compact(map(toolingRuns[0]?.["env"])["PROJECTS"]) ===
     compact(
       TOOLING_PROJECTS,
-    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process (0602)");
+    ), "SC8: the tooling legs run the tooling and tooling-integration projects on main, and tooling alone on a branch's full set, which runs no tooling law that starts a process");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   require(JSON.stringify(commandsOf(tests).toSorted()) ===

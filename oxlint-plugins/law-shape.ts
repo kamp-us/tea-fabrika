@@ -1,9 +1,9 @@
 // Each law in a `next/` or `.agents/` test file is a property, or an example whose title starts with
-// `vector:`, `format:`, `pinned:`, `scenario:` or `type:` and its reason (0093, 0527). One ticket or
+// `vector:`, `format:`, `pinned:`, `scenario:` or `type:` and its reason (each law is a property that walks the machine, and each plant is run once, never kept; a law checked only by the compiler takes the type label). One ticket or
 // law id may stand before the label (`T652 scenario: ...`, `R3 format: ...`): one token of letters,
 // digits and dots, then a space. A label deeper in the title, or only in a comment, does not count.
 // It blocks in every folder at zero, and advises where the config's warn override still names the
-// folder (0523).
+// folder (a lint rule blocks wherever its code is clean).
 //
 // A test is a call rooted at `it` or `test`: `it(...)`, `it.effect(...)`, `it.live(...)`,
 // `it.skip(...)`, `it.only(...)`, `it.fails(...)`, and the ones a first call makes:
@@ -21,7 +21,7 @@
 // not followed, a `property` from another module included.
 //
 // A `type:` law is one only the compiler checks, so its body is judged before the property shapes,
-// and it gets its own message (0527). Each statement is an `expectTypeOf(...)` or `assertType(...)`
+// and it gets its own message (a law checked only by the compiler takes the type label). Each statement is an `expectTypeOf(...)` or `assertType(...)`
 // chain, or a `type` or `interface` declaration, with one chain at least. No other call, `new`,
 // `await`, `yield`, tagged template or `import()` stands anywhere in it, the chains' arguments and
 // the functions written in them included. The two names count only from a value import of `vitest`
@@ -73,10 +73,10 @@ export const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a bod
   LABELS,
   Arr.map((l) => `${l}:`),
   Arr.join(", "),
-)} and its reason (0093, 0527).`;
+)} and its reason (each law is a property that walks the machine, and each plant is run once, never kept; a law checked only by the compiler takes the type label).`;
 
 export const TYPE_MESSAGE =
-  "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels (0527).";
+  "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels (a law checked only by the compiler takes the type label).";
 
 type Fn = ESTree.ArrowFunctionExpression | ESTree.Function;
 
@@ -182,7 +182,7 @@ const assertion = (expression: Node, checks: ReadonlySet<string>): ReadonlySet<N
   }
 };
 
-/** Whether a body asserts types and runs nothing else: 0527's body. */
+/** Whether a body asserts types and runs nothing else: the type-label rule's body. */
 const typeOnly = (fn: Fn, checks: ReadonlySet<string>): boolean => {
   if (fn.body == null) {
     return false;

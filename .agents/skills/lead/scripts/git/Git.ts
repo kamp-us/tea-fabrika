@@ -1,5 +1,5 @@
 // Git: the shared git service of the lead scripts (S2 of .kalfa/quests/port-scripts-0113-PLAN.md).
-// This file is the contract only (0095): `GitProcess.layer` runs real git, `GitTest.layer` answers
+// This file is the contract only (a service file holds only its contract, and each layer is its own file): `GitProcess.layer` runs real git, `GitTest.layer` answers
 // from a model in memory, and git.integration.test.ts holds the two to the same answers. It holds
 // only the calls a port makes; a later port adds its call here, in both layers, with its law.
 // Today's lead tooling, run on our own laptop; it is not product.

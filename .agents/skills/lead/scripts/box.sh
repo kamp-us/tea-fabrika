@@ -118,7 +118,7 @@ def fetched_head(branch):
     return head
 def rows(state=None):
     # The box's own rows, and the quest's, where drive writes each step's row (BOXES/<quest>-rows.jsonl).
-    # A box made before decision 0546 names its quest under `lane:`, so both keys are read.
+    # A box made before the rule that a lane is called a quest names its quest under `lane:`, so both keys are read.
     quest = (state or {}).get("quest") or (state or {}).get("lane")
     paths = [state_dir / (name + ".rows.jsonl")] + ([boxes / (quest + "-rows.jsonl")] if quest else [])
     return [json.loads(l) for p in paths if p.exists() for l in p.read_text().splitlines() if l]
@@ -169,7 +169,7 @@ def new_box():
         return any(facts(p).get("branch") == quest and any((d / p.stem).is_dir() for d in (boxes / "box", boxes)) for p in state_dir.glob("*.box") if p.stem != name)
     # A branch whose change is only field rows is the lead logging runs, not a quest writing the
     # ticket (field-rows PR 601 on ticket 276, 2026-11-09): a field/*.jsonl file, or a row file in
-    # field/notes/, field/runs/ or field/findings/ (decision 0090). Judged by its paths, not its name,
+    # field/notes/, field/runs/ or field/findings/ (each field row is its own file). Judged by its paths, not its name,
     # from where it left main: a quest base on an older main would count main's newer files as its.
     def rows_only(other):
         changed = must(git("diff", "--name-only", "--no-renames", "origin/main..." + other), "branch paths unreadable").splitlines()

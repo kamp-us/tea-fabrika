@@ -1,4 +1,4 @@
-// machine.ts: the one tea machine that walks a flow (0064, 0046). Today's lead tooling. It holds the
+// machine.ts: the one tea machine that walks a flow (the lead drives work by writing a flow that one program runs, and no agent holds a loop; every state machine is a tea machine, and a file exports at most one). Today's lead tooling. It holds the
 // flow, where it is, and every step attempt with its outcome; it does no input or output. Its one
 // Cmd, `step_run`, is done by the `Runners` service, which the walk wires in.
 //
@@ -104,7 +104,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
     model: Model,
     msg: Schema.Never,
     cmds: [stepRun],
-    // SAFETY: tea's `types` slot only carries the Ctx type; tea never reads this empty value (0561).
+    // SAFETY: tea's `types` slot only carries the Ctx type; tea never reads this empty value (a cast says the fact the compiler cannot see).
     types: { ctx: {} as Ctx },
     init: (loaded, ctx): Next => {
       if (loaded === null) {

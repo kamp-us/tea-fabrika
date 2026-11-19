@@ -347,7 +347,7 @@ describe("chain after the merge (p86 and p89)", () => {
   });
 
   // scenario: signed commits, squash and later log commits require a fixed real git history.
-  // 0098 changed it: this was broken_chain, and a pull request that landed behind main is done.
+  // The signed-chain rule changed it: this was broken_chain, and a pull request that landed behind main is done.
   it("scenario: done: the last link's to is the head's tree, and the squash took a main that moved", () => {
     const r = new Repo();
     const { squash, rows } = squashed(r, twoSteps(r), true);

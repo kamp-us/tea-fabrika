@@ -135,7 +135,7 @@ describe("box rm, today's tooling", () => {
 
   // Plant: today's guard protects only MAIN's checkout, so borrowed storage is deleted.
   // Cover nested alternates and intermediate links. `box.sh rm` is the one public caller since
-  // catchup.sh, the other, was retired for GitHub's merge queue (0162).
+  // catchup.sh, the other, was retired for GitHub's merge queue (a pull request whose steps passed lands on green CI and a clean leak check alone).
   it.each(
     (["direct"] as const).flatMap((entry) =>
       (["gitdir-root", "shared", "gitdir", "commondir", "objects", "alternates", "alternates-file"] as const).flatMap(

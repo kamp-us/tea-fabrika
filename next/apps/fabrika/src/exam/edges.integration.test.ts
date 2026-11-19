@@ -106,7 +106,7 @@ describe("asks", () => {
     expect(JSON.stringify(exit)).toContain(PRODUCT);
   });
 
-  // From effect-functions' exam file (0591): the span law is on `asks`, no shape check, so it lives here.
+  // From effect-functions' exam file (a test that reads files as text declares its reads, and shape checks are lint rules): the span law is on `asks`, no shape check, so it lives here.
   it("the exam's generated edge reads keep answers and one named function span", () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 12 }), (old) => {
@@ -152,7 +152,7 @@ describe("edges.ts, as CI runs it", () => {
   const quiet = { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
   const script = join(import.meta.dirname, "edges.ts");
 
-  // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
+  // Each test builds its own repository in its own scope, which removes it when the test ends (anything that holds a resource is acquired in a scope, so the scope releases it).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "edges-"))),
     (repo) => Effect.sync(() => rmSync(repo, { recursive: true, force: true })),

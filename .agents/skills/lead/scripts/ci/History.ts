@@ -1,6 +1,6 @@
-// History and Issues: what ci-speed.ts asks GitHub. This file is the contract only (0095):
+// History and Issues: what ci-speed.ts asks GitHub. This file is the contract only (a service file holds only its contract, and each layer is its own file):
 // `HistoryGh.layer` asks GitHub through `gh api`, `HistoryTest.layer` answers from lists in memory.
-// History only reads. Issues writes the one `ci-scheduled` issue this measure keeps (0541).
+// History only reads. Issues writes the one `ci-scheduled` issue this measure keeps (CI speed has a goal, and a daily job measures it).
 // Today's lead tooling; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

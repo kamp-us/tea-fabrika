@@ -15,7 +15,7 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
-// oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
+// oxlint's own rule holds a name written as an identifier; ours holds a literal key (a question word is never a name).
 const NATIVE = "eslint(id-denylist)";
 
 const CUSTOM = "fabrika(no-question-word-key)";
@@ -239,7 +239,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
             `const b = {[\`${word.slice(0, 2)}\${text}\`]: text};`,
             `const c = {reason: text, ${near}: ${JSON.stringify(word)}, ${JSON.stringify(near)}: text};`,
             `const d = a.${word}; const e = a[${JSON.stringify(word)}]; const f = ${JSON.stringify(word)} in a;`,
-            // An outside key read into a good local name is the edge 0081 allows.
+            // An outside key read into a good local name is the edge the no-question-word rule allows.
             `const {${word}: borrowed} = a; const {${word}: renamed = text} = a;`,
             `function read({${word}: kept}: {readonly ${near}: string}) {return kept;}`,
             `const g: A[${JSON.stringify(word)}] = borrowed; const h: ${near} = renamed;`,
@@ -290,7 +290,7 @@ it.live("format: quoted, escaped, shorthand and computed spellings", () =>
 // format: the user-facing diagnostic names all five words, asks for the value's noun, assumes no
 // replacement and offers no autofix.
 it("format: diagnostic names the five words and offers no autofix", () => {
-  // The test owns a plain list of what the rule reported (0579); `report` takes one diagnostic.
+  // The test owns a plain list of what the rule reported (a property law is it.prop with Schemas, and test hooks are not exported); `report` takes one diagnostic.
   const reports: Array<Diagnostic> = [];
   // This diagnostic check supplies only the Context method this rule calls.
   const context: Pick<Context, "report"> = { report: (diagnostic) => void reports.push(diagnostic) };
@@ -311,7 +311,7 @@ it("format: diagnostic names the five words and offers no autofix", () => {
     Arr.map(keys, (key) => ({
       node: key,
       message:
-        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
+        "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names.",
     })),
   );
 });

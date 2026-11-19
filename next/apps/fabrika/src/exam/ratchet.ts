@@ -1,11 +1,11 @@
-// The ratchet on the list files (0524, 0168): a list of old findings only shrinks until it is
+// The ratchet on the list files (no check reads a list that lets broken code pass; an old lint break is fixed, never kept in a list): a list of old findings only shrinks until it is
 // deleted. CI's `check` job runs it as `node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"`.
 //
 // For each list it reads the file at the base and at the committed `HEAD`, never the working tree,
 // keys each row the way that list's own reader matches it, and counts: a row the head holds beyond
 // the base is added. Shrinking, pruning, reordering, a new `reason` and deleting the file pass. A
 // lint row whose file git renamed between the base and the head is the same row under its new name:
-// the file holds the same break, so the list did not grow (0536 renamed 130 test files).
+// the file holds the same break, so the list did not grow (the real-resource rule renamed 130 test files).
 //
 //   next-ledger.json, agents-ledger.json   file, rule and code (oxlint-plugins/ledger.ts), counted
 //   unreachable-ledger.json                scope, kind and id (code-graph's findingKey)
@@ -199,7 +199,7 @@ const annotation = (answer: Answer, sha: string) => {
   const head =
     answer.reason === "not_a_list"
       ? `${answer.file} does not read as a list at HEAD.`
-      : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (0524): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
+      : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (no check reads a list that lets broken code pass): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
 
   return [`::error file=${answer.file}::${escape(Arr.join([head, ...answer.rows], "\n"))}`];
 };
@@ -234,7 +234,7 @@ const main = Effect.gen(function* () {
 
   // Each rename from the base to the head, as git finds it: `R<score>\0old\0new\0`. With `-B`, a file
   // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
-  // part that kept its text (0536 split five files this way): its rows are read under that name too.
+  // part that kept its text (the real-resource rule split five files this way): its rows are read under that name too.
   // A row left at the old path as well is still counted as added, so a copy cannot hide a new row.
   const moved = Arr.filter(
     Str.split(yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])), "\0"),

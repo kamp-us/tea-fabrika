@@ -48,7 +48,7 @@
 //   - a quest started again after an `ask`: the lock is held, so the fresh beat decides
 //   - an out file with other lines before and after the outcome line
 //
-// Existing tools looked at (decision 0040): none reads this record. `gcloop.ts status` reads the
+// Existing tools looked at (an existing, widely used tool comes before a hand-written one): none reads this record. `gcloop.ts status` reads the
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";

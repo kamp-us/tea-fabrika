@@ -5,7 +5,7 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-// Ticket 548, today's tooling (owner, 2026-11-10, decision 0048): the leak check reads each commit
+// Ticket 548, today's tooling (owner, 2026-11-10, the leak check reads each pushed commit on its own): the leak check reads each commit
 // a push sends on its own. `leakgrep.sh --commits <rev>...` reads every commit `git rev-list
 // <rev>...` names: a commit as its diff from its parent, a first commit as all it holds, a merge
 // as the lines that are new against every parent. Every history here is one git itself wrote.
@@ -184,7 +184,7 @@ describe("T548 the leak check reads each pushed commit on its own, today's tooli
   });
 
   // Plant: clear a flagged line when any commit of the range removes its text.
-  it("reads a line as old text only when the same commit removes it with other spacing (0047)", () => {
+  it("reads a line as old text only when the same commit removes it with other spacing (an added line that only respaces a removed line is old text to the leak check)", () => {
     fc.assert(
       fc.property(
         fc.array(fc.constantFrom(...leaks), { minLength: 1, maxLength: 4 }),
@@ -245,7 +245,7 @@ describe("T548 the leak check reads each pushed commit on its own, today's tooli
       const merge = commit({ "a.md": [`the merge says ${leaks[1]}`, "branch says plain"] });
       expect(merge).not.toBe(taken);
       expect(read(...pushed).hits).toEqual({ [merge]: 1 });
-      // 0047: a merge clears nothing. Main's line with other spacing is the merge's own new text.
+      // An added line that only respaces a removed line is old text to the leak check: a merge clears nothing. Main's line with other spacing is the merge's own new text.
       git("reset", "-q", "--hard", "HEAD^");
       git("-c", "core.hooksPath=/dev/null", "merge", "-q", "--no-commit", "-X", "ours", "origin/main");
       const respaced = commit({ "a.md": [`main  says ${word}`, "branch says plain"] });

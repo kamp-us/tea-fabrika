@@ -1,5 +1,5 @@
 // Checks: what a quest asks GitHub about one CI job at one head. This file is the contract only
-// (0095): `ChecksGh.layer` asks GitHub through `gh api`, `ChecksTest.layer` answers from a list in
+// (a service file holds only its contract, and each layer is its own file): `ChecksGh.layer` asks GitHub through `gh api`, `ChecksTest.layer` answers from a list in
 // memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";

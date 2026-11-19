@@ -12,9 +12,9 @@
 // the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
-// commits them as one unsigned step commit through stepcommit (0161, 0164). A mutation
+// commits them as one unsigned step commit through stepcommit (today's tooling signs no commit with a step key; the bot pushes agent branches with no step signature). A mutation
 // step's Stryker run happens before its agent starts, in a container with its own network
-// (mutbox.ts, decision 0045): drive runs it on the step's start head with the tests a `RELATED=`
+// (mutbox.ts, a step that needs ports or its own processes and network isolation runs in a container): drive runs it on the step's start head with the tests a `RELATED=`
 // line of the brief names, and the agent only reads the report, which rides in its prompt. A run
 // that is stuck there ends the step stuck, with no agent; it is never run on the host. Mutation's
 // agent is Claude only, one Electron step at a time. The box cannot write state/electron.lock, so
@@ -26,7 +26,7 @@
 //
 //   (before)           a refusal when the data volume has under 20 GB free, or when a worktree
 //                      of the main checkout holds the quest's branch. No start runs or waits for
-//                      box.sh gc: its own timer and each merge do (gcloop.ts, 0101). Each start
+//                      box.sh gc: its own timer and each merge do (gcloop.ts, box cleanup runs on a timer and after a merge, never on a step's start path). Each start
 //                      phase's time goes on the step's entry in state/<quest>.json as `phases`
 //   starting   Act     box.sh new, at the quest's head
 //   drafting   Sub     one turn of the agent in the box (`runTurn`), waited on; its typed answer
@@ -37,8 +37,8 @@
 //                      is an ask: a box has no network, so the lead refreshes it outside)
 //   pushing    Act     botpush the backup branch, <branch>-wip (a -wip branch as it is), when
 //                      the step committed, then the branch itself, with a draft pull request
-//                      when it has none (pr/Publish.ts, 0134); a refused push or draft is stuck
-//   recording  Act     the field row (with the plants the typed answer named, 0093),
+//                      when it has none (pr/Publish.ts, every commit is pushed when it is made, with a draft pull request from the first commit); a refused push or draft is stuck
+//   recording  Act     the field row (with the plants the typed answer named, each law is a property that walks the machine, and each plant is run once, never kept),
 //                      state/<quest>.json and .md, and the box removed unless stuck
 //                      or it still holds work no branch has (uncommitted files, commits off the
 //                      step's branch); the outcome line's reason then says what was kept
@@ -49,7 +49,7 @@
 // whose diff has no product lines; the why is in `reason`), 2 usage, 3 refused to start, before
 // any agent ran: `refused:<check>`, one of quest_running (another live process drives this quest:
 // a chain, or a step run alone; state/<quest>.lock holds its pid), agent_cap (12 agents running,
-// 0012: the ACP harnesses drive started), low_disk (under 20 GB free, with gcloop.ts's status
+// the most the one-at-a-time rule for shared resources allows: the ACP harnesses drive started), low_disk (under 20 GB free, with gcloop.ts's status
 // line), branch_checked_out (the quest's
 // branch checked out in a worktree, which the fetch could not update), docker_busy (a mutation step
 // while another run holds the one Docker box), or a box.sh new start check
@@ -57,7 +57,7 @@
 // keeps its box for the lead to look at, and so does any step whose box still holds uncommitted
 // files or commits off its branch. DRIVE_MINUTES (default 60) is how long the agent may run
 // before it is stopped and the step is stuck. A stuck line, row and state entry carry its `fault`,
-// `tool` or `work`, read from the stuck reason (`faultFrom`, decision 0076); the line also carries
+// `tool` or `work`, read from the stuck reason (`faultFrom`, a quest stops at its budget, or when its steps keep failing close together); the line also carries
 // the turn's list-price dollars, which the chain's backstop counts.
 //
 // Where a step starts: at --from; else at the newest pushed tip of the branch or of its -wip
@@ -229,7 +229,7 @@ const drive = outcomesOf({
 
 type Outcome = typeof drive.schema.Type;
 
-/** What a stuck step was stuck on (0076): a tool around the work, or the work itself. */
+/** What a stuck step was stuck on (a quest stops at its budget, or when its steps keep failing close together): a tool around the work, or the work itself. */
 export const FAULTS = ["tool", "work"] as const;
 
 export type Fault = (typeof FAULTS)[number];
@@ -393,7 +393,7 @@ const Read = Schema.Struct({
   /** `null`: the fetch failed, with why in `problem`. */
   head: Schema.NullOr(Schema.String),
   commits: Schema.Finite,
-  /** What the commits check held the step on (`heldBy`). A missing signature is never in it (0161). */
+  /** What the commits check held the step on (`heldBy`). A missing signature is never in it (today's tooling signs no commit with a step key). */
   unsigned: Schema.Array(Schema.String),
   exam: Schema.Array(Schema.String),
   /** `file:line` of each added line that leaks; never the text. */
@@ -441,7 +441,7 @@ const Entry = Schema.Struct({
   keep: Schema.Boolean,
   /** What the agent's turn spent, for the field row. */
   spent: Spent,
-  /** The plants the step's typed answer named, for the field row (0093). */
+  /** The plants the step's typed answer named, for the field row (each law is a property that walks the machine, and each plant is run once, never kept). */
   plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
@@ -740,7 +740,7 @@ const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
  * the step answered (layers build2, 2026-11-09: a send back removed 10 uncommitted files). The
- * plants the answer named go on the row whatever the outcome: they ran (0093). */
+ * plants the answer named go on the row whatever the outcome: they ran (each law is a property that walks the machine, and each plant is run once, never kept). */
 const recordIt = (
   ask: Ask,
   j: Ended,
@@ -775,7 +775,7 @@ const draft: DepKeyedSub<Model, DraftSub> = {
 
 export const machine = defineMachine({
   // SAFETY: tea's `types` slot only carries the Model, Msg and Sub types; tea never reads these
-  // empty values (0561).
+  // empty values (a cast says the fact the compiler cannot see).
   types: { model: {} as Model, msg: {} as Msg, sub: {} as DraftSub, ctx: undefined },
   cmds: [boxNew, stepRead, backupPush, record],
   init: (): Step => [{ phase: "idle" }, []],
@@ -914,7 +914,7 @@ export type Env = {
   readonly MAIN: string;
   readonly BOXES: string;
   readonly GH_REPO: string;
-  /** The coordination and judgment model and effort (env.sh, decision 0022). */
+  /** The coordination and judgment model and effort (env.sh, the lead's Codex steps run on gpt-6-astra at medium effort by default). */
   readonly CODEX_MODEL: string;
   readonly CODEX_EFFORT: string;
   /** Role profiles resolved by env.sh. `prepare` refuses a missing profile. */
@@ -1252,7 +1252,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
  * are read from the tree and copied into a fresh worktree of the main checkout at the base;
  * stepcommit checks ownership and formatting, then makes the bot's unsigned hand-run commit
- * (0161, 0164). The branch points at that commit, or stays at the base when nothing changed.
+ * (today's tooling signs no commit with a step key; the bot pushes agent branches with no step signature). The branch points at that commit, or stays at the base when nothing changed.
  */
 export const collect = (env: Env, ask: Ask, changes: readonly Change[], path: string) => {
   const git = (...args: string[]) => {
@@ -1557,7 +1557,7 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
           return failed("git log -p", diff);
         }
 
-        // The repo's own commit check. A commit with no signature never holds a step (0161); the
+        // The repo's own commit check. A commit with no signature never holds a step (today's tooling signs no commit with a step key); the
         // rules it still gives for signed commits do (`questStuck`).
         const check =
           commits === 0
@@ -1587,8 +1587,8 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
         };
       }),
     // The step's commit came out of the box: the backup first, then the quest's own branch and its
-    // draft pull request, opened at the quest's first commit (0134). A box cannot push: no key, no
-    // network (0045), so this host part does, the moment drive commits.
+    // draft pull request, opened at the quest's first commit. A box cannot push: no key, no
+    // network (a step that needs ports or its own processes and network isolation runs in a container), so this host part does, the moment drive commits.
     backup_push: (cmd: { ask: Ask; head: string }) =>
       Effect.gen(function* () {
         const r = sh("node", [join(HERE, "botpush.mjs"), env.MAIN, wipBranch(cmd.ask.branch), cmd.head]);
@@ -1825,7 +1825,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
   const text = Option.isSome(report) ? read(report.value) : null;
 
   return text === null || Option.isNone(report)
-    ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
+    ? "\n\n---\nThis quest has no mutation report drive can read. Since the rule that mutation testing runs on a schedule against main, not in a pull request, a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe quest's newest mutation report (${report.value}), whole. Your box cannot read outside itself, so read it here:\n\n${Str.trim(text)}\n`;
 };
 
@@ -1858,7 +1858,7 @@ const turnDraft: DraftRun = (env, agents, ask) => turn(env, agents, ask, readFil
 //
 //   MUTATION_AGENT   who the chain starts it as, and the only agent `prepare` takes for it.
 //   mutationDraft    how its draft runs: first the Stryker sample, in a container with its own
-//                    network (mutbox.ts, decision 0045), on the step's start head with the tests
+//                    network (mutbox.ts, a step that needs ports or its own processes and network isolation runs in a container), on the step's start head with the tests
 //                    the brief's `RELATED=` line names and the quest's root as arm a. Then one
 //                    agent turn that reads the report. A run that ended stuck (Docker down, a
 //                    second Docker box, a failed baseline) is a stuck step with no agent started.
@@ -2020,7 +2020,7 @@ type Quest = {
 
 /**
  * The quest's state file (`state/<quest>.json`), or `null` when there is none. One written before
- * decision 0546 names the quest `lane` and reads as `quest` (`questKeyed`), so its next write says
+ * The rule that a lane is called a quest names the quest `lane` and reads as `quest` (`questKeyed`), so its next write says
  * `quest`.
  */
 const savedQuest = (path: string): Quest | null =>
@@ -2296,7 +2296,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
   if (step === "mutation" && relatedIn(readFileSync(p.brief, "utf8")) === undefined) {
     return usageError(
-      "a mutation step needs its related tests: a line RELATED=<paths> in the brief (its Stryker run goes in a container, decision 0045)",
+      "a mutation step needs its related tests: a line RELATED=<paths> in the brief (its Stryker run goes in a container, a step that needs ports or its own processes and network isolation runs in a container)",
     );
   }
 
@@ -2442,7 +2442,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   }
 
   // Dead boxes filled the disk once (2026-11-09). The cleanup is no step's job any more: a timer and
-  // each merge run it (gcloop.ts, 0101; a hung one held 12 starts over 6 minutes each on
+  // each merge run it (gcloop.ts, box cleanup runs on a timer and after a merge, never on a step's start path; a hung one held 12 starts over 6 minutes each on
   // 2026-11-10). A nearly full disk refuses here and starts no cleanup of its own: the reason says
   // when the loop last swept and what it kept, so the lead fixes the cause and never asks the owner
   // for space. A standing box name never refuses: RunId.next above takes the first free one.
@@ -2480,7 +2480,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     }
   }
 
-  // One Docker box at a time (0012): a mutation step's Stryker run needs it, so a box held by
+  // One Docker box at a time (one type check, one Electron test app and one Docker box run at a time across all agents): a mutation step's Stryker run needs it, so a box held by
   // another run is a start check's no, before box.sh new, never a stuck step.
   if (step === "mutation") {
     const lock = dockerLock(env);
@@ -2524,7 +2524,7 @@ export interface DriveLine {
   readonly from: string;
   readonly head: string;
   readonly reason: string;
-  /** A stuck step's fault (0076), else `null`. */
+  /** A stuck step's fault (a quest stops at its budget, or when its steps keep failing close together), else `null`. */
   readonly fault: Fault | null;
   readonly report: string | null;
   readonly kept: boolean;

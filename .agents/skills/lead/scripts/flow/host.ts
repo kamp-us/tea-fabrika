@@ -1,5 +1,5 @@
 // host.ts: the host step, which runs a quest's Electron laws and retakes its shots on the laptop,
-// outside any box. Today's lead tooling (0064). A box has no screen and no network (0045), so a
+// outside any box. Today's lead tooling (the lead drives work by writing a flow that one program runs, and no agent holds a loop). A box has no screen and no network (a step that needs ports or its own processes and network isolation runs in a container), so a
 // ticket that changes a program's window names its host commands in the quest brief:
 //
 //   ## host
@@ -21,7 +21,7 @@
 //   send   to build, with the last lines of the command that failed or ran past its time limit
 //   stuck  the worktree, the commit or the push failed
 //
-// One run, all in one scope (0061): the laptop's Electron lock (drive.ts's `state/electron.lock`,
+// One run, all in one scope (anything that holds a resource is acquired in a scope, so the scope releases it): the laptop's Electron lock (drive.ts's `state/electron.lock`,
 // one pid in it: a live holder is waited on, a dead one's lock taken over), a worktree of the main
 // checkout at the head, a short temp folder for `FABRIKA_HOME` and `TMPDIR` (a socket path has a
 // 103-byte limit), and each command's process group, killed when its time limit ends. The window
@@ -123,7 +123,7 @@ const HostFields = Schema.Struct({
 });
 
 /**
- * The host step's args, as a flow saves them. A flow saved before decision 0546 names the quest
+ * The host step's args, as a flow saves them. A flow saved before the rule that a lane is called a quest names the quest
  * `lane`: it reads as `quest`, and a new flow saves `quest`.
  */
 export const HostArgs = Schema.Union([HostFields, HostFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
@@ -517,7 +517,7 @@ export const lastHost = (steps: ReadonlyArray<unknown>): string | null =>
 
 /**
  * The quest's state file, read loosely: what drive.ts wrote stays as it is, except a `lane` key
- * from before decision 0546, which `questKeyed` reads as `quest`.
+ * from before the rule that a lane is called a quest, which `questKeyed` reads as `quest`.
  */
 const QuestFile = Schema.StructWithRest(
   Schema.Struct({ quest: Schema.String, head: Schema.optional(Schema.String), steps: Schema.Array(Schema.Unknown) }),

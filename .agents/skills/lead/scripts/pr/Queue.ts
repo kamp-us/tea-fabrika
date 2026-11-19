@@ -1,15 +1,15 @@
-// Queue: how a finished pull request lands, and what follows its merge (0162). Main takes changes
+// Queue: how a finished pull request lands, and what follows its merge (a pull request whose steps passed lands on green CI and a clean leak check alone). Main takes changes
 // only through GitHub's merge queue: GitHub tests each pull request on newest main and merges it,
 // so nothing here merges main in, waits on a check or runs one again. Today's lead tooling, run on
 // our own laptop; it is not product.
 //
 //   add      the pull request is open, ready and into main -> leak grep on its net change, on each
 //            of its commits and on its title and description, each failing closed -> each new
-//            exported name is named under `## New names` (Names.ts, 0587) -> `ci-required`
+//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
-//            description names (0015) and start one box cleanup sweep (0101); else say how it stands
+//            description names (a merge closes only the tickets its pull request names with our own phrase) and start one box cleanup sweep (box cleanup runs on a timer and after a merge, never on a step's start path); else say how it stands
 //
 // `add` answers "queued", never "merged": the merge is GitHub's, later. `settle` is how code learns
 // it happened. Read through its module: `Queue.add(...)`.
@@ -121,7 +121,7 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
   }
 
-  // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
+  // With a queue on, a merge call on a head that is not green yet arms auto-merge (a pull request whose steps passed lands on green CI and a clean leak check alone). So the
   // required check is read first, and anything but a finished success asks nothing.
   const required = yield* requiredAt(found.oid, a.wait);
   const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
@@ -149,7 +149,7 @@ const PHRASE = /^[ \t]*fabrika close ticket ([0-9]+)[ \t]*$/;
 
 /**
  * The tickets a description names, each once, in order: only a line of its own that reads
- * `fabrika close ticket <N>` (0015). No GitHub keyword, trailer or commit subject names one.
+ * `fabrika close ticket <N>` (a merge closes only the tickets its pull request names with our own phrase). No GitHub keyword, trailer or commit subject names one.
  */
 export const namedTickets = (body: string): ReadonlyArray<number> => [
   ...new Set(

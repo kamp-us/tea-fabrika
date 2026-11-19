@@ -1,14 +1,14 @@
 name: scheduled
 
-# The full run, the whole suite (0534). The merge line runs only the tests a change reaches: a pull
+# The full run, the whole suite (the merge line runs only the tests a change reaches, and a schedule runs every test). The merge line runs only the tests a change reaches: a pull
 # request and a merge queue group each run the in-memory next/ tests and the plain tooling tests
-# their diff reaches (check.yaml's next and related jobs, 0584), a pull request with the `visual`
-# label its visual tests too (0536), and never an `.integration.` law, of next/ or of tooling
-# (0602). This runs all of next/, every layer of it
-# (0536): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
+# their diff reaches (check.yaml's next and related jobs, a test's kind follows what it uses, never its name), a pull request with the `visual`
+# label its visual tests too (a test that needs a real resource runs only in main's full run), and never an `.integration.` law, of next/ or of tooling
+# (integration laws run only in main's full run). This runs all of next/, every layer of it
+# (a test that needs a real resource runs only in main's full run): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
 # run runs, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
 # push to main starts it when no full run on main started in the last hour, and an hourly catch-up
-# starts it on a head that has had none (0581): the `gate` job decides (gate.mjs), so a break no
+# starts it on a head that has had none (main's full run starts on a push to main and an hourly catch-up): the `gate` job decides (gate.mjs), so a break no
 # diff reached shows within about an hour of its push, two at most when the next push is long in
 # coming. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one, and
 # a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
@@ -41,26 +41,26 @@ name: scheduled
 #                          by the workflow's own token
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`; a branch's full set runs `next`
-#                          alone (0602); on main each leg checks its report, and the one that ran
+#                          alone (integration laws run only in main's full run); on main each leg checks its report, and the one that ran
 #                          the @kalfa/config package law keeps the tested archive (SC22)
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` and `tooling-integration`
 #                          projects, every file, no `--changed`; a branch's full set runs
-#                          `tooling` alone (0602); the 9 legs above are one matrix, the `tests` job
+#                          `tooling` alone (integration laws run only in main's full run); the 9 legs above are one matrix, the `tests` job
 #   report          1      after the others, on any result but the gate's `false`; it fails unless
 #                          the run is green, so a run whose red leg left no failed job still ends
 #                          `failure`
 #
-# A branch's proof run (0590) is this workflow started by hand on a branch other than main. Its
+# A branch's proof run (a branch's proof run runs only the tests its change reaches) is this workflow started by hand on a branch other than main. Its
 # `select` job runs proof.ts, which lists the tests the branch's change reaches against origin/main
 # with Vitest's own `--changed`, `.visual.` laws included. It runs no `.integration.` law, even one
-# its change reaches, on a changed set or a full set: only main's full run does (0602). A change to a
+# its change reaches, on a changed set or a full set: only main's full run does. A change to a
 # file in vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the
 # lockfile, a package.json) runs the full set, on the `tests` legs above, and so does a hand start
 # whose `scope` input is `full`, for the test file that needs it (`law`). Any other change runs its set on
 # the `changed` legs, as many as the set needs and one when it is small, each its own list; a set of
 # zero files starts no leg and the run is green. `scope` is `changed` unless a person says `full`
-# (0590). The run keeps what it tested, and the `law` of a `full` start, as its `proof-set` artifact and
+# (a branch's proof run runs only the tests its change reaches). The run keeps what it tested, and the `law` of a `full` start, as its `proof-set` artifact and
 # in its summary. On main `select` never runs, so `tests` runs every test there whatever `scope` says:
 # a push, the catch-up and a hand start on main (SC15, SC17, SC21).
 #
@@ -82,24 +82,24 @@ name: scheduled
 # depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
 # vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
 on:
-  # Every push to main asks; the gate starts the run only when none started within the gap (0581).
+  # Every push to main asks; the gate starts the run only when none started within the gap (main's full run starts on a push to main and an hourly catch-up).
   # Every path: the gate, not a path filter, decides.
   push:
     branches: [main]
-  # The hourly catch-up (0581), at minute 17: GitHub delays and drops runs queued on the hour, when
+  # The hourly catch-up (main's full run starts on a push to main and an hourly catch-up), at minute 17: GitHub delays and drops runs queued on the hour, when
   # most schedules start (its docs, "Events that trigger workflows", schedule). It starts a run only
   # on a head that has had none, and never within the gap.
   schedule:
     - cron: "17 * * * *"
   # By hand, on main or on a branch. On main it is main's full run whatever the inputs say: `select`
-  # never runs there (SC17). On a branch it is a proof run (0590): `changed` runs what the change
+  # never runs there (SC17). On a branch it is a proof run (a branch's proof run runs only the tests its change reaches): `changed` runs what the change
   # reaches, and a change to a rerun trigger still runs the full set; `full` runs the full set, for
   # `law`. Only main's run writes the issue. A full start is
   # `gh workflow run scheduled.yaml --ref <branch> -f scope=full -f law=<test file>` (SC21).
   workflow_dispatch:
     inputs:
       scope:
-        description: On a branch, the changed set (0590) or the full set; main always runs every test
+        description: On a branch, the changed set (a branch's proof run runs only the tests its change reaches) or the full set; main always runs every test
         type: choice
         required: true
         default: changed
@@ -121,7 +121,7 @@ concurrency:
   queue: max
   cancel-in-progress: false
 
-# Ten job groups cap jobs across participating refs and runs (0595, 0598): `scheduled-main-1` to
+# Ten job groups cap jobs across participating refs and runs (scheduled runs share ten job slots; the merge line leaves the scheduled job groups): `scheduled-main-1` to
 # `MAIN_SLOTS` for main's full run, `scheduled-proof-1` to `PROOF_SLOTS` for a branch's proof run, and
 # `scheduled-control` for the gate, select and report. The merge line, check.yaml, holds none of them, so a
 # pull request never waits on a full run. A group is a queue that admits one job: the legs pinned to
@@ -134,10 +134,10 @@ permissions:
   actions: read
   contents: read
 
-# The settings (0069). The gap: no full run on main starts within this many minutes of the last one,
-# except by hand; an hour at least, 0581's binding constraint, and the gate reads it. The two group
+# The settings (a choice that makes sense as a setting is a setting, declared once). The gap: no full run on main starts within this many minutes of the last one,
+# except by hand; an hour at least, the full-run timing rule's binding constraint, and the gate reads it. The two group
 # counts: MAIN_SLOTS for main's full run and PROOF_SLOTS for a branch's proof run, which with the one
-# control group make the ten jobs of 0595's budget. Change them here, keeping MAIN_SLOTS + PROOF_SLOTS
+# control group make the ten jobs of the shared-slots rule's budget. Change them here, keeping MAIN_SLOTS + PROOF_SLOTS
 # at 9, and then pin `tests` again to the new counts (its two maps and its `max-parallel`), since
 # GitHub allows no `env` in `strategy` or a job's `concurrency`. workflow-lint.ts holds all of it
 # (SC6, SC16, SC19, SC20).
@@ -147,7 +147,7 @@ env:
   PROOF_SLOTS: &proof-slots 4
 
 jobs:
-  # The gate (0581): whether this run starts the tests. A hand start always does; a push or the
+  # The gate (main's full run starts on a push to main and an hourly catch-up): whether this run starts the tests. A hand start always does; a push or the
   # catch-up does when no full run on main started within the gap, and only on a head that has had
   # none (gate.mjs). The ref's workflow group holds this run, so earlier runs on main have ended
   # before main's gate reads them. It reads runs with the workflow's own token, which cannot cancel
@@ -188,16 +188,16 @@ jobs:
   #
   # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
   # `next-integration` projects on main, and over `next` alone on a branch's full set, since only
-  # main's full run runs the real-resource laws (0602; `PROJECTS` reads the ref), each a fifth of
+  # main's full run runs the real-resource laws (integration laws run only in main's full run; `PROJECTS` reads the ref), each a fifth of
   # the files by measured seconds; `e2e-1` and `e2e-2` fetch chromium and run the `next-visual`
   # project on their half of the visual files. A project, not a path, picks the files: `next/` as
   # a path would start `next-visual` on legs with no Chromium. Then every tooling test, on
   # `tooling-1` and `tooling-2`: the tests of neither version's product code (CI's own, the lint
   # plugins, the root scripts and the skill scripts), the `tooling` project and, on main alone, the
-  # `tooling-integration` one, its laws that start a process (0584, 0602), since a project ignores
-  # `--exclude` (0536). `PROJECTS` reads the ref, as on the vitest legs. The merge line runs only
+  # `tooling-integration` one, its laws that start a process (a test's kind follows what it uses, never its name; integration laws run only in main's full run), since a project ignores
+  # `--exclude` (a test that needs a real resource runs only in main's full run). `PROJECTS` reads the ref, as on the vitest legs. The merge line runs only
   # the plain tooling laws a change reaches (check.yaml's related job), so this is the only CI job
-  # that runs them all. Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`,
+  # that runs them all. Today's tests run in no CI job. Nothing is narrowed: no `--changed`,
   # no list.
   #
   # The full set, wherever it runs: on main, where `select` never runs, and on a branch whose
@@ -205,7 +205,7 @@ jobs:
   # every leg the run started. `!cancelled()` lets it run after a skipped `select`, which would skip
   # it otherwise; the gate's `start` and the select's own result still decide (SC15).
   #
-  # The groups (0598). Main's full run takes `scheduled-main-1` to MAIN_SLOTS and a branch's full set
+  # The groups (the merge line leaves the scheduled job groups). Main's full run takes `scheduled-main-1` to MAIN_SLOTS and a branch's full set
   # `scheduled-proof-1` to PROOF_SLOTS, each leg pinned to one by its place in the matrix. A group is a
   # first in, first out queue that admits one job, and the matrix makes its jobs in list order, so
   # the matrix lists the legs in the order they should start: the longest first, the first MAIN_SLOTS
@@ -298,7 +298,7 @@ jobs:
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # Leg `tooling-k` runs shard `k/2` of the tooling tests, with the limit check.yaml's tooling
-      # legs had before 0539 took them off the merge line, on the step itself, as next's.
+      # legs had before the no-tooling-tests-on-the-merge-line rule took them off the merge line, on the step itself, as next's.
       - name: tooling tests
         if: startsWith(matrix.shard, 'tooling-')
         timeout-minutes: &tooling-limit 30
@@ -347,7 +347,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-  # What a branch's proof run tests (0590, proof.ts). Only on a hand start on a branch other than
+  # What a branch's proof run tests (a branch's proof run runs only the tests its change reaches, proof.ts). Only on a hand start on a branch other than
   # main, so main's push, catch-up and hand start never narrow (SC17). The whole history, blobless as
   # in check.yaml, so git can diff the branch with origin/main from their merge base, and an install,
   # since Vitest lists the set. It says `full` when the change touches a rerun trigger or the hand
@@ -401,10 +401,10 @@ jobs:
           if-no-files-found: ignore
           retention-days: 90
 
-  # A changed set's legs (0590): leg `k` runs exactly its list from `select`, over every project
+  # A changed set's legs (a branch's proof run runs only the tests its change reaches): leg `k` runs exactly its list from `select`, over every project
   # proof.ts lists, so a list may hold next/'s in-memory and visual laws and tooling tests together,
   # at full depth, as the `tests` legs do. No real-resource law: only main's full run runs those
-  # (0602), so a leg names no `next-integration` project either. Chromium comes first on a leg
+  # (integration laws run only in main's full run), so a leg names no `next-integration` project either. Chromium comes first on a leg
   # whose list holds a visual file. Its own matrix, which a run starts only when `select` said
   # `changed` with a leg, so it and `tests` never run in one run, and its own fail-fast stops each
   # leg of it. Its legs are next legs for the report (`changed (k)`), with next's test step limit

@@ -1,6 +1,6 @@
-// M4 (0591): `pnpm lint:manifests` (`next-manifests.ts`) fires on each manifest break of the exam's
+// M4 (a test that reads files as text declares its reads, and shape checks are lint rules): `pnpm lint:manifests` (`next-manifests.ts`) fires on each manifest break of the exam's
 // planted tree and on nothing else, and passes the real next/. These laws were the manifest half of
-// the exam's next/apps/fabrika/src/exam/deps.integration.test.ts until 0591 made it this command; its
+// the exam's next/apps/fabrika/src/exam/deps.integration.test.ts until the exam-to-lint rule made it this command; its
 // real-tree law is the command's run in `pnpm lint`, kept here too. Each planted tree is a temp folder
 // of its own; nothing is written inside the repo.
 // Plant: let the design package go to any next/ package, and design-taker's fault goes unseen.

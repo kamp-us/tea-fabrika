@@ -146,9 +146,9 @@ const plants: Plant[] = [
       chromium.if = chromium.if!.replace("next/**", "next/ **");
     },
   ],
-  // 0536, E10 and E11. Each plant was run once on the real check.yaml too, and restored.
+  // The real-resource rule, E10 and E11. Each plant was run once on the real check.yaml too, and restored.
   [
-    "E10: the full fallback alone, as before 0536, so the merge queue starts the visual legs",
+    "E10: the full fallback alone, as before the real-resource rule, so the merge queue starts the visual legs",
     (w) => {
       w.jobs.next.strategy.matrix.shard = `\${{ fromJSON(needs.changes.outputs.shards || '${JSON.stringify(nextLegs(2))}') }}`;
     },

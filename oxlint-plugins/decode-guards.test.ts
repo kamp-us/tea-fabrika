@@ -1,7 +1,7 @@
-// Ticket 737, G1 and G3. next/ decodes input with Effect Schema (decision 0023), so oxlint's own
+// Ticket 737, G1 and G3. next/ decodes input with Effect Schema (next/ follows Effect's code style and doc comments), so oxlint's own
 // `no-restricted-properties` reports a bare `JSON.parse` there. It blocks in every folder at zero
-// (0523), and since ticket 909 a wrong service ID blocks too (decision 0168). The fixtures are the
-// rule's inputs (0093); the replay reads the tree.
+// (a lint rule blocks wherever its code is clean), and since ticket 909 a wrong service ID blocks too (an old lint break is fixed, never kept in a list). The fixtures are the
+// rule's inputs (each law is a property that walks the machine, and each plant is run once, never kept); the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -153,7 +153,7 @@ const probe = ({
       "",
       `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
       "",
-      `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
+      `export const read = (text: string): string => ${parse ? "JSON.parse(text)" : "text"};`,
       ...(blocking ? ["", "debugger;"] : []),
     ],
     "\n",
@@ -162,7 +162,7 @@ const probe = ({
 const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
 
 // T930 L9: the planted folder has no warn line, so it is at zero and a bare JSON.parse blocks there
-// (0523), beside a wrong service ID, which blocks since ticket 909.
+// (a lint rule blocks wherever its code is clean), beside a wrong service ID, which blocks since ticket 909.
 describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a wrong service ID both block", () => {
   it("a clean report passes, and a JSON.parse, a wrong ID or another blocking one fails", () => {
     const seen = new Set<string>();

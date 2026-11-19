@@ -81,7 +81,7 @@ it.prop(
 
     const emitted = emittedBy(result);
 
-    // 0598: the related job holds no group, so the selection carries no group map.
+    // The merge line leaves the scheduled job groups: the related job holds no group, so the selection carries no group map.
     expect(Object.keys(emitted)).toEqual(["run", "legs", "files", "projects", "consumer"]);
 
     expect(Object.keys(result).toSorted()).toEqual(["consumer", "legs", "projects"]);
@@ -151,8 +151,8 @@ const toolingOf = (plain: number, real: number) => [
   ),
 ];
 
-// scenario: by the same call (0602), a tooling law that starts a process is an `.integration.` law
-// and stays on the full run (0584). Run 44278795643 put
+// scenario: by the same call (integration laws run only in main's full run), a tooling law that starts a process is an `.integration.` law
+// and stays on the full run (a test's kind follows what it uses, never its name). Run 44278795643 put
 // `.github/ci/workflow-lint/scheduled.integration.test.ts`, which spawns a process, on a pull
 // request's tooling leg. The `tooling-integration` project now keeps such a file out of tooling's
 // list; this holds the merge line to the name whatever a list gives. Plants, each run once on
@@ -224,7 +224,7 @@ const gitOf =
 
 const Event = Schema.Literals(["pull_request", "merge_group", "push"]);
 
-// scenario: the review of the build of 0602's merge line: a plant at related.ts's read of the event,
+// scenario: the review of the build of the integration-laws rule's merge line: a plant at related.ts's read of the event,
 // `process.env["EVENT"]`, left every law green, since no law ran the step itself. This one runs it
 // on its own env, git and list, with a decoy variable beside the runner's. Plants, each run once on
 // related.ts and restored: `run` reads `env["EVENT"]` (red); reads `process.env["EVENT"]` (red);
@@ -335,7 +335,7 @@ it.prop(
   options,
 );
 
-// T1076 D1, D2 and D5, after decision 0602: the archive is kept by main's full run, not by a pull request.
+// T1076 D1, D2 and D5, after the rule that integration laws run only in main's full run: the archive is kept by main's full run, not by a pull request.
 // P1 (scripts/kalfa-config.test.ts) is the root tooling consumer and a plain law. `--changed` cannot reach it
 // by import, so the selector adds it by path, and only after Vitest lists it alone in tooling. P2 (kalfa/
 // config/src/Package.integration.test.ts) builds, packs and installs the package; it is an `.integration.`
@@ -351,7 +351,7 @@ const PACKAGE = "kalfa/config/src/Package.integration.test.ts";
 const CONSUMER = "scripts/kalfa-config.test.ts";
 
 // The paths whose change keeps P1 in the run besides the package: the fault's route. The record guard
-// left the route with decision 0602: it holds no delivery rule any more.
+// left the route with the rule that integration laws run only in main's full run: it holds no delivery rule any more.
 const ROUTE = [".github/ci/related.ts", ".github/workflows/check.yaml", ".github/ci/workflow-lint/related.ts"] as const;
 
 const word = Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/));
@@ -526,7 +526,7 @@ it.prop(
 
     const all = Object.values(result.legs).flat();
 
-    // The merge line lists no integration file at all (0602); any other event lists them. P2 is in neither.
+    // The merge line lists no integration file at all (integration laws run only in main's full run); any other event lists them. P2 is in neither.
     expect(all.toSorted()).toEqual([...(event === "push" ? ordinary : []), ...withConsumer].toSorted());
     expect(new Set(all).size).toBe(all.length);
     expect(all).not.toContain(PACKAGE);
@@ -539,7 +539,7 @@ it.prop(
       expect(result.consumer).toBe("");
     }
 
-    // Exactly the five outputs (0598 took slots away, 1569 took plants, 0602 took the archive), the new one
+    // Exactly the five outputs (the scheduled-groups rule took slots away, 1569 took plants, the integration-laws rule took the archive), the new one
     // as the owning leg or empty.
     const printed = emitted(result);
 
@@ -627,7 +627,7 @@ it.prop(
 // positional argument keeps the files whose path holds it, `--changed` the files the change reaches) and a
 // real git repository for the change. Each run starts a process, so the count is small and every
 // route is also held by a scenario below.
-// A next-integration file the readers list names. settings-generated.test.ts was one until 0591 made
+// A next-integration file the readers list names. settings-generated.test.ts was one until the exam-to-lint rule made
 // it plain, so the build law stands in.
 const INTEGRATION_READER = "next/apps/fabrika/src/build.integration.test.ts";
 
@@ -790,7 +790,7 @@ const expectSelector = (given: Selected) => {
 
   const reached = (universe: readonly string[]) => universe.filter((file) => run.reachable.includes(file));
 
-  // The merge line lists no next-integration file at all (0602); P2 is listed only on a full run of the
+  // The merge line lists no next-integration file at all (integration laws run only in main's full run); P2 is listed only on a full run of the
   // other events, as any integration file is, and never added for a package change.
   expect(at("next-integration")).toEqual(
     given.event === "push"

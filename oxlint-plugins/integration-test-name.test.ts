@@ -1,4 +1,4 @@
-// 0584, next/. A plain test file whose own code starts a real thing fails, and the same file named
+// The test-kind rule, next/. A plain test file whose own code starts a real thing fails, and the same file named
 // `.integration.` or `.visual.` passes. Each generated case runs in process through oxlint's
 // RuleTester; one oxlint run over planted files proves the repo's own .oxlintrc.json wires the rule,
 // and one over the real tree that it is at zero there. Plants, each run once on starters.ts and
@@ -62,7 +62,7 @@ const one = (module: string, name: string, alias: string, line: (ref: string) =>
   return { imports: [got.line], line: line(got.ref) };
 };
 
-/** Every starter of 0584's list, in any import spelling; the calls on globals ignore the spelling. */
+/** Every starter of the test-kind rule's list, in any import spelling; the calls on globals ignore the spelling. */
 const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelling) => Real }> = [
   ...Arr.map(["spawn", "spawnSync", "exec", "execSync", "execFile", "execFileSync", "fork"], (name) => ({
     tag: "process" as const,
@@ -230,7 +230,7 @@ it("K1: every starter fires in a plain next/ test file at its line, in any impor
     );
   }
 
-  // Coverage: every kind 0584 names that a call shows is in the list.
+  // Coverage: every kind the test-kind rule names that a call shows is in the list.
   expect([...new Set(Arr.map(REAL, (real) => real.tag))].sort()).toEqual([
     "browser",
     "disk",
@@ -260,9 +260,9 @@ const STAND_INS = [
   'import * as TestDatabase from "@kampus/vitest";\nTestDatabase.make(file);',
   "const TestDatabase = { make: (_: string) => 0 };\nTestDatabase.make(file);",
   'import { make } from "./TestDatabase.ts";\nmake(file);',
-  // Rolldown bundles in memory: reading repo files in the process is plain (0584).
+  // Rolldown bundles in memory: reading repo files in the process is plain (a test's kind follows what it uses, never its name).
   'import { rolldown } from "rolldown";\nconst bundle = await rolldown({ input: "src/a.ts" });',
-  // Reading a repository file is plain (0584).
+  // Reading a repository file is plain (a test's kind follows what it uses, never its name).
   'import { readFileSync } from "node:fs";\nreadFileSync("a.txt", "utf8");',
   // A browser's name is not a launch.
   'import { chromium } from "playwright";\nconst kind = chromium.name();',
@@ -355,7 +355,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
   }
 });
 
-it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)", () => {
+it("scenario: next/'s tree is at zero, so the rule blocks from the start (a lint rule blocks wherever its code is clean)", () => {
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.

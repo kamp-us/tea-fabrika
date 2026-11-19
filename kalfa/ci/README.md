@@ -5,7 +5,8 @@ says what kind of change each repo-relative path is: `code` when a program or a 
 `instructions` when an agent reads it as its instructions (skill prose, `AGENTS.md`, `CLAUDE.md`, an
 agent's definition), and `docs` for Markdown that nothing reads. Markdown is docs unless a reader is named for it, so a
 `GLOSSARY.md` and every `kalfa/` Markdown file but `kalfa/config/README.md` are docs.
-0180 and 0090 say why.
+Why: an instruction file takes a quick edit with no test first, and the lead admin-merges a docs-only
+pull request after checking it is not broken.
 
 Three users read it, and must agree:
 

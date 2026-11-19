@@ -1,12 +1,12 @@
 import { Record as Rec, Result } from "effect";
-// Today's CI, serving both versions. Who may touch issues (0534, 0541).
+// Today's CI, serving both versions. Who may touch issues (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it).
 import { parse } from "yaml";
 import { VERDICT } from "./scheduled.ts";
 import { isMap, map } from "./shared.ts";
 
 /**
  * The two jobs that may hold the `issues` permission, each by its workflow file and its job name
- * (0534, 0541): the full run's report and the daily speed measure, both under the `ci-scheduled`
+ * (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it): the full run's report and the daily speed measure, both under the `ci-scheduled`
  * label. lintScheduled and lintCiSpeed hold what each grants.
  */
 const ISSUE_JOBS: Readonly<Record<string, string>> = {
@@ -14,13 +14,14 @@ const ISSUE_JOBS: Readonly<Record<string, string>> = {
   ".github/workflows/ci-speed.yaml": "measure",
 };
 
-const ISSUES_RULE = "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (0534, 0541)";
+const ISSUES_RULE =
+  "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it)";
 
 /** A grant that touches issues: `write-all`, or a map that names `issues`. */
 const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant) && "issues" in grant);
 
 /**
- * 0534's and 0541's binding constraint: automation opens issues here from those two jobs alone. A
+ * The changed-tests rule's and the CI speed goal's binding constraint: automation opens issues here from those two jobs alone. A
  * workflow-wide grant that touches issues fails in every workflow, the two included, and so does a
  * job's, unless it is one of ISSUE_JOBS asking by name; `write-all` fails there too.
  */

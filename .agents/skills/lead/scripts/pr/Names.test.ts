@@ -1,4 +1,4 @@
-// Today's lead tooling. Names' laws (0587): a pull request's new exported names, read from GitHub's
+// Today's lead tooling. Names' laws (a new helper names the tools it searched, and a new name cites the industry's word): a pull request's new exported names, read from GitHub's
 // patches, and the `## New names` lines its description must hold for each. Pure; nothing here asks
 // GitHub.
 import { describe, expect, it } from "@effect/vitest";
@@ -32,7 +32,7 @@ const body = (lines: ReadonlyArray<string>) =>
     "\n",
   );
 
-describe("Names: each new exported name has a line under ## New names (0587)", () => {
+describe("Names: each new exported name has a line under ## New names (a new helper names the tools it searched, and a new name cites the industry's word)", () => {
   // Plants: read no `+` lines, forget a declaration kind, let a name in another part of the body
   // count, or count a name that is only a part of a longer word.
   it.prop(

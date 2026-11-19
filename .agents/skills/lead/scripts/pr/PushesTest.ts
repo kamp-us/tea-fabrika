@@ -1,4 +1,4 @@
-// PushesTest.layer: the Pushes service in memory, built on the Recorder (0579). A leak grep refuses
+// PushesTest.layer: the Pushes service in memory, built on the Recorder (a property law is it.prop with Schemas, and test hooks are not exported). A leak grep refuses
 // or passes as told, and each push that passes moves the branch on a remote kept in memory, as
 // `origin` would. The Recorder keeps every call in order, with all its args, so a test reads that
 // the grep ran before the push with `Recorder.calls(Pushes)`, inside the layer it provided.

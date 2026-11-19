@@ -1,7 +1,7 @@
-// The one table every tool's law reads (decisions 0183, 0180 and 0090): CI's changes job, the lead's
+// The one table every tool's law reads (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first): CI's changes job, the lead's
 // arm and the lead's admin merge. Each row is one change, as its paths are listed. `docsOnly` is what
 // CI skips its heavy jobs on and what arm accepts. `adminDocs` is the admin merge's answer: `isAdminDocs`
-// holds for every path (0183), so instruction text, and a README outside the admin merge's folders, is not.
+// holds for every path (the lead admin-merges a docs-only pull request after checking it is not broken), so instruction text, and a README outside the admin merge's folders, is not.
 //
 // The rows 1657 and 1650 are the file lists of those pull requests on 2026-11-18, as GitHub
 // listed them. The other rows are one path each, pinned: each names a kind of path a rule must not get wrong.
@@ -39,7 +39,7 @@ export const TABLE: readonly Row[] = [
     docsOnly: true,
     adminDocs: false,
   },
-  // A root README is docs for CI, but the admin merge takes docs only in its own folders (0183), so it refuses this.
+  // A root README is docs for CI, but the admin merge takes docs only in its own folders (the lead admin-merges a docs-only pull request after checking it is not broken), so it refuses this.
   { pr: "README.md", paths: ["README.md"], docsOnly: true, adminDocs: false },
   {
     pr: ".claude/agents/step-build.md",

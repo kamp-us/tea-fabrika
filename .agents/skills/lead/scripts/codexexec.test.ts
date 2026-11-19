@@ -2,7 +2,7 @@
 // on the PATH of a temp folder the scope gives back. The fake records each call's arguments and
 // plays what the test planned for that call: its JSON lines, its last message, its exit code.
 //
-// Edge cases, listed before the code (decision 0040), each with a law below:
+// Edge cases, listed before the code (an existing, widely used tool comes before a hand-written one), each with a law below:
 //   1. a failure that names capacity is tried again, and never more than 6 times in all;
 //   2. a failure that names no capacity is tried once;
 //   3. a non-empty last message holding a valid answer is done, in one call;

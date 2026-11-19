@@ -12,7 +12,7 @@ name: host
 #
 # By hand, `-f suite=<name>` runs one fixed suite: l13 (the default), e88-r6, box or p8. `p8` is the
 # SIGKILL law of .github/ci/progress-reporter.integration.test.ts (P8), on `ubuntu-latest`: a branch
-# proof run never starts an `.integration.` law (decision 0602), so this suite is where that law
+# proof run never starts an `.integration.` law (integration laws run only in main's full run), so this suite is where that law
 # runs on a disposable machine before main's full run does.
 on:
   pull_request:

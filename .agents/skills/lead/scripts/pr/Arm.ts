@@ -1,18 +1,18 @@
-// Arm: how the lead turns on GitHub's merge when ready for one pull request (0530, 0544), the one
+// Arm: how the lead turns on GitHub's merge when ready for one pull request (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips), the one
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
 //         its change, its commits and its words -> each new exported name is named under
-//         `## New names` (Names.ts, 0587) -> scheduled proof at its head, or automatic ready CI
+//         `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> scheduled proof at its head, or automatic ready CI
 //         with related-test coverage, is read -> green: marked ready if a draft, then merge when ready on, as a
 //         squash pinned to that head
 //
-// A branch's proof run tests the full set or, since 0590, the changed set: the tests its change
+// A branch's proof run tests the full set or, since the proof-run rule, the changed set: the tests its change
 // reaches against origin/main. Its jobs' names say which (`kind`): a full run has `tests (<leg>)`
 // legs, a changed-set run has `changed (<leg>)` legs or, for a set of zero files, no leg. Either one
 // green at the head arms. A changed set is the set of one diff, so a changed-set run at an older head
 // proves nothing about this head's change and refuses; a full run at an older head still arms with
-// 0544's note.
+// The arm-every-reviewed-pull-request rule's note.
 //
 // A run that ended `cancelled` was once not a run someone stopped: a red leg's old last step,
 // `stop the run`, canceled its own run, so every leg read `cancelled` and only the steps showed which
@@ -20,7 +20,7 @@
 // command judges each job, never the run's top line, and on a refusal prints each job that is not
 // green, its failed steps and the failing test lines of its log.
 //
-// No run at the head arms, as 0544 lets a reviewed pull request be armed with no full run first, and
+// No run at the head arms, as the arm-every-reviewed-pull-request rule lets a reviewed pull request be armed with no full run first, and
 // says so in one line. A run at the head that is red or has not ended refuses.
 // With no scheduled proof at the head, the newest exact-head automatic check can prove the related
 // set. It must be a successful ready PR run from this repository, with select, related and the real
@@ -31,7 +31,7 @@
 // the note; a changed-set run, or one red or not ended, refuses. Read through its module:
 // `Arm.arm(...)`.
 //
-// Neither route asks for an `.integration.` law (0602): a branch's proof run runs none, on a full
+// Neither route asks for an `.integration.` law (integration laws run only in main's full run): a branch's proof run runs none, on a full
 // set or a changed one (proof.ts, scheduled.yaml's `PROJECTS`), and a ready run's related legs are
 // the plain tooling laws its change reaches (related.ts's `onMergeLine`). Only main's full run runs
 // them, after the merge. Arm reads each job's name and how it ended, never which laws it ran, so
@@ -51,7 +51,7 @@ export const WORKFLOW = "scheduled.yaml";
 const AUTOMATIC = "check.yaml";
 
 /**
- * The jobs a branch's proof run skips by design (0590): `select` on a hand start on main, the test
+ * The jobs a branch's proof run skips by design (a branch's proof run runs only the tests its change reaches): `select` on a hand start on main, the test
  * matrix `select` did not choose, and both matrices on a changed set of zero files. GitHub lists a
  * skipped matrix as one job with no leg in its name. The `report` job is never one: it runs on every
  * run a hand start begins (pull request 1404) and fails unless the run is green by what `select`
@@ -65,7 +65,7 @@ export const passes = (job: Job): boolean =>
   (job.conclusion === "success" || (job.conclusion === "skipped" && SKIPPED_BY_DESIGN.includes(job.name)));
 
 /**
- * What a proof run tested: every test, the changed set of its head's diff (0590), or, for a docs-only
+ * What a proof run tested: every test, the changed set of its head's diff (a branch's proof run runs only the tests its change reaches), or, for a docs-only
  * change, its automatic check alone (`docs`).
  */
 const Kind = Schema.Literals(["full", "changed", "automatic", "docs"]);
@@ -369,9 +369,9 @@ const redReport = Effect.fn("Arm.redReport")(function* (
 
 const proofNote = "automatic ready and queue CI provide the required checks";
 
-/** The line a head with no full run of its own is armed with (0544). */
+/** The line a head with no full run of its own is armed with (every pull request whose review passed has merge when ready on, and main's full run catches what slips). */
 const unrunNote = (seen: string, oid: string, docs: boolean): string =>
-  `no full run at ${oid.slice(0, 12)}${seen}; arming as 0544 allows (${
+  `no full run at ${oid.slice(0, 12)}${seen}; arming as the arm-every-reviewed-pull-request rule allows (${
     docs ? "a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run" : proofNote
   })`;
 
@@ -391,7 +391,7 @@ const judgedBy = (run: number, kind: Kind, oid: string): string => {
     return `automatic ready check ${run} green at ${head}: docs only (@kalfa/ci/DocsOnly), so CI skipped its heavy jobs and ci-required passed`;
   }
 
-  return `changed-set run ${run} green on every job at ${head}, the tests this change reaches (0590)`;
+  return `changed-set run ${run} green on every job at ${head}, the tests this change reaches (a branch's proof run runs only the tests its change reaches)`;
 };
 
 export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
@@ -452,7 +452,7 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
           ? note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`)
           : Effect.fail(
               refuse(
-                `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); ${proofNote}`,
+                `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (a branch's proof run runs only the tests its change reaches); ${proofNote}`,
               ),
             ),
       );

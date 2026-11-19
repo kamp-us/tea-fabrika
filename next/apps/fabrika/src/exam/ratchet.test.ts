@@ -1,6 +1,6 @@
-// The ratchet on the list files (0524, ticket 933): a list only shrinks until it is deleted. The core
+// The ratchet on the list files (no check reads a list that lets broken code pass, ticket 933): a list only shrinks until it is deleted. The core
 // is judged on generated rows here; ratchet.integration.test.ts runs the script on a planted git
-// repository, as CI runs it, so it runs on the schedule (0536).
+// repository, as CI runs it, so it runs on the schedule (a test that needs a real resource runs only in main's full run).
 import { describe, expect, it } from "@effect/vitest";
 import { Array as Arr, Effect, Exit } from "effect";
 import * as fc from "fast-check";
@@ -150,7 +150,7 @@ describe("a file that comes, goes or does not read (L3)", () => {
   });
 });
 
-// 0536 renamed 130 test files, each with its rows in next-ledger.json. A row is its file, rule and
+// The real-resource rule renamed 130 test files, each with its rows in next-ledger.json. A row is its file, rule and
 // code, so a rename alone would read as a new row; the ratchet reads the base's rows under git's
 // renames, so the same break under a new name is the same row, and one more row still is not.
 // Plants, each run once on ratchet.ts and restored: `renames` ignored (red: every renamed row

@@ -1,4 +1,4 @@
-// 0584, next/. `test-kind.ts` fails an `.integration.` file that reaches no real thing, and only
+// The test-kind rule, next/. `test-kind.ts` fails an `.integration.` file that reaches no real thing, and only
 // advises on a plain file that reaches one through helpers. K3 runs twice: on `judge` in memory,
 // over chains of every edge kind code-graph answers, and through the real command on planted trees,
 // so code-graph's own resolution (a relative path, a workspace package's exact export, a `*`

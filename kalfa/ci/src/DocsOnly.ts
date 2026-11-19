@@ -1,12 +1,12 @@
 /**
  * The docs-only classifier: what kind of change a repo-relative path is. CI's changes job and the
- * lead's tools share it (decisions 0183, 0180 and 0090), so both answer alike for the same paths.
+ * lead's tools share it (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first), so both answer alike for the same paths.
  *
  * - `code`: a program or a test reads the file. A path no rule below names is code too.
  * - `instructions`: an agent reads the file as its instructions, and no program runs it: skill prose,
  *   `AGENTS.md`, `CLAUDE.md`, and Markdown under `.claude/` (an agent's definition or command) or
- *   `.github/` (a pull request template and the like) (0180).
- * - `docs`: Markdown that no program or skill reads (0183, 0090). Markdown is docs unless a reader
+ *   `.github/` (a pull request template and the like) (an instruction file takes a quick edit with no test first).
+ * - `docs`: Markdown that no program or skill reads (the lead admin-merges a docs-only pull request after checking it is not broken). Markdown is docs unless a reader
  *   below names it.
  *
  * This file imports nothing, so CI can run it before any install.
@@ -33,7 +33,7 @@ const INPUT_FOLDERS = new Set(["brief", "briefs", "prompt", "prompts"]);
 // The skill trees. A skill's Markdown is prose or a script's input, never docs.
 const SKILL_TREES = [".agents/skills/", ".claude/skills/"];
 
-// The folders whose docs the admin merge takes (decision 0183).
+// The folders whose docs the admin merge takes (the lead admin-merges a docs-only pull request after checking it is not broken).
 const ADMIN_FOLDERS = [".kalfa/decisions/", "docs/", ".kalfa/glossary/", ".kalfa/runbooks/", ".kalfa/guidelines/"];
 
 /** A skill's script, which a lead script or a test runs, whatever its extension. */
@@ -46,7 +46,7 @@ const isSkillProse = (path: string): boolean =>
 
 /**
  * Markdown that an agent or GitHub reads as configuration: any `.md` under `.claude/` outside a skill's own
- * folder, such as an agent's definition or command (0180), and any `.md` under `.github/`, such as a pull
+ * folder, such as an agent's definition or command (an instruction file takes a quick edit with no test first), and any `.md` under `.github/`, such as a pull
  * request template.
  */
 const isToolMarkdown = (path: string): boolean =>
@@ -66,7 +66,7 @@ const inFixtures = (path: string): boolean => path.split("/").slice(0, -1).inclu
 /**
  * An `AGENTS.md` or `CLAUDE.md` that an agent reads. Not under a `fixtures` folder at any depth, not under
  * today's `packages/` or `programs/`, not in a skill's scripts folder, not in a skill's own folder and not in
- * a brief or prompt folder, since a test or a program reads those (0180). Everywhere else, the root, `next/`,
+ * a brief or prompt folder, since a test or a program reads those (an instruction file takes a quick edit with no test first). Everywhere else, the root, `next/`,
  * `kalfa/`, `docs/` or any other folder, it is instruction text.
  */
 const isInstructionMap = (path: string): boolean => {
@@ -108,7 +108,7 @@ export const reads = (path: string): boolean =>
 
 /**
  * What kind of change a path is: `code`, `instructions` or `docs`, as the top of this file says. Markdown
- * outside the skill trees that nothing reads is docs (0183, 0090).
+ * outside the skill trees that nothing reads is docs (the lead admin-merges a docs-only pull request after checking it is not broken).
  *
  * @category getters
  */
@@ -129,7 +129,7 @@ export const kind = (path: string): "code" | "instructions" | "docs" => {
 };
 
 /**
- * Whether a change is docs only (decisions 0183 and 0180): at least one path, and no path is code.
+ * Whether a change is docs only (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first): at least one path, and no path is code.
  * Instruction text counts as no code, since no program runs it. CI skips its heavy jobs on such a
  * change, and the lead's arm accepts one. The admin merge is stricter: it takes only the docs that
  * `isAdminDocs` names.
@@ -140,7 +140,7 @@ export const docsOnly = (paths: readonly string[]): boolean =>
   paths.length > 0 && paths.every((path) => kind(path) !== "code");
 
 /**
- * The admin merge's docs (decision 0183), narrower than `docsOnly`: `docs` kind under one of the folders the
+ * The admin merge's docs (the lead admin-merges a docs-only pull request after checking it is not broken), narrower than `docsOnly`: `docs` kind under one of the folders the
  * admin merge takes. README files and `.kalfa/patterns/` Markdown stay out until the owner says otherwise.
  *
  * @category predicates

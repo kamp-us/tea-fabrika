@@ -3,7 +3,7 @@
 // module and `node/settings/`; and only `settings/TomlParser.ts` imports the parser. oxlint's own
 // `no-restricted-imports` says so, in `.oxlintrc.json`, so this law is that rule's plant test, through
 // the real config at generated next/ paths. It was in next/apps/fabrika/src/settings-generated.test.ts
-// until 0591 moved it here, beside the other lint rules' tests. Plant: drop
+// until the exam-to-lint rule moved it here, beside the other lint rules' tests. Plant: drop
 // `src/settings-start.integration.test.ts` from the adapter's allowed files in `.oxlintrc.json`, and a
 // drawn start file is refused.
 import * as fc from "fast-check";
@@ -127,7 +127,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
       ),
       // A lint property: each run starts one oxlint process over up to 12 planted files, so a red
       // ends at its first counterexample rather than shrinking through more processes.
-      // 0591's M8 count: at the old 10 runs this seed never drew a start file taking the adapter.
+      // The exam-to-lint rule's M8 count: at the old 10 runs this seed never drew a start file taking the adapter.
       { seed: SEED, numRuns: 100, endOnFailure: true },
     );
     expect([...started].sort()).toEqual([...START].sort());

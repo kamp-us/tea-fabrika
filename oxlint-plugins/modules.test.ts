@@ -1,11 +1,11 @@
-// Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
+// Ticket 477, PR 0: the lint laws of libfabrika's modules (libfabrika has one folder per subject, and the rule file says who may import whom), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
 //   - `fabrika/modules`, hand-written, since no existing rule says these four: no module re-exports
 //     another module's names; `src/` holds only the listed modules and top files; every export in an
 //     `internal/` file is `@internal`; the shared top files hold values only.
 //   - oxlint's own `eslint/no-restricted-imports`: nobody outside a module imports its `internal/`.
 //   - oxlint's own `unicorn/filename-case`: a front file is PascalCase and an `internal/` file is
-//     camelCase (decision 0040: an existing rule before a hand-written one).
+//     camelCase (an existing, widely used tool comes before a hand-written one: an existing rule before a hand-written one).
 // The planted files are linted with the repository's own `.oxlintrc.json`, at their real paths, so
 // the config's lists and path globs are under test with the rule.
 //
@@ -120,7 +120,7 @@ const unlisted = [
   `${SRC}/utils/x.ts`, // the plan's plant: a folder by kind
   `${SRC}/sync/Merge.ts`,
   `${SRC}/Ledger/Ledger.ts`, // a module's name in another case is another folder
-  `${SRC}/LedgerError.ts`, // the plan's plant: no shared error (0043, rule 12)
+  `${SRC}/LedgerError.ts`, // the plan's plant: no shared error (libfabrika has one folder per subject, and the rule file says who may import whom, rule 12)
   `${SRC}/Helpers.ts`,
   `${SRC}/Helpers.test.ts`,
 ];
@@ -469,9 +469,9 @@ const ledgerImports = await plant(
   Object.fromEntries([...ledgerRefused, ...ledgerTaken].map(([path = "", up = ""]) => [path, ledgerBody(up)])),
 );
 
-// scenario: every module and every depth, since the law is a list of paths in the config. 0043, rule
+// scenario: every module and every depth, since the law is a list of paths in the config. The module-and-layer rule, rule
 // 11 and its amendments: the module above never sees what is two layers down, so `runtime/`,
-// `access/` and `gateway/` import no `ledger/`, types and tests included (0062). The override that
+// `access/` and `gateway/` import no `ledger/`, types and tests included (test files keep to the layers too). The override that
 // says so replaces the modules override's options, so its Radix and `internal/` entries must still hold.
 describe("runtime/, access/ and gateway/ never import ledger/", () => {
   it("refuses an import or re-export of ledger/, a type too, from each of the three, tests too", () => {
@@ -487,7 +487,7 @@ describe("runtime/, access/ and gateway/ never import ledger/", () => {
   });
 });
 
-// L5 of the trusted-rules swap (0573): `fabrika/one-id-module` is gone, and `modules` (rule 2) holds its
+// L5 of the trusted-rules swap (a trusted lint rule replaces ours where it catches as much): `fabrika/one-id-module` is gone, and `modules` (rule 2) holds its
 // one path, since `data` is no folder the config lists. The retired rule's generated bodies run in
 // process through RuleTester with the config's own options, and the first run's four bodies, one of
 // each kind, then go through one oxlint run each with the repo's config.

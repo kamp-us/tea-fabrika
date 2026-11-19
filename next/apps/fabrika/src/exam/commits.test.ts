@@ -403,7 +403,7 @@ describe("exam paths and scope", () => {
           `fixtures/next/${name}`,
           "allowed_signers",
           "exam-paths.json",
-          // 0524: a list file is an exam path until it is deleted, and so are code-graph's names.
+          // No check reads a list that lets broken code pass: a list file is an exam path until it is deleted, and so are code-graph's names.
           "next-ledger.json",
           "agents-ledger.json",
           "unreachable-ledger.json",
@@ -514,7 +514,7 @@ describe("check (p83 to p86)", () => {
       runs,
     );
   });
-  // 0098: where a branch stands against main is no input, so no pull request is broken for it; a gap
+  // The signed chain covers a branch's own change, not main: where a branch stands against main is no input, so no pull request is broken for it; a gap
   // in its links is a commit whose note does not fit, unsigned_commit. Plant: answer broken_chain at
   // the head again.
   it("P18: no pull request, signed or not, is broken_chain at pull request time", () => {
@@ -769,7 +769,7 @@ describe("chain (p86 and p89 after merge)", () => {
       runs,
     );
   });
-  // 0098: a squash that landed behind main has its own tree, and the chain ends at the head's tree.
+  // The signed chain covers a branch's own change, not main: a squash that landed behind main has its own tree, and the chain ends at the head's tree.
   // Plant: end at the squash's tree only; or accept any end once a head is given.
   it("P31: a chain ends at the head's tree when the squash landed behind main, and only there", () => {
     fc.assert(
@@ -851,7 +851,7 @@ describe("trusted config files", () => {
         },
         { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
         { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
-        { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (0062)" },
+        { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open) (test files keep to the layers too)" },
         { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
         {
           "glob": "next/**/tsconfig.json",
@@ -893,7 +893,7 @@ describe("trusted config files", () => {
         { "glob": ".oxfmtrc.json", "why": "the format settings" },
         { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
         { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
-        { "glob": "vendor/**", "why": "the lint rules we take as they ship, at their pinned commit (0563)" },
+        { "glob": "vendor/**", "why": "the lint rules we take as they ship, at their pinned commit (we use the anti-slop plugin as it ships, never our own copy of its rules)" },
         { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
         { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
         {
@@ -918,9 +918,9 @@ describe("trusted config files", () => {
           "why": "the owner's ledger of functions left out of the React Compiler"
         },
         { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
-        { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks (0524)" },
-        { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks (0524)" },
-        { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name (0524)" },
+        { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks (no check reads a list that lets broken code pass)" },
+        { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks (no check reads a list that lets broken code pass)" },
+        { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name (no check reads a list that lets broken code pass)" },
         { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
         { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
         { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
@@ -964,7 +964,7 @@ const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).cha
 
 const refusals = (cs: Commit[], main = EXAM) => Arr.filter(check(pr(cs), main).answers, (a) => a._tag === "stuck");
 
-describe("0053 parent exam lists", () => {
+describe("parent exam lists: a build commit is judged by the exam list in its own parent", () => {
   // Plant: use main's matcher, or union main and parent.
   it("t1: build paths use only its parent list", () => {
     fc.assert(

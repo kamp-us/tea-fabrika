@@ -13,7 +13,7 @@ const DRAFT_NAMES = {
 };
 
 // Marking a draft ready starts the full run; only a new head cancels the run before it. Adding the
-// `visual` label starts the same run with the visual legs (0536), and it cancels the one it repeats.
+// `visual` label starts the same run with the visual legs (a test that needs a real resource runs only in main's full run), and it cancels the one it repeats.
 const TYPES = ["opened", "synchronize", "reopened", "ready_for_review", "labeled"];
 
 const CANCEL =

@@ -1,5 +1,5 @@
 /**
- * `@kalfa/quality/stryker/Run`: run one plant, or survey the mutants on some lines (decision 0600).
+ * `@kalfa/quality/stryker/Run`: run one plant, or survey the mutants on some lines (testing, linting and formatting live in @kalfa/quality).
  *
  * A plant runs only once its target is certain: the file is read, Stryker's instrumenter makes every
  * mutant on it, and the shape must match exactly one (`Target.find`). Every refusal is before Stryker

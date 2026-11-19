@@ -1,4 +1,4 @@
-// Ticket 911, B1.0, next/. A service file holds only its contract (0095, E5 in
+// Ticket 911, B1.0, next/. A service file holds only its contract (a service file holds only its contract, and each layer is its own file, E5 in
 // docs/direction/effect-code-guidelines.md): each layer is a sibling file that exports `layer`, and
 // the class that extends `Context.Service` holds no code that runs. So this rule refuses every static
 // member of such a class, not only one that returns a Layer (owner, 2026-11-13): a syntax rule cannot
@@ -132,7 +132,7 @@ export const noStaticLayer: CreateRule = {
           context.report({
             node: member,
             message:
-              "A service class holds only its contract (0095): move this static member to a sibling file that exports it, as ledger/LedgerSql.ts exports `layer`, and have callers import it from there (oxlint-plugins/no-static-layer.ts).",
+              "A service class holds only its contract (a service file holds only its contract, and each layer is its own file): move this static member to a sibling file that exports it, as ledger/LedgerSql.ts exports `layer`, and have callers import it from there (oxlint-plugins/no-static-layer.ts).",
           });
         }
       }

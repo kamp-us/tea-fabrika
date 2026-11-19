@@ -1,4 +1,4 @@
-// L5 of the Reflect ban (decision 0554, .kalfa/quests/reflect-ban-PLAN.md): no ignore comment
+// L5 of the Reflect ban (a field is read through its type or a decode, never past it with Reflect, .kalfa/quests/reflect-ban-PLAN.md): no ignore comment
 // lets a Reflect call through `no-restricted-properties` outside the plan's 6 named lines. Generated
 // files at next/ and tooling paths, linted with the repository's own config, so the counts the
 // config allows are the ones read. A file's ignore comments that cover a Reflect line count, in each

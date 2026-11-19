@@ -1,5 +1,5 @@
 // Names: the exported names a pull request adds, and whether its description names each one under
-// `## New names` (0587). A name added there says what the industry calls it, with the source; the
+// `## New names` (a new helper names the tools it searched, and a new name cites the industry's word). A name added there says what the industry calls it, with the source; the
 // review judges that line, and this file only checks that it is there. Queue.add and Arm.arm read
 // it before they ask GitHub to merge. Pure. Today's lead tooling, run on our own laptop. Read
 // through its module: `Names.refusal(...)`.
@@ -121,12 +121,12 @@ export const refusal = (body: string, patches: ReadonlyArray<Patch>): string | n
   const said = section(body);
 
   if (said === null && hidden.length > 0) {
-    return `GitHub shows no patch for ${Arr.join(hidden, ", ")}, so its new names cannot be read; add a ## New names section with a line for each (0587, the pr skill)`;
+    return `GitHub shows no patch for ${Arr.join(hidden, ", ")}, so its new names cannot be read; add a ## New names section with a line for each (a new helper names the tools it searched, and a new name cites the industry's word, the pr skill)`;
   }
 
   const missing = Arr.filter(names, (name) => said === null || !says(said, name));
 
   return missing.length === 0
     ? null
-    : `its diff exports new names its ## New names section does not name: ${Arr.join(missing, ", ")}; add one line each, what the industry calls it, with the source (0587, the pr skill)`;
+    : `its diff exports new names its ## New names section does not name: ${Arr.join(missing, ", ")}; add one line each, what the industry calls it, with the source (a new helper names the tools it searched, and a new name cites the industry's word, the pr skill)`;
 };

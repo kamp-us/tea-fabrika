@@ -1,8 +1,8 @@
 // Unlisted: every branch, on the laptop or pushed, that holds commits not on main and has no open
-// pull request (0134). It lists; it deletes nothing. Today's lead tooling, read through its module:
+// pull request (every commit is pushed when it is made, with a draft pull request from the first commit). It lists; it deletes nothing. Today's lead tooling, read through its module:
 // `Unlisted.check`.
 //
-// Tools looked at first (0040), and what each cannot do here:
+// Tools looked at first (an existing, widely used tool comes before a hand-written one), and what each cannot do here:
 //   git branch --no-merged origin/main   a squash merge leaves every merged branch "not merged"
 //                                         (https://git-scm.com/docs/git-branch), and it knows no PRs
 //   git cherry origin/main <branch>      matches commit by commit on patch ids; a squash of several

@@ -2,7 +2,7 @@
 // There is no list of edge files (owner, 2026-11-05; Tier 1, P35), so each run fires at every one of
 // the 18 paths that list once named, and passes only where an edge comment stands over it.
 // These plants were the exam's (next/apps/fabrika/src/exam/no-effect-run-outside-edge.integration.test.ts)
-// until 0591 moved them here. Plant: drop `makeRuntimePromise` from the rule's run set, and line 12
+// until the exam-to-lint rule moved them here. Plant: drop `makeRuntimePromise` from the rule's run set, and line 12
 // stops firing at every path.
 
 import { Record as Rec, Array as Arr } from "effect";

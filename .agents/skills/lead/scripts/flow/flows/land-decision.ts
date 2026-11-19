@@ -1,10 +1,10 @@
 // The flow that lands a docs-only decision pull request (AGENTS.md: added to the merge queue on
 // green CI with a clean leak grep, no plan, tests, review or field rows). Today's lead tooling
-// (0064). The lead writes a three-line flow file per decision and runs it:
+// (the lead drives work by writing a flow that one program runs, and no agent holds a loop). The lead writes a three-line flow file per decision and runs it:
 //
 //   // BOXES/flows/adr-0065.ts, importing landDecision from this module by its path
 //   export default landDecision({ ticket: "660", dir: "<worktree>", branch: "fabrikalfa/adr-0065",
-//     paths: [".kalfa/decisions/0065-x.md"], subject: "T660 lead: 0065, ...", title: "...", body: "..." });
+//     paths: [".kalfa/decisions/0065-x.md"], subject: "T660 lead: the count-not-clock rule, ...", title: "...", body: "..." });
 //
 // and runs that file with the flow runner and `--lead` (its usage is in the runner's header).
 //

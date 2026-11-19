@@ -1,5 +1,5 @@
 // Today's lead tooling. The admin merge's answer for every row of the fixed table (@kalfa/ci/DocsOnly.test-support):
-// a row's files are docs only for the admin merge exactly when the row's adminDocs says so (0183, 0180).
+// a row's files are docs only for the admin merge exactly when the row's adminDocs says so (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first).
 import { expect, it } from "@effect/vitest";
 import { TABLE } from "@kalfa/ci/DocsOnly.test-support";
 import * as Merge from "./Merge.ts";

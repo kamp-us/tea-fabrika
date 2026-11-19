@@ -1,6 +1,6 @@
 name: plants
 
-# One plant on disposable CI (decisions 0600 and 0594): a Stryker-made mutant named by its code shape,
+# One plant on disposable CI (testing, linting and formatting live in @kalfa/quality; safe checks run directly, and launchd, Electron and process-signal laws use disposable CI): a Stryker-made mutant named by its code shape,
 # run against the one law that must kill it. The catalog is .github/ci/plants.ts. Only a person starts
 # it, by hand; no push, pull request or schedule does, so it adds no automatic run:
 #

@@ -1,5 +1,5 @@
 /**
- * Finding the one mutant a plant names, by its code shape (decision 0600). Pure.
+ * Finding the one mutant a plant names, by its code shape (testing, linting and formatting live in @kalfa/quality). Pure.
  *
  * `made` is every mutant Stryker's instrumenter makes on the whole file. For each, the node's own
  * text is sliced from the file and every run of whitespace is folded to one space; a mutant is a

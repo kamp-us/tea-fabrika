@@ -1,32 +1,32 @@
-// Today's CI, serving both versions. What a branch's proof run tests (0590): scheduled.yaml started
+// Today's CI, serving both versions. What a branch's proof run tests (a branch's proof run runs only the tests its change reaches): scheduled.yaml started
 // by hand on a branch other than main runs only the tests its change reaches. Its `select` job runs
 // this, after an install, and the `changed` job's legs run what it prints.
 //
 //   the branch's change against origin/main      the run tests
 //   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
-//                                                less every `.integration.` law (0602)
+//                                                less every `.integration.` law (integration laws run only in main's full run)
 //   is started with `scope: full` for a `law`     the full set too, and the record keeps the inputs
 //   reaches some tests                           those, on as many `changed` legs as they need
 //   reaches no test                              nothing: the run is green with no test leg
 //
-// The set is Vitest's own (0040): `vitest list --changed <base>` over the `next`, `next-visual` and
+// The set is Vitest's own (an existing, widely used tool comes before a hand-written one): `vitest list --changed <base>` over the `next`, `next-visual` and
 // `tooling` projects, the import graph `--changed` walks, with the files vitest.config.ts hands it as
 // watched files. The `.integration.` laws, `next-integration`'s and `tooling-integration`'s, run
-// only on main's full run (0602), so a proof run lists none of them, even one its change reaches,
-// and `choose` drops any name a list still gives; today's run in no CI job (0533). A next/ change
+// only on main's full run, so a proof run lists none of them, even one its change reaches,
+// and `choose` drops any name a list still gives; today's run in no CI job (CI runs none of today's version's tests). A next/ change
 // adds the in-memory reader tests too (changes.mjs's `readers`), as the merge line does: they read
 // next/'s source as text, so the import graph cannot reach them, and making each file they read a
 // rerun trigger would make every next/ change run everything.
 //
 // Rerun triggers are checked here on git's own diff, before Vitest's narrowing of the lockfile and
-// the manifests (vitest.changed.ts): a change to any of them runs the full set (0590), as Vitest's own
+// the manifests (vitest.changed.ts): a change to any of them runs the full set (a branch's proof run runs only the tests its change reaches), as Vitest's own
 // `filterTestsBySource` does when a changed file matches `forceRerunTriggers` (Vitest 5.0.5,
 // dist/chunks/cli-api.De07GUeT.js). The match is vitest.config.ts's: Vitest's installed picomatch,
 // with `dot: true`, over `testConfig`'s triggers.
 //
 // A changed set of zero files is a green run with no test leg, and its record says so: the lead asked
 // for a proof of this head, the set Vitest gave is that proof, and main's full run, every test on
-// every push (0581), stays the net for a miss. Ending the run with no verdict would leave arm with
+// every push (main's full run starts on a push to main and an hourly catch-up), stays the net for a miss. Ending the run with no verdict would leave arm with
 // nothing to read at the head, the same as no run at all.
 //
 // Legs are sized from the full-depth seconds the schedule measured (vitest.shards.ts's `rowsAt`), the
@@ -36,7 +36,7 @@
 // A hand start says what it wants as `scope` (scheduled.yaml's input, `changed` unless a person says
 // `full`) and, for `full`, the `law`: the test file that needs the full set. This script holds both
 // to the rules in `inputsOf` and has no default of its own, so the workflow's input is the one place a
-// default is declared (0069). `scope: changed` does not override a rerun trigger: 0590 stands.
+// default is declared (a choice that makes sense as a setting is a setting, declared once). `scope: changed` does not override a rerun trigger: the proof-run rule stands.
 //
 // The run keeps what it tested as its `proof-set` artifact and in its summary: the base commit, the
 // head, git's changed files, the inputs, each leg's files and seconds, and when. origin/main moves on,
@@ -56,7 +56,7 @@ export { isTrigger };
 
 /**
  * The projects a proof run lists and runs: every one CI runs but `next-integration` and
- * `tooling-integration`, which only main's full run runs (0602), and today's left out (0533).
+ * `tooling-integration`, which only main's full run runs, and today's left out (CI runs none of today's version's tests).
  */
 export const PROJECTS = ["next", "next-visual", "tooling"] as const;
 
@@ -66,7 +66,7 @@ const flags = (projects: readonly string[]) => projects.flatMap((project) => ["-
 /**
  * The `vitest list` calls a changed set is read from: `reached`, the tests the change reaches
  * against `base` over PROJECTS, and `readers`, the in-memory reader tests, asked for only when the
- * change touches next/ (`null` otherwise). Neither names an integration project (0602).
+ * change touches next/ (`null` otherwise). Neither names an integration project (integration laws run only in main's full run).
  */
 export const listings = (base: string, changed: readonly string[]) => ({
   reached: [...flags(PROJECTS), `--changed=${base}`],
@@ -104,7 +104,7 @@ export type Proof =
       readonly seconds: Readonly<Record<string, number>>;
     };
 
-/** The hand start's `scope` input, as scheduled.yaml gives it (0590). */
+/** The hand start's `scope` input, as scheduled.yaml gives it (a branch's proof run runs only the tests its change reaches). */
 const ScopeInput = Schema.Literals(["changed", "full"]);
 
 /** The hand start's inputs, decoded: `full` carries the `law` that needs the full set. */
@@ -186,7 +186,7 @@ export const inProjects =
  * What the run tests. `triggers` come first, and so does `scope: full`: a change to a rerun trigger or
  * a hand start for the full set is the full set whatever the import graph says. Else `files`, the set
  * Vitest listed, split by `sizing`, less every `.integration.` law, of next/ or of tooling: only
- * main's full run runs those (0602). PROJECTS already lists none of them; the name holds them out
+ * main's full run runs those. PROJECTS already lists none of them; the name holds them out
  * whatever a list gives.
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
@@ -231,7 +231,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
  * What the select step gives the next jobs: `scope`, `full` or `changed`; `legs`, the `changed`
  * job's matrix, a JSON list, `[]` when it starts no leg; and `files`, each leg's files as one line of
  * words, a JSON map by leg; and `slots`, the proof groups rotated by the workflow run number. `count`
- * is how many proof groups there are, MOST and PROOF_SLOTS (0598).
+ * is how many proof groups there are, MOST and PROOF_SLOTS (the merge line leaves the scheduled job groups).
  */
 export const outputs = (proof: Proof, run: number, count: number): string[] => {
   const legs = proof._tag === "changed" ? proof.legs : {};
@@ -248,7 +248,7 @@ export const outputs = (proof: Proof, run: number, count: number): string[] => {
 const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 
 /**
- * A full permutation of the `count` proof groups (0598), turned by the workflow run number, so
+ * A full permutation of the `count` proof groups (the merge line leaves the scheduled job groups), turned by the workflow run number, so
  * `count` runs in a row send every leg to every group. A retry keeps its workflow run number.
  */
 const slots = (run: number, count: number): Record<string, string> => {
@@ -276,20 +276,20 @@ const slots = (run: number, count: number): Record<string, string> => {
 
 /** The run's summary: what it tests and why, and each leg's files. */
 export const summary = (proof: Proof): string => {
-  const head = `Proof run at ${proof.head.slice(0, 9)}, against origin/main at ${proof.base.slice(0, 9)} (decision 0590).`;
+  const head = `Proof run at ${proof.head.slice(0, 9)}, against origin/main at ${proof.base.slice(0, 9)} (a branch's proof run runs only the tests its change reaches).`;
 
   if (proof._tag === "full") {
     const why =
       proof.inputs._tag === "full"
         ? [
-            `The full set, chosen by hand (\`scope: full\`) for the law \`${proof.inputs.law}\`: it runs every test but the \`.integration.\` laws, which only main's full run runs (decision 0602).`,
+            `The full set, chosen by hand (\`scope: full\`) for the law \`${proof.inputs.law}\`: it runs every test but the \`.integration.\` laws, which only main's full run runs.`,
           ]
         : [];
 
     const triggered =
       proof.triggers.length > 0
         ? [
-            "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs (decision 0602).",
+            "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs.",
             "",
             ...proof.triggers.map((path) => `- \`${path}\``),
           ]

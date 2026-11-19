@@ -29,17 +29,17 @@
 //                      again with a note, or park the quest for the lead
 //   opening    Act     botpush the branch and open the pull request (or find the open one)
 //   typechecking Listen CI's `typecheck` job at the pushed head, polled until that one job ends
-//                      (./ci/typecheck.ts; no laptop typecheck, 0133): red sends the quest back with
+//                      (./ci/typecheck.ts; no laptop typecheck, no push waits on a local typecheck, since CI runs it): red sends the quest back with
 //                      the error lines from the job's log, to tests when every error is in an exam
-//                      path, else to build, counted as a send back (0076), and the PR stays open
+//                      path, else to build, counted as a send back (a quest stops at its budget, or when its steps keep failing close together), and the PR stays open
 //                      for the next push; no answer in time, or no type error in a failed job,
 //                      goes on, and the last line says why
-//   loosening  Check   loosening.sh on the quest's exam diff, its output posted on the PR (0014):
+//   loosening  Check   loosening.sh on the quest's exam diff, its output posted on the PR (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call):
 //                      0 hits goes on, any hit parks for the lead's hand check, an error is stuck
 //   landing    Act     ./pr/Queue.ts: the leak checks on the change, each commit and the PR's title
 //                      and description, a wait for `ci-required` at the head within
 //                      `CHAIN_QUEUE_MINUTES` (60), then one squash pinned to that head, which adds
-//                      the PR to GitHub's merge queue (0162). GitHub tests it on newest main and
+//                      the PR to GitHub's merge queue (a pull request whose steps passed lands on green CI and a clean leak check alone). GitHub tests it on newest main and
 //                      merges it later; the chain never merges main in and never waits for the merge
 //   over               done (queued), ask (parked for the lead, the why in `reason`) or stuck
 //
@@ -48,7 +48,7 @@
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A quest runs no
 // mutation step: mutation runs hourly against main instead. `--start mutation`
-// stays for a quest parked inside its mutation step before 0066: it runs that one step, then goes on
+// stays for a quest parked inside its mutation step before the scheduled-mutation rule: it runs that one step, then goes on
 // to review, so nothing in flight is stranded. No move ever names mutation: a send to it, or to
 // plan, parks (only the lead approves a plan). A send goes to the quest step it names. A lockfile ask
 // parks too: the lead refreshes it outside the box. Any other ask, and any stuck, goes to the
@@ -86,7 +86,7 @@
 // checkout, chain.ts copies `.agents/` at the main checkout's commit into `BOXES/pins/<quest>.<pid>`,
 // runs itself again from there, and removes the copy when that process ends. The record's
 // `scripts` names the commit; a restart pins again and prints the commit its last process ran on.
-// The quest's pull request is a draft from its first commit (0134): drive's pushing phase pushes each
+// The quest's pull request is a draft from its first commit: drive's pushing phase pushes each
 // step's commit to the branch and opens the draft when the branch has none (./pr/Publish.ts). The
 // `opening` phase pushes the reviewed head, gives the pull request the brief's `## pr` words and
 // marks it ready (`Publish.ready`), through the typed PullRequests service.
@@ -133,7 +133,7 @@ import { Digest } from "effect/crypto";
 
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
-// oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
+// oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (lead tooling under .agents/ follows next/'s code rules)
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
@@ -188,7 +188,7 @@ const isStep = (s: string): s is StepName => (STEPS as readonly string[]).includ
 /** A quest's name, as its state files and its pin folder carry it. */
 const QUEST_NAME = /^[a-z0-9][a-z0-9-]*$/;
 
-/** A quest's steps, in order (0066). A move names only these, so no move reaches mutation. */
+/** A quest's steps, in order (mutation testing runs on a schedule against main, not in a pull request). A move names only these, so no move reaches mutation. */
 export const QUEST_STEPS = ["tests", "build", "review"] as const;
 
 export type QuestStep = (typeof QUEST_STEPS)[number];
@@ -211,13 +211,13 @@ export const MaxStucks = Context.Reference<number>("chain/MaxStucks", { defaultV
 /** Steps a quest may run before it parks, when its plan and brief give no estimate for a backstop. */
 export const MaxSteps = Context.Reference<number>("chain/MaxSteps", { defaultValue: () => 16 });
 
-/** The quest's intensity (0076): this many sends or work stucks... */
+/** The quest's intensity (a quest stops at its budget, or when its steps keep failing close together): this many sends or work stucks... */
 export const IntensityCount = Context.Reference<number>("chain/IntensityCount", { defaultValue: () => 3 });
 
 /** ...within this many of its last steps stop the chain and ask a person. */
 export const IntensityWithin = Context.Reference<number>("chain/IntensityWithin", { defaultValue: () => 5 });
 
-/** The backstop is this many times the estimate the plan or the quest brief gives (0076). */
+/** The backstop is this many times the estimate the plan or the quest brief gives (a quest stops at its budget, or when its steps keep failing close together). */
 export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { defaultValue: () => 2 });
 
 /** Minutes each host command may run (./flow/host.ts says where the default comes from). */
@@ -271,7 +271,7 @@ export type Line = {
   readonly outcome: string;
   readonly head: string;
   readonly reason: string;
-  /** A stuck step's fault, `tool` or `work` (0076); `null` for any other outcome. */
+  /** A stuck step's fault, `tool` or `work` (a quest stops at its budget, or when its steps keep failing close together); `null` for any other outcome. */
   readonly fault: Fault | null;
   readonly report: string | null;
   readonly box: string;
@@ -343,7 +343,7 @@ const toJudge = Move.cases.judge.make({});
 const toOpen = Move.cases.open.make({});
 
 /**
- * The step a done answer hands to, or `null` at the end of the chain. Build hands to review (0066);
+ * The step a done answer hands to, or `null` at the end of the chain. Build hands to review (mutation testing runs on a schedule against main, not in a pull request);
  * a mutation step, run only by `--start mutation`, hands to review too.
  */
 const after: Record<StepName, QuestStep | null> = {
@@ -377,7 +377,7 @@ export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: nu
         return to === step ? toJudge : toStep(to, `${step} answered ${line.outcome}: ${line.reason}`);
       }
 
-      // plan is the lead's to approve; mutation is no quest step since 0066, so neither runs here.
+      // plan is the lead's to approve; mutation is no quest step since the scheduled-mutation rule, so neither runs here.
       return toPark(`${step} sent the quest to ${to}, which is not a quest step: ${line.reason}`);
     case "ask":
       if (reason === "lockfile") {
@@ -579,7 +579,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
     lines.push("", f.plants);
   }
 
-  // Only a quest started at mutation, parked inside that step before 0066, gets here.
+  // Only a quest started at mutation, parked inside that step before the scheduled-mutation rule, gets here.
   if (step === "mutation") {
     lines.push(
       `T=${f.ticket}, BUILD=${short(f.heads.build ?? f.head)} (the newest build commit; the mutation sampler diffs it against its parent).`,
@@ -592,7 +592,7 @@ export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: 
 // ---------------------------------------------------------------- the budget
 
 /**
- * How one step ended, as the quest's intensity counts it (0076): `pass` (done, skip or ask), `send`
+ * How one step ended, as the quest's intensity counts it (a quest stops at its budget, or when its steps keep failing close together): `pass` (done, skip or ask), `send`
  * (sent back), `work` (stuck on the work) or `tool` (stuck on a tool, never counted against the quest).
  */
 export const MARKS = ["pass", "send", "work", "tool"] as const;
@@ -644,7 +644,7 @@ export const backstopFrom = (estimate: Budget, times: number): Budget => ({
   dollars: estimate.dollars * times,
 });
 
-/** Why the chain stopped to ask a person to redo, cut scope or drop (0076), kept in its record. */
+/** Why the chain stopped to ask a person to redo, cut scope or drop (a quest stops at its budget, or when its steps keep failing close together), kept in its record. */
 export const Stop = Schema.TaggedUnion({
   intensity: {
     count: Schema.Finite,
@@ -666,7 +666,9 @@ export type Stop = typeof Stop.Type;
 /** The stop's question, with its counts, for the lead. */
 export const stopReason = (stop: Stop): string => {
   const spent = `Spent so far: ${stop.steps} steps, $${stop.dollars.toFixed(2)}.`;
-  const ask = "Answer redo, cut scope or drop (0076).";
+
+  const ask =
+    "Answer redo, cut scope or drop (a quest stops at its budget, or when its steps keep failing close together).";
 
   if (stop._tag === "intensity") {
     const { sends, work } = counted(stop.window);
@@ -701,7 +703,7 @@ const lineFields = {
 
 const LineS = Schema.Struct(lineFields);
 
-// `fault` and `listUsd` came with 0076: a record written before them reads them as null.
+// `fault` and `listUsd` came with the quest budget rule: a record written before them reads them as null.
 const SavedLine = Schema.Struct({
   ...lineFields,
   fault: lineFields.fault.pipe(Schema.withDecodingDefaultKey(Effect.succeed(null))),
@@ -734,7 +736,7 @@ const ChainFields = Schema.Struct({
   /** When the chain added the PR to GitHub's merge queue. */
   queued: Schema.optionalKey(Schema.String),
   steps: Schema.Array(StepRecord),
-  /** Why the chain last stopped to ask a person (0076), when it did. */
+  /** Why the chain last stopped to ask a person (a quest stops at its budget, or when its steps keep failing close together), when it did. */
   stop: Schema.optionalKey(Stop),
   /** The heartbeat while the chain runs (./flow/Beat.ts); gone once the quest ends. */
   beat: Schema.optionalKey(Beat.Beat),
@@ -743,7 +745,7 @@ const ChainFields = Schema.Struct({
 });
 
 /**
- * The quest's chain record, `state/<quest>-chain.json`. One written before decision 0546 names the
+ * The quest's chain record, `state/<quest>-chain.json`. One written before the rule that a lane is called a quest names the
  * quest `lane`: it reads as `quest`, and the next write says `quest`.
  */
 export const ChainRecord = Schema.Union([ChainFields, ChainFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);
@@ -792,7 +794,7 @@ const hostRun = Cmd.make("host_run", {
   err: ["unknown"],
 });
 
-/** CI's typecheck job at the pushed head, read the moment it ends, once the PR is open (0133). */
+/** CI's typecheck job at the pushed head, read the moment it ends, once the PR is open (no push waits on a local typecheck, since CI runs it). */
 const typecheckRead = Cmd.make("typecheck_read", {
   input: Schema.Struct({ pr: Schema.Finite, head: Schema.String }),
   ok: Typecheck.Verdict,
@@ -808,13 +810,13 @@ type Cmds =
   | ReturnType<typeof land>
   | ReturnType<typeof hostRun>;
 
-/** How the quest ends: queued, parked for the lead, or stuck; a stop of 0076 says which rule fired. */
+/** How the quest ends: queued, parked for the lead, or stuck; a stop of the quest budget rule says which rule fired. */
 export type End = { readonly kind: "done" | "ask" | "stuck"; readonly reason: string; readonly stop?: Stop };
 
 export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "ask" ? 20 : 30);
 
 /**
- * The Check, pure: what loosening.sh's exit means before the queue (0014). Exit 0 (no hits) goes on,
+ * The Check, pure: what loosening.sh's exit means before the queue (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call). Exit 0 (no hits) goes on,
  * and `null` says so. Exit 1 is the hit list, parked for the lead's hand check. Anything else is an
  * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
  */
@@ -837,7 +839,7 @@ type Quest = {
   readonly hosted: string | null;
   readonly heads: Partial<Record<StepName, string>>;
   readonly stucks: number;
-  /** The last steps' marks, at most `intensity.within` of them (0076). */
+  /** The last steps' marks, at most `intensity.within` of them (a quest stops at its budget, or when its steps keep failing close together). */
   readonly window: readonly Mark[];
   /** List-price dollars this chain spent, steps and judgments. */
   readonly dollars: number;
@@ -885,7 +887,7 @@ const over = (quest: Quest, end: End): Step => [{ phase: "over", quest, end }, [
 
 const stopped = (quest: Quest, stop: Stop): Step => over(quest, { kind: "ask", reason: stopReason(stop), stop });
 
-/** The intensity, pure: the window holds `count` sends or work stucks (0076). */
+/** The intensity, pure: the window holds `count` sends or work stucks (a quest stops at its budget, or when its steps keep failing close together). */
 const intensityStop = (quest: Quest, { count, within }: Limits["intensity"]): Stop | null => {
   const { sends, work } = counted(quest.window);
 
@@ -894,7 +896,7 @@ const intensityStop = (quest: Quest, { count, within }: Limits["intensity"]): St
     : null;
 };
 
-/** The backstop, pure: the quest ran its steps or spent its dollars (0076). */
+/** The backstop, pure: the quest ran its steps or spent its dollars (a quest stops at its budget, or when its steps keep failing close together). */
 const backstopStop = (quest: Quest, backstop: Budget | null): Stop | null => {
   if (backstop === null) {
     return null;
@@ -907,7 +909,7 @@ const backstopStop = (quest: Quest, backstop: Budget | null): Stop | null => {
     : Stop.cases.backstop.make({ passed, backstop, steps: quest.round, dollars: quest.dollars });
 };
 
-/** loosening.sh on the reviewed head of the open PR, before anything lands (0014). */
+/** loosening.sh on the reviewed head of the open PR, before anything lands (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call). */
 const loosenAt = (quest: Quest, pr: number): Step => [
   { phase: "loosening", quest, pr },
   [loosen({ pr, head: quest.head })],
@@ -962,7 +964,7 @@ const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limi
         : [{ phase: "judging", quest, step, line }, [judge({ step, line, round: quest.round })]];
     }
 
-    // No laptop typecheck first (0133): CI's typecheck job answers once the head is pushed.
+    // No laptop typecheck first (no push waits on a local typecheck, since CI runs it): CI's typecheck job answers once the head is pushed.
     case "open":
       return [{ phase: "opening", quest }, [prOpen({ head: quest.head })]];
     default:
@@ -973,7 +975,7 @@ const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limi
 export const makeMachine = (limits: Limits) =>
   defineMachine({
     // SAFETY: tea's `types` slot only carries the Model and Msg types; tea never reads these empty
-    // values (0561).
+    // values (a cast says the fact the compiler cannot see).
     types: { model: {} as Model, msg: {} as Msg, ctx: undefined },
     cmds: [stepRun, judge, prOpen, typecheckRead, loosen, land, hostRun],
     init: (): Step => [
@@ -1000,7 +1002,7 @@ export const makeMachine = (limits: Limits) =>
 
         const { outcome, head, reason } = m.value;
 
-        // 0076: the host step's mark joins the window like any step's. A send to build is a send
+        // A quest stops at its budget, or when its steps keep failing close together: the host step's mark joins the window like any step's. A send to build is a send
         // back; a stuck is the tool's (git, the signer, the push), never counted against the quest.
         const mark = Match.value(outcome).pipe(
           Match.when("send", (): Mark => "send"),
@@ -1047,7 +1049,7 @@ export const makeMachine = (limits: Limits) =>
           dollars: s.quest.dollars + (line.listUsd ?? 0),
         };
 
-        // 0076: the window is checked before any move, so a tripped quest starts nothing more.
+        // A quest stops at its budget, or when its steps keep failing close together: the window is checked before any move, so a tripped quest starts nothing more.
         const intensity = intensityStop(quest, limits.intensity);
 
         if (intensity !== null) {
@@ -1084,7 +1086,7 @@ export const makeMachine = (limits: Limits) =>
               reason: `${s.step} ${s.line.outcome}: ${s.line.reason} (the judgment agent failed)`,
             })
           : stay(s),
-      // The PR is open and the head pushed: CI's typecheck job at that head is next (0133).
+      // The PR is open and the head pushed: CI's typecheck job at that head is next (no push waits on a local typecheck, since CI runs it).
       pr_open_ok: (s, m): Step => {
         if (s.phase !== "opening") {
           return stay(s);
@@ -1098,7 +1100,7 @@ export const makeMachine = (limits: Limits) =>
 
         return [{ phase: "typechecking", quest: s.quest, pr }, [typecheckRead({ pr, head: s.quest.head })]];
       },
-      // Green goes on to loosening.sh. Red is a send back (0076): its mark joins the window, and
+      // Green goes on to loosening.sh. Red is a send back (a quest stops at its budget, or when its steps keep failing close together): its mark joins the window, and
       // the step it names gets the error lines; the PR stays open for the next push. No answer
       // goes on too, and the quest keeps why.
       typecheck_read_ok: (s, m): Step => {
@@ -1374,7 +1376,7 @@ const handlers = (s: Setup) => {
         writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
         // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
-        // runs it only for a quest started at mutation (0066).
+        // runs it only for a quest started at mutation (mutation testing runs on a schedule against main, not in a pull request).
         const agent = stepAgent(cmd.step, s.claude, s.exec);
         const claude = agent === "claude";
 
@@ -1397,7 +1399,7 @@ const handlers = (s: Setup) => {
         // A slot refusal is a typed failure the schedule retries.
         const once = Effect.gen(function* () {
           // prepare runs the start checks in this thread: a hung one stops the beat. Box cleanup is
-          // not among them (gcloop.ts, 0101).
+          // not among them (gcloop.ts, box cleanup runs on a timer and after a merge, never on a step's start path).
           s.beats.enter("cleanup", null);
 
           const prepared = prepare(env, {
@@ -1558,7 +1560,7 @@ const handlers = (s: Setup) => {
 
         return { text: Formatter.formatJson(move), listUsd: listUsd("codex-read", env.CODEX_MODEL, turned.spent) };
       }),
-    // CI's typecheck job alone, polled until it ends: never the whole run or ci-required (0133).
+    // CI's typecheck job alone, polled until it ends: never the whole run or ci-required (no push waits on a local typecheck, since CI runs it).
     typecheck_read: (cmd: { pr: number; head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("typecheck", null);
@@ -1598,7 +1600,7 @@ const handlers = (s: Setup) => {
           "\n",
         );
 
-        // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
+        // The draft opened at the quest's first commit (drive's pushing phase, every commit is pushed when it is made, with a draft pull request from the first commit) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
         note(
           `review said merge-ready at ${pipe(cmd.head, Str.slice(0, 8))}; pushing ${s.branch} and marking its PR ready`,
@@ -1625,7 +1627,7 @@ const handlers = (s: Setup) => {
       }),
     // loosening.sh on the exam diff from where the quest leaves main to the reviewed head, run in
     // the main checkout, which holds every step's commits. Its output, hits or not, goes on the PR
-    // as a comment before anything lands (0014); a comment that fails is exit 2, never a pass.
+    // as a comment before anything lands (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call); a comment that fails is exit 2, never a pass.
     loosen: (cmd: { pr: number; head: string }) =>
       Effect.sync(() => {
         s.beats.enter("loosening", null);
@@ -1728,7 +1730,7 @@ const handlers = (s: Setup) => {
 
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
       }),
-    // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
+    // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone). The wait is for
     // `ci-required` at that head only; the merge is GitHub's, later, and nothing here waits for it.
     land: (cmd: { pr: number }) =>
       Effect.gen(function* () {
@@ -1760,7 +1762,7 @@ const handlers = (s: Setup) => {
 
 /**
  * Which agent ran the quest's steps, for the PR body. It names only steps the quest ran, so a quest
- * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
+ * with no mutation step (mutation testing runs on a schedule against main, not in a pull request) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
  */
 export const providers = (
   ran: readonly string[],
@@ -1982,7 +1984,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     const { stop } = end.end;
     beats.clear();
 
-    // The stop goes in the chain record with the rule that fired and what was spent (0076).
+    // The stop goes in the chain record with the rule that fired and what was spent (a quest stops at its budget, or when its steps keep failing close together).
     if (stop !== undefined) {
       record.writeRecord({ ...record.readRecord(), stop });
     }
@@ -2008,7 +2010,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
 /**
  * The quest's backstop: `BackstopTimes` the estimate in the approved plan, else in the quest brief.
  * With none, one printed line says the backstop is skipped and `MaxSteps` holds. The numbers go to
- * stderr only, never into a step's brief or the state file a judgment reads (0076).
+ * stderr only, never into a step's brief or the state file a judgment reads (a quest stops at its budget, or when its steps keep failing close together).
  */
 const backstopFor = (plan: string, brief: string) =>
   Effect.gen(function* () {
