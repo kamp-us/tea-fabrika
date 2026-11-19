@@ -199,7 +199,7 @@ How the runner runs `send_chunks` (a new host Cmd beside `send`, `Runner.ts:224`
 - After the last part: `send_chunks_ok { _tag: "queued", id, letters }`.
 - **Order per pair.** A `send` or `send_chunks` to a target waits while an earlier one to the same
   target still waits. So the letters one writer sends one reader arrive in the order its Cmds were
-  made, as OTP keeps order per sender and receiver (`docs/direction/follows/otp.md`, row 19).
+  made, as OTP keeps order per sender and receiver (`direction/follows/otp.md`, row 19).
 
 ### The two settings
 
@@ -371,7 +371,7 @@ workerd and sockets, so it runs on the schedule.
 | next/apps/fabrika/repo.json | build | generated | by `settings-generate.ts` |
 | docs/settings-reference.md | build | generated | by `settings-generate.ts` |
 | .glossary/TERMS.md | build | docs | rows `chunk`, `ack (inbox)`, `full`; the `pipe` row says letters are chunks |
-| docs/direction/follows/otp.md | build | docs | a row "Mailbox bound": OTP has none and a send never waits; ours caps unread letters, `send` answers `full`, `send_chunks` waits |
+| direction/follows/otp.md | build | docs | a row "Mailbox bound": OTP has none and a send never waits; ours caps unread letters, `send` answers `full`, `send_chunks` waits |
 | docs/plan/tier-1.md | build | docs | piece 4: the cap, `full`, chunked sends and the two settings move to "In code now"; the right for two programs on one line stays open |
 | next/packages/libfabrika/src/runtime/Chunk.test.ts | tests | tests | L1, L2 |
 | next/packages/libfabrika/src/processes/internal/programMail.test.ts | tests | tests | L3 |
@@ -503,7 +503,7 @@ Estimate: 6 steps, $43
 - What is lost if not recorded now: who read how far, and when. The ack row keeps it from the first
   read. A `full` answer saves nothing on the ledger, by 0109; its who, when and counts live on the
   span only.
-- `.glossary/TERMS.md`, `docs/direction/follows/otp.md` and `docs/plan/tier-1.md`, as in the files
+- `.glossary/TERMS.md`, `direction/follows/otp.md` and `docs/plan/tier-1.md`, as in the files
   table, in pull request 2.
 - `experiments/294-inbox-cap.md`, in pull request 1, the source for both defaults.
 - `field/runs/` rows for each step, by the lead.

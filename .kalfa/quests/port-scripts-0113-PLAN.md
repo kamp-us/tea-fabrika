@@ -588,12 +588,12 @@ Mac. The real-layer sets run in a box on real git, which any Linux box has.
 | `docs/plan/README.md` | lead | S8, S13, each integrator | docs |
 | `docs/how-to/sign-a-step-commit.md` | lead | S12 | docs |
 | `docs/plan/ticket-900-docs-lint.md` | lead | S9 | docs |
-| `docs/direction/how-we-get-work-done.md` | lead | S11, S13 | docs |
-| `docs/direction/skills-hold-only-judgment.md` | lead | S11 | docs |
-| `docs/direction/a-unit-of-work-is-a-commit.md` | lead | S13, S14 | docs |
-| `docs/direction/lane-queue-or-scheduled-job.md` | lead | S5, S13, S14 | docs |
-| `docs/direction/next-is-a-pipeline-pre-run.md` | lead | S13 | docs |
-| `docs/direction/agents-run-on-codex.md` | lead | S6 | docs |
+| `direction/how-we-get-work-done.md` | lead | S11, S13 | docs |
+| `direction/skills-hold-only-judgment.md` | lead | S11 | docs |
+| `direction/a-unit-of-work-is-a-commit.md` | lead | S13, S14 | docs |
+| `direction/lane-queue-or-scheduled-job.md` | lead | S5, S13, S14 | docs |
+| `direction/next-is-a-pipeline-pre-run.md` | lead | S13 | docs |
+| `direction/agents-run-on-codex.md` | lead | S6 | docs |
 | `.agents/skills/lead/scripts/redact/RedactFs.ts` | build | S5 | 60 |
 | `.agents/skills/lead/scripts/box.sh` | build | S5 | 2 |
 | `.agents/skills/lead/scripts/runplan.sh` | build | S5 | 1 |

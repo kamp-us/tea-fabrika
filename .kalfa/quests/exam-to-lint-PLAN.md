@@ -386,7 +386,7 @@ laws exist under another name, `AccessMachine.laws.test.ts`, which moves with `g
 
 A laws file with a property law and no sync test or reason (16). Each gets a `syncTest(` call,
 or `// sync test left out: <why>` where the machine's model cannot round-trip, with the reason read
-from the machine (S2 in `docs/direction/saved-state.md`). The laws file is named after each machine.
+from the machine (S2 in `direction/saved-state.md`). The laws file is named after each machine.
 
 - next/packages/libfabrika/src/client/HandsMachine.ts
 - next/packages/libfabrika/src/client/Prefix.ts

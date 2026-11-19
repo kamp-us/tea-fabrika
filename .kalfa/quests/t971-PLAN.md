@@ -253,7 +253,7 @@ three in `runtime/`. No folder reaches zero, so no warn line goes, and none is a
 | `next/packages/libfabrika/src/Id.types.test.ts` | tests | none | not changed: cited for its module-scope `checkTypes` idiom |
 
 an earlier decision's own records (the `type (label)` glossary row and the label table row in
-`docs/direction/five-steps-for-every-check.md`) landed with
+`direction/five-steps-for-every-check.md`) landed with
 https://github.com/kamp-us/tea-fabrika/pull/1233.
 
 ## Validation

@@ -819,7 +819,7 @@ before each merge (see "Calls taken").
 | tsconfig.base.json | tests | 6 | one checker override for `.agents/**` with `allowedDuplicatedPackages: ["@demlik/tea"]` and its comment, naming ticket 1065; an exam path, so the tests step writes it |
 | oxlint-plugins/duplicate-packages.test.ts | tests | tests | E3, new |
 | .agents/tsconfig.json | build | 0 | no change: the setting lives in the base file's override (see "Slice 1"); it changes only if the fallback is taken |
-| docs/direction/pin-exact-versions.md | build | docs | one line: a named catalog's pointer is exact as well |
+| direction/pin-exact-versions.md | build | docs | one line: a named catalog's pointer is exact as well |
 
 ### Slice 2: the `_tag` patch, and all of our side
 
@@ -864,10 +864,10 @@ before each merge (see "Calls taken").
 | .agents/skills/lead/scripts/flow/machine.ts | build | 2 | only if a handler reads an answer's key |
 | .patterns/effect-tagged-value-is-matched.md | build | docs | a tea Msg is matched by its own union; the `type` lines and `Match.discriminators("type")` go |
 | .glossary/TERMS.md | build | docs | the `_tag`, `input port` and `Msg` rows: tea's Msgs, Cmds and Subs are keyed `_tag` |
-| docs/direction/program-shape.md | build | docs | line 118: a Msg's `_tag` and an input's key |
-| docs/direction/shared-tiles.md | build | docs | line 66's example |
-| docs/direction/schema-classes-not-of-helpers.md | build | docs | line 45: 0569 and its amendment |
-| docs/direction/code-commits-and-signs-each-step.md | build | docs | line 24's comment |
+| direction/program-shape.md | build | docs | line 118: a Msg's `_tag` and an input's key |
+| direction/shared-tiles.md | build | docs | line 66's example |
+| direction/schema-classes-not-of-helpers.md | build | docs | line 45: 0569 and its amendment |
+| direction/code-commits-and-signs-each-step.md | build | docs | line 24's comment |
 | .agents/skills/write-pattern/references/diagrams.md | build | docs | line 36: a transition label is the Msg's `_tag` |
 | docs/plan/tier-1.md | build | docs | line 717: tea's Msgs, Cmds and Subs are `_tag` |
 | docs/plan/README.md | build | docs | the where-we-are row for the patch and its issues |

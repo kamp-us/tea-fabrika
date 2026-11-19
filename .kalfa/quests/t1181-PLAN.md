@@ -106,7 +106,7 @@ No call here is under 80%. The two nearest to the line, both 80%:
    (`Runner.ts:2752` to `:2770`). The wake and the upgrade names are those same two answers,
    checked more strictly. `load` means the loader failed or the declaration names another program
    (`:2738` to `:2748`); `newer` means a lower declared `v` (`:2751`). Both are wrong here.
-   [Hot reload, H3 and H4](../../../docs/direction/hot-reload.md) and
+   Hot reload, H3 and H4 and
    [0006](../../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md) say a new build the process
    cannot take refuses the swap for that one process, which keeps its old code, with a
    `code.refused` ([0013](../../../.kalfa/decisions/0013-records-carry-their-build.md)). No new word.

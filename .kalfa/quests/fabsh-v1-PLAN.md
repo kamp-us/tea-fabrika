@@ -446,7 +446,7 @@ Today's files below are the behavior to rebuild under 0586, never imports into `
 | .oxlintrc.json | tests | S1 | tests |
 | pnpm-lock.yaml | tests | S1 | tests |
 | .glossary/TERMS.md | build | S1, S2 | docs |
-| docs/direction/follows/README.md | build | S2 | docs |
+| direction/follows/README.md | build | S2 | docs |
 | docs/plan/tier-1.md | build | S1, S2, S3, S4 | docs |
 
 `cells.table.ts` is written by running `table.ts` against ghostty-web 0.4.0's own wasm, as today's
