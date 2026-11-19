@@ -4128,6 +4128,7 @@
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
         "kalfa/ci/**",
+        "kalfa/ledger/**",
         "kalfa/config/**",
         ".github/ci/**",
         "next/apps/fabrika/**",
