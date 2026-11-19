@@ -549,13 +549,6 @@ speaks over. Under layer 4, the app layer, which builds fabrika's programs on it
 | runner (program core) | (decided Nov 17, changed Nov 18) What runs a started program in one place. It has two jobs: it provides the Layers for the program's `Req`, and it plumbs inputs, outputs and errors. It takes the started form, `Stream<In> => Stream<Out>`. There is one Layer bundle per place: a Durable Object, Node, a browser tab, a test. As react-dom's `createRoot(el).render(app)` mounts a tree, with Effect's `ManagedRuntime` providing the Layers. [0601](../.decisions/0601-program-make-with-optional-pipes.md) | Not `ProgramRunner` (Runtime), the service that steps one process with seven services. Not tea's engine. Not the brain (Clients). |
 | socket | (decided Nov 18) One end of a connection: Effect's `Socket` (`effect/socket`), with a `reader` and a `writer`. A transport in `@kalfa/transport` makes it, over a WebSocket or WebRTC. [0601](../.decisions/0601-program-make-with-optional-pipes.md) | Not a Unix socket file. Not the transport, which makes sockets. |
 
-## Kalfa contexts
-
-Each kalfa package is one bounded context with its own `GLOSSARY.md`, in the format of the
-[domain-modeling skill](../.agents/skills/domain-modeling/SKILL.md). This section is the map to
-them. A package's glossary is made the turn its first term is settled, and its line is added here
-the same turn. None exists yet.
-
 ## Context map
 
 How the contexts talk, and how each word that crosses a border translates. The map is Evans's:

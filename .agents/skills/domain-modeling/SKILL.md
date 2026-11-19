@@ -1,6 +1,6 @@
 ---
 name: domain-modeling
-description: Sharpen a bounded context's words while you design. Use when a talk or a change coins, renames or blurs a term, when you write or edit a context's GLOSSARY.md or `.glossary/TERMS.md`, and before you offer a decision to record.
+description: Sharpen a bounded context's words while you design. Use when a talk or a change coins, renames or blurs a term, when you write or edit a context's GLOSSARY.md or `.glossary/TERMS.md`, and when a ruling gets settled.
 ---
 
 # domain-modeling
@@ -10,14 +10,11 @@ once. Only reading a glossary for vocabulary is not this skill, and any skill ca
 
 ## Where the words live
 
-- **One kalfa package is one bounded context** ([we follow DDD](../../../docs/direction/we-follow-ddd.md),
-  [0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md)). Its words live in
-  `kalfa/<package>/GLOSSARY.md`, made the turn its first term is settled, never before.
-- **`next/`'s contexts stay in [`.glossary/TERMS.md`](../../../.glossary/TERMS.md)**, which keeps its
-  rows and its context map. Its "Kalfa contexts" section is the map to every kalfa glossary: add a
-  line there when you make one.
-- **A word keeps one meaning inside a context.** A word that means two things in two contexts gets
-  a row in each, and a line in the context map. Before you add a word, search both places.
+- **The map in [`.glossary/TERMS.md`](../../../.glossary/TERMS.md) says which contexts exist and
+  where each one's words are written.**
+- **A word keeps one meaning inside a context.** A word with two meanings in two contexts is noted
+  in each, and the map names the boundary between them.
+- **Search before you add a word:** `node .agents/skills/lead/scripts/records.ts find "<words>"`.
 - **Decisions go through the [adr skill](../adr/SKILL.md) into `.decisions/`.** Never a `docs/adr/`.
 
 ## A kalfa glossary
@@ -51,10 +48,9 @@ _Avoid_: error, violation, lint
   surfaced at once, with the file.
 - **Write the glossary inline,** the turn the word is settled. Do not batch them up.
 
-## Offer a decision sparingly
+## Record a settled ruling
 
-Offer one only when all three hold: it is hard to reverse, it surprises a reader without context,
-and it came from a real trade-off. A missing one means no decision. Then use the adr skill, and ask
-first whether it is only a setting ([0069](../../../.decisions/0069-choices-are-settings.md)).
+Ask first whether it is only a setting ([0069](../../../.decisions/0069-choices-are-settings.md)),
+then record it with the [adr skill](../adr/SKILL.md).
 
 Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
