@@ -1,46 +1,30 @@
 ---
 name: grilling
-description: Interview the owner, round by round, to stress-test a design or plan. Use on "grill me", "poke holes", "what am I missing", or when a plan has branches nobody has walked.
+description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
 ---
 
-# grilling
+Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
-Keep asking until you and the owner share one picture. Map the design as a **design tree**: every
-decision branches into the decisions that hang off it. Visit every branch. Assume nothing silently.
+Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
 
-This is for a session with the owner. A pipeline step does not grill: it follows
-[AGENTS.md, "Finish your task"](../../../AGENTS.md#finish-your-task).
+Format a round like so:
 
-Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already
-settled: the questions you can ask now without guessing at answers you have not heard yet. Ask the
-whole frontier in one round. Number each question, and give your recommended answer with it. Then
-wait for the owner's answers before the next round.
+```
+❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
 
-Format a round like this:
+➡️ <your recommended answer>
 
-```md
-Q1 - **Question title**: the question, with its choices, possibly in several paragraphs.
+---
 
-Lean: your recommended answer, with why, what it costs, and how sure you are.
+❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+
+➡️ <your recommended answer>
 ```
 
-- **Word each question so "yes" accepts your lean.** Under about 80% sure, say what would settle it.
-- **Each answer reshapes the tree.** Settled decisions push the frontier outward and unblock the
-  questions that waited on them. Recompute the frontier and ask the next round. A question whose
-  answer depends on another question still open in this round waits for a later round.
-- **Finding facts is your job, never the owner's.** When a question needs a fact from the files, the
-  tools or the decisions, look it up first: read the code, the decisions and the glossary. Search
-  what is settled before you ask: `node .agents/skills/lead/scripts/records.ts find "<words>"`. A
-  slow lookup can go to a sub-agent with a fresh context, but do not block the round on it: ask the
-  questions that do not wait on it.
-- **The decisions are the owner's.** Put each one to them, and wait.
-- **Plain words.** Short sentences. A new term gets a few words of meaning.
+Word each question so "yes" accepts your recommended answer.
 
-The session is done when the frontier is empty: every branch of the design tree is visited, and
-nothing is left silently assumed. Then say what you now understand, and act only after the owner
-says yes.
+Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
-Run [domain-modeling](../domain-modeling/SKILL.md) alongside: when a word clashes or a rule gets
-settled, write it down then.
+Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent with a fresh context window to find it; don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report; ask the rest of the frontier now. The _decisions_ are the user's: put each to them and wait.
 
-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
+The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
