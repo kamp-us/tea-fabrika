@@ -2,7 +2,7 @@
 [[records]]
 name = "decisions"
 path = ".kalfa/decisions/"
-prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
+prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one. A ruling that fails those tests and that a lint rule, a check or a tool setting enforces gets no ADR: its why is a comment beside the enforcement. A ruling not built yet is a spec on the tracker, the ruling as its requirements; once built, the code holds it, and it gets an ADR only if building it proved hard to reverse. A setting is code: its value lives in its config file."
 
 [[records]]
 name = "glossary"
@@ -17,7 +17,7 @@ prompt = "One design area's rules, approved by the owner. Read an area's page wh
 [[records]]
 name = "patterns"
 path = ".kalfa/patterns/"
-prompt = "How the code is shaped now, one doc per pattern. Find one with README.md and `rg -n '^(where|when):' .kalfa/patterns`, then read the doc for your change. Write one with the write-pattern skill. When a doc and the source disagree, the source wins and the doc gets fixed."
+prompt = "How the code is shaped now, one doc per pattern. Find one with README.md and `rg -n '^(where|when):' .kalfa/patterns`, then read the doc for your change. A fact about how the code is shaped now, such as a service's name, lives here or in the code. Write one with the write-pattern skill. When a doc and the source disagree, the source wins and the doc gets fixed."
 
 [[records]]
 name = "runbooks"
@@ -32,7 +32,7 @@ prompt = "One signed plan per ticket, approved by the owner before its tests are
 [[records]]
 name = "research"
 path = ".kalfa/research/"
-prompt = "The research format in the `research` skill: one file per question, answered from high-trust primary sources, each claim cited."
+prompt = "The research format in the `research` skill: one file per question, answered from high-trust primary sources, each claim cited. Any reading of outside sources lives here, wherever it was first written."
 
 [[records]]
 name = "retro"

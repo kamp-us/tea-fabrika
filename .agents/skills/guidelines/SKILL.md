@@ -61,8 +61,8 @@ above, and you have read it whole.
 
 ### 3. Pick one running example
 
-- One real case from today's code, read on main, with `file:line` for each claim: a mode the app
-  has today, one real ticket's run, or the key code as it stands.
+- One real case from the code on main, with `file:line` for each claim: a mode the app has now,
+  one real ticket's run, or the key code as it stands.
 - The running example is carried through every later step: the principles, the designs, the
   prototype, the page and the walk. Every principle says whether the example follows it or breaks
   it, and where.
@@ -72,16 +72,17 @@ above, and you have read it whole.
 ### 4. Test every principle three ways
 
 Draft the principles from what the makers agree on and where the running example breaks it, as
-many as the findings give. Rules that share one reason and one check are one principle. Then give
-each principle these five:
+many as the findings give. Write each one as a product principle in plain words: what a person
+does and sees, never a test name, a type or a file. Rules that share one reason and one check are
+one principle. Then give each principle these five:
 
 - **Linear as the builder:** how Linear's team would build it as fabrika programs, in one line, or
   "No Linear answer: <why>". Where we differ, say why. Ask it of every rule, not only of screens.
 - **The Elm or OTP answer:** Elm's model, update, view and parents stepping children, or OTP's
   mailbox, supervisor and `code_change`, where one fits. Say where we leave it.
 - **Accessibility:** the WCAG criterion it touches, and what needs a real screen reader run.
-- **A kind:** `law` (the test writer can check it), `lint` (`pnpm lint` can hold it) or `taste`
-  (only a shot beside Linear checks it).
+- **A kind:** `law` (a test can check it), `lint` (`pnpm lint` can hold it) or `taste` (only a
+  shot beside Linear checks it). The kind steers the build plan (step 12), and stays off the page.
 - **A lean:** "Lean, NN%." with the doubt and what would settle it, or "No lean, the owner picks."
 
 **Done when** every principle has all five.
@@ -94,7 +95,7 @@ before its pull request opens, with or without a study; then read
 
 Build the designs with the prototype skill's UI path: 3 or 4 variants of the program's window, each
 a different answer to the same job, such as a list, a card, a panel or inline. Keys and mouse both
-work in each. Read today's code for which jobs exist, and design how they look afresh. Our layer on
+work in each. Read the code on main for which jobs exist, and design how they look afresh. Our layer on
 top of that skill:
 
 - **The fabsh pipe line first.** Before a design is built, write its fabsh pipe line:
@@ -106,8 +107,8 @@ top of that skill:
   (`@kampus/fabrika-design`) and sits in the real chassis, with as few boxes as "No extra
   containers" asks.
 - **Shots at five layouts.** Shoot each design as "Show it running" says, at the five layouts of
-  "Shoot more than one layout", dark mode first, as the owner runs it. Set each shot beside today's
-  app and beside the closest Linear screen, from Linear's public docs or changelog.
+  "Shoot more than one layout", dark mode first, as the owner runs it. Set each shot beside the
+  app as it runs now and beside the closest Linear screen, from Linear's public docs or changelog.
 
 **Done when** each design has its pipe line, runs in the real chassis, and has shots at all five
 layouts, each beside today's app and Linear.
@@ -115,7 +116,7 @@ layouts, each beside today's app and Linear.
 ### 6. The owner picks one, then refine it in rounds
 
 - Show the owner the designs: each one's pipe line, its variant in the prototype skill's switcher,
-  and its shots beside today's and Linear's. **The owner picks one.**
+  and its shots beside the current app's and Linear's. **The owner picks one.**
 - Each design that lost gets one or two plain lines on why, tied to a principle or a shot ("lost on
   T2: the rec sits under the question, see the 2x2 shot").
 - Refine the pick in rounds. For each shot, one line: would Linear's team ship this? Name what looks
@@ -147,8 +148,8 @@ its shots in `shots/`, in the shape of [the guideline page](references/guideline
 
 - **Line one is the status:** **Proposed DATE.** It becomes **Approved DATE.** on the owner's yes
   (step 11). That line is the record of the approval.
-- One `## X1: <name>` per principle, with its fields. The leans and their numbers, the lost designs
-  and the smaller calls go in the pull request's body (step 10).
+- One `## X1: <name>` per principle, with its fields. The kinds, the leans and their numbers, the
+  `file:line`s, the lost designs and the smaller calls go in the pull request's body (step 10).
 
 **Done when** every box in the guideline page's checklist is ticked.
 
@@ -165,10 +166,12 @@ on one throwaway branch, pushed and kept out of main. Copy the shots the page li
 leakgrep.sh checks added text; private words stay outside the repo.
 
 - Write its title and body with the pr skill. It holds the page and its shots.
-- Beside the pr skill's parts, the body carries: the scope line; each principle with its kind and
-  its lean, or "No lean, the owner picks"; the running example; what was decided; the designs and
-  why each lost; the smaller calls, each with its options as small code blocks and a lean; what other
-  open pull requests would change to match; the prototype branch; what it cannot tell us.
+- Beside the pr skill's parts, the body carries: the scope line; each principle with its kind, its
+  lean or "No lean, the owner picks", and where the running example breaks it, at `file:line`; for
+  a visual principle, its tokens and the layouts and Linear screen its look is judged at; the
+  running example; what was decided; the designs and why each lost; the smaller calls, each with
+  its options as small code blocks and a lean; what other open pull requests would change to match;
+  the prototype branch; what it cannot tell us.
 - It opens as a draft, and it lands after the owner's yes (step 11).
 
 **Done when** the draft is open, and the pr skill's leakgrep check passed on its body.
@@ -187,8 +190,7 @@ leakgrep.sh checks added text; private words stay outside the repo.
 - The owner's answer on a lean changes the prototype first, then the page, then the pull request's
   body.
 - The last step asks one yes or no: merge it? On a yes, before the merge and in the same pull
-  request, line one of the page becomes **Approved DATE.**, and each `law` and `lint` principle's
-  **Held by** names its test or lint rule, or the quest that will build it.
+  request, line one of the page becomes **Approved DATE.**
 
 **Done when** the owner answered the merge question, and on a yes the page says Approved.
 
@@ -196,8 +198,11 @@ leakgrep.sh checks added text; private words stay outside the repo.
 
 An approved page is done when the app shows it, so every study ends here.
 
-- The same day as the merge, write the build plan with the plan skill, for the version new work
-  goes in. It is saved as a `quests` record, and it names the prototype branch.
+- The same day as the merge, write the build plan with the plan skill. It is saved as a `quests`
+  record, and it names the prototype branch.
+- The plan picks which principles get codified, from each one's kind. A codified principle goes
+  into the ticket's spec as user stories until it is built, then lives as a test whose name reads
+  like the principle, so a reader finds it by the page's own words.
 - Bring it to the owner as one yes or no: approve the plan? On a yes, file the build as a tracker
   ticket with `from` set to the page's pull request. The test writer starts as soon as a slot is
   free, then the build and one review, as for every pull request.
@@ -208,5 +213,8 @@ An approved page is done when the app shows it, so every study ends here.
 ## Changing an approved page
 
 A change to a guideline is an edit to its page, in a pull request the owner says yes to. The page
-and its history are the whole record. A change to a `law` or `lint` principle changes its test or
-lint rule in the same pull request.
+and its history are the whole record. A change to a codified principle changes its test, found by
+its name, in the same pull request.
+
+Keeping a page true is judgment, not a check: whoever changes an area reads its page, and when the
+change makes a principle false, edits the page in the same pull request.
