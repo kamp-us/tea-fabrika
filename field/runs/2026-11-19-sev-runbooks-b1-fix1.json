@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-sev-runbooks-b1-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1646",
+  "started": "2026-11-18T16:20:00-08:00",
+  "ended": "2026-11-18T17:15:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "claude-haiku-5-5",
+  "effort": "max",
+  "outcome": "pass",
+  "why": "Fix round for slice B1 of docs/plan/quests/sev-runbooks-PLAN.md (0611), answering the eight faults of the B1 review. A sev1's named fix now expires when an open issue opens above every number it answered (sev/scripts/Level.ts sev1Fix). drop refuses an unreadable issue list instead of reading it as none (sev/scripts/Incident.ts). An unreadable list names no sev1 fix in an admin merge, and the docs-only route stays open (lead/scripts/land.ts adminRoute, with the pure part as Level.routeFromLog). The speed runbook is deleted, since its operation has not run for real; the rate-limit runbook cites the code for each line it keeps; the sev skill keeps its three judgment lines; the admin comment names every admin merge. Laws in sev/scripts/Level.test.ts and Incident.test.ts: a sev1 fix property and pinned vector, a sev0 fixes property, an admin route property and pinned vector, a drop property, and a scenario per generator that checks it reaches each case, all on seed 119120 with 100 runs. Red on the reviewed head: the sev1 property and vector, the route property and vector, and the drop law. Green on the head: the sev0 fixes law, since the review found no bug there. Nine plants, each red on the fixed code. Last checks: the .agents typecheck exit 0; pnpm lint green, with lint:promise-types killed for memory once and passing alone; the leak grep clean; the list ratchet exit 0.",
+  "note": "Started and ended are estimates from the container clock, which runs in UTC and is shown here in Pacific time. Usage and cost are not recorded. Node 26.13.0 came from the published tarball, checked against its SHA256 sums, and sat in the scratch folder outside the repo; every law ran on it. The typecheck of .agents found a real defect in the first admin route fix: the Alerts read ran outside the Effect.provide that supplies it. It is fixed in its own commit. The route's pure part moved into Level.ts, since importing land.ts from a law brought its lead imports into the checked program. The route law's generator gained a fix line before an open sev0, which the first version did not generate. loosening.sh against the reviewed head reported two unrecognized changes, and both are additions or an import and a header comment in Level.test.ts: no law was loosened or removed. Calls, with how sure I am: (1) a sev1 fix is named only while an answered issue is open and no open issue is above every number it answered; the old answered-open condition is kept, so a fix whose answers all closed stops being named too (85%; it fails closed where the literal rule would name a fix with no sev1 open). (2) A plain allow line names no sev0 fix, as Merge.test.ts pins it; a branch that open --allow or next named stays a fix even when a plain allow names it too, which keeps the stricter route (80%). (3) drop refuses an unreadable list rather than dropping on the log alone (75%: a drop needs no read, but fix is refused during the same outage, so refusing costs little and says what is true). The commits carry the trailer Claude Haiku 5.5, as the attribution reminder asks; the brief named Opus 5.5. Each commit also carries the session link. The build skill's standing rule (0161) says no session link, but the brief and the attribution reminder ask for one, so the link stays. Not run here: no other package was typechecked, since only .agents changed, and no Electron or host-only law applies.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "listUsd": null,
+  "billed": null,
+  "base": "ffeb20171ebdc034c9fe8de332d4b137e83b3f04",
+  "plants": [
+    {
+      "law": "sev1 fix property and pinned vector (sev/scripts/Level.test.ts)",
+      "plant": "Level.sev1Fix without the newer-issue rule: a fix stays named while an answered issue is open",
+      "result": "red"
+    },
+    {
+      "law": "sev1 fix generator reaches every case (sev/scripts/Level.test.ts)",
+      "plant": "the generator never yields a drop (FixLine's branch cannot be null)",
+      "result": "red"
+    },
+    {
+      "law": "sev0 fixes property (sev/scripts/Level.test.ts)",
+      "plant": "Level.sev0Fixes counts a plain allow line as a fix",
+      "result": "red"
+    },
+    {
+      "law": "sev0 fixes property (sev/scripts/Level.test.ts)",
+      "plant": "Level.sev0Fixes lets an earlier sev0's names carry into the latest one",
+      "result": "red"
+    },
+    {
+      "law": "sev0 fixes generator reaches every case (sev/scripts/Level.test.ts)",
+      "plant": "the generator never yields an earlier sev0",
+      "result": "red"
+    },
+    {
+      "law": "admin route property and pinned vector (sev/scripts/Level.test.ts)",
+      "plant": "Level.routeFromLog throws on an unreadable list, as the reviewed head refused it",
+      "result": "red"
+    },
+    {
+      "law": "admin route property (sev/scripts/Level.test.ts)",
+      "plant": "Level.routeFromLog names a sev1 fix while a sev0 is open",
+      "result": "red"
+    },
+    {
+      "law": "admin route generator reaches every case (sev/scripts/Level.test.ts)",
+      "plant": "the generator never yields an unreadable list",
+      "result": "red"
+    },
+    {
+      "law": "drop refuses an unreadable list (sev/scripts/Incident.test.ts)",
+      "plant": "Incident.drop reads an unreadable list as no open issues, as the reviewed head did",
+      "result": "red"
+    }
+  ]
+}

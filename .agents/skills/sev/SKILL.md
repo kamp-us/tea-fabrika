@@ -7,8 +7,10 @@ description: How the lead acts when CI is the emergency, at one of two levels. U
 
 A sev is CI as the emergency, at one of two levels. A sev0 is the owner's call: nothing lands, so
 CI freezes and the fixes land one at a time. A sev1 is on by itself while one of two checks has its
-issue open: changes still land, and fixes go first. The script does what code can; this page holds
-the judgment ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+issue open: changes still land, and a fix goes ahead by admin merge, one at a time
+([0611](../../../.decisions/0611-sev-runbooks-fixes-reserve-priority.md)). The lead is the incident
+commander at both levels. Each situation has its own runbook, below; the script does what code can;
+this page holds the judgment ([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
 
 ```text
 none --(full run red, or a speed number over goal: its issue opens)--> sev1
@@ -21,104 +23,55 @@ sev0 --(every fix merged, or the owner calls it off: close)--> sev1 if an issue 
 |---|---|---|
 | What is broken | Nothing can land, or every run makes it worse | Changes land, but the full run is red or a speed number is over its goal ([0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)) |
 | Merge line | Stopped; the owner empties the queue | Runs as normal ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)) |
-| CI runs | All canceled, except the one fix's | All run |
-| How a fix lands | One at a time, by admin merge | Through the merge line, ahead of other changes |
+| CI runs | All canceled, except the allowed branches', the merge queue's and main's `check` run | All run |
+| How a fix lands | One at a time, by admin merge, on current main | One at a time, by admin merge, on current main; every other change stays on the merge line |
 | Other work | Stops; every agent saves and waits | Keeps going |
 | Who calls it | Only the owner | Nobody: the full run or the daily speed check opens its issue |
 | Ends when | Every fix has merged, or the owner calls it off; it then becomes a sev1 or ends | That issue closes, which the same check does when it is green or inside the goal again |
 
-The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md); the two levels and the
-sev1 rule are [0542](../../../.decisions/0542-two-sev-levels-one-skill.md). Below a sev1 there is
-no level: a slow or odd run is a ticket, and a flaky test is fixed the day it is seen
-([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
+The sev0 rule is [0532](../../../.decisions/0532-a-sev0-freezes-ci.md); the two levels are
+[0542](../../../.decisions/0542-two-sev-levels-one-skill.md); where each rule changed, 0611 says.
+Below a sev1 there is no level: a slow or odd run is a ticket, and a flaky test is fixed the day it
+is seen ([0036](../../../.decisions/0036-a-flaky-test-is-fixed.md)).
 
 The cost of a sev1 with no caller: the two checks must stay worth trusting. A false alarm puts us in
 a sev1, so a check that cries wolf is itself a fix that goes first.
+
+## The runbooks
+
+Open the one for what happened. Each has a trigger, roles, steps, an exit and comms.
+
+- [Main is red](../../../.runbooks/sev-main-is-red.md): a sev1, "Scheduled CI is red on main", or main looks red with no issue.
+- A sev1 "CI speed: a stage is over its goal" has no runbook yet; one is written after the first speed sev1 is worked and written up.
+- [Nothing lands](../../../.runbooks/sev-nothing-lands.md): a sev0, on the owner's word.
+- [A fix is red](../../../.runbooks/sev-a-fix-is-red.md): a fix's `ci-required` or its review comes back red.
+- [Two fixes at once](../../../.runbooks/sev-two-fixes-at-once.md): a second fix is ready while one lands.
+- [Main goes red in a freeze](../../../.runbooks/sev-main-red-in-a-freeze.md): a sev0, main's own check goes red.
+- [The rate limit runs out](../../../.runbooks/sev-rate-limit-runs-out.md): GitHub's limit for the login reaches 0.
+- [Close and walk](../../../.runbooks/sev-close-and-walk.md): every fix merged, the owner calls it off, or the issue closed.
+
+`pnpm lint` checks that each runbook has its parts and that this list links every one
+(`records check runbook`).
+
+## Judgment
+
+- **A fix makes CI land again, faster, cheaper or green;** a feature almost done is not one.
+- **A full run's word is its verdict.** A red full run ends `failure`. `cancelled` means a person, the freeze or a
+  leg's limit stopped it, so read its report job's line first. On 2026-11-15 a red full run read as cut off, and its
+  pull request merged with two red laws.
+- **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped cause as a ticket. A
+  loosened or removed law goes to the owner ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)).
 
 ## When unsure which level
 
 - Only the owner raises to sev0. When it looks like one, tell him in one line that a sev0 may fit,
   and why. Do not argue the level while it is on; that goes in the write-up after (PagerDuty says
-  the same: https://docs.pagerduty.com/ops-guides/incident-response-guide/severity-levels).
-- **It looks like a sev1, but no issue is open** (for example main went red between two full
-  runs; they start on a push to main and hourly, [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)):
-  start the full run by hand, `gh workflow run scheduled.yaml --ref main`, so the check opens
-  its issue itself. Never open, close or label a `ci-scheduled` issue by hand.
-
-## sev1
-
-- **What counts:** an open `ci-scheduled` issue. "Scheduled CI is red on main" is the full run's
-  ([0534](../../../.decisions/0534-the-merge-line-runs-changed-tests-a-schedule-runs-all.md), its
-  start moved by [0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)); "CI
-  speed: a stage is over its goal" is the daily check's (0541). `status` lists them.
-- **What the lead does:** the response only. Find each cause the same day and ticket it. Put each
-  fix first on the merge line, ahead of other changes. The queue no longer runs the full suite
-  (0534), so a fix lands at the speed of its own changed tests.
-- **A fix is proven only by main's next full run,** never by a branch's own full run: a fix's pull
-  request is armed once its review passed, as any other is
-  ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)). Visual and real-resource tests do not run on pull
-  requests ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)), and
-  neither does a tooling law that starts a process
-  ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)). On 2026-11-14 a
-  rename broke a visual law, and nothing showed it until a pull request with the `visual` label ran.
-  Read main's first full run after the fix lands before you call it fixed.
-- **A full run's word is its verdict.** A red full run ends `failure`, on main and on a branch.
-  `cancelled` means a person or the freeze stopped it, or a leg hung past its job's backstop limit;
-  read its report job's line before you call it harmless. On 2026-11-15 a red full run on a branch
-  still canceled itself, read as cut off, and its pull request merged with two red laws. A
-  merge-line run (`check`) still cancels itself when red; its `ci-required` is the word there.
+  the same: https://docs.pagerduty.com/ops-guides/incident-response-guide/severity-levels). An agent,
+  a reviewer, a red main or a cost you measured is never a sev0 by itself.
+- **It looks like a sev1, but no issue is open:** the first steps of
+  [Main is red](../../../.runbooks/sev-main-is-red.md) start the full run so the check opens its own
+  issue. Never open, close or label a `ci-scheduled` issue by hand.
 - **Moving up:** when nothing can land, or each run makes it worse, tell the owner a sev0 may fit.
-- **Tell the owner:** one line when a sev1 starts (which issue, the cause if known), one when it
-  ends (what fixed it).
-
-## sev0
-
-- **What counts:** the owner says "sev0". An agent, a reviewer, a red main or a cost you measured is
-  never a sev0 by itself.
-- **The merge queue:** the owner empties it, not you; the lead's tooling refuses a dequeue. One red
-  entry makes every entry behind it run again, and full runs take the runners from the fixes. If
-  entries are still queued when he calls it, tell him which.
-- **Other work:** every agent, session and cloud job not on a fix saves where it is and stops. Tell
-  each one, and tell them again when it ends.
-- **One fix at a time.** A fix makes CI land again, faster, cheaper or green; a feature that is
-  "almost done" is not one. The allow list holds only the fix being landed now, in the order the
-  owner gives; with none given, the one the others wait on goes first.
-- For that fix: let only its checks run, and admin-merge it once its required checks are green,
-  you read the whole diff, and the leak grep is clean on the change and its words. Then `next` the
-  following fix.
-- **Every ready pull request lands the same way,** not only the fixes ([0603](../../../.decisions/0603-no-stacks-and-sev0-admin-merges.md)). The lead lands each
-  itself, one at a time, past the queue: `sev.ts allow <branch>`, then
-  `land.ts merge <pr> --admin`, once its steps passed, `ci-required` is green at its head and the
-  leak grep is clean. Read each merge's answer before the next.
-  - **The order:** the sev fixes, then the format and code-quality sweeps (format, lint, Effect,
-    mock and exam sweeps: they touch many files, so every pull request before them adds
-    conflicts), then the rest in the order they became ready, a child right after its parent.
-  - **No catch-up first.** A green pull request is not caught up with main. One that conflicts after
-    an earlier merge gets main merged in as the bot, and takes its place again once it is green.
-  - **Stacks:** remove an old native stack link with `gh stack unstack <number>` (`gh api
-    repos/<repo>/stacks` lists them). GitHub refuses `gh pr merge` on a stack member; each layer
-    lands on its own, bottom first.
-  - **A narrowed proof bar is the lead's to sign** when it keeps every law and files the dropped
-    cause as its own ticket, in the same read, by the lead session the quest reports to. A
-    loosened or removed law still goes to the owner.
-- **A red fix stops the line.** Fix it, or tell the owner what is red and ask what happens next.
-- **A check that is not required and already known red elsewhere** does not hold the admin merge
-  (on 2026-11-14 that was `launchd`). Find its root cause and ticket it the same turn.
-- **Decision and docs pull requests land at once,** by
-  [0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md), with no wait for the end (0603).
-- **Ending it:** when every fix has merged, or the owner calls it off; never when CI "looks
-  better". `close` stops the loop and prints the walk and the level after.
-- **After close, rerun nothing.** A run the freeze canceled and a red run that stopped itself both
-  end `cancelled`, and a rerun tests old code: on 2026-11-14 a run tested a pull request against a
-  main 40 minutes old. Walk the list `close` prints, in its order, on the merge line: merge main
-  into each branch and push, so a fresh run tests today's main. A branch that already holds main's
-  head gets its fresh run with its next push.
-- **After a big rename on main,** GitHub may mark pull requests as conflicting that a local merge
-  resolves. Merge main locally and push.
-- **Start the full run by hand** after close, as it prints: the freeze canceled it, and
-  nothing starts it again until its next slot.
-- **Tell the owner:** one line at open (the fixes, in order), one at each fix that goes red, one at
-  close (how many pull requests to walk, and the level now).
 
 ## Many agents at once
 
@@ -161,19 +114,19 @@ level. For a sev0, paste the summary `close` prints.
 ## The commands
 
 Run every command from the main checkout, so they share one log, `runs/sev/log.jsonl`. It keeps
-each sev0's open, fixes, cancels and close. A sev1 is not in it: the open issues are the record.
+each sev0's open, fixes, cancels and close, and a sev1's named fix; the open issues are the record
+of the level itself. The runbooks say when each runs.
 
 ```sh
 S=.agents/skills/sev/scripts/sev.ts
-node $S status                                   # the level now: sev0, sev1 or none, since when, why
-
-node $S open 0 --reason "..." --allow fabrikalfa/ci-cache   # in the background, on the owner's call
-node $S next fabrikalfa/ci-legs                  # that fix alone is allowed; the one before is canceled from now
-node $S allow fabrikalfa/ci-flake                # one more fix branch, without replacing the list
-git merge origin/main && git push                # on a conflict, in the PR's own worktree
-node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless the sev0 allows it and ci-required is green
+node $S status                                   # the level now, since when, why, and a sev1's named fix
+node $S open 0 --reason "..." --allow <branch>   # a sev0, on the owner's call; in the background
+node $S next <branch>                            # that fix alone is allowed; the one before is canceled from now
+node $S allow <branch>                           # one more ready pull request's branch, without replacing the list
+node $S fix <branch>                             # a sev1's one fix landing now; --drop lets it go
 node $S close --by lead                          # every fix merged; --by owner when he called it off
 node $S loop                                     # only if the open 0 loop died with its shell
+node .agents/skills/lead/scripts/land.ts merge <n> --admin  # a fix, a ready pull request in a sev0, or a docs change
 ```
 
 `SEV_SECONDS` sets the beat, 20 seconds by default; `close` waits three beats for the loop. The
