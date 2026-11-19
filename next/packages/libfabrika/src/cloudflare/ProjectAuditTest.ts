@@ -25,7 +25,8 @@ import { writeSshsig } from "../transport/Sshsig.ts";
 
 import * as Formatter from "effect/Formatter";
 import { programBox } from "./box.ts";
-import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
+import type { ProcessObjects, RecordObjects } from "./ObjectCalls.ts";
+import { ProjectService, type projectLayer, projectLayerWithoutObjects, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
 
 /** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
@@ -75,10 +76,17 @@ export interface Harness {
   readonly tail: () => object;
   readonly environment: (
     box: InstanceType<ReturnType<typeof programBox>>,
-    accept: () => number,
     usage: (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => void,
     loaded: (key: string, code: unknown) => void,
   ) => Omit<Parameters<typeof projectLayer>[1], "INSTANCE">;
+  /**
+   * The Project's calls on its Process and Record objects, by registered name (ticket 1067): `msg`
+   * asks the box and counts each accepted message with `accept`.
+   */
+  readonly objects: (
+    box: InstanceType<ReturnType<typeof programBox>>,
+    accept: () => number,
+  ) => Layer.Layer<ProcessObjects | RecordObjects>;
 }
 
 /** The driver runs the generated Effect and checks coverage after all six walks. */
@@ -185,7 +193,6 @@ const projectWalk = Effect.fnUntraced(function* (
 
   const env = harness.environment(
     box,
-    () => ++accepted,
     (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => {
       reported.push({ object, rows });
     },
@@ -210,7 +217,7 @@ const projectWalk = Effect.fnUntraced(function* (
 
   const project = yield* ProjectService.pipe(
     Effect.provide(
-      projectLayer(
+      projectLayerWithoutObjects(
         ctx,
         { ...env, INSTANCE: Formatter.formatJson(instance) },
         {
@@ -218,7 +225,7 @@ const projectWalk = Effect.fnUntraced(function* (
           bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
           door: harness.door(url, ProjectInput),
         },
-      ),
+      ).pipe(Layer.provide(harness.objects(box, () => ++accepted))),
     ),
   );
 

@@ -21,11 +21,13 @@ import { Answer, Attached, Hello, RateCountFailure } from "../transport/Wire.ts"
 import type { ConnectionId } from "./bindings.ts";
 import { cloudflareSql } from "./CloudflareSql.ts";
 import { ProjectClient, rejected } from "./platform.ts";
+import * as RecordObjectsRpc from "./RecordObjectsRpc.ts";
 import {
   complete,
   projectStub,
   recordedLayer,
   recordingLayer,
+  recordStub,
   rpc,
   SettingsRuntime,
   type BrainOptions,
@@ -144,7 +146,9 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
   );
 
   const recording = yield* Layer.build(
-    recordingLayer(cloudflareSql(ctx.storage), env, config.name, `connection:${gateway}`),
+    recordingLayer(cloudflareSql(ctx.storage), env, `connection:${gateway}`).pipe(
+      Layer.provide(RecordObjectsRpc.layer((part) => recordStub(env, config.name, part))),
+    ),
   ).pipe(Effect.provideService(RecordedStart, checked));
 
   const recorded = <A, E>(work: Effect.Effect<A, E>, counted?: (value: A) => boolean) =>

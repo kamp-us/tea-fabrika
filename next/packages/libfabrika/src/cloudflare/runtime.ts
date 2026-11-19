@@ -143,10 +143,13 @@ import { cloudflareSql } from "./CloudflareSql.ts";
 import { handsLayer } from "./hands.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
 import { mailLayer, wakeups } from "./mail.ts";
+import { ProcessObjects, RecordObjects } from "./ObjectCalls.ts";
 import type { RecordShape } from "./objects.ts";
-import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
+import { BucketClient, GatewayClient, ProjectClient, StorageClient } from "./platform.ts";
+import * as ProcessObjectsRpc from "./ProcessObjectsRpc.ts";
 import * as Publish from "./Publish.ts";
 import * as ProjectQuotas from "./quotas.ts";
+import * as RecordObjectsRpc from "./RecordObjectsRpc.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
@@ -731,7 +734,20 @@ export const bucketCalls = (bucket: R2Bucket): BucketCalls => ({
     Effect.runPromise(bucketHead(bucket, key)),
 });
 
-const recordLayer = (env: Env, project: string) => RecordManager.remote((name) => recordStub(env, project, name));
+// Each part is the Record object `RecordObjects` calls by that part's name: the live Worker provides it over
+// the binding, and a law provides it with a Recorder (ticket 1067).
+const recordLayer = Layer.unwrap(
+  Effect.service(RecordObjects).pipe(
+    Effect.map((objects) =>
+      RecordManager.remote((name) => ({
+        write: (...args) => objects.write(name, ...args),
+        read: (...args) => objects.read(name, ...args),
+        content: (...args) => objects.content(name, ...args),
+        deleteContent: (...args) => objects.deleteContent(name, ...args),
+      })),
+    ),
+  ),
+);
 
 const archiveLayer = (env: Env) => Archive.bucket(bucketCalls(env.MEASUREMENTS));
 
@@ -808,20 +824,19 @@ export const RunnerLayer = Context.Reference<typeof ProgramRunner.withLoader>(
 );
 
 /**
- * Layer that provides an object's recording: the remote Record calls, the archive and the span sink
- * on its own SQL, with every span tagged with the start's settings hash and build.
+ * Layer that provides an object's recording: the Record calls it takes from `RecordObjects`, the
+ * archive and the span sink on its own SQL, with every span tagged with the start's settings hash
+ * and build.
  *
  * @category layers
  */
-export const recordingLayer = (sql: Sql, env: Env, project: string, object: string) =>
+export const recordingLayer = (sql: Sql, env: Env, object: string) =>
   Layer.effectContext(
     Effect.gen(function* () {
       const start = yield* RecordedStart;
       const sink = yield* SinkLayer;
 
-      const services = yield* Layer.build(
-        Layer.mergeAll(recordLayer(env, project), archiveLayer(env), sink(sql, { object })),
-      );
+      const services = yield* Layer.build(Layer.mergeAll(recordLayer, archiveLayer(env), sink(sql, { object })));
 
       const tracer = yield* Tracer.Tracer.pipe(Effect.provideContext(services));
 
@@ -936,6 +951,8 @@ const projectLogic = Effect.fn("project.init")(function* (
   const installs = yield* Semaphore.make(1);
   const by = `brain:${name}`;
   const ids = yield* ProcessIdGenerator;
+  // The Project calls its Process objects by registered name, through a service (ticket 1067).
+  const objects = yield* ProcessObjects;
 
   const founder = {
     name,
@@ -946,7 +963,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     build: config.build,
   };
 
-  const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, name, `project:${name}`));
+  const base = Layer.mergeAll(ledgerLayer, recordingLayer(sql, env, `project:${name}`));
 
   const processManager = ProcessManager.layer(
     {
@@ -1164,7 +1181,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     pid: string,
     { descriptor, drain }: { readonly descriptor: typeof SavedDescriptor.Type; readonly drain: boolean },
   ) {
-    yield* rpc(ProcessClient.make(processStub(env, name, descriptor.name)).configure(descriptor, drain));
+    yield* rpc(objects.configure(descriptor.name, descriptor, drain));
     sql.exec("UPDATE dev_descriptors SET pending=0 WHERE process=?", pid);
   });
 
@@ -1234,7 +1251,7 @@ const projectLogic = Effect.fn("project.init")(function* (
               owner,
             };
           })
-        : rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process));
+        : rpc(objects.descriptor(process.name, process.process));
 
       // Its pending row is delivered after the build, with the other starts.
       sql.exec(
@@ -1249,9 +1266,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     // It also cannot take a swap yet, so its delivery below brings it to the selected code.
     const undelivered = yield* decodePending(process.process);
 
-    const recorded =
-      undelivered?.descriptor ??
-      (yield* rpc(ProcessClient.make(processStub(env, name, process.name)).descriptor(process.process)));
+    const recorded = undelivered?.descriptor ?? (yield* rpc(objects.descriptor(process.name, process.process)));
 
     // A process moved at an open runs the code that took its build's place.
     const descriptor = { ...recorded, build: moved.get(recorded.build) ?? recorded.build };
@@ -1283,7 +1298,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       return known;
     }
 
-    const descriptor = yield* rpc(ProcessClient.make(processStub(env, name, life.name)).descriptor(life.state.process));
+    const descriptor = yield* rpc(objects.descriptor(life.name, life.state.process));
 
     const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process }).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
@@ -1338,13 +1353,10 @@ const projectLogic = Effect.fn("project.init")(function* (
       notify: clients.notify,
       admit: (pid, incoming, before) =>
         ProjectQuotas.admitsInput(Context.get(services, Quotas), processes, pid, incoming, config.build, before),
-      deliver: (pid, incoming) =>
-        processObject(pid).pipe(
-          Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).msg(incoming))),
-        ),
+      deliver: (pid, incoming) => processObject(pid).pipe(Effect.flatMap((owner) => rpc(objects.msg(owner, incoming)))),
       open: (pid, client) =>
         processObject(pid).pipe(
-          Effect.flatMap((owner) => rpc(ProcessClient.make(processStub(env, name, owner)).open(client))),
+          Effect.flatMap((owner) => rpc(objects.open(owner, client))),
           Effect.flatMap((value) =>
             Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
               Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
@@ -1723,9 +1735,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         continue;
       }
 
-      const outcome = yield* rpc(
-        ProcessClient.make(processStub(env, name, process.name)).swap({ load, program, hash }),
-      ).pipe(
+      const outcome = yield* rpc(objects.swap(process.name, { load, program, hash })).pipe(
         Effect.retry({ times: 2, while: (error) => error instanceof LedgerError && error.reason === "unreachable" }),
       );
 
@@ -2321,11 +2331,13 @@ export class ProjectService extends Context.Service<
 
 /**
  * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
- * recorded in its own ledger.
+ * recorded in its own ledger, and leaves the Project's calls on its Process and Record objects to
+ * `ProcessObjects` and `RecordObjects`. A law provides them with a Recorder; `projectLayer` provides
+ * them over the bindings.
  *
  * @category layers
  */
-export const projectLayer = (
+export const projectLayerWithoutObjects = (
   ctx: DurableObjectState,
   env: Env,
   options: ProjectOptions,
@@ -2356,6 +2368,41 @@ export const projectLayer = (
         return Layer.effect(ProjectService, projectLogic(ctx, env, options, local)).pipe(
           Layer.provide(Layer.merge(ProcessIdGenerator.layer, Id.Generator.layer)),
           Layer.provide(recorded),
+        );
+      }),
+    ),
+  );
+};
+
+/**
+ * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
+ * recorded in its own ledger. Its Process and Record calls go over the bindings of `env`, to the
+ * objects of the Project's own name.
+ *
+ * @category layers
+ */
+export const projectLayer = (
+  ctx: DurableObjectState,
+  env: Env,
+  options: ProjectOptions,
+  local = projectLedger(
+    ctx,
+    env,
+    ctx.id.name ?? options.config?.name ?? "project",
+    options.input ?? checkedSettings(env),
+  ),
+) => {
+  const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
+
+  return Layer.unwrap(
+    input.pipe(
+      Effect.map(({ input }) => {
+        // The Project's own name, as `projectLogic` reads it.
+        const project = ctx.id.name ?? input.name;
+
+        return projectLayerWithoutObjects(ctx, env, options, local).pipe(
+          Layer.provide(ProcessObjectsRpc.layer((object) => processStub(env, project, object))),
+          Layer.provide(RecordObjectsRpc.layer((part) => recordStub(env, project, part))),
         );
       }),
     ),
@@ -2461,7 +2508,12 @@ const processLogic = Effect.fnUntraced(function* (
   // The name's own accounts and fault slot, kept beside its data in this object's SQLite (0147).
   const accounting = yield* ProjectQuotas.process(sql, saved.name, checked.values);
   const ledger = LedgerRemote.layer(stub, { reader: saved.id });
-  const base = Layer.mergeAll(ledger, recordingLayer(sql, env, project, saved.id));
+
+  const records = recordingLayer(sql, env, saved.id).pipe(
+    Layer.provide(RecordObjectsRpc.layer((part) => recordStub(env, project, part))),
+  );
+
+  const base = Layer.mergeAll(ledger, records);
 
   // ProcessStore takes `sync` as a call, so each runtime and its tests can hand it their own.
   const all = Layer.mergeAll(
