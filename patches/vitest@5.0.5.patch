@@ -1,0 +1,16 @@
+diff --git a/dist/chunks/run.BPv-BBRv.js b/dist/chunks/run.BPv-BBRv.js
+index 5c235b31744aebca14b9a79dd0836fa0faa9740f..8cacf0f13f7a1189b569b4fd6e96626baa994a4f 100644
+--- a/dist/chunks/run.BPv-BBRv.js
++++ b/dist/chunks/run.BPv-BBRv.js
+@@ -3813,7 +3813,10 @@ function throttle(fn, ms) {
+ 			return fn.apply(this, args);
+ 		}
+ 		// Make sure fn is still called even if there are no further calls
+-		pendingCall ??= setTimeout(call.bind(this), ms, ...args);
++		pendingCall ??= setTimeout(() => {
++			pendingCall = void 0;
++			call.apply(this, args);
++		}, ms);
+ 	};
+ }
+ // throttle based on summary reporter's DURATION_UPDATE_INTERVAL_MS
