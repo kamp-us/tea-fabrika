@@ -26,9 +26,9 @@ It is read from three places.
   one machine (ignored by git, never committed). Their verdicts are public on
   the pull requests and are linked below.
 - **The bigger record.** Experiments
-  [54](../experiments/54-why-reviews-fail.md),
-  [57](../experiments/57-repeat-findings-read-by-hand.md) and
-  [58](../experiments/58-shrinking-list-replay.md), which read the reviews
+  54 (in the notes),
+  57 (in the notes) and
+  58 (in the notes), which read the reviews
   fabrika recorded on [kamp-us/phoenix](https://github.com/kamp-us/phoenix).
 
 Where the skill says one thing and the logs show another, both are given. The
@@ -265,7 +265,7 @@ fabrika review ci <pr> --sha <head> --wait --budget-seconds 480
   in quest 561. Under fabrika alone the reviewer does the waiting. On phoenix,
   92 failed reviews had the red check arrive while the reviewer ran, and those
   took 10.9 minutes at the median
-  ([experiment 54](../experiments/54-why-reviews-fail.md)).
+  (experiment 54 (in the notes)).
 - **Skill and repo guide disagree.** The logged repo's guide says the reviewer
   runs the first criterion's end-to-end fixture. The skill says no kind of
   review runs again what CI enforces. In the logs, 0 of 6 reviewers ran a
@@ -288,7 +288,7 @@ reads: the answer of step 9 (settled, red)
 - **Move and tag:** Check. `code can do this`. On phoenix, when code checks a
   red check again one round later, it agrees with the reviewer 88% of the
   time, 65 of 74
-  ([experiment 58](../experiments/58-shrinking-list-replay.md)).
+  (experiment 58 (in the notes)).
 
 ### 11. Read the failing log, say where to look
 
@@ -345,7 +345,7 @@ writes: nothing yet. The rows go out in step 19
   post.
 - **Move and tag:** Draft. `needs a reader`. Code alone can check about 15% of
   recorded findings again
-  ([experiment 58](../experiments/58-shrinking-list-replay.md)).
+  (experiment 58 (in the notes)).
 
 ### 14. Look for what the criteria do not name
 
@@ -368,7 +368,7 @@ writes: nothing yet
 - **Move and tag:** Draft. `needs a reader`. On phoenix two failed reviews in
   three needed a reader, and the largest part was text that says something the
   code no longer does
-  ([experiment 54](../experiments/54-why-reviews-fail.md)).
+  (experiment 54 (in the notes)).
 
 ### 15. Does such a finding belong to this ticket?
 
@@ -385,7 +385,7 @@ answers: in scope | out of scope
   in a fifth to a third of failed reviews (experiment 54).
 - **Move and tag:** Judge. `not sure`. A small classifier got this question
   right 30 times in 36 with none wrong, but on 12 clean cases made by hand
-  ([experiment 27](../experiments/27-review-router.md)). No real case is in
+  (experiment 27 (in the notes)). No real case is in
   the six logs.
 
 ### 16. Add it to the ticket, or file it
@@ -763,7 +763,7 @@ and hands back data in place of prose. The code is in `src/stages/review/`.
 It runs alone and only reads. There is no machine with phases, no post, no
 ledger line, no second round and no place in the operator.
 
-> **Since then:** experiment 65 ([the review stage as a program](../experiments/65-review-as-a-program.md))
+> **Since then:** experiment 65 (the review stage as a program (in the notes))
 > made this piece a tea machine with phases and a program. `alone.ts` is
 > gone; its steps are the machine's. The reviewer's run is a Subscription,
 > the reviewer can file a note through one opened tool, and the result is
@@ -820,7 +820,7 @@ handed a short environment (`agentEnv`, `src/env.ts`): what it needs to start
 and find its login, and no other variable of the machine. A run has a
 limit in dollars, 2 unless told.
 
-It is offered no server of tools either. [Experiment 61](../experiments/61-missing-case.md)
+It is offered no server of tools either. Experiment 61 (in the notes)
 found the tools of the signed-in account's connectors in the list of three
 runs out of 13. Two options keep them out, and the runner ends a run whose
 list still holds a tool the options did not name:

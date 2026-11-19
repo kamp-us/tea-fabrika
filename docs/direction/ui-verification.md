@@ -23,8 +23,8 @@ Its decided rules are in: [0469](../../.decisions/0469-a-ui-check-reads-data-fir
 [0475](../../.decisions/0475-a-model-judge-advises-one-row.md),
 [0476](../../.decisions/0476-the-owners-look-is-aimed.md).
 
-Built from [experiment 192](../../experiments/192-ui-verification-guidelines.md), which checks the
-seven layers of [experiment 191](../../experiments/191-ui-verification-research.md) against the
+Built from experiment 192 (in the notes), which checks the
+seven layers of experiment 191 (in the notes) against the
 makers' own docs and tonight's two tickets, and a private page, "UI verification guidelines", with a
 window you can break and check. Neither is a measurement. Source tags such as [m7] are experiment
 192's.

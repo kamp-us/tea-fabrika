@@ -89,7 +89,7 @@ has no single place that can say who was first.
   wants no Cloudflare runs the same bundle on a self-hosted runtime
   (workerd, celld). Which one a host uses is config; see
   tea-host.
-- **Experiment 93 backs it** ([write-up](../../experiments/93-ledger-miniflare.md)).
+- **Experiment 93 backs it** (write-up (in the notes)).
   All 10 laws hold in Miniflare. A 30-minute soak at about 100 times a
   team's load, killed every 5 minutes, lost no acknowledged write and made
   no gap or duplicate; each restart took about 200 ms. The object's data is
@@ -309,7 +309,7 @@ connect.pipe(Effect.retry(reconnect));
   lives in the macOS Keychain). The brain checks the page's origin, so a
   website cannot open a socket to the local brain (cross-site WebSocket
   hijacking). Keys go window, brain, hands, shell; check them against
-  [experiment 143](../../experiments/143-typing-latency.md)'s typing bar. The
+  experiment 143 (in the notes)'s typing bar. The
   hands still run as a login service (launchd through SMAppService on the Mac,
   systemd on the VM) and own the local brain's life. The menubar is required,
   and Quit there stops the service.
@@ -318,7 +318,7 @@ connect.pipe(Effect.retry(reconnect));
   launchd service, so nothing starts at login. The menu bar is part of that app. Quit
   stops the brain. Whether hands still run as a login service is for Tier 4.*
   - ~~The window talks only to its own hands, over a Unix socket~~ **Replaced
-    2026-10-31.** [Experiment 172](../../experiments/172-hands-restart-time.md)
+    2026-10-31.** Experiment 172 (in the notes)
     leaned that way at 85%: a hands crash costs 0.4 to 0.8 s until the window
     is back and caught up. The number still holds; the window now reconnects
     to the brain instead.
@@ -348,11 +348,11 @@ connect.pipe(Effect.retry(reconnect));
 What local Miniflare gives us, from our own experiments:
 
 - WebSockets held by an object, asleep or awake: yes, the hibernation API
-  runs locally ([experiment 96](../../experiments/96-ledger-mailbox.md)).
+  runs locally (experiment 96 (in the notes)).
 - An object going to sleep by itself: not seen locally; a test forces it with
-  `ctx.abort()` ([experiment 148](../../experiments/148-remote-programs.md)).
+  `ctx.abort()` (experiment 148 (in the notes)).
 - Restarts: about 12 to 17 a day at 500 MB of memory, and every connection
-  drops ([experiment 93](../../experiments/93-ledger-miniflare.md)). That
+  drops (experiment 93 (in the notes)). That
   reconnects one socket per client, far below the limit of 200 opened at once
   that get reset. Reconnecting is the normal path, after a small random wait.
 - Speed: an object call answers in about 10 ms (experiment 148).
@@ -406,7 +406,7 @@ after about 10 s and drops what waits in memory.*
 - **D1, who decides a race (2026-10-19):** the project's Durable Object is
   the referee. It handles one call at a time, so a claim checks and writes in
   one step: compare-and-set plus a lease
-  ([experiment 110](../../experiments/110-one-ledger-for-the-pipeline.md):
+  (experiment 110 (in the notes):
   race 50 of 50, a stalled holder fenced 75 of 75). `append` stays plain, with
   the id check only. A conditional append waits for a case that needs it.
 - **D2, streams:** one log per project, with named streams inside it
@@ -459,7 +459,7 @@ after about 10 s and drops what waits in memory.*
 The jobs that live on the ledger: claims, inboxes, the process tree, and who
 is online. Claims, inboxes and the process tree live in the one project object,
 because a crash changes all three at once.
-[Experiment 145](../../experiments/145-many-objects.md) split them and broke 11
+Experiment 145 (in the notes) split them and broke 11
 of 27 rules. Who is online is read from the gateways' last ping (T6), never
 written, so it needs no table.
 
@@ -523,7 +523,7 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   follows OTP: registry, mailbox, links, monitors, trap exit, supervisors. A
   difference from OTP needs a written reason. A check that ours matches OTP is
   still owed, since experiment 99 came before experiment 107.
-  *Done 2026-11-09 for Tier 1's slice: [experiment 239](../../experiments/239-supervision-vs-otp.md),
+  *Done 2026-11-09 for Tier 1's slice: experiment 239 (in the notes),
   with tickets 404 to 406 for what it found.*
   *Amended 2026-11-09 (owner, [0016](../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)):*
   each difference from OTP's supervisor is written with its reason in two places, here and in the
@@ -550,7 +550,7 @@ Two differences stay, each with its reason written in the code: names are
 never freed (a name is a stream, and the log keeps every stream), and only the
 parent sends exit signals (a job cannot kill a job it does not own).
 
-Five more differences stay in `next/`. [Experiment 239](../../experiments/239-supervision-vs-otp.md)
+Five more differences stay in `next/`. Experiment 239 (in the notes)
 found them with no written reason; these are the reasons. Paths are under
 `next/packages/libfabrika/src/`.
 

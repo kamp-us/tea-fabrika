@@ -6,7 +6,7 @@ summary: "Both versions. Where each piece of work in a change lives, by two ques
 # Quest, queue or scheduled job: where each piece of work in a change lives
 
 **Decided 2026-11-11.** The owner decided the rule, the tie-breaker and the picture after a walk of
-[experiment 260](../../experiments/260-lane-queue-or-scheduled-job.md), and corrected two of its
+experiment 260 (in the notes), and corrected two of its
 guesses. The binding part is
 [0108](../../.decisions/0108-a-job-lives-in-a-lane-a-queue-or-a-scheduled-job.md). A scheduled job
 is the repo's existing word:

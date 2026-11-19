@@ -120,7 +120,7 @@ const run = Agents.run({ provider, session: chat.session, folder, prompt: typed 
 ## Where a person's login lives
 
 **Ruled 2026-10-26 by the owner, after
-[experiment 157](../../experiments/157-login-stays-home.md).** Each person's
+experiment 157 (in the notes).** Each person's
 login is kept in their own locker on one shared Cloudflare account. A job's
 box holds the login itself, the way GitHub Actions and OpenAI's CI page do it.
 Our Worker never sees a real token.

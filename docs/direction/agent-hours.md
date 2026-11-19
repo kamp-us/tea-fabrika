@@ -25,7 +25,7 @@ The five open questions, as answered on the same day:
 | Restate Tier 1's size? | Yes: Tier 1 and the self-fix plan, at the measured rate | 80% | [Where this differs](#where-this-differs-from-settled-notes) |
 | Split the field log's `lane`? | Yes: `ticket` and `pr`, two fields | 85% | [What a run records](#what-a-run-records) |
 
-Built from [experiment 187](../../experiments/187-agent-hours.md), which defined the unit,
+Built from experiment 187 (in the notes), which defined the unit,
 measured it from `field/runs.jsonl` joined to merged PRs, and held our past guesses up to it.
 AGENTS.md says "Size work in files, lines and agent hours" and never said what an agent hour is.
 This note does.

@@ -18,7 +18,7 @@ Decided before this note, by the owner on 2026-11-02, and not asked again: `next
 Compiler compatible from day one, with the guidelines and rules that takes; and today's app follows
 the same guidelines too, as a tryout whose lessons go to `next/` rethought. Decided the same day,
 after this note's first version: **no Babel in the build**, and the calls in
-[experiment 195's "Decided"](../../experiments/195-oxc-toolchain.md#decided). This note is how.
+experiment 195's "Decided" (in the notes). This note is how.
 
 **Strict, decided 2026-11-03.** We follow React's Compiler rules as written, the same as React's
 own Rules of React [r24], with no advice level. Every finding the Compiler, its checks or the React
@@ -34,11 +34,11 @@ tea's own hook once it takes the Effect engine, and until then one `useSyncExter
 stand-in; tea 0.23.0's `useRuntime` took it, so there is no stand-in), [UI on Manti](./ui-on-manti.md), [oxlint and oxfmt](./oxlint-and-oxfmt.md), and
 [nobody writes their own exam](./nobody-writes-their-own-exam.md).
 
-Built from [experiment 194](../../experiments/194-react-compiler.md), which read React's docs and
+Built from experiment 194 (in the notes), which read React's docs and
 the tools and ran oxlint's React rules and the Compiler over today's window code;
-[experiment 195](../../experiments/195-oxc-toolchain.md), which ran oxc's native port of the
+experiment 195 (in the notes), which ran oxc's native port of the
 Compiler on the same code, built `next/`'s window with it and ran it; and
-[experiment 176](../../experiments/176-react-on-the-real-app.md), which compiled today's app on a
+experiment 176 (in the notes), which compiled today's app on a
 branch. Also a private page, "React Compiler guidelines", with a window whose components you can
 break and compile. 194's probe and 195's spike are small, and 176 is one machine. None is a
 benchmark.
@@ -255,8 +255,8 @@ Lean 85%, taken.
 no hand `memo`. First decided 2026-11-02 (195, open call 5). Lean 75%, taken.
 
 *Changed 2026-11-05:* way 3b goes through tea 0.23.0's `useRuntime` with a selector, not a stand-in
-([demlik 853](https://github.com/kamp-us/demlik/issues/853) closed). [Experiment
-213](../../experiments/213-tea-react-select.md) ran it under Babel's Compiler on both engines:
+([demlik 853](https://github.com/kamp-us/demlik/issues/853) closed). Experiment
+213 (in the notes) ran it under Babel's Compiler on both engines:
 three tiles, tile b clicked three times, drew a0 b3 c0, in 400 of 400 trials. The cost below, about
 60 lines in the hook's file, is gone.
 

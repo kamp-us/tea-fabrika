@@ -180,7 +180,7 @@ fabrika runs. Rows that may already half-cover a slice are listed in
 Tier 3 was "two people". It is now a small group, a few friends or a small company, sharing one
 fabrika on one person's Cloudflare. Every one of them uses it only from a browser or a phone; setup
 and deploy may still use a Mac. Why: the main browser case is a few friends on browsers and phones
-([experiment 229](../../experiments/229-browser-only-friends.md)). So "more than two people" and
+(experiment 229 (in the notes)). So "more than two people" and
 "phone as approver" left Tier 7. Roles finer than the three below stay in Tier 7. The real domain
 is chosen at install time ([below](#tier-3s-address-mail-recovery-and-join-screen-owner-2026-11-08)).
 
@@ -216,7 +216,7 @@ Decided by the owner in the product walk.
 
 #### Tier 3's address, mail, recovery and join screen (owner, 2026-11-08)
 
-Decided by the owner from [experiment 229](../../experiments/229-browser-only-friends.md).
+Decided by the owner from experiment 229 (in the notes).
 
 - **The address is asked once, up front** (row 13). The install asks for the final web address. A
   `workers.dev` address is allowed, with a note that moving later means everyone makes new
@@ -244,11 +244,11 @@ person selects, with no competing claims or leases
 
 - **Transport:** hands as a client; how a client says it takes tasks.
 - **Data:** the queue, claims, leases; every container job records its run seconds and who started
-  it, from the first job (owner, 2026-11-08, [experiment 229](../../experiments/229-browser-only-friends.md)
+  it, from the first job (owner, 2026-11-08, experiment 229 (in the notes)
   row 31).
 - **Coordination:** Cloudflare Container hands first: the host is a Durable Object and each job gets
   its own container ([local is the cloud](../direction/local-is-the-cloud.md), owner, 2026-10-25),
-  and [experiment 148](../../experiments/148-remote-programs.md) ran real Claude Code in one; then
+  and experiment 148 (in the notes) ran real Claude Code in one; then
   Mac and VM hands; work queues; mail delivery, leases; the rest of C2 to C5: supervision trees,
   sibling strategies, links and trap exit, since Tier 1 has no process that starts another (owner,
   2026-11-06). A program that starts another hardens Tier 1's slice of programs working together.

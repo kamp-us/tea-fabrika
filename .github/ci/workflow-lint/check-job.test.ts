@@ -5,7 +5,6 @@ import { parse } from "yaml";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
 import {
   build,
-  checkFlag,
   env,
   guard,
   options,
@@ -74,53 +73,14 @@ const plants: Plant[] = [
       step(w, "check", "lint")["if"] = build;
     },
   ],
-  // F1 to F3, the field row check inside check (ticket 985). Source plants, each run once on
-  // workflow-lint.ts and restored: the rows anywhere in check (red: before lint); F3 dropped (red: a legs job, a field job comes back).
-  // SAFETY: each row below is a plant's name and the function that applies it, written out by hand.
+  // F1: the check job's flags. Plants on the check job's own steps.
   ...(
     [
-      [
-        "the row check ignores failure",
-        (w) => Object.assign(step(w, "check", "field rows"), { "continue-on-error": true }),
-      ],
-      [
-        "the row check runs before lint",
-        (w) => {
-          const [rows] = w.jobs.check.steps.splice(place(w, "check", "field rows"), 1);
-          w.jobs.check.steps.splice(place(w, "check", "lint"), 0, rows!);
-        },
-      ],
-      [
-        "the row check skips after a failure",
-        (w) => (step(w, "check", "field rows")["if"] = `\${{ needs.changes.outputs.field != 'false' }}`),
-      ],
-      ["the row check runs on the check flag", (w) => (step(w, "check", "field rows")["if"] = checkFlag)],
-      [
-        "the row check without its base",
-        // SAFETY: `valid` gives check's field rows step an `env` map with BASE in it.
-        (w) => Reflect.deleteProperty(step(w, "check", "field rows")["env"] as Record<string, string>, "BASE"),
-      ],
-      ["the row check bypassed", (w) => (step(w, "check", "field rows")["run"] = "echo passed")],
-      ["the row check twice", (w) => w.jobs.check.steps.push({ ...step(w, "check", "field rows") })],
       ["check runs only on the check flag", (w) => (w.jobs.check.if = guard("check"))],
-      [
-        "rows alone install everything",
-        (w) => w.jobs.check.steps.splice(place(w, "check", "install the row check"), 1),
-      ],
-      ["the row install runs with lint", (w) => (step(w, "check", "install the row check")["if"] = checkFlag)],
-      ["the full install runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "install"), "if")],
-      ["lint runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "lint"), "if")],
-      ["the ratchet runs for rows alone", (w) => Reflect.deleteProperty(step(w, "check", "lists only shrink"), "if")],
+      ["the full install runs for no flag", (w) => (step(w, "check", "install")["if"] = build)],
+      ["lint runs for no flag", (w) => (step(w, "check", "lint")["if"] = build)],
+      ["the ratchet runs for no flag", (w) => Reflect.deleteProperty(step(w, "check", "lists only shrink"), "if")],
       ["check checks out no history", (w) => (step(w, "check", "checkout")["with"] = {})],
-      [
-        "a field job comes back",
-        (w) => {
-          Object.assign(w.jobs, {
-            field: { "timeout-minutes": 5, steps: [{ run: "node .github/ci/field-check.ts" }] },
-          });
-          w.jobs["ci-required"].needs.push("field");
-        },
-      ],
     ] as [string, (w: Workflow) => void][]
   ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
     fault,

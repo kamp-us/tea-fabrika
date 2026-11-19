@@ -24,7 +24,7 @@ Not walked, and still open: [what the ledger records](#what-the-ledger-records) 
 [call 8 of program guidelines](#8-is-a-side-panel-a-program), "Is a side panel a program?", moved
 here from that note and waits on a day of use.
 
-Built from [experiment 207](../../experiments/207-layers.md), which read about 20 makers and tools,
+Built from experiment 207 (in the notes), which read about 20 makers and tools,
 two of them outside software, and built four designs in today's app, and a private Design canvas,
 "Layers guidelines", with every design and layout pressable. Neither is a measurement. A tag such as
 `[m1]` points at that experiment's links.

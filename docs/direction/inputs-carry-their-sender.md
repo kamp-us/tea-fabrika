@@ -39,7 +39,7 @@ reason (below) was decided 2026-11-07 as question 15.
   is the one authority on who sent it, as one gen_server owns a table in OTP. A process asks over
   one RPC. The doubt: one extra round trip per write; a cache would go stale.
 
-Built from [experiment 209](../../experiments/209-talking-to-agents-in-place.md) and the shared
+Built from experiment 209 (in the notes) and the shared
 tile study behind it, and the Design canvas "Shared tile guidelines". Neither is a measurement.
 
 ```ts

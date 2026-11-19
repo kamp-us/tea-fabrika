@@ -626,7 +626,7 @@ host  {"type":"desk",...} then {"type":"answer","id":3,"took":true}
 ## Decided 2026-10-25, later still: no browser desk for now
 
 **Decided** 2026-10-25, after
-[experiment 150](../../experiments/150-browser-desk.md). A plain browser tab
+experiment 150 (in the notes). A plain browser tab
 can be the desk, but for now the app is the only one. The host keeps only its
 socket file and never listens on a port.
 

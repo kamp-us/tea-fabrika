@@ -344,15 +344,15 @@ const jev = liveJev(key, {calls: 2_000}, meter.of(self))   // the dollar cap is 
   `tokens` and a price table (Langfuse's "inferred"). The price table is the
   same one the estimate reads.
 - **Every container job records its run seconds and who started it,** from the first job
-  (owner, 2026-11-08, [experiment 229](../../experiments/229-browser-only-friends.md) row 31).
+  (owner, 2026-11-08, experiment 229 (in the notes) row 31).
   It follows from "record wide, read later": who started a job is lost if it is not written then.
 
 ## The meter on subscriptions
 
 *Decided 2026-11-07 (owner).* The study behind it is
-[experiment 223](../../experiments/223-reading-subscription-usage.md). The record's shape is for
+experiment 223 (in the notes). The record's shape is for
 `next/`. Today's version gets the first three fields in `field/runs.jsonl`
-([field](../../field/README.md#a-run)), and its code records none of this yet.
+(the field log (in the notes)), and its code records none of this yet.
 
 ```ts
 // A sketch, next/. What one agent run records about how it was paid and how full its limit is.
@@ -419,7 +419,7 @@ One run on a Max login, traced (the run id and the numbers are made up):
 ### 2. What every agent run records
 
 Every key is optional. The sources are experimental or undocumented
-([experiment 223](../../experiments/223-reading-subscription-usage.md)), so a key that did not come
+(experiment 223 (in the notes)), so a key that did not come
 is unknown, never zero or false. The record never holds a key's value.
 
 | Key | Where it comes from |

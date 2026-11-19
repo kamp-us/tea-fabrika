@@ -1,8 +1,8 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
-// flag, the field rows last, the one ratchet step that holds every list file to shrinking (0524), and
+// flag, the one ratchet step that holds every list file to shrinking (0524), and
 // the copy-paste advice step (0587).
 import { Predicate } from "effect";
-import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
+import { compact, map, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
 
@@ -17,46 +17,29 @@ const COPIES = 'node .github/ci/copies.ts --base "$BASE"';
 
 const COPIES_BASE = `\${{ github.event.pull_request.base.sha }}`;
 
-// The check job's flags (ticket 985): lint on check, field rows on field, the CI package's install
-// when only rows changed.
+// The check job's flag: lint on check.
 const CHECK = "needs.changes.outputs.check!='false'";
-
-const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
-
-const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 
 export const checkJob: Rule = ({ jobs }, require) => {
   // A draft's check is lint alone: the build skips on changes' build flag.
-  // F1. check also holds the field row check (ticket 985): its setup runs on any flag, its full
-  // install and lint on the check flag, the CI package's install when only rows changed, and the
-  // row check last, after any failure, on the field flag, so a red lint never hides red rows.
+  // F1. check's setup runs on any flag, its lint steps on the check flag, the build on build.
   const checkSteps = steps(map(jobs["check"]));
-  const rows = checkSteps.filter((s) => s["run"] === "node .github/ci/field-check.ts");
-  const rowInstall = checkSteps.filter((s) => s["run"] === ROW_INSTALL);
 
   for (const step of checkSteps) {
     const slow = step["run"] === "pnpm build";
     const setup = Predicate.isString(step["uses"]);
-    const expected = slow ? BUILD : rows.includes(step) ? ROWS : rowInstall.includes(step) ? ROWS_ALONE : CHECK;
+    const expected = slow ? BUILD : CHECK;
     require(setup
       ? !("if" in step)
       : compact(step["if"]) ===
-          expected, "F1: check's lint steps run on the check flag, the build on build, the rows on field, its setup on every run");
+          expected, "F1: check's lint steps run on the check flag, the build on build, its setup on every run");
   }
 
-  require(rows.length === 1 &&
-    rows[0] === checkSteps.at(-1) &&
-    rows[0]?.["continue-on-error"] === undefined &&
-    JSON.stringify(rows[0]?.["env"]) ===
-      JSON.stringify(
-        env,
-      ), "F1: check runs the row check once, last, with the run's base, head and event, and its failure blocks");
-  require(rowInstall.length === 1 &&
-    checkSteps.some(
-      (s) => s["run"] === "pnpm install --frozen-lockfile",
-    ), "F1: check installs everything for lint, and only the CI package for rows alone");
+  require(checkSteps.some(
+    (s) => s["run"] === "pnpm install --frozen-lockfile",
+  ), "F1: check installs everything for lint");
   const checkout = checkSteps.find((s) => Predicate.isString(s["uses"]) && s["uses"].startsWith("actions/checkout@"));
-  require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the row check diffs");
+  require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the ratchet diffs");
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
   // pass with a grown list; a first push's zeros map to no base, as for the test steps.

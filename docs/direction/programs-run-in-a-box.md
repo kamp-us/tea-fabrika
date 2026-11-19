@@ -115,7 +115,7 @@ test:
   every write. A ticket that steers the agent can then change only that
   ticket's answer, and an accept still waits for the owner's approval of the plan.
   Cost: about 0.3 s to start a box (128), on a turn of about 4 s.
-  [Experiment 137](../../experiments/137-key-outside-the-box.md) ran a triage
+  Experiment 137 (in the notes) ran a triage
   turn this way, in sandbox-runtime and in Docker, with no login in the box.
 - **Proposed: the model is reached through a relay on the host** (experiment
   137, 80%; not yet the owner's call).
@@ -178,8 +178,8 @@ tool("ask", "Ask a helper one question", {question: z.string()}, ({question}) =>
   ([Anthropic](https://code.claude.com/docs/en/agent-sdk/secure-deployment)).
   Environment variables are a weak place for a key
   ([Blaxel](https://blaxel.ai/blog/egress-proxy-api-credentials-ai-agent-sandboxes)).
-- **It runs.** [Experiment 127](../../experiments/127-agent-in-a-box.md) ran the
-  whole Claude Code program in both boxes. [Experiment 128](../../experiments/128-program-in-a-box.md)
+- **It runs.** Experiment 127 (in the notes) ran the
+  whole Claude Code program in both boxes. Experiment 128 (in the notes)
   ran whole programs in all three:
   - about 320 ms from start to first output in a box, 215 ms as a plain child;
   - a Cmd passed out in 0.2 ms in sandbox-runtime and 0.7 ms in Docker;

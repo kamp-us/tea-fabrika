@@ -39,7 +39,7 @@ Every formal check in this repo follows five steps.
    - A design with no code yet: TLA+. Once the code exists, the check moves to
      the code. A spec kept after that is checked against real runs in the
      drift job, and only advises (decided 2026-10-25,
-     [experiment 139](../../experiments/139-tla-trace-validation.md)).
+     experiment 139 (in the notes)).
    - A promise that must hold at any size, where a bound is not enough: a
      proof.
 3. **Show the check can fail.** Each check has a planted break it must catch,

@@ -14,7 +14,7 @@ E1, and the Alchemy port goes first in the fix order; doc comments carry no `@si
 ([0118](../../.decisions/0118-no-since-tag-before-a-release.md)); an error's reason is a tagged
 error ([0119](../../.decisions/0119-an-errors-reason-is-a-tagged-error.md)).
 
-Built from [experiment 262](../../experiments/262-effects-team-as-the-builder.md): four reads of
+Built from experiment 262 (in the notes): four reads of
 every `next/` file beside Effect 4.1.2's source, and one run of Effect's own checker,
 `@effect/tsgo` 0.63.0. Neither is a measurement of how the code behaves. There is no Design canvas:
 this study is about code, so the guidelines skill's design steps do not apply. The experiment

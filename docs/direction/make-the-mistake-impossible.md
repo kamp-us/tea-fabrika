@@ -54,7 +54,7 @@ workQueue(machines.queue, inputs.note, noteOne, clearOne); // note does not ack:
 - An agent, or a person in a hurry, takes the cheap path. A written rule is
   the kind that does not hold: today's fabrika had rules in prose against its
   review text growing, and the text grew anyway
-  ([experiment 59](../../experiments/59-how-the-review-skill-grew.md)).
+  (experiment 59 (in the notes)).
 - In the first days, agents told in their prompt not to read deleted tests
   read them through the shell anyway, in most sessions. Only taking the shell
   away stopped it.

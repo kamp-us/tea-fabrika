@@ -22,10 +22,7 @@ const CSS = readFileSync(join(import.meta.dirname, "window", "window.css"), "utf
 const TOKENS = readFileSync(fileURLToPath(import.meta.resolve("@kampus/fabrika-design/tokens.css")), "utf8");
 
 const RADIX: unknown = JSON.parse(
-  readFileSync(
-    join(import.meta.dirname, "..", "..", "..", "experiments", "177-themes", "schemes", "radix-colors-3.0.0.json"),
-    "utf8",
-  ),
+  readFileSync(join(import.meta.dirname, "fixtures", "radix-colors-3.0.0.json"), "utf8"),
 );
 
 type Look = "dark" | "light";

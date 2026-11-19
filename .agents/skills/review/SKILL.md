@@ -19,8 +19,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 ## Steps
 
 1. **Read** `AGENTS.md`, `next/AGENTS.md` for `next/` work, then the approved plan whole, then the
-   decided notes it builds, and the tests and build rows in `field/runs/` for this quest (the plants
-   are there).
+   decided notes it builds.
 2. **Read every commit** since `origin/main`: `git diff $(git merge-base origin/main HEAD)..HEAD`.
    The branch may be behind main: judge the change, and say if a merge of main would conflict, with
    any open pull request the brief names.
@@ -106,19 +105,16 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    Each blocker gives `file:line`, its source, the missed case, and what a fix must do. A
    demonstrated gap in a named class checks the law; it does not reopen every test's merits.
 
-   Any other actionable finding is one finding row with proof: never a ticket, a fix or only a
+   Any other actionable finding is one finding with proof: never a ticket, a fix or only a
    mention, and never a security hole.
-   Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in
-   field/findings/. Do not start another review round for it.
+   Give each one in the answer. The lead records it in the notes. Do not start another review round for it.
    When the brief says the pull request waits for the owner, end the findings with a short plain
    list, "For the owner": the two or three things only the owner can decide, each with your lean
    and percentage.
    End with exactly one answer: line, as the last line.
    It reads `answer: done <why>` when merge-ready, else `answer: send build <why>` (or `send tests`,
    `send plan`). The verdict is never the answer.
-   Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why, and
-   [A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-   counts as proof. Other means it is wrong but blocks nothing by the rule in step 3, in this diff
+   Decision [0035](../../../.decisions/0035-outside-work-becomes-finding-rows.md) says why. Other means it is wrong but blocks nothing by the rule in step 3, in this diff
    or beside it. Reading one function is not proof: run it, or show the two lines that disagree.
    With no proof, write nothing.
 
@@ -133,7 +129,7 @@ whole diff.
   copy where your box lets you write, never in the branch. The fix agent wrote this law itself, so
   yours is the read that guards it.
 - You may withdraw a finding of yours that was wrong. Say which, and why.
-- A new fault you notice outside the fix is a finding row, or ticket text for the lead. It does
+- A new fault you notice outside the fix is a finding, or ticket text for the lead. It does
   not send the quest back unless it breaks the slice's main job.
 - End with the same `answer:` line, as the last line.
 

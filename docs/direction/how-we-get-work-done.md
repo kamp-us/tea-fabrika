@@ -14,7 +14,7 @@ the pipeline last ([0059](../../.decisions/0059-pipeline-starts-from-the-work.md
 five-part plan, with ticket 574 as its running example and the loop starting at "decide what to
 work on next" (0059's amendment, 2026-11-10).
 
-Built from [experiment 250](../../experiments/250-how-we-get-work-done.md), which read how the teams
+Built from experiment 250 (in the notes), which read how the teams
 that build coding agents, and use them, get work done, checked them against agent fleets, single
 builders and outside measurements, and read `field/` for what really happens here. It is not a
 measurement. This is step 1 to 3 of 0059's order: the loop in plain words, then in fabrika's words,
@@ -65,7 +65,7 @@ No fabrika words in this section, as 0059 asks.
 
 The teams that build coding agents and use them to build those agents (Anthropic, OpenAI, Google,
 Cursor, Cognition), checked against Stripe, StrongDM, Ramp, single builders and METR's
-measurements ([experiment 250, the answer](../../experiments/250-how-we-get-work-done.md#the-answer)):
+measurements (experiment 250, the answer (in the notes)):
 
 - **Agents write most of the code, and a person's attention is the scarce thing.** About 90% of
   Claude Code's code [a1], 75% of Google's new code [g1]; "the only fundamentally scarce thing is
@@ -200,7 +200,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
 - **Ticket 574:** half. Mutation, review, CI, `loosening.sh` and the lead's hand check all ran. No
   tier, so the lead read it as it reads every PR.
 - **Since the walk:** the guess "a risk tier set from the paths it touches" was **wrong**, and stays
-  here marked as wrong. [Experiment 252](../../experiments/252-risk-tiers-on-phoenix.md) replayed
+  here marked as wrong. Experiment 252 (in the notes) replayed
   path tiers on 457 merged pull requests of kamp-us/phoenix: the high tier was not above the medium
   one in later fixes (7.4% against 9.8%), while size alone separated them (1.3% at 50 lines or
   fewer, 11.6% over 400). [0079](../../.decisions/0079-size-counts-governed-paths-name-who.md)
@@ -277,7 +277,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
   read.
 - **Since the walk:** [0093](../../.decisions/0093-laws-walk-plants-run-once.md), a trial: its
   second check had a fresh agent write laws from the plan alone, blind to the old tests.
-  [Experiment 257](../../experiments/257-second-check-blind-laws.md) found it killed the same 98 of
+  Experiment 257 (in the notes) found it killed the same 98 of
   144 mutants as the old file: a second reader that writes only its own check file.
 
 ### F7: code holds the edges; the agent holds the path inside a step
@@ -320,13 +320,13 @@ the work did. Here, 16 of 31 stuck test-writer runs were `fetch_failed`.
 **Since the walk:** [0076](../../.decisions/0076-a-lane-stops-at-its-budget.md): every stuck step
 says its fault, `tool` or `work`; a tool fault files a finding and drains one tool budget shared by
 all quests, and does not count against the quest.
-[Experiment 254](../../experiments/254-how-a-lane-should-stop.md) sorted about 35 of 41 stuck steps
+Experiment 254 (in the notes) sorted about 35 of 41 stuck steps
 on the five longest quests as tool faults.
 
 ## What became of the first six
 
 The first draft's six principles came from the human-team reading. Tested against the frontier
-([experiment 250, part 6](../../experiments/250-how-we-get-work-done.md#part-6-the-first-drafts-six-principles-tested)):
+(experiment 250, part 6 (in the notes)):
 
 | First draft | Verdict | Where it went |
 |---|---|---|

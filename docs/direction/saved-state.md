@@ -14,7 +14,7 @@ owner already decided, each named where it is used: D3's entry with `said` and `
 `saw` on window Msgs (2026-10-31), hot reload's H2 and H3 (2026-11-01), "no version number on each
 machine" ([an old host is named, then restarted](./an-old-host-is-named-then-restarted.md),
 2026-10-25), the pipeline guidelines' P4 to P7 (2026-11-01), and record wide (2026-11-01). The
-owner approved [experiment 189](../../experiments/189-games-study.md) and asked for this study over
+owner approved experiment 189 (in the notes) and asked for this study over
 its top ideas, `seen` first.
 
 Its decided rules are in: [0225](../../.decisions/0225-entries-carry-what-writers-saw.md),
@@ -24,7 +24,7 @@ Its decided rules are in: [0225](../../.decisions/0225-entries-carry-what-writer
 [0229](../../.decisions/0229-diverged-names-first-difference.md),
 [0230](../../.decisions/0230-replay-reruns-code-only.md).
 
-Built from [experiment 190](../../experiments/190-saved-state.md), which read about twenty makers
+Built from experiment 190 (in the notes), which read about twenty makers
 and ran GGPO's sync test on today's quest, and a private page, "Saved state guidelines". Neither is a
 measurement of `next/`; the one probe ran on today's version. Tags such as [g1] and [i3] are
 experiment 190's links.
@@ -156,7 +156,7 @@ export const syncTest = <S, M, C>(machine: Machine<S, M, C>, opts: {state: Schem
   succeeds only if the Workflow Definition is compatible with the provided history" [i5].
 - **Measured, today's version:** today's quest passes it. 300 lists at seed 190, a stop at each of
   2,783 steps, every phase reached: 0 breaks, 88 ms. A planted field the schema drops broke 300 of
-  300 ([experiment 190](../../experiments/190-saved-state.md#the-probe-ggpos-sync-test-on-todays-lane)).
+  300 (experiment 190 (in the notes)).
 - **Where the helper lives:** decided 2026-11-01, 70% (smaller call 4), in tea's `@demlik/tea/pbt` beside `propertyInvariant`,
   taking `encode` and `decode` as plain functions, so tea takes on no convention of ours. Until tea
   ships it, a 40 to 60 line helper in libfabrika's test kit, deleted when tea has it.
@@ -220,7 +220,7 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
 - **The saved model carries its `build`, decided 2026-11-01, 85%** (smaller call 5). H6 puts
   `build` on every entry; a saved model in the object's storage is not an entry. With `build`, a
   version can be worked out later from the code kept by hash
-  ([experiment 173](../../experiments/173-worker-loader.md)), so a switch to branch B later loses
+  (experiment 173 (in the notes)), so a switch to branch B later loses
   no fact for good. Without it, the shape a model was saved in is gone.
 - **Linear:** no Linear answer: Linear does not publish how its client upgrades a saved local
   store.

@@ -71,7 +71,7 @@ propertyInvariant(ship, stubCtxThrowingProxy(), arbMsgSequence(msgs), (step) =>
      says no cleanup goes into it);
      - The quest's laws (`laws/lane.ts`) move to tea's pbt first, as laws of
        the rebuilt quest (added 2026-10-24). In
-       [experiment 139](../../experiments/139-tla-trace-validation.md) they
+       experiment 139 (in the notes) they
        were the only check that caught 5 of 46 mutants (432, 464, 465, 472,
        553): the stall rule's count and the `unseen` rule. The move is done
        when 139's fixed sample, seed 139, is caught by the new laws as well.
@@ -179,7 +179,7 @@ mutants.
 
 ## Decided: a TLA+ spec that outlives its design is checked against real runs (2026-10-25)
 
-**Decided** 2026-10-25, from [experiment 139](../../experiments/139-tla-trace-validation.md).
+**Decided** 2026-10-25, from experiment 139 (in the notes).
 Proposed 2026-10-24.
 
 ```ts

@@ -72,7 +72,7 @@ blog posts 02, 03 and 07 (deleted from main 2026-11-09; they stay at the tag `ar
   on dollars, a receipt at the end. Write down what a run answers, and its
   cost, before running it.
 
-Measured in [experiment 51](../../experiments/51-jev-vs-opus.md): at 0.8 and
+Measured in experiment 51 (in the notes): at 0.8 and
 above Jev matched the big model on every real case seen, at roughly 1/220 of
 the cost per answer. That is agreement on a small sample, not proof of
 correctness.
@@ -80,7 +80,7 @@ correctness.
 ## Changed 2026-10-28
 
 Two additions, decided with the first live use, the duplicate hint
-([experiment 167](../../experiments/167-duplicate-hint.md)).
+(experiment 167 (in the notes)).
 
 ```ts
 // A new question asked at volume: no agent asks it today, so there is nothing to agree with.

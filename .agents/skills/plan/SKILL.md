@@ -92,7 +92,7 @@ when to keep going and how to write for a reader who saw none of the work.
 - End the Size section with `Estimate: <n> steps, $<d>`, the quest's budget: chain.ts stops a quest
   at twice it ([0076](../../../.decisions/0076-a-lane-stops-at-its-budget.md)). `n` is the steps you expect:
   tests, build, review, plus one per likely send-back. `d` is their list-price dollars, priced from
-  similar steps in `field/runs/` and the older rows in `field/runs.jsonl`.
+  the list prices of the models you plan to use.
 
 ## The open questions test
 
@@ -108,12 +108,9 @@ a new schedule or a paid account still waits for the owner: split it into a late
 
 ## Outside your task
 
-Something wrong outside your task is one finding row, never a fix:
-[A finding](../../../field/README.md#a-finding) has the rule, the fields and what counts as proof.
+Something wrong outside your task is one finding with proof, never a fix.
 Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
-goes in the plan. Put the row in a last section of the plan, `## Findings`, as one JSON line in a
-fence. Its `id` is the date and a short slug. The lead saves it unchanged as its own file in
-`field/findings/`.
+goes in the plan. Put it in a last section of the plan, `## Findings`. The lead records it in the notes.
 
 ## Standing rules
 

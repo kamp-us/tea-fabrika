@@ -46,14 +46,12 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
 | Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md), the map of the contexts; each context's `GLOSSARY.md` is written when its words are decided | The term, with an `_Avoid_` line, in its context's `GLOSSARY.md`, in the pull request that coins or renames a word |
 | Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list .patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md`, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) ([0005](./.decisions/0005-patterns-and-decisions-are-visual.md)) |
 | Know a design area's guidelines, or write them for one area | `docs/guidelines/<area>.md`, read whole; [the guidelines skill](./.claude/skills/guidelines/SKILL.md) to write them | An edit to the page, in a pull request the owner says yes to ([0136](./.decisions/0136-guidelines-live-in-their-own-pages.md)); what that skill lists, in its shape |
-| Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md) and [`records.ts`](./.agents/skills/lead/scripts/records.ts) `list experiments`, then the write-up | `experiments/NN-short-title.md`, as [its README](./experiments/README.md) says. Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up ([0027](./.decisions/0027-experiment-results-live-in-a-private-archive.md)) |
-| Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/` | One file per agent run and one per thing that broke, cost too much, needed a person or worked well, the same day ([0090](./.decisions/0090-each-field-row-is-a-file.md)) |
-| Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going; never a security hole ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)) |
+| Know what was tried, what happened on real tickets, or report something wrong outside your task | The notes: experiments, field rows and findings live in the owner's private notes, outside this repo | Say it in your report with proof, then keep going; never a fix, and never a security hole ([0035](./.decisions/0035-outside-work-becomes-finding-rows.md)). The lead records it in the notes |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context ([0130](./.decisions/0130-every-piece-of-knowledge-has-one-home.md)) |
 | Build the new version, or change today's machines (`packages/fabrika`, `packages/pipeline`, `programs/*`) | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/`; today's machines are frozen ([0525](./.decisions/0525-todays-version-is-frozen.md), amended in part by [0533](./.decisions/0533-today-keeps-its-tests-off-ci.md)), with the top-level [`README.md`](./README.md#what-is-in-this-repository) as their map and each part's own README | Code in `next/`, with its test beside it as `name.test.ts`: all new work goes there. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
 | Do an operation by hand: a sev, a wipe of the dev and test homes | [`.runbooks/`](./.runbooks/), the one file for that operation | One file there, the first time the operation is done for real ([0571](./.decisions/0571-runbooks-live-in-top-level-runbooks.md)) |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
-| Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
+| Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | What happened, in the notes |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
 
 Tickets go in the app's own tracker, never a GitHub issue on this repo
@@ -92,7 +90,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 - **These need no approval,** in your own worktree and on your own files: `pnpm format` and `pnpm lint`; a fix for a
   lint, format or type error your own change caused; your own narrow test, run again after a change; a command tried
   again after a timeout; an install with `--frozen-lockfile`; a commit of your own paths with the step-commit skill,
-  which pushes for you (in a box, `drive.ts` commits and pushes instead); a finding row.
+  which pushes for you (in a box, `drive.ts` commits and pushes instead).
 - **Report for a reader who saw none of the work.** Give the answer first, then what changed, what ran, and what could
   not run and why. Write full sentences in plain words, use no name you made up along the way, and give a path or a full
   URL for each thing you cite, so the report stands on its own.
@@ -130,12 +128,11 @@ more than about five minutes that CI runs anyway ([0603](./.decisions/0603-no-st
 
 | What changed | What to run here |
 |---|---|
-| Only Markdown that no program or skill reads, or field rows | `pnpm lint`, which checks the added rows too |
+| Only Markdown that no program or skill reads | `pnpm lint` |
 | Skill prose | `pnpm lint`, which runs `skillscheck.sh`, its one reader |
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
 | A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite |
-| A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
 | A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](./.agents/skills/guidelines/references/changing-the-product.md)) |
 

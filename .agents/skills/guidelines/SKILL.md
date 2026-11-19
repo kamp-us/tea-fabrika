@@ -174,7 +174,7 @@ links it.
   `proposed`. If the folder or its README does not exist yet, create it with this first row.
 - The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
   the answer and the $ in `summary`), in the shape
-  [`experiments/README.md`](../../../experiments/README.md#the-experiments) gives
+  the experiments log (in the notes) gives
   ([0522](../../../.decisions/0522-no-folder-keeps-an-index-table.md)).
 
 ### 9. Build and publish the deck and the prototype

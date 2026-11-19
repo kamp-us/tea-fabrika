@@ -659,7 +659,7 @@ someone newer claims, and the clock plays no part in it.**
   before the fix merges, on the laptop, for $0. The lease laws that assume
   expiry is final change, written by an agent that does not build the fix.
 - **How sure: 70%.** Rule B never ran in experiment 149. The rerun settles it.
-- **Built and measured, 2026-10-26: [experiment 151](../../experiments/151-patient-lease.md).**
+- **Built and measured, 2026-10-26: experiment 151 (in the notes).**
   On the real code, with the expiry job at 1 s, every drop up to 5 minutes kept the quest with
   no restart while nobody else wanted it (474 of 474), a longer drop with a second host waiting
   went to that host cleanly (236 of 236), a dead host's ticket frees as fast as before, and
@@ -1024,7 +1024,7 @@ const Talk = Schema.Struct({
 - **Registered names, `cast` and `whereis`** (`host/host.ts`,
   `host/observer.ts`). A name is registered once. Anyone may put a message in
   its inbox, deduped by id. `whereis` says which host holds it now.
-- **Experiment 95** ([write-up](../../experiments/95-agents-across-hosts.md))
+- **Experiment 95** (write-up (in the notes))
   asked an agent on another host a question through the shared ledger, with
   hosts killed and taken over. Every question got exactly one answer. It
   already laid A2A beside ours: their Message is our ask and reply, their

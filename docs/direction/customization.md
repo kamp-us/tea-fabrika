@@ -14,7 +14,7 @@ Messages: what an agent or a person sends you
 
 Its decided rules are in: [0480](../../.decisions/0480-the-inbox-is-one-program-two-views.md).
 
-Built from [experiment 206](../../experiments/206-customization.md) and its step 5 shots. The Design
+Built from experiment 206 (in the notes) and its step 5 shots. The Design
 canvas "Customization guidelines" is not drawn yet. Neither is a measurement.
 
 ```ts

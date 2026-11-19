@@ -64,10 +64,10 @@ lands nowhere. Agent work is at-least-once; what it leaves behind is once.
 - A crash is different. A program that crashes is **down**, and only its parent may start it
   again. The poet has no parent here, so nothing will. Stop everything and delete `.teahouse/`
   to start over. Putting a program under a supervisor, so a crash is restarted, is what
-  [experiment 99](../../../experiments/99-monitors-supervisor.md) shows.
+  experiment 99 (in the notes) shows.
 
 ## Next
 
-- [`experiments/101-real-agents-faults.md`](../../../experiments/101-real-agents-faults.md):
+- experiment 101 (in the notes):
   120 real agent questions with hosts killed mid-question, and resuming a session instead of
   asking again.

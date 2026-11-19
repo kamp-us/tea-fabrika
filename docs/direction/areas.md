@@ -33,7 +33,7 @@ Its decided rules are in: [0356](../../.decisions/0356-an-area-is-a-persons-data
 [0362](../../.decisions/0362-a-jobs-line-follows-the-filter.md),
 [0363](../../.decisions/0363-a-judge-area-guess-is-off.md).
 
-Built from [experiment 205](../../experiments/205-organizing-work.md), which read about 40 makers
+Built from experiment 205 (in the notes), which read about 40 makers
 and tools and built four designs and three rounds in today's tracker, and a Design canvas, "Area
 guidelines", which is not published yet. Neither is a measurement. A tag such as `[l10]` points at
 that experiment's links.

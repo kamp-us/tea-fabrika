@@ -769,7 +769,7 @@ The sheet, all of it. The calls the owner made on it:
 15. Each "Check my sheet" is recorded: when, which device, matched or not. Never the words.
 
 Decided by the owner, 2026-11-08, for a few friends on one Cloudflare account
-([experiment 229](../../experiments/229-browser-only-friends.md) rows 18 and 19):
+(experiment 229 (in the notes) rows 18 and 19):
 
 16. Recovery mail goes to any friend: Email Sending with the group's own domain, Access's
     one-time PIN with only `workers.dev`. No check per friend. The install sets up the address,

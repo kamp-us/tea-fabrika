@@ -5,7 +5,7 @@ summary: "`next/`. Anything that replaces a tea machine is banned: no Effect `Wo
 
 # tea is the engine
 
-`next/`. Decided by the owner on 2026-11-02. From [experiment 174](../../experiments/174-effect-on-cloudflare.md).
+`next/`. Decided by the owner on 2026-11-02. From experiment 174 (in the notes).
 
 Its decided rules are in: [0254](../../.decisions/0254-tea-is-the-one-engine.md).
 

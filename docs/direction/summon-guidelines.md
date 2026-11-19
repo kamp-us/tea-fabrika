@@ -36,7 +36,7 @@ on these, decided before it and not asked again
 - **Proposed:** [fabsh grows into a language](./fabsh-grows-into-a-language.md), and
   [program guidelines](./program-guidelines.md) G7 R5 (decided) for the rows completion can read.
 
-Built from [experiment 220](../../experiments/220-summon-guidelines.md), which read about 16 makers
+Built from experiment 220 (in the notes), which read about 16 makers
 and checked today's `@claude` line in tsh against them, and a Design canvas, "Summon guidelines",
 that a second pass draws. Neither is a measurement.
 

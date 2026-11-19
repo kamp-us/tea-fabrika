@@ -16,7 +16,7 @@ the first of it in `next/`. The decision record is
 
 The engine lives in `@kalfa/config` under `kalfa/config/`, named by the app that uses it.
 
-Built from [experiment 251](../../experiments/251-settings.md), which read how about twenty makers and
+Built from experiment 251 (in the notes), which read how about twenty makers and
 tools let people set a choice, checked `next/`'s local instance against them, and ran one editor
 probe. The reading is not a measurement. A tag such as [c5] points at that experiment's links.
 

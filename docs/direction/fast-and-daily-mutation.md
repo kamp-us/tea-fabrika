@@ -16,7 +16,7 @@ at the measured rate.
 - The rest goes to a mutation queue, a program in `next/` shaped like a merge queue (Tier 6).
 - Today's version keeps only the speedups on each pull request. Its daily run is not built.
 
-The numbers are from [experiment 181](../../experiments/181-fast-and-daily-mutation.md).
+The numbers are from experiment 181 (in the notes).
 
 ```ts
 // A sketch, not built. Two jobs for one tool.

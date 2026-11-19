@@ -78,7 +78,7 @@ is what keeps a task away from a tab. See
   run it.
 - **A sleeping object, checked locally on 2026-10-31.** This bullet used to say
   Miniflare never puts an object to sleep by itself. That was wrong.
-  [Experiment 174](../../experiments/174-effect-on-cloudflare.md) saw an object
+  Experiment 174 (in the notes) saw an object
   with one open socket go to sleep within 16 s, with the socket still open, on
   Miniflare 4.20260730.0 (compatibility date 2026-07-01) and again on workerd
   1.20261101.1 (date 2026-10-30). Pings did not wake it: 20 of 20 answered at
