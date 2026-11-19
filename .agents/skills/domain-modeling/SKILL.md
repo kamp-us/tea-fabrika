@@ -1,60 +1,74 @@
 ---
 name: domain-modeling
-description: Sharpen a bounded context's words while you design. Use when a talk or a change coins, renames or blurs a term, when you write or edit a context's GLOSSARY.md or `.glossary/TERMS.md`, and when a ruling gets settled.
+description: Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a GLOSSARY.md, or recording or editing an ADR.
 ---
 
-# domain-modeling
+# Domain Modeling
 
-This is the active habit: while you design, you test the words, and you write each settled one
-down at once. Merely reading the map for vocabulary is not this skill, and any skill can do that.
-This skill is for when you are changing the words, not only reading them.
+Actively build and sharpen the project's domain model as you design. This is the *active* discipline: challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `GLOSSARY.md` for vocabulary is not this skill: that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
 
-## Where the words live
+## File structure
 
-- **The map in [`.glossary/TERMS.md`](../../../.glossary/TERMS.md) says which contexts exist and
-  where each one's words are written.**
-- **A word keeps one meaning inside a context.** A word with two meanings in two contexts is noted
-  in each, and the map names the boundary between them.
-- **When a word could belong to more than one context,** work out which one the talk is in. If it
-  is unclear, ask.
-- **Write a context's words down when its first term is settled, never before.** Do not make an
-  empty glossary file to start.
-- **Search before you add a word:** `node .agents/skills/lead/scripts/records.ts find "<words>"`.
-- **Decisions go through the [adr skill](../adr/SKILL.md) into `.decisions/`.** Never a `docs/adr/`.
+Most repos have a single context:
 
-Each word is one row, in the format of [the glossary format](references/glossary-format.md).
+```
+/
+├── GLOSSARY.md
+├── docs/
+│   └── adr/
+│       ├── 0001-event-sourced-orders.md
+│       └── 0002-postgres-for-write-model.md
+└── src/
+```
+
+If a `.kalfa/glossary/GLOSSARY-MAP.md` exists at the root, the repo has multiple contexts. The map points to where each one lives:
+
+```
+/
+├── .kalfa/glossary/GLOSSARY-MAP.md
+├── docs/
+│   └── adr/                          ← system-wide decisions
+├── src/
+│   ├── ordering/
+│   │   ├── GLOSSARY.md
+│   │   └── .kalfa/decisions/                 ← context-specific decisions
+│   └── billing/
+│       ├── GLOSSARY.md
+│       └── .kalfa/decisions/
+```
+
+Create files lazily: only when you have something to write. If no `GLOSSARY.md` exists, create one when the first term is resolved. If no `.kalfa/decisions/` exists, create it when the first ADR is needed.
 
 ## During the session
 
 ### Challenge against the glossary
 
-When the owner, or the talk, uses a term that conflicts with the existing language, call it out at
-once: "The glossary defines 'cancellation' as X, but you seem to mean Y. Which is it?"
+When the user uses a term that conflicts with the existing language in `GLOSSARY.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y. Which is it?"
 
 ### Sharpen fuzzy language
 
-When someone uses a vague or overloaded term, propose one precise canonical term: "You're saying
-'account': do you mean the Customer or the User? Those are different things."
+When the user uses vague or overloaded terms, propose a precise canonical term. "You're saying 'account': do you mean the Customer or the User? Those are different things."
 
 ### Discuss concrete scenarios
 
-When two concepts' relationship is discussed, test it with a specific scenario. Invent edge cases
-that force the line between the concepts to be precise.
+When domain relationships are being discussed, stress-test them with specific scenarios. Invent scenarios that probe edge cases and force the user to be precise about the boundaries between concepts.
 
 ### Cross-reference with code
 
-When someone says how something works, read the code and check whether it agrees. A contradiction is
-surfaced at once, with the file: "Your code cancels entire Orders, but you just said partial
-cancellation is possible. Which is right?"
+When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible. Which is right?"
 
-### Write the words down inline
+### Update GLOSSARY.md inline
 
-When a term is settled, write its row right there. Do not batch them up. The words are not a spec,
-a scratch pad, or a repository for implementation decisions: they are the words, and nothing else.
+When a term is resolved, update `GLOSSARY.md` right there. Don't batch these up: capture them as they happen. Use the format in [GLOSSARY-FORMAT.md](./GLOSSARY-FORMAT.md).
 
-## Record a settled ruling
+`GLOSSARY.md` should be totally devoid of implementation details. Do not treat `GLOSSARY.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
 
-Ask first whether it is only a setting ([0069](../../../.decisions/0069-choices-are-settings.md)),
-then record it with the [adr skill](../adr/SKILL.md).
+### Offer ADRs sparingly
 
-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
+Only offer to create an ADR when all three are true:
+
+1. **Hard to reverse**: the cost of changing your mind later is meaningful
+2. **Surprising without context**: a future reader will wonder "why did they do it this way?"
+3. **The result of a real trade-off**: there were genuine alternatives and you picked one for specific reasons
+
+If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).

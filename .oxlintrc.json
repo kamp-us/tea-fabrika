@@ -3896,6 +3896,7 @@
       // 0558: no ternary nests more than 2 deep.
       "files": [
         "kalfa/ci/**",
+        "kalfa/ledger/**",
         "kalfa/records/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
@@ -3945,6 +3946,7 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/tasks/**",
+        "kalfa/ledger/**",
         "kalfa/quality/**",
         "kalfa/records/**",
         "next/packages/vitest/**",
@@ -3962,6 +3964,7 @@
       // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
       "files": [
         "kalfa/ci/**",
+        "kalfa/ledger/**",
         "kalfa/records/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
@@ -4012,6 +4015,7 @@
         "next/programs/inbox/**",
         "next/programs/pipeline/**",
         "next/programs/tezgah/**",
+        "kalfa/ledger/**",
         "kalfa/records/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
@@ -4025,6 +4029,7 @@
       "files": [
         "kalfa/ci/**",
         "kalfa/config/**",
+        "kalfa/ledger/**",
         ".agents/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
@@ -4064,6 +4069,7 @@
       // 0562: no tagged value written by hand.
       "files": [
         "kalfa/ci/**",
+        "kalfa/ledger/**",
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
@@ -4098,6 +4104,7 @@
         "kalfa/config/src/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/tezgah/**",
+        "kalfa/ledger/**",
         "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/chaos/**",
@@ -4116,6 +4123,7 @@
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/mcp/**",
         "next/packages/libfabrika/src/repositories/**",
+        "kalfa/ledger/**",
         "kalfa/quality/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
@@ -4131,6 +4139,7 @@
       // 0567: a ternary chain over one value's literals is a Match.
       "files": [
         "kalfa/ci/**",
+        "kalfa/ledger/**",
         "kalfa/records/**",
         "kalfa/config/**",
         ".github/ci/**",

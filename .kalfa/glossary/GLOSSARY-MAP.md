@@ -34,7 +34,7 @@ moves the line here if it does.
 
 - **Shared names** (`next/packages/libfabrika/GLOSSARY.md`): the few words every context uses, such
   as ids and keys. A small shared kernel.
-- **Ledger** (`next/packages/libfabrika/src/ledger/GLOSSARY.md`): the record of facts and the
+- **Ledger** (`kalfa/ledger/GLOSSARY.md`): the record of facts and the
   coordination built on it.
 - **Runtime and program core** (`next/packages/libfabrika/src/runtime/GLOSSARY.md`): what a program
   is, how it runs, and the processes that run it.
