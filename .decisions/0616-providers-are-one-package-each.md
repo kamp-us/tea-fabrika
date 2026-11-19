@@ -1,12 +1,12 @@
 ---
 id: 0616
-title: A protocol package holds interfaces and a test Layer only, and each provider is one package holding every Layer for it, as @effect/platform and @effect/platform-node do, never a provider's code inside a protocol package
+title: A protocol package holds interfaces and a test Layer only, and each provider is one package named @kalfa/provider-<name> holding every Layer for it, as @effect/platform and @effect/platform-node do, never a provider's code inside a protocol package
 status: accepted
 date: 2026-11-18
 tags: [kalfa, protocol, provider, github, chat, codehost, ci, program, fabrikalfa, effect-platform]
 ---
 
-# 0616: A protocol package holds interfaces and a test Layer only, and each provider is one package holding every Layer for it, as @effect/platform and @effect/platform-node do, never a provider's code inside a protocol package
+# 0616: A protocol package holds interfaces and a test Layer only, and each provider is one package named @kalfa/provider-<name> holding every Layer for it, as @effect/platform and @effect/platform-node do, never a provider's code inside a protocol package
 
 ```mermaid
 flowchart TB
@@ -17,9 +17,9 @@ flowchart TB
     program["@kalfa/program"]
   end
   subgraph providers["provider packages: every Layer for one provider"]
-    github["@kalfa/github"]
-    discord["@kalfa/discord (later)"]
-    slack["@kalfa/slack (later)"]
+    github["@kalfa/provider-github"]
+    discord["@kalfa/provider-discord (later)"]
+    slack["@kalfa/provider-slack (later)"]
   end
   github -->|provides| codehost
   github -->|provides| ci
@@ -39,7 +39,7 @@ class Chat extends Context.Service<Chat, {
   static readonly test: Layer.Layer<Chat> = /* in memory */
 }
 
-// A sketch. In @kalfa/github: one Layer for each protocol GitHub speaks.
+// A sketch. In @kalfa/provider-github: one Layer for each protocol GitHub speaks.
 export const Codehost: Layer.Layer<CodeHost, never, Credentials>
 export const Runs: Layer.Layer<Runs, never, Credentials>
 export const Chat: Layer.Layer<Chat, never, Credentials> // a comment that mentions the bot
@@ -47,7 +47,8 @@ export const Chat: Layer.Layer<Chat, never, Credentials> // a comment that menti
 
 **What this decides:** that a protocol package holds only interfaces and a test Layer, that each
 provider is one package holding all its Layers, that `@kalfa/chat` is a new protocol package, and
-that fabrikalfa is an app that composes them.
+that fabrikalfa is an app that composes them. Each provider package is named
+`@kalfa/provider-<name>`, and `Journal` lives in `@kalfa/program` while `@kalfa/ledger` builds on it.
 
 ## Context
 
@@ -58,6 +59,12 @@ and a third provider would add a subpath to each. Swapping a provider would touc
 
 On 2026-11-18 the owner ruled that a protocol package holds only the interface, and each provider
 is one package that holds every Layer for that provider.
+
+The name follows Terraform. Its registry requires every provider repository to match
+`terraform-provider-{NAME}`
+([HashiCorp, publishing providers](https://developer.hashicorp.com/terraform/registry/providers/publishing)).
+So the packages are `@kalfa/provider-github`, `@kalfa/provider-cloudflare` (the Ledger on Durable
+Objects, and program hosting on Workers), `@kalfa/provider-discord` and `@kalfa/provider-slack`.
 
 The model is Effect's own split: `@effect/platform` holds the protocols (`FileSystem`, `Path`,
 `Terminal`, `HttpClient`) and `@effect/platform-node`, `@effect/platform-bun` and
@@ -72,7 +79,7 @@ small libraries; and on [0231](0231-ledger-and-codehost-are-separate.md) (typed 
 direct `gh` call) and [0613](0613-kalfa-package-imports-are-a-guideline.md) (a kalfa package may
 import another's protocol). Per [0605](0605-no-record-patches-another.md), 0612, 0614 and 0585 are
 edited in place in the same pull request: their GitHub Layers moved from subpaths to
-`@kalfa/github`. Nothing is superseded.
+`@kalfa/provider-github`. Nothing is superseded.
 
 ## Decision
 
@@ -86,12 +93,20 @@ that composes them.**
   - `@kalfa/chat` is new. It is how we talk to third-party chat providers: messages, threads,
     mentions, replies and buttons.
 - **Provider packages:** one per provider, holding all its Layers.
-  - `@kalfa/github` provides codehost (pull requests, merges, pushes, labels, variables), ci
+  - `@kalfa/provider-github` provides codehost (pull requests, merges, pushes, labels, variables), ci
     (Actions runs) and chat.
   - GitHub chat is issue and pull request comments. A comment that mentions the bot is a chat
     message, the same as a Discord message.
   - Later: `@kalfa/discord` and `@kalfa/slack`, for chat.
   - Swapping a provider is one new package. No protocol package changes.
+  - The name is `@kalfa/provider-<name>`, where `<name>` is the vendor's own short name, as
+    Terraform's `terraform-provider-{NAME}` is. Others named so far: `@kalfa/provider-cloudflare`
+    (the Ledger on Durable Objects, and program hosting on Workers), `@kalfa/provider-discord` and
+    `@kalfa/provider-slack` (chat).
+- **The Journal and the ledger.** The `Journal` interface and its memory test Layer live in
+  `@kalfa/program`. `@kalfa/ledger` exports a `journal` Layer that builds a Journal on any `Ledger`.
+  So ledger depends on program's interface, never the reverse. `@kalfa/ledger` names no storage.
+  The storage is a provider's Ledger Layer, such as `@kalfa/provider-cloudflare`'s.
 - **fabrikalfa is an app,** the same tier as fabrika: a tiny fabrika (one server, many clients)
   that composes kalfa packages into a bot usable from anywhere: this terminal, Discord, Slack or a
   fabrika tile.
@@ -110,12 +125,12 @@ that composes them.**
 ## Consequences
 
 - **Build plans change their target.** The ci and codehost plans of 0585's order put the GitHub
-  Layers in `@kalfa/github`. This record builds nothing and starts no plan.
-- **The cost.** A provider package grows with each protocol it speaks, and `@kalfa/github` is the
+  Layers in `@kalfa/provider-github`. This record builds nothing and starts no plan.
+- **The cost.** A provider package grows with each protocol it speaks, and `@kalfa/provider-github` is the
   first large one. A protocol's shape is a guess until two providers use it, and chat will have its
   second only with Discord or Slack.
 - **Not decided here:** the service and field names, how a mention is told from other comments,
-  who fabrikalfa lets ask for what, and when `@kalfa/chat` or `@kalfa/github` is built.
+  who fabrikalfa lets ask for what, and when `@kalfa/chat` or `@kalfa/provider-github` is built.
 
 ## Records
 

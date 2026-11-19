@@ -43,7 +43,7 @@ kalfa/
                 @kalfa/ci/ship    today's land.ts and pr/
   codehost/   @kalfa/codehost the code host protocol, once (0614)
   chat/       @kalfa/chat      the chat protocol, interfaces only (0616)
-  github/     @kalfa/github    the provider: every Layer GitHub gives codehost, ci and chat (0616)
+  provider-github/ @kalfa/provider-github the provider: every Layer GitHub gives codehost, ci and chat (0616)
   records/    @kalfa/records    find, list, next, show, resolve; field rows; frontmatter Schemas
   quality/    @kalfa/quality    testing, linting and formatting, one subpath per tool
                 @kalfa/quality/vitest   0557's test toolbox
@@ -116,7 +116,7 @@ domain and is exported by subpath, never made into a small package of its own.**
   - **`@kalfa/ci/ship`** is today's `land.ts` and `pr/`, named for its job: check, leak check,
     merge main, sign, push, open the pull request, queue, arm. Shipping is the CD half of CI/CD, so
     it lives with CI ([0614](0614-kalfa-codehost-holds-the-code-host-protocol-once.md)).
-    - GitHub is the only real code host, as the Layer in `@kalfa/github` (0616). The direct `gh`
+    - GitHub is the only real code host, as the Layer in `@kalfa/provider-github` (0616). The direct `gh`
       calls in `land.ts` move behind the code host services (0231), which `ship` uses to merge.
     - It refuses to merge unless leakgrep passed in the same run.
     - It refuses to arm while the pull request's text is still draft text.
