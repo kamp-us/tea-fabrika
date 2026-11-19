@@ -81,6 +81,5 @@ holds the main it just fetched (owner, 2026-11-12).**
 - A pull request that waits on CI while main moves may go around more than once. The script says
   each round in one line, so a slow merge has a visible reason.
 - 0097 is superseded. [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md) is
-  amended in part: its "may land behind main once lint passes" no longer holds; its pinned head and
-  its no-override rule do.
+  amended in part: its "may land behind main once lint passes" no longer holds.
 - Not decided here: running fewer jobs on the catch-up run, and what the merge queue replaces.

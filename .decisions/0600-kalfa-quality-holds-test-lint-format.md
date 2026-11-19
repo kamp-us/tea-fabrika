@@ -58,9 +58,8 @@ plant into product code; 11 edit the test file's own fake.
   subpaths share, such as Schemas and settings.
 - Each tool is an optional peer dependency, so a project installs only the tools it imports. This is
   how drizzle-orm ships one driver per subpath.
-- It replaces `@kalfa/vitest` and `@kalfa/oxlint`. Everything 0557 and
-  [0579](0579-property-laws-use-it-prop.md) say of `@kalfa/vitest` holds for
-  `@kalfa/quality/vitest`; everything 0585 says of `@kalfa/oxlint` holds for `@kalfa/quality/oxlint`.
+- It replaces `@kalfa/vitest` and `@kalfa/oxlint` with `@kalfa/quality/vitest` and
+  `@kalfa/quality/oxlint`.
 - **Its first build is the plant runner on Stryker**, in `/stryker`, built from the pipeline's
   driver:
   - A plant names its mutant by code shape. If the target is not found exactly once, the plant fails

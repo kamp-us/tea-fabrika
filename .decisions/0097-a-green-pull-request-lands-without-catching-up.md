@@ -53,9 +53,8 @@ hours long.
 [0049](0049-merge-behind-main-once-lint-passes-on-the-true-merge.md) already lets a green pull
 request land behind main once `pnpm lint` passes on its true merge. The script used that only when
 main moved during its own wait: it still caught every pull request up first. This decision removes
-that first catch-up for a pull request that is already green. It amends 0049 in part: 0049's rule
-and its binding constraints stay, and "when main moved after the checks" now covers a head whose
-checks ran before the script started.
+that first catch-up for a pull request that is already green. It amends 0049 in part: "when main
+moved after the checks" now covers a head whose checks ran before the script started.
 
 The [ship stage rules](../docs/direction/ship-stage-rules.md) say the same for the product's own
 ship stage: a branch behind main ships as it is. The review is on the diff, so the diff a reviewer

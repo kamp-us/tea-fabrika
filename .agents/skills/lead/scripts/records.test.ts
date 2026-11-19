@@ -571,6 +571,17 @@ describe("resolve", () => {
     expect(Resolution.isAnyOf(["broken"])(resolve("0004", loop))).toBe(true);
   });
 
+  it("scenario: a chain that meets a superseded record with no successor is broken, and says so", () => {
+    const chain = new Map([
+      ["0005", readStatus("superseded", "0006")],
+      ["0006", readStatus("superseded")],
+    ]);
+
+    expect(resolve("0005", chain)).toEqual(
+      Resolution.cases.broken.make({ id: "0005", reason: "0005 is superseded by 0006, whose status is superseded" }),
+    );
+  });
+
   it("scenario: two links that meet on one live decision are not a loop", () => {
     const meet = new Map<string, Status>([
       ["0001", Status.cases.superseded.make({ by: ["0002", "0003"] })],
@@ -614,13 +625,23 @@ describe("status shape", () => {
           expect(resolutionLine(resolve(live, statuses), paths)).not.toContain("amended");
 
           // Not the new shape: the old links, `superseded` with no successor, and any other text.
+          // A longer word that starts with `accepted` or `superseded` is other too, with its raw text.
           for (const raw of [
             text,
             `superseded by [${live}](${live}-x.md)`,
             `amended-in-part by [${live}](${live}-x.md)`,
+            `accepted ${text}`,
+            "accepted-in-part",
+            `superseded ${text}`,
+            "superseded by",
           ]) {
             expect(readStatus(raw)).toEqual(Status.cases.other.make({ status: raw }));
             expect(readStatus(raw, live)).toEqual(Status.cases.other.make({ status: raw }));
+          }
+
+          // A successor that is not exactly four digits is no successor: `superseded` with it is other.
+          for (const bad of [`${live}0`, `x${live}`, live.slice(1)]) {
+            expect(readStatus("superseded", bad)).toEqual(Status.cases.other.make({ status: "superseded" }));
           }
 
           expect(readStatus("superseded")).toEqual(Status.cases.other.make({ status: "superseded" }));
