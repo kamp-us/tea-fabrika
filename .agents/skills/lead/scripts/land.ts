@@ -52,9 +52,10 @@
 //   land.ts merge <pr> [--admin]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
 //     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
-//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row), a
-//     sev fix at either level (0611: the branch `sev.ts fix` named in a sev1, or one `open --allow`
-//     or `next` named in a sev0), or a ready pull request a sev0 `allow`ed (0603). A fix and a ready
+//     for a docs-only pull request (0183: every file @kalfa/ci/DocsOnly's isAdminDocs, Markdown no
+//     program reads in a docs folder, or a field row; instruction text is armed instead), a sev
+//     fix at either level (0611: the branch `sev.ts fix` named in a sev1, or one `open --allow` or
+//     `next` named in a sev0), or a ready pull request a sev0 `allow`ed (0603). A fix and a ready
 //     one need `ci-required` green at the head, and a fix also needs origin/main's head in its
 //     history. Every one runs the leak gate first, on the change, each commit, the title and the
 //     description, and refuses on any hit or on a grep that could not run.
