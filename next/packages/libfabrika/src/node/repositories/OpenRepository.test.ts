@@ -24,45 +24,12 @@ import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import {
-  Repositories,
-  RepositoriesError,
-  ReadFailed,
-  Snapshot as RepoSnapshot,
-} from "../../repositories/Repositories.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import { personName, reader } from "./OpenRepository.test-support.ts";
 import * as OpenRepository from "./OpenRepository.ts";
-
-const personName = "~/.fabrika/fabrika.toml";
-
-const document = ".fabrika/fabrika.toml";
 
 /** The repository documents the settings accept: no file, an empty one, and one that names the version. */
 const Document = Schema.NullOr(Schema.Literals(["", '# repo\n\nfabrika-version = "0.0.0"\n']));
-
-const repoSnapshot = (text: string | null) =>
-  Schema.decodeSync(RepoSnapshot)({
-    key: Function.pipe("a", Str.repeat(64)),
-    branch: "release",
-    commit: Function.pipe("b", Str.repeat(40)),
-    file: document,
-    text,
-    hash: Function.pipe("c", Str.repeat(64)),
-  });
-
-/** A repository that holds `text` as its settings document, and refuses to resolve any source. */
-const reader = (text: string | null) =>
-  Layer.succeed(Repositories, {
-    open: () =>
-      Effect.succeed({
-        snapshot: repoSnapshot(text),
-        read: () => Effect.succeed(null),
-        resolve: () =>
-          Effect.fail(
-            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
-          ),
-      }),
-  });
 
 /** The same hash with its first digit changed: "0" becomes "1", every other digit becomes "0". */
 const flip = (hex: string) => (hex.startsWith("0") ? "1" : "0") + Function.pipe(hex, Str.slice(1));

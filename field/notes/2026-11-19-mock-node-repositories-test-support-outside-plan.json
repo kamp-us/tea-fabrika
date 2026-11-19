@@ -1,0 +1,14 @@
+{
+  "id": "2026-11-19-mock-node-repositories-test-support-outside-plan",
+  "date": "2026-11-19",
+  "quests": ["kamp-us/tea-fabrika#1647"],
+  "stage": "plan",
+  "kind": "friction",
+  "person": false,
+  "primitive": "Gather",
+  "what": "The plan for the mock sweep's node/repositories slice (docs/plan/quests/mock-node-repositories-PLAN.md) had no test-support file in its file table. It planned L3 in the file that already held the helpers (repoSnapshot, reader, personName, document). Plan correction 1 then moved L3 into a new plain OpenRepository.test.ts, because the old file had been renamed to OpenRepository.composed.integration.test.ts. That left the new file a copy of those helpers. The review of 2026-11-18 found the copies. The fix round added next/packages/libfabrika/src/node/repositories/OpenRepository.test-support.ts, holding one shared copy that both files import. The coordinator approved the new file under the lead's standing ruling for a new file in the slice's own folder that no other owner holds.",
+  "cause": "The plan's file table was written for L3 in place. The move of L3 to a new file was a correction made at the tests step, and nothing re-read the file table for what the move now needed.",
+  "fix": "One test-support file in the folder, imported by both test files; no layer-rules.json row was needed, and no law body changed.",
+  "test": "On the next sweep slice, when a plan correction moves a law to a new file, check at once whether the helpers the law uses must move with it.",
+  "links": ["https://github.com/kamp-us/tea-fabrika/pull/1647"]
+}
