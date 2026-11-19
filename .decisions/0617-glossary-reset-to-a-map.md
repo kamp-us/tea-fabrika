@@ -1,6 +1,6 @@
 ---
 id: 0617
-title: The old glossary is reset: the map in .glossary/TERMS.md defines no term, and each context's words live in its own GLOSSARY.md
+title: "The old glossary is reset: the map in .glossary/TERMS.md defines no term, and each context's words live in its own GLOSSARY.md"
 status: accepted
 date: 2026-11-18
 tags: [glossary, names, plan, build, review, records]
