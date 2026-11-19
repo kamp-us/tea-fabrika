@@ -1,0 +1,254 @@
+From a57f136323fef85762685df008655c975630f844 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 19 Nov 2026 03:05:44 +0000
+Subject: [PATCH] The adapted skills ship the upstream MIT license verbatim,
+ one per skill folder, and a license notice the law requires keeps its
+ author's name (decision 0618), in today's lead tooling
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WuXcavPdDeBLJJgyEZwjM6
+---
+ .agents/skills/codebase-design/LICENSE        | 21 ++++++
+ .agents/skills/codebase-design/SKILL.md       |  2 +-
+ .../codebase-design/references/deepening.md   |  2 +-
+ .../references/design-it-twice.md             |  2 +-
+ .agents/skills/domain-modeling/LICENSE        | 21 ++++++
+ .agents/skills/domain-modeling/SKILL.md       |  2 +-
+ .../references/glossary-format.md             |  2 +-
+ .agents/skills/grilling/LICENSE               | 21 ++++++
+ .agents/skills/grilling/SKILL.md              |  2 +-
+ ...license-notices-keep-their-authors-name.md | 64 +++++++++++++++++++
+ AGENTS.md                                     |  2 +-
+ 11 files changed, 134 insertions(+), 7 deletions(-)
+ create mode 100644 .agents/skills/codebase-design/LICENSE
+ create mode 100644 .agents/skills/domain-modeling/LICENSE
+ create mode 100644 .agents/skills/grilling/LICENSE
+ create mode 100644 .decisions/0618-license-notices-keep-their-authors-name.md
+
+diff --git a/.agents/skills/codebase-design/LICENSE b/.agents/skills/codebase-design/LICENSE
+new file mode 100644
+index 000000000..f1dd2c091
+--- /dev/null
++++ b/.agents/skills/codebase-design/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Matt Pocock
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/.agents/skills/codebase-design/SKILL.md b/.agents/skills/codebase-design/SKILL.md
+index f4ea71857..52effe7ee 100644
+--- a/.agents/skills/codebase-design/SKILL.md
++++ b/.agents/skills/codebase-design/SKILL.md
+@@ -113,4 +113,4 @@ Good interfaces make testing natural:
+   sketch the interface several radically different ways, then compare them on depth, locality and
+   seam placement.
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](LICENSE)).
+diff --git a/.agents/skills/codebase-design/references/deepening.md b/.agents/skills/codebase-design/references/deepening.md
+index 237e74ca0..57fcdf704 100644
+--- a/.agents/skills/codebase-design/references/deepening.md
++++ b/.agents/skills/codebase-design/references/deepening.md
+@@ -55,4 +55,4 @@ adapter.
+ - Tests should survive internal refactors, since they describe behavior, not implementation. If a
+   test has to change when the implementation changes, it is testing past the interface.
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](../LICENSE)).
+diff --git a/.agents/skills/codebase-design/references/design-it-twice.md b/.agents/skills/codebase-design/references/design-it-twice.md
+index 0ae614862..67b8bb45f 100644
+--- a/.agents/skills/codebase-design/references/design-it-twice.md
++++ b/.agents/skills/codebase-design/references/design-it-twice.md
+@@ -55,4 +55,4 @@ Then give your own recommendation: which design is strongest, and why. If parts
+ designs would combine well, propose the hybrid. Be opinionated. Say what the recommendation costs,
+ and how sure you are. Under about 80% sure, name the doubt and what would settle it.
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](../LICENSE)).
+diff --git a/.agents/skills/domain-modeling/LICENSE b/.agents/skills/domain-modeling/LICENSE
+new file mode 100644
+index 000000000..f1dd2c091
+--- /dev/null
++++ b/.agents/skills/domain-modeling/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Matt Pocock
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/.agents/skills/domain-modeling/SKILL.md b/.agents/skills/domain-modeling/SKILL.md
+index 6b8cdda02..8eb1c3bc7 100644
+--- a/.agents/skills/domain-modeling/SKILL.md
++++ b/.agents/skills/domain-modeling/SKILL.md
+@@ -57,4 +57,4 @@ a scratch pad, or a repository for implementation decisions: they are the words,
+ Ask first whether it is only a setting ([0069](../../../.decisions/0069-choices-are-settings.md)),
+ then record it with the [adr skill](../adr/SKILL.md).
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](LICENSE)).
+diff --git a/.agents/skills/domain-modeling/references/glossary-format.md b/.agents/skills/domain-modeling/references/glossary-format.md
+index 22d8ef1f0..6fd231836 100644
+--- a/.agents/skills/domain-modeling/references/glossary-format.md
++++ b/.agents/skills/domain-modeling/references/glossary-format.md
+@@ -38,4 +38,4 @@ follow, in a table with three cells:
+ - **No implementation detail.** A glossary is not a spec or a scratch pad. It holds words and
+   nothing else.
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](../LICENSE)).
+diff --git a/.agents/skills/grilling/LICENSE b/.agents/skills/grilling/LICENSE
+new file mode 100644
+index 000000000..f1dd2c091
+--- /dev/null
++++ b/.agents/skills/grilling/LICENSE
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright (c) 2026 Matt Pocock
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/.agents/skills/grilling/SKILL.md b/.agents/skills/grilling/SKILL.md
+index 9f2e635ad..e61236e20 100644
+--- a/.agents/skills/grilling/SKILL.md
++++ b/.agents/skills/grilling/SKILL.md
+@@ -43,4 +43,4 @@ says yes.
+ Run [domain-modeling](../domain-modeling/SKILL.md) alongside: when a word clashes or a rule gets
+ settled, write it down then.
+ 
+-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
++Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license, [notice](LICENSE)).
+diff --git a/.decisions/0618-license-notices-keep-their-authors-name.md b/.decisions/0618-license-notices-keep-their-authors-name.md
+new file mode 100644
+index 000000000..2200ac677
+--- /dev/null
++++ b/.decisions/0618-license-notices-keep-their-authors-name.md
+@@ -0,0 +1,64 @@
++---
++id: 0618
++title: A license notice the law requires ships verbatim with its author's name, in a LICENSE file beside the text it covers, and the no-names rule does not reach it
++status: accepted
++date: 2026-11-19
++tags: [license, mit, public-repo, names, skills, vendor, attribution]
++---
++
++# 0618: A license notice the law requires ships verbatim with its author's name, in a LICENSE file beside the text it covers, and the no-names rule does not reach it
++
++**What this decides:** text we adapt or ship from an outside project carries that project's license
++notice as written, even when its copyright line names a person.
++
++```mermaid
++flowchart LR
++  adapt["text adapted from an outside project"] --> license["its LICENSE, verbatim, in the same folder"]
++  license --> link["the text's attribution line links that LICENSE"]
++```
++
++```text
++.agents/skills/domain-modeling/
++  SKILL.md        ends: Adapted from <project> (MIT license, [notice](LICENSE))
++  LICENSE         the upstream MIT text, byte for byte
++```
++
++## Context
++
++[PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668) adapts three skills from an outside
++project under the MIT license. The MIT license asks that "the above copyright notice and this
++permission notice shall be included in all copies or substantial portions of the Software", and a
++review judged the skills substantial portions. The notice's copyright line names its author, and
++AGENTS.md says "No personal names or account names". The owner ruled on 2026-11-19 that the
++notice ships, one LICENSE file in each skill folder. The plan for the anti-slop plugin
++(`docs/plan/quests/anti-slop-install-PLAN.md`, "Their `LICENSE` holds its author's name") read the
++rule the same way for `vendor/anti-slop/LICENSE`, under
++[0563](./0563-anti-slop-plugin-as-it-ships.md). This record makes that reading the rule.
++
++This changes AGENTS.md's "This repo is public" list, which now names the exception and links here.
++
++## Decision
++
++**A license notice the law requires ships verbatim, its author's name included, and the public
++repo's no-names rule does not reach it.**
++
++- The no-names rule is about our own people and accounts: what they type, who they are, where
++  their machines keep files.
++- The notice goes in a file named `LICENSE`, byte for byte as the outside project ships it, in the
++  folder of the text it covers. Adapted text in several folders gets one copy per folder.
++- The adapted text's attribution line names the project, with its link, and links that `LICENSE`.
++- An account name stays out of our own folder and file names. It may appear in the notice and in
++  the source link.
++
++**Binding constraints**
++
++- Never edit a license notice's text, and never drop one to pass the leak grep. A hit goes to the
++  lead, who owns the word list.
++
++## Consequences
++
++- The three skills of PR 1668 each ship the upstream `LICENSE`, and their companion files link the
++  copy in their skill's folder.
++- An adapted text with no license file is a review finding.
++- Not decided here: what share of an outside text counts as substantial. A review judges it per
++  case, and when in doubt the notice ships.
+diff --git a/AGENTS.md b/AGENTS.md
+index d21fba2b7..7510cea21 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -167,7 +167,7 @@ Tool facts that cost us time (`gh pr edit`, `claude -p` tools, `rg` and dot fold
+ 
+ - No secrets, and never print or write a key.
+ - A list of open security holes stays out of this repo. Each fix lands as a normal pull request.
+-- No absolute paths from anyone's machine. Use repo-relative paths or `~`. No personal names or account names.
++- No absolute paths from anyone's machine. Use repo-relative paths or `~`. No personal names or account names, except in a license notice the law requires, which ships verbatim ([0618](./.decisions/0618-license-notices-keep-their-authors-name.md)).
+ - Never quote what a person typed in a chat session. Record the decision, not the conversation. Text a person posted
+   publicly on an issue or pull request may be linked and summarised.
+ 
+-- 
+2.43.0
+
