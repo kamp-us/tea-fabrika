@@ -109,9 +109,10 @@ that composes them.**
   journal conformance tests. Other drivers, such as SQLite or memory, are other providers of tea's
   interface. `@kalfa/ledger` names no storage. The storage is a provider's Ledger Layer, such as
   `@kalfa/provider-cloudflare`'s.
-- **A Cmd is an activity.** Our word for a tea Cmd is "activity": one bounded Effect whose answer
-  is a recorded Msg. Replay never re-runs it. A Cmd still in flight is tracked by tea's `owed()`.
-  Effect's `Workflow` and `Activity` stay banned as code ([0254](0254-tea-is-the-one-engine.md)).
+- **A tea Cmd is one bounded Effect whose answer is a recorded Msg.** It plays the role Effect
+  Workflow's Activity plays, but "Activity" is not our name for it. Replay never re-runs a Cmd. A Cmd
+  still in flight is tracked by tea's `owed()`. Effect's `Workflow` and `Activity` stay banned as
+  code ([0254](0254-tea-is-the-one-engine.md)).
 - **A program's trace is not in the journal.** Its spans and measurements live in their own record
   objects, as [0202](0202-spans-and-measurements-kept-forever.md) and
   [0204](0204-process-record-rolls-in-parts.md) decide.
