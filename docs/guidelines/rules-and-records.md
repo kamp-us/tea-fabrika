@@ -117,8 +117,8 @@ a reader   -> reads the home; git log is its history; the record says why
   ([memory docs](https://code.claude.com/docs/en/memory)).
 - **Example:** Effect's repo `AGENTS.md` is about 55 lines: layout, the narrowest check for each
   kind of change, and generated files.
-- **Held by:** [0608](../../.decisions/0608-the-map-fits-its-readers-limits.md): a size check in
-  `pnpm lint`, its limit a setting with its source. Built by [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
+- **Held by:** [0610](../../.decisions/0610-agents-md-follows-memory-guide.md): `AGENTS.md` follows
+  Claude Code's memory guide and stays under 200 lines. Built by [the build plan](../plan/quests/rules-and-records-build-PLAN.md).
 - **Breaks today:** `AGENTS.md` is 39,103 bytes; at 32 KiB a reader stops at line 389, before
   "How to write here" (`AGENTS.md:396`). With `next/AGENTS.md` it is 49,516 bytes.
 
