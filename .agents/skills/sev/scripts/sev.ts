@@ -7,8 +7,11 @@
 //                                                         in the background
 //   node sev.ts next <branch>                             that branch alone is allowed: the next fix
 //   node sev.ts allow <branch>                            one more fix branch, while it runs
-//   node sev.ts close --by owner|lead                     ends the sev0: stops the loop, prints the
-//                                                         walk, the full run to start and the level
+//   node sev.ts fix <branch>                              a sev1's one fix now landing; a second is
+//                                                         refused until the first merged
+//   node sev.ts fix --drop                                lets go of the named fix
+//   node sev.ts close --by owner|lead                     ends the sev0: stops the loop, starts main's
+//                                                         full run, prints the walk and the level
 //   node sev.ts status                                    the level now, since when and why
 //   node sev.ts loop                                      the cancel loop again, when the first died
 //
@@ -107,6 +110,30 @@ const allowCommand = Command.make(
   }),
 ).pipe(Command.withDescription("Keep one more fix branch's runs, while the sev0 is open"));
 
+const fixCommand = Command.make(
+  "fix",
+  {
+    branch: Argument.optional(branchArgument),
+    drop: Flag.Boolean("drop").pipe(Flag.withDescription("Let go of the named fix, so another can be named")),
+  },
+  Effect.fn(function* ({ branch, drop }) {
+    const { home } = yield* setup;
+
+    if (drop) {
+      return yield* Option.isSome(branch)
+        ? Refused.make({ reason: "fix --drop takes no branch" })
+        : Incident.drop(home);
+    }
+
+    return yield* Option.isSome(branch)
+      ? Incident.fix(home, branch.value)
+      : Refused.make({ reason: "fix takes a branch, or --drop" });
+  }),
+).pipe(
+  Command.provide(services),
+  Command.withDescription("Name a sev1's one fix now landing, or let it go with --drop"),
+);
+
 const closeCommand = Command.make(
   "close",
   {
@@ -120,7 +147,9 @@ const closeCommand = Command.make(
   }),
 ).pipe(
   Command.provide(services),
-  Command.withDescription("End the sev0: stop the loop, print what the lead does next and the level now"),
+  Command.withDescription(
+    "End the sev0: stop the loop, start main's full run, print what the lead does next and the level now",
+  ),
 );
 
 const statusCommand = Command.make(
@@ -148,7 +177,15 @@ const loopCommand = Command.make(
 );
 
 const sev = Command.make("sev").pipe(
-  Command.withSubcommands([openCommand, nextCommand, allowCommand, closeCommand, statusCommand, loopCommand]),
+  Command.withSubcommands([
+    openCommand,
+    nextCommand,
+    allowCommand,
+    fixCommand,
+    closeCommand,
+    statusCommand,
+    loopCommand,
+  ]),
 );
 
 /** A refusal or a failed GitHub call ends the command with its reason and exit 1. */
