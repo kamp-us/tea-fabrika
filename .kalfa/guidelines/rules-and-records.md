@@ -22,8 +22,8 @@ a reader   -> reads the home; git log is its history; the comment or the record 
 - **Kind:** taste.
 - **Means:** A rule lives in exactly one place. If a check, a type or a config file can hold it,
   that is its home. Else it lives in the instruction already read for that job. Else, while
-  nothing is built to hold it, it is a spec on the tracker, the ruling as its requirements. A record that is not a rule's home holds
-  no copy of it, only why and a link.
+  nothing is built to hold it, it is a spec on the tracker, the ruling as its requirements. A
+  record that is not a rule's home holds no copy of it, only why and a link.
 - **Why:** the Rust RFC process says "once accepted, RFCs should not be substantially changed",
   and a feature lands only with "a complete PR to the Reference describing the feature"
   ([RFCs](https://github.com/rust-lang/rfcs/blob/master/README.md),
@@ -40,8 +40,9 @@ a reader   -> reads the home; git log is its history; the comment or the record 
 ## R2: a rule changes where it lives, and no record patches another
 
 - **Kind:** lint.
-- **Means:** A change to a rule edits its home, in the same pull request as its why. A record gets no `## Amendments` section, no "the rest still holds" line and no "carried
-  forward" copy. A record whose why was reversed is superseded whole.
+- **Means:** A change to a rule edits its home, in the same pull request as its why. A record
+  gets no `## Amendments` section, no "the rest still holds" line and no "carried forward" copy.
+  A record whose why was reversed is superseded whole.
 - **Why:** consolidated law keeps "The latest available revised version of the legislation
   incorporating changes", and the amending act stays as enacted
   ([legislation.gov.uk](https://www.legislation.gov.uk/help)).
