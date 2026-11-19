@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. **None exists
-yet.** Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Three exist so
+far: Ledger, Program and Identity. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -34,10 +34,10 @@ moves the line here if it does.
 
 - **Shared names** (`next/packages/libfabrika/GLOSSARY.md`): the few words every context uses, such
   as ids and keys. A small shared kernel.
-- **Ledger** (`kalfa/ledger/GLOSSARY.md`): the record of facts and the
+- **Ledger** ([`kalfa/ledger/GLOSSARY.md`](../../kalfa/ledger/GLOSSARY.md)): the record of facts and the
   coordination built on it.
-- **Runtime and program core** (`next/packages/libfabrika/src/runtime/GLOSSARY.md`): what a program
-  is, how it runs, and the processes that run it.
+- **Program** ([`kalfa/program/GLOSSARY.md`](../../kalfa/program/GLOSSARY.md)): what a program is,
+  how it runs as processes, and what happens when one fails.
 - **Pipeline** (`next/programs/pipeline/GLOSSARY.md`): the steps a ticket goes through from filed to
   merged.
 - **Tracker** (`next/programs/inbox/GLOSSARY.md`): tickets, plans and asks as a person sees them.
@@ -72,7 +72,7 @@ its words are ours.
 
 - **Shared names** is a shared kernel: small, used by every context, changed in a pull request that
   changes its glossary too.
-- **Ledger supplies, the rest are its customers.** Tracker, Pipeline and Runtime write facts to it
+- **Ledger supplies, the rest are its customers.** Tracker, Pipeline and Program write facts to it
   and read them back.
 - **Pipeline and Tracker are partners.** The pipeline asks; the tracker shows the ask to a person.
 - **Delivery uses Code hosting,** and **Code hosting uses Source control.**
@@ -85,14 +85,14 @@ its words are ours.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
   words into ours.
-- **Clients and Frame speak to Runtime** over a published protocol, and show what Tracker and
+- **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
   Pipeline say.
 - **Records talk about every context** and translate nothing.
 - **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
-  CI says build and job, Code hosting says check, Runtime says process. A GitHub "workflow run" is
+  CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/provider-github`.
 - A word that means two things in two contexts gets an entry in each glossary and a line here.
-- **Recovery** means two things: in Runtime, a process getting back its saved state; in Identity, a
+- **Recovery** means two things: in Program, a process getting back its saved state; in Identity, a
   human getting back in after losing every device.
 
 ## Open clashes
