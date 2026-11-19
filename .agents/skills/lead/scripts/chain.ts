@@ -1192,7 +1192,7 @@ You are the lead's judgment for quest ${quest}, started by chain.ts because the 
 answered ${line.outcome}: ${line.reason}
 You read; you change no file and start nothing. Your row only reads this repo and nothing beside
 it, so the quest's state file and the step's report follow below. Read what you need in this repo.
-Before you park a question, search .decisions/, .glossary/ and docs/direction/ for its answer. Then
+Before you park a question, search .decisions/, each GLOSSARY.md and docs/direction/ for its answer. Then
 answer with one JSON object (its schema follows): answer "send" with the step to run again (tests, build
 or review) and a note of one or two sentences for that step, or answer "park" with step null and
 why the lead has to look, in one sentence.

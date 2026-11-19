@@ -1,17 +1,32 @@
 # Glossary map
 
 This is the map of the project's words. It names the contexts, says where each context's glossary
-will live, and says how the contexts relate. It defines no term.
+will live, and says how the contexts relate. It defines no term. The rule for it is
+[0617](../.decisions/0617-glossary-reset-to-a-map.md).
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
 Each context gets its own `GLOSSARY.md` when its words are decided, and not before. **None exists
-yet.** A glossary's shape is in the domain-modeling skill
+yet.** Its shape is in the domain-modeling skill
 ([mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/GLOSSARY-FORMAT.md),
-adapted for this repo in [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668)): a short
-description, then each term with its meaning and an `_Avoid_` line. When a glossary is made, its
-line below becomes a link, in the same pull request. The old file, about 650 lines and 500 terms,
-is in git history. It is not a source: the words get decided again, one context at a time.
+adapted for this repo in [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668)). In short:
+
+```md
+# Context name
+
+One sentence on what the context is.
+
+## Language
+
+**Term**:
+What the word means here.
+_Avoid_: the words to use instead
+```
+
+Each term is a `**Term**:` line, its meaning, and an `_Avoid_:` line, with no blank line inside the
+term. When a glossary is made, its line below becomes a link, in the same pull request. The old
+file, about 700 lines and 460 terms, is in git history. It is not a source: the words get decided
+again, one context at a time.
 
 The paths below are leans. A glossary may land beside the code it names, and its pull request
 moves the line here if it does.
@@ -49,7 +64,7 @@ moves the line here if it does.
   context.
 
 GitHub is not a context. It sits behind an anticorruption layer, in a provider package
-(`@kalfa/provider-github`, [0616](../.decisions/0616-chat-codehost-provider-split.md)), so none of
+(`@kalfa/provider-github`, [0616](../.decisions/0616-providers-are-one-package-each.md)), so none of
 its words are ours.
 
 ## Relationships
