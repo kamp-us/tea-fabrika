@@ -33,10 +33,11 @@ never fails the command.
 | `map` (advice) | [0610](../../.decisions/0610-agents-md-follows-memory-guide.md) | A tracked `AGENTS.md`, the root or one folder down, with more than 200 lines. The 200 is `maxLines` in `MapSize.ts`: Claude Code's memory guide says to keep each file "under 200 lines per file" ([memory](https://code.claude.com/docs/en/memory)), as 0610 says. Lines count as `wc -l` counts them. A constant, not a setting. |
 
 The link check reads `AGENTS.md` and `CLAUDE.md` files, `.agents/skills/`, `docs/guidelines/`,
-`.runbooks/`, `docs/plan/`, `.patterns/` and `.glossary/` (Markdown), and the comments of tracked
-`.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does not read `.decisions/`, `experiments/`,
-`field/` or `docs/direction/`, which are history, nor fenced code, nor symlinks. A bare number is not
-a link.
+`.runbooks/`, `docs/plan/` (but not `docs/plan/quests/`, below), `.patterns/` and `.glossary/`
+(Markdown), and the comments of tracked `.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does
+not read `.decisions/`, `experiments/`, `field/`, `docs/direction/` or `docs/plan/quests/`, which are
+history, nor fenced code, nor symlinks. A signed plan in `docs/plan/quests/` is a record of what was
+agreed, held by its body hash, so the check skips it. A bare number is not a link.
 
 Markdown is read by micromark into mdast (`mdast-util-from-markdown` with GitHub's tables, the
 reader `programs/markdown` uses), so a link's text may wrap and a table cell is its own block. The
