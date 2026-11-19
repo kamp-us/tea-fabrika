@@ -26,18 +26,15 @@ else (`packages/`, `programs/`, `apps/`) is today's version: what we use every d
 
 ## Where things live
 
-- **Records:** [`.kalfa/kalfa.toml`](./.kalfa/kalfa.toml) names each record folder (decisions, glossary, guidelines,
-  patterns, runbooks, retro) and what goes in it. Read it before you read or write a record.
-- **Decisions:** before you change a choice, read the decisions in `.kalfa/decisions/` that govern it. Record a new one
-  with [the adr skill](./.agents/skills/adr/SKILL.md).
+- **Records:** where each kind of record lives and what goes in it is in [`.kalfa/kalfa.toml`](./.kalfa/kalfa.toml), so
+  read it before you read or write any record.
 - **Direction:** [`docs/direction/`](./docs/direction/README.md) holds the long design notes, and
   [`docs/direction/follows/`](./docs/direction/follows/README.md) where `next/` follows a model (OTP, Elm, Kubernetes)
   and where it leaves it. It takes no new note: a settled choice becomes a decision, and a design still in draft is a
   file in `docs/`. No folder keeps an index table.
 - **A real ticket through the pipeline:** [the how-to](./docs/how-to/run-a-pipeline-ticket.md), and
   [its rules for a live run](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run).
-- **A live run's state and logs:** `runs/` on your own machine. The programs write it; you read it. Git ignores it, and
-  it is never committed.
+- **A live run's state and logs:** `runs/`, local to your machine. Read it; never edit or commit it.
 - **Knowledge that lives only in a chat or in an agent's private memory** is in the wrong place: write it here.
 
 ## Finish your task
