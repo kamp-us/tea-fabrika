@@ -1,6 +1,6 @@
 ---
 name: guidelines
-description: Run a guidelines study, one product area's design from the settled check to an approved guideline page and its build plan. Use when an area needs guidelines, when a new or changed screen needs its look picked before its pull request opens, or when an approved guideline page changes.
+description: Run a guidelines study, one product area's design from the settled check to an approved guideline page and its build plan. Use when an area needs guidelines, when a new or changed screen needs its look picked before its pull request opens, when an approved guideline page changes, or when an older note is sorted into the record kinds.
 ---
 
 # A guidelines study
@@ -18,7 +18,8 @@ then into a build in the app. It ends with:
 
 `.kalfa/kalfa.toml` says where each record kind lives and what goes in it. A study writes a
 `research`, a `guidelines` and a `quests` record, and its settled check reads the `decisions`,
-`glossary` and `guidelines` records.
+`glossary` and `guidelines` records. Sorting an older note's pieces into the record kinds is its own
+branch, with its own labels: read [sorting a note](references/sorting-a-note.md) whole first.
 
 Read [the rules for changing the product](references/changing-the-product.md) whole before step 4.
 Every design, prototype and page in the study follows them.
@@ -72,16 +73,17 @@ above, and you have read it whole.
 ### 4. Test every principle three ways
 
 Draft the principles from what the makers agree on and where the running example breaks it, as
-many as the findings give. Rules that share one reason and one check are one principle. Then give
-each principle these five:
+many as the findings give. Write each one as a product principle in plain words: what a person
+does and sees, never a test name, a type or a file. Rules that share one reason and one check are
+one principle. Then give each principle these five:
 
 - **Linear as the builder:** how Linear's team would build it as fabrika programs, in one line, or
   "No Linear answer: <why>". Where we differ, say why. Ask it of every rule, not only of screens.
 - **The Elm or OTP answer:** Elm's model, update, view and parents stepping children, or OTP's
   mailbox, supervisor and `code_change`, where one fits. Say where we leave it.
 - **Accessibility:** the WCAG criterion it touches, and what needs a real screen reader run.
-- **A kind:** `law` (the test writer can check it), `lint` (`pnpm lint` can hold it) or `taste`
-  (only a shot beside Linear checks it).
+- **A kind:** `law` (a test can check it), `lint` (`pnpm lint` can hold it) or `taste` (only a
+  shot beside Linear checks it). The kind steers the build plan (step 12), and stays off the page.
 - **A lean:** "Lean, NN%." with the doubt and what would settle it, or "No lean, the owner picks."
 
 **Done when** every principle has all five.
@@ -147,8 +149,8 @@ its shots in `shots/`, in the shape of [the guideline page](references/guideline
 
 - **Line one is the status:** **Proposed DATE.** It becomes **Approved DATE.** on the owner's yes
   (step 11). That line is the record of the approval.
-- One `## X1: <name>` per principle, with its fields. The leans and their numbers, the lost designs
-  and the smaller calls go in the pull request's body (step 10).
+- One `## X1: <name>` per principle, with its fields. The kinds, the leans and their numbers, the
+  `file:line`s, the lost designs and the smaller calls go in the pull request's body (step 10).
 
 **Done when** every box in the guideline page's checklist is ticked.
 
@@ -165,10 +167,12 @@ on one throwaway branch, pushed and kept out of main. Copy the shots the page li
 leakgrep.sh checks added text; private words stay outside the repo.
 
 - Write its title and body with the pr skill. It holds the page and its shots.
-- Beside the pr skill's parts, the body carries: the scope line; each principle with its kind and
-  its lean, or "No lean, the owner picks"; the running example; what was decided; the designs and
-  why each lost; the smaller calls, each with its options as small code blocks and a lean; what other
-  open pull requests would change to match; the prototype branch; what it cannot tell us.
+- Beside the pr skill's parts, the body carries: the scope line; each principle with its kind, its
+  lean or "No lean, the owner picks", and where the running example breaks it, at `file:line`; for
+  a visual principle, its tokens and the layouts and Linear screen its look is judged at; the
+  running example; what was decided; the designs and why each lost; the smaller calls, each with
+  its options as small code blocks and a lean; what other open pull requests would change to match;
+  the prototype branch; what it cannot tell us.
 - It opens as a draft, and it lands after the owner's yes (step 11).
 
 **Done when** the draft is open, and the pr skill's leakgrep check passed on its body.
@@ -187,8 +191,7 @@ leakgrep.sh checks added text; private words stay outside the repo.
 - The owner's answer on a lean changes the prototype first, then the page, then the pull request's
   body.
 - The last step asks one yes or no: merge it? On a yes, before the merge and in the same pull
-  request, line one of the page becomes **Approved DATE.**, and each `law` and `lint` principle's
-  **Held by** names its test or lint rule, or the quest that will build it.
+  request, line one of the page becomes **Approved DATE.**
 
 **Done when** the owner answered the merge question, and on a yes the page says Approved.
 
@@ -198,6 +201,9 @@ An approved page is done when the app shows it, so every study ends here.
 
 - The same day as the merge, write the build plan with the plan skill, for the version new work
   goes in. It is saved as a `quests` record, and it names the prototype branch.
+- The plan picks which principles get codified, from each one's kind. A codified principle goes
+  into the ticket's spec as user stories until it is built, then lives as a test whose name reads
+  like the principle, so a reader finds it by the page's own words.
 - Bring it to the owner as one yes or no: approve the plan? On a yes, file the build as a tracker
   ticket with `from` set to the page's pull request. The test writer starts as soon as a slot is
   free, then the build and one review, as for every pull request.
@@ -208,5 +214,8 @@ An approved page is done when the app shows it, so every study ends here.
 ## Changing an approved page
 
 A change to a guideline is an edit to its page, in a pull request the owner says yes to. The page
-and its history are the whole record. A change to a `law` or `lint` principle changes its test or
-lint rule in the same pull request.
+and its history are the whole record. A change to a codified principle changes its test, found by
+its name, in the same pull request.
+
+Keeping a page true is judgment, not a check: whoever changes an area reads its page, and when the
+change makes a principle false, edits the page in the same pull request.

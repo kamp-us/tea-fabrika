@@ -275,11 +275,11 @@ The wire has four steps. Any client speaks it.
 // 3. Everything else (T8). A Cmd is a request; news is a notification, with no id.
 {"jsonrpc": "2.0", "id": 7, "method": "git.push", "params": {"branch": "feat/x"}}
 {"jsonrpc": "2.0", "id": 7, "error": {"code": 1, "message": "rejected", "data": {"why": "stale"}}}
-{"jsonrpc": "2.0", "method": "ledger.appended", "params": {"rev": 412}}
+{"jsonrpc": "2.0", "method": "ledger.appended", "params": {"pos": 412}}
 ```
 
 ```ts
-// 4. Drops (T7). Retry once at once, then back off. Once back, catch up from the last rev seen.
+// 4. Drops (T7). Retry once at once, then back off. Once back, catch up from the last pos seen.
 const backoff = Schedule.min([
 	Schedule.exponential("250 millis").pipe(Schedule.jittered), // each wait 80 to 120%, at random
 	Schedule.spaced("30 seconds"), // never more than 30 s
@@ -337,7 +337,7 @@ connect.pipe(Effect.retry(reconnect));
   auto-response. The brain never checks on a timer; presence reads the last
   ping when asked, away after 75 s.
 - **T7, drops (85%):** retry once at once, then exponential backoff with
-  jitter, capped at 30 s. Catch up by revision. State changes wait in an
+  jitter, capped at 30 s. Catch up by position. State changes wait in an
   outbox with ids; throwaway messages drop. The knobs live in `[transport]`.
 - **T8, messages (75%):** JSON-RPC 2.0, as MCP, ACP and LSP use. A Cmd is
   `method` and `params`; ok is `result`; err is `error.data.why`; news is a
@@ -384,8 +384,8 @@ interface Data {
 {
 	id: "e-91",        // the writer's id: a resend is saved once
 	stream: "build:7",
-	pos: 3,            // place in its stream
-	rev: 412,          // place in the whole log
+	rev: 3,            // revision: place in its stream
+	pos: 412,          // position: place in the whole log
 	arrivedAt: "23:12:04", // the referee's clock, when it reached the ledger: leases, limits and order use only this
 	by: "mac@owner",   // stamped by the door from the signed-in key
 	sentAt: "23:10:01",    // the writer's own clock, when it wrote it: shown, never used to decide
@@ -416,8 +416,8 @@ after about 10 s and drops what waits in memory.*
   for good. The referee's code gets entries without it, so nothing can decide
   with it.
 - **D4, hearing news:** poke, then pull (Replicache's shape). The brain sends
-  `ledger.appended` with `{rev, streams}` on the ephemeral lane, at most once;
-  the client pulls with `ledger.read` after the last rev it has. A lost poke
+  `ledger.appended` with `{pos, streams}` on the ephemeral lane, at most once;
+  the client pulls with `ledger.read` after the last position it has. A lost poke
   costs nothing: the next poke or the reconnect catch-up pulls the same
   entries. Every client hears every poke in its project; per-stream
   subscriptions wait, since nothing is lost by adding them later. ~~`wait` stays

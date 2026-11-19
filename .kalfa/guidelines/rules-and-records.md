@@ -7,21 +7,22 @@ aim: a stale, repeated or contradictory rule cannot grow back, because the shape
 stop it, not a cleanup.
 
 ```text
-a ruling   -> .kalfa/decisions/NNNN-slug.md   why the owner ruled, about a page, links the home
-           -> one edit to the rule's home, in the same pull request
+a ruling   -> one edit to the rule's home, in the same pull request
+           -> its why: a comment beside the check or setting that enforces it,
+              or .kalfa/decisions/NNNN-slug.md only when the ADR tests pass
 the home   -> a check or a config file, if code can hold the rule
            -> else the instruction read for that job: a skill, a folder's AGENTS.md,
               a pattern doc, a guideline page, a runbook
-           -> else the record itself, edited in place until code or an instruction takes it
-a reader   -> reads the home; git log is its history; the record says why
+           -> else, while it is not built, a spec on the tracker, the ruling as its requirements
+a reader   -> reads the home; git log is its history; the comment or the record says why
 ```
 
 ## R1: one home per rule, picked by what holds it
 
 - **Kind:** taste.
 - **Means:** A rule lives in exactly one place. If a check, a type or a config file can hold it,
-  that is its home. Else it lives in the instruction already read for that job. Else it stays in
-  its own decision record until one of those can take it. A record that is not a rule's home holds
+  that is its home. Else it lives in the instruction already read for that job. Else, while
+  nothing is built to hold it, it is a spec on the tracker, the ruling as its requirements. A record that is not a rule's home holds
   no copy of it, only why and a link.
 - **Why:** the Rust RFC process says "once accepted, RFCs should not be substantially changed",
   and a feature lands only with "a complete PR to the Reference describing the feature"
@@ -39,8 +40,7 @@ a reader   -> reads the home; git log is its history; the record says why
 ## R2: a rule changes where it lives, and no record patches another
 
 - **Kind:** lint.
-- **Means:** A change to a rule edits its home, in the same pull request as the short record of
-  why. A record gets no `## Amendments` section, no "the rest still holds" line and no "carried
+- **Means:** A change to a rule edits its home, in the same pull request as its why. A record gets no `## Amendments` section, no "the rest still holds" line and no "carried
   forward" copy. A record whose why was reversed is superseded whole.
 - **Why:** consolidated law keeps "The latest available revised version of the legislation
   incorporating changes", and the amending act stays as enacted
