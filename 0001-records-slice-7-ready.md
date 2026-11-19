@@ -1,0 +1,9 @@
+# For fabrikaa: records slice 7 ready
+
+Pull request: https://github.com/kamp-us/tea-fabrika/pull/1658, branch `fabrikalfa/records-slice-7`, head `c0299ba5d3b4855eb9eef9157da7eee54c5d1c09`. Marked ready, not armed. Today's lead tooling and records, not `next/`.
+
+- **What landed:** 15 superseded records now carry `status: superseded` and `successor: "NNNN"`: 0022, 0034, 0049, 0063, 0097, 0129, 0146, 0150, 0156, 0518, 0539, 0540, 0588, 0596 and 0608. `records.ts` reads only `accepted` and `superseded`, with law L9 and a broken-chain scenario. The adr skill teaches "edit the rule's home, or supersede whole". 0600 also lost its still-holds sentences.
+- **Edits outside the plan's list, both approved by you:** `.agents/skills/sev/SKILL.md:62` now cites 0584, and `docs/plan/README.md:556` now cites 0525.
+- **Steps:** one build (sonnet, high), one review (sonnet, high, merge-ready with 4 non-blocking findings), one fix round (haiku, max) for findings 1 to 3, and a recheck (merge-ready, no findings). Finding 4 is `field/findings/2026-11-19-code-cites-superseded-0539.json`, for the lead's ticket.
+- **Checks at the head:** `pnpm lint` (21 parts) and `pnpm typecheck` passed locally, and CI lint, typecheck and ci-required passed on the same head. `records.test.ts` passed, 35 of 35. `node kalfa/records/src/bin.ts check` went from 21 findings to 6, none new: two links in signed plans and four YAML parse errors (0099, 0105, 0255, 0582), all left to slice 9 and the lead's plan fold. `records.ts resolve` lands all 15 records on their successors, on a clone whose main is this head. `loosening.sh` had two hits, and the hand check found neither loosens a law. The leak grep is clean over all commits and over the net diff.
+- **Plan corrections:** in the PR body and in `field/findings/2026-11-19-records-plan-slice-7-corrections.json`.
