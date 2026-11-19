@@ -38,6 +38,13 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   "packages/pipeline/bin/tsh",
 ];
 
+/**
+ * Scripts that are another author's text, kept byte for byte (Matt Pocock's skills, MIT,
+ * `.agents/skills/UPSTREAM-mattpocock-skills-LICENSE`). The check changes, never the text, so they
+ * carry no edge line and no port. A script is added here only with a vendored skill that ships it.
+ */
+const VENDORED: ReadonlyArray<string> = [".agents/skills/diagnosing-bugs/scripts/hitl-loop.template.sh"];
+
 /** A file that runs as shell or Python, by its name. */
 const SCRIPT = /\.(?:sh|py)$/;
 
@@ -218,7 +225,7 @@ const edges = (text: string): { readonly marked: boolean; readonly broken: boole
  */
 export const check = (tracked: ReadonlyArray<string>, head: (path: string) => string): ReadonlyArray<Finding> => {
   const present = new Set(tracked);
-  const listed = new Set(NOT_YET_PORTED);
+  const listed = new Set([...NOT_YET_PORTED, ...VENDORED]);
 
   const stale: ReadonlyArray<Finding> = NOT_YET_PORTED.filter((path) => !present.has(path)).map((path) => ({
     _tag: "stale_entry",
