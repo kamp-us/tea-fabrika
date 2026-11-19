@@ -1,16 +1,17 @@
 // The anti-slop lint plugin, taken as it ships (decision 0563): the fork's `src/` sits unchanged in
 // vendor/anti-slop/ (vendored.ts holds that), and `.oxlintrc.json` loads its two plugins. The owner
-// took ten of its rules. Each is on as an error in the folders its own block at the end of the
-// config lists, and nowhere else: a folder goes on a rule's list in the pull request that brings it
-// to zero hits of that rule.
+// took ten of its rules. Each is on as an error across the whole scope, from its own block at the
+// end of the config, and that block's `excludeFiles` names the folders that still have hits. A new
+// folder is on from its first file, and a pull request that brings a folder to zero takes it off
+// the exclude list: the list only shrinks, as advice.ts's warn lines do.
 //
 // A whole `pnpm lint` run calls `audit` here, which holds three things. The config loads each of the
 // fork's two plugins from vendor/anti-slop/ and from nowhere else (`strays`), so an edited copy in
 // another folder cannot stand in for it. The folder is the pinned commit's code (vendored.ts). And
-// the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on a folder
-// with no hit of a rule that the rule's list does not name, and on a listed glob that is not a folder
-// of the scope. It keeps no list of its own: the folders still waiting are the scope's folders minus
-// the rule's list. The typecheck port is today's lead tooling and joins as four exact globs.
+// the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on an
+// excluded folder with no hit of its rule left, on a folder with hits that no excluded folder
+// covers, on an excluded glob that is not a folder of the scope, and on a block whose `files` leave
+// out part of the scope. The typecheck port is today's lead tooling and joins as four exact globs.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,7 +42,7 @@ const PLUGINS = [
   { name: "anti-slop-effect", specifier: "vendor/anti-slop/src/effect/index.ts" },
 ];
 
-/** The globs of the whole scope. A rule's list becomes these once every folder is on it. */
+/** The globs of the whole scope but the typecheck port, each a tree every taken rule is on in. */
 export const WHOLE: ReadonlyArray<string> = ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
 
 /** The typecheck port's four globs, as its lint blocks name them. */
@@ -93,29 +94,46 @@ export const folders = (root: string): ReadonlyArray<string> => [
   ]),
 ];
 
-/** What the zero lock asks of one rule's list. */
+/** Every glob a taken rule's block names in `files`: the whole scope, so a new folder is on from its first file. */
+export const SCOPE: ReadonlyArray<string> = [...WHOLE, ...TYPECHECK];
+
+/** What the zero lock asks of one rule's exclude list. */
 interface Lock {
-  /** The folders of the scope with no hit of the rule that its list does not name yet. */
-  readonly add: ReadonlyArray<string>;
-  /** The globs on its list that are neither a folder of the scope nor one of the whole-scope globs. */
+  /** The excluded folders with no hit of the rule left: each comes off the list. */
+  readonly remove: ReadonlyArray<string>;
+  /** The folders with a hit that no excluded folder covers. */
+  readonly missing: ReadonlyArray<string>;
+  /** The excluded globs that are not a folder of the scope. */
   readonly refused: ReadonlyArray<string>;
 }
 
-/** A listed glob covers its own folder and every folder below it. */
+/** A glob covers its own folder and every folder below it. */
 const covers = (glob: string, folder: string): boolean =>
   glob === folder || (glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
-/** The zero lock for one rule: its list, and the rule's hits in each folder of the scope. */
+/**
+ * The hits of `folder` that no excluded folder covers: its own count, less the counts of the
+ * outermost excluded folders inside it, which never overlap.
+ */
+const loose = (folder: string, excluded: ReadonlyArray<string>, hits: ReadonlyMap<string, number>): number => {
+  const inside = Arr.filter(excluded, (glob) => glob !== folder && covers(folder, glob));
+  const outermost = Arr.filter(inside, (glob) => !Arr.some(inside, (other) => other !== glob && covers(other, glob)));
+
+  return (hits.get(folder) ?? 0) - Arr.reduce(outermost, 0, (sum, glob) => sum + (hits.get(glob) ?? 0));
+};
+
+/** The zero lock for one rule: its exclude list, and the rule's hits in each folder of the scope. */
 export const lock = (
   scope: ReadonlyArray<string>,
-  listed: ReadonlyArray<string>,
+  excluded: ReadonlyArray<string>,
   hits: ReadonlyMap<string, number>,
 ): Lock => ({
-  add: Arr.filter(
+  remove: Arr.filter(excluded, (glob) => scope.includes(glob) && (hits.get(glob) ?? 0) === 0),
+  missing: Arr.filter(
     scope,
-    (folder) => (hits.get(folder) ?? 0) === 0 && !Arr.some(listed, (glob) => covers(glob, folder)),
+    (folder) => !Arr.some(excluded, (glob) => covers(glob, folder)) && loose(folder, excluded, hits) > 0,
   ),
-  refused: Arr.filter(listed, (glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
+  refused: Arr.filter(excluded, (glob) => !scope.includes(glob)),
 });
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
@@ -131,7 +149,11 @@ const Printed = Schema.fromJsonString(
     ),
     ignorePatterns: Schema.Array(Schema.String),
     overrides: Schema.Array(
-      Schema.Struct({ files: Schema.Array(Schema.String), rules: Schema.Record(Schema.String, Setting) }),
+      Schema.Struct({
+        files: Schema.Array(Schema.String),
+        excludeFiles: Schema.optionalKey(Schema.Array(Schema.String)),
+        rules: Schema.Record(Schema.String, Setting),
+      }),
     ),
   }),
 );
@@ -267,7 +289,9 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     Arr.flatMap(overrides, (block) => {
       const setting = block.rules[rule];
 
-      return setting !== undefined && levelOf(setting) === "deny" ? [{ files: block.files, setting }] : [];
+      return setting !== undefined && levelOf(setting) === "deny"
+        ? [{ files: block.files, excluded: block.excludeFiles ?? [], setting }]
+        : [];
     });
 
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
@@ -281,20 +305,34 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   const scope = folders(root);
 
   const unlocked = Arr.flatMap(TAKEN, (rule) => {
-    const { add, refused } = lock(
+    const on = blocks(rule);
+
+    const { remove, missing, refused } = lock(
       scope,
-      Arr.flatMap(blocks(rule), (block) => block.files),
+      Arr.flatMap(on, (block) => block.excluded),
       hits.get(rule) ?? new Map(),
     );
 
+    const narrow = Arr.filter(SCOPE, (glob) => !Arr.some(on, (block) => block.files.includes(glob)));
+
     return [
       ...Arr.map(
-        add,
-        (folder) => `.oxlintrc.json: ${rule} has no hit left in ${folder}: add the folder to its block (0563)`,
+        remove,
+        (folder) =>
+          `.oxlintrc.json: ${rule} has no hit left in ${folder}: remove the folder from its block's excludeFiles (0563)`,
+      ),
+      ...Arr.map(
+        missing,
+        (folder) =>
+          `.oxlintrc.json: ${rule} has hits in ${folder}, which its block's excludeFiles does not name: fix them, since the list only shrinks`,
       ),
       ...Arr.map(
         refused,
-        (glob) => `.oxlintrc.json: ${rule}'s block names ${glob}, which is not a folder of its scope`,
+        (glob) => `.oxlintrc.json: ${rule}'s excludeFiles names ${glob}, which is not a folder of its scope`,
+      ),
+      ...Arr.map(
+        narrow,
+        (glob) => `.oxlintrc.json: ${rule}'s block leaves ${glob} out of its files, which name the whole scope`,
       ),
     ];
   });
