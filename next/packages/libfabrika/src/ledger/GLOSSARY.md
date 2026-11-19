@@ -1,9 +1,6 @@
 # Ledger
 
-The ledger is where every program's facts are kept, in order, and never changed. A program asks for
-"a ledger" and never knows where it lives: on a laptop, in a Durable Object or in memory. So every
-word here is one a caller of the ledger can see. How a provider stores, copies, orders or seals it
-is the provider's, and its words are not here. Settled with the owner on 2026-11-18.
+Where every program's facts are kept, in order, and never changed. Only words a caller of the ledger sees are here; how a provider stores, copies or orders it is the provider's.
 
 ## Language
 
