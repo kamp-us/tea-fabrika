@@ -400,7 +400,7 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
   (the review one keeps the template above, minus the two head lines, which the chain fills in),
   and `## pr`: the pull request's description, its first line the title, with the
   `fabrika close ticket <N>` line when the PR finishes the ticket, written as
-  [the pr skill](../pr/SKILL.md#a-quests-description-is-written-twice) says. Every section is
+  [the pr skill](../pr/SKILL.md#in-this-repo) says. Every section is
   required. A quest has no `## mutation` section.
 - **Which steps need Claude:** `--claude` names the steps with Electron or socket work, and
   `--electron` the ones that run the app.
@@ -504,9 +504,8 @@ visible, and never weaken the rules to hide this message.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    (ticket 652). Its last act
-   is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
-   this repo's steps, what ran each one, and the dollars, in the order
-   [the pr skill](../pr/SKILL.md) gives.
+   is `land.ts ready` ([the template](#quest-brief-template)). The PR body file is written with
+   [the pr skill](../pr/SKILL.md).
 9. **Land it:** the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
    [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
