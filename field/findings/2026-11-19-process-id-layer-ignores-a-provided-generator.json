@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-19-process-id-layer-ignores-a-provided-generator",
+  "date": "2026-11-19",
+  "by": "build",
+  "model": "sonnet",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/quests/mock-gateway-processes-telemetry-PLAN.md",
+    "line": 229
+  },
+  "says": "The mock sweep plan for gateway, processes and telemetry says slice 2 has no product file and that law M3 provides `generatorWith(...)` beside `ProcessIdGenerator.layer`. On main `ProcessIdGenerator.layer` provides `Id.Generator.layer` inside itself, so a generator provided from outside never reaches it and the entropy and exhausted cases cannot be written that way. The build added one static, `ProcessIdGenerator.layerWithGenerator` (the same service over a provided `Id.Generator`), and `layer` is now that layer provided with `Id.Generator.layer`. Two smaller plan points also differ from main: the lock for these folders is a pair of blocks (a copy for the files but their `*.test.ts` carries the two `process` entries), and deleting a folder from a lock block turns the V1 coverage red, not the M1 walk, since M1 reads its folders from the config.",
+  "proof": "next/packages/libfabrika/src/processes/ProcessIdGenerator.ts on main at 75b436003569fdb25f7f815504caafec137a0c4d ends its `Layer.effect(...)` with `.pipe(Layer.provide(Id.Generator.layer))`, while the plan's sketch at line 229 reads `Effect.provide(ProcessIdGenerator.layer), Effect.provide(generator(exitReason, marker))`. With the new static, the second plant of M3 (the law given `Id.Generator.layer` in place of `generatorWith(...)`) is red on the entropy and exhausted cases.",
+  "cost": "A builder who follows the plan's sketch writes a law whose generator is ignored, so the entropy and exhausted cases fail or pass for the wrong reason, and may ship the spy again to get them.",
+  "head": "75b436003569fdb25f7f815504caafec137a0c4d",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null
+}
