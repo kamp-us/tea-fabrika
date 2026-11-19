@@ -34,6 +34,14 @@ const plainHead = fc
   .array(fc.stringMatching(/^[a-z #!/=.-]{0,24}$/), { maxLength: 8 })
   .map((lines) => ["#!/bin/sh", ...lines].join("\n"));
 
+describe("a vendored upstream script", () => {
+  // Plant, run once: the `VENDORED` entry was removed from the check. Red: a `new_script` finding.
+  it("gives no finding, with no edge line", () => {
+    const path = ".agents/skills/diagnosing-bugs/scripts/hitl-loop.template.sh";
+    expect(check([...LISTED, path], reader({ [path]: "#!/usr/bin/env bash\nset -euo pipefail\n" }))).toEqual([]);
+  });
+});
+
 describe("a tracked shell or Python file", () => {
   // Plant, run once: `SCRIPT` became /\.sh$/, so the check skips `.py`. Red: a `.py` path gave no
   // finding.
