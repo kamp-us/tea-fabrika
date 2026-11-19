@@ -52,10 +52,12 @@
 //   land.ts merge <pr> [--admin]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
 //     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
-//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row) or a
-//     branch an open sev0 allows (0532, whose fix also needs `ci-required` green). Both run the
-//     leak gate first, on the change, each commit, the title and the description, and refuse on any
-//     hit or on a grep that could not run.
+//     for a docs-only pull request (0183: every file Markdown in a docs folder, or a field row), a
+//     sev fix at either level (0611: the branch `sev.ts fix` named in a sev1, or one `open --allow`
+//     or `next` named in a sev0), or a ready pull request a sev0 `allow`ed (0603). A fix and a ready
+//     one need `ci-required` green at the head, and a fix also needs origin/main's head in its
+//     history. Every one runs the leak gate first, on the change, each commit, the title and the
+//     description, and refuses on any hit or on a grep that could not run.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
@@ -76,13 +78,16 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Result, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import { Alerts } from "../../sev/scripts/Alerts.ts";
+import * as AlertsGh from "../../sev/scripts/AlertsGh.ts";
 import * as Level from "../../sev/scripts/Level.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
+import * as BranchesGit from "./pr/BranchesGit.ts";
 import * as Merge from "./pr/Merge.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
@@ -723,20 +728,32 @@ const armCommand = Command.make(
   }),
 );
 
-/** The branches an open sev0 allows, from the sev log in the main checkout; none when none is open. */
-const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
-  const { sev0 } = yield* Level.read(`${main}/runs/sev`).pipe(
-    Effect.mapError(
-      (e) =>
-        new Refused({
-          check: "merge",
-          reason: `the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`,
-          output: "",
-        }),
-    ),
+/** The admin route the sev log gives, read in the main checkout (Level.routeFromLog builds it, 0611). */
+const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
+  const unread = (reason: string) => new Refused({ check: "merge", reason, output: "" });
+
+  const { entries, sev0 } = yield* Level.read(`${env.MAIN}/runs/sev`).pipe(
+    Effect.mapError((e) => unread(`the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`)),
   );
 
-  return sev0._tag === "open" ? sev0.allow : [];
+  // The issues are read only when a sev1 fix could be named: no open sev0, and a fix line in the log.
+  const mayName = sev0._tag === "closed" && entries.some(Level.Entry.guards.fix);
+
+  const issues: Result.Result<ReadonlyArray<Level.Alert>, string> = mayName
+    ? yield* Effect.gen(function* () {
+        return yield* (yield* Alerts).open;
+      }).pipe(
+        Effect.provide(AlertsGh.layer(env.GH_REPO, env.MAIN)),
+        Effect.mapError((e) => e.reason),
+        Effect.result,
+      )
+    : Result.succeed([]);
+
+  if (Result.isFailure(issues)) {
+    yield* Console.log(`land: the open ci-scheduled issues do not read (${issues.failure}), so no sev1 fix is named`);
+  }
+
+  return Merge.Route.cases.admin.make(Level.routeFromLog(entries, sev0, issues));
 });
 
 const mergeCommand = Command.make(
@@ -745,12 +762,10 @@ const mergeCommand = Command.make(
   Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
     const env = yield* loadEnv;
 
-    const route = admin
-      ? Merge.Route.cases.admin.make({ sev0: yield* sev0Allows(env.MAIN) })
-      : Merge.Route.cases.queue.make({});
+    const route = admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({});
 
     const done = yield* Merge.merge({ dir: env.MAIN, pr, route }).pipe(
-      Effect.provide(queueServices(env)),
+      Effect.provide(Layer.merge(queueServices(env), BranchesGit.layer(env.MAIN))),
       Effect.mapError(refusedAt("merge")),
     );
 

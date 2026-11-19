@@ -1,6 +1,6 @@
 // WorkflowRunsTest.layer: the WorkflowRuns service in memory, built on the Recorder (0579), on one
-// list of runs that its cancels change as GitHub's would. It asks GitHub nothing. The Recorder keeps
-// every call in order, each list and each cancel, answered or refused, so a law reads what the loop
+// list of runs that its cancels and dispatches change as GitHub's would. It asks GitHub nothing. The Recorder keeps
+// every call in order, each list, cancel and dispatch, answered or refused, so a law reads what the loop
 // spent of GitHub's rate limit with `Recorder.calls(WorkflowRuns)`, inside the layer it provided.
 import { Recorder } from "@kampus/vitest";
 import { Array as Arr, DateTime, Effect, type Layer, Option } from "effect";
@@ -76,6 +76,22 @@ export const layer = (
             ? change(id, { status: "completed", conclusion: "cancelled" })
             : Effect.fail(refusal);
         }),
+      // A fresh run on `ref`, queued, after every run GitHub holds; its id is the next one after the highest.
+      dispatch: (workflow, ref) =>
+        Effect.andThen(spend, () =>
+          Effect.map(DateTime.now, (now) => {
+            w.runs.push({
+              id: Arr.reduce(w.runs, 0, (top, r) => Math.max(top, r.id)) + 1,
+              workflow: workflow.replace(/\.ya?ml$/, ""),
+              event: "workflow_dispatch",
+              branch: ref,
+              sha: "0".repeat(40),
+              status: "queued",
+              conclusion: null,
+              created: DateTime.formatIso(now),
+            });
+          }),
+        ),
     },
     { fails: given.failing ?? {} },
   );

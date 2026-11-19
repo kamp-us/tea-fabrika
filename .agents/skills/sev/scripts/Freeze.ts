@@ -1,8 +1,8 @@
 // Freeze: what a sev0 does to CI, as code (decision 0532). Today's lead tooling, run on our own
 // laptop; it is not product.
 //
-//   loop   every beat, cancel each unfinished run that is not the merge queue's and not on a branch
-//          the allow list names, until the log says the sev0 closed. In a sev0 the owner has
+//   loop   every beat, cancel each unfinished run that is not the merge queue's, not main's `check`
+//          push run and not on a branch the allow list names, until the log says the sev0 closed. In a sev0 the owner has
 //          emptied the queue, so its runs are none, and keeping them is harmless
 //   ended  after a close, wait until the loop has said it ended, so no cancel comes after
 //
@@ -23,9 +23,9 @@ import { WorkflowRuns } from "./WorkflowRuns.ts";
 
 // ---------------------------------------------------------------- the deciding part
 
-/** Why a run is kept: it is the merge queue's, or its branch fixes the emergency. */
+/** Why a run is kept: it is the merge queue's, its branch fixes the emergency, or it is main's own `check` run. */
 export const Verdict = Schema.TaggedUnion({
-  keep: { reason: Schema.Literals(["queue", "allowed"]) },
+  keep: { reason: Schema.Literals(["queue", "allowed", "main"]) },
   cancel: {},
 });
 
@@ -34,14 +34,18 @@ export type Verdict = typeof Verdict.Type;
 /**
  * What the freeze does with one unfinished run. A merge queue run is kept: in a sev0 the owner has
  * emptied the queue first, so there is none, and canceling one would take its pull request out of
- * the queue behind the owner's back. A push run on main is canceled too.
+ * the queue behind the owner's back. Main's own `check` run on a push is kept too, so a red main is
+ * seen while the freeze holds (0611); main's full run (`scheduled`) is canceled, as every other push
+ * run is, and `close` starts it again.
  */
 export const verdict = (run: Run, allow: ReadonlyArray<string>): Verdict =>
   run.event === "merge_group"
     ? Verdict.cases.keep.make({ reason: "queue" })
     : allow.includes(run.branch)
       ? Verdict.cases.keep.make({ reason: "allowed" })
-      : Verdict.cases.cancel.make({});
+      : run.workflow === "check" && run.event === "push" && run.branch === "main"
+        ? Verdict.cases.keep.make({ reason: "main" })
+        : Verdict.cases.cancel.make({});
 
 /**
  * How many cancel loops of the latest sev0 have not said they ended. A close that no loop answered
