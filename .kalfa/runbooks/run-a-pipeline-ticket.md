@@ -1,3 +1,7 @@
+---
+summary: Run one tracker ticket through every pipeline step on a real repository, from one line in an app tile
+---
+
 # Run a ticket through the pipeline
 
 Today's version. One line in an app tile takes one tracker ticket through every step, on a real

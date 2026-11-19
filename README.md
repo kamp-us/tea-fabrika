@@ -118,7 +118,7 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 ## Use it on a real repository
 
 **This is an older path, not the current way.** To run a ticket today, use
-[Run a ticket through the pipeline](./docs/how-to/run-a-pipeline-ticket.md). This section stays until
+[Run a ticket through the pipeline](./.kalfa/runbooks/run-a-pipeline-ticket.md). This section stays until
 `deliver` is deleted.
 
 **It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same quest against a fake GitHub. Read
@@ -196,7 +196,7 @@ Steps:
 These still run, but they are not the way forward:
 
 - `operate ticket=<url>` in tsh: the older one-ticket loop (build, review, ship). It is going to
-  be deleted. Use [the pipeline](./docs/how-to/run-a-pipeline-ticket.md).
+  be deleted. Use [the pipeline](./.kalfa/runbooks/run-a-pipeline-ticket.md).
 - The first-generation factory (`pnpm demo`, `pnpm real`) is gone from main. It stays in git at the tag `archive/2026-11-09`.
 
 ## Where to go next
@@ -204,10 +204,10 @@ These still run, but they are not the way forward:
 | You want to | Go to |
 |---|---|
 | Know what is next, and who has the move | The tracker |
-| Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
+| Run a ticket through the pipeline | [`.kalfa/runbooks/run-a-pipeline-ticket.md`](./.kalfa/runbooks/run-a-pipeline-ticket.md) |
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
-| Write a program for `next/` | [`docs/how-to/write-a-next-program.md`](./docs/how-to/write-a-next-program.md) |
+| Write a program for `next/` | [`.kalfa/runbooks/write-a-next-program.md`](./.kalfa/runbooks/write-a-next-program.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | the experiments log (in the notes) |
 | See what happened on real tickets | the field log (in the notes) |
