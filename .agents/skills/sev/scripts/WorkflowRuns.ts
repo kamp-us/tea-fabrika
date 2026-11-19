@@ -1,5 +1,5 @@
-// WorkflowRuns: what a sev0 asks GitHub Actions about its workflow runs, and the one write it makes,
-// a cancel. It holds no rerun on purpose: a run the freeze canceled and a red run that stopped
+// WorkflowRuns: what a sev0 asks GitHub Actions about its workflow runs, and the two writes it makes,
+// a cancel and the start of a fresh run (`dispatch`). It holds no rerun on purpose: a run the freeze canceled and a red run that stopped
 // itself both end `cancelled`, and a rerun tests old code, so leaving a sev0 asks for none.
 //
 // This file is the contract only (0095): `WorkflowRunsGh.layer` asks GitHub through `gh`,
@@ -59,5 +59,7 @@ export class WorkflowRuns extends Context.Service<
     readonly unfinished: Effect.Effect<ReadonlyArray<Run>, WorkflowRunsError | RateLimited>;
     /** Asks GitHub to cancel run `id`. */
     readonly cancel: (id: number) => Effect.Effect<void, WorkflowRunsError | RateLimited>;
+    /** Starts a fresh run of `workflow` (its file name, such as `scheduled.yaml`) on `ref`, a branch. */
+    readonly dispatch: (workflow: string, ref: string) => Effect.Effect<void, WorkflowRunsError | RateLimited>;
   }
 >()("sev/WorkflowRuns") {}

@@ -31,7 +31,10 @@ const queue = made(1, { event: "merge_group", branch: "gh-readonly-queue/main/pr
 
 const fixPr = made(2, { branch: FIX });
 
-const mainPush = made(3, { event: "push", branch: "main" });
+// Main's full run: the one run on main the freeze still cancels (0611). Its `check` run is kept.
+const mainPush = made(3, { event: "push", branch: "main", workflow: "scheduled" });
+
+const checkMain = made(10, { event: "push", branch: "main", workflow: "check" });
 
 const otherPr = made(4, {});
 
@@ -177,6 +180,8 @@ describe("verdict", () => {
     { run: fixPr, allow: [FIX], is: "keep allowed" },
     { run: made(7, { event: "push", branch: FIX }), allow: [FIX], is: "keep allowed" },
     { run: mainPush, allow: [FIX], is: "cancel" },
+    // pinned: 2026-11-18, the freeze canceled main's own `check` run, so a red main went unseen.
+    { run: checkMain, allow: [], is: "keep main" },
     { run: otherPr, allow: [FIX], is: "cancel" },
     { run: dispatched, allow: [FIX], is: "cancel" },
     { run: made(8, { branch: `${FIX}-2` }), allow: [FIX], is: "cancel" },
@@ -193,57 +198,92 @@ describe("verdict", () => {
     ({ run, allow }) => Freeze.verdict({ ...run, event: "merge_group" }, allow)._tag === "keep",
   );
 
+  // R8 of docs/plan/quests/sev-runbooks-PLAN.md (0611). Plants: the old verdict, with no case for main's `check`
+  // run (a `check` push on main is canceled); keep every push run on main, so main's full run is kept too.
   it.prop(
-    "property: any other run is kept exactly when its branch is on the allow list",
-    { run: Run, allow: Schema.Array(Schema.String), listed: Schema.Boolean },
-    ({ run, allow, listed }) => {
-      const other = { ...run, event: run.event === "merge_group" ? "push" : run.event };
-      const list = listed ? [...allow, other.branch] : Arr.filter(allow, (b) => b !== other.branch);
-
-      return (Freeze.verdict(other, list)._tag === "keep") === listed;
+    "property: a run is kept exactly when it is the merge queue's, its branch is allowed, or it is the `check` workflow's push to main; main's full run and every other run is canceled",
+    {
+      kind: Schema.Literals(["checkPushMain", "scheduledPushMain", "hostPushMain", "checkPushElse", "queue", "other"]),
+      workflow: Schema.Literals(["check", "scheduled", "host"]),
+      event: Schema.Literals(["push", "pull_request", "merge_group", "workflow_dispatch"]),
+      // Main is drawn often, so a `check` run of another event on main, and a `scheduled` one, are reached.
+      branch: Schema.Union([Schema.Literal("main"), Schema.String]),
+      allow: Schema.Array(Schema.String),
+      listed: Schema.Boolean,
     },
+    ({ kind, workflow, event, branch, allow, listed }) => {
+      // Each case of the rule is drawn on its own, so none depends on luck in the plain draw.
+      const run = {
+        ...made(1, {}),
+        ...(kind === "checkPushMain"
+          ? { workflow: "check", event: "push", branch: "main" }
+          : kind === "scheduledPushMain"
+            ? { workflow: "scheduled", event: "push", branch: "main" }
+            : kind === "hostPushMain"
+              ? { workflow: "host", event: "push", branch: "main" }
+              : kind === "checkPushElse"
+                ? { workflow: "check", event: "push", branch }
+                : kind === "queue"
+                  ? { workflow, event: "merge_group", branch }
+                  : { workflow, event, branch }),
+      };
+
+      const list = listed ? [...allow, run.branch] : Arr.filter(allow, (b) => b !== run.branch);
+
+      const keeps =
+        run.event === "merge_group" ||
+        listed ||
+        (run.workflow === "check" && run.event === "push" && run.branch === "main");
+
+      expect(Freeze.verdict(run, list)._tag === "keep").toBe(keeps);
+    },
+    { arbitrary: { seed: 119120, runs: runsFor({ fast: 200, full: 600 }) } },
   );
 });
 
 describe("the cancel loop", () => {
-  it.effect("scenario: each beat cancels every run but the queue's and the fix branch's, and a close ends it", () => {
-    const github = WorkflowRunsTest.world([queue, fixPr, mainPush, otherPr, done, dispatched]);
+  it.effect(
+    "scenario: each beat cancels every run but the queue's, the fix branch's and main's `check` run, and a close ends it",
+    () => {
+      // Main's `check` run is listed last, so the loop meets it after every run it cancels: and keeps it.
+      const github = WorkflowRunsTest.world([queue, fixPr, mainPush, otherPr, done, dispatched, checkMain]);
 
-    return law(
-      Effect.gen(function* () {
-        const dir = yield* home;
-        const loop = yield* started(dir, [FIX]);
-        yield* until(Effect.map(cancels, (ids) => ids.length === 3));
-        expect(yield* cancels).toEqual([3, 4, 6]);
+      return law(
+        Effect.gen(function* () {
+          const dir = yield* home;
+          const loop = yield* started(dir, [FIX]);
+          yield* until(Effect.map(cancels, (ids) => ids.length === 3));
+          expect(yield* cancels).toEqual([3, 4, 6]);
 
-        // A run that starts later is canceled on the next beat.
-        github.runs.push(made(20, {}));
-        yield* until(Effect.map(cancels, (ids) => ids.length === 4));
-        expect((yield* cancels).at(-1)).toBe(20);
+          // A run that starts later is canceled on the next beat.
+          github.runs.push(made(20, {}));
+          yield* until(Effect.map(cancels, (ids) => ids.length === 4));
+          expect((yield* cancels).at(-1)).toBe(20);
 
-        expect(yield* ending(dir)).toBe("answered");
-        yield* finished(loop);
-        expect(yield* tags(dir)).toEqual([
-          "opened",
-          "looping",
-          "canceled",
-          "canceled",
-          "canceled",
-          "canceled",
-          "closed",
-          "ended",
-        ]);
-        expect((yield* Level.log(dir)).at(-1)).toMatchObject({ by: "loop" });
+          expect(yield* ending(dir)).toBe("answered");
+          yield* finished(loop);
+          expect(yield* tags(dir)).toEqual([
+            "opened",
+            "looping",
+            "canceled",
+            "canceled",
+            "canceled",
+            "canceled",
+            "closed",
+            "ended",
+          ]);
+          expect((yield* Level.log(dir)).at(-1)).toMatchObject({ by: "loop" });
 
-        // Nothing is canceled once it closed, however many beats pass.
-        github.runs.push(made(21, {}));
-        yield* TestClock.adjust(Duration.seconds(60));
-        yield* settle;
-        expect(yield* cancels).toHaveLength(4);
-      }),
-      github,
-    );
-  });
+          // Nothing is canceled once it closed, however many beats pass.
+          github.runs.push(made(21, {}));
+          yield* TestClock.adjust(Duration.seconds(60));
+          yield* settle;
+          expect(yield* cancels).toHaveLength(4);
+        }),
+        github,
+      );
+    },
+  );
 
   it.effect("scenario: a branch allowed while the loop runs is kept from then on", () => {
     const github = WorkflowRunsTest.world([queue]);
