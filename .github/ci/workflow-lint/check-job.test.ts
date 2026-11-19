@@ -78,7 +78,7 @@ const plants: Plant[] = [
     [
       [
         "check skips when the classifier failed",
-        (w) => (w.jobs.check.if = "${{ !cancelled() && needs.changes.outputs.check != 'false' }}"),
+        (w) => (w.jobs.check.if = guard("check").replace("needs.changes.result != 'success' || ", "")),
       ],
       ["the full install runs for no flag", (w) => (step(w, "check", "install")["if"] = build)],
       ["lint runs for no flag", (w) => (step(w, "check", "lint")["if"] = build)],
@@ -91,7 +91,7 @@ const plants: Plant[] = [
       mutate(w);
     },
   ]),
-  // 0587 (C1): jscpd is advice only, so a step that can fail the job, or that is gone, is refused.
+  // The cite-your-sources rule (C1): jscpd is advice only, so a step that can fail the job, or that is gone, is refused.
   [
     "C1: the copies step can fail the job",
     (w) => Reflect.deleteProperty(step(w, "check", "copies (advice)"), "continue-on-error"),
@@ -115,7 +115,7 @@ const plants: Plant[] = [
       step(w, "check", "copies (advice)")["env"] = {};
     },
   ],
-  // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
+  // The no-pass-list rule, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
   [
     "L7: the ratchet step is deleted",
     (w) => {
