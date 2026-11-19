@@ -1,7 +1,8 @@
 ---
 id: 0518
 title: You summon an agent by @name in any text box, never a summon word or a palette row, an @ with no such agent on the desk starts it and says it is a paid run, and an @ line runs in the background
-status: superseded by [0157](0157-summon-starts-an-agent-and-at-talks-to-it.md)
+status: superseded
+successor: "0157"
 date: 2026-11-05
 tags: [ui, shared-tiles, summon, agents, tsh, today]
 ---
@@ -14,8 +15,7 @@ tsh$ fg %scout                               wait on it; Ctrl-C stops the turn
 ```
 
 **Superseded by [0157](0157-summon-starts-an-agent-and-at-talks-to-it.md).** "No `summon` word" and
-"an `@` with no such agent starts it" were taken back on 2026-11-06. The `@` in every text box and
-the background `@` line still hold, and 0157 restates them.
+"an `@` with no such agent starts it" were taken back on 2026-11-06.
 
 **What this decides:** how a person calls an agent into their tile, in today's version.
 

@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-mock-node-repositories-fix1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1647",
+  "started": "2026-11-18T16:12:00-08:00",
+  "ended": "2026-11-18T16:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Fix round (0177) for the slice mock-node-repositories of ticket 1067, in next/, after the review at 7e4445c sent it back for one fault: the new plain OpenRepository.test.ts copied repoSnapshot, reader, personName and document from OpenRepository.composed.integration.test.ts. A new test-support file, next/packages/libfabrika/src/node/repositories/OpenRepository.test-support.ts, now holds personName, document, repoSnapshot and one reader(text, touches?), and both test files import it and no longer carry the copies. The test-support file reaches no disk, git, process or network, so OpenRepository.test.ts stays a plain test that runs on every pull request. No law body changed, no product file changed, no layer-rules.json row was needed, and Redacted left the composed file's imports because it became unused.",
+  "note": "Node 26.13.0 from the scratchpad first on PATH, TYPESAFE_API_KEY unset. Commands and results: nice -n 15 pnpm exec vitest run --maxWorkers=3 on OpenRepository.test.ts and OpenRepository.composed.integration.test.ts (2 files, 4 passed); plant (a) in kalfa/config/src/Load.ts (resolve returns make's snapshot and skips Snapshot.read), the L3 law ran once and went red with 'expected [...] to have a length of 2 but got 1', the file was put back by copy and git status showed no product file; pnpm format (exit 0); pnpm lint (every part passed but lint:promise-types, which exited 1 in the parallel run, likely killed for memory, as in the build round); pnpm -s lint:promise-types alone (0 findings, exit 0); pnpm -s lint:kind (exit 0, no line for this folder); pnpm -s lint:layers (exit 0, allowlist OK); pnpm typecheck inside next/packages/libfabrika (exit 0). rg for vi. in the folder was clean before and this change adds none. The started and ended times are approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "OpenRepository.test.ts: L3 a snapshot whose saved hash does not check is refused, never returned unchecked",
+      "plant": "kalfa/config/src/Load.ts resolve skips Snapshot.read and returns make's snapshot (plan plant a), run once after the helper move",
+      "result": "red"
+    }
+  ]
+}

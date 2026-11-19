@@ -66,6 +66,7 @@ import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
 import { Chain, REFUSED } from "../telemetry/Trace.ts";
+import { AdmissionError, Admissions } from "../transport/Admissions.ts";
 import { type CheckedHello, checkHello, type WebCryptoError } from "../transport/Hello.ts";
 import { type Checked, KeyLine, verifySshsig } from "../transport/Sshsig.ts";
 import { PasskeyLine, passkeyRp } from "../transport/Webauthn.ts";
@@ -608,6 +609,44 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   ) {
     let claimed = false;
 
+    const admit = Effect.fnUntraced(function* () {
+      const at = yield* clock;
+
+      const spent = yield* store.atomic(() => {
+        const current = store.get(`client/${client}`, Attached);
+
+        if (!attempt.current || current?._tag === "online") {
+          return Result.succeed(false);
+        }
+
+        return nonces.spend(hello.nonce, until, at);
+      });
+
+      if (Result.isFailure(spent)) {
+        return yield* spent.failure;
+      }
+
+      claimed = spent.success;
+
+      if (!claimed) {
+        return Admission.cases.refused.make({ reason: "not_granted" });
+      }
+
+      const raw = hello.key;
+      const existing = yield* readMembers();
+
+      if (existing === null && raw !== options.founder.window) {
+        return Admission.cases.refused.make({ reason: "not_granted" });
+      }
+
+      const members = existing ?? (yield* clients.members);
+      const identity = admitted(members, raw);
+
+      return "reason" in identity
+        ? Admission.cases.refused.make({ reason: "not_granted" })
+        : Admission.cases.admitted.make({ identity: { ...identity, key: trusted.name } });
+    });
+
     const result = yield* silent(
       checkHello({
         hello,
@@ -617,45 +656,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         nonce: hello.nonce,
         versions: options.versions,
         ping: options.ping,
-        consume: () => attempt.current && claimed,
-        admit: Effect.fnUntraced(function* () {
-          const at = yield* clock;
-
-          const spent = yield* store.atomic(() => {
-            const current = store.get(`client/${client}`, Attached);
-
-            if (!attempt.current || current?._tag === "online") {
-              return Result.succeed(false);
-            }
-
-            return nonces.spend(hello.nonce, until, at);
-          });
-
-          if (Result.isFailure(spent)) {
-            return yield* spent.failure;
-          }
-
-          claimed = spent.success;
-
-          if (!claimed) {
-            return Admission.cases.refused.make({ reason: "not_granted" });
-          }
-
-          const raw = hello.key;
-          const existing = yield* readMembers();
-
-          if (existing === null && raw !== options.founder.window) {
-            return Admission.cases.refused.make({ reason: "not_granted" });
-          }
-
-          const members = existing ?? (yield* clients.members);
-          const identity = admitted(members, raw);
-
-          return "reason" in identity
-            ? Admission.cases.refused.make({ reason: "not_granted" })
-            : Admission.cases.admitted.make({ identity: { ...identity, key: trusted.name } });
+      }).pipe(
+        Effect.provideService(Admissions, {
+          consume: Effect.sync(() => attempt.current && claimed),
+          admit: () => admit().pipe(Effect.mapError((cause) => AdmissionError.make({ cause }))),
         }),
-      }),
+      ),
     );
 
     if (result._tag === "refused") {
@@ -2199,7 +2205,7 @@ export class Gateway extends Context.Service<
       trusted: Trusted,
     ) => Effect.Effect<
       typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
-      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError
+      GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError | AdmissionError
     >;
     readonly knock: (
       client: ConnectionId,

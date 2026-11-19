@@ -76,7 +76,14 @@ RuntimeCauseTest.suite(law, {
   LedgerError,
 });
 
-GatewayCauseTest.suite(law, { fresh });
+// The door's suite gets the ledger from this module, since `gateway/` never imports `ledger/` (0043).
+GatewayCauseTest.suite(law, {
+  fresh,
+  ledger: (sql) =>
+    Layer.merge(LedgerSql.layer(sql, { reader: "gateway-cause" }), LedgerTransactionSql.layer(sql)).pipe(
+      Layer.provide(quiet),
+    ),
+});
 
 const failures: fc.Arbitrary<object> = fc.oneof(
   fc.string().map((message) => new Error(message)),

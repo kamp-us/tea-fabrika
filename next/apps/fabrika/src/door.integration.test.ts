@@ -2214,8 +2214,12 @@ describe("P10 review regressions", () => {
               const result = yield* Effect.result(d.initialize(overflow.client, overflow.hello, overflow.trusted));
               expect.soft(result).toMatchObject({
                 _tag: "Failure",
-                // A full store is the gateway's own fault, with no lower one beneath it.
-                failure: { _tag: "GatewayError", reason: { _tag: "Storage", cause: undefined } },
+                // The hello's admission wraps the door's error and keeps it as the cause. A full store
+                // is the gateway's own fault, with no lower one beneath it.
+                failure: {
+                  _tag: "AdmissionError",
+                  cause: { _tag: "GatewayError", reason: { _tag: "Storage", cause: undefined } },
+                },
               });
               expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
               expect.soft(receipts()).toEqual(full);

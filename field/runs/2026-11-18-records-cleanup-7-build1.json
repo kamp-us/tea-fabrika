@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-records-cleanup-7-build1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1658",
+  "started": "2026-11-18T15:30:00-08:00",
+  "ended": "2026-11-18T16:15:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Slice 7 of docs/plan/quests/rules-and-records-build-PLAN.md, today's lead tooling and records, one builder with no plan or test writer, in six parts. Part 1: 15 superseded records (0022, 0034, 0049, 0097, 0129, 0146, 0150, 0156, 0518, 0540, 0588, 0596, 0608, 0063, 0539) take status: superseded and successor: \"NNNN\" naming the record that replaced each directly; 0588 loses its Amendments section whole, 0063 its still-holds line, 0034 its still-holds sentence, 0156 two (holds as written, stands alone), 0518 one (still hold). Part 2: 0600's \"The rest of each holds.\" is deleted, since 0557, 0579 and 0585 already say the package name @kalfa/quality and the six packages in their own text. Part 3: records.ts readStatus takes the status and the successor key and reads two cases, accepted and superseded with a four-digit successor, anything else is other with its raw text; Status.accepted and Resolution.accepted hold nothing, amendedBy and every amended-by line are gone, Status.superseded keeps a by array of one so resolve follows a chain unchanged; the header and doc comments say the new shape. Part 4: records.test.ts gains L9 (fc.integer ids 1 to 9999 padded, seed 119120, 100 runs); its fixtures take the new shape and the amended expectations became accepted ones. Part 5: the adr skill has no amend, step 2 shows the two-line status, step 4 is Edit the rule's home, or supersede whole, step 5 cites only accepted. Part 6: this row.",
+  "note": "A Claude subagent in a cloud session; model and effort are the requested values. Started and ended are estimates; usage and cost are not recorded. Node here is v22, not the pinned 26.13.0, so the narrow vitest run used CI=1 to pass the local pinned-Node gate; no volta was installed. pnpm typecheck was not run, by the brief.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "c3dac8ab55806e6f29b8a5a91961fbdadb92f665",
+  "plants": [
+    {
+      "law": "L9, .agents/skills/lead/scripts/records.test.ts",
+      "plant": ".agents/skills/lead/scripts/records.ts, readStatus reads the successor only from a [NNNN] link in the status line",
+      "result": "red"
+    }
+  ]
+}

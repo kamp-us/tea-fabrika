@@ -26,7 +26,6 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Rec from "effect/Record";
-import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -34,21 +33,15 @@ import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
 
 import * as fc from "fast-check";
-import { vi } from "vitest";
 import * as Id from "../../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../../ledger/Ledger.ts";
 import * as LedgerSql from "../../ledger/LedgerSql.ts";
 import type { Line } from "../../ledger/Log.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import * as RepositoryTrustLedger from "../../packs/RepositoryTrustLedger.ts";
-import {
-  Repositories,
-  RepositoriesError,
-  ReadFailed,
-  Snapshot as RepoSnapshot,
-} from "../../repositories/Repositories.ts";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
+import { document, personName, reader, repoSnapshot } from "./OpenRepository.test-support.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
@@ -66,43 +59,9 @@ const ids = generated(Id.InputId);
 
 const people = generated(Id.make("person"));
 
-const document = ".fabrika/fabrika.toml";
-
-const personName = "~/.fabrika/fabrika.toml";
-
 const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
 
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
-
-const repoSnapshot = (text: string | null) =>
-  Schema.decodeSync(RepoSnapshot)({
-    key: Function.pipe("a", Str.repeat(64)),
-    branch: "release",
-    commit: Function.pipe("b", Str.repeat(40)),
-    file: document,
-    text,
-    hash: Function.pipe("c", Str.repeat(64)),
-  });
-
-const reader = (text: string | null, touches: Array<string>) =>
-  Layer.succeed(Repositories, {
-    open: () =>
-      Effect.succeed({
-        snapshot: repoSnapshot(text),
-        read: (path: string) => {
-          touches.push(path);
-
-          return Effect.succeed(null);
-        },
-        resolve: () => {
-          touches.push("outside source");
-
-          return Effect.fail(
-            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
-          );
-        },
-      }),
-  });
 
 describe("T878 composed repository opening", () => {
   it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", () =>
@@ -216,48 +175,6 @@ describe("T878 composed repository opening", () => {
               }
             }),
           ).pipe(Effect.provide(services)),
-        );
-      }),
-      { seed: 119120, numRuns: 200 },
-    ));
-
-  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", () =>
-    // A fault at the saved-data boundary makes bypassing Snapshot.read observable.
-    fc.assert(
-      fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (cells) => {
-        const original = SettingsSnapshot.make;
-        const spy = vi.spyOn(SettingsSnapshot, "make");
-        await Effect.runPromise(
-          Effect.acquireRelease(Effect.void, () => Effect.sync(() => spy.mockRestore())).pipe(
-            Effect.andThen(
-              Effect.gen(function* () {
-                for (const c of cells) {
-                  spy.mockImplementation((group, resolved) =>
-                    original(group, resolved).pipe(
-                      Effect.map((saved) => (c % 2 === 0 ? { ...saved, hash: "wrong" } : { ...saved, values: {} })),
-                    ),
-                  );
-
-                  const result = yield* OpenRepository.prepare("selected-repo", {
-                    person: { path: "person-file", name: personName },
-                    flags: {},
-                    env: {},
-                    version: "0.0.0",
-                  }).pipe(
-                    Effect.provide([
-                      reader("", []),
-                      FileSystem.layerNoop({ readFileString: () => Effect.succeed("") }),
-                    ]),
-                    Effect.exit,
-                  );
-
-                  expect(Exit.isFailure(result)).toBe(true);
-                }
-              }),
-            ),
-            Effect.scoped,
-            Effect.provide(services),
-          ),
         );
       }),
       { seed: 119120, numRuns: 200 },

@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-node-repositories-tests1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1647",
+  "started": "2026-11-18T14:10:00-08:00",
+  "ended": "2026-11-18T14:32:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Tests step for law L3 only of docs/plan/quests/mock-node-repositories-PLAN.md, in next/ (branch fabrikalfa/mock-node-repositories). The old L3 with vi.spyOn(SettingsSnapshot, \"make\") is gone from OpenRepository.composed.integration.test.ts (with its vi import), and the rewritten L3 is a new plain file, next/packages/libfabrika/src/node/repositories/OpenRepository.test.ts: an it.effect.prop over a generated wrong (Schema.Boolean) and a repository document (null, empty, or one naming the version), watching Effect's Digest on WebCrypto with the Recorder, with the second digestHex answer's first digit changed when wrong. It checks two digestHex runs over the same bytes, failure exactly when wrong, and the failure as an OpenRepositoryError whose reason is InvalidDocument over a redacted SettingsError whose cause is a SnapshotError. The law is green on main's product code, with no product change. The lock laws V1 and V2 (.oxlintrc.json, oxlint-plugins) are not written in this run: another open pull request owns .oxlintrc.json.",
+  "note": "The plan's file OpenRepository.test.ts was renamed OpenRepository.composed.integration.test.ts (PR 1420) and Snapshot.ts and Load.ts moved to kalfa/config/src (@kalfa/config), so the plants ran there; Load.load calls Load.resolve, which calls make then read, so the plants edit resolve. This container has Node 22 and the local-limit guard pins Node 26, so a Node 26.13.0 binary was downloaded to the scratchpad and put first on PATH for each run. Commands: nice -n 15 pnpm exec vitest run --maxWorkers=3 on OpenRepository.test.ts (1 passed) and on it with the composed integration file (4 passed); pnpm format; pnpm typecheck in next/packages/libfabrika (clean). Plan gap: its Layer.unwrap sketch compiled as written; the instanceof check on a Schema class fails the Effect typecheck (instanceOfSchema), so Schema.is is used. The started and ended times are approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "OpenRepository.test.ts: L3 a snapshot whose saved hash does not check is refused, never returned unchecked",
+      "plant": "(a) Load.resolve in kalfa/config/src/Load.ts skips Snapshot.read and returns make's snapshot: red on the first case, wrong false (expected 1 digestHex run to have a length of 2)",
+      "result": "red"
+    },
+    {
+      "law": "OpenRepository.test.ts: L3 a snapshot whose saved hash does not check is refused, never returned unchecked",
+      "plant": "(b) Load.resolve catches read's failure and returns make's snapshot: red when wrong true (Exit.isFailure was false, expected true)",
+      "result": "red"
+    },
+    {
+      "law": "OpenRepository.test.ts: L3 a snapshot whose saved hash does not check is refused, never returned unchecked",
+      "plant": "(c) Snapshot.read in kalfa/config/src/Snapshot.ts drops its hash compare: red when wrong true (Exit.isFailure was false, expected true)",
+      "result": "red"
+    }
+  ]
+}

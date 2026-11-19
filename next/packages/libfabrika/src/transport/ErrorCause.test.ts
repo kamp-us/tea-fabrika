@@ -3,14 +3,17 @@
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged. A rejection is injected through
 // Effect's own `WebCrypto` reference with a stand-in `Crypto`, so nothing is spied on (0555, ticket
-// 1067 slice 1).
+// 1067 slice 1). C6's admission is `Layer.mock(Admissions, ...)`, since `checkHello` asks for the
+// service (slice 2).
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as WebCrypto from "effect/crypto/WebCrypto";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
+import { Admissions } from "./Admissions.ts";
 import { checkHello, helloText } from "./Hello.ts";
 import { subtle } from "./internal/binary.ts";
 import * as Rejecting from "./internal/rejecting.test-support.ts";
@@ -137,9 +140,14 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
               name: `SHA256:${Buffer.from(hash).toString("base64").replace(/=+$/, "")}`,
               versions: [2],
               ping: { min: 10_000, max: 60_000 },
-              consume: () => true,
-              admit: () => Effect.die("C6: admission must not be reached once digest is refused"),
-            }),
+            }).pipe(
+              Effect.provide(
+                Layer.mock(Admissions, {
+                  admit: () => Effect.die("C6: admission must not be reached once digest is refused"),
+                  consume: Effect.die("C6: no nonce is spent once digest is refused"),
+                }),
+              ),
+            ),
           ),
         );
 

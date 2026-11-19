@@ -121,6 +121,9 @@ const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: bo
   ["const a = vi.fn();", true, true],
   ["const b = v.fn();", true, false],
   ['vi.spyOn(console, "log");', true, true],
+  // V2, the alias: `v.spyOn(o, "m")` after `import { vi as v } from "vitest"` is refused by the vitest rule
+  // (oxlint 1.90.0, the lockfile's); the properties rule names the object `vi` and never sees it.
+  ['v.spyOn(console, "log");', true, false],
   ['vi.mock("./c.ts");', true, true],
   ['vi.doMock("./d.ts");', true, true],
   ['vi.stubEnv("E", "f");', true, true],
@@ -132,6 +135,10 @@ const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: bo
   ["const m = vi.fn().mockReturnValue(1);", false, true],
   // L17's old spy in next/apps/fabrika/e2e, word for word (the app-e2e plan, L5).
   ['vi.spyOn(console, "warn").mockImplementation(() => {});', false, true],
+  // A documented gap of the pair, not a line it holds: the alias and a chained call together. The vitest
+  // rule misses the chain (oxc#29656) and the properties rule misses the alias, so neither refuses it.
+  // When oxc fixes the first, this line turns `true` in `VI_METHODS`, and the comment goes.
+  ['v.spyOn(console, "warn").mockImplementation(() => undefined);', false, false],
   // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
   ["const n = vi.hoisted(() => 1);", false, false],
   ["const o = vi.waitFor(() => 1);", false, false],

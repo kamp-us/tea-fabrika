@@ -19,9 +19,8 @@
 // `## Decision` section; a note's title and its `summary` (`where` and `when` for a pattern); a
 // glossary row whole. Context sections and long bodies are left out on purpose: experiment 270
 // found that whole notes swamp the ranking. A superseded decision is shown as the live decision it
-// lands on, and an amended one names its amendments, so a citation lands on what is in force;
-// `--all` shows each record as itself. A shortlist is never a clearance: a record that says the same
-// thing in other words is not found.
+// lands on, so a citation lands on what is in force; `--all` shows each record as itself. A
+// shortlist is never a clearance: a record that says the same thing in other words is not found.
 //
 // It fetches origin's main first, unless `find --read-only` was asked, then reads `origin/main`
 // through git (`ls-tree`, `cat-file`). Read-only discovery needs origin/main fetched beforehand,
@@ -32,7 +31,9 @@
 // open pull request can still hold the same number; the adr skill's check of open pull requests
 // covers that.
 //
-// Each record says what it is at its own top. A decision's frontmatter gives `title` and `status`.
+// Each record says what it is at its own top. A decision's frontmatter gives `title` and `status`,
+// and `status` has two cases (decision 0606): `accepted`, or `superseded` with a `successor: "NNNN"`
+// key naming the one record that replaced it. Any other status prints as itself and is never in force.
 // The other folders keep a small frontmatter block of their own, read with the file's `# `
 // heading as the title:
 //
@@ -302,26 +303,34 @@ export const wordsIn = (text: string): ReadonlySet<string> =>
     ),
   );
 
-/** A decision's status, read from its frontmatter. An amendment narrows a decision; it is still in force. */
+/**
+ * A decision's status, read from its frontmatter (0606): in force, or superseded by the one record
+ * that replaced it. There is no amended case. `by` holds that one record; `resolve` follows it down
+ * a chain. Anything else is `other`, with its raw text.
+ */
 export const Status = Schema.TaggedUnion({
-  accepted: { amendedBy: Schema.Array(Schema.String) },
+  accepted: {},
   superseded: { by: Schema.Array(Schema.String) },
   other: { status: Schema.String },
 });
 
 export type Status = typeof Status.Type;
 
-/** Reads `accepted`, `amended-in-part by [0525](...), [0530](...)` or `superseded by [0043](...)`. */
-export const readStatus = (raw: string | undefined): Status => {
+/**
+ * Reads `status: accepted`, or `status: superseded` with the `successor` key's four digits (its
+ * quotes already stripped by `readTop`). `superseded` with no successor, the old `superseded by
+ * [NNNN](...)` and `amended-in-part by ...` forms, and any other text are `other`.
+ */
+export const readStatus = (raw: string | undefined, successor?: string): Status => {
   const status = Str.trim(raw ?? "");
-  const ids = Arr.map([...pipe(status, Str.matchAll(/\[(\d{4})\]/g))], (m) => m[1] ?? "");
+  const next = Str.trim(successor ?? "");
 
-  if (/^superseded by\b/i.test(status)) {
-    return Status.cases.superseded.make({ by: ids });
+  if (status === "superseded" && /^\d{4}$/.test(next)) {
+    return Status.cases.superseded.make({ by: [next] });
   }
 
-  return status === "accepted" || /^amended-in-part by\b/i.test(status)
-    ? Status.cases.accepted.make({ amendedBy: ids })
+  return status === "accepted"
+    ? Status.cases.accepted.make({})
     : Status.cases.other.make({ status: status === "" ? "(no status)" : status });
 };
 
@@ -384,7 +393,10 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
 
   const decision =
     folder === ".decisions" && id !== undefined
-      ? { id: pipe(String(id), Str.padStart(4, "0")), status: readStatus(top.fields.get("status")) }
+      ? {
+          id: pipe(String(id), Str.padStart(4, "0")),
+          status: readStatus(top.fields.get("status"), top.fields.get("successor")),
+        }
       : undefined;
 
   const body = decision === undefined ? "" : decidingText(text);
@@ -394,7 +406,7 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
 
 /** Where a cited decision lands: itself when it is in force, or the live decisions that superseded it. */
 export const Resolution = Schema.TaggedUnion({
-  accepted: { id: Schema.String, amendedBy: Schema.Array(Schema.String) },
+  accepted: { id: Schema.String },
   superseded: { id: Schema.String, by: Schema.Array(Schema.String) },
   other: { id: Schema.String, status: Schema.String },
   absent: { id: Schema.String },
@@ -404,7 +416,7 @@ export const Resolution = Schema.TaggedUnion({
 export type Resolution = typeof Resolution.Type;
 
 /**
- * Follows `superseded by` links from one decision to the accepted decisions they end on. A link to
+ * Follows `successor` links from one decision to the accepted decision they end on. A link to
  * a decision that is not there, to one that is neither accepted nor superseded, or in a loop, is
  * broken: the answer says so and never guesses.
  */
@@ -452,7 +464,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
   };
 
   return Status.match(start, {
-    accepted: (s) => Resolution.cases.accepted.make({ id, amendedBy: s.amendedBy }),
+    accepted: () => Resolution.cases.accepted.make({ id }),
     other: (s) => Resolution.cases.other.make({ id, status: s.status }),
     superseded: (s) => {
       const reason = follow(id, s.by, new Set([id]));
@@ -598,7 +610,7 @@ export const find = (
       decision === undefined
         ? []
         : Status.match(decision.status, {
-            accepted: (s) => (s.amendedBy.length === 0 ? [] : [`amended by: ${Arr.join(s.amendedBy, ", ")}`]),
+            accepted: () => [],
             superseded: (s) => [`superseded by: ${Arr.join(s.by, ", ")}`],
             other: (s) => [`status: ${s.status}`],
           });
@@ -641,16 +653,7 @@ export const foundLines = (found: Found): ReadonlyArray<string> =>
 /** The line `resolve` prints for one decision. */
 export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string, string>): string =>
   Resolution.match(resolution, {
-    accepted: (r) =>
-      Arr.join(
-        [
-          r.id,
-          "accepted",
-          paths.get(r.id) ?? "",
-          ...(r.amendedBy.length === 0 ? [] : [`amended by: ${Arr.join(r.amendedBy, ", ")}`]),
-        ],
-        "  ",
-      ),
+    accepted: (r) => Arr.join([r.id, "accepted", paths.get(r.id) ?? ""], "  "),
     superseded: (r) =>
       Arr.join(
         [
