@@ -153,7 +153,7 @@ test, so a law patches the global with `vi.spyOn`. The opposite mistake is to mo
 
 ## Decision
 
-[Build on Effect](../docs/direction/build-on-effect.md): Effect's own modules first;: an existing tool before a
+[Build on Effect](../../docs/direction/build-on-effect.md): Effect's own modules first;: an existing tool before a
 hand-written one: no `vi` mock in a law. The
 typed digest through the `WebCrypto` reference is the merge session's ruling of 2026-11-15,
 recorded in the plan for ticket 1067's mock sweep of `gateway`, `processes` and `telemetry`.

@@ -19,7 +19,7 @@ price is a hole.
 
 Versions read: `effect` 4.1.2 (its `src/` ships in the package, with `AGENTS.md`, 433 lines, read in
 full), `@effect/platform-node-shared` 4.1.2, `@effect/sql-d1` 4.0.6, `@effect/tsgo` 0.63.0, oxlint
-1.90.0, and Effect-TS/effect-smol's own `AGENTS.md` and `.patterns/effect.md`, fetched with `gh api`
+1.90.0, and Effect-TS/effect-smol's own `AGENTS.md` and `.kalfa/patterns/effect.md`, fetched with `gh api`
 on 2026-11-11.
 
 **The answer.** Effect's team writes small named pieces. A long file is a shelf: many short exports,
@@ -151,7 +151,7 @@ each with its own edge comment (`platform.ts:20-25` and on), and every one fails
 |---|---|---|
 | [a1] | `node_modules/effect/AGENTS.md`, 4.1.2 | "Avoid functions that only wrap and return `Effect.gen`" (`:16-17`); errors are `Schema.TaggedError`, with `cause: Schema.Defect()` (`:166-168`); "**AVOID using predicates or manual parsing**" (`:114`); "**NEVER** write your own helper functions like `isRecord`" (`:321-322`); use `DateTime`, not `Date` (`:290`); a service id holds "the package name and the subdirectory path" (`:142-144`); a static layer on the service (`:146-148`) |
 | [a2] | effect-smol `AGENTS.md` (fetched) | "Prefer existing abstractions and conventions over introducing new ones"; "Do not use `async` / `await` or `try` / `catch`"; "Do not use `Date.now` or `new Date`" |
-| [a3] | effect-smol `.patterns/effect.md` (fetched) | "Always use `return yield*` when yielding terminal effects"; "Prefer `Effect.fnUntraced` over functions that only return `Effect.gen`"; class syntax for `Context.Service` |
+| [a3] | effect-smol `.kalfa/patterns/effect.md` (fetched) | "Always use `return yield*` when yielding terminal effects"; "Prefer `Effect.fnUntraced` over functions that only return `Effect.gen`"; class syntax for `Context.Service` |
 | [a4] | `@effect/tsgo` 0.63.0 `README.md` and `schema.json` | 135 checks in five groups (correctness, anti-pattern, Effect-native, style, maintainers) and seven oxlint presets |
 | [a5] | the checker run (step 6 below) | Effect's own repo blocks on none of these checks and keeps its docs rule, `effect/jsdocs`, private |
 
@@ -434,7 +434,7 @@ are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as ab
   the versions above.
 - [a1] `node_modules/effect/AGENTS.md`, 4.1.2.
 - [a2] [Effect-TS/effect-smol `AGENTS.md`](https://github.com/Effect-TS/effect-smol/blob/main/AGENTS.md).
-- [a3] [Effect-TS/effect-smol `.patterns/effect.md`](https://github.com/Effect-TS/effect-smol/blob/main/.patterns/effect.md).
+- [a3] [Effect-TS/effect-smol `.kalfa/patterns/effect.md`](https://github.com/Effect-TS/effect-smol/blob/main/.kalfa/patterns/effect.md).
 - [a4] `@effect/tsgo` 0.63.0, its `README.md` and `schema.json` in the installed package;
   [Effect-TS/tsgo](https://github.com/Effect-TS/tsgo).
 - [m1] [Elm guide, Structuring Web Apps](https://guide.elm-lang.org/webapps/structure.html).

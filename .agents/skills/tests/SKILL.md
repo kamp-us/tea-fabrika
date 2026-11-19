@@ -25,7 +25,7 @@ this skill for the law. The reviewer reads that law on its recheck.
 1. **Look around first.** Read `AGENTS.md` whole, `next/AGENTS.md` for `next/` work, the approved
    plan whole (an amendment section overrides the body where they differ), then the code and rows
    it points to. Open the neighbors of each test file you will write (the suites, drivers and
-   test-support beside it) and `.patterns/` for a law, a suite and a test layer, so your laws read
+   test-support beside it) and `.kalfa/patterns/` for a law, a suite and a test layer, so your laws read
    like theirs. Read `node_modules/effect/AGENTS.md` before you write Effect code. Say which
    version you are in: `next/` or today's.
 2. **Write each law and plant a break for it once.** Every law uses generated inputs on the real

@@ -291,7 +291,7 @@ the Electron client and recovery with both windows.
 
 *2026-11-12:* ticket 893 slice 1 in `next/` saves process view watchers across object sleep
 and removes a watch on publish after its Project route leaves. Unknown delivery failures retain
-membership. [The storage pattern](../../.patterns/durable-objects-sleep.md). This finishes no
+membership. [The storage pattern](../../.kalfa/patterns/durable-objects-sleep.md). This finishes no
 Tier 1 row; the count stays 21 of 44. P14's first-window quest next brings this fix into its branch
 and proves a real press after idle updates the window without reload. Socket absence checking is
 slice 2 and remains separate.
@@ -355,7 +355,7 @@ and 79 kept modules, matching the approved plan's sketch.
 *2026-11-12:* P38's slice 3 is cut in three on tracker ticket 753. Slice 3a in `next/` is
 [PR 1039](https://github.com/usirin/tea-fabrika/pull/1039): a settings file and the saved snapshot
 take their encodings from the one declaration, and a snapshot is read back strictly, with its hash
-checked ([the pattern](../../.patterns/settings.md)). It adds no setting and starts no Worker read.
+checked ([the pattern](../../.kalfa/patterns/settings.md)). It adds no setting and starts no Worker read.
 It finishes no Tier 1 row, so the count stays 20. Slice 3b comes next: the Worker handoff, the start
 record and the first byte setting, `limits.record`. Slice 3c adds the remaining declarations. P38
 stays open until its whole settings stack lands

@@ -83,7 +83,7 @@ outcomes".
 
 ## 2. Sweep: which feature and role each file is
 
-The vocabulary came from `next/`'s own words in `.glossary/TERMS.md`, the Runtime, Ledger and
+The vocabulary came from `next/`'s own words in `.kalfa/glossary/GLOSSARY-MAP.md`, the Runtime, Ledger and
 Clients sections: `ledger`, `records`, `processes`, `supervision`, `grants`, `door`, `gateway`,
 `programs`, `brain`, `host`, `build`, `exam`. The roles stayed the tool's five defaults. A 5-file
 try came back right, then all 91 files under `next/packages/libfabrika` and `next/apps/fabrika`

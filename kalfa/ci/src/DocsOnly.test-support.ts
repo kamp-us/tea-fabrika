@@ -105,7 +105,7 @@ export const TABLE: readonly Row[] = [
     adminDocs: false,
   },
   // Markdown outside the admin merge's folders is docs for CI, and no admin docs.
-  { pr: ".patterns/x.md", paths: [".patterns/x.md"], docsOnly: true, adminDocs: false },
+  { pr: ".kalfa/patterns/x.md", paths: [".kalfa/patterns/x.md"], docsOnly: true, adminDocs: false },
   // Pull request 1671, an experiment's write-up alone, on 2026-11-19. It is docs only, so it is armed, but
   // not admin docs: a tool reads its frontmatter, and the lead ruled it lands through the queue.
   {

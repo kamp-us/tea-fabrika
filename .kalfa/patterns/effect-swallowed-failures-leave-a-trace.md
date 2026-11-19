@@ -54,7 +54,7 @@ Rules:
   failed stop into a defect that hides the stop's own error. Record it and go on
   (`Effect.catchCause(Effect.logWarning)` or the span form above).
 - **Every traced function is `Effect.fn("piece.verb")`,** so the record has a span to sit on
-  ([effect-fn for traced functions](../docs/direction/effect-fn-for-traced-functions.md)).
+  ([effect-fn for traced functions](../../docs/direction/effect-fn-for-traced-functions.md)).
 - **The record keeps content rules.** An error's message rides in the span's failure, never in a tag
   (`next/packages/libfabrika/src/ledger/Ledger.ts:15`).
 
@@ -99,10 +99,10 @@ nothing anywhere says so.
 ## Decision
 
 0024: `next/` records with spans plus log lines;
-[a function that returns an Effect is written with `Effect.fn`](../docs/direction/effect-fn-for-traced-functions.md);
+[a function that returns an Effect is written with `Effect.fn`](../../docs/direction/effect-fn-for-traced-functions.md);
 the owner's "record wide, read later" (AGENTS.md). Credit: kamp-us/phoenix's
-[backend-exception-translation.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/backend-exception-translation.md)
+[backend-exception-translation.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/backend-exception-translation.md)
 ("a swallowed refusal still logs its cause") and its live publisher's
-`Effect.ignore({log: "Warn"})` in [effect-context-service.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-context-service.md).
+`Effect.ignore({log: "Warn"})` in [effect-context-service.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-context-service.md).
 
 > Derived from `effect@4.1.2`; re-verify on pin bump.

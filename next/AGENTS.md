@@ -60,7 +60,7 @@ has nothing, marked as an edge with its reason.
 - **Every state machine is explicit**.
 - **Every state machine is a tea machine**.
 - **A tagged value is matched, never compared by hand,** in an `update` handler too
-  ([the pattern](../.patterns/effect-tagged-value-is-matched.md)).
+  ([the pattern](../.kalfa/patterns/effect-tagged-value-is-matched.md)).
 
 ## Words
 

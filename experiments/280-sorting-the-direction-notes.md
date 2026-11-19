@@ -1,7 +1,7 @@
 ---
 date: "2026-11-11"
 scripts: "none; reading, nothing ran"
-summary: "Both versions' notes under `docs/direction/`, at `67864f7bf`, after 0115's move; step 2 of 0130. Of 151 notes, 114 can go with no owner call: 21 delete now, 34 fold into an existing decision, 44 need their missed rules written first, 6 become experiments, 3 patterns, 6 go to the private archive. 37 need the owner, as 18 yes/no questions, among them 5 long notes whose reasoning fits no short decision file. The 0115 move missed 258 rule flags in 62 notes. `follows/`'s four files stay apart under 0017; the lean is `.patterns/follows/`. Agent time only, $0; tokens not recorded."
+summary: "Both versions' notes under `docs/direction/`, at `67864f7bf`, after 0115's move; step 2 of 0130. Of 151 notes, 114 can go with no owner call: 21 delete now, 34 fold into an existing decision, 44 need their missed rules written first, 6 become experiments, 3 patterns, 6 go to the private archive. 37 need the owner, as 18 yes/no questions, among them 5 long notes whose reasoning fits no short decision file. The 0115 move missed 258 rule flags in 62 notes. `follows/`'s four files stay apart under 0017; the lean is `.kalfa/patterns/follows/`. Agent time only, $0; tokens not recorded."
 ---
 
 # 280. Sorting the direction notes: what kind each one is, and where it goes
@@ -121,7 +121,7 @@ Each is one yes/no. The lean, why, cost and confidence follow.
 17. **`one-parent-stages-as-slots`: is only "the pipeline is one parent, with the steps as its
     children" decided, and the slot bullets history?** Lean: yes. Why: the 2026-10-22 line names
     only the idea. Cost: one short decision file; the rest is archived. Confidence: 70%.
-18. **`follows/`: move the four files to `.patterns/follows/` and amend 0017's path, keeping its
+18. **`follows/`: move the four files to `.kalfa/patterns/follows/` and amend 0017's path, keeping its
     one-row-per-behavior rule?** Lean: yes. Why: 0130 removes `docs/direction/` but names no new
     home, a table of our code against a model is "how the code is shaped now", and 0130 says the
     move changes no rule, so the path change needs the amendment. Cost: 0017's amendment, about 10
@@ -134,7 +134,7 @@ Each is one yes/no. The lean, why, cost and confidence follow.
 - **Kind** is 0130's: `reasoning` (decided rules moved, reasoning left), `study` (an experiment),
   `shape` (a pattern), `guide` (a how-to or guideline), `history` (the archive), `proposed`.
 - **Links in** counts files that link the note, from a `rg` of its file name: AG for AGENTS.md, DEC
-  `.decisions/`, PAT `.patterns/`, AGT the skills, PLAN `docs/plan/`, CODE code files, DIR other
+  `.decisions/`, PAT `.kalfa/patterns/`, AGT the skills, PLAN `docs/plan/`, CODE code files, DIR other
   notes, OTH experiments, `field/`, the glossary and other docs. A zero is left out.
 - **Missed** means a decided rule in the note that no decision file holds. A reader flagged it
   with its line number. The list is at the end.
@@ -287,7 +287,7 @@ How the code is shaped now. `effect-code-guidelines` and `new-combos` also hold 
 |---|---|---|---|---|---|
 | `effect-code-guidelines` | guide | 0120, 0118, 0119; patterns for E1, E2, E3, E5, E6, E8 | E4 and E7 before/after blocks (no imports-and-ids pattern); "Smaller calls"; fix order; cost table. MISSED, below | DEC 1, OTH 3 | pattern: `effect-imports-and-ids.md` (E7), E4 into `effect-state-and-time`; smaller calls folded into 0120 |
 | `new-combos` | shape | none; 0079 answers one open point | The six combos (Rate, Controls, Brief, Poll, ask grown, guarded files grown) and their sketches, built in `packages/pipeline/src/`. Open: ratings before blocking, Poll's clock | DEC 1, CODE 5, DIR 2, OTH 1 | pattern: `pipeline-combos` (today's version); the four missed rules fold into a new decision; then delete |
-| `the-frame` | shape | 0490, 0491, 0492, 0493, glossary Frame section | The four part tables: 50 parts, each with industry word, source link and today's `file:line`. "Nobody decides these yet" (12 part words, proposed). Open: is a popover footer pressable; `%3` vs tmux pane ids. | DEC 6, PLAN 1, DIR 5, OTH 1 | pattern: `.patterns/frame-parts.md`, today's app frame mapped to code, diagram first. The 12 proposed words go to the glossary's open clashes. |
+| `the-frame` | shape | 0490, 0491, 0492, 0493, glossary Frame section | The four part tables: 50 parts, each with industry word, source link and today's `file:line`. "Nobody decides these yet" (12 part words, proposed). Open: is a popover footer pressable; `%3` vs tmux pane ids. | DEC 6, PLAN 1, DIR 5, OTH 1 | pattern: `.kalfa/patterns/frame-parts.md`, today's app frame mapped to code, diagram first. The 12 proposed words go to the glossary's open clashes. |
 
 ### Goes to the private archive (6)
 
@@ -365,10 +365,10 @@ History nothing builds from. Their decided parts, if any, are already in decisio
 
 | Note | Kind | Rules held in | Left that nothing holds | Links in | Move |
 |---|---|---|---|---|---|
-| `follows/README` | shape | 0017 (the table rule, the four columns, the not-yet-decided DDD, Linear, tmux and i3 tables) | The index table's row counts, which are stale: it says Kubernetes 11 rows and 10 differ, and the file says 13 and 12 | AG 1, DEC 2, PLAN 0, PAT 0, AGT 1, CODE 0, DIR 1, OTH 1 | owner: lean `.patterns/follows/README.md`, with the counts fixed and 0017's path amended |
-| `follows/elm` | shape | 0017 (the shape); each row cites its own decision or `path:line` | The 12-row table itself, a living comparison against code at `5b1171ed` | AG 0, DEC 1, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.patterns/follows/elm.md`, after the owner's yes on the README row |
-| `follows/kubernetes` | shape | 0017 | The 13-row table; its "Coming: 0016" line | AG 0, DEC 2, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.patterns/follows/kubernetes.md`, after the owner's yes |
-| `follows/otp` | shape | 0017; rows draw on experiment 239 | The 28-row table; its "Coming: 0016" line | AG 0, DEC 6, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 2, OTH 1 | pattern: `.patterns/follows/otp.md`, after the owner's yes |
+| `follows/README` | shape | 0017 (the table rule, the four columns, the not-yet-decided DDD, Linear, tmux and i3 tables) | The index table's row counts, which are stale: it says Kubernetes 11 rows and 10 differ, and the file says 13 and 12 | AG 1, DEC 2, PLAN 0, PAT 0, AGT 1, CODE 0, DIR 1, OTH 1 | owner: lean `.kalfa/patterns/follows/README.md`, with the counts fixed and 0017's path amended |
+| `follows/elm` | shape | 0017 (the shape); each row cites its own decision or `path:line` | The 12-row table itself, a living comparison against code at `5b1171ed` | AG 0, DEC 1, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.kalfa/patterns/follows/elm.md`, after the owner's yes on the README row |
+| `follows/kubernetes` | shape | 0017 | The 13-row table; its "Coming: 0016" line | AG 0, DEC 2, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.kalfa/patterns/follows/kubernetes.md`, after the owner's yes |
+| `follows/otp` | shape | 0017; rows draw on experiment 239 | The 28-row table; its "Coming: 0016" line | AG 0, DEC 6, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 2, OTH 1 | pattern: `.kalfa/patterns/follows/otp.md`, after the owner's yes |
 
 ## The order to remove them in
 

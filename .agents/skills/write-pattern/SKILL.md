@@ -1,43 +1,43 @@
 ---
 name: write-pattern
-description: Write or re-ground one `.patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
+description: Write or re-ground one `.kalfa/patterns/<name>.md` doc, the record of how the code is shaped now. Use on "write a pattern doc" or "the patterns drifted", and whenever a shape you relied on is undocumented or a pattern doc you trusted is wrong. Not for why a choice was made (the adr skill) or what a word means (the glossary).
 ---
 
 # write-pattern
 
-`.patterns/` says **how the code is shaped now**. A decision that describes an old world is
+`.kalfa/patterns/` says **how the code is shaped now**. A decision that describes an old world is
 history doing its job. A pattern doc that describes an old world is a trap. So the whole skill is
 one question asked twice: is this true of the source right now, and will a reader who cannot check
 still be right tomorrow?
 
 It is the code-level sibling of the [guidelines skill](../guidelines/SKILL.md), which covers product
-design. You edit one path and nothing else: `.patterns/<name>.md`. You only read the code you
+design. You edit one path and nothing else: `.kalfa/patterns/<name>.md`. You only read the code you
 describe.
 
 ```mermaid
 flowchart TD
-  start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .patterns/ own it?"}
+  start["a shape you relied on, or a doc that looks wrong"] --> owns{"does .kalfa/patterns/ own it?"}
   owns -- "it is a why" --> routed["routed: .kalfa/decisions/ via the adr skill"]
-  owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .glossary/TERMS.md"]
+  owns -- "it is a word" --> routedWord["routed: the context's GLOSSARY.md, found in .kalfa/glossary/GLOSSARY-MAP.md"]
   owns -- "it is a measurement" --> routedExp["routed: experiments/"]
-  owns -- "it is a shape" --> bar{"clears the bar in .patterns/README.md?"}
+  owns -- "it is a shape" --> bar{"clears the bar in .kalfa/patterns/README.md?"}
   bar -- no --> declined["declined: write nothing"]
   bar -- yes --> exists{"a doc already covers it?"}
   exists -- yes --> reground["re-ground that doc against the source"]
-  exists -- no --> write["write .patterns/name.md"]
+  exists -- no --> write["write .kalfa/patterns/name.md"]
   reground --> register["its frontmatter: where and when"]
   write --> register
 ```
 
-## 1. Check that `.patterns/` owns it
+## 1. Check that `.kalfa/patterns/` owns it
 
 Four places sit next to each other, and material often arrives in the wrong one's clothes:
 
 | Place | Holds |
 |---|---|
-| `.patterns/` | how the code is shaped now |
+| `.kalfa/patterns/` | how the code is shaped now |
 | `.kalfa/decisions/` and `docs/direction/` | why, and its history |
-| `.glossary/TERMS.md` and each context's `GLOSSARY.md` | what a word means |
+| `.kalfa/glossary/GLOSSARY-MAP.md` and each context's `GLOSSARY.md` | what a word means |
 | `experiments/` and `field/` | what was measured, on a date |
 
 The mix-up that really happens is **the why**. A pattern doc that argues why a choice was made has
@@ -60,7 +60,7 @@ decision's reason as "below the bar", which is true and answers the wrong questi
 
 Most material that feels like a pattern is not one. **Declining is the most useful thing this skill
 does**: a corpus grows by adding, and nobody removes a doc. The bar lives in
-[`.patterns/README.md`](../../../.patterns/README.md#when-to-add-a-doc). Apply it as written, and
+[`.kalfa/patterns/README.md`](../../../.kalfa/patterns/README.md#when-to-add-a-doc). Apply it as written, and
 soften nothing. In short, there are two ways in:
 
 - **A shape in use:** real source and tests here show a reusable shape and where it stops. No
@@ -75,7 +75,7 @@ are below the bar. Writing nothing is a correct result.
 ## 3. Read the library before you add to it
 
 ```sh
-rg -n '^(where|when):' .patterns
+rg -n '^(where|when):' .kalfa/patterns
 ```
 
 It prints each doc's `where` and `when` from its own frontmatter. A doc with no `where` or no `when` is a doc nobody will find. Fix it in step 6.
@@ -91,7 +91,7 @@ Skip this for a new doc. An existing doc goes stale in two ways, and only one sh
 repo path in it is a cited path (drop a `:line` suffix). List what touched them since:
 
 ```sh
-doc=.patterns/act-keeps-its-intent.md
+doc=.kalfa/patterns/act-keeps-its-intent.md
 anchor=$(git log -1 --format=%H origin/main -- "$doc")
 paths=$(rg -o '`[a-z.][^` ]*/[^` ]*`' "$doc" | tr -d '`' | sed 's/:[0-9-]*$//' | sort -u)
 git log --oneline "$anchor"..origin/main -- $paths

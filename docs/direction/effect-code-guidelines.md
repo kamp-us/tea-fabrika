@@ -138,7 +138,7 @@ export const recordStub = (env: Env, project: string, name: string) =>
 - **Why.** Effect's guide: "**NEVER** write your own helper functions like `isRecord` or
   `isString`" (`node_modules/effect/AGENTS.md:321`). kamp-us/phoenix writes every Durable Object
   with Effect-returning methods and calls it through Alchemy's stub
-  ([its pattern doc](https://github.com/kamp-us/phoenix/blob/main/.patterns/alchemy-durable-objects.md)).
+  ([its pattern doc](https://github.com/kamp-us/phoenix/blob/main/.kalfa/patterns/alchemy-durable-objects.md)).
 - **Effect's team as the builder.** They would delete `Patch.ts` for `JsonPatch.get`
   (`effect/src/JsonPatch.ts:184`) and move the 7 hand WebCrypto edges to `effect/crypto`.
 - **Elm or OTP.** OTP reaches for its standard library (`crypto`, `gen_*`) before a hand module.

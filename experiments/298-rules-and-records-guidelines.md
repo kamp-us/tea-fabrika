@@ -8,11 +8,11 @@ summary: "Our tooling and the records of both versions; $0. Where should a rule 
 
 Read on 2026-11-17, on `origin/main` at `ad93a08fb`. This is reading, not a measurement: nothing
 ran but `wc`, `rg`, `git`, `records.ts` and two small counting scripts. No model, no key, **$0**.
-It feeds the proposed page [rules and records](../docs/guidelines/rules-and-records.md). This area
+It feeds the proposed page [rules and records](../.kalfa/guidelines/rules-and-records.md). This area
 has no screen, so there is no Design canvas, no designs and no shots: step 5 and step 9 of the
 guidelines skill were left out on purpose, and each principle is shown against three real records
 instead. It covers today's tooling and the records both versions read (`.decisions/`, `AGENTS.md`,
-skills, `.patterns/`, `.glossary/`, checks and settings), not product code.
+skills, `.kalfa/patterns/`, `.kalfa/glossary/`, checks and settings), not product code.
 
 **The answer: a rule lives once, in the thing that holds it, and is edited there. A decision record
 keeps why the owner ruled, links that home, and is never patched by another record.** Every maker
@@ -40,7 +40,7 @@ was not tested here.
   `.github/ci/workflow-lint/issues.ts` hold what 0534 says, with the record numbers as their why.
   The record is the stale copy, not the code.
 - **The skill this study follows has a live case.** The guidelines skill's step 8 says to add an
-  index row to `docs/guidelines/README.md`
+  index row to `.kalfa/guidelines/README.md`
   says no folder keeps an index table. This study follows 0522.
 
 ```text
@@ -164,7 +164,7 @@ search must find homes too.
   the map's size (0129 and 0180 left it open).
 - **Open pull requests on the area:** [PR 1305](https://github.com/kamp-us/tea-fabrika/pull/1305)
   (modules guidelines) and [PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254) (fabsh
-  guidelines) each add `docs/guidelines/README.md`; this study adds the same text as PR 1305's, so
+  guidelines) each add `.kalfa/guidelines/README.md`; this study adds the same text as PR 1305's, so
   the three merge without a conflict. [PR 1504](https://github.com/kamp-us/tea-fabrika/pull/1504)
   moves the exam's code-shape checks into lint, the direction of R3.
 
@@ -184,8 +184,8 @@ amended in part; main moved since. Each line is one command or one counting scri
 | amended records patched by a superseded record | 3, by 4 links: 0012 by 0596, 0032 by 0034, 0049 by 0097 and 0146 | the same |
 | records patched by 2 or more others | 33; the most, 0023, by 7 | the same |
 | longest titles | 61 words, 52 | the `title:` line |
-| links to a superseded record | 1 in `docs/plan/README.md`, 23 from other records, 0 in AGENTS.md, skills, `.patterns/` | `rg` over each folder |
-| links that land on an amended record | AGENTS.md 25 of 56, `next/AGENTS.md` 10 of 18, skills 77 of 147, `.patterns/` 21 of 39, plan 284 of 621 | the same |
+| links to a superseded record | 1 in `docs/plan/README.md`, 23 from other records, 0 in AGENTS.md, skills, `.kalfa/patterns/` | `rg` over each folder |
+| links that land on an amended record | AGENTS.md 25 of 56, `next/AGENTS.md` 10 of 18, skills 77 of 147, `.kalfa/patterns/` 21 of 39, plan 284 of 621 | the same |
 | root `AGENTS.md` | 480 lines, 39,103 bytes; with `next/AGENTS.md`, 49,516 | `wc -lc` |
 
 A link to an amended record is a link to half a rule: the reader must also open each record named
@@ -278,7 +278,7 @@ Against the three records:
   of 15,057 machine-minutes, and the call that the merge line never runs the full suite.
 - **0023:** format values move nowhere, since `.oxfmtrc.json` already holds them; the "follow"
   rows (`no-console`, `array-type`, inline type imports) become lint rules from a trusted set
- or tickets; each kept difference's reason goes beside its code as `.patterns/effect-differences-say-why.md`
+ or tickets; each kept difference's reason goes beside its code as `.kalfa/patterns/effect-differences-say-why.md`
   already says. The record shrinks to its why: code in `next/` reads like Effect's for a reader who
   knows Effect, and each difference says why where it is.
 - **0129:** the three moves already sit at the top of AGENTS.md ("A rule lives where it is read");
@@ -419,7 +419,7 @@ Against the three records:
 - **0534:** `scheduled.yaml` and `issues.ts` cite 0534 as their why; after R1 that link lands on a
   true page. Today it lands on a title that says "every 3 hours".
 - **0023:** AGENTS.md says "0023 lists the differences"; the list it lands on is stale. After R1
-  the link goes to `.patterns/effect-differences-say-why.md`.
+  the link goes to `.kalfa/patterns/effect-differences-say-why.md`.
 - **0129:** AGENTS.md's first lines cite 0129 as the why of the map; that is a why link and stays.
 
 ### R6: the map every agent reads fits its readers' limits
@@ -517,7 +517,7 @@ seen"; R8 adds that the second miss gets a check.
    ```
 2. **No word cap on records.** Nygard's "one or two pages" `[d1]` goes in the adr skill as advice;
    no check counts words. The other team's cap shows why. Lean, 85%.
-3. **Search finds homes.** `records.ts find` covers records, `.patterns/` and `.runbooks/`; once
+3. **Search finds homes.** `records.ts find` covers records, `.kalfa/patterns/` and `.kalfa/runbooks/`; once
    rules live in skills and AGENTS.md, it should rank those too. Lean, 75%.
 4. **A rule with no home yet stays in its record, edited in place,** not a new folder of topic
    pages as the other team made. One fewer kind of file. Lean, 65%; the doubt is that a record then

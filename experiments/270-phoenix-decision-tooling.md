@@ -94,7 +94,7 @@ Phoenix still misses decisions, in the same ways we do:
 - [kamp-us/phoenix#7483](https://github.com/kamp-us/phoenix/issues/7483) (open): a ruling that
   dropped invite-only was made on an issue comment; no ADR recorded it, and two accepted ADRs still
   describe invite-only as live. A ruling outside the corpus is invisible to every tool.
-- [kamp-us/phoenix#3172](https://github.com/kamp-us/phoenix/issues/3172) (closed): a `.patterns/`
+- [kamp-us/phoenix#3172](https://github.com/kamp-us/phoenix/issues/3172) (closed): a `.kalfa/patterns/`
   doc repeated a claim that an earlier ADR had corrected. A doc outside `.decisions/` drifted from it.
 - [kamp-us/phoenix#3980](https://github.com/kamp-us/phoenix/issues/3980) (closed): two live cases
   in one session of a new ADR contradicting an accepted one; this is what produced `adr sweep`.
@@ -126,7 +126,7 @@ what a person typed.
 | (Not phoenix) corpus coverage | n/a | Move the decided rules of direction notes into decision files, as 0001 says ("Old decisions are not copied in yet", `0001:37`). On 2026-11-11, 133 of our 149 direction notes said "decided" in their first lines, and 73 of those were linked from no decision file. | **Yes, steadily, one decision per pull request.** No tool finds a rule that lives only in a long note. 85%. |
 
 One more gap found on the way: a search tool the lead used outside the repo searched `docs`,
-`experiments`, `field`, `.glossary` and `AGENTS.md`, but **not `.decisions/`**, and step agents in a
+`experiments`, `field`, `.kalfa/glossary` and `AGENTS.md`, but **not `.decisions/`**, and step agents in a
 box could not run it at all.
 
 What happened next, on main: 0115 took the corpus row (decided rules move into decision files,

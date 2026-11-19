@@ -6,9 +6,9 @@ reasoning, the leans, the Linear rows and the smaller calls stay in the experime
 links it.
 
 ```text
-text area     docs/guidelines/<area>.md
-visual area   docs/guidelines/<area>/README.md       the page
-              docs/guidelines/<area>/shots/          real shots from the built app
+text area     .kalfa/guidelines/<area>.md
+visual area   .kalfa/guidelines/<area>/README.md       the page
+              .kalfa/guidelines/<area>/shots/          real shots from the built app
                 <state>.<layout>.<look>.png
 ```
 

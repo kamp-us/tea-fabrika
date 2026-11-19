@@ -8,7 +8,7 @@ summary: "A thing with a proper name in the industry keeps it; an obscure one ge
 **Decided, in pieces:**
 
 - The rule: decided 2026-10-18, below.
-- The glossary: reset on 2026-11-18. The map is [`.glossary/TERMS.md`](../../.glossary/TERMS.md);
+- The glossary: reset on 2026-11-18. The map is [`.kalfa/glossary/GLOSSARY-MAP.md`](../../.kalfa/glossary/GLOSSARY-MAP.md);
   each context's terms live in its own `GLOSSARY.md`, with an `_Avoid_` line.
 - The sweep's picks: made 2026-10-24 and 2026-10-28 (the naming sweep).
 - The two-domains rule: replaced 2026-11-03 by [we follow DDD](./we-follow-ddd.md).

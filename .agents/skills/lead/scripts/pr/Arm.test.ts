@@ -258,7 +258,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         expect(Arm.line(yield* arm(stale))).toBe(
           `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
-        const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".glossary/TERMS.md"] }, red);
+        const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".kalfa/glossary/GLOSSARY-MAP.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
           `pr 1092: no full run at ${head}; arming as 0544 allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
         );

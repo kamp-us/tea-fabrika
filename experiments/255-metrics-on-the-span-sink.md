@@ -37,7 +37,7 @@ yield* sink.sums("lane.step", from, to); // SumPoint[], oldest first, then by ou
 
 Four files, all in `next/packages/libfabrika/src/telemetry/`:
 
-- `Trace.ts`: `OUTCOME = "fab.outcome"`, `Outcome` (the five verbs from `.glossary/TERMS.md`,
+- `Trace.ts`: `OUTCOME = "fab.outcome"`, `Outcome` (the five verbs from `.kalfa/glossary/GLOSSARY-MAP.md`,
   "outcome"), `MeasuredOutcome` (a verb, `other`, or null), an `outcome` field on `Measurements`, and
   `SumPoint`, OpenTelemetry's sum point (delta, monotonic) with one attribute.
 - `internal/measurements.ts`: an `outcome` column, a `sums` table keyed by piece, hour and outcome,

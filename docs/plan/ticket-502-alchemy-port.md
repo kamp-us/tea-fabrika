@@ -465,7 +465,7 @@ write-up to main; its code stays on its branch.
 | `next/packages/libfabrika/src/node/dev/dev.ts` `next/packages/libfabrika/src/node/dev/dev-recording.ts` | build | S4, S7 | 30 | the Node doubles follow the Effect contracts; the control binding names no entrypoint |
 | `next/packages/libfabrika/src/node/build/build.ts` `next/apps/fabrika/src/build.ts` | build | S8 | 80 | the brain phase hands its plugins to Alchemy's bundler |
 | `node-kinds.json` | build | S1, S2, S3, S8 | 4 | names each bridge export; the row goes with `brain.ts` |
-| `.glossary/TERMS.md` `.patterns/effect-services-and-layers.md` `.patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `object classes are effect objects` `.kalfa/decisions/0018-cloudflare-only-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
+| `.kalfa/glossary/GLOSSARY-MAP.md` `.kalfa/patterns/effect-services-and-layers.md` `.kalfa/patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `object classes are effect objects` `.kalfa/decisions/0018-cloudflare-only-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
 
 No screenshots: no window changes.
 

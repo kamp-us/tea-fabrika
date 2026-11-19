@@ -107,7 +107,7 @@ corners: `typeof x === "object" && x !== null` is true for an array, `Predicate.
 
 ## Decision
 
-[Build on Effect](../docs/direction/build-on-effect.md): Effect's own modules and shapes first;: an existing tool before a
+[Build on Effect](../../docs/direction/build-on-effect.md): Effect's own modules and shapes first;: an existing tool before a
 hand-written one.
 
 > Derived from `effect@4.1.2`; re-verify on pin bump. Every row's line and stability is re-read on a

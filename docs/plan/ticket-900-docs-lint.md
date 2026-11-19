@@ -53,7 +53,7 @@ export class RecordedStart extends Context.Service</* ... */>()("...") {} // fir
 ## How others do it
 
 Existing tools first. Our
-shape is in [the doc comments pattern](../../.patterns/doc-comments.md): a module block, one
+shape is in [the doc comments pattern](../../.kalfa/patterns/doc-comments.md): a module block, one
 description paragraph, three optional sections in order, `**Example** (Title)` sections, tags in
 a fixed order with `@stability` and `@category`, no `@since` yet, and `@internal` in `internal/`
 files.
@@ -363,7 +363,7 @@ change comments in product files, so the build step writes them. The lead alone 
 | `oxlint-plugins/README.md` | tests | 1 | docs | the rule, the tools looked at, the first-day count by module |
 | `.oxlintrc.json` | tests | 1 | 20 | the two blocks in The shape |
 | `next-ledger.json` | lead | 1 to 9 | 4200 | slice 1: the 833 entries, written by one whole-repo lint run, after the owner's yes. Slices 2 to 9: only as `pnpm lint` pruned it |
-| `.patterns/doc-comments.md` | build | 1 | docs | "What can hold it" becomes what holds it |
+| `.kalfa/patterns/doc-comments.md` | build | 1 | docs | "What can hold it" becomes what holds it |
 | `docs/direction/effect-code-guidelines.md` | build | 1 | docs | E6: the measured counts beside the guess, which stays, marked wrong |
 | `next/packages/libfabrika/src/runtime/Runner.ts` `next/packages/libfabrika/src/gateway/Gateway.ts` `next/packages/libfabrika/src/cloudflare/runtime.ts` | build | 2 | 215 | doc blocks only |
 | `next/packages/libfabrika/src/presence/` `next/packages/libfabrika/src/schedules/` `next/packages/libfabrika/src/gateway/` `next/packages/libfabrika/src/repositories/` `next/packages/libfabrika/src/packs/` `next/packages/libfabrika/src/jobs/` | build | 3 | 390 | doc blocks only |

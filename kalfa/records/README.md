@@ -22,7 +22,7 @@ command.
 | Check | What it finds |
 |---|---|
 | `map` (advice) | A tracked `AGENTS.md`, the root or one folder down, with more than 200 lines. The 200 is `maxLines` in `MapSize.ts`: Claude Code's memory guide says to keep each file "under 200 lines per file" ([memory](https://code.claude.com/docs/en/memory)). Lines count as `wc -l` counts them. A constant, not a setting. |
-| `runbook` | Runs only by its name, and `pnpm lint` runs it: each tracked `.runbooks/*.md` has a `summary`, each `.runbooks/sev-*.md` has the level-two headings Trigger, Roles, Steps, Exit and Comms, and `.agents/skills/sev/SKILL.md` links every sev runbook and none that is not there. |
+| `runbook` | Runs only by its name, and `pnpm lint` runs it: each tracked `.kalfa/runbooks/*.md` has a `summary`, each `.kalfa/runbooks/sev-*.md` has the level-two headings Trigger, Roles, Steps, Exit and Comms, and `.agents/skills/sev/SKILL.md` links every sev runbook and none that is not there. |
 
 Markdown is read by micromark into mdast (`mdast-util-from-markdown` with GitHub's tables), so a
 link's text may wrap and a table cell is its own block.

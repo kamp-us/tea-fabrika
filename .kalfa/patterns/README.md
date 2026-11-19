@@ -3,13 +3,13 @@
 How the code is shaped now, one doc per shape. Each doc opens with a Mermaid diagram of the
 mechanism, then one small real code block, then the words, and it points at real files with
 `path:line`. Write or re-ground
-one with the [write-pattern skill](../.agents/skills/write-pattern/SKILL.md).
+one with the [write-pattern skill](../../.agents/skills/write-pattern/SKILL.md).
 
 ```mermaid
 flowchart LR
-  shape["a code shape agents rely on"] --> patterns[".patterns/name.md"]
+  shape["a code shape agents rely on"] --> patterns[".kalfa/patterns/name.md"]
   why["why it was chosen"] --> decisions[".kalfa/decisions/NNNN-slug.md"]
-  word["what a word means"] --> glossary[".glossary/TERMS.md, then GLOSSARY.md"]
+  word["what a word means"] --> glossary[".kalfa/glossary/GLOSSARY-MAP.md, then GLOSSARY.md"]
   measured["what was measured"] --> experiments["experiments/NN-title.md"]
 ```
 
@@ -47,5 +47,5 @@ when: "Adding a setting, or reading or writing a settings file"
 Each doc's `where` and `when` are in its frontmatter:
 
 ```sh
-rg -n '^(where|when):' .patterns
+rg -n '^(where|when):' .kalfa/patterns
 ```

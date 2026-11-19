@@ -85,7 +85,7 @@ services in place.
 `it("...", async () => { await Effect.runPromise(...) })` is how every non-Effect codebase writes
 a test, and it passes. The difference only shows the day a law depends on time: it then sleeps for
 real, or passes on a fast laptop and fails on a slow CI runner (host law 30 in today's code did
-exactly that, [build on Effect](../docs/direction/build-on-effect.md), "The clock").
+exactly that, [build on Effect](../../docs/direction/build-on-effect.md), "The clock").
 
 ## Holds it
 
@@ -93,19 +93,19 @@ exactly that, [build on Effect](../docs/direction/build-on-effect.md), "The cloc
   but is off for tests (`.oxlintrc.json:375`). Turning it on for tests, after counting its false
   alarms, would hold the first rule. `fabrika/prefer-schema-arbitrary` blocks hand-built
   fast-check data in every folder at zero, and advises only where a folder's warn line says so
-  ([where a rule still advises](../oxlint-plugins/README.md#where-a-rule-still-advises)).
+  ([where a rule still advises](../../oxlint-plugins/README.md#where-a-rule-still-advises)).
 - vitest's own rules (`no-standalone-expect`, `valid-expect`, `expect-expect`) do not know
   `it.effect` and fire about 10 in 10 times falsely (lint audit, 2026-11-09), so they stay off.
 - Waiting on events, not durations: judgment only.
 
 ## Decision
 
-[Build on Effect](../docs/direction/build-on-effect.md); [no Promises](../docs/direction/no-promises.md).
+[Build on Effect](../../docs/direction/build-on-effect.md); [no Promises](../../docs/direction/no-promises.md).
 The same shape at scale: [clanka](https://github.com/Effectful-Tech/clanka/tree/44eb97a4eff8ae00bcf18750b387fe5a98cd191c)
 (Effect 4.1.1) has 197 `it.effect`, 18 `TestClock` and 1 `Effect.runPromise` in all its tests, and
 makes its temp folders with `fs.makeTempDirectoryScoped()` inside the test
 ([`AgentExecutor.test.ts:45-46`](https://github.com/Effectful-Tech/clanka/blob/44eb97a4eff8ae00bcf18750b387fe5a98cd191c/src/AgentExecutor.test.ts#L45-L46)),
-so a failed test still cleans up. Credit: kamp-us/phoenix's [effect-testing.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.patterns/effect-testing.md)
+so a failed test still cleans up. Credit: kamp-us/phoenix's [effect-testing.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-testing.md)
 (`it.effect` over `runPromise`, `TestClock`, "await events, never durations"). Its advice to use
 `assert` instead of `expect` inside `it.effect` does not carry over: on `@effect/vitest@4.1.2` `expect`
 works, and `next/` relies on it.

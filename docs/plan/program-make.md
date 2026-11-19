@@ -313,7 +313,7 @@ Paths are repo-relative. Counts estimate added or changed lines after P12 and P3
 | `docs/plan/README.md` | Record the repair and P14 dependency | 8 | lead |
 | `docs/plan/tier-1.md` | Update P11 and P14 dependencies | 8 | lead |
 | `docs/plan/tier-1-detail.md` | Separate authoring from load checking; update examples | 45 | lead |
-| `.glossary/TERMS.md` | Correct the `next/` program definition | 8 | lead |
+| `.kalfa/glossary/GLOSSARY-MAP.md` | Correct the `next/` program definition | 8 | lead |
 | `field/runs.jsonl`, `field/notes.jsonl` | Record each step and the confirmed gap | 12 | lead |
 
 About **1,540 changed or added lines**, including the saved plan. The test writer repeats the program search on the merged base. Any further runnable test declaration belongs to tests; any further product declaration belongs to build.

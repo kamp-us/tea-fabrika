@@ -103,6 +103,6 @@ way through a JSON number. A reader would also fill a missing saved value from i
 hides a snapshot that was cut short.
 
 The reason for one declaration is in and
-[the settings note](../docs/direction/settings.md).
+[the settings note](../../docs/direction/settings.md).
 
 > Derived from `effect@4.1.2`; re-verify on pin bump.

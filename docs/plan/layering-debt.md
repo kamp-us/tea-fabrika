@@ -409,7 +409,7 @@ unless they start at the repo root.
 | `next/packages/libfabrika/src/gateway/GatewayRevocation.test.ts` `next/packages/libfabrika/src/node/gateway/` | tests | 7 | tests | 1,170 lines become a suite with a runner |
 | `next-ledger.json` | tests | 1, 4, 5, 6, 7 | 0 | each slice deletes exactly its rows: 8, 6, 27, 21, 9. Only as `pnpm lint` prunes it |
 | `oxlint-plugins/README.md` | tests | each slice | docs | the list's count in the table row for this rule |
-| `next/AGENTS.md` `.glossary/TERMS.md` `docs/plan/README.md` | build | each slice | docs | the `MailboxError` and `ProcessManagerError` rows say built; a row for each new word; where we are now |
+| `next/AGENTS.md` `.kalfa/glossary/GLOSSARY-MAP.md` `docs/plan/README.md` | build | each slice | docs | the `MailboxError` and `ProcessManagerError` rows say built; a row for each new word; where we are now |
 | `oxlint-plugins/ledger.test.ts` `layer-rules.json` `next/packages/libfabrika/src/runtime/RunnerWatchersTest.ts` `next/packages/libfabrika/src/node/Watchers.test.ts` `next/packages/libfabrika/src/gateway/JobsTest.ts` `next/packages/libfabrika/src/node/gateway/Jobs.test.ts` | tests | none | 0 | read for this plan and not changed: the list's own law, the rule file, and the two suite and runner pairs cited above |
 
 No screenshots: no window changes. No host-only law: every law runs on Node's SQLite in CI.

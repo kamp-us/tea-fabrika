@@ -103,7 +103,7 @@ read 2026-11-15. Each line says where it went.
   weaker assertion, `as` cast, list row, rule turned down, `oxlint-disable` on wrong code.
 - **Look around before acting.** One sentence telling the model to "explore broadly" first helped
   on loosely specified tasks. Each step's first step is now "Look around first": the plan, the
-  neighbors of each file, `.patterns/`, Effect's guide.
+  neighbors of each file, `.kalfa/patterns/`, Effect's guide.
 - **A turn that ends in text is a report, not proof it is done.** Name the open items and continue;
   stop after two or three. The lead skill's step briefs section now says so.
 - **State the done condition up front.** Each skill's standing rules list its checks in order, and

@@ -127,7 +127,7 @@ pinned ones does not.
   in code which combo comes next."
 
 Settled check, on 2026-11-10: `git grep -i "code mode"` over `docs/`, `experiments/`, `.decisions/`,
-`field/` and `.glossary/` found nothing. On 2026-11-11 it finds only 0074's line that points here.
+`field/` and `.kalfa/glossary/` found nothing. On 2026-11-11 it finds only 0074's line that points here.
 
 ## The known way, from the makers
 

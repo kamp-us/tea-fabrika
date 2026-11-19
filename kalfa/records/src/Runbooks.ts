@@ -1,6 +1,6 @@
 /**
- * The runbook check: every tracked `.runbooks/*.md` keeps a `summary` in its frontmatter.
- * A sev runbook, `.runbooks/sev-*.md`, also has the five level-two headings Trigger, Roles, Steps, Exit and
+ * The runbook check: every tracked `.kalfa/runbooks/*.md` keeps a `summary` in its frontmatter.
+ * A sev runbook, `.kalfa/runbooks/sev-*.md`, also has the five level-two headings Trigger, Roles, Steps, Exit and
  * Comms, and the sev skill, `.agents/skills/sev/SKILL.md`, links every sev runbook and no sev runbook that
  * is not there.
  */
@@ -10,9 +10,9 @@ import { parse } from "./Frontmatter.ts";
 import { markdown } from "./Markdown.ts";
 import { read, Tracked } from "./Tracked.ts";
 
-const RUNBOOK = /^\.runbooks\/[^/]+\.md$/;
+const RUNBOOK = /^\.kalfa\/runbooks\/[^/]+\.md$/;
 
-const SEV = /^\.runbooks\/sev-[^/]+\.md$/;
+const SEV = /^\.kalfa\/runbooks\/sev-[^/]+\.md$/;
 
 const SKILL = ".agents/skills/sev/SKILL.md";
 
@@ -81,7 +81,7 @@ export const check = Effect.fnUntraced(function* (root: string) {
       ];
     });
 
-  // What the sev skill links: each `.runbooks/sev-*.md` it points at, and where.
+  // What the sev skill links: each `.kalfa/runbooks/sev-*.md` it points at, and where.
   const skill = pages.find(({ path: file }) => file === SKILL);
   const linked = new Set<string>();
   const dangling: Array<Finding> = [];

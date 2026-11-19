@@ -567,7 +567,7 @@ the tests step writes them. Moves and doc blocks in product files are the build 
 | `next/packages/libfabrika/src/index.ts` `next/packages/libfabrika/src/cloudflare/index.ts` `next/packages/libfabrika/src/coordination/index.ts` | build | B2.8 | 130 | each barrel becomes namespace re-exports with tag-only blocks |
 | `next/packages/libfabrika/src/` | build | B3.1 to B3.7 | 480 | each module's product files, import lines only |
 | `next/packages/libfabrika/src/**/*.test.ts` `next/packages/libfabrika/src/**/*Test.ts` `next/packages/libfabrika/src/**/*.test-support.ts` | tests | B3.0 to B3.7 | tests | each module's test files, import lines only |
-| `.patterns/doc-comments.md` `.patterns/effect-services-and-layers.md` `docs/direction/effect-code-guidelines.md` | build | B1.0, B2.1 | docs | "what can hold it" becomes what holds it, and the measured counts stand beside the guesses |
+| `.kalfa/patterns/doc-comments.md` `.kalfa/patterns/effect-services-and-layers.md` `docs/direction/effect-code-guidelines.md` | build | B1.0, B2.1 | docs | "what can hold it" becomes what holds it, and the measured counts stand beside the guesses |
 
 No screenshots: no window changes.
 

@@ -2,7 +2,7 @@
 // `Effect.validate`) written WITHOUT an explicit `concurrency` option: make the
 // serial-vs-parallel choice visible at the call site instead of an invisible default.
 //
-// Rationale (single site; .patterns/serial-read-baseline.md): these combinators default
+// Rationale (single site; .kalfa/patterns/serial-read-baseline.md): these combinators default
 // to `concurrency: 1`: effect@4.0.0-beta.92 `Effect.forEach` documents "By default, the
 // operations are performed sequentially", and `Effect.all` over an iterable delegates to
 // the same `forEach`. So `Effect.all([a, b, c])` runs three INDEPENDENT effects strictly
@@ -57,7 +57,7 @@ export const noImplicitEffectConcurrency: CreateRule = {
 
         context.report({
           node,
-          message: `${what}: with no explicit \`concurrency\` the serial-vs-parallel choice is invisible at the call site (.patterns/serial-read-baseline.md; #2567). Fix: pass \`{ concurrency: "unbounded" }\` (or \`<n>\`) to fan out, or \`{ concurrency: 1 }\` to keep it serial on purpose. Exception: // oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>.`,
+          message: `${what}: with no explicit \`concurrency\` the serial-vs-parallel choice is invisible at the call site (.kalfa/patterns/serial-read-baseline.md; #2567). Fix: pass \`{ concurrency: "unbounded" }\` (or \`<n>\`) to fan out, or \`{ concurrency: 1 }\` to keep it serial on purpose. Exception: // oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>.`,
         });
       },
     };

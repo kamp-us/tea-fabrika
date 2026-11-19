@@ -39,14 +39,14 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
 
 Open the one for what happened. Each has a trigger, roles, steps, an exit and comms.
 
-- [Main is red](../../../.runbooks/sev-main-is-red.md): a sev1, "Scheduled CI is red on main", or main looks red with no issue.
+- [Main is red](../../../.kalfa/runbooks/sev-main-is-red.md): a sev1, "Scheduled CI is red on main", or main looks red with no issue.
 - A sev1 "CI speed: a stage is over its goal" has no runbook yet; one is written after the first speed sev1 is worked and written up.
-- [Nothing lands](../../../.runbooks/sev-nothing-lands.md): a sev0, on the owner's word.
-- [A fix is red](../../../.runbooks/sev-a-fix-is-red.md): a fix's `ci-required` or its review comes back red.
-- [Two fixes at once](../../../.runbooks/sev-two-fixes-at-once.md): a second fix is ready while one lands.
-- [Main goes red in a freeze](../../../.runbooks/sev-main-red-in-a-freeze.md): a sev0, main's own check goes red.
-- [The rate limit runs out](../../../.runbooks/sev-rate-limit-runs-out.md): GitHub's limit for the login reaches 0.
-- [Close and walk](../../../.runbooks/sev-close-and-walk.md): every fix merged, the owner calls it off, or the issue closed.
+- [Nothing lands](../../../.kalfa/runbooks/sev-nothing-lands.md): a sev0, on the owner's word.
+- [A fix is red](../../../.kalfa/runbooks/sev-a-fix-is-red.md): a fix's `ci-required` or its review comes back red.
+- [Two fixes at once](../../../.kalfa/runbooks/sev-two-fixes-at-once.md): a second fix is ready while one lands.
+- [Main goes red in a freeze](../../../.kalfa/runbooks/sev-main-red-in-a-freeze.md): a sev0, main's own check goes red.
+- [The rate limit runs out](../../../.kalfa/runbooks/sev-rate-limit-runs-out.md): GitHub's limit for the login reaches 0.
+- [Close and walk](../../../.kalfa/runbooks/sev-close-and-walk.md): every fix merged, the owner calls it off, or the issue closed.
 
 `pnpm lint` checks that each runbook has its parts and that this list links every one
 (`records check runbook`).
@@ -67,7 +67,7 @@ Open the one for what happened. Each has a trigger, roles, steps, an exit and co
   the same: https://docs.pagerduty.com/ops-guides/incident-response-guide/severity-levels). An agent,
   a reviewer, a red main or a cost you measured is never a sev0 by itself.
 - **It looks like a sev1, but no issue is open:** the first steps of
-  [Main is red](../../../.runbooks/sev-main-is-red.md) start the full run so the check opens its own
+  [Main is red](../../../.kalfa/runbooks/sev-main-is-red.md) start the full run so the check opens its own
   issue. Never open, close or label a `ci-scheduled` issue by hand.
 - **Moving up:** when nothing can land, or each run makes it worse, tell the owner a sev0 may fit.
 

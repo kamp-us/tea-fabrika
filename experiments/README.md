@@ -26,7 +26,7 @@ trusting any line that says an agent could not see a file.
 - A new write-up quotes the numbers it uses inline. Raw results and assets go to the private
   archive; a script writes raw samples under `runs/`, which git ignores, or to a path a flag names.
 - The write-ups left here shrink over time: a write-up nothing cites goes once its lesson is in
-  `.decisions/`, `.patterns/` or `docs/direction/`.
+  `.decisions/`, `.kalfa/patterns/` or `docs/direction/`.
 - [open-questions.md](./open-questions.md) is the list of open questions the
   log kept up to experiment 20.
 

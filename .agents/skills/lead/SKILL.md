@@ -567,7 +567,7 @@ visible, and never weaken the rules to hide this message.
    (`gh api repos/<repo>/stacks` lists them). Every PR squash-merges, a parent too. An open child stays
    current by merging its parent's head with `gh pr update-branch <child>`, never a rebase or a force push; if its
    signed tree links changed, only its own step owner signs them again. In a sev0 the lead lands
-   every ready pull request by admin merge, in order, as [the sev0 runbook](../../../.runbooks/sev-nothing-lands.md) says.
+   every ready pull request by admin merge, in order, as [the sev0 runbook](../../../.kalfa/runbooks/sev-nothing-lands.md) says.
    After the merge, the lead closes the tickets the description names and starts one box cleanup sweep.
    `land.ts merged <pr>` does both (step 10).
    The sweep removes the quest's boxes and its clean, idle linked worktree. Never remove MAIN itself.

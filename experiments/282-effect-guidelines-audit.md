@@ -84,8 +84,8 @@ Kind: lint, then taste. **Check: partly built.**
   request 958. Our `fabrika/no-wall-clock` (`.oxlintrc.json:833`) blocks clock reads.
 - **Off:** `globalFetchInEffect` and `globalDateInEffect`.
 - **Not written:** `fabrika/no-hand-guard` and `fabrika/no-raw-crypto`.
-- **The pattern docs exist:** `.patterns/effect-reach-for-what-ships.md` and
-  `.patterns/effect-crypto-through-services.md`.
+- **The pattern docs exist:** `.kalfa/patterns/effect-reach-for-what-ships.md` and
+  `.kalfa/patterns/effect-crypto-through-services.md`.
 
 Broken today:
 
@@ -143,7 +143,7 @@ its cause (ticket 695), so the note's "92 of 113 cause drops" no longer holds.
 
 The hard parts go in `internal/`, and the `layer` is one line. Kind: pattern, plus lint for the
 service type, plus taste for the cut. **Check: partly built.** The pattern doc exists
-(`.patterns/effect-long-body-is-a-shelf.md`, pull request 961). `fabrika/written-service-type` is
+(`.kalfa/patterns/effect-long-body-is-a-shelf.md`, pull request 961). `fabrika/written-service-type` is
 not written.
 
 Broken today:
@@ -198,7 +198,7 @@ pattern. **Check: no.**
 - `fabrika/no-static-layer` is not written. 0095 requires it, and no pull request or commit adds
   it.
 - `strictEffectProvide` is off.
-- Only the pattern doc exists: `.patterns/effect-services-and-layers.md`.
+- Only the pattern doc exists: `.kalfa/patterns/effect-services-and-layers.md`.
 
 Broken today:
 
@@ -226,7 +226,7 @@ No plan codes and no history in comments. Kind: lint, then taste. **Check: no.**
 - The docs lint rule is not built. The note's fix order puts it in step 5. Ticket 900 ("a lint rule
   holds E6") showed as open, at triage.
 - The plan-code rule is not written.
-- Only the pattern doc exists: `.patterns/doc-comments.md`.
+- Only the pattern doc exists: `.kalfa/patterns/doc-comments.md`.
 
 Broken today. The heuristic: an `export` line whose line above does not end in `*/`, with
 `internal/` and tests left out.
@@ -291,7 +291,7 @@ request 1109 fixed one id, and `284ad0536` fixed another.
 ## E8: where we differ from Effect, the file says why
 
 At the code, with the record that decided it. Kind: taste. **Check: no.** It is review only. The
-pattern doc exists: `.patterns/effect-differences-say-why.md`.
+pattern doc exists: `.kalfa/patterns/effect-differences-say-why.md`.
 
 Broken today. This is a read of the note's 6 keep-list sites, not a count:
 

@@ -143,7 +143,7 @@ name = "acme-ledger"   # the project's Worker. A new name is a new, empty server
   Its connect example, `…/acme`, is further down and is to be redrawn.
 
 **Decided 2026-10-25: the server is declared and deployed with Alchemy,** the
-same setup kamp-us/phoenix uses (`.patterns/alchemy-overview.md` there), on
+same setup kamp-us/phoenix uses (`.kalfa/patterns/alchemy-overview.md` there), on
 Alchemy's latest version rather than phoenix's pinned one. Experiment 144
 deploys with it, and says how today's Durable Object ledger fits Alchemy's
 shape. The owner wants Alchemy to deploy a host and the storage layer from

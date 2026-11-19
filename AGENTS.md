@@ -15,7 +15,7 @@ all kept here on purpose, so they can be analysed later.
 
 `next/` is what we are building, on the decisions; its rules are in `next/AGENTS.md`. Everything else is what we use
 today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/` grows beside today's version
-([0002](.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)). How far it is:
+([0002](./.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)). How far it is:
 [where we are](./docs/plan/README.md#where-we-are-now).
 
 - **Know which version your work is in** before you read or change code. Your brief or ticket says so. If it does not,
@@ -31,25 +31,26 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
   until `next/`'s Electron window is back; what it teaches goes into `next/` as a lesson, rethought and not copied,
   except an approved guideline, whose rules `next/` follows as written. Today's library is `@kampus/fabrika-old`
   and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
-- **The design package is shared by both versions,** the one exception to sharing no code
-  ().
+- **The design package is shared by both versions,** the one exception to sharing no code.
 
 ## Where to read, where to write
+
+[`.kalfa/kalfa.toml`](./.kalfa/kalfa.toml) says where each kind of record lives (decisions, glossary, guidelines, patterns, runbooks, retro) and what goes in it. Read it first. The rest of this table points at the other places.
 
 | You want to | Read | Write |
 |---|---|---|
 | Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) | The plan docs, in the same pull request as the work |
 | Know what the owner decided | [`.kalfa/decisions/`](./.kalfa/decisions/); see [Decision discovery](#decision-discovery) | `.kalfa/decisions/NNNN-slug.md`, with [`/adr`](./.agents/skills/adr/SKILL.md), only for a hard-to-reverse choice |
 | Know where this is going and why, or where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/`](./docs/direction/README.md), the long design notes, and [`docs/direction/follows/`](./docs/direction/follows/README.md) | No new note is written there: long reasoning a decision needs goes in the decision's own Context, or in the experiment that holds its evidence; a follows row changes in the pull request that changes that behavior; no folder keeps an index table |
-| Know what a word means | [`.glossary/TERMS.md`](./.glossary/TERMS.md), the map of the contexts; each context's `GLOSSARY.md` is written when its words are decided | The term, with an `_Avoid_` line, in its context's `GLOSSARY.md`, in the pull request that coins or renames a word |
-| Know how the code is shaped now | [`.patterns/README.md`](./.patterns/README.md) and `rg -n '^(where|when):' .patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.patterns/<name>.md`, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) |
-| Know a design area's guidelines, or write them for one area | `docs/guidelines/<area>.md`, read whole; [the guidelines skill](./.claude/skills/guidelines/SKILL.md) to write them | An edit to the page, in a pull request the owner says yes to; what that skill lists, in its shape |
+| Know what a word means | [`.kalfa/glossary/GLOSSARY-MAP.md`](./.kalfa/glossary/GLOSSARY-MAP.md), the map of the contexts; each context's `GLOSSARY.md` is written when its words are decided | The term, with an `_Avoid_` line, in its context's `GLOSSARY.md`, in the pull request that coins or renames a word |
+| Know how the code is shaped now | [`.kalfa/patterns/README.md`](./.kalfa/patterns/README.md) and `rg -n '^(where|when):' .kalfa/patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.kalfa/patterns/<name>.md`, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) |
+| Know a design area's guidelines, or write them for one area | `.kalfa/guidelines/<area>.md`, read whole; [the guidelines skill](./.claude/skills/guidelines/SKILL.md) to write them | An edit to the page, in a pull request the owner says yes to; what that skill lists, in its shape |
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md) and `ls experiments`, then the write-up | `experiments/NN-short-title.md`, as [its README](./experiments/README.md) says. Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/` | One file per agent run and one per thing that broke, cost too much, needed a person or worked well, the same day |
 | Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going; never a security hole |
 | Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
 | Build the new version, or change today's machines (`packages/fabrika`, `packages/pipeline`, `programs/*`) | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/`; today's machines are frozen, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as their map and each part's own README | Code in `next/`, with its test beside it as `name.test.ts`: all new work goes there. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
-| Do an operation by hand: a sev, a wipe of the dev and test homes | [`.runbooks/`](./.runbooks/), the one file for that operation | One file there, the first time the operation is done for real |
+| Do an operation by hand: a sev, a wipe of the dev and test homes | [`.kalfa/runbooks/`](./.kalfa/runbooks/), the one file for that operation | One file there, the first time the operation is done for real |
 | Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |

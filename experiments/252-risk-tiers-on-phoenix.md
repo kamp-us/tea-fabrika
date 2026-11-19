@@ -43,7 +43,7 @@ HIGH = [".claude/**", ".github/**", ".claude-plugin/**", "packages/ci-required/*
         "apps/web/worker/db/drizzle/**", "packages/db-schema/**", "packages/migrations-guard/**",
         "apps/web/worker/db/drizzle.config.ts",
         "infra/**", "packages/cf-credentials/**", "**/alchemy.run.ts", "**/wrangler.*"]
-LOW = ["**/*.md", "**/*.mdx", "**/docs/**", ".patterns/**", ".glossary/**", "reports/**", "ops/**",
+LOW = ["**/*.md", "**/*.mdx", "**/docs/**", ".kalfa/patterns/**", ".kalfa/glossary/**", "reports/**", "ops/**",
        "**/*.test.*", "**/*.spec.*", "**/tests/**", "**/test/**", "**/__tests__/**", "**/test-fixtures/**",
        "**/fixtures/**", "**/*.testing.ts", "benchmarks/**"]
 # Size baseline: lines = additions + deletions; small <= 50, mid 51..400, large > 400.

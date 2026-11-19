@@ -245,7 +245,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
   ('s third test). An agent is
   a process that restarts every run.
 - **What holds it:** taste today. This is already fabrika's habit: `.kalfa/decisions/`, `docs/direction/`,
-  `.glossary/`, one fresh agent per step reading a state file. But AGENTS.md is about 685 lines.
+  `.kalfa/glossary/`, one fresh agent per step reading a state file. But AGENTS.md is about 685 lines.
 - **Doubt:** no measurement here that a long file hurts. Settled by running the same step with the
   long and the short file.
 - **Cost:** a rewrite of the most-read file.

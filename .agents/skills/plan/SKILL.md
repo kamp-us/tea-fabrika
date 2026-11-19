@@ -28,7 +28,7 @@ when to keep going and how to write for a reader who saw none of the work.
    its decisions, patterns and source, and name its answer or say you found none.
 3. **Check what is settled** before you call anything open: `.kalfa/decisions/`, `docs/direction/`,
    `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Run
-   `rg -il "<words>" .kalfa/decisions .glossary docs/direction .patterns .runbooks` for each open
+   `rg -il "<words>" .kalfa/decisions .kalfa/glossary docs/direction .kalfa/patterns .kalfa/runbooks` for each open
    question, in two or three wordings, and read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of

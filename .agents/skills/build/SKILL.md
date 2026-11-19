@@ -22,7 +22,7 @@ for the product code.
 
 1. **Look around first.** Read `AGENTS.md` whole, `next/AGENTS.md` for `next/` work, the approved
    plan whole (an amendment section overrides the body where they differ), then the decided notes
-   it builds. Before any edit, open the files the plan cites, their neighbors and `.patterns/`, so
+   it builds. Before any edit, open the files the plan cites, their neighbors and `.kalfa/patterns/`, so
    the new code reads like the code beside it. Read `node_modules/effect/AGENTS.md` in full before
    you write Effect code. Say which version you are in. In `next/`: Effect all the way, no
    Promises, an object class stays thin.

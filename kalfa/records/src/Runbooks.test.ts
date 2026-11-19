@@ -1,7 +1,7 @@
-// The runbooks check. Each tracked `.runbooks/*.md` has a frontmatter `summary`; each `.runbooks/sev-*.md` has the
+// The runbooks check. Each tracked `.kalfa/runbooks/*.md` has a frontmatter `summary`; each `.kalfa/runbooks/sev-*.md` has the
 // five headings Trigger, Roles, Steps, Exit and Comms; and the sev skill, `.agents/skills/sev/SKILL.md`, links every
-// `.runbooks/sev-*.md` and no runbook that is not there. Every law runs on a repo held in memory
-// (Records.test-support.ts): none reads the repo's real `.runbooks/` or starts git.
+// `.kalfa/runbooks/sev-*.md` and no runbook that is not there. Every law runs on a repo held in memory
+// (Records.test-support.ts): none reads the repo's real `.kalfa/runbooks/` or starts git.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Path, Schema } from "effect";
@@ -61,7 +61,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const files: Record<string, string> = {
         // Not a runbook, and not read as one: a file that is not Markdown, and a page outside the folder.
-        ".runbooks/notes.txt": "no frontmatter here\n",
+        ".kalfa/runbooks/notes.txt": "no frontmatter here\n",
         "docs/plan/README.md": "---\nid: 7\n---\n\nA plan.\n",
         "AGENTS.md": "# Working here\n",
       };
@@ -70,7 +70,7 @@ it.effect.prop(
       const linked: Array<string> = [];
 
       sev.forEach(({ fault, heading, name }, i) => {
-        const path = `.runbooks/sev-${i}-${slugOf(name)}.md`;
+        const path = `.kalfa/runbooks/sev-${i}-${slugOf(name)}.md`;
         const text = runbook(fault, HEADINGS, heading);
         files[path] = text;
 
@@ -90,7 +90,7 @@ it.effect.prop(
       });
 
       plain.forEach(({ fault, name }, i) => {
-        const path = `.runbooks/${i}-${slugOf(name)}.md`;
+        const path = `.kalfa/runbooks/${i}-${slugOf(name)}.md`;
         // A runbook that is not a sev one needs no headings at all.
         files[path] = runbook(fault, [], "");
 
@@ -107,14 +107,14 @@ it.effect.prop(
         "",
         ...padding.map((w) => `${w}.`),
         ...linked.map((path, i) => `- [runbook ${i}](../../../${path})`),
-        ...(dangling ? ["- [gone](../../../.runbooks/sev-gone.md)"] : []),
+        ...(dangling ? ["- [gone](../../../.kalfa/runbooks/sev-gone.md)"] : []),
         "- [a page](../../../docs/plan/README.md)",
       ];
 
       files[SKILL] = `${lines.join("\n")}\n`;
 
       if (dangling) {
-        expected.push({ path: SKILL, rule: "dangling", raw: ".runbooks/sev-gone.md" });
+        expected.push({ path: SKILL, rule: "dangling", raw: ".kalfa/runbooks/sev-gone.md" });
       }
 
       const all = yield* Runbooks.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
@@ -159,8 +159,8 @@ it.effect(
       ].join("\n");
 
       const files = {
-        ".runbooks/sev-x.md": sev,
-        [SKILL]: "[x](../../../.runbooks/sev-x.md)\n",
+        ".kalfa/runbooks/sev-x.md": sev,
+        [SKILL]: "[x](../../../.kalfa/runbooks/sev-x.md)\n",
       };
 
       const found = yield* Runbooks.check(ROOT).pipe(Effect.provide(world(ROOT, files)));
@@ -201,7 +201,7 @@ it.effect.prop(
   { name: Words },
   ({ name }) =>
     Effect.gen(function* () {
-      const path = `.runbooks/${slugOf(name)}.md`;
+      const path = `.kalfa/runbooks/${slugOf(name)}.md`;
       const good = runbook("none", [], "");
 
       const dirty = yield* run(["check", "runbook"], { [path]: runbook("summary", [], "") });

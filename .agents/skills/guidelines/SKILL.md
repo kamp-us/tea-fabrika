@@ -6,7 +6,7 @@ description: Run this repo's guidelines study for one design area, from settled 
 # A guidelines study
 
 One design area becomes a few principles the owner can press, read and decide on, and then a
-build in the app. A study ends with one experiment, one guideline page under `docs/guidelines/`,
+build in the app. A study ends with one experiment, one guideline page under `.kalfa/guidelines/`,
 one Design canvas titled "<Area> guidelines", one docs-only pull request, a walk that ends in a yes
 or a no, and, on a yes, one approval decision and a build plan the same day. The canvas is the
 study's front door, presented the way a designer presents work: slides that walk the story, and at the end a clickable prototype of the pick that answers
@@ -28,7 +28,7 @@ look step, shots at five layouts, and the other rules a screen follows, moved th
 
 ### 1. Check what is settled
 
-- Search `docs/guidelines/` (any page on the area), `.kalfa/decisions/`, what is
+- Search `.kalfa/guidelines/` (any page on the area), `.kalfa/decisions/`, what is
   left of `docs/direction/`, `experiments/` and `docs/plan/` (README, `tiers.md`,
   `tier-1.md`) for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
@@ -148,7 +148,7 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 7. Write the guideline page
 
-`docs/guidelines/<area>.md`, or for a visual area a folder: `docs/guidelines/<area>/README.md`
+`.kalfa/guidelines/<area>.md`, or for a visual area a folder: `.kalfa/guidelines/<area>/README.md`
 with its shots in `shots/`. Copy the shape from
 `references/guideline-page.md`. No new note goes under `docs/direction/`.
 
@@ -167,7 +167,7 @@ links it.
 
 ### 8. List the page and the experiment
 
-- One row in `docs/guidelines/README.md`: the area, what the page covers, then its status,
+- One row in `.kalfa/guidelines/README.md`: the area, what the page covers, then its status,
   `proposed`. If the folder or its README does not exist yet, create it with this first row.
 - The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
   the answer and the $ in `summary`), in the shape
@@ -225,7 +225,7 @@ leakgrep.sh checks added text; private words stay outside the repo.
 - The last step asks one yes or no: merge it?
 - **Before the merge, in the same pull request:**
   - Line one of the page becomes **Approved DATE.**, with a link to the approval decision, and its
-    row in `docs/guidelines/README.md` says `approved DATE`. The experiment keeps its leans and
+    row in `.kalfa/guidelines/README.md` says `approved DATE`. The experiment keeps its leans and
     their confidence numbers as written. The canvas's marks change to match.
   - Write the area's one approval decision with [`/adr`](../adr/SKILL.md),
     `.kalfa/decisions/NNNN-<area>-guidelines-approved.md`. Its title names the area and the approval. It

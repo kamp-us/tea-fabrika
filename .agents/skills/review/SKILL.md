@@ -50,7 +50,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      check job names each clone the diff adds; say for each whether it is a real copy.
    - Each new name (type, service, function, file, setting, record field) has its line under the
      description's `## New names`: the industry's word, with a source that says it. Check each line
-     against its context's `GLOSSARY.md` (the contexts are in `.glossary/TERMS.md`) and
+     against its context's `GLOSSARY.md` (the contexts are in `.kalfa/glossary/GLOSSARY-MAP.md`) and
      [the names rule](../../../docs/direction/use-the-industrys-names.md): one word per idea, the
      glossary's word where it has one, and a plain gloss for an obscure one. A line whose source
      does not name the thing is a finding.

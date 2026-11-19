@@ -30,7 +30,7 @@ is linked; the others have no other home yet.
   `node_modules/effect/AGENTS.md` in full: it ships inside the installed package, so it always
   matches the lockfile. Where it and a decision here differ, the decision wins
   (and
-  [the pattern](../../../../.patterns/effect-differences-say-why.md) list the differences). Read a
+  [the pattern](../../../../.kalfa/patterns/effect-differences-say-why.md) list the differences). Read a
   package's source in the repo its installed `package.json` names in `repository`: for Effect that is
   `Effect-TS/effect`, never `effect-smol`, where v4 was only built as a beta.
 - **Judge a design by its properties, never its size.** Never pick between designs by how many lines
@@ -104,7 +104,7 @@ is linked; the others have no other home yet.
 
 Before any question to the owner, design question, recommendation
 or plan, search `.kalfa/decisions/`, each context's `GLOSSARY.md`, `docs/direction/`, `experiments/` and the plan for the
-topic. Start with `rg -il "<words>"` over those folders (and `.patterns/`, `.runbooks/`),
+topic. Start with `rg -il "<words>"` over those folders (and `.kalfa/patterns/`, `.kalfa/runbooks/`),
 in two or three wordings, then read every hit and look for what a word search cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
 shape with the note it says it builds, and name any place it walks a decision back. A claim about
 how a piece runs comes from reading that piece's note now, never from a summary. A settled note is

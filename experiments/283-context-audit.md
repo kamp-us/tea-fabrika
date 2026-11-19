@@ -201,7 +201,7 @@ Y1's Currency criterion. Each was checked by looking.
 - **`lead/SKILL.md` line 537** links a rule suite at the repo's old address.
 - **`guidelines/SKILL.md` line 103** calls program guidelines "PR 332, proposed". Pull request 332
   is merged.
-- **`guidelines/SKILL.md` lines 183 to 184** say to add a `docs/guidelines/` row to the root
+- **`guidelines/SKILL.md` lines 183 to 184** say to add a `.kalfa/guidelines/` row to the root
   `AGENTS.md` table if it is missing. The row is there.
 - **The lead skill misses the host step,** as the answer says.
 

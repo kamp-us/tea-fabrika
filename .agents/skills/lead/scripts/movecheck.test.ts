@@ -145,7 +145,7 @@ const edited = (t: Text): fc.Arbitrary<Text> =>
 
 const before = text.chain((old) => fc.tuple(fc.constant(old), respecified(old)));
 
-const NAMED = ["layer-rules.json", ".oxlintrc.json", ".patterns/libfabrika-rooms.md"];
+const NAMED = ["layer-rules.json", ".oxlintrc.json", ".kalfa/patterns/libfabrika-rooms.md"];
 
 describe("movecheck, a move PR: only the table's renames, and only specifiers change", () => {
   // Plant (the plan's): change one character in a moved function body. Also: read a statement's

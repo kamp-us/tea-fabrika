@@ -132,12 +132,19 @@ it("property: an AGENTS.md or CLAUDE.md under the root, next/, kalfa/ or docs/ i
   );
 });
 
-// Plant: `isAdminDocs` answers the docs kind alone, so a README or a `.patterns/` Markdown counts as admin docs.
-it("property: isAdminDocs is the docs kind under the admin merge's five folders, and no path outside them is admin docs", () => {
-  const adminFolder = fc.constantFrom(".kalfa/decisions", "docs", "field", ".glossary", ".runbooks");
+// Plant: `isAdminDocs` answers the docs kind alone, so a README or a `.kalfa/patterns/` Markdown counts as admin docs.
+it("property: isAdminDocs is the docs kind under the admin merge's six folders, and no path outside them is admin docs", () => {
+  const adminFolder = fc.constantFrom(
+    ".kalfa/decisions",
+    "docs",
+    "field",
+    ".kalfa/glossary",
+    ".kalfa/runbooks",
+    ".kalfa/guidelines",
+  );
 
   const otherFolder = fc.constantFrom(
-    ".patterns",
+    ".kalfa/patterns",
     "apps",
     "oxlint-plugins",
     "next",

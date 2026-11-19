@@ -712,7 +712,7 @@ checked on main on 2026-11-11. The note gives each one in full; these are the le
 - **Disagreement:** written by people versus written by agents with a tidy pass ([a12],
   secondary).
 - **Fabrika today:** this is already fabrika's habit (`.decisions/`, `docs/direction/`,
-  `.glossary/`, one fresh agent per step reading a state file, AGENTS.md). But AGENTS.md is about
+  `.kalfa/glossary/`, one fresh agent per step reading a state file, AGENTS.md). But AGENTS.md is about
   685 lines on main today, and OpenAI's harness team keeps theirs a short map (secondary [o1]);
   Stripe scopes rules by folder [s2].
 - **Lean, 75%:** cut AGENTS.md to a map and move rules into scoped files or checks.
@@ -765,7 +765,7 @@ reason. The follow-up study, [experiment 254](./254-how-a-lane-should-stop.md), 
 
 Each name below was checked on main, in code or in a settled note. "Today" is today's version;
 "`next/`" is the new one. The ledger's word for a recorded fact is now **event** (renamed
-2026-11-08, `.glossary/TERMS.md`); today's code says fact and `kind`.
+2026-11-08, `.kalfa/glossary/GLOSSARY-MAP.md`); today's code says fact and `kind`.
 
 | Part | Who owns it today | In `next/`, by settled notes |
 |---|---|---|
