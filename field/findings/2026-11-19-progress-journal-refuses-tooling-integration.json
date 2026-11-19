@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-19-progress-journal-refuses-tooling-integration",
+  "date": "2026-11-19",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/progress.ts",
+    "line": 39
+  },
+  "says": "In today's CI, the progress journal allows the projects next, next-integration, next-visual and tooling but not tooling-integration, so every callback from a tooling-integration law is dropped as 'vitest-progress: metadata unavailable' and every tooling leg's time table reads partial, with write gaps.",
+  "proof": "vitest.config.ts:260 names the project tooling-integration; progress.ts:39 allows only [\"next\", \"next-integration\", \"next-visual\", \"tooling\"]. Main full run 44428278854, job 135239318310, printed 8 'vitest-progress: metadata unavailable' lines, all while .github/ci/progress-reporter.integration.test.ts ran, and its time table said 'Journal partial' and 'Reasons: write_gap. Gap starts: 2741, 2747, 2755.' The green leg in run 44426789535, job 135233711469, printed the same 8 lines and 'Gap starts: 2743, 2749, 2755.'",
+  "cost": "On main's full run, a hung tooling-integration law, the kind that starts processes, is never shown as the last observed activity, and a real write gap on a tooling leg cannot be told from these.",
+  "head": "5c2dc3102030f3abacf6a97d109fe2d0ef21230d",
+  "ticket": "kamp-us/tea-fabrika#1170",
+  "pr": null
+}
