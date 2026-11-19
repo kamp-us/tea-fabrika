@@ -732,33 +732,27 @@ const armCommand = Command.make(
  * The pure part of adminRoute: the admin route the sev log gives, from its lines, its folded sev0 and
  * the read of the open ci-scheduled issues. An open sev0 lists its branches and which of them are
  * fixes; with none open, a sev1 has the one fix `sev.ts fix` named while a `ci-scheduled` issue it
- * answers is open. A branch the log does not name is no fix. A failed read refuses here.
+ * answers is open. A branch the log does not name is no fix. An unreadable list names no sev1 fix,
+ * so a sev1 fix is refused, and the other routes stay open: a docs-only merge needs no fix (0183, 0611).
  */
 export const routeFromLog = (
   entries: ReadonlyArray<Level.Entry>,
   sev0: Level.Sev0,
   issues: Result.Result<ReadonlyArray<Level.Alert>, string>,
-): Result.Result<Merge.Route, string> => {
+): Merge.Route => {
   if (sev0._tag === "open") {
-    return Result.succeed(
-      Merge.Route.cases.admin.make({
-        sev0: sev0.allow,
-        sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)),
-        sev1: null,
-      }),
-    );
+    return Merge.Route.cases.admin.make({
+      sev0: sev0.allow,
+      sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)),
+      sev1: null,
+    });
   }
 
-  // Only a fix line names a sev1 fix, and it counts only while an issue it answers is open.
-  if (!entries.some(Level.Entry.guards.fix)) {
-    return Result.succeed(Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: null }));
-  }
-
-  return Result.isFailure(issues)
-    ? Result.fail(`the open ci-scheduled issues do not read: ${issues.failure}`)
-    : Result.succeed(
-        Merge.Route.cases.admin.make({ sev0: [], sev0Fixes: [], sev1: Level.sev1Fix(entries, issues.success) }),
-      );
+  return Merge.Route.cases.admin.make({
+    sev0: [],
+    sev0Fixes: [],
+    sev1: Result.isSuccess(issues) ? Level.sev1Fix(entries, issues.success) : null,
+  });
 };
 
 /** The admin route the sev log gives, read in the main checkout (see routeFromLog). */
@@ -780,13 +774,11 @@ const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
       )
     : Result.succeed([]);
 
-  const route = routeFromLog(entries, sev0, issues);
-
-  if (Result.isFailure(route)) {
-    return yield* unread(route.failure);
+  if (Result.isFailure(issues)) {
+    yield* Console.log(`land: the open ci-scheduled issues do not read (${issues.failure}), so no sev1 fix is named`);
   }
 
-  return route.success;
+  return routeFromLog(entries, sev0, issues);
 });
 
 const mergeCommand = Command.make(
