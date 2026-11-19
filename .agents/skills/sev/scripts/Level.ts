@@ -110,15 +110,23 @@ export const level = (sev0: Sev0, issues: ReadonlyArray<Alert>, fix: string | nu
 
 /**
  * The branch named as the sev1's fix: the newest `fix` line, unless it is a drop, or none of the
- * issues it answered is open any more. A fix named for an issue that has closed is not the fix of
- * one that opened after it, and the clock plays no part.
+ * issues it answered is open any more, or an open issue opened after it was named. Issue numbers
+ * only grow, so an issue opened after the fix is one above every number the fix answered: the clock
+ * plays no part (0611).
  */
 export const sev1Fix = (entries: ReadonlyArray<Entry>, issues: ReadonlyArray<Alert>): string | null => {
   const named = Arr.findLast(entries, Entry.guards.fix);
 
-  return Option.isSome(named) && Arr.some(issues, (i) => named.value.issues.includes(i.number))
-    ? named.value.branch
-    : null;
+  if (Option.isNone(named) || named.value.branch === null) {
+    return null;
+  }
+
+  const answered = named.value.issues;
+  const answersOpen = Arr.some(issues, (i) => answered.includes(i.number));
+  const newest = Math.max(...answered);
+  const newer = Arr.some(issues, (i) => i.number > newest);
+
+  return answersOpen && !newer ? named.value.branch : null;
 };
 
 /**
