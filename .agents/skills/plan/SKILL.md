@@ -5,7 +5,7 @@ description: Write the plan for one pull request, read-only, as the pipeline's p
 
 # The plan step
 
-You write one pull request's plan. You change no product or test code. The lead reads the plan and
+You write one pull request's plan. A ticket with a fix command takes [the mechanical branch](../lead/SKILL.md#the-mechanical-branch) and gets no plan. You change no product or test code. The lead reads the plan and
 approves it, or sends it back. Return it unsigned, including when you review or revise a plan: only
 the lead session fills the blank approval line.
 

@@ -17,6 +17,14 @@ They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](h
 
 Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`; of that rule only the `JSON.parse` fire can advise, and every other entry, such as the Reflect ban below, blocks at any level). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
 
+## A rule ships with its fixer
+
+A rule we write here ships with its fixer wherever the fix is deterministic, with `context.report({ fix })`
+([0615](../.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). Copy the shape of `prefer-namespace-import.ts` or
+`padding-line-between-statements.ts`. A rule that cannot fix says why in one line at the top of its file,
+for example `// no fixer: the fix needs judgment, which service to inject`. A ticket for the rule's hits
+then takes [the mechanical branch](../.agents/skills/lead/SKILL.md#the-mechanical-branch): run the fixer over the whole repo, one pull request.
+
 ## The anti-slop plugin, taken as it ships
 
 Decision [0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md) takes the anti-slop lint plugin as it ships. Its README says it is meant to be copied in, and there is no npm package, so the fork's `src/` sits in `vendor/anti-slop/` whole and unchanged, with its `LICENSE`. `vendor/anti-slop/pin.json` records where it came from:

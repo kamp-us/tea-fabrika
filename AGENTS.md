@@ -101,10 +101,10 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 
 ## How a change lands
 
-Every pull request, `next/` or today's, goes through the pipeline's steps: plan, test writer, build, one review. No
-agent approves a pull request, and no agent answers a question the machine put to a person. The rest is in
-[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands) (and
-[its steps](./.agents/skills/lead/SKILL.md#steps)), [the plan](./docs/plan/README.md#how-a-change-lands) and
+Product work goes plan, test writer, build, one review. A ticket with a fix command (lint autofix, codemod, rename) takes
+the mechanical branch: run it over the whole repo, one pull request per rule, no plan, no test writer
+([0615](./.decisions/0615-mechanical-tickets-take-a-fix-command-branch.md)). No agent approves a pull request. The rest is in
+[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands), [the plan](./docs/plan/README.md#how-a-change-lands) and
 [the tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws).
 
 ## Before you design anything
