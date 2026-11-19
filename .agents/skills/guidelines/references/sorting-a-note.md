@@ -21,8 +21,8 @@ Each piece gets one label, and each label names its home.
 - **drop**: stale, and needed nowhere. A piece that is still true is already held, or it goes to a
   home.
 
-The sort adds nothing to an existing ADR, with one exception: a row that compares us with an outside
-model, such as OTP or Elm, goes into the ADR whose choice it explains, or else to notes.
+The sort never grows an ADR. A row that compares us with an outside model, such as OTP or Elm, is
+reasoning like any other, and it goes to notes.
 
 ## The cases
 
