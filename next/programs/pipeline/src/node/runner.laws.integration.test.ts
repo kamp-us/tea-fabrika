@@ -3,8 +3,7 @@ import { expect } from "@effect/vitest";
 import type { Ci } from "@kampus/libfabrika/ci/Ci";
 import { Status } from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
-import type { CodeHost } from "@kampus/libfabrika/codehost/CodeHost";
-import { Change } from "@kampus/libfabrika/codehost/CodeHost";
+import { Change, CodeHost } from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import { InputId, Writer } from "@kampus/libfabrika/coordination";
 import { Doorbell } from "@kampus/libfabrika/ledger/Ledger";
@@ -36,6 +35,7 @@ import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Recorder } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import {
   Array as Arr,
@@ -306,7 +306,11 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   });
 
   return {
-    host,
+    host: {
+      ...host,
+      calls: <M extends Recorder.Method<CodeHost["Service"]>>(method: M) =>
+        Effect.provideContext(Recorder.calls(CodeHost, method), services),
+    },
     ci,
     reset,
     alarms: store.alarms,
