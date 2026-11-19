@@ -18,7 +18,7 @@ flowchart LR
   decides["owner decides"] --> number["find the next number"]
   number --> write["write .decisions/NNNN-slug.md"]
   write --> sweep["sweep: governance.ts and rg"]
-  sweep --> relate["link, supersede or amend"]
+  sweep --> relate["link or supersede"]
   relate --> pr["one docs PR"]
 ```
 
@@ -64,8 +64,15 @@ Why it came up. Link the note, ticket or pull request.
 What changes, what it costs, what is not decided here.
 ```
 
-- `status` is `accepted`, `superseded` or `amended`; step 4 says how an older file changes. Nobody
-  deletes a decision.
+- `status` is `accepted`, or `superseded` with a `successor: "NNNN"` key naming the one record that
+  replaced it ([0606](../../../.decisions/0606-a-record-is-accepted-or-superseded.md)). Step 4 says
+  when an older file changes. Nobody deletes a decision.
+
+  ```yaml
+  status: superseded
+  successor: "0162"
+  ```
+
 - Keep it short. The long reasoning goes in a `docs/direction/` note.
 - A decision moved in from elsewhere leaves only a one-line link behind
   ([0002](../../../.decisions/0002-moving-a-decision-removes-it-from-its-source.md)).
@@ -105,20 +112,19 @@ its false alarms are measured. An empty
 list is not a clearance: two decisions that disagree about what a word means may share no words.
 Read the area by hand too.
 
-## 4. Supersede or amend
+## 4. Edit the rule's home, or supersede whole
 
-For each real conflict, pick one and edit only the older file's `status:` line:
+For each real conflict, pick one:
 
-| The new decision | Older file's `status:` becomes |
+| The new decision | What changes |
 |---|---|
-| replaces it outright | `superseded by [NNNN](NNNN-slug.md)` |
-| changes part of it, the rest still holds | `amended-in-part by [NNNN](NNNN-slug.md)`, appended to any list already there, in number order |
-| only refines your own earlier file's details | no status change; add a dated line under its `## Amendments` |
+| changes part of a rule | the rule where it lives: the older record's own text, or the check, skill or pattern that holds it, in the same pull request. The older file stays `accepted` |
+| reverses the older file's whole why | the older file's frontmatter becomes `status: superseded` and `successor: "NNNN"`, the record that replaced it |
 
-You may add a one-line pointer in the older file's body, linking yours and saying where its text
-still holds. It adds no rule. Name the relationship in your own `## Context` as well.
+Your `## Context` says what you changed ([0605](../../../.decisions/0605-no-record-patches-another.md)).
+No record gets an `## Amendments` section, a still-holds line or a copy of another record's rule.
 
-If an amendment adds a subject the older title does not name, retitle the older file (frontmatter
+If an edit adds a subject the older title does not name, retitle the older file (frontmatter
 `title` and heading together) so it names every rule it holds. Keep its number and file name, so
 links still work.
 
@@ -130,9 +136,8 @@ Before you link a decision, resolve it on `origin/main`:
 node .agents/skills/lead/scripts/records.ts resolve <id>...   # status, file, and the live one a superseded one names
 ```
 
-Cite it as a rule only when its status is `accepted` or `amended-in-part by ...`. A `superseded`
-file is history. A file only in an open PR may never merge. Use the file name you just read, not one
-you remember.
+Cite it as a rule only when its status is `accepted`. A `superseded` file is history. A file only
+in an open PR may never merge. Use the file name you just read, not one you remember.
 
 ## 6. Words
 

@@ -1,7 +1,8 @@
 ---
 id: 0022
 title: The lead's Codex steps run on gpt-6-astra at medium effort, never gpt-6.1-sol at xhigh by default
-status: superseded by [0069](0069-choices-are-settings.md)
+status: superseded
+successor: "0069"
 date: 2026-11-09
 tags: [codex, model, effort, lead, steps, astra, sol, price]
 ---

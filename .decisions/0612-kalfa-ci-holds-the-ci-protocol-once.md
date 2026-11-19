@@ -1,12 +1,12 @@
 ---
 id: 0612
-title: The CI protocol lives once, in @kalfa/ci, as Effect services with our own admission logic as pure domain code and GitHub Actions as one Layer at @kalfa/ci/github, and every CI user is a client of it, never a second protocol
+title: The CI protocol lives once, in @kalfa/ci, as Effect services with our own admission logic as pure domain code and GitHub Actions as one Layer in @kalfa/provider-github, and every CI user is a client of it, never a second protocol
 status: accepted
 date: 2026-11-18
 tags: [kalfa, ci, runs, admission, priority-class, preemption, github-actions, sev, libfabrika, tooling]
 ---
 
-# 0612: The CI protocol lives once, in @kalfa/ci, as Effect services with our own admission logic as pure domain code and GitHub Actions as one Layer at @kalfa/ci/github, and every CI user is a client of it, never a second protocol
+# 0612: The CI protocol lives once, in @kalfa/ci, as Effect services with our own admission logic as pure domain code and GitHub Actions as one Layer in @kalfa/provider-github, and every CI user is a client of it, never a second protocol
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ flowchart LR
     runs["Runs service"]
     admit["admission: pure domain code"]
   end
-  gh["@kalfa/ci/github: the Layer"]
+  gh["@kalfa/provider-github: the ci Layer"]
   sev --> runs
   land --> runs
   lib --> runs
@@ -67,7 +67,7 @@ reverses, so nothing is superseded.
 ## Decision
 
 **`@kalfa/ci` holds the CI protocol once, as Effect services. Our admission logic is pure domain
-code beside it, and GitHub Actions is one Layer at `@kalfa/ci/github`. Every user of CI is a client.**
+code beside it, and GitHub Actions is one Layer in `@kalfa/provider-github`. Every user of CI is a client.**
 
 - **The protocol is services.** A `Runs` service dispatches a run, cancels it, and streams its
   states. More services join it in the same package as the work needs them.
@@ -79,7 +79,7 @@ code beside it, and GitHub Actions is one Layer at `@kalfa/ci/github`. Every use
 - **A higher class preempts a lower one.** The model is Kubernetes
   [PriorityClass and preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/).
   Preemption cancels through `Runs.cancel`, so the Layer under it does the real cancel.
-- **GitHub Actions is a Layer,** `@kalfa/ci/github`. Another CI is another Layer, and no client
+- **GitHub Actions is a Layer,** in the provider package `@kalfa/provider-github` (0616). Another CI is another Layer, and no client
   changes. The Layer is where the GitHub API is called; nothing else calls it
   ([0231](0231-ledger-and-codehost-are-separate.md)).
 - **Every user is a client.** Today's lead tooling (`sev.ts`, `land.ts`) and `next/`'s libfabrika
@@ -95,8 +95,8 @@ code beside it, and GitHub Actions is one Layer at `@kalfa/ci/github`. Every use
 - Admission and preemption are pure functions of the runs and their classes, with no clock, network
   or file in them, so a test runs them as plain values.
 - A priority class is an ordered, closed set. A run has exactly one class.
-- `@kalfa/ci` stays one of the six packages of 0585. The Layer is a subpath, `@kalfa/ci/github`,
-  never a new package.
+- `@kalfa/ci` stays one of the packages of 0585 and holds interfaces and a test Layer only. The
+  GitHub Layer is in `@kalfa/provider-github` (0616), never in `@kalfa/ci`.
 
 ## Consequences
 

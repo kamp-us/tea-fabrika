@@ -33,7 +33,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { targetStream } from "../tasks/Tasks.ts";
 import type { SpanRow } from "../telemetry/Trace.ts";
 import { Answer, Attached, type Wait, PAGE as WINDOW_PAGE } from "../transport/Wire.ts";
-import type { GatewayCalls } from "./bindings.ts";
+import { ConnectionId, type GatewayCalls } from "./bindings.ts";
 import { ConnectionService, connectionLayer } from "./connection.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
@@ -43,12 +43,14 @@ import * as WaitsLive from "./WaitsLive.ts";
 import { runsFor } from "@kampus/vitest";
 
 import * as fc from "fast-check";
+import { GatewayError, Storage } from "../gateway/GatewayError.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
+import { AdmissionError } from "../transport/Admissions.ts";
 
 import * as Runtime from "./runtime.ts";
 
@@ -1321,7 +1323,7 @@ const declaration = () => {
   );
 };
 
-const project = Effect.fnUntraced(function* () {
+const project = Effect.fnUntraced(function* (door: Partial<GatewayCalls> = {}) {
   const db = yield* database;
   const sql = nodeSql(db);
   const values = new Map<string, unknown>();
@@ -1399,7 +1401,7 @@ const project = Effect.fnUntraced(function* () {
     Runtime.projectLayer(ctx, env, {
       programs: { [PROGRAM]: { hash: yield* hash(SOURCE), source: SOURCE } },
       bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
-      door: () => Effect.succeed(fake<GatewayCalls>({ retire: () => Effect.void })),
+      door: () => Effect.succeed(fake<GatewayCalls>({ retire: () => Effect.void, ...door })),
     }),
   );
 
@@ -1455,6 +1457,47 @@ it.live.prop(
         expect(notified).toEqual([
           { connection: "test-connection", client: "test-client", news: News.cases.view.make({ update }) },
         ]);
+      }
+    }).pipe(Effect.scoped),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },
+);
+
+// Mock sweep slice 2, the round-2 amendment. The door's `initialize` fails with `AdmissionError` now, and
+// the Project's calls cross RPC as rendered errors: a storage failure leaves as its reason alone, so no
+// storage cause crosses the Durable Object RPC, bare or inside `AdmissionError`; any other error passes as
+// it is, a `GatewayError` inside `AdmissionError` included.
+// Plant: drop `renderedStorage`'s `AdmissionError` branch in runtime.ts (`const lower = error`): an admission
+// `LedgerError` then crosses as `AdmissionError` with its cause.
+it.effect.prop(
+  "L11: the Project's initialize fails with a bare LedgerError reason for a LedgerError, bare or inside the hello's AdmissionError, and passes any other failure, an AdmissionError holding a GatewayError included, as it is",
+  { reason: Schema.Literals(LedgerError.fields.reason.literals), secret: Schema.String, other: Schema.String },
+  ({ reason, secret, other }) =>
+    Effect.gen(function* () {
+      const gateway = new GatewayError({ reason: new Storage({ cause: other }) });
+      const kept = [gateway, new AdmissionError({ cause: gateway })];
+
+      const rendered = [
+        new LedgerError({ reason, message: secret, cause: secret }),
+        new AdmissionError({ cause: new LedgerError({ reason, message: secret, cause: secret }) }),
+      ];
+
+      const initialize = (door: unknown) =>
+        project({ initialize: () => Effect.fail(door) }).pipe(
+          Effect.flatMap(({ service }) =>
+            Effect.flip(
+              service.initialize(ConnectionId.make("test-client"), undefined, { url: "u", tab: "t", name: "n" }),
+            ),
+          ),
+        );
+
+      for (const door of kept) {
+        expect(yield* initialize(door), "any other failure passes as it is").toBe(door);
+      }
+
+      for (const door of rendered) {
+        const error = yield* initialize(door);
+        expect(error).toBeInstanceOf(LedgerError);
+        expect(error, "the reason alone, with no message and no cause").toStrictEqual(new LedgerError({ reason }));
       }
     }).pipe(Effect.scoped),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 50 }) } },

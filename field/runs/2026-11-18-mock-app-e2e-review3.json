@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-mock-app-e2e-review3",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1648",
+  "started": "2026-11-18T22:49:02Z",
+  "ended": "2026-11-18T22:56:28Z",
+  "parent": "2026-11-18-mock-app-e2e-tests5",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "Review of the judgment commits since review2 on the mock sweep's app-e2e slice 1, ticket 1067, in next/ and the shared Effect patch, at 70f86397 on fabrikalfa/mock-app-e2e-s1: merge-ready, no blocker, two non-blocking doc_drift rows. The main merge 2008418a, read with --remerge-diff, keeps main's newer code in all six conflicts and loses nothing of the slice: next/AGENTS.md takes main's short map, whose rule table is gone, so the slice's row goes with it and every vi message still says the fix; bundle.ts keeps main's cause name and Str.replaceAll and prints through Console; L17 in reload.visual.test.ts keeps main's it and Arr forms and Formatter.formatJson and reads TestConsole.warnLines, its checks word for word; builtin-plants.ts takes main's VI_LOCK and adds the computed key, the optional call and L17's old spy; pnpm-lock.yaml is main's byte for byte but the effect patch hash, which is the sha256 of patches/effect@4.1.3.patch. The e2e lock blocks in .oxlintrc.json write out exactly the six no-restricted-properties entries and the level main gives each file set (checked from oxlint --print-config on main and on HEAD: e2e/* warn, e2e/node/** deny), plus the five vi entries. The L10 change in oxlint-plugins/plants.test.ts:1116-1139 is honest, not a loosening: it pins the two e2e blocks by name, place and level, and a plant that drops the four Reflect entries from the e2e/* block turns L10 red. a8b46363's README section (oxlint-plugins/README.md:1264) matches the config. 7ee86b3d adds infoLines and debugLines in warnLines' shape to TestConsole's src, dist .js and .d.ts, changes no other hunk, and L3 reads all five readers with every method covered; the mock-pipeline, mock-cloudflare and mock-node-client plans already name these two readers for the first slice that adds them, so this follows approved plans. 989e8d42 and 70f86397 are mechanical. loosening.sh: eight unrecognized-change hits, none a loosening. Findings, not blocking: oxlint-plugins/plants.test.ts:1070 still says client/ comes last though the e2e blocks now follow it; .patterns/a-law-watches-calls-with-a-recorder.md:152 cites reload.visual.test.ts:302, which the merge moved to line 371.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "plants": [
+    {
+      "law": "L10 of the Reflect ban",
+      "plant": "temporary edit of .oxlintrc.json, restored: drop the four Reflect entries from the next/apps/fabrika/e2e/* lock block",
+      "result": "red"
+    },
+    {
+      "law": "M1 (L4)",
+      "plant": "temporary edit of .oxlintrc.json, restored: drop the five vi entries from the next/apps/fabrika/e2e/node/** block's no-restricted-properties",
+      "result": "red"
+    },
+    {
+      "law": "L3",
+      "plant": "installed effect's TestConsole src and dist, restored by copy: infoLines filters on debug",
+      "result": "red"
+    }
+  ],
+  "note": "Ran at 70f86397, with Node 26.13.0 and TYPESAFE_API_KEY unset: scripts/effect-testconsole.test.ts, 1 passed, and green again after the L3 plant was restored; oxlint-plugins/plants.test.ts -t for L1 and L10 of the Reflect ban, M1 of the mock sweep and the Data.TaggedError entry, 6 passed. oxlint --print-config on main's config and on HEAD's, compared per file set. sh .agents/skills/lead/scripts/loosening.sh origin/main HEAD and from the merge base: the same eight hits. governance.ts read. git status was clean after each plant. Not checked: whether Effect-TS/effect#10665 now names infoLines and debugLines, since the GitHub API for that repository is not open to this session. No typecheck and no lint: the lead ran a typecheck at this head.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "review"
+}

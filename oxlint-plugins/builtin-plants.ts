@@ -121,12 +121,24 @@ const VI_LOCK: readonly (readonly [line: string, vitest: boolean, properties: bo
   ["const a = vi.fn();", true, true],
   ["const b = v.fn();", true, false],
   ['vi.spyOn(console, "log");', true, true],
+  // V2, the alias: `v.spyOn(o, "m")` after `import { vi as v } from "vitest"` is refused by the vitest rule
+  // (oxlint 1.90.0, the lockfile's); the properties rule names the object `vi` and never sees it.
+  ['v.spyOn(console, "log");', true, false],
   ['vi.mock("./c.ts");', true, true],
   ['vi.doMock("./d.ts");', true, true],
   ['vi.stubEnv("E", "f");', true, true],
+  // A computed key and an optional call are read through by both rules (the app-e2e plan, L4).
+  ['vi["spyOn"](console, "warn");', true, true],
+  ["const r = vi?.fn();", true, true],
   // Chained: the vitest rule does not see these, the member access is refused by the properties rule.
   ['vi.spyOn(console, "warn").mockImplementation(() => undefined);', false, true],
   ["const m = vi.fn().mockReturnValue(1);", false, true],
+  // L17's old spy in next/apps/fabrika/e2e, word for word (the app-e2e plan, L5).
+  ['vi.spyOn(console, "warn").mockImplementation(() => {});', false, true],
+  // A documented gap of the pair, not a line it holds: the alias and a chained call together. The vitest
+  // rule misses the chain (oxc#29656) and the properties rule misses the alias, so neither refuses it.
+  // When oxc fixes the first, this line turns `true` in `VI_METHODS`, and the comment goes.
+  ['v.spyOn(console, "warn").mockImplementation(() => undefined);', false, false],
   // Not banned: the rest of `vi`, a comment, a string, another object's `fn`, a plain list.
   ["const n = vi.hoisted(() => 1);", false, false],
   ["const o = vi.waitFor(() => 1);", false, false],
@@ -145,8 +157,9 @@ const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean
 
 /**
  * M2 of the mock sweep's lock (decisions 0555, 0579): what oxlint's `vitest/no-restricted-vi-methods`
- * refuses alone, in a test file under `oxlint-plugins/`. A chained call stays `false` here: the
- * rule does not see it, and `VI_PROPERTIES` refuses it.
+ * refuses alone, in a test file under `oxlint-plugins/`, and in one of every folder a block of the
+ * lock lists (M1 in plants.test.ts, `next/apps/fabrika/e2e` first). A chained call stays `false`
+ * here: the rule does not see it, and `VI_PROPERTIES` refuses it.
  * Plant: delete the lock's block from `.oxlintrc.json`, and the refused lines are not refused.
  */
 export const VI_METHODS: Plant = viPlant("vitest(no-restricted-vi-methods)", ([, vitest]) => vitest);
