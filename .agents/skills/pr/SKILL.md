@@ -1,202 +1,181 @@
 ---
 name: pr
-description: Write or rewrite one pull request's title and description, what the change does first. Use whenever a PR body file, a quest brief's `## pr` section or the words of an open pull request are written, and on "write the PR description" or "fix this PR's title".
+description: "Use when writing a PR body."
+metadata:
+  credits:
+    skill: show-me
+    author: Dex Horthy
+    organisation: Humanlayer
+    url: "https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md"
 ---
 
-# pr
+Use this template for writing the PR body:
 
-A description answers one question first: **what can a person, a program or an agent do after this
-merge that it could not do before?** A reader who stops after the first part still knows what
-landed. The steps table and the dollars come last: they say how the work was done, never what it is.
+```markdown
+## Summary
 
-Write it **after the review, from the diff**. A sentence taken from the plan is a promise, so check
-that the diff kept it. Read the description again after every fix round and every merge of main: the
-change moves, and the words must move with it.
+<diagram, diff-sketch, or tree>
 
-```mermaid
-flowchart TD
-  diff["read the whole diff, the plan and the laws"] --> title["title: what is true after the merge"]
-  title --> does["What this does: the answer first"]
-  does --> rest["the other parts, in their fixed order"]
-  rest --> leak["leakgrep.sh --text on the body file"]
-  leak --> open{"is the pull request open?"}
-  open -- "no, a quest is ending" --> ready["land.ts ready --body"]
-  open -- yes --> patch["gh api -X PATCH repos/kamp-us/tea-fabrika/pulls/N"]
+## Evidence
+
+- **Before:** <screenshot/output/failing test run>
+  **After:** <screenshot/output/passing test run>
+
+## Merge Danger
+
+**Door:** <one-way or two-way>
+
+<optional: description>
+
+**Blast Radius:** <one-word description>
+
+<optional: potential ramifications of merge>
 ```
 
-## One real example
+## Sections
 
-The top of [pull request 1074](https://github.com/kamp-us/tea-fabrika/pull/1074), cut short. Its
-whole description is the model.
+Skip all preambles and keep prose brief. Use the user's domain language from `GLOSSARY.md`.
 
-````markdown
-P39 slice 2: a granted hands key takes and finishes saved jobs, in next/ (ticket 714)
+### Summary
 
-## What this does
+Pick the smallest view that makes the key point clear.
 
-All of it is in `next/`. Today's version is not touched.
+- Show logic or an algorithm as pseudocode:
 
-- A person can grant a separate key the rank `hands`. Before, a grant was `window` or `agent` only.
-- A window or agent key cannot call the job methods. A hands key cannot call anything else.
-- No command runs yet. Requests still come only from trusted code through `Jobs.request`, and there
-  is no `jobs.request` on the wire.
+```text
+on(save)
+  if content is unchanged
+    return cached result
+  write new content
+  return fresh result
+```
 
-## Why this change
+- Show runtime control flow as a call tree:
 
-Ticket 714, the thin slice of hands: this is slice 2 of 5, so the ticket stays open and there is no
-closing phrase. Plan row P39.
+```text
+submitForm
+  createSession
+    persistPrompt
+    launchAgent
+  navigateToSession
+```
 
-## How it works
+- Show UI structure as a component tree, including state and module boundaries that matter:
 
-- `gateway/JobAccess.ts`, new and pure: `owns` checks the process, the named key, the executor and
-  the execution.
-- `jobs/Jobs.ts`: the service gains `forProcess(process)`, a stream of the jobs whose saved request
-  names that process.
+```text
+<SessionPage> (apps/example/src/routes/session.tsx)
+  useSessionEvents()
+  <SessionToolbar>
+    <RunSkillButton> (packages/ui)
+```
+
+- Show file responsibility or a broad refactor as a shallow file tree:
+
+```text
+src/
+├── commands/       # parses user actions
+├── sessions/       # owns session state
+└── transport/      # sends API requests
+```
+
+- Show component interaction, control flow, or data flow with Mermaid:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant Daemon
+    User->>UI: choose command
+    UI->>Daemon: send expanded prompt
+    Daemon-->>UI: stream result
+```
+
+- Use `diff` when the point is what changes and the surrounding shape already exists. Match the diff shape to the topic.
+
+For a component change:
+
+```diff
+ <SessionPage>
+   useSessionEvents()
+   <SessionToolbar>
++    <RunSkillButton />
+   <SessionTimeline>
++    <SkillResultCard />
+```
+
+For a file-layout change:
+
+```diff
+ src/
+ ├── commands/
++│   └── show-me.ts       # expands the slash command
+ ├── sessions/
+-└── transport.ts
++└── transport/
++    ├── client.ts
++    └── stream.ts
+```
+
+For a call-tree or call-stack change:
+
+```diff
+ submitForm
+   createSession
+     persistPrompt
++    expandSkillMention
+     launchAgent
+-  navigateToSession
++  navigateToSession
++    subscribeToEvents
+```
+
+For a state or control-flow change:
+
+```diff
+ on(save)
+-  write content
++  if content is unchanged
++    return cached result
++  write new content
++  invalidate cache
+```
+
+- Show the whole block when most of it is new, when omitted context would hide ownership or order, or when the user needs a copyable target shape:
 
 ```ts
-// gateway/Gateway.ts: a job call checks the grant again inside the write turn.
-if (method.startsWith("jobs.")) {
-  ...
+function expandSkill(command: string): string {
+  const skillName = command.slice(1);
+  return `use the ${skillName} skill`;
 }
 ```
 
-Read these files first, in this order:
+#### Guidance
 
-1. `gateway/Jobs.ts`
-2. `gateway/JobAccess.ts`
-````
+Place each visual next to the short text it supports. Keep only the calls, files, props, states, and boundaries needed to answer the user's current question or the options to resolve the current discussion point.
 
-Three of its six bullets, two of its seven lines of shape and two of its six files are shown.
+You may use one of these, you may use several, it is unlikely you will use all of them. Use your judgement and don't overwhelm the user.
 
-## The parts, in order
+### Evidence
 
-| Part | Holds |
-|---|---|
-| Title | What the change does, in one plain clause, with its plan row or ticket, and `in next/` when it is |
-| `## What this does` | 3 to 6 short bullets: what works after this merge that did not before, and in which version |
-| `## Why this change` | The ticket, the plan row, and the decision or note it builds. One or two lines |
-| `## How it works` | The shape in code, for a reader about to open the diff |
-| `## What a reader should know` | What other code or stored data will feel |
-| `## New names` | One line per new name: what the industry calls it, with the source |
-| `## Laws and checks` | The laws by name, what ran, and the loosening check |
-| `## Not in this pull request` | What waits for a later slice, and what was found and left |
-| `## How it looks` | Only for a change to a program's window: the shots |
-| `## Steps` | The tooling's table, unchanged |
-| The closing phrase | `fabrika close ticket <N>`, only when this pull request finishes the ticket |
+Concrete evidence that the change works. Show a before and after.
 
-Drop a part only when it truly has nothing. Never leave a heading with nothing under it. A docs
-pull request that records one decision is often just the title, What this does, Why this change and
-one line of checks.
+Screenshots are S-tier - when the environment is set up for it and the change is visual.
 
-## What each part needs
+Execution-based evidence is A-tier. Test results, console output. Show the exact test that now fails and passes, using pseudocode.
 
-- **Title.** Say what is true after the merge: `a process keeps its watchers across its object's
-  sleep`. Never the step's name, never the draft's `the quest's steps are running`, never a note on
-  what to write. At the squash it becomes main's commit subject, where nobody sees the body.
-- **What this does.** The answer first. Each bullet is something a person, a program or an agent can
-  now do, or a fault that is gone. A list of files is not an answer. When nothing can be reached yet
-  (a contract with no caller, a route no client speaks), say so in a bullet: it is the line a reader
-  needs most. The test: could the owner read only this part and tell someone what landed?
-- **Why this change.** Links, not an argument: the decision already holds the reasons. A ticket
-  lives in the tracker, so name it by number. Say which slice this is, and whether the ticket stays
-  open.
-- **How it works.** Name each new or changed service, layer, machine, schema and command, one line
-  each. Add one small code block copied from the diff that shows the whole idea, then "Read these
-  files first", numbered. A reader should know where to start before opening the diff.
-- **What a reader should know.** New or removed public exports, settings, a stored shape (a fact
-  recorded from now on, and whether older rows still read), and anything that makes other code
-  change. When there is none, say "Nothing." in one line.
-- **New names.** Each name the diff adds, a type, a service, a function, a file, a setting or a
-  record field, gets one line: the name, what the industry calls it, and a link to a source that
-  says so, such as a maker's docs or the context's `GLOSSARY.md`. A name we coined says what it was
-  searched against and why no industry word fits.
-  `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does
-  not name (`.agents/skills/lead/scripts/pr/Names.ts`).
-- **Laws and checks.** Each law by its exact test title, with what it protects in a few words. Then
-  what ran, at which head, and what ran it. Say what could not run and why, and what is not known
-  yet: a check nobody ran is said as plainly as a green one. Then `loosening.sh`'s output and, when
-  it had hits, the lead's hand check of each.
-- **Not in this pull request.** What the next slices add, by slice. Each finding row written or
-  handed over. Never defend the size: no number caps a pull request.
-- **How it looks.** List each shot by state and layout, link the comment that holds them, and name
-  the head they were taken at. Say what looks broken, empty or wrong in each. The shots are attached
-  with `gh`'s `--attach` and never committed
-  (and "Show it running" and
-  "Shoot more than one layout" in
-  [the changing-the-product reference](../guidelines/references/changing-the-product.md)).
-- **Steps.** Keep the table the tooling wrote: step, box, outcome, list dollars, total. One line
-  above it says which parts were the pipeline's steps and which were the lead's. Work done by hand
-  after the last step (a type fix, a merge of main) gets its own honest line there.
-- **The closing phrase** stands on a line of its own, and only when the merge finishes the ticket. A slice that leaves its
-  ticket open leaves the phrase out and says so under Why this change.
+### Merge Danger
 
-## A quest's description is written twice
+Describe whether it's a one-way or two-way door. You can walk back through two-way doors, but not one-way doors. A PR that is cheap to roll back is lower risk. Changes that involve destructive actions or hard-to-reverse decisions are one-way doors.
 
-A quest brief needs its `## pr` section before any code exists, and `chain.ts` posts it word for
-word: the first line as the title, the rest as the description, then its own `## Steps`
-(`.agents/skills/lead/scripts/chain.ts:1444`). So:
+The blast radius is the potential impact or scope of the changes introduced by this PR. Consider all possibilities. Examples are layout shift, breakages for consumers, mobile responsiveness, etc.
 
-- **At the start,** write only what the plan already settles, in final words: the title, What this
-  does as the plan promises it, Why this change, Not in this pull request. Never a note on what to
-  say later. Pull request 1074 opened with such a note as its title and nothing above its steps.
-- **When the review says merge-ready,** read the diff and rewrite the whole description with this
-  skill. Keep the tooling's Steps part as it is.
-- **Every heading has two words or more,** on purpose. In a quest brief a one-word `## ` heading
-  starts a new brief section (`chain.ts:384`), so a `## Why` would cut the description short there.
+## In this repo
 
-## Words
+Our tools read the body, so it also holds:
 
-[AGENTS.md](../../../AGENTS.md#how-to-write-here) holds the rules, in "How to write here" and "This
-repo is public". The ones a description breaks most:
-
-- Plain everyday words and short sentences. American English.
-- A pull request or an issue is a full URL. A decision or a note is a full URL too: a relative link
-  does not resolve in a description.
-- No personal names, no account names, no machine paths, and nothing a person typed in a chat.
-- No session link. A credit line for the agent is fine.
-
-## Send it
-
-```sh
-sh .agents/skills/lead/scripts/leakgrep.sh --text <file>
-gh api -X PATCH repos/kamp-us/tea-fabrika/pulls/<n> -f title='<title>' -F body=@<file>
-```
-
-Check the body file before it is sent, every time. `gh pr edit` fails in this repo, so an open pull
-request is changed with the second line. A quest agent does not send: its body file's first line is
-the title, and it ends with `land.ts ready --body <file>`
-([the lead skill](../lead/SKILL.md#quest-brief-template)). `land.ts run` then adds `loosening.sh`'s
-output as its own last section, so do not paste it twice.
-
-## The known way
-
-- [Google's engineering practices](https://google.github.io/eng-practices/review/developer/cl-descriptions.html):
-  the first line is a short summary of what is being done and stands alone in the history, the body
-  says what and why, "Fix bug" is not a description, and the description is read again before the
-  merge. We keep all four. Google writes the first line as an order. Here it is a statement, as
-  main's titles already are.
-- Effect: [its template](https://github.com/Effect-TS/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md)
-  asks for a type, a description and related issues. Its
-  [pull request skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/pull-requests/SKILL.md)
-  asks for the problem addressed, the notable decisions and the issue it closes, and says not to
-  narrate the diff. Some of its merged pull requests also open with summary bullets and end with the
-  commands that were run ([one of them](https://github.com/Effect-TS/effect/pull/10627)). A change
-  to runtime behavior or an exported type also gets a changeset, a short note for people who use the
-  package ([its changesets skill](https://github.com/Effect-TS/effect/blob/main/.agents/skills/changesets/SKILL.md#requirement)).
-  Our What this does, Laws and checks and What a reader should know are those three.
-
-## Could become a check
-
-Each of these is a rule code could hold. It stays here until its check lands.
-
-- The title is one clause: not empty, not the draft's placeholder, no second sentence.
-- `## What this does` is there, with 3 to 6 bullets, before a quest's pull request is marked ready or
-  `land.ts ready` takes a body file.
-- No heading has nothing under it, and the headings keep this order.
-- No relative link, no bare `#<n>` and no session link.
-- `leakgrep.sh --text` on the title and the description wherever a tool sends them. `land.ts run`
-  does it today.
-- Every file path named in the description is in the diff, and every law title is in one of its
-  test files.
-- A closing phrase that is not on a line of its own, or a `Closes #<n>`, is named: neither closes
-  anything.
+- **The title** is the first line of the body file, above `## Summary`. It says what is true after the merge.
+- **`## New names`**, when the diff exports a new name: one line per name, what the industry calls it, with a link to a source that says so. The merge queue refuses a PR whose diff exports a name this section does not name.
+- **`fabrika close ticket <N>`** on a line of its own, only when the merge finishes the ticket. Nothing else closes one.
+- **A quest brief's `## pr` section** writes `### Summary` and `### Evidence`, because a one-word `## ` heading starts a new brief section and cuts the PR body short.
+- **The last line** is `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+- **Never** quote a person's chat words, and never link a session.

@@ -165,7 +165,7 @@ on one throwaway branch, pushed and kept out of main. Copy the shots the page li
 
 leakgrep.sh checks added text; private words stay outside the repo.
 
-- Write its title and body with the pr skill. It holds the page and its shots.
+- Write its title and body with the pr skill.
 - Beside the pr skill's parts, the body carries: the scope line; each principle with its kind, its
   lean or "No lean, the owner picks", and where the running example breaks it, at `file:line`; for
   a visual principle, its tokens and the layouts and Linear screen its look is judged at; the
