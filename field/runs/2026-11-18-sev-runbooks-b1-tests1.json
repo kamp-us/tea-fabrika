@@ -1,0 +1,176 @@
+{
+  "date": "2026-11-18",
+  "run": "2026-11-18-sev-runbooks-b1-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1646",
+  "started": "2026-11-18T15:20:00-08:00",
+  "ended": "2026-11-18T15:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Wrote B1's laws of docs/plan/quests/sev-runbooks-PLAN.md in today's lead tooling and kalfa/records: R6 in pr/Merge.test.ts, R7 and R9 in sev/scripts/Incident.test.ts, R8 in sev/scripts/Freeze.test.ts, R11 in kalfa/records/src/Runbooks.test.ts, and the package.json line that makes pnpm lint run records check runbook. R10 and every B2 file are not in this round. Each is red against the product as it stands: R6 because Route has no sev1 or sev0Fixes and a sev0 fix behind main is admitted; R7 because Incident.fix is not a function; R8 because the verdict cancels main's check push run; R9 because close dispatches nothing (and the old nextLines still tells the lead to start the full run by hand); R11 because Runbooks.ts does not exist. Every older law in those files stays green. No product file was touched.",
+  "note": "A first tests agent's work was cut off by a container restart before it committed, and this agent took it over: it kept R8's verdict law, R9's scenarios, R7's walk and R11's laws after reading each, rewrote R6 (a sev0 now tells a fix from a ready pull request, and a ready one needs no catch-up) and fixed R11's CLI law (its fixture lacked the records the runbook follows, and its decision numbers could collide with them). It dropped R11's claim that a bare records check runs the runbook check, which the plan does not say. To prove each law can go green and fail, this agent built the product in scratch copies of .agents/skills/sev, .agents/skills/lead/scripts and kalfa/records under the worktree, ran the plants there, and deleted the copies; no product file was edited. The plants below name that scratch build. Node 26.13.0 was fetched outside the repo because the container has Node 22. Started and ended are estimates; usage and cost are not recorded. pnpm lint is red only on the new records check runbook line (records has no runbook check yet) and its promise-types part was killed for memory once and passed alone.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "0d034c9795c500e0014234d4b6a862ba1113a50d",
+  "plants": [
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Today's Freeze.verdict, with no case for main's check push run (the product as it stands)",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Scratch build: keep every push run on main, so main's full run is kept too",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Scratch build: keep a check push run on any branch",
+      "result": "red"
+    },
+    {
+      "law": "R8 main's check runs kept in a sev0 (sev/scripts/Freeze.test.ts)",
+      "plant": "Scratch build: keep a check run on main of any event",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: ancestor check dropped, so a fix whose head lacks main is admitted",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: ancestor check asked of a sev0 ready pull request too",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: the sev1 fix read as any branch once a fix is named",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: any branch admitted while a sev0 lists some branch",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: ci-required skipped for a fix",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: a sev0 fix read as a ready pull request",
+      "result": "red"
+    },
+    {
+      "law": "R6 admin merge of a fix, both levels (pr/Merge.test.ts)",
+      "plant": "Scratch build: the ancestor check tolerates a head up to 5 commits behind",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: fix overwrites the named fix, so a second fix is named silently",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: fix refuses even after the named fix merged",
+      "result": "red"
+    },
+    {
+      "law": "R7 one sev1 fix at a time (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: fix --drop leaves the fix named",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: close dispatches before the loop's end line, one dispatch",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: close dispatches twice (before the loop's end and after)",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: close dispatches check.yaml in place of scheduled.yaml",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: close dispatches on a branch other than main",
+      "result": "red"
+    },
+    {
+      "law": "R9 close starts main's full run (sev/scripts/Incident.test.ts)",
+      "plant": "Scratch build: close dispatches nothing",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: follows is not read",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: a follows id that names no accepted record passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: a superseded record counts as resolved",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: the summary check is off",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: headings asked of every runbook, not the sev ones",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: a heading is any line that mentions its name",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: a sev runbook the skill does not link passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: a skill link to a missing sev runbook passes",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: only the skill's first link is read",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: records check runbook runs the status check",
+      "result": "red"
+    },
+    {
+      "law": "R11 the runbooks check (kalfa/records/src/Runbooks.test.ts)",
+      "plant": "Scratch build: runbook is not a name check takes",
+      "result": "red"
+    }
+  ]
+}

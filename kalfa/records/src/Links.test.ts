@@ -2,7 +2,7 @@
 // A Markdown link, or a `.decisions/NNNN-slug.md` path in a code comment, in a file under the scope, to a
 // superseded record is one `link` finding that names the successor. A link to an accepted record, a link in
 // fenced code, a bare number, a code string that is not a comment, a symlinked file, and anything in the
-// history folders (`.decisions/`, `experiments/`, `field/`, `docs/direction/`) are none.
+// history folders (`.decisions/`, `experiments/`, `field/`, `docs/direction/`, `docs/plan/quests/`) are none.
 //
 // Assumed export, `Links.ts`: `check(root: string)`: `Effect<ReadonlyArray<Finding>, E, Tracked |
 // FileSystem | Path>`; a finding is `{ _tag: "link", path, line, target, live }`, `target` the four-digit
@@ -38,7 +38,6 @@ const SCOPE = [
   "docs/guidelines/rules-and-records.md",
   ".runbooks/sev.md",
   "docs/plan/README.md",
-  "docs/plan/quests/a-PLAN.md",
   ".patterns/settings.md",
   ".glossary/TERMS.md",
 ] as const;
@@ -54,7 +53,12 @@ const CODE = [
 ] as const;
 
 // Folders and files that are history, or not code: a link there is no finding.
-const HISTORY = ["experiments/01-a-run.md", "field/notes/a-note.md", "docs/direction/a-note.md"] as const;
+const HISTORY = [
+  "experiments/01-a-run.md",
+  "field/notes/a-note.md",
+  "docs/direction/a-note.md",
+  "docs/plan/quests/a-PLAN.md",
+] as const;
 
 const FORMS = ["inline", "anchor", "angle", "reference", "dot-slash", "wrapped", "table"] as const;
 
@@ -136,10 +140,10 @@ const codeLink = (file: string, target: string, style: number, head: (typeof HEA
       : { lines: [`/** The rule: ${path}. */`], at: 0, head: first };
 };
 
-// Plants: read `docs/direction/` as in scope, so the history links are findings; match links line by line, so
-// the wrapped one is missed; read comments with no regard for strings, so a string that holds `//` is a
-// finding; open a template string at any backtick, so the comments after a regex literal are lost; name the
-// next record and not the end of the chain.
+// Plants: read `docs/direction/` and `docs/plan/quests/` as in scope, so the history links are
+// findings; match links line by line, so the wrapped one is missed; read comments with no regard for
+// strings, so a string that holds `//` is a finding; open a template string at any backtick, so the
+// comments after a regex literal are lost; name the next record and not the end of the chain.
 it.effect.prop(
   "L5 a link or a code-comment path to a superseded record is a link finding naming the live record at the end of its chain; accepted targets, fenced code, bare numbers, strings, symlinks and the history folders are none",
   {

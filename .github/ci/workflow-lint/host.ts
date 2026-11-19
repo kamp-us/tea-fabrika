@@ -1,4 +1,4 @@
-// Today's CI for next/: fixed suites on the disposable macOS runner.
+// Today's CI: fixed host-law suites on disposable runners (macOS for next/'s launchd laws, Linux for P8).
 import { parse } from "yaml";
 import { allSteps, compact, map, sameEntries } from "./shared.ts";
 
@@ -24,6 +24,12 @@ const BOX = [
   'git rev-parse HEAD > "$RUNNER_TEMP/box-head.txt"',
   'pnpm exec vitest run --project tooling --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/box.json"',
   ".agents/skills/lead/scripts/box.test.ts",
+].join(" ");
+
+const P8 = [
+  'git rev-parse HEAD > "$RUNNER_TEMP/p8-head.txt"',
+  'pnpm exec vitest run --project tooling-integration --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/p8.json"',
+  ".github/ci/progress-reporter.integration.test.ts",
 ].join(" ");
 
 /** The host workflow keeps L13 as its default and exposes only fixed remote law suites. */
@@ -52,12 +58,18 @@ export const lintHost = (text: string): string[] => {
     suite["required"] === true &&
     suite["default"] === "l13" &&
     JSON.stringify(suite["options"]) ===
-      JSON.stringify(["l13", "e88-r6", "box"]), "H1: dispatch selects only l13, e88-r6 or box and defaults to l13");
+      JSON.stringify([
+        "l13",
+        "e88-r6",
+        "box",
+        "p8",
+      ]), "H1: dispatch selects only l13, e88-r6, box or p8 and defaults to l13");
 
   const jobs = map(workflow["jobs"]);
   const launchd = map(jobs["launchd"]);
   const e88 = map(jobs["e88-r6"]);
   const box = map(jobs["box"]);
+  const p8 = map(jobs["p8"]);
   const l13 = allSteps(launchd).find((step) => step["name"] === "L13");
   const paths = map(on["pull_request"])["paths"];
   require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["pull_request", "workflow_dispatch"]) &&
@@ -69,7 +81,7 @@ export const lintHost = (text: string): string[] => {
     String(l13?.["run"]).includes(
       "pnpm exec vitest run --maxWorkers=1 --root e2e --fileParallelism=false --testTimeout=120000 --hookTimeout=120000 electron-launchd.visual.test.ts",
     ), "H2: L13 retains its automatic paths and default command");
-  require(JSON.stringify(Object.keys(jobs).toSorted()) === JSON.stringify(["box", "e88-r6", "launchd"]) &&
+  require(JSON.stringify(Object.keys(jobs).toSorted()) === JSON.stringify(["box", "e88-r6", "launchd", "p8"]) &&
     [launchd, e88, box].every((job) => job["runs-on"] === "macos-15" && job["timeout-minutes"] === 20) &&
     compact(e88["if"]) ===
       "github.event_name=='workflow_dispatch'&&inputs.suite=='e88-r6'", "H3: E88 R6 is dispatch-only on the existing macOS runner and time limit");
@@ -129,6 +141,36 @@ export const lintHost = (text: string): string[] => {
         "if-no-files-found": "error",
       }),
     ), "H7: box saves its exact head and JSON results after a failed law too");
+
+  const p8Steps = allSteps(p8);
+  const p8Run = p8Steps.find((step) => step["name"] === "P8 law");
+  const p8Proof = p8Steps.find((step) => step["name"] === "P8 proof");
+  require(p8["runs-on"] === "ubuntu-latest" &&
+    p8["timeout-minutes"] === 20 &&
+    compact(p8["if"]) === "github.event_name=='workflow_dispatch'&&inputs.suite=='p8'" &&
+    String(p8Run?.["run"])
+      .replace(/\\\n\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() === P8 &&
+    JSON.stringify(p8Run?.["env"]) === JSON.stringify({ FABRIKA_TEST_DEPTH: "full" }) &&
+    Object.keys(map(workflow["env"])).length === 0 &&
+    Object.keys(map(p8["env"])).length === 0 &&
+    p8["continue-on-error"] === undefined &&
+    p8Steps.every(
+      (step) =>
+        step["continue-on-error"] === undefined && (step === p8Run || Object.keys(map(step["env"])).length === 0),
+    ) &&
+    p8Run?.["if"] === undefined &&
+    compact(p8Proof?.["if"]) === "always()" &&
+    p8Proof?.["uses"] === "actions/upload-artifact@v7" &&
+    sameEntries(
+      Object.entries(map(p8Proof?.["with"])),
+      Object.entries({
+        name: "p8",
+        path: `\${{ runner.temp }}/p8*`,
+        "if-no-files-found": "error",
+      }),
+    ), "H9: p8 dispatch runs only the fixed P8 file at full depth on ubuntu-latest, with blocking failures and a proof saved after a failed law too");
 
   const concurrency = map(workflow["concurrency"]);
   const group = /^host-\$\{\{(.+)\}\}-\$\{\{(.+)\}\}$/.exec(String(concurrency["group"]));

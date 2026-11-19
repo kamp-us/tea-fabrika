@@ -3077,6 +3077,144 @@
       }
     },
     {
+      // 0555, 0579: the `vi` lock for libfabrika's top files and its `gateway/`, `processes/` and `telemetry/`
+      // folders, as a pair of blocks, the shape of the `node/repositories/**` pair above. These four sets take one
+      // list of this rule today, the JSON.parse warn blocks' (the same six entries for a `*.test.ts` file, the
+      // eight with the two `process` ones for the rest), and all four still hold a JSON.parse oracle that
+      // advises, so they stay at warn and in those blocks: joining the pair above would turn that advice into a
+      // blocking line. A `vi` fire blocks at warn too, since only a JSON.parse fire advises (advice.ts). The
+      // `src/*` glob is the top files alone, as in the warn blocks (a `*` does not cross a folder). A folder joins
+      // `files` of both blocks in the slice that takes its `vi` calls to zero, and none is taken off (0524). When a
+      // folder's JSON.parse fires reach zero, it moves to the pair above and leaves the warn blocks.
+      // This block is for every file of the four: the six entries the test files take, then the `vi` ones. The
+      // vitest rule is set here only.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/telemetry/**"
+      ],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
+    },
+    {
+      // The copy of the block above for the same files but their `*.test.ts`, with the two `process` entries added,
+      // as M13's blocks do for libfabrika. It comes after the block above, so a product file takes this one.
+      "files": [
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/telemetry/**"
+      ],
+      "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "process",
+            "property": "stdout",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          },
+          {
+            "object": "process",
+            "property": "stderr",
+            "message": "Write through Effect's Console; a raw stdout or stderr write takes a disable line with its reason (owner ruling, 2026-11-15)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
+    },
+    {
       // P18 L4: a window client's reconnects are the Link machine's (`transport/Link.ts`, `backoff`), so
       // nothing in the client retries a dial itself. This block comes after next/** and after the
       // JSON.parse warn block above, on purpose: an override replaces options and a file takes the last
