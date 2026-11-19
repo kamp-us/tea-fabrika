@@ -2,27 +2,27 @@
 [[records]]
 name = "decisions"
 path = ".kalfa/decisions/"
-prompt = "Matt Pocock's ADR format. Write one only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
+prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
 
 [[records]]
 name = "glossary"
 path = ".kalfa/glossary/"
-prompt = "GLOSSARY-MAP.md is the map of bounded contexts. Each context's words live in its own GLOSSARY.md, in Matt Pocock's glossary format: only words a caller of that context sees."
+prompt = "GLOSSARY-MAP.md is the map of bounded contexts. Each context's words live in its own GLOSSARY.md, in the glossary format in the `domain-modeling` skill: only words a caller of that context sees. A context's GLOSSARY.md is written when its words are decided. A term goes in with an _Avoid_ line, in the pull request that coins or renames it."
 
 [[records]]
 name = "guidelines"
 path = ".kalfa/guidelines/"
-prompt = "One design area's rules, approved by the owner. Change a rule only by editing its page, in a pull request the owner says yes to."
+prompt = "One design area's rules, approved by the owner. Read an area's page whole before you change that area, and write one with the guidelines skill. Change a rule only by editing its page, in a pull request the owner says yes to."
 
 [[records]]
 name = "patterns"
 path = ".kalfa/patterns/"
-prompt = "How the code is shaped now, one doc per pattern. When a doc and the source disagree, the source wins and the doc gets fixed."
+prompt = "How the code is shaped now, one doc per pattern. Find one with README.md and `rg -n '^(where|when):' .kalfa/patterns`, then read the doc for your change. Write one with the write-pattern skill. When a doc and the source disagree, the source wins and the doc gets fixed."
 
 [[records]]
 name = "runbooks"
 path = ".kalfa/runbooks/"
-prompt = "One file per operation done by hand, written the first time it is done for real."
+prompt = "One file per operation done by hand, such as a sev or a wipe of the dev and test homes. Read that operation's file before you do it. A runbook is written the first time its operation is done for real."
 
 [[records]]
 name = "quests"
@@ -30,11 +30,11 @@ path = ".kalfa/quests/"
 prompt = "One signed plan per ticket, approved by the owner before its tests are written. The test writer, the builder and the review read it as the contract. When its pull request lands, the quest moves to the notes repo."
 
 [[records]]
-name = "retro"
-path = ".kalfa/retro/"
-prompt = "Matt Pocock's retro format: one file per session worth learning from."
-
-[[records]]
 name = "research"
 path = ".kalfa/research/"
-prompt = "Matt Pocock's research format: one file per question, answered from high-trust primary sources, each claim cited."
+prompt = "The research format in the `research` skill: one file per question, answered from high-trust primary sources, each claim cited."
+
+[[records]]
+name = "retro"
+path = ".kalfa/retro/"
+prompt = "The retro format in the `retro` skill: one file per session worth learning from."

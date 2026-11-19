@@ -6,9 +6,9 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
 Each context gets its own `GLOSSARY.md` when its words are decided, and not before. **None exists
-yet.** Its shape is in the domain-modeling skill
-([mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/engineering/domain-modeling/GLOSSARY-FORMAT.md),
-adapted for this repo in [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668)). In short:
+yet.** Its shape is in the `domain-modeling` skill's
+[`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
+[PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
 ```md
 # Context name
