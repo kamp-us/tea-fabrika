@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { TABLE } from "./DocsOnly.test-support.ts";
-import { docsOnly, kind } from "./DocsOnly.ts";
+import { docsOnly, isAdminDocs, kind } from "./DocsOnly.ts";
 
 const options = { seed: 119120, numRuns: runsFor({ fast: 50, full: 200 }) };
 
@@ -18,11 +18,34 @@ const ext = fc.constantFrom("md", "ts", "sh", "py", "mjs", "json");
 
 // Markdown under a tree a program or a test reads: code.
 const readMarkdown = fc
-  .tuple(fc.constantFrom("next", "kalfa", "programs", "packages", "fixtures"), folders, word)
+  .tuple(fc.constantFrom("next", "kalfa", "programs", "packages", "fixtures", "vendor"), folders, word)
   .map(([tree, dirs, name]) => [tree, ...dirs, `${name}.md`].join("/"));
 
 // A skill's script, with any extension, Markdown included: code.
 const skillScript = fc.tuple(word, word, ext).map(([skill, name, e]) => `.agents/skills/${skill}/scripts/${name}.${e}`);
+
+// AGENTS.md and CLAUDE.md, capitalized, which the lowercase generators above never draw.
+const instructionMapName = fc.constantFrom("AGENTS.md", "CLAUDE.md");
+
+// An AGENTS.md or CLAUDE.md under today's packages/ or programs/, at any depth: a program or a test reads it.
+const todayMap = fc
+  .tuple(fc.constantFrom("packages", "programs"), folders, instructionMapName)
+  .map(([tree, dirs, name]) => [tree, ...dirs, name].join("/"));
+
+// An AGENTS.md or CLAUDE.md with a fixtures folder above it, at any depth under a read tree: code.
+const fixturesMap = fc
+  .tuple(
+    fc.constantFrom("next", "kalfa", "programs", "packages", "fixtures", "vendor"),
+    folders,
+    folders,
+    instructionMapName,
+  )
+  .map(([tree, above, below, name]) => [tree, ...above, "fixtures", ...below, name].join("/"));
+
+// An AGENTS.md or CLAUDE.md in a skill's scripts folder, at any depth: code, since a script folder is code.
+const scriptsMap = fc
+  .tuple(word, folders, instructionMapName)
+  .map(([skill, dirs, name]) => [".agents/skills", skill, "scripts", ...dirs, name].join("/"));
 
 // Paths of every kind, so one list can mix code, instruction text and docs.
 const anyPath = fc.oneof(
@@ -42,13 +65,10 @@ const anyPath = fc.oneof(
 
 // vector: the fixed table's answers, for CI and for the lead's tools, row by row.
 // Plant: `isRow` answers false for a field row, so the 1641 row's files count as code.
-it("vector: every row of the fixed table gets its docsOnly answer, and its adminDocs answer for the admin merge's docs kind", () => {
+it("vector: every row of the fixed table gets its docsOnly answer, and its adminDocs answer from isAdminDocs", () => {
   for (const row of TABLE) {
     expect(docsOnly(row.paths), row.pr).toBe(row.docsOnly);
-    expect(
-      row.paths.every((path) => kind(path) === "docs"),
-      row.pr,
-    ).toBe(row.adminDocs);
+    expect(row.paths.every(isAdminDocs), row.pr).toBe(row.adminDocs);
   }
 });
 
@@ -65,9 +85,9 @@ it("property: docsOnly of a non-empty list is true exactly when no path is code,
 });
 
 // Plant: `reads` answers false for Markdown under next/, so such a file is docs and not code.
-it("property: Markdown under next/, kalfa/, programs/, packages/ or fixtures/ is code, and so is a skill's script with any extension", () => {
+it("property: Markdown under a read tree is code, and so is a skill's script with any extension, and so is an AGENTS.md or CLAUDE.md under packages/, programs/, a fixtures folder or a skill's scripts folder", () => {
   fc.assert(
-    fc.property(fc.oneof(readMarkdown, skillScript), (path) => {
+    fc.property(fc.oneof(readMarkdown, skillScript, todayMap, fixturesMap, scriptsMap), (path) => {
       expect(kind(path), path).toBe("code");
     }),
     options,
@@ -75,14 +95,14 @@ it("property: Markdown under next/, kalfa/, programs/, packages/ or fixtures/ is
 });
 
 // Plant: `isInstructionMap` lets fixtures/ through, so a fixture's AGENTS.md reads as instruction text, not code.
-it("property: an AGENTS.md or CLAUDE.md is instructions outside fixtures/, a skill's folder and a brief or prompt folder, and code within them", () => {
+it("property: an AGENTS.md or CLAUDE.md under the root, next/, kalfa/ or docs/ is instructions, and under a root fixtures/, a brief or prompt folder or a skill's folder it is code", () => {
   const plain = word.filter((dir) => !["fixtures", "brief", "briefs", "prompt", "prompts"].includes(dir));
 
   const name = fc.constantFrom("AGENTS.md", "CLAUDE.md");
 
   const outside = fc
     .tuple(
-      fc.constantFrom<readonly string[]>([], ["next"], ["kalfa"], ["programs"], ["docs"]),
+      fc.constantFrom<readonly string[]>([], ["next"], ["kalfa"], ["docs"]),
       fc.array(plain, { maxLength: 2 }),
       name,
     )
@@ -107,6 +127,38 @@ it("property: an AGENTS.md or CLAUDE.md is instructions outside fixtures/, a ski
     fc.property(outside, within, (out, inside) => {
       expect(kind(out), out).toBe("instructions");
       expect(kind(inside), inside).toBe("code");
+    }),
+    options,
+  );
+});
+
+// Plant: `isAdminDocs` answers the docs kind alone, so a README or a `.patterns/` Markdown counts as admin docs.
+it("property: isAdminDocs is the docs kind under the admin merge's six folders, and no path outside them is admin docs", () => {
+  const adminFolder = fc.constantFrom(".decisions", "docs", "field", ".glossary", ".runbooks", "experiments");
+
+  const otherFolder = fc.constantFrom(".patterns", "apps", "oxlint-plugins", "next", "vendor", ".github", ".claude");
+
+  // Markdown under one of the admin merge's folders: admin docs exactly when its kind is docs.
+  const inside = fc
+    .tuple(adminFolder, folders, word)
+    .map(([dir, below, name]) => [dir, ...below, `${name}.md`].join("/"));
+
+  // Markdown outside them, a root README included: never admin docs.
+  const outside = fc.oneof(
+    fc.tuple(otherFolder, folders, word).map(([dir, below, name]) => [dir, ...below, `${name}.md`].join("/")),
+    fc.constant("README.md"),
+  );
+
+  fc.assert(
+    fc.property(inside, (path) => {
+      expect(isAdminDocs(path), path).toBe(kind(path) === "docs");
+    }),
+    options,
+  );
+
+  fc.assert(
+    fc.property(outside, (path) => {
+      expect(isAdminDocs(path), path).toBe(false);
     }),
     options,
   );

@@ -311,6 +311,24 @@ const plants: Plant[] = [
       step(w, "changes", "parser pass")["env"] = env;
     },
   ],
+  // The changes job's installs and setups are read wherever they sit, the classifier's own Node setup
+  // aside (classify.ts holds that one). Each plant puts one before the classify step, and must fail.
+  [
+    "an install before the classify step, with no continue-on-error",
+    (w) => {
+      w.jobs.changes.steps.splice(place(w, "changes", "classify"), 0, { run: "pnpm install --frozen-lockfile" });
+    },
+  ],
+  [
+    "an unguarded setup-node before the classify step, under another name",
+    (w) => {
+      w.jobs.changes.steps.splice(place(w, "changes", "classify"), 0, {
+        name: "setup node before classify",
+        uses: "actions/setup-node@v7",
+        with: { "node-version": "26.13.0" },
+      });
+    },
+  ],
 ];
 
 // T1076 O4. Each new fault goes through the existing whole-workflow acceptance path alone, on the

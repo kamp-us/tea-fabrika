@@ -1,7 +1,7 @@
 // The one table every tool's law reads (decisions 0183, 0180 and 0090): CI's changes job, the lead's
 // arm and the lead's admin merge. Each row is one change, as its paths are listed. `docsOnly` is what
-// CI skips its heavy jobs on and what arm accepts. `adminDocs` is the admin merge's answer: every path
-// is a `docs` kind, so instruction text is not docs.
+// CI skips its heavy jobs on and what arm accepts. `adminDocs` is the admin merge's answer: `isAdminDocs`
+// holds for every path (0183), so instruction text, and a README outside the admin merge's folders, is not.
 //
 // The rows 1657, 1650 and 1641 are the file lists of those pull requests on 2026-11-18, as GitHub
 // listed them. The other rows are one path each, pinned: each names a kind of path a rule must not get wrong.
@@ -49,7 +49,8 @@ export const TABLE: readonly Row[] = [
     docsOnly: true,
     adminDocs: true,
   },
-  { pr: "README.md", paths: ["README.md"], docsOnly: true, adminDocs: true },
+  // A root README is docs for CI, but the admin merge takes docs only in its own folders (0183), so it refuses this.
+  { pr: "README.md", paths: ["README.md"], docsOnly: true, adminDocs: false },
   {
     pr: ".claude/agents/step-build.md",
     paths: [".claude/agents/step-build.md"],
@@ -87,4 +88,50 @@ export const TABLE: readonly Row[] = [
     docsOnly: false,
     adminDocs: false,
   },
+  // Vendored Markdown is read: `pnpm lint` hashes vendor/anti-slop/src against its pin.
+  {
+    pr: "vendor/anti-slop/src/vendor/eslint-stylistic/UPSTREAM.md",
+    paths: ["vendor/anti-slop/src/vendor/eslint-stylistic/UPSTREAM.md"],
+    docsOnly: false,
+    adminDocs: false,
+  },
+  // An agent's command under .claude/ is instruction text: quiet in CI, and never admin docs.
+  { pr: ".claude/commands/x.md", paths: [".claude/commands/x.md"], docsOnly: true, adminDocs: false },
+  // A pull request template under .github/ is read by GitHub and our tools: instruction text.
+  {
+    pr: ".github/pull_request_template.md",
+    paths: [".github/pull_request_template.md"],
+    docsOnly: true,
+    adminDocs: false,
+  },
+  // Markdown outside the admin merge's folders is docs for CI, and no admin docs.
+  { pr: ".patterns/x.md", paths: [".patterns/x.md"], docsOnly: true, adminDocs: false },
+  // An experiment's write-up is admin docs: 0183 names it as docs, and experiments/ is an admin folder.
+  { pr: "experiments/300-x.md", paths: ["experiments/300-x.md"], docsOnly: true, adminDocs: true },
+  // A package's, a program's or a fixture's AGENTS.md is read by a test or a program: code.
+  { pr: "packages/a/AGENTS.md", paths: ["packages/a/AGENTS.md"], docsOnly: false, adminDocs: false },
+  // pnpm lint hashes vendor/anti-slop/src against its pin, so an AGENTS.md there is read too.
+  {
+    pr: "vendor/anti-slop/src/AGENTS.md",
+    paths: ["vendor/anti-slop/src/AGENTS.md"],
+    docsOnly: false,
+    adminDocs: false,
+  },
+  { pr: "programs/a/AGENTS.md", paths: ["programs/a/AGENTS.md"], docsOnly: false, adminDocs: false },
+  { pr: "next/fixtures/AGENTS.md", paths: ["next/fixtures/AGENTS.md"], docsOnly: false, adminDocs: false },
+  {
+    pr: "next/packages/x/fixtures/r/AGENTS.md",
+    paths: ["next/packages/x/fixtures/r/AGENTS.md"],
+    docsOnly: false,
+    adminDocs: false,
+  },
+  // A skill's scripts folder is code, its AGENTS.md included.
+  {
+    pr: ".agents/skills/lead/scripts/AGENTS.md",
+    paths: [".agents/skills/lead/scripts/AGENTS.md"],
+    docsOnly: false,
+    adminDocs: false,
+  },
+  // The docs/ AGENTS.md is instruction text: quiet in CI, and not admin docs.
+  { pr: "docs/AGENTS.md", paths: ["docs/AGENTS.md"], docsOnly: true, adminDocs: false },
 ];

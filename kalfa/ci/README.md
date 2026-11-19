@@ -11,7 +11,7 @@ Three users read it, and must agree:
 - `.github/ci/changes.mjs`, the changes job's classifier, which skips the heavy jobs on a docs-only
   change (`check.yaml` links this package before it runs).
 - `.agents/skills/lead/scripts/pr/Arm.ts`, which arms a docs-only pull request on its automatic check.
-- `.agents/skills/lead/scripts/pr/Merge.ts`, the admin merge, which takes only the `docs` kind.
+- `.agents/skills/lead/scripts/pr/Merge.ts`, the admin merge, which takes only `isAdminDocs`: the `docs` kind in `.decisions/`, `docs/`, `field/`, `.glossary/`, `.runbooks/` or `experiments/` (decision 0183).
 
 The package imports nothing and has no dependencies, so CI can run it before any install. Its laws are
 in `src/DocsOnly.test.ts`, and the table every tool's law reads is `src/DocsOnly.test-support.ts`.

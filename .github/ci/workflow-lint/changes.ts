@@ -85,14 +85,14 @@ export const changesJob: Rule = ({ jobs }, require) => {
 
   const sizing = changeSteps.find((s) => s["id"] === "size");
 
-  // The steps after the classify step only. The classifier's own Node and link come before it, on
-  // the pinned Node with no `if`, and classify.ts holds them.
-  const afterClassify = changeSteps.slice(changeSteps.findIndex((s) => s["id"] === "diff") + 1);
-
-  for (const step of afterClassify.filter(
+  // Every step of the job, before the classify step too, except the classifier's own Node setup: classify.ts
+  // holds that one, on the pinned Node with no `if` and no `continue-on-error`. Any other install or setup
+  // fails changes wherever it sits.
+  for (const step of changeSteps.filter(
     (s) =>
-      (Predicate.isString(s["uses"]) && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
-      (Predicate.isString(s["run"]) && s["run"].startsWith("pnpm install")),
+      s["name"] !== "setup node for the classifier" &&
+      ((Predicate.isString(s["uses"]) && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
+        (Predicate.isString(s["run"]) && s["run"].startsWith("pnpm install"))),
   )) {
     const forSizing = step["run"] === "pnpm install --frozen-lockfile --ignore-scripts";
     const before = forSizing ? sizing : same;
