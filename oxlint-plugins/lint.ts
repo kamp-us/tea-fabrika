@@ -11,7 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { Array as Arr, pipe, Result } from "effect";
 import { advises, stale, warnLines } from "./advice.ts";
-import { audit } from "./anti-slop.ts";
+import { audit, baseConfig } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 import { load, scriptReads } from "./script-reads.mjs";
@@ -234,8 +234,9 @@ for (const { _tag, line } of stuck) {
 
 // The anti-slop plugin, taken as it ships (we use the anti-slop plugin as it ships, never our own copy of its rules). Only a whole run says whether vendor/anti-slop/ is
 // still the pinned commit's code, and only it sees every folder, so only it runs the zero lock: a
-// folder with no hit of a taken rule goes on that rule's list (anti-slop.ts).
-const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout);
+// folder with no hit of a taken rule left comes off that rule's exclude list, and a list never names
+// a folder its list at the merge base with origin/main does not (anti-slop.ts).
+const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout, baseConfig(ROOT));
 
 for (const line of vendored) {
   console.error(line);

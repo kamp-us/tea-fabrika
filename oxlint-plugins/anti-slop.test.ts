@@ -1,14 +1,17 @@
 // The anti-slop rules the owner took (we use the anti-slop plugin as it ships, never our own copy of its rules) are the exam, so each is seen to fire through the
 // repository's own .oxlintrc.json, everywhere in the scope but the folders its block excludes (L2,
 // L3). The config names no other rule of the two plugins, and never turns a taken one down (L3, L5).
-// The zero lock in anti-slop.ts is a property of its own (L4). The config loads the two plugins from
-// vendor/anti-slop/ and from nowhere else (L7).
+// The zero lock in anti-slop.ts is a property of its own (L4), and no block may set a taken rule
+// below error (L9). The config loads the two plugins from vendor/anti-slop/ and from nowhere else (L7).
 //
 // Plants, each run once and undone:
 // - L2: drop the `anti-slop-effect` entry from `jsPlugins`. The two tag rules load no rule, and their
 //   plants get no diagnostic.
 // - L3: name a taken rule in the root `rules`. It fires in a folder its block excludes.
 // - L4: `lock` answers "nothing to remove" for every input.
+// - L4: `added` answers [] whatever the base branch's list holds; `remove` reads a folder's own
+//   hits in place of `loose`.
+// - L9: `lowered` reads only the blocks that set a taken rule at error.
 // - L5: add `{ "files": ["next/**"], "rules": { "anti-slop/no-runtime-typeof": "off" } }` at the end.
 // - L7: load `anti-slop` from `./oxlint-plugins/fixtures/edited-copy/index.ts` in `.oxlintrc.json`.
 //   The scenario then reads a line naming that path.
@@ -20,7 +23,7 @@ import { Array as Arr, Effect, pipe, Option, Order, Predicate, Record as Rec, Sc
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { countFile, folders, lock, SCOPE, strays, TAKEN, WHOLE } from "./anti-slop.ts";
+import { baseLists, countFile, folders, lock, lowered, SCOPE, strays, TAKEN, WHOLE } from "./anti-slop.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -318,7 +321,12 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
     const scope = ["next/programs/old/**", "next/programs/new/**"];
     const hits = new Map([["next/programs/old/**", 2]]);
 
-    expect(lock(scope, ["next/programs/old/**"], hits)).toEqual({ remove: [], missing: [], refused: [] });
+    expect(lock(scope, ["next/programs/old/**"], hits, null)).toEqual({
+      remove: [],
+      missing: [],
+      refused: [],
+      added: [],
+    });
   });
 
   it("property: and refuses an excluded glob that is not a folder of the scope", () => {
@@ -345,7 +353,7 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
           );
 
           const gone = Arr.map(strays, (name) => `next/gone/${name}/**`);
-          const result = lock(scope, [...Arr.map(onList, glob), ...gone], map);
+          const result = lock(scope, [...Arr.map(onList, glob), ...gone], map, null);
 
           const folderOf = (keep: (entry: (typeof counted)[number]) => boolean) =>
             pipe(
@@ -362,6 +370,7 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
           expect(result.remove).toEqual(remove);
           expect(result.missing).toEqual(folderOf(({ name, hits }) => hits > 0 && !onList.includes(name)));
           expect(result.refused).toEqual(gone);
+          expect(result.added).toEqual([]);
           reached.remove ||= result.remove.length > 0;
           reached.missing ||= result.missing.length > 0;
           reached.none ||= result.remove.length === 0 && result.missing.length === 0;
@@ -373,6 +382,63 @@ describe("L4 the zero lock names the excluded folders with no hit and the folder
 
     expect(reached).toEqual({ remove: true, missing: true, none: true, refused: true });
   });
+
+  // Plant: `added` answers [] whatever the base branch's list holds, so a dirty folder put on the list passes.
+  it("scenario: an excluded folder the base branch's list does not name is refused, even with hits", () => {
+    const [clean, dirty] = ["next/programs/clean/**", "next/programs/dirty/**"];
+
+    const hits = new Map([
+      [clean, 1],
+      [dirty, 3],
+    ]);
+
+    expect(lock([clean, dirty], [clean, dirty], hits, [clean])).toEqual({
+      remove: [],
+      missing: [],
+      refused: [],
+      added: [dirty],
+    });
+
+    expect(lock([clean, dirty], [clean], new Map([[clean, 1]]), [clean, dirty]).added).toEqual([]);
+
+    // The repository's own lists, read as the base branch's text is read, grow past nothing.
+    const base = Option.getOrThrow(baseLists(readFileSync(join(ROOT, ".oxlintrc.json"), "utf8")));
+
+    for (const rule of TAKEN) {
+      const list = base.get(rule);
+      expect(list, rule).toEqual(excluded(rule));
+      expect(lock(folders(ROOT), excluded(rule), new Map(), list ?? null).added, rule).toEqual([]);
+    }
+  });
+
+  // Plant: `remove` reads a folder's own hits in place of `loose`, so the outer glob stays on the list.
+  it("scenario: an excluded folder whose every hit sits in an excluded folder inside it comes off the list", () => {
+    const [pkg, src] = ["kalfa/config/**", "kalfa/config/src/**"];
+
+    const hits = new Map([
+      [pkg, 4],
+      [src, 4],
+    ]);
+
+    expect(lock([pkg, src], [pkg, src], hits, [pkg, src])).toEqual({
+      remove: [pkg],
+      missing: [],
+      refused: [],
+      added: [],
+    });
+
+    expect(
+      lock(
+        [pkg, src],
+        [pkg, src],
+        new Map([
+          [pkg, 5],
+          [src, 4],
+        ]),
+        [pkg, src],
+      ).remove,
+    ).toEqual([]);
+  });
 });
 
 describe("L5 no block for a taken rule says off or warn", () => {
@@ -383,6 +449,23 @@ describe("L5 no block for a taken rule says off or warn", () => {
 
     expect(settings.length).toBeGreaterThan(0);
     expect(Arr.filter(settings, ([, setting]) => levelOf(setting) !== "deny")).toEqual([]);
+  });
+});
+
+// Plant: `lowered` reads only the blocks that set a taken rule at error, so a later "off" block passes.
+describe("L9 no block sets a taken rule below error", () => {
+  it("scenario: a later block that sets a taken rule to off or warn is refused", () => {
+    const on = { files: [...SCOPE], rules: { "anti-slop/no-runtime-typeof": "deny" } };
+    const off = { files: ["next/programs/a/**"], rules: { "anti-slop/no-runtime-typeof": "allow" } };
+    const warn = { files: ["kalfa/**"], rules: { "anti-slop/max-ternary-depth": ["warn", [{ max: 2 }]] as const } };
+    const other = { files: ["next/**"], rules: { "eslint/no-console": "allow" } };
+
+    expect(lowered([on, other])).toEqual([]);
+    expect(lowered([on, off, warn])).toEqual([
+      expect.stringContaining("anti-slop/no-runtime-typeof to allow in next/programs/a/**"),
+      expect.stringContaining("anti-slop/max-ternary-depth to warn in kalfa/**"),
+    ]);
+    expect(lowered(printed.overrides)).toEqual([]);
   });
 });
 
@@ -402,7 +485,7 @@ describe("L8 the zero lock covers the typecheck port, today's tooling", () => {
     );
 
     for (const rule of TAKEN) {
-      expect(lock(scope, excluded(rule), new Map()).refused, rule).toEqual([]);
+      expect(lock(scope, excluded(rule), new Map(), null).refused, rule).toEqual([]);
     }
   });
 });
@@ -483,10 +566,10 @@ effectIt.effect.prop(
       ];
 
       const scope = [pkg, src, program];
-      expect(lock(scope, [], new Map())).toEqual({ remove: [], missing: [], refused: [] });
-      expect(lock(scope, [pkg, src], new Map()).remove).toEqual([pkg, src]);
+      expect(lock(scope, [], new Map(), null)).toEqual({ remove: [], missing: [], refused: [], added: [] });
+      expect(lock(scope, [pkg, src], new Map(), null).remove).toEqual([pkg, src]);
       const gone = `kalfa/${input.name}/absent/**`;
-      expect(lock(scope, [gone], new Map()).refused).toEqual([gone]);
+      expect(lock(scope, [gone], new Map(), null).refused).toEqual([gone]);
 
       // The actual fold used by count must account for every overlapping scope.
       for (const mode of ["source", "package", "mixed"]) {
@@ -506,11 +589,11 @@ effectIt.effect.prop(
         expect(hits.get(pkg)).toBe(source + other);
         expect(hits.get(src) ?? 0).toBe(source);
         expect(hits.has(program)).toBe(false);
-        expect(lock(scope, [], hits).missing).toEqual(source === 0 ? [pkg] : [pkg, src]);
-        expect(lock(scope, [pkg], hits)).toEqual({ remove: [], missing: [], refused: [] });
+        expect(lock(scope, [], hits, null).missing).toEqual(source === 0 ? [pkg] : [pkg, src]);
+        expect(lock(scope, [pkg], hits, null)).toEqual({ remove: [], missing: [], refused: [], added: [] });
         // Excluding the source folder alone leaves the package's own hits, outside it, on.
-        expect(lock(scope, [src], hits).missing).toEqual(other === 0 ? [] : [pkg]);
-        expect(lock(scope, [src], hits).remove).toEqual(source === 0 ? [src] : []);
+        expect(lock(scope, [src], hits, null).missing).toEqual(other === 0 ? [] : [pkg]);
+        expect(lock(scope, [src], hits, null).remove).toEqual(source === 0 ? [src] : []);
       }
     }),
   { arbitrary: { seed: 119120, runs: 100, size: 100 } },

@@ -82,10 +82,8 @@ const targetStrings = (x: unknown): string[] =>
         ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
-// The platform's own import names, as ADR 0018 lists them (Cloudflare is reached only through Alchemy)
-// (.kalfa/decisions/0018-cloudflare-only-through-alchemy.md, "New `next/` code never imports the
-// platform directly"): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A
-// change to that list changes this one. A name ending in `:` or `/` is a prefix; the rest are
+// The platform's own import names (new `next/` code never imports the platform directly, only
+// through Alchemy): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A name ending in `:` or `/` is a prefix; the rest are
 // package names, with their subpaths.
 const platform = ["cloudflare:", "miniflare", "workerd", "wrangler", "@cloudflare/"] as const;
 

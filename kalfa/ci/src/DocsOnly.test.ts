@@ -5,7 +5,7 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { TABLE } from "./DocsOnly.test-support.ts";
-import { docsOnly, isAdminDocs, kind } from "./DocsOnly.ts";
+import { docsOnly, kind } from "./DocsOnly.ts";
 
 const options = { seed: 119120, numRuns: runsFor({ fast: 50, full: 200 }) };
 
@@ -64,10 +64,9 @@ const anyPath = fc.oneof(
 
 // vector: the fixed table's answers, for CI and for the lead's tools, row by row.
 // Plant: `reads` answers true for every path under kalfa/, so the kalfa/ci/README.md row counts as code.
-it("vector: every row of the fixed table gets its docsOnly answer, and its adminDocs answer from isAdminDocs", () => {
+it("vector: every row of the fixed table gets its docsOnly answer", () => {
   for (const row of TABLE) {
     expect(docsOnly(row.paths), row.pr).toBe(row.docsOnly);
-    expect(row.paths.every(isAdminDocs), row.pr).toBe(row.adminDocs);
   }
 });
 
@@ -126,52 +125,6 @@ it("property: an AGENTS.md or CLAUDE.md under the root, next/, kalfa/ or docs/ i
     fc.property(outside, within, (out, inside) => {
       expect(kind(out), out).toBe("instructions");
       expect(kind(inside), inside).toBe("code");
-    }),
-    options,
-  );
-});
-
-// Plant: `isAdminDocs` answers the docs kind alone, so a README or a `.kalfa/patterns/` Markdown counts as admin docs.
-it("property: isAdminDocs is the docs kind under the admin merge's five folders, and no path outside them is admin docs", () => {
-  const adminFolder = fc.constantFrom(
-    ".kalfa/decisions",
-    "docs",
-    ".kalfa/glossary",
-    ".kalfa/runbooks",
-    ".kalfa/guidelines",
-  );
-
-  const otherFolder = fc.constantFrom(
-    ".kalfa/patterns",
-    "apps",
-    "oxlint-plugins",
-    "next",
-    "vendor",
-    ".github",
-    ".claude",
-  );
-
-  // Markdown under one of the admin merge's folders: admin docs exactly when its kind is docs.
-  const inside = fc
-    .tuple(adminFolder, folders, word)
-    .map(([dir, below, name]) => [dir, ...below, `${name}.md`].join("/"));
-
-  // Markdown outside them, a root README included: never admin docs.
-  const outside = fc.oneof(
-    fc.tuple(otherFolder, folders, word).map(([dir, below, name]) => [dir, ...below, `${name}.md`].join("/")),
-    fc.constant("README.md"),
-  );
-
-  fc.assert(
-    fc.property(inside, (path) => {
-      expect(isAdminDocs(path), path).toBe(kind(path) === "docs");
-    }),
-    options,
-  );
-
-  fc.assert(
-    fc.property(outside, (path) => {
-      expect(isAdminDocs(path), path).toBe(false);
     }),
     options,
   );

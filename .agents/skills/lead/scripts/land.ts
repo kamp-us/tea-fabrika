@@ -51,13 +51,12 @@
 //
 //   land.ts merge <pr> [--admin]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
-//     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, only
-//     for a docs-only pull request (the lead admin-merges a docs-only pull request after checking it is not broken: every file @kalfa/ci/DocsOnly's isAdminDocs, Markdown no
-//     program reads in a docs folder, or a field row; instruction text is armed instead), a sev
-//     fix at either level (a sev fix is admin-merged one at a time on current main: the branch `sev.ts fix` named in a sev1, or one `open --allow` or
-//     `next` named in a sev0), or a ready pull request a sev0 `allow`ed (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order). A fix and a ready
-//     one need `ci-required` green at the head, and a fix also needs origin/main's head in its
-//     history. Every one runs the leak gate first, on the change, each commit, the title and the
+//     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, which
+//     skips the queue and never a green check: every one needs `ci-required` green at the head,
+//     docs included. It lands a sev fix at either level (a sev fix is admin-merged one at a time on current main: the branch `sev.ts fix` named in a
+//     sev1, or one `open --allow` or `next` named in a sev0), a ready pull request a sev0 `allow`ed
+//     (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), or any other pull request the owner asked for. A fix also needs origin/main's head in
+//     its history. Every one runs the leak gate first, on the change, each commit, the title and the
 //     description, and refuses on any hit or on a grep that could not run.
 //
 //   land.ts merged <pr>...

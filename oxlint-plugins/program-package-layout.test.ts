@@ -239,7 +239,7 @@ describe("fabrika/program-package-layout", () => {
     { line: 'export {x} from "dep-c";', manifest: { peerDependencies: { "dep-c": "1.0.0" } } },
     { line: 'import "dep-d";', manifest: { optionalDependencies: { "dep-d": "1.0.0" } } },
     { line: 'import "#path";', manifest: { imports: { "#path": "node:path" } } },
-    // Review 7 of P16b: the platform's types stay fine as types, whatever ADR 0018's list holds (Cloudflare is reached only through Alchemy).
+    // Review 7 of P16b: the platform's types stay fine as types, whatever the platform's import names hold (new `next/` code never imports the platform directly).
     {
       line: 'import type {DurableObjectState} from "@cloudflare/workers-types"; export type {DurableObjectState};',
       manifest: { devDependencies: { "@cloudflare/workers-types": "1.0.0" } },
@@ -679,7 +679,7 @@ describe("fabrika/program-package-layout", () => {
       defines: true,
       pure: [],
     },
-    // Review 7 of P16b: two more of ADR 0018's platform names (Cloudflare is reached only through Alchemy), each a package the manifest declares
+    // Review 7 of P16b: two more of the platform's import names (new `next/` code never imports the platform directly), each a package the manifest declares
     // (23, 24). Cloudflare's Container is a Durable Object class by another name.
     {
       text: (c) => `import {Container} from "@cloudflare/containers"; export class ${c} extends Container {}`,
@@ -1176,7 +1176,7 @@ describe("fabrika/program-package-layout", () => {
           ],
           // pinned: review 7 of P16b, `import {Container} from "@cloudflare/containers"; export
           // class C extends Container {}` at '.', with the package in `dependencies`, gave no
-          // finding: worker() left out two of ADR 0018's platform names (Cloudflare is reached only through Alchemy).
+          // finding: worker() left out two of the platform's import names.
           [
             "program0",
             ["./server", "./ui", "./lib"],

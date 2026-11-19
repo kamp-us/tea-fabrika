@@ -280,7 +280,7 @@ A Worker runtime import is one of the platform's names, the list
 [0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) gives (`cloudflare:*`, `miniflare`,
 `workerd`, `wrangler`, `@cloudflare/*`), or Alchemy's local runtime
 (`@alchemy.run/cloudflare-runtime`) or libfabrika's `box` and `workers` entries. The rule's
-`platform` list cites ADR 0018 (Cloudflare is reached only through Alchemy) and changes with it. A type-only import of any of them passes, so
+`platform` list holds the platform's import names (new `next/` code never imports the platform directly). A type-only import of any of them passes, so
 `@cloudflare/workers-types` stays fine as types. A link is followed when it is relative or when it
 resolves to a file that is not a dependency's, under `node_modules`: its own name, a `#` import or
 an absolute path, in the package or out of it.
@@ -347,7 +347,7 @@ The hand-written part, and the generated case that tests each edge in
 | Every `*` in a target is the same text | the plants' two-`*` target |
 | A pattern target in build output, or under a symlinked folder, is listed | the plants' `dist/*.js` target and symlinked `src/lib` |
 | A link by a non-relative name (its own name, a `#` import, an absolute path) is followed when it resolves to a file outside `node_modules` | the plants' `#server` import; link `absolute` and its pinned review 7 example |
-| ADR 0018's platform names (Cloudflare is reached only through Alchemy) are Worker runtime names, `@cloudflare/*` and `wrangler` included, even as declared dependencies | shapes 23 and 24 (`@cloudflare/containers`, `wrangler`), the drawn names of the runtime-import and dynamic-import plants, and the pinned review 7 `Container` example |
+| The platform's import names (new `next/` code never imports the platform directly) are Worker runtime names, `@cloudflare/*` and `wrangler` included, even as declared dependencies | shapes 23 and 24 (`@cloudflare/containers`, `wrangler`), the drawn names of the runtime-import and dynamic-import plants, and the pinned review 7 `Container` example |
 | A `#` alias whose `imports` entry names a Worker runtime anywhere (a string, an array, a condition after a file target, a pattern key) is a Worker runtime import | links `imports alias`, `imports array`, `imports condition`, `imports pattern`, and the pinned review 6 `#cf` example |
 | A link that resolves to nothing is refused, save a `node:` builtin, a declared dependency, or a `#` alias whose every target is one | the plants' missing file, `#` with no entry, with a missing target or an undeclared target, undeclared package, own unexported subpath, `virtual:` scheme; the accept law's fine links |
 | A literal link is a string or a template literal with no `${}`; `require` and `import x = require()` are links; any other name is refused, never skipped | the plants' template literal, `require`, `import =` and computed import |
@@ -771,7 +771,7 @@ in plan amendment A1. Other imported Schema members still fire, and `Schema.Neve
 Every file with a machine call, even a private call, also refuses imports from the closed I/O
 list in the rule. That list covers the named Effect runtime, clock, storage and stream modules,
 Effect's process/http/cli/unstable subpaths, `@effect/*`, `node:`, tea runners, and the platform
-imports named in ADR 0018 (Cloudflare is reached only through Alchemy). Pure `effect/encoding` and `effect/crypto` imports pass. Type-only imports
+imports (new `next/` code never imports the platform directly). Pure `effect/encoding` and `effect/crypto` imports pass. Type-only imports
 pass, both whole declarations and individual specifiers.
 
 The approved plan measured 13 files with exported machines or factories and expected zero hits.

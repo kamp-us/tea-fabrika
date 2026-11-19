@@ -967,9 +967,9 @@
                   "@kampus/libfabrika/client/WindowMachine",
                   "@kampus/libfabrika/client/WindowStart",
                   "@kampus/libfabrika/client/Headless",
-                  // Desk S2b: the window's key table and prefix router (ADR 0035: each window runs the prefix key itself, with no network wait) and its side of tezgah
-                  // (ADR 0035, the desk is one platform-free core and its state lives in the brain). Desk S2a and S4: tezgah's wire shapes and the one drawn geometry a
-                  // window folds its layout with (ADR 0035: a process never knows its screen size, and each window folds the layout to its own).
+                  // Desk S2b: the window's key table and prefix router (each window runs the prefix key itself, with no network wait) and its side of tezgah
+                  // (the desk is one platform-free core, and its own state is a process in the brain). Desk S2a and S4: tezgah's wire shapes and the one drawn geometry a
+                  // window folds its layout with (a process never knows its screen size, and each window folds the layout to its own).
                   "@kampus/libfabrika/client/Keys",
                   "@kampus/libfabrika/client/Tezgah",
                   "@kampus/libfabrika/tezgah/Layout",
@@ -3018,10 +3018,10 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
             "mock": "Give the code a service and provide a test layer.",
             "doMock": "Give the code a service and provide a test layer.",
-            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
@@ -3060,7 +3060,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3071,7 +3071,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3133,7 +3133,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3144,7 +3144,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3176,10 +3176,10 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
             "mock": "Give the code a service and provide a test layer.",
             "doMock": "Give the code a service and provide a test layer.",
-            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
@@ -3218,7 +3218,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3229,7 +3229,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3295,7 +3295,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3306,7 +3306,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3504,10 +3504,10 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
             "mock": "Give the code a service and provide a test layer.",
             "doMock": "Give the code a service and provide a test layer.",
-            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
@@ -3541,7 +3541,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3552,7 +3552,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3582,10 +3582,10 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
             "mock": "Give the code a service and provide a test layer.",
             "doMock": "Give the code a service and provide a test layer.",
-            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
@@ -3624,7 +3624,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3635,7 +3635,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
@@ -3653,10 +3653,10 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
             "mock": "Give the code a service and provide a test layer.",
             "doMock": "Give the code a service and provide a test layer.",
-            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
@@ -3695,7 +3695,7 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
           { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
@@ -3706,7 +3706,7 @@
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",

@@ -4,16 +4,17 @@
 //
 //   queue   as Queue.add: open, ready, into main -> the leak gate -> ci-required green -> one
 //           pinned squash, which adds it to the merge queue
-//   admin   open, ready, into main, no `Plan:` title -> every file docs (the lead admin-merges a docs-only pull request after checking it is not broken), or the branch is a sev
-//           fix at either level (the sev1's named fix, or a sev0's `open --allow` or `next` branch,
-//           a sev fix is admin-merged one at a time on current main), or a ready pull request an open sev0 allows (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order) -> the leak gate -> for a fix
-//           or a ready one, ci-required green, and for a fix also origin/main's head in its history
-//           -> one pinned squash with --admin, past the queue
+//   admin   open, ready, into main, no `Plan:` title -> the leak gate -> ci-required green at the head,
+//           for every admin merge -> for a sev fix, also origin/main's head in its history -> one
+//           pinned squash with --admin, past the queue. "Admin" skips the queue, never a green
+//           ci-required. It says why it was allowed: a sev fix at either level (the sev1's named fix,
+//           or a sev0's `open --allow` or `next` branch, as a sev fix is admin-merged one at a time on
+//           current main), a ready pull request an open sev0 allows (no pull request is in a stack,
+//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, that the owner asked.
 //
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
-import * as DocsOnly from "@kalfa/ci/DocsOnly";
 import { Effect, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import * as Arm from "./Arm.ts";
@@ -24,15 +25,6 @@ import * as Queue from "./Queue.ts";
 
 /** The pull request was not merged, and nothing was asked of GitHub's merge. */
 export class NotMerged extends Schema.TaggedError<NotMerged>()("NotMerged", { reason: Schema.String }) {}
-
-/**
- * Whether a changed file keeps a pull request docs only for the admin merge, as the docs-only admin-merge rule has it: a docs file
- * in one of the admin merge's folders, by the shared classifier's `isAdminDocs` (@kalfa/ci/DocsOnly).
- * Instruction text is not docs (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first): skill prose, AGENTS.md, CLAUDE.md and an agent's definition.
- * A README and `.kalfa/patterns/` Markdown are not docs for it either, so a pull request that changes one is
- * armed, not admin-merged.
- */
-export const isDocsFile = (path: string): boolean => DocsOnly.isAdminDocs(path);
 
 /** How the lead merges: through the queue, or past it with an admin merge. */
 export const Route = Schema.TaggedUnion({
@@ -64,9 +56,9 @@ export const Done = Schema.TaggedUnion({
   admin: {
     pr: Schema.Number,
     oid: Schema.String,
-    /** Why it was allowed: a docs-only change, a sev fix, or a ready pull request in a sev0. */
-    for: Schema.Literals(["docs", "fix", "ready"]),
-    /** The level a fix or a ready pull request landed in; `null` for a docs change. */
+    /** Why it was allowed: a sev fix, a ready pull request in a sev0, or the owner asked. */
+    for: Schema.Literals(["fix", "ready", "asked"]),
+    /** The level a fix or a ready pull request landed in; `null` when the owner asked. */
     level: Schema.NullOr(Schema.Literals(["sev0", "sev1"])),
   },
   merged: { pr: Schema.Number, commit: Schema.String },
@@ -74,14 +66,8 @@ export const Done = Schema.TaggedUnion({
 
 export type Done = typeof Done.Type;
 
-/** Why the admin merge is allowed for this pull request, or why not. */
-const adminFor = (head: string, files: ReadonlyArray<string>, route: AdminRoute) => {
-  const code = files.filter((path) => !isDocsFile(path));
-
-  if (files.length > 0 && code.length === 0) {
-    return { for: "docs" as const, level: null };
-  }
-
+/** Why the admin merge is allowed for this branch: a sev fix, a ready pull request in a sev0, or the owner asked. */
+const adminFor = (head: string, route: AdminRoute) => {
   if (route.sev1 === head) {
     return { for: "fix" as const, level: "sev1" as const };
   }
@@ -94,14 +80,7 @@ const adminFor = (head: string, files: ReadonlyArray<string>, route: AdminRoute)
     return { for: "ready" as const, level: "sev0" as const };
   }
 
-  const shown = code.length > 5 ? [...code.slice(0, 5), `and ${code.length - 5} more`] : code;
-
-  return {
-    refused:
-      files.length === 0
-        ? "it changes no files, so it is not docs only; refused"
-        : `not docs only (the lead admin-merges a docs-only pull request after checking it is not broken), and ${head} is no sev fix (a sev fix is admin-merged one at a time on current main) and no open sev0 allows it (a sev0 is the owner's call, and it freezes CI and lands ready pull requests one at a time); --admin refused: ${shown.join(", ")}`,
-  };
+  return { for: "asked" as const, level: null };
 };
 
 const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route: AdminRoute) {
@@ -119,24 +98,18 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
     return yield* refuse(refused);
   }
 
-  const allowed = adminFor(found.head, yield* prs.files(found.number), route);
-
-  if ("refused" in allowed) {
-    return yield* refuse(allowed.refused);
-  }
+  const allowed = adminFor(found.head, route);
 
   yield* Leaks.gate(dir, found);
 
-  // A fix and a ready pull request land once their required checks are green (the sev skill); a docs
-  // change starts no CI.
-  if (allowed.for !== "docs") {
-    const required = yield* (yield* Checks).job(found.oid, Queue.REQUIRED);
+  // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,
+  // never the check.
+  const required = yield* (yield* Checks).job(found.oid, Queue.REQUIRED);
 
-    if (required._tag === "None" || required.value.conclusion !== "success") {
-      const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
+  if (required._tag === "None" || required.value.conclusion !== "success") {
+    const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
-      return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
-    }
+    return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
   }
 
   // A fix holds main's head (a sev fix is admin-merged one at a time on current main): the next fix is tested on top of it. A ready pull request in a sev0
@@ -181,8 +154,8 @@ export const line = (done: Done): string =>
     queued: (d) => Queue.line(Queue.Added.cases.queued.make({ pr: d.pr, oid: d.oid })),
     admin: (d) =>
       `pr ${d.pr}: admin-merged at ${d.oid}, ${
-        d.for === "docs"
-          ? "docs only (the lead admin-merges a docs-only pull request after checking it is not broken)"
+        d.for === "asked"
+          ? "the owner asked"
           : d.for === "fix"
             ? `a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
             : "a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
