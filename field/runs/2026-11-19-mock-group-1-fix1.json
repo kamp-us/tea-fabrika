@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-mock-group-1-fix1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1665",
+  "started": "2026-11-18T17:50:00-08:00",
+  "ended": "2026-11-18T18:15:00-08:00",
+  "parent": "2026-11-19-mock-group-1-review1",
+  "active": null,
+  "role": "step",
+  "step": "fix",
+  "model": "sonnet",
+  "effort": "high",
+  "outcome": "pass",
+  "why": "The one fix round for mock group 1 of ticket 1067, in next/ and our lint tooling, after the review at 490bd55b3 sent it back for one blocking class: the static member layerWithGenerator that the build added to the ProcessIdGenerator service class breaks decision 0095. next/packages/libfabrika/src/processes/ProcessIdGenerator.ts is main's content again. Law M3 of ProcessIdGenerator.test.ts (the clock, entropy and exhausted cases) now provides ProcessIdGenerator.layer and, outside it, WebCrypto.layer of a Stub.make stand-in crypto written in the test file, whose getRandomValues fills 255 or throws the marker, with no cast and no vi; its Schemas, bounds, run count, option and checks are unchanged. The crypto pattern doc describes that wiring and its Gateway.ts line numbers are right again. Field rows: the first finding names the fix, the build run row carries the pull request, and the review's line-drift finding is a new row.",
+  "note": "Node 22.23.5 first on PATH (the repo pins 26.13.0), TYPESAFE_API_KEY unset. Commands and results: git fetch origin and git merge --ff-only origin/fabrikalfa/mock-group-1 (fast-forwarded to 359a1c519); git checkout origin/main -- next/packages/libfabrika/src/processes/ProcessIdGenerator.ts; pnpm format (exit 0); CI=1 nice -n 15 pnpm exec vitest run on ProcessIdGenerator.test.ts (7 of 7 passed). Plant (a), the provide of WebCrypto.layer(crypto) deleted from the test: the entropy and exhausted cases red, 5 passed 2 failed, test file put back by copy. Plant (b), makeGenerator's Id.Generator.layer in next/packages/libfabrika/src/Id.ts reading globalThis.crypto.getRandomValues instead of SecureRandom.layerWebCrypto: the entropy and exhausted cases red, 5 passed 2 failed, Id.ts put back by git checkout. The clock case stayed green under both, as on main. Doc check: grep -n 'getRandomValues|^const fingerprint|^const hash' on Gateway.ts printed 828, 2299, 2301 and 2318 (hash ends at 2326), so the doc now says 2301-2326, 828 and 2299; every other file:line the doc cites was read at its line (RepositoriesGit.ts:96, dev.ts:132 and :140, cli.ts:16, Archive.ts:45-54, grant.ts:76 and :136, Id.ts:245-257 and :303-305, Id.test-support.ts:79, Built.ts:35-38, GatewayNonce.ts, Crypto.test-support.ts:32 and :69, plants.test.ts:996 and :1283, builtin-plants.ts:165 and :172) and matched. pnpm lint: 20 of 21 parts passed (field check 4 added rows before this row, oxlint 0 blocking); lint:kind died with EPIPE from the type server in the parallel run and passed alone (pnpm -s lint:kind, exit 0). pnpm typecheck inside next/packages/libfabrika (exit 0). CI=1 nice -n 15 pnpm exec vitest run --maxWorkers=3 on ProcessIdGenerator.test.ts and runtime/EffectFunctions.test.ts (2 files, 18 passed). Leak grep on the commit messages and on the diff from the merge base before the push. Not run: the full suite, the changed-files run, any integration, launchd, Electron or process-signal law. The started and ended times are approximate.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "ProcessIdGenerator.test.ts: next dies on IdError entropy and exhausted",
+      "plant": "the WebCrypto.layer(crypto) provide deleted, so the real crypto answers",
+      "result": "red"
+    },
+    {
+      "law": "ProcessIdGenerator.test.ts: next dies on IdError entropy and exhausted",
+      "plant": "Id.ts Id.Generator.layer reads globalThis.crypto.getRandomValues, past the WebCrypto reference",
+      "result": "red"
+    }
+  ]
+}
