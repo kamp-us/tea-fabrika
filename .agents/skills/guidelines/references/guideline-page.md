@@ -1,67 +1,62 @@
 # The guideline page
 
-Step 7 writes one page per design area. It holds the area's
-rules together, read whole, and it is edited in place when a guideline changes. The long
-reasoning, the leans, the Linear rows and the smaller calls stay in the experiment, and the page
-links it.
+Step 8 writes one page per design area. It holds the area's rules together, read whole, and it is
+edited in place when a guideline changes. Its folder is the `guidelines` record's path in
+`.kalfa/kalfa.toml`.
 
 ```text
-text area     .kalfa/guidelines/<area>.md
-visual area   .kalfa/guidelines/<area>/README.md       the page
-              .kalfa/guidelines/<area>/shots/          real shots from the built app
+text area     <area>.md
+visual area   <area>/README.md          the page
+              <area>/shots/             real shots from the built app
                 <state>.<layout>.<look>.png
 ```
 
-A visual area is one a person judges by its look. Its shots come from the real built app (step 5),
-never from a canvas, and they are product docs kept in the repo. The canvas and the walk page are
-private: name them by title, never link them.
+A visual area is one a person judges by its look. Its shots come from the real built app (steps 5
+and 6), and they are product docs kept in the repo. The look in a shot's name is `do`, `dont` or a
+design's name. The layout is one of the five in "Shoot more than one layout"
+([changing the product](changing-the-product.md)).
+
+The page holds the rules and why they hold. The makers' reading lives in the research file. The
+leans and their numbers, the lost designs and the smaller calls live in the pull request's body.
+
+The approved pages in the `guidelines` record are filled examples: read one before you write.
+Where one is older than this shape, this file wins.
 
 ## The text form
 
-```markdown
-**Proposed 2026-11-11.** From [experiment NN](../../experiments/NN-<area>.md) and the Design
-canvas "<Area> guidelines".
+`X` is a letter for the area.
+
+````markdown
+**Proposed 2026-11-19.**
+
+What the area covers, in one or two lines, with the scope line from step 1. The makers' reading:
+[<the research question>](<relative link to the research file>).
+
+```text
+the running example in a few lines: what a person does, and what the app answers
+```
 
 ## X1: <name>
 
 - **Kind:** law, lint or taste.
 - **Means:** what a person or a program does, in one or two plain sentences.
 - **Why:** a short quoted source, with its link.
-- **Example:** real code or a real shot, never made up.
-- **Held by:** the type, test, lint rule or refusal. A `law` or `lint` principle links its
-  decision file and does not restate it. A `taste` principle names the shot a person judges it by.
+- **Example:** real code or a real shot.
+- **Linear:** how its team would build it, or "No Linear answer: <why>", and where we differ.
+- **Elm or OTP:** the answer that fits, and where we leave it.
+- **WCAG:** the criterion it touches, or "none", and what needs a real screen reader run.
+- **Held by:** the type, test, lint rule or refusal that holds it. A `law` names its test by its
+  exact title, and a `lint` names its rule; one not built yet links the quest that builds it. A
+  `taste` principle names the shot a person judges it by.
 - **Breaks today:** `file:line`, or "Nothing: today's <example> follows it, at `file:line`."
-```
+````
 
-On the owner's yes, line one becomes
-`**Approved DATE.** [NNNN](../../.decisions/NNNN-<area>-guidelines-approved.md)`.
-
-## A filled principle
-
-This is M4 from [modes](../../../../docs/direction/modes.md), cut to the page's shape. Its lines
-were read on main on 2026-11-11.
-
-```markdown
-## M4: you always get out
-
-- **Kind:** law.
-- **Means:** Escape leaves every mode a program defines, beside any other key it picks. The prefix
-  and F6 work in every mode. Leaving keeps your work, and no mode ends on a timer.
-- **Why:** Tesler asks "How do I get out of this mode?". WCAG 2.1.2, no keyboard trap, and 2.2.1,
-  no time limit.
-- **Example:** info mode's own words, `apps/fabrika/src/window/frame.ts:947`:
-  `"Info mode on. Escape leaves."`
-- **Held by:**; the key load refuses a
-  mode with no way out (PR 282); the test "leaves on Escape, once what lies over the desk has
-  closed, and says so", `apps/fabrika/src/window/frame.test.ts:1134`.
-- **Breaks today:** Nothing: info mode leaves on Escape once what lies over the desk has closed,
-  at `apps/fabrika/src/window/frame.ts:1042` (`escaped`).
-```
+On the owner's yes, line one becomes `**Approved DATE.**`, and it holds nothing else.
 
 ## The visual form
 
-A visual principle opens with a do and don't pair of shots, then the same fields, plus two more.
-The names in angle brackets are placeholders, not real tokens or shots.
+A visual principle opens with a do and don't pair of shots, then the same fields, plus Tokens and
+Checked by. The names in angle brackets are placeholders, not real tokens or shots.
 
 ```markdown
 ## X2: <name>
@@ -74,23 +69,24 @@ The names in angle brackets are placeholders, not real tokens or shots.
 - **Means:** ...
 - **Why:** ...
 - **Example:** the do shot above.
+- **Linear:**, **Elm or OTP:**, **WCAG:** ...
 - **Tokens:** `<token>`, `<token>`, from `@kampus/fabrika-design`.
 - **Checked by:** who looks, at which of the five layouts, beside which Linear screen.
 - **Held by:** ...
 - **Breaks today:** ...
 ```
 
-The look in a shot's name is `do`, `dont` or a design's name. The layouts are step 5's five: one
-tile, two side by side, two stacked, a 2x2 grid, and about 1024x700.
-
 ## Checklist
 
-- [ ] Line one is the status: Proposed DATE with the experiment's link, or Approved DATE with the
-  approval decision's link.
-- [ ] Every principle is a `## X1: <name>` with Kind, Means, Why, Example, Held by and Breaks today.
+- [ ] Line one is the status alone: **Proposed DATE.** or **Approved DATE.**
+- [ ] The research file is linked, and the running example opens the page.
+- [ ] Every principle is a `## X1: <name>` with Kind, Means, Why, Example, Linear, Elm or OTP,
+  WCAG, Held by and Breaks today.
 - [ ] Every Why quotes a source and links it. Every Example is real code or a real shot.
-- [ ] Every `law` and `lint` principle links its decision file and does not restate it.
+- [ ] Every `law` and `lint` principle's Held by names its test or lint rule, or links the quest
+  that builds it.
 - [ ] Every `file:line` was read on main the day the page was written.
 - [ ] A visual principle opens with a do and don't pair, and names its Tokens and Checked by.
-- [ ] No leans, no confidence numbers, no smaller calls: those stay in the experiment.
+- [ ] The leans, their numbers and the smaller calls are in the pull request's body, and the page
+  holds none of them.
 - [ ] Every relative link resolves.

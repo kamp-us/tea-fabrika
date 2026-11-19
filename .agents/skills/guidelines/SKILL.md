@@ -1,253 +1,212 @@
 ---
 name: guidelines
-description: Run this repo's guidelines study for one design area, from settled check to an approved guideline page. Use on "guidelines for X", "we need X guidelines", "run the guidelines process", or "a guidelines study".
+description: Run a guidelines study, one product area's design from the settled check to an approved guideline page and its build plan. Use when an area needs guidelines, when a new or changed screen needs its look picked before its pull request opens, or when an approved guideline page changes.
 ---
 
 # A guidelines study
 
-One design area becomes a few principles the owner can press, read and decide on, and then a
-build in the app. A study ends with one experiment, one guideline page under `.kalfa/guidelines/`,
-one Design canvas titled "<Area> guidelines", one docs-only pull request, a walk that ends in a yes
-or a no, and, on a yes, one approval decision and a build plan the same day. The canvas is the
-study's front door, presented the way a designer presents work: slides that walk the story, and at the end a clickable prototype of the pick that answers
-every key and click the guidelines name. It is a Design canvas in Claude Design with the design
-system installed ([drawn on Claude Design](../../../docs/direction/design-on-claude-design.md)).
+A study turns one design area into a few principles the owner can press, read and decide on, and
+then into a build in the app. It ends with:
 
-The models are themes (PR 281), keybindings (PR 282), hot reload (PR 286) and modes (PR 287).
-Themes came first; the other three set the order of the principle slides, and modes is the
-closest to it all: copy modes for those. The page's shape is `references/guideline-page.md`.
-Pipeline guidelines (PR 290) drifted on structure (no demo, no Try it), so it is not a model.
-The prototype copies the mockup rounds instead (the tile, the pipe marker finalists, the chat
-window, the outline round): there the screen is the point, and the words sit beside it.
+- one research file, from the research skill;
+- 3 or 4 designs and a pressable prototype of the pick, from the prototype skill, on one
+  throwaway branch;
+- one guideline page, whose line one says **Proposed DATE.** and, on the owner's yes,
+  **Approved DATE.**;
+- one docs-only pull request, and a walk in chat that ends in a yes or a no;
+- on a yes, the build plan the same day, as a quest.
 
-Read `AGENTS.md` first. Its rules on names, writing, version and the public repo all apply. Read
-[the rules for changing the product](references/changing-the-product.md) too: the daily moment, the
-look step, shots at five layouts, and the other rules a screen follows, moved there from `AGENTS.md`.
+`.kalfa/kalfa.toml` says where each record kind lives and what goes in it. A study writes a
+`research`, a `guidelines` and a `quests` record, and its settled check reads the `decisions`,
+`glossary` and `guidelines` records.
+
+Read [the rules for changing the product](references/changing-the-product.md) whole before step 4.
+Every design, prototype and page in the study follows them.
 
 ## The steps
 
 ### 1. Check what is settled
 
-- Search `.kalfa/guidelines/` (any page on the area), `.kalfa/decisions/`, what is
-  left of `docs/direction/` for the area.
-- Write down each decided point with its source. A decided point is marked decided everywhere
-  and is never asked again.
-- Name the open pull requests on the same area and what they already lean.
-- The look is settled, so follow it and don't reopen it:
-  [color principles](../../../docs/direction/color-principles.md) and
-  [themes](../../../docs/direction/themes.md). Radix steps are used for their jobs, with **two
-  text steps only** (12 and the low step), and rank comes from size and weight. A program's own
-  text is sans, and mono is only for what a person types.
+- Search the `decisions`, `glossary` and `guidelines` records in two or three wordings of the area,
+  and read every hit. A guideline page is settled when its line one says Approved.
+- Write down each decided point with its source. A decided point stays decided in every later step:
+  follow it, and ask nobody about it again.
+- Name the open pull requests on the same area (`gh pr list --search "<area>"`) and what each one
+  already leans.
 - **Name the scope in one line:** which program or part the study changes. The chassis (the top
-  bar, the bottom line, each tile's title bar, the desk) stays exactly as it is unless the study is
-  about the chassis. A change it seems to need outside the scope becomes a question for the owner,
-  never a change.
-- **Done when** you can list, with a link each, what is decided, what is leaned, and what nobody
-  has touched.
+  bar, the bottom line, each tile's title bar, the desk) stays as it is unless the study is about
+  the chassis. A change the study seems to need outside its scope becomes a question for the owner.
 
-### 2. Pick one running example
+**Done when** the scope line is written and you can list, with a link each, what is decided, what is
+leaned, and what nobody has touched.
 
-- One real case from today's code, read on main, with `file:line` for each claim. Modes used
-  info mode (`C-b i`). Pipeline used ticket 117's real run. Keybindings used today's key code.
-- It runs through the experiment, the page, the code block that opens the page, and the
-  canvas. Every principle says whether today's case follows it or breaks it, and where.
-- Say which version each claim is about: today's version (`apps/`, `packages/`, `programs/`) or
-  `next/`.
+### 2. Read the makers
 
-### 3. Lead with the known way
+Use the research skill, with the question "how do the makers solve <area>?". Start it now: its
+agent reads while you pick the running example (step 3). Brief that agent with this list, so the
+file it saves holds all of it:
 
-- Read about 10 to 15 makers and tools: the thinkers (papers, NN/g), the tools people use daily,
-  apps with a pointer (Apple's HIG, Linear, Figma), and WCAG. Public docs and source, not memory.
-- Look outside software too. Name two or three tools from another field that solved the same
-  shape of problem for people who work fast all day: music tools (Ableton Live folds devices in
-  place and marks every part that takes a key in Key Map mode, which gave us
-  [fold, not tabs](../../../docs/direction/fold-not-tabs.md) and
-  [configurable keys](../../../docs/direction/keybindings-are-configurable.md)), video editors,
-  game tools, a cockpit, a kitchen. Say what each one teaches and what does not carry over.
-- Quote short, checked against the page as fetched. Mark a claim from a summary page
-  **secondary**, and one found nowhere **guess**. Give each source a tag (`[t1]`, `[k3]`).
-- Write the plain way they agree on before any lean of ours. Where it clashes with a goal of
-  ours, say so in one line.
+- 10 to 15 makers and tools: thinkers (papers, NN/g), tools people use all day, apps with a pointer
+  (Apple's HIG, Linear, Figma), and WCAG.
+- Two or three tools from outside software that solved the same shape of problem for people who
+  work fast all day: a music tool (Ableton Live folds devices in place, and its Key Map mode marks
+  every part that takes a key), a video editor, a game tool, a cockpit, a kitchen. Each says what it
+  teaches and what does not carry over.
+- Short quotes, checked against the page as fetched.
+- The plain way they agree on comes first, before any lean of ours. Where it clashes with a goal of
+  ours, one line says so.
 
-### 4. Test every guideline three ways
+**Done when**, before step 4, the research file is saved as a `research` record with every item
+above, and you have read it whole.
 
-- **Linear as the builder** ([changing the product](references/changing-the-product.md)),
-  asked of every principle and every rule, not only screens. Write it as a row, or "No Linear
-  answer: <why>". Where we differ, say why. Ask it again for each design in step 5: which program
-  owns each part of it?
-- **Elm or OTP.** Name the Elm answer (model, update, view, parents step children) or the
-  Erlang/OTP one (mailbox, supervisor, `code_change`) where it fits. Say where we leave it.
-- **Accessibility.** Name the WCAG criterion a principle touches, and what needs a real screen
-  reader run.
+### 3. Pick one running example
+
+- One real case from today's code, read on main, with `file:line` for each claim: a mode the app
+  has today, one real ticket's run, or the key code as it stands.
+- The running example is carried through every later step: the principles, the designs, the
+  prototype, the page and the walk. Every principle says whether the example follows it or breaks
+  it, and where.
+
+**Done when** the example is named in one line, with the `file:line`s you read on main today.
+
+### 4. Test every principle three ways
+
+Draft the principles from what the makers agree on and where the running example breaks it, as
+many as the findings give. Rules that share one reason and one check are one principle. Then give
+each principle these five:
+
+- **Linear as the builder:** how Linear's team would build it as fabrika programs, in one line, or
+  "No Linear answer: <why>". Where we differ, say why. Ask it of every rule, not only of screens.
+- **The Elm or OTP answer:** Elm's model, update, view and parents stepping children, or OTP's
+  mailbox, supervisor and `code_change`, where one fits. Say where we leave it.
+- **Accessibility:** the WCAG criterion it touches, and what needs a real screen reader run.
+- **A kind:** `law` (the test writer can check it), `lint` (`pnpm lint` can hold it) or `taste`
+  (only a shot beside Linear checks it).
+- **A lean:** "Lean, NN%." with the doubt and what would settle it, or "No lean, the owner picks."
+
+**Done when** every principle has all five.
 
 ### 5. Build 3 or 4 designs and look at them next to Linear
 
-The Linear row in step 4 is words. This step checks the look with eyes. It starts wide, as the
-pipe marker finalists did with four different designs, and only then refines one.
+Steps 5 and 6 are also the **look step**. They run on their own for any new or changed screen
+before its pull request opens, with or without a study; then read
+[the rules for changing the product](references/changing-the-product.md) first.
 
-This step also runs on its own for a screen already being built in today's app, before its pull
-request opens, even when no study is running (owner, 2026-11-08).
+Build the designs with the prototype skill's UI path: 3 or 4 variants of the program's window, each
+a different answer to the same job, such as a list, a card, a panel or inline. Keys and mouse both
+work in each. Read today's code for which jobs exist, and design how they look afresh. Our layer on
+top of that skill:
 
-- Build **3 or 4 distinct designs** for real in today's app, on a local branch, with the real
-  tokens (`packages/fabrika-design/src/themes.ts`) and the real chassis around them. Each is a different
-  answer to the same job, such as a list, a card, a panel or inline, not a small change to one
-  design. Keys and mouse both work in each, as the guidelines say. Read today's code for which
-  jobs exist, not for how they look
-  ([rethink, do not port](../../../docs/direction/rethink-do-not-port.md)).
-- **Each design writes its tsh pipe line first,** before it is built: `tracker --all | outline`,
-  or `outline | ticket`. Any part that is another program's job becomes its own tile, joined by a
-  pipe: a sidebar that opens a detail, a list another program owns, a mode that swaps the whole
-  view. The yardstick is [program guidelines](../../../docs/direction/program-guidelines.md): G1,
-  one job per program, and G6, programs meet on typed pipes.
-- Fewer boxes ([changing the product](references/changing-the-product.md), "No extra containers"). A selected row is a full-row fill and stronger
-  text, never a colored bar on one side.
-- Shoot each design as [changing the product](references/changing-the-product.md)'s "Show it running"
-  says, at the five layouts of its "Shoot more than one layout". Put each shot beside today's app and beside the closest Linear screen, from
-  Linear's public docs or changelog.
-- Show the owner the designs on the canvas (step 9), one slide each with its pipe line on top and
-  its prototype beside it. **The owner picks one.** Each design that lost gets one or two plain
-  lines on why, tied to a principle or a shot.
-- Then refine the pick in rounds. For each shot, one line: would Linear's team ship this? What
-  looks off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped
-  layout? Fix it and reshoot. Two or three rounds is normal. Stop when you would ship it.
-- Keep every design and every round. For each, the shoot presses the real build through every
-  key and click the principles name, and every other key and click the screen takes, and saves
-  each state it reaches: its shot, the words on screen (from the DOM), and which press led where.
-  These files are the prototype's reference, not its source: step 9 copies its words, keys and
-  first state table from them and matches its boxes and sizes to the shots.
-- **A press the shoot missed is shot now,** in the real build, never left out. A state the real
-  build cannot reach yet is built on the local branch first, then shot. Only a part Manti cannot
-  draw yet stays a named gap (step 9).
-- Their yes on the look comes before the write-up. On a no, go round again.
-- Each principle also gets a **kind**, so it is checked the right way: **law** (the test writer
-  can check it), **lint** (`pnpm lint` can hold it) or **taste** (only a shot beside Linear checks
-  it).
+- **The fabsh pipe line first.** Before a design is built, write its fabsh pipe line:
+  `tracker --all | outline`, or `outline | ticket`. A part that is another program's job becomes
+  its own tile, joined by a pipe: a sidebar that opens a detail, a list another program owns, a mode
+  that swaps the whole view. One program does one job, and programs meet on typed pipes. Then ask
+  Linear as the builder of the design: which program owns each part?
+- **The real tokens and chassis.** Each design takes its tokens from the design package
+  (`@kampus/fabrika-design`) and sits in the real chassis, with as few boxes as "No extra
+  containers" asks.
+- **Shots at five layouts.** Shoot each design as "Show it running" says, at the five layouts of
+  "Shoot more than one layout", dark mode first, as the owner runs it. Set each shot beside today's
+  app and beside the closest Linear screen, from Linear's public docs or changelog.
 
-### 6. Write the experiment
+**Done when** each design has its pipe line, runs in the real chassis, and has shots at all five
+layouts, each beside today's app and Linear.
 
-The experiment write-up goes in the notes, not this repo. Shape, from 182, 183 and 184:
+### 6. The owner picks one, then refine it in rounds
 
-- The title is the question. Line one: the date read, and **"This is reading, not a
-  measurement."** unless something ran. It links the page and names the Design canvas "<Area>
-  guidelines" by title.
-- When step 5 ran, say so: the branch, the app version, the designs and rounds shot, and how many
-  states each prototype has, with how many of them have a real shot.
-- **The answer** first: what the makers agree on, then how today's example follows and breaks it.
-- One small `text` block: how each tool does it, one line each.
-- `## What was read`, then one section per group of sources, at most one table each.
-- `## Today's <example>`: a what, today, where table, then the same case checked against each
-  principle (passes, breaks, half).
-- `## What this tells us for fabrika`: the long reasoning the page leaves out. Each principle with
-  its lean (**Lean, NN%.** with the doubt and what would settle it, or **No lean, the owner
-  picks.**), its Linear row, its Elm or OTP answer and its cost. Then the smaller calls, each with
-  options as small code blocks and a lean; what the ledger records, or "nothing new"; and a tryout
-  in today's version, with a size in lines and agent hours, when the area has one.
-- `## What it cannot tell us`, `## Links` with the tags.
-- Dollars spent, even when $0. A probe that ran says where, on what version, and if it was kept.
+- Show the owner the designs: each one's pipe line, its variant in the prototype skill's switcher,
+  and its shots beside today's and Linear's. **The owner picks one.**
+- Each design that lost gets one or two plain lines on why, tied to a principle or a shot ("lost on
+  T2: the rec sits under the question, see the 2x2 shot").
+- Refine the pick in rounds. For each shot, one line: would Linear's team ship this? Name what looks
+  off: a box in a box, a gray that fights, a line nobody needs, loud text, a cramped layout. Fix it
+  and reshoot. Two or three rounds is normal.
 
-### 7. Write the guideline page
+**Done when** you would ship the last round and the owner said yes to its look. On a no, go round
+again.
 
-`.kalfa/guidelines/<area>.md`, or for a visual area a folder: `.kalfa/guidelines/<area>/README.md`
-with its shots in `shots/`. Copy the shape from
-`references/guideline-page.md`. No new note goes under `docs/direction/`.
+### 7. Build the pressable prototype
 
-The page holds the rules only. The long reasoning, the leans and how sure, the Linear rows, the
-smaller calls, the ledger, the tryout and the cost stay in the experiment (step 6), and the page
-links it.
+Build the pick's prototype with the prototype skill's logic path. Its question: do the pick's keys,
+clicks and states do what the principles say? Our layer on top:
 
-- **Line one is the status:** **Proposed DATE.** with a link to the experiment. On the owner's
-  yes it becomes **Approved DATE.** with a link to the approval decision (step 11).
-- **One `## X1: <name>` per principle,** as many as the findings give, never aimed at a count.
-  When several share one reason and one check, they are rules: group them under one principle, as
-  hot reload's six held seventeen rules.
-- **Each principle's fields,** for a text and for a visual principle, are in
-  `references/guideline-page.md`, with a filled one and a checklist. Step 5's shots that are not
-  on the page stay private.
+- It uses the real tokens and draws the real chassis around the window, so it looks like the
+  pick's shots. Its words, names and keys are the pick's own.
+- Every key and click the principles name is an action: a free-play button, and its key while the
+  window has focus. A press the app ignores is an action that says why.
+- Each principle's **Try it** line ("press X, watch Y", from the state it starts in) is one guided
+  walkthrough tab.
 
-### 8. List the page and the experiment
+**Done when** every key and click the principles name has an action, every principle has its tab,
+and you pressed each tab end to end.
 
-- One row in `.kalfa/guidelines/README.md`: the area, what the page covers, then its status,
-  `proposed`. If the folder or its README does not exist yet, create it with this first row.
-- The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
-  the answer and the $ in `summary`), in the shape
-  the experiments log (in the notes) gives.
+### 8. Write the guideline page
 
-### 9. Build and publish the deck and the prototype
+Write `<area>.md` at the `guidelines` record's path, or for a visual area `<area>/README.md` with
+its shots in `shots/`, in the shape of [the guideline page](references/guideline-page.md).
 
-**One Design canvas titled "<Area> guidelines",** with the design system installed: its
-`tokens.json` copied in and its record in the canvas's index, as the canvas type says. Follow the
-type's own instructions for every file. Later rounds revise the same canvas. It holds two things,
-in this order:
+- **Line one is the status:** **Proposed DATE.** It becomes **Approved DATE.** on the owner's yes
+  (step 11). That line is the record of the approval.
+- One `## X1: <name>` per principle, with its fields. The leans and their numbers, the lost designs
+  and the smaller calls go in the pull request's body (step 10).
 
-- **The deck.** Slides that walk the story the way a designer presents work: the question and the
-  scope, what is settled, how the makers do it, one slide per principle with its lean, one slide
-  per design with why it lost or won, the rounds of the pick, the proof, the smaller calls, what it
-  cannot tell us. Each slide is a 1280x720 artboard with one idea on it, and Play walks them in
-  order. The canvas opens on the first slide.
-- **The prototype, last.** The pick, built on the design system and driven by a small state
-  machine, so every key and click the guidelines name does something. Each other design gets one
-  too, at one tile at least, so its slide can be pressed.
+**Done when** every box in the guideline page's checklist is ticked.
 
-The Slides type is not used: its live embed takes no clicks and no keys, so it cannot hold a
-prototype. Shots and the prototype are in dark mode first, as the owner runs it.
+### 9. Keep the prototypes
 
-- Follow `references/deck-structure.md`: the slide list, the prototype rules, the plain walk
-  page, the press checklist and the marks. Every box on it is checked before publishing.
-- A gap tag says what the build will draw there.
-- A round is ready for the owner's look only when every row of the press checklist is ticked and
-  every state has a real shot.
-- The owner's plain walk page sits beside the canvas for the walk.
+Capture them as the prototype skill says: every design, every round and the pressable prototype go
+on one throwaway branch, pushed and kept out of main. Copy the shots the page links into its
+`shots/`.
+
+**Done when** the branch is pushed, and every shot the page links is in its folder.
 
 ### 10. Open a docs-only pull request
 
 leakgrep.sh checks added text; private words stay outside the repo.
 
-- Title: `guidelines: <area>, proposed, with experiment NN`. It holds the page (and its
-  `shots/`), the experiment and their rows. The body, as PR 287: what is in it, the principles
-  with their kinds and leans (or "No lean, the owner picks"), the shape, today's example, what was
-  decided, what other open pull requests would change to match, open calls, what it cannot tell
-  us. It names the canvas "<Area> guidelines" and the walk page by title, never by link.
-- It lands after the owner's yes.
+- Write its title and body with the pr skill. It holds the page and its shots.
+- Beside the pr skill's parts, the body carries: the scope line; each principle with its kind and
+  its lean, or "No lean, the owner picks"; the running example; what was decided; the designs and
+  why each lost; the smaller calls, each with its options as small code blocks and a lean; what other
+  open pull requests would change to match; the prototype branch; what it cannot tell us.
+- It opens as a draft, and it lands after the owner's yes (step 11).
+
+**Done when** the draft is open, and the pr skill's leakgrep check passed on its body.
 
 ### 11. Walk the owner through it
 
-- The walk follows the deck. One step per message, titled `**Step N of M: <name>**`, each naming
-  the slide it is about. Step one is the whole idea, then one step per principle, then the
-  designs, then the smaller calls.
-- 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks". Then one everyday comparison.
-  End with "Say next." and wait.
-- A principle's step ends with its Try it line, so the owner can press it in the prototype.
-- The next to last step is the prototype: the owner presses it in Play, and any press that does
-  the wrong thing goes back to step 9 before the walk goes on.
-- The owner's answer on a lean changes the canvas first, then the experiment and the page, then the pull request.
-- The last step asks one yes or no: merge it?
-- **Before the merge, in the same pull request:**
-  - Line one of the page becomes **Approved DATE.**, with a link to the approval decision, and its
-    row in `.kalfa/guidelines/README.md` says `approved DATE`. The experiment keeps its leans and
-    their confidence numbers as written. The canvas's marks change to match.
-  - Write the area's one approval decision with [`/adr`](../adr/SKILL.md),
-    `.kalfa/decisions/NNNN-<area>-guidelines-approved.md`. Its title names the area and the approval. It
-    says the owner approved the page on DATE and links it, and holds no principle.
-  - Each `law` and `lint` principle that has no decision file yet gets one, with `/adr`, and its
-    **Held by** links it. A `taste` principle gets no file of its own.
+- One step per message, titled `**Step N of M: <name>**`, each naming what the owner looks at: a
+  principle on the page, a design's shots, a tab of the prototype. Step one is the whole idea, then
+  one step per principle, then the designs, then the smaller calls, then the prototype, then the
+  merge.
+- 3 to 5 short bullets per step, each with its lean and how sure, or "No lean, the owner picks".
+  Then one everyday comparison. End with "Say next." and wait.
+- A principle's step ends with its Try it line, so the owner presses it in the prototype's tab.
+- At the prototype step the owner presses it. A press that does the wrong thing goes back to step 7
+  before the walk goes on.
+- The owner's answer on a lean changes the prototype first, then the page, then the pull request's
+  body.
+- The last step asks one yes or no: merge it? On a yes, before the merge and in the same pull
+  request, line one of the page becomes **Approved DATE.**, and each `law` and `lint` principle's
+  **Held by** names its test or lint rule, or the quest that will build it.
+
+**Done when** the owner answered the merge question, and on a yes the page says Approved.
 
 ### 12. Plan the build, the same day
 
-An approved page is not done until the app shows it. The owner decided on 2026-11-03 that every
-study ends here.
+An approved page is done when the app shows it, so every study ends here.
 
-- **The same day as the merge,** write the build plan for the version the page names, using the
-  plan skill.
-- **Today's version is in scope.** A page about today's app, or one whose tryout the owner took,
-  is the owner's pick by that yes; it needs no second ask before it is planned.
-- **Bring it to the owner as one yes or no:** approve the plan? On a yes, the test writer starts
-  as soon as a slot is free (AGENTS.md's caps), then the build and one review, as every
-  pull request does. File the build as a tracker ticket with `from` set to the page's pull request.
-- **A `next/`-only page** gets its plan written too, filed against the tier it lands in, so the
-  build is waiting when that tier opens.
+- The same day as the merge, write the build plan with the plan skill, for the version new work
+  goes in. It is saved as a `quests` record, and it names the prototype branch.
+- Bring it to the owner as one yes or no: approve the plan? On a yes, file the build as a tracker
+  ticket with `from` set to the page's pull request. The test writer starts as soon as a slot is
+  free, then the build and one review, as for every pull request.
+- The build folds the pick in properly, as the prototype skill says: rewritten, not promoted.
+
+**Done when** the quest is saved and the owner answered it.
 
 ## Changing an approved page
 
-A change to a guideline is an edit to its page, in a pull request the owner says yes to. It never
-writes a new decision file, and the approval decision is not edited. A change to a `law` or `lint`
-rule goes through its own decision file, with `/adr`.
+A change to a guideline is an edit to its page, in a pull request the owner says yes to. The page
+and its history are the whole record. A change to a `law` or `lint` principle changes its test or
+lint rule in the same pull request.
