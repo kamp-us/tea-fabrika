@@ -1,28 +1,61 @@
 # Ledger
 
-The ledger is the project's one ordered record of entries, and the coordination built on it. Every
-other context writes its facts here and reads them back. These words were settled with the owner on
-2026-11-18, one at a time.
+The ledger is where every program's facts are kept, in order, and never changed. A program asks for
+"a ledger" and never knows where it lives: on a laptop, in a Durable Object or in memory. So every
+word here is one a caller of the ledger can see. How a provider stores, copies, orders or seals it
+is the provider's, and its words are not here. Settled with the owner on 2026-11-18.
 
-| Term | Definition | Not |
-|---|---|---|
-| Transaction | A group of entries written to the ledger atomically: all of them land, or none do. | Turn, atomic (as a name), batch |
-| Journal driver | The ledger's implementation of tea's journal driver, one stream per program. The journal itself is Runtime's word. | Journal (as a Ledger word) |
-| Revision | An entry's place in its own stream, counting up from the stream's first entry. | `pos` (today's code), version, offset |
-| Position | An entry's place in the whole log, across every stream. | `rev` (today's code; it means position, not revision), offset, sequence |
-| Entry | One item stored in the ledger, never changed or removed once stored. | Line, record, row, fact, letter, event (an event is one kind of entry) |
-| Entry id | The writer's own id for an entry. Sending the same entry id again stores nothing new and gets the first answer back, so a writer may always resend. | Duplicate, resent (as an outcome) |
-| Expected revision | The revision a writer says its stream is still at. The append is refused if the stream has moved past it. | Seen, last rev |
-| Read | One-time fetch of a stream's entries from a revision onward. | Fetch, load |
-| Subscription | A standing read that delivers each new entry of a stream as it is stored. | Wait, watch, tail, park |
-| Stream | A named, ordered sequence of entries inside the ledger. | Topic, channel, log (the log is all streams together) |
-| Head | A stream's newest revision. | Top, tail, latest |
-| Sequencer | The one place that puts entries in order and gives each its position. | Referee, ledger server, project object, leader |
-| Refusal | The ledger's answer when an append may not be stored: the expected revision is stale, or the writer may not write there. | Rejection, error (a refusal is an answer, not a failure) |
-| Append | Adding entries to a stream. The ledger's only way in. | Write, put, insert, send (as the Ledger's verb) |
-| New entry | What a writer hands to append: an entry before the sequencer gives it a revision and a position. | Line, draft, event data |
-| Log | The ledger's one global order across every stream, the thing positions count along. | Store, history, the ledger (the ledger is the context; the log is its order) |
+## Language
 
-Not Ledger words: who may write where is Access's (the ledger asks, Access answers, and the ledger
-only names the refusal); a stream moving to a new storage object (roll, seal) is the storage
-provider's, and no stream sees it.
+**Log**:
+The ledger's one order across every stream: each entry has exactly one place in it.
+_Avoid_: Store, history, the ledger (the ledger is the context; the log is its order)
+
+**Stream**:
+A named, ordered sequence of entries inside the log, such as one program's journal or one ticket.
+_Avoid_: Topic, channel, partition
+
+**Entry**:
+One item kept in a stream. Once kept, it is never changed. A program may call an entry that says
+something happened an event; to the ledger it is an entry.
+_Avoid_: Line, record, row, fact, letter
+
+**Entry id**:
+The writer's own id for an entry. Sending an entry with the same id again keeps nothing new and gets
+the same answer as the first time, so a writer may always send again.
+_Avoid_: Duplicate, dedupe key
+
+**Revision**:
+An entry's place in its own stream, counting up from 1 with no gaps.
+_Avoid_: Pos, offset, version, seq
+
+**Position**:
+An entry's place in the whole log, across every stream. Positions only go up.
+_Avoid_: Rev, offset, sequence number
+
+**Head**:
+A stream's newest revision.
+_Avoid_: Top, tail, latest, end
+
+**Append**:
+Adding entries to the end of a stream. The only way anything gets into the ledger.
+_Avoid_: Write, put, insert, send (as the ledger's verb)
+
+**Read**:
+Getting a stream's entries after a given revision, oldest first, once.
+_Avoid_: Fetch, load, query
+
+**Wait**:
+Asking to be told when a stream grows past a given revision. It never blocks: it answers at once
+that the stream is ready, or that the waiter will be rung when it is.
+_Avoid_: Subscription, watch, poll, listen
+
+**Transaction**:
+Reads and appends that happen as one: nothing else is kept between them, and the appends land
+together or not at all.
+_Avoid_: Turn, atomic (as a name), batch
+
+**Journal driver**:
+The ledger's way of holding a program's journal for tea: one stream per process, with one writer.
+The journal itself is Program's word.
+_Avoid_: Journal (as a ledger word), journal store
