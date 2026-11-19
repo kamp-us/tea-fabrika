@@ -40,6 +40,9 @@ moves the line here if it does.
 - **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in chat apps.
 - **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
   GitHub.
+- **Code hosting** (`kalfa/codehost/GLOSSARY.md`): what a remote host adds on top of git: a proposal
+  to merge one ref into another, reviews, the host's checks and its rules. Built from Source
+  control's words.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
   briefs, transcripts and usage.
 - **Scheduling** (candidate, no path yet): when work starts on its own. It may fold into another
@@ -56,6 +59,10 @@ its words are ours.
 - **Ledger supplies, the rest are its customers.** Tracker, Pipeline and Runtime write facts to it
   and read them back.
 - **Pipeline and Tracker are partners.** The pipeline asks; the tracker shows the ask to a person.
+- **Delivery uses Code hosting,** and **Code hosting uses Source control.**
+- **A git provider implements Source control.** `@kalfa/provider-github` implements Code hosting
+  and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
+  words (pull request, check run, ruleset) into Code hosting's.
 - **Delivery uses Runs.** A change lands only when the checks it needs have run.
 - **Access and Configuration are asked by many.** Any context may ask who someone is, or read a
   setting, and neither owns the question's words.
