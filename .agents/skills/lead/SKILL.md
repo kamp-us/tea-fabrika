@@ -329,7 +329,7 @@ Read the header before you run one; this table only says what each is for.
 | `chain.ts` | a whole quest end to end, to the merge queue ([below](#run-a-whole-quest-with-chaints)) |
 | `quests.ts` | what each quest is doing now, read-only |
 | `flow/run.ts` | run one flow of typed steps with no agent holding the loop; `flow/flows/land-decision.ts` lands a docs-only decision PR |
-| `mutbox.ts` | the mutation run's Stryker sample in a container (0066) |
+| `mutbox.ts` | the mutation run's Stryker sample in a container |
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
 | `publish.ts` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it |
