@@ -60,7 +60,7 @@ A step that `drive.ts` runs in a box does not call this script: drive commits it
 Owner checks read the box's saved plan. Older worktrees without `.box` keep the legacy route.
 Existing notes stay unchanged, including invalid or stale links. Put their check result in your report
 for the lead.
-- The full table of answers is in [sign a step's commit](../../../docs/how-to/sign-a-step-commit.md).
+- The full table of answers is in [sign a step's commit](../../../.kalfa/runbooks/sign-a-step-commit.md).
 
 `scripts/exam.py <exam-paths.json> <path>...` prints each path that is an exam path, with its glob,
 and exits 1 when it finds one. The plan step's check uses it too.

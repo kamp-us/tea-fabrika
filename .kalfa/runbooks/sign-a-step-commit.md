@@ -1,7 +1,11 @@
+---
+summary: Sign what a step committed in next/, push it, and read the check the merge makes
+---
+
 # Sign a step's commit
 
 How a step signs what it committed in `next/`, how the lead pushes it, and how the merge reads the
-check. Tier 1's P32 built it, from [a unit of work is a commit](../direction/a-unit-of-work-is-a-commit.md).
+check. Tier 1's P32 built it, from [a unit of work is a commit](../../docs/direction/a-unit-of-work-is-a-commit.md).
 The laws are p83 to p87 and p89 in the tier 1 detail, in the notes.
 
 ```sh
@@ -115,7 +119,7 @@ A pull request that touches no `next/**` and no exam path is "not in scope" and 
 Not today. The `commits` workflow is gone and the merge reads no such run, since no step signs a
 commit by hand. `pnpm commits check`
 still runs by hand. A row per merge is proposed
-([autonomy is measured trust](../direction/autonomy-is-measured-trust.md), M1).
+([autonomy is measured trust](../../docs/direction/autonomy-is-measured-trust.md), M1).
 
 ## After the merge
 

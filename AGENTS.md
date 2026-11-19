@@ -32,8 +32,6 @@ else (`packages/`, `programs/`, `apps/`) is today's version: what we use every d
   [`docs/direction/follows/`](./docs/direction/follows/README.md) where `next/` follows a model (OTP, Elm, Kubernetes)
   and where it leaves it. It takes no new note: a settled choice becomes a decision, and a design still in draft is a
   file in `docs/`. No folder keeps an index table.
-- **A real ticket through the pipeline:** [the how-to](./docs/how-to/run-a-pipeline-ticket.md), and
-  [its rules for a live run](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run).
 - **A live run's state and logs:** `runs/`, local to your machine. Read it; never edit or commit it.
 - **Knowledge that lives only in a chat or in an agent's private memory** is in the wrong place: write it here.
 
