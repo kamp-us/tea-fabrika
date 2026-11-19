@@ -9,7 +9,7 @@ summary: "`next/` from its first `.tsx` file; today's app as the owner's tryout.
 below, after a walk, and set them strict: every compiler finding blocks, and the only exit is an
 owner-approved ledger row. The leans' confidence numbers stay as written.
 
-Its decided rules are in: [0053](../../.kalfa/decisions/0053-react-compiler-without-babel.md),,,.
+Its decided rules are in: [0038](../../.kalfa/decisions/0038-react-compiler-without-babel.md),,,.
 
 Decided before this note, by the owner on 2026-11-02, and not asked again: `next/` is React
 Compiler compatible from day one, with the guidelines and rules that takes; and today's app follows

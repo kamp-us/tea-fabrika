@@ -55,9 +55,8 @@ Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`
   keyed by (recipient life, ref), binds a process id, and never follows the name. The glossary says
   the caller picks the ref "so a retried request finds the same watch"; for a program the caller is
   its runner, and the Cmd's own stable id does that (see "Calls taken").
-- **Permissions:** [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md),
-  [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md),
-  [0029](../../../.kalfa/decisions/0029-one-rebac-permission-system.md), and
+- **Permissions:** [0026](../../../.kalfa/decisions/0026-the-cause-signs-writes.md),,
+  [0025](../../../.kalfa/decisions/0025-one-rebac-permission-system.md), and
   `next/packages/libfabrika/src/permissions/Model.ts` (`StartProgram`, the first rule).
 - **Tracker ticket 1039** (open): a tile that tezgah closes keeps its watch until the session ends;
   the window needs a `process.demonitor` call at the door, with flush. It is the window's own path
@@ -160,7 +159,7 @@ monitored: {
   process: ProcessId,
   to: Recipient,
   name: Schema.optionalKey(ProcessName),   // new: the name asked, as the watcher said it
-  member: Schema.optionalKey(Sender),      // new: the member the watch was checked against (0030, 0030)
+  member: Schema.optionalKey(Sender),      // new: the member the watch was checked against (0026)
 },
 // demonitored is unchanged: { ref, to, reason: "canceled" | "watcher_exited" }.
 ```
@@ -209,7 +208,7 @@ caller never learns whether a name exists:
 3. `stale_sender`: the watcher's life is not live, or `Senders` says the cause went to a life that
    ended.
 4. The permission step: the member is the sender of `from.parent`, else the watcher's recorded
-   member (0030). A member is checked with `WatchProcess` on this fabrika. With no member, the watch
+   member. A member is checked with `WatchProcess` on this fabrika. With no member, the watch
    is allowed only for a related pair, the watcher's own child or its starter, read by name as
    `ProgramMailLedger`'s `related` reads it. Else `forbidden`.
 5. `no_name`: the name was never registered.
@@ -309,7 +308,7 @@ moment of the watch and go in now, even though nothing reads them:
 - **Which name the watcher asked for.** The row keeps the life it bound, but a name is not readable
   from a life after a restart without the full history, and a `DOWN` for a watch made by name says
   the name, as Erlang's does.
-- **Which member the watch was checked against.** The permission rule will change (0029); a later
+- **Which member the watch was checked against.** The permission rule will change (0025); a later
   reader needs to know which rule let a watch through.
 - **Both clocks and the cause:** `sentAt`, `arrivedAt`, `parent` and `traceId`, on every row, as the
   ledger already records.
@@ -433,7 +432,7 @@ says.
   what a monitor is. A cap on watches per process would be a setting, but OTP has none and nothing
   measured a need, so there is no cap.
 - **Typed services only.** The runner reaches `Monitors` as a service; nothing calls a command-line
-  tool ([0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)).
+  tool ([0017](../../../.kalfa/decisions/0017-protocols-live-once.md)).
 
 ## Validation
 

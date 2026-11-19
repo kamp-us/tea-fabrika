@@ -97,7 +97,7 @@ nice -n 19 node replay.ts                                   # no model
 - **The bridge** (`bridge.ts`) is a stdio MCP server that `claude -p` starts. It offers one door's
   tools. Every door reaches the program only through one function, `call`, and logs each call.
 - **Door B's wall is Cloudflare's Worker Loader**, through Alchemy's `Cloudflare.WorkerLoader()`
-  ([0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)), as in
+  ([0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)), as in
   [experiment 173](./173-worker-loader.md). `scripts/worker.js` loads each script into its own
   isolate keyed `<code hash>/<run id>`, with `globalOutbound: null` and one binding, `FABRIKA`: a
   `Handle` stub made with `ctx.exports.Handle({props: {run, callback}})`. Each handle call goes back
@@ -272,7 +272,7 @@ doubt.
   the handle obeys is an env value.
 - **A, B and C run through a bridge we wrote,** not P25's. Reads go through `view.open` and the
   program's read port in the bridge, since the door has no read-port call yet.
-- **C's flow runs in the bridge, not as a recorded process in the brain** (0035). A kill
+- **C's flow runs in the bridge, not as a recorded process in the brain** (0029). A kill
   during a flow was not tried; a real flow runner would survive one, this one would not.
 - **The kill was tried once, on door B only,** and the agent never repeated a write, so the run did
   not exercise the guards. `replay.ts` did, without a model.

@@ -13,7 +13,7 @@ watch calls), for one folder of the sweep that
 
 (libfabrika writes output only through Effect's `Console`, law M3) and follows
  and
-[0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md).
+[0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md).
 
 ```ts
 // The whole idea, on the L6 law of local-dev.laws.test.ts. A sketch, not compiled.
@@ -295,7 +295,7 @@ with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 2 `vi.mock`, 0 `vi.d
 |---|---|---|---|
 | `vi.stubEnv("FABRIKA_HOME", home)` | 6 | `dev.laws.integration.test.ts` 2, `dev-errors.laws.integration.test.ts` 3, `dev-secrets.laws.integration.test.ts` 1 | yes, this slice: the law provides the home with `ConfigProvider.layer(ConfigProvider.fromUnknown({ FABRIKA_HOME: home }))`. The settings command already reads it through `Config` (`node/settings/Command.ts:56`, `optional("FABRIKA_HOME")`); the tests step reads each stub's reader first, and a reader found on `process.env` moves to `Config` in the build, about 4 product lines |
 | `vi.mock("rolldown")` | 1 | `watch.laws.integration.test.ts` | yes, as 0555's one exception: this is the law of `watch.ts`, the one file that wraps Rolldown, so the line takes `// oxlint-disable-next-line vitest/no-restricted-vi-methods -- the law of watch.ts, the one file that wraps rolldown; nothing below it to swap` |
-| `vi.mock("cloudflare:workers")` | 1 | `supervision-spans.integration.test.ts:34` | **no**: [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work, which has no plan yet |
+| `vi.mock("cloudflare:workers")` | 1 | `supervision-spans.integration.test.ts:34` | **no**: [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work, which has no plan yet |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The block M1 describes
 is the shape it lands with, whole, for `node/dev/**`, on the day the `cloudflare:workers` mock

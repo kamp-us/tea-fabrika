@@ -306,7 +306,7 @@ desk.exit = ["escape", "q"]      # in every mode exit works in
 **Yes, lean 75%, and info mode is the test.**
 
 - **What it needs:** the desk as a program (Tier 2), a window-side machine that holds its mode
-  (Tier 1 already keeps focus in the window's machine; *2026-11-13: that stopgap ended with [0159, and focus is the desk process's, per [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md)*), and step 3 above, so a window-wide mode
+  (Tier 1 already keeps focus in the window's machine; *2026-11-13: that stopgap ended with [0159, and focus is the desk process's, per [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md)*), and step 3 above, so a window-wide mode
   wins over the focused tile.
 - **Resize** fits i3's binding mode: `h j k l` and arrows move an edge, Escape and Enter leave. In
   the file it is `[mode.desk.resize.keys]`. While it is on, the prefix still works.

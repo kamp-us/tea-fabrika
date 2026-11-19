@@ -18,7 +18,7 @@ a window lives in `apps/`, `programs/` and `next/` alike.
 - **No new paid accounts** until fabrika is a product. Design for the free route and say what it
   can't do. Cloudflare is the exception: fabrika assumes its paid Workers plan, such as its Secrets
   Store.
-- **All in on Manti** ([0052](../../../../.kalfa/decisions/0052-one-design-package-on-manti.md)).
+- **All in on Manti**.
 - **Keep the platform's defaults.** On a Mac, closing a window keeps the app running and Cmd-Q
   quits. Leaving a convention needs the owner's yes.
 - **Subtle, and accessible without apology.** Color is never the only cue (WCAG 1.4.1). Give sources

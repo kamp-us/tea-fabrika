@@ -547,7 +547,7 @@ pipeline/build       # from a pack the project lists and locks
 ./programs/deploy    # this repo's own, a path from its .fabrika folder
 ```
 
-*Changed 2026-11-10 by [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md):* the third spelling
+*Changed 2026-11-10 by [0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md):* the third spelling
 goes: a repo's own program is in a pack in `.fabrika/packs/<name>/`, named `<pack>/<program>` like any
 other, and `fabrika/tracker` is the core pack's, the pack named `fabrika`.
 

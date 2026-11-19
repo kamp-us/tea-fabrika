@@ -249,7 +249,7 @@ met this as ticket 457, and `run.sh` mutates in place for it). The runner finds 
 run is refused as `needs_in_place` before Stryker starts, naming the setting. checklist-pid is
 such a plant: its law is in `next/apps/fabrika`, its target in `next/packages/libfabrika`.
 
-### Settings (0054)
+### Settings
 
 Each is one Effect `Config` with its Schema and its one default, under `quality.stryker`, so the
 environment name is `KALFA_QUALITY_STRYKER_<KEY>`. No `FABRIKA_` name and no `~/.fabrika` path.
@@ -300,7 +300,7 @@ gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path
 node .github/ci/plants.ts stryker plant host-pnpm-path --out runs/plants/host-pnpm-path.json
 # To find a shape for a new plant: every mutant on some lines, with its status and its killers.
 node .github/ci/plants.ts stryker survey .agents/skills/lead/scripts/boxnode.ts --law .agents/skills/lead/scripts/flow/host.test.ts --from 120 --to 135
-# Later, once @kalfa/cli exists and finds the package's `kalfa.cli` field (0054):
+# Later, once @kalfa/cli exists and finds the package's `kalfa.cli` field:
 kalfa quality stryker plant host-pnpm-path
 ```
 

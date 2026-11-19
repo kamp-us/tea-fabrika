@@ -14,7 +14,7 @@ object comes from the test package, never by hand), and the recorder plan's row 
 
 (libfabrika writes output only through Effect's `Console`, law M13) and follows
  (no list lets broken code pass)
-and [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) (platform pieces go
+and [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) (platform pieces go
 through Alchemy).
 
 ```ts
@@ -148,7 +148,7 @@ Counted on `origin/main` at `f7169af` with
 - **Left in the folder, and not this quest's:** `vi.mock` 13 (`cloudflare:workers` 8, `./objects.ts`
   4, `effect` 1), `vi.hoisted` 4 and `vi.stubGlobal` 1 (`WebSocketPair`, `readers.laws.test.ts:658`).
   Slice 2 removes the `vi.mock("effect")` at `readers.laws.test.ts:62`, since it is there only so
-  `Effect.result` could be swapped. The `cloudflare:workers` mocks wait on Alchemy (0019), and the
+  `Effect.result` could be swapped. The `cloudflare:workers` mocks wait on Alchemy (0018), and the
   `./objects.ts` mocks wait on the object implementations being exported (0555, "Consequences").
   `WebSocketPair` is a platform global that `connection.ts` makes, so it goes with the Alchemy
   slice. None of these is counted by the recorder plan's row, and the lock does not name them.
@@ -166,7 +166,7 @@ which forbids. Counted on main at
 |---|---|---|---|
 | `effect` | 1 | `readers.laws.test.ts` | yes, slice 2: it was there only so `Effect.result` could be spied on, and those spies go |
 | `./objects.ts` | 4 | `readers.laws.test.ts`, `entry-flows.laws.test.ts`, `alarm.laws.test.ts`, `ObjectService.test.ts` | yes, slice 2: the object implementations are exported from `objects.ts`, so each law imports the one it needs (0555, "Consequences"), about 8 product lines |
-| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and is covered by the approved Alchemy mocks plan, [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511) |
+| `cloudflare:workers` | 7 | `connection.test.ts`, `error-cause.test.ts`, `leave.laws.test.ts`, `reload.laws.test.ts`, `runner-reply.laws.test.ts`, `supervision.laws.integration.test.ts`, `ProjectAuditTest.ts` | **no**: [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) reaches the platform module through Alchemy, and 0555 names that move as its own work. It changes how the Worker's entry and every object reach the platform, which is past a mock sweep's slice and is covered by the approved Alchemy mocks plan, [PR 1511](https://github.com/kamp-us/tea-fabrika/pull/1511) |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The block in "The lock"
 is the shape it lands with on the day the folder's last `cloudflare:workers` mock goes, whole, for

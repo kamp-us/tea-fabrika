@@ -230,7 +230,7 @@ type Mode =
 ```
 
 ```ts
-// The runner keeps a terminal program's editor and screen in memory, beside its saved model (0049).
+// The runner keeps a terminal program's editor and screen in memory, beside its saved model (0036).
 // A program says it has one; nothing of it is in the saved fold.
 export const fabsh = Program.make({
   name: "fabsh",
@@ -485,7 +485,7 @@ table is made, never copied from today's file.
 | L27 | A pipe, `summon`, `@name` or `#room` line is read and colored, and Enter refuses it in words that name the quest that builds it | test | Effect Arbitrary: Schema.Union | one line of each kind with random words, 100 runs | run the first program of a pipe | S2 |
 | L28 | The prefix pressed twice sends one Ctrl-B on to the tile, and the prefix alone never reaches it | test | @demlik/tea/pbt.arbMsgSequence | prefix message walks, default runs | pass the first Ctrl-B on | S2 |
 | L29 | A program with a view run in the foreground shows in the tile and the tile goes back to fabsh when it ends; Ctrl-C stops it; `&` gives the prompt back at once; `attach %n` brings it forward | test | fc.commands | starts, ends, Ctrl-C and attach on tezgah's stepper, 200 runs | leave the tile on the ended process | S3 |
-| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0030) | test | fc.commands | lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
+| L30 | A start from a line is checked against the member who typed it, and fabsh holds no start grant (0026) | test | fc.commands | lines from members with and without a role, 100 runs | judge the start by fabsh's own grant | S3 |
 | L31 | `;` runs each statement, `&&` only after status 0, `\|\|` only after another, and `$( )` puts a finished process's output into the line by its shape | test | fc.commands | chains of statements with random statuses, 200 runs | run `&&`'s right side on any status | S3 |
 | L32 | `jobs`, `ps`, `stop %n`, `tell %n` and `close %n` act on the job table every tile shares, and a job's `%n` is the same in each tile | test | fc.commands | jobs begun and ended across two tiles, 200 runs | number jobs per tile | S3 |
 | L33 | The screen's text region, the status region and the replies region hold the grid's text, at most once a frame, every 3 s and 50 lines | test | scenario: a long print, a status that changes each second, 60 replies | long print, status each second, 60 replies | write the status on each change | S2 |
@@ -535,7 +535,7 @@ still apply: its own `FABRIKA_HOME` in a temp folder, never in the foreground.
 - **One client row per submitted line, with counts and no text:** how many keys, how many were
   predicted, how many predictions the process overwrote, and the longest wait for a confirm. Wide
   events; nothing reads them yet, and they are the only record of how echo feels.
-- **Not recorded, on purpose:** key bytes and the line before Enter (0049), and the screen's bytes.
+- **Not recorded, on purpose:** key bytes and the line before Enter (0036), and the screen's bytes.
 
 ## Is this a setting?
 

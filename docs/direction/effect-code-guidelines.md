@@ -147,7 +147,7 @@ export const recordStub = (env: Env, project: string, name: string) =>
 - **The Alchemy port.** `cloudflare/objects.ts` defines the four classes Alchemy's way already.
   `Project`, `Process` and `Connection` are still called through the hand-typed Promise shapes of
   `cloudflare/bindings.ts`: the unfinished half of
-  [0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) (ticket 502). The stub's type
+ (ticket 502). The stub's type
   says a call cannot fail, and at run time it can, so each call is still wrapped once at the
   caller, with the cause kept.
 - **What is left for a hand wrapper.** An edge neither Alchemy nor Effect covers, such as the Node
@@ -475,7 +475,7 @@ export const supervisor = Machine.make({
 | The supervisor as a saved tea machine | a `Schedule` | a `Schedule` cannot be saved |
 | Every span written to SQLite (`telemetry/Sink.ts:282`) | an in-memory buffer | a sleeping object loses the buffer |
 | A stateless signed nonce | the challenge kept in memory | the same |
-| Synchronous SQL and ledger steps (0010) | an async transaction | nothing runs between the number and the write |
+| Synchronous SQL and ledger steps (0011) | an async transaction | nothing runs between the number and the write |
 | A named `Effect.fn` span on every export | `fnUntraced` in library code | we want the trace; its run-time cost is not measured |
 
 - **Why.** Effect explains its own choices in place: "D1 batches execute on the binding directly

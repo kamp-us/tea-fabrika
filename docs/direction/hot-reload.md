@@ -12,7 +12,7 @@ layer does, the facts on the ledger, where it is off, and the laws, each with it
 swap, the least sure at 60%, was approved on its own. Each lean keeps its number: a lean under 80%
 is decided but still names what would settle it.
 
-Its decided rules are in: [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md), [0013](../../.kalfa/decisions/0013-records-carry-their-build.md).
+Its decided rules are in: [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md), [0013](../../.kalfa/decisions/0013-records-carry-their-build.md), [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md).
 
 Built from [experiment 183](../../experiments/183-hmr.md), which swapped a program's code under a
 running process in Miniflare and read how about ten tools do it, and a clickable page, "Hot reload

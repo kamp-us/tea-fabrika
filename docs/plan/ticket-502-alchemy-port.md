@@ -4,8 +4,8 @@ Plancheck-Version: 3
 # Ticket 502: the rest of the Alchemy port
 
 Everything here is about `next/`. Today's version is not changed. Nothing is built. This plan
-builds [0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md), with its amendments, and
-the rows of [0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) that move with it.
+builds, with its amendments, and
+the rows of [0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) that move with it.
  gives it a slot.
 
 ```mermaid
@@ -126,7 +126,7 @@ More counts, so a slice can check itself:
 - **Alchemy's own decisions and patterns:** none found in the installed package, which ships
   `src/`, `lib/` and a README. The local source checkout is at beta.77, older than the installed
   one, so nothing here is taken from it.
-- **phoenix,** which moved first: its decisions 0031 and 0032 and its pattern doc, all linked from
+- **phoenix,** which moved first: its decisions 0027 and 0032 and its pattern doc, all linked from
   0041. Its per-call sibling rule failed when run here and is replaced (0041, Amendments).
 - **OTP.** A `gen_server` keeps its callback module, the shell, apart from the logic it calls.
   That is the thin class of [an object class stays thin](../direction/object-classes-stay-thin.md).
@@ -230,7 +230,7 @@ What each slice changes in that picture:
   ```ts
   // cloudflare/CloudflareSql.ts today
   transaction: (step) => storage.transactionSync(step),
-  // after, a sketch: the step stays a plain function (0010), and no raw handle is needed
+  // after, a sketch: the step stays a plain function (0011), and no raw handle is needed
   transaction: (step) => storage.transaction(Effect.sync(step)),
   ```
 
@@ -290,7 +290,7 @@ owner's own answer.
 - **States**: the shells
   add none. A shell builds its service once and hands calls to it. The saved wake and the alarm
   stay in the Process service, untouched.
-- **Sleep** ([0022](../../.kalfa/decisions/0022-objects-never-stay-awake.md)): a
+- **Sleep**: a
   Layer starts no timer and no fiber that waits. The alarm slot's type has no failure, so a failed
   alarm dies as a defect and the platform retries it, as a rejected Promise does today.
 - **Scope**: the service is
@@ -465,7 +465,7 @@ write-up to main; its code stays on its branch.
 | `next/packages/libfabrika/src/node/dev/dev.ts` `next/packages/libfabrika/src/node/dev/dev-recording.ts` | build | S4, S7 | 30 | the Node doubles follow the Effect contracts; the control binding names no entrypoint |
 | `next/packages/libfabrika/src/node/build/build.ts` `next/apps/fabrika/src/build.ts` | build | S8 | 80 | the brain phase hands its plugins to Alchemy's bundler |
 | `node-kinds.json` | build | S1, S2, S3, S8 | 4 | names each bridge export; the row goes with `brain.ts` |
-| `.glossary/TERMS.md` `.patterns/effect-services-and-layers.md` `.patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `.kalfa/decisions/0019-cloudflare-only-through-alchemy.md` `.kalfa/decisions/0019-cloudflare-only-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
+| `.glossary/TERMS.md` `.patterns/effect-services-and-layers.md` `.patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `object classes are effect objects` `.kalfa/decisions/0018-cloudflare-only-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
 
 No screenshots: no window changes.
 
@@ -566,5 +566,5 @@ The one question this plan had, whether both instances still get the same bytes 
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-13-t502-first-plan-is-not-in-git","date":"2026-11-13","by":"plan","model":"claude-fable-5-2","rule":"doc_drift","location":{"path":".kalfa/decisions/0019-cloudflare-only-through-alchemy.md","line":221},"says":"0041 folds two tickets into the port as \"PR 7 and PR 8\" of a plan whose list of pull requests, and whose amendments A1 to A10, are in no file in git.","proof":"`git log --all --oneline --diff-filter=A --name-only -- 'docs/plan/*502*' '*t502*plan*'` prints nothing. Pull request 763's body cites \"the signed T502 plan, amendments A1 to A10\", and tracker ticket 502 says the plan is a file in a step's working folder.","cost":"A reader cannot tell which of the eight pull requests are done, or what the ten amendments decided, without rebuilding it from three pull requests.","head":"5c72400255ffdd8f9e4478b1647cba224bdddda3","ticket":"kamp-us/tea-fabrika#502","pr":null}
+{"_tag":"finding","id":"2026-11-13-t502-first-plan-is-not-in-git","date":"2026-11-13","by":"plan","model":"claude-fable-5-2","rule":"doc_drift","location":{"path":"object classes are effect objects","line":221},"says":"0041 folds two tickets into the port as \"PR 7 and PR 8\" of a plan whose list of pull requests, and whose amendments A1 to A10, are in no file in git.","proof":"`git log --all --oneline --diff-filter=A --name-only -- 'docs/plan/*502*' '*t502*plan*'` prints nothing. Pull request 763's body cites \"the signed T502 plan, amendments A1 to A10\", and tracker ticket 502 says the plan is a file in a step's working folder.","cost":"A reader cannot tell which of the eight pull requests are done, or what the ten amendments decided, without rebuilding it from three pull requests.","head":"5c72400255ffdd8f9e4478b1647cba224bdddda3","ticket":"kamp-us/tea-fabrika#502","pr":null}
 ```

@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is `next/`. It builds piece 4 of [Tier 1](../tier-1.md) ("Pipes, for built-ins first"), the
 parts nothing on screen depends on, all bound by
-[0024](../../../.kalfa/decisions/0024-programs-meet-by-mail.md) (a pipe is saved program mail).
+[0020](../../../.kalfa/decisions/0020-programs-meet-by-mail.md) (a pipe is saved program mail).
 Two pull requests: the measurement that picks the two defaults lands first, then the plumbing.
 
 ```ts

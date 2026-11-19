@@ -98,7 +98,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
     change a running exam. A diff that changes the list asks the owner.
 - **Where it writes.** Code makes a local commit of the new tests on the
   plan's base, and the ledger holds only its hash
-  ([nothing is pushed before review](../../.kalfa/decisions/0041-changes-stay-local-until-review.md)). One `checked`
+  (nothing is pushed before review). One `checked`
   fact per Property records red or green
   (`packages/pipeline/src/criteria/book.ts`, where each Property has its own `p<n>` id). Nothing is pushed.
 - **Names.** Test writer (was verify writer), `tests_write` (was

@@ -1,6 +1,6 @@
 ---
 state: "decided 2026-11-11; four unclear cases are the lead's leans, not ruled on"
-summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The quest: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the quest. The picture: a thin quest, one merge queue fabrika provides (0043), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next (0022), with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes. From experiment 260."
+summary: "Both versions. Where each piece of work in a change lives, by two questions: does it judge this one change or something shared (main, the laptop, the tracker), and must its answer exist before the next step starts? The quest: judges this change and the next step needs it. A queue: one piece of work per event, done once, can wait its turn. A scheduled job, on a timer: shared state, safe to run twice, compares \"should be\" with \"is\". A check that stops lasting harm (a leak, lost work, a builder changing its own exam) never leaves the quest. The picture: a thin quest, one merge queue fabrika provides (0034), the tool checkout brought up to date on the merge (never by a scheduled job), and two scheduled jobs, the laptop cleaner and a main watcher that files one ticket when main goes red. Every scheduled job writes a \"last ran\" fact and is shown late after two periods; in `next/` one is an alarm that sets the next, with a scheduled job piece under ticket 762. Tests stay on the pull request, in five minutes. From experiment 260."
 ---
 
 # Quest, queue or scheduled job: where each piece of work in a change lives
@@ -42,7 +42,7 @@ home({ judges: "shared", neededNext: false, stopsLastingHarm: false, ourEventMov
 
 ```mermaid
 flowchart LR
-  quest["quest: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0043)"]
+  quest["quest: plan, tests, build, host, review, typecheck, open, loosening"] --> mq["merge queue (0034)"]
   quest --> desk["lead's hand work, a queue the quest waits on"]
   desk --> quest
   mq --> merged["merge event"]
@@ -58,7 +58,7 @@ flowchart LR
 - **A thin quest.** Plan, tests, build, host, one review, typecheck, open, loosening, then into the
   merge queue. Every piece of work in it judges this change and is needed by the next step.
 - **One merge queue.** fabrika provides it as its own primitive, in its official pipeline pack
-  ([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)). What it runs before a merge
+  ([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)). What it runs before a merge
   is 0107's and, until its first stage's:
   every check on a head that holds main.
 - **Work on the merge event.** The merge queue raises it. Bringing the tool checkout up to date
@@ -114,8 +114,7 @@ the budget, the check gets faster.
   finished" ([timer](https://www.erlang.org/doc/apps/stdlib/timer.html)).
 - **In `next/`, a scheduled job on Cloudflare is an alarm that sets the next alarm.** The object
   works inside a wake and sleeps; it never stays awake with a timer of its own
-  ([0022](../../.kalfa/decisions/0022-objects-never-stay-awake.md),
-  [scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)).
+  ([scheduled jobs run on the host's alarms](./scheduled-jobs-on-the-host.md)).
 - **A scheduled job piece for `next/` is planned in three stages** under tracker ticket 762: first
   it works, then better, then secure.
 
@@ -152,7 +151,7 @@ Lead tooling today. Where a home is a lean, it says so.
   the 20-minute check (the lead's lean, not ruled on). Last night that check cost 6 quest-hours over
   33 parks.
 - **Merging.** Lint on the true merge, the squash, a retry after an outside fault, a conflict sent
-  back to the quest: the merge queue (0043).
+  back to the quest: the merge queue (0034).
 - **On the merge event.** Bring the tool checkout up to date, once for a burst of merges, at a
   moment when no step is starting (decided). Close the tickets the merge finished, with a scheduled
   job as the backstop for a close the event missed (the lead's lean, not ruled on). A cleanup run.

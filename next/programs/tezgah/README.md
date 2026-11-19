@@ -1,7 +1,7 @@
 # tezgah
 
 `fabrika/tezgah`, the window manager of `next/`, the new version of fabrika, as a program in the
-brain (0046). It holds each workspace's layout and focus, and it starts and stops the processes its
+brain (0035). It holds each workspace's layout and focus, and it starts and stops the processes its
 tiles show. Read [`src/program.ts`](./src/program.ts) beside this page.
 
 Each person has one tezgah process, `tezgah:<the person id's body>`: the brain boots the founder's.

@@ -7,7 +7,7 @@ summary: "A ticket ties every fact of a quest together; its state is their fold.
 
 Decided 2026-10-24. One part is still proposed, and it is marked. Walked when Tier 6 starts (owner, 2026-11-08): pipeline timelines and each step's brief.
 
-Its decided rules are in: [0039](../../.kalfa/decisions/0039-status-is-a-fold.md).
+Its decided rules are in: [0032](../../.kalfa/decisions/0032-status-is-a-fold.md).
 
 ```ts
 // A sketch. A ticket is the key that ties one quest's facts together.

@@ -9,7 +9,7 @@ summary: "Today's version first. One kind of tile: a person summons any agent th
 decided these during the walk of the Design canvas "Shared tile guidelines" on 2026-11-04, and more
 in later walks, each marked decided below:
 
-Its decided rules are in: [0047](../../.kalfa/decisions/0047-one-kind-of-shared-tile.md),,,,.
+Its decided rules are in:,,,,.
 
 - **Decided, one kind of tile.** A tile holds the person and any agent they summon. The "agent's
   own tile" goes as a kind, for good.

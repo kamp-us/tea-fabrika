@@ -22,8 +22,7 @@ Base read: branch `fabrikalfa/p39-s4` at `7dad34bb6` (slice 4a, draft pull reque
 https://github.com/kamp-us/tea-fabrika/pull/1315, not merged). This slice stacks on it. Every code
 line cited here is read on that branch.
 
-Builds [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),,,
-[0045](../../../.kalfa/decisions/0045-the-app-starts-the-brain.md),,,
+Builds,,,,,,
  and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md), build order step 5.
@@ -41,7 +40,7 @@ What "run a turn" means, from the notes:
   (decided 2026-11-06): the brain keeps the alias and the session, and "the turn runs on hands".
   A turn needs files and agents, so a browser tab never takes one.
 - [0001](../../../.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md): a turn is the maker's own
-  harness, unchanged, on the person's own login. [0034](../../../.kalfa/decisions/0034-agents-behind-one-service.md):
+  harness, unchanged, on the person's own login.:
   reached only through one agent service of ours.
 -: Tier 1 holds
   "hands far enough to run one turn", and Tier 2 builds hands for real.
@@ -98,7 +97,7 @@ Not fetched this session; each is from the makers' public docs as known, marked 
 - **GitHub Actions self-hosted runner** keeps its identity in files in its own folder
   (`.runner`, `.credentials`, `.credentials_rsaparams`), made once by `config.sh` and reused on
   every start. Kept: one folder, made once, reused. Left: no registration token; the person grants
-  the key on the ledger (0027). Not fetched.
+  the key on the ledger. Not fetched.
 - **kubelet** keeps its client key under `/var/lib/kubelet/pki/` and asks the API server to approve
   it (TLS bootstrapping, a CSR a person or a controller approves). Kept: the machine makes its own
   key and a person approves it at the brain. Not fetched.

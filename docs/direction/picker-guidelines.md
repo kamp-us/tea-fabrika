@@ -18,7 +18,7 @@ and a tsh word, and a program hands the desk `index(model)`, a pure function, so
 index and ranks once, and picking a row is `open program location`
 ([program guidelines](./program-guidelines.md), G3, G5, G7 and its R5, decided 2026-11-06).
 
-Its decided rules are in: [0048](../../.kalfa/decisions/0048-desk-owns-the-picker.md),,,,.
+Its decided rules are in:,,,,.
 
 Rooms, direct messages, mentions, summon and forks belong to the summon note
 ([PR 425](https://github.com/usirin/tea-fabrika/pull/425), proposed). The picker only lists them as

@@ -11,7 +11,7 @@ The desktop is layer 5, on top of the app. It places tiles, owns focus and
 routes keys: the part KDE or GNOME plays on Linux. Its codename is Tuval;
 users only ever see "fabrika".
 
-Its decided rules are in: [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md), [0049](../../.kalfa/decisions/0049-shell-is-a-regular-program.md), [0045](../../.kalfa/decisions/0045-the-app-starts-the-brain.md).
+Its decided rules are in: [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md), [0036](../../.kalfa/decisions/0036-shell-is-a-regular-program.md).
 
 *Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
 day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is

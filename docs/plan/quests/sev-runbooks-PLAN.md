@@ -43,7 +43,7 @@ for a plan because the change moves rules.
 What was read, on `origin/main` at d524d4e69 (`kalfa/` at d2968b0e2), so a reader can check each claim.
 
 - Decisions:,,,,,,,,,,,,
-  [0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md),.
+  [0017](../../../.kalfa/decisions/0017-protocols-live-once.md),.
 - Field notes: `field/notes/2026-11-14-ci-sev0-froze-ci-and-ended-as-a-sev1.json`,
   `field/notes/2026-11-14-ci-sev1-three-reds-the-schedule-alone-could-see.json`,
   `field/notes/2026-11-15-ci-sev1-the-workspace-program-broke-the-saved-home-law.json`,
@@ -87,7 +87,7 @@ Slice 1 takes the cheap known step: capacity held back for a class while a sev i
 GitHub-native way (slot groups, as 0598 already uses). Slice 2 takes the full known way, Kubernetes'
 classes and preemption, as pure domain code in `@kalfa/ci`, the one CI protocol, with GitHub Actions
 as one Layer behind it, the way `CodeHost` puts GitHub behind a service
-([0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)), so GitHub's lack of priority
+([0017](../../../.kalfa/decisions/0017-protocols-live-once.md)), so GitHub's lack of priority
 stops shaping the design.
 
 ## The shape
@@ -388,8 +388,7 @@ export const admit = (waiting: ReadonlyArray<RunState>, running: ReadonlyArray<R
 What slice 2's plan must settle, each a design call for that plan: where admission runs (a gate job
 that waits for our admit, or runs started only by `dispatch`); how many runners we have, given the
 measured 34; how a preempted run's branch is caught up; and the order in which `sev.ts`, `land.ts`
-and next/'s `Ci.ts` move onto it. It is tooling any repo could use, so it is a `kalfa/` package
-(0054), not `next/` product code.
+and next/'s `Ci.ts` move onto it. It is tooling any repo could use, so it is a `kalfa/` package, not `next/` product code.
 
 ## One value traced through
 

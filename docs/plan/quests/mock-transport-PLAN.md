@@ -6,7 +6,7 @@ Plancheck-Version: 3
 This is `next/` only. Today's app is not touched. It builds
  (no `vi.spyOn`, `vi.mock`, `vi.doMock` or
 `vi.stubEnv`; a stand-in comes from a service)
-(the `Recorder` is our one way to watch calls), [0021](../../../.kalfa/decisions/0021-modules-import-lower-layers.md)
+(the `Recorder` is our one way to watch calls)
 (a module offers services in its own types and errors) and the approved
 [Recorder plan](recorder-PLAN.md), whose "Size" section lists this folder as one later slice:
 9 `vi.fn`, 11 `toHaveBeenCalled*` and 1 `vi.spyOn`.

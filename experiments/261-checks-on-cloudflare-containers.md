@@ -175,7 +175,7 @@ lockfile pins beta.85, so the install was stale.
   `snapshotContainer`, `setInactivityTimeout` and `exec(argv)`. `exec` returns a scoped process
   with `stdout` and `stderr` as `Stream<Uint8Array>` and `exitCode` as an Effect, where "Nonzero
   exit codes are returned normally". Closing the scope sends SIGKILL. All of it is Effect, so
-  [0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) and "no Promises" hold with no
+  [0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) and "no Promises" hold with no
   edge comments.
 - Errors are typed (`NoContainerInstanceError`, `ContainerRateLimitedError`,
   `ContainerCrashedError`, `ContainerNotRunningError`), so a CI Layer could map them to `stuck`
@@ -186,9 +186,9 @@ lockfile pins beta.85, so the install was stale.
 It would fit as both shapes at once. `Ci.cloudflare` is one more Layer of the `Ci` service in
 [services and our own CI](../docs/direction/services-and-our-own-ci.md), so a stage never knows
 where a check ran. Each box is a `hands` client started on demand, which takes one job with
-`jobs.take` ([0027](../.kalfa/decisions/0027-job-machines-take-their-work.md)), the shape
+`jobs.take`, the shape
 [experiment 197](./197-daily-checks-on-cloudflare.md) drew for the daily checks. A box that reports
-by calling out keeps [0022](../.kalfa/decisions/0022-objects-never-stay-awake.md):
+by calling out keeps:
 the job's object need not stay awake polling.
 
 What building it now would undo: the services note defers our own CI hosts, and says "Money saved
@@ -212,7 +212,7 @@ settled, because nothing ran:
 1. How fast a Cloudflare vCPU runs our tests and `tsgo` against a GitHub 4-CPU runner.
 2. The cold start of a multi-GB image holding `node_modules` and Chromium.
 3. Whether bubblewrap's user namespaces and DinD work inside Firecracker for the `test` shards.
-4. Whether a 10-minute job runs with the object asleep (0022).
+4. Whether a 10-minute job runs with the object asleep.
 
 This study cost only agent time: one agent reading, no model call of its own and no paid run.
 

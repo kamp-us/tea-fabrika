@@ -1,12 +1,12 @@
 ---
 date: "2026-11-18"
 scripts: "carry-approvals.ts, on the branch fabrikalfa/exp-carry-approvals at experiments/scripts/carry-approvals.ts, not on main. It reads local git and the list from `gh pr list`, and writes raw rows under runs/ (git ignores it, 0027). It runs about 3 minutes."
-summary: "Both versions; $0. Yes, code can decide most of it. Of 250 merges of main into PR branches since 2026-11-15, decision 0042's rule keeps the approval on 127 (51%), asks for a glance on 8 (3%) and for a re-review on 115 (46%). A plain patch-id alone keeps only 116. Of the 115, 11 had nothing new in the resolution (a false alarm) and 25 only dropped lines. Plain `git range-diff` saw none of the 250 resolutions. A clean merge can still break meaning: main touched a file the PR touches in 48 of the 127 kept."
+summary: "Both versions; $0. Yes, code can decide most of it. Of 250 merges of main into PR branches since 2026-11-15, an earlier decision's rule keeps the approval on 127 (51%), asks for a glance on 8 (3%) and for a re-review on 115 (46%). A plain patch-id alone keeps only 116. Of the 115, 11 had nothing new in the resolution (a false alarm) and 25 only dropped lines. Plain `git range-diff` saw none of the 250 resolutions. A clean merge can still break meaning: main touched a file the PR touches in 48 of the 127 kept."
 ---
 
 # 300. Can code decide that an approval carries across a merge of main?
 
-**The answer.** Mostly yes, and the rule already exists: [0042](../.kalfa/decisions/0042-a-yes-carries-by-rule.md)
+**The answer.** Mostly yes, and the rule already exists:
 (`kept`, `glance`, `stale`), from [experiment 165](./165-review-binds-to-diff.md). It was measured
 on force pushes. This write-up measures it on merges of main into a PR branch, which is the case
 the `merger` meets. Both versions are in the data (the PRs touch `next/` and today's code); the

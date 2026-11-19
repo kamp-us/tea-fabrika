@@ -17,7 +17,7 @@ outside fabrika's own source get a thin slice before Tier 5; repo programs and p
 *Changed 2026-11-10 by:* each
 tier checks that slice with a cold agent as the author, and every place it gets stuck is a gap.
 
-*Changed 2026-11-10 by [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md):* in `next/`, every
+*Changed 2026-11-10 by [0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md):* in `next/`, every
 program is in a pack: libfabrika is the syntax, the core pack `fabrika` ships with fabrika as its
 standard library, and a repo's own programs are a pack in `.fabrika/packs/<name>/`; "core" below is
 today's word, not the core pack.

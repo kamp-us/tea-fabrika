@@ -8,9 +8,8 @@ summary: "`next/`. fabrika is built on Durable Objects the way Elixir is built o
 **Decided 2026-11-07 (owner): the principle, five calls from P37's questions and after, and the
 four leans below, after a walk of each part. The leans' confidence numbers stay as written.** `next/`.
 
-Its decided rules are in: [0014](../../.kalfa/decisions/0014-no-object-grows-forever.md),,,
-[0015](../../.kalfa/decisions/0015-archives-go-to-r2.md),,,
-[0014](../../.kalfa/decisions/0014-no-object-grows-forever.md).
+Its decided rules are in:,,,,,,
+[0014](../../.kalfa/decisions/0014-ledger-seals-never-shards.md).
 
 ```ts
 // A sketch of the whole idea. Every object that grows names its cap and what it does there.

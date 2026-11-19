@@ -32,7 +32,7 @@ libfabrika
 [`.oxlintrc.json`](../.oxlintrc.json) and explained in
 [`oxlint-plugins/README.md`](../oxlint-plugins/README.md). Two rules of `pnpm lint:layers` do not
 say the fix. A module imports only from lower layers: it prints `[upward]`, and the fix is in
-[0021](../.kalfa/decisions/0021-modules-import-lower-layers.md).
+.
 A part imports only the parts its row in `layer-rules.json` lists, and every library and tuval file
 has a row (a row's `imports`, and `roots`).
 `eslint/no-console`, on for `next/packages/libfabrika/src` but its `*.test.ts` files, does not say
@@ -47,15 +47,13 @@ has nothing, marked as an edge with its reason.
 ## What lint does not hold yet
 
 - **Use the platform through Alchemy, never directly,** in the cloud and on the laptop alike
-  ([0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)).
+  ([0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)).
 - **A resource is acquired in a scope,** never with `try/finally` or an `afterEach`.
 - **A service file holds only its contract**.
 - **An object class stays thin.** It holds what the platform gives it and a one-line handoff. The
   logic is plain code that also runs on Node in tests
-  ([an object class stays thin](../docs/direction/object-classes-stay-thin.md),
-  [0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)).
-- **A folder of libfabrika is a module, and its rank is a layer**
-  ([0021](../.kalfa/decisions/0021-modules-import-lower-layers.md)).
+  ([an object class stays thin](../docs/direction/object-classes-stay-thin.md)).
+- **A folder of libfabrika is a module, and its rank is a layer**.
 - **Test files keep the layers too,** with no exemption.
 - **A window reads state through tea's own React hook,** `useRuntime`, and state lives in a tea
   machine, never `useState` ([Elm first](../docs/direction/elm-first.md)).

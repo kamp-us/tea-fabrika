@@ -39,7 +39,7 @@ A sketch, next/: the build order, then the lines that work at the end. Built-in 
 window  ->  fabsh in a tile (the desk beside it)  ->  pipes  ->  summon and @name  ->  join and rooms
 the window is a browser tab and the Electron app, built side by side: one window code, two clients
 prefix, then split right                       the desk sends {type: "did", does: "split_right"}
-fabsh$ a | b                                   what a puts out is mailed to b, saved like any letter (0024)
+fabsh$ a | b                                   what a puts out is mailed to b, saved like any letter (0020)
 fabsh$ summon claude haiku as scout            the one way to start an agent
 fabsh$ @scout what changed in next/ yesterday?  a letter to scout's mailbox; it runs behind you (A1, A3)
 fabsh$ fg %scout                               wait on the turn; Ctrl-C stops the turn, scout stays (A2)
@@ -55,7 +55,7 @@ built the way its decision or note designs it, and today's version shows what wo
 Done is seen in the Electron app and in a browser tab (owner, 2026-11-13, 0159's third amendment).
 The two are built side by side from the first piece that draws, and a piece that draws is not done
 until it works in both. The app is one more client of the same window code
-([0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md)), so nothing is built for
+([0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md)), so nothing is built for
 the browser alone and found broken in the app later.
 
 Two more pieces come with it (owner, 2026-11-13, the same amendment):
@@ -71,7 +71,7 @@ Two more pieces come with it (owner, 2026-11-13, the same amendment):
 At the laptop, in the app or a tab, a person can:
 
 - open a tile that runs `fabsh`, type a line and see each letter at once, while the process confirms
-  it ([0049](../../.kalfa/decisions/0049-shell-is-a-regular-program.md)); each word shows its role in
+  it ([0036](../../.kalfa/decisions/0036-shell-is-a-regular-program.md)); each word shows its role in
   color, so colors, Tab and the error mark read one list (S1 of the
   [summon guidelines](../direction/summon-guidelines.md#s1-one-grammar-typed-tokens-every-view-reads-it),
   a lean; the lead's reading puts syntax highlighting in `fabsh`'s first build, not later);
@@ -79,21 +79,21 @@ At the laptop, in the app or a tab, a person can:
   `fabrika/tezgah`, never a fixed layout first;
 - start a program from `fabsh` and see it in a tile, which follows its `keep` when the process ends; the brain checks the start against
   the member whose line caused it, never against `fabsh`'s program
-  ([0030](../../.kalfa/decisions/0030-the-cause-signs-writes.md)). *2026-11-14: built
-  (ticket 953), on the ReBAC core of [0029](../../.kalfa/decisions/0029-one-rebac-permission-system.md):
+  ([0026](../../.kalfa/decisions/0026-the-cause-signs-writes.md)). *2026-11-14: built
+  (ticket 953), on the ReBAC core of [0025](../../.kalfa/decisions/0025-one-rebac-permission-system.md):
   the brain asks the gateway who sent the start's cause, checks `StartProgram` on this fabrika, and
   the child's `started` line records that member. A start with no member's input behind it is
   checked against the requester's recorded member when it has one. `StartGrant` still judges a
   start with neither, such as a boot process's own; it moves onto relation rows in its own pull
   request;*
 - pipe `a | b` between `fabsh`'s built-ins, over saved program mail
-  ([0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md));
+  ([0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md));
 - `summon` an agent under a name, talk to it with `@name` in the background, wait on it with
   `fg %name`, and end it with `dismiss`
   (A1 to A5);
 - send `@name` to a person, which reaches that person's inbox program (A5);
 - `join` a room, talk in it with a `#room` line, `leave` it, and know everyone on the project can
-  read it (R1, R2, R5, [0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md)).
+  read it (R1, R2, R5).
 
 Then the next work is built inside fabrika, by talking to a summoned agent there. The first work
 after done is recovery and the rest of the cloud rows (P26, P27, P28, P29, P36; owner,
@@ -157,9 +157,9 @@ In build order. "Decide first" lists only what no decision answers yet.
 **1. The window, in a browser tab and in the Electron app.**
 - Designed by: P14's and P19's rows, [Elm first](../direction/elm-first.md),
   [keybindings are configurable](../direction/keybindings-are-configurable.md),
-  [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md) (one core, with `electron`,
+  [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md) (one core, with `electron`,
   `browser` and `headless` backends),
-  [0045](../../.kalfa/decisions/0045-the-app-starts-the-brain.md) (the app starts the brain).
+ (the app starts the brain).
 - In code now: the pieces above, in a browser page. *Changed 2026-11-15: the `next/packages/tuval`
   package is on main (the window's parent machine, the page boot and the browser's key, socket and
   row store), and the workspace program `fabrika/tezgah` is in `next/programs/tezgah`
@@ -203,12 +203,12 @@ In build order. "Decide first" lists only what no decision answers yet.
   [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146).*
 
 **2. A person starts a program, and the desk.**
-- Designed by: [0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md),, 0278, 0272,, 0279 as 0159 amends it, and P42's row.
+- Designed by: [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md),, 0278, 0272,, 0279 as 0159 amends it, and P42's row.
 - In code now ([PR 1231](https://github.com/kamp-us/tea-fabrika/pull/1231), merged 2026-11-15, the desk quest, slices
   S1 to S4; its plan is [`quests/desk-PLAN.md`](./quests/desk-PLAN.md)):
   - **The start check (S1).** A start a window's letter caused is checked against that letter's
-    sender, never the program that asked (0030). It is main's check, on the one permission system
-    ([0029](../../.kalfa/decisions/0029-one-rebac-permission-system.md)): the brain checks
+    sender, never the program that asked (0026). It is main's check, on the one permission system
+    ([0025](../../.kalfa/decisions/0025-one-rebac-permission-system.md)): the brain checks
     `StartProgram` on this fabrika (`processes/ChildrenLedger.ts`, `judge`). A sender with an
     owner, admin or member row may start any program, and no start grant is read. A sender with no
     row is refused `forbidden`. The desk holds no start right of its own, and its laws drive the
@@ -216,14 +216,14 @@ In build order. "Decide first" lists only what no decision answers yet.
   - **A start carries its member down (built on main by ticket 953, in
     [PR 1239](https://github.com/kamp-us/tea-fabrika/pull/1239), not by this quest).** A start with no member's letter
     behind it is checked as the member its requester was checked against, down the whole chain of
-    starts ([0030](../../.kalfa/decisions/0030-the-cause-signs-writes.md)). The child's
+    starts. The child's
     `started` line records that member.
   - **`stop_child` (S1).** A program may end its own child, as OTP's `terminate_child`: the child
     ends with `shutdown` and each watcher gets a `DOWN`. Another program's child is `not_child`,
     and a child already ended is `noproc`. It works on the real instance too.
   - **tezgah in the brain (S2a).** `fabrika/tezgah` runs in the brain, one process per person,
     `tezgah:<the person id's body>`, and the boot starts the founder's
-    ([0046](../../.kalfa/decisions/0046-desk-lives-in-the-brain.md)). It holds each
+    ([0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md)). It holds each
     workspace's layout and focus. A split's new tile enters the layout only once its process has
     started, and a close stops the tile's process when tezgah started it. A window started with
     the `tezgah` option takes its tiles from tezgah's view, never from a fixed list. A window whose
@@ -255,7 +255,7 @@ In build order. "Decide first" lists only what no decision answers yet.
   has a shell word and a palette entry (`each window runs its own prefix:33`), and the palette is in Tier 6 (open).
 
 **3. `fabsh`, a program in a tile.**
-- Designed by: [0049](../../.kalfa/decisions/0049-shell-is-a-regular-program.md),, S1 of the summon guidelines,
+- Designed by: [0036](../../.kalfa/decisions/0036-shell-is-a-regular-program.md),, S1 of the summon guidelines,
   [fabsh grows into a language](../direction/fabsh-grows-into-a-language.md) (proposed).
 - In code now: nothing named `fabsh` is on main (checked 2026-11-15). *Added 2026-11-15: the program
   is built on the draft
@@ -264,7 +264,7 @@ In build order. "Decide first" lists only what no decision answers yet.
   waits for the owner's walk of the fabsh guidelines
   ([PR 1254](https://github.com/kamp-us/tea-fabrika/pull/1254)).* Today's `tsh` has 12 built-in words
   (`packages/fabrika/src/shell/grammar.ts:83`), which maps the jobs and is not copied.
-- Not built: the program, its line editor in its model, its view with local echo (0049), the
+- Not built: the program, its line editor in its model, its view with local echo (0036), the
   reader that gives every word a role (S1), and the built-ins.
 - Decide first: S1, and with it what a line may hold and which built-in words `fabsh` has (both
   listed as not decided in 0159).
@@ -275,8 +275,8 @@ In build order. "Decide first" lists only what no decision answers yet.
   `summon` v1 is today's `summon`.*
 
 **4. Pipes, for built-ins first.**
-- Designed by: [0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md),
-  [0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md), program guidelines G6.
+- Designed by: [0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md),
+  [0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md), program guidelines G6.
 - In code now: program mail (above). A program's `outputs` are declared
   (`runtime/Program.ts:144`) and nothing reads them. The two fixes 0109 binds first are built
   (ticket 936, https://github.com/kamp-us/tea-fabrika/pull/1203): delivery looks a letter up by
@@ -297,8 +297,7 @@ In build order. "Decide first" lists only what no decision answers yet.
 
 **5. Hands, far enough to run a turn.**
 - Designed by: [talk where you work](../direction/talk-where-you-work.md#in-next-summon-is-an-alias-with-a-session)
-  (the brain keeps the name and the session; the turn runs on hands),
-  [0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md).
+  (the brain keeps the name and the session; the turn runs on hands),.
 - In code now: the task service (`tasks/Tasks.ts:32`). *Changed 2026-11-15: slice 2 (ticket 879,
   merged 2026-11-13 Pacific through [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146))
   added the `hands` key rank (`access/Access.ts`) and the gateway's `tasks.take`, `tasks.started`,
@@ -347,8 +346,7 @@ In build order. "Decide first" lists only what no decision answers yet.
   is the single `fabrika/inbox` (`program.ts:45`).
 
 **8. Rooms and `join`.**
-- Designed by: R1, R2, R5 and R8 of the summon guidelines,
-  [0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md).
+- Designed by: R1, R2, R5 and R8 of the summon guidelines,.
 - In code now: nothing.
 - Not built: room records, `join`, `leave`, `#room` lines, the bottom line's list of rooms (R5),
   and wherever a room's talk is shown (in scope by 0159's second amendment; R5 names a room tile).
@@ -451,11 +449,11 @@ Listed, not resolved.
   `docs/direction/summon-guidelines.md:921` refuses an agent's name that is a person's, and leaves two people's
   `scout` open.
 - **0517 against 0157, on how an agent connects.** 0517 says `summon` takes any agent that speaks
-  the agent link, `fabrika mcp --as <name>` (`.kalfa/decisions/0047-one-kind-of-shared-tile.md:30`), an agent that dials in. 0157 makes
+  the agent link, `fabrika mcp --as <name>` (`a tile holds you and your agents:30`), an agent that dials in. 0157 makes
   `<agent>` a harness fabrika starts (`summon starts an agent and at talks to it:61`), and S4 has fabrika open the harness's session
   (`docs/direction/summon-guidelines.md:240`). 0157 points to 0517 for which agents may be summoned (`summon starts an agent and at talks to it:95`).
 - **0279 against 0274, on focus.** 0279 says each window keeps its own focus and there is no desk
-  process (`tuval is a package desk in tier 2:26`). 0274 puts tiles, focus and layout in a process in the brain (`.kalfa/decisions/0046-desk-lives-in-the-brain.md:42`).
+  process (`tuval is a package desk in tier 2:26`). 0274 puts tiles, focus and layout in a process in the brain (`.kalfa/decisions/0035-desk-lives-in-the-brain.md:42`).
   0159 amends 0279 in its timing only, so whether focus is the window's or the desk process's
   still reads two ways.
   *2026-11-13: settled. 0159 brings the desk program now, with a second tile, so the stopgap in 0279
@@ -813,11 +811,11 @@ These were checked. The first one was [open question 9](#open-questions), decide
 | P29 | E | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). The drill on the MCP client, with the checklist as its target (*changed 2026-11-11*), the owner's yes on `alchemy plan --stage drill`, a verdict on screen; `kill_brain` comes back through P12's brain restart. Check 7 (detail T14, p39) | the detail's Chaos monkey | P27, P25 | about 4 | 0.5 to 0.6 |
 | P30 | exam | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Done 2026-11-08, [PR 497](https://github.com/usirin/tea-fabrika/pull/497):** written and signed by the tests role, reviewed merge-ready, and the mutation step added six laws. **Shrunk 2026-11-06:** tea's own hook came early. [PR 363](https://github.com/usirin/tea-fabrika/pull/363) moved the workspace to tea 0.23.0, whose `useRuntime` takes the Effect engine and a selector, so no stand-in is written and nothing is deleted ([experiment 213](../../experiments/213-tea-react-select.md)). P30 removes the exam's allowance for `window/use-model.ts`, so `useSyncExternalStore` is imported nowhere in `next/`, as the React Compiler note now says. *It said: bump tea to 0.24.0 once out, move the window to `useMachine`, and delete `use-model.ts`.* | [Elm first](../direction/elm-first.md), [React Compiler, C4](../direction/react-compiler.md) | nothing | about 6 | 0.1 to 0.2 |
 | P38 | A | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 3b-1 as [PR 1054](https://github.com/usirin/tea-fabrika/pull/1054).* *Changed 2026-11-15: slice 3b-1 merged 2026-11-13 Pacific through [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146); PR 1054 was closed for that reason.* **Planned in 7 slices, tracker ticket 664; slice 1, the local port as a declared setting read from the two settings files, merged 2026-11-11 as [PR 901](https://github.com/usirin/tea-fabrika/pull/901), and slice 2, `fabrika settings` showing each value and where it came from (ticket 730), as [PR 954](https://github.com/usirin/tea-fabrika/pull/954). Slice 3 is cut in three on ticket 753; slice 3a, one codec per declaration for the settings files and the snapshot, with a strict snapshot read that checks its hash, merged as [PR 1039](https://github.com/usirin/tea-fabrika/pull/1039). Slice 3b, the Worker handoff, the start record and `limits.record`, comes next, then slice 3c, the remaining declarations. P38 is not done until the whole settings stack lands. and [the settings note](../direction/settings.md) are on main. The owner added it to Tier 1 on 2026-11-10.** *It said, earlier on 2026-11-11: slice 1 is being built, no pull request yet. Before that: not planned yet; plan to come.* The foundation for loading settings in `next/`: the read of `.fabrika/fabrika.toml` and `~/.fabrika/fabrika.toml`, each setting declared once as an Effect `Config` with its schema and default, and the providers (the file, the environment, a flag, a test). Plus the settings for what Tier 1 already builds or changes. Which settings come first is the plan's call; the lead's sketch is the list of programs an instance loads, then the flags `dev.ts` takes today |, [one fabrika.toml per repo](../direction/one-fabrika-toml-per-repo.md) | P12, P16 | not sized yet | not sized yet |
-| P39 | to be planned | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 2 as [PR 1074](https://github.com/usirin/tea-fabrika/pull/1074).* *Changed 2026-11-15: slice 2, a granted hands key takes and finishes saved tasks (ticket 879), merged 2026-11-13 Pacific through [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146); PR 1074 was closed for that reason. On main: the `hands` rank and `tasks.take`, `tasks.started`, `tasks.finish` and `tasks.read`. Slice 3 is ticket 1040, its plan being written; slices 4 and 5 are not started.* *Changed 2026-11-15: slice 3 (ticket 1040) is being built in [PR 1309](https://github.com/kamp-us/tea-fabrika/pull/1309): a program returns the built-in `hands` Cmd, the runner saves it as a task request under the Cmd's id, the gateway wakes the program after `tasks.finish`, and the result comes back as one `hands_ok` or `hands_err` answer; the task gains a `collected` state, and `hands.target` names the person's hands key, with no default. This slice adds no right on who may ask the hands: it rests on and Tier 1's one-person scope, and under [0029](../../.kalfa/decisions/0029-one-rebac-permission-system.md) that right becomes a relation in a later tier. Open for the owner, not decided: no slice of P39 runs an agent turn yet, since the five slices end at `git --version`. Slices 4 and 5 are not started.* *Changed 2026-11-15: slice 4a, the hands client, is built in `next/` as draft [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315) and waits for the owner's look: a hands key lists its own open tasks (`tasks.list`) and waits on its own `target:` stream (`tasks.wait`), and the client takes one task, saves each step in its journal, runs the command once and reports it. Slice 4b is what is left of slice 4: the real `git --version` command, the launcher, the key file, how the hands start on a Mac, approving the key in a window, and the host-only run.* **Planned in 5 slices; slice 1, a durable task service (ticket 732), merged 2026-11-11 as [PR 917](https://github.com/usirin/tea-fabrika/pull/917), and [0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md) names its first task, `git --version` on one host. The owner added it to Tier 1 on 2026-11-10.** *It said: to be planned.* The thin slice of hands: a program can ask for a command and see it run |, [brain, hands, window, agent](../direction/brain-hands-window-agent.md) | to be planned | not sized yet | not sized yet |
-| P40 | A | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Planned in 4 slices, tracker ticket 715; slice 1, qualified program identities, merged 2026-11-11 as [PR 939](https://github.com/usirin/tea-fabrika/pull/939): the core counter builds and runs as `fabrika/counter` through the real builder, embedded table and Worker Loader, its registered name still `counter:1`, and a window's route keeps the whole name. Slice 2, ticket 878, merged 2026-11-12 as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072): explicit repo selection pins the advertised default-branch commit, checks its settings through P38 and saves repository trust through the local instance. P38 slices 1, 2 and 3a satisfy this slice's foundation. permits source folders anywhere on disk. Slice 3, the listed pack build and its settings, is shared with P38's slice 5 and waits on that shared settings work and P34c; slice 4, the person's start and the cold-author check, waits on P42, P14 and P18. P40 is not done until slice 4's cold-author check passes. The owner added it to Tier 1 on 2026-11-10.** *It said, earlier on 2026-11-11: slice 1 is being built, no pull request yet. Before that: to be planned.* The thin slice of programs written outside fabrika's own source: a person can run a program the app's source does not list, as a repo's own pack listed by a `./` path ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)), checked by a cold author |, [packs are programs](../direction/packs-are-programs.md) | P11, P12, P16 for slice 1; P38 slices 1, 2 and 3a for slice 2; P38 slice 5, P34c, P42, P14 and P18 for the later slices | about 30 for slice 1, its tests included | not sized yet |
+| P39 | to be planned | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). *Open 2026-11-13: slice 2 as [PR 1074](https://github.com/usirin/tea-fabrika/pull/1074).* *Changed 2026-11-15: slice 2, a granted hands key takes and finishes saved tasks (ticket 879), merged 2026-11-13 Pacific through [PR 1146](https://github.com/kamp-us/tea-fabrika/pull/1146); PR 1074 was closed for that reason. On main: the `hands` rank and `tasks.take`, `tasks.started`, `tasks.finish` and `tasks.read`. Slice 3 is ticket 1040, its plan being written; slices 4 and 5 are not started.* *Changed 2026-11-15: slice 3 (ticket 1040) is being built in [PR 1309](https://github.com/kamp-us/tea-fabrika/pull/1309): a program returns the built-in `hands` Cmd, the runner saves it as a task request under the Cmd's id, the gateway wakes the program after `tasks.finish`, and the result comes back as one `hands_ok` or `hands_err` answer; the task gains a `collected` state, and `hands.target` names the person's hands key, with no default. This slice adds no right on who may ask the hands: it rests on and Tier 1's one-person scope, and under [0025](../../.kalfa/decisions/0025-one-rebac-permission-system.md) that right becomes a relation in a later tier. Open for the owner, not decided: no slice of P39 runs an agent turn yet, since the five slices end at `git --version`. Slices 4 and 5 are not started.* *Changed 2026-11-15: slice 4a, the hands client, is built in `next/` as draft [PR 1315](https://github.com/kamp-us/tea-fabrika/pull/1315) and waits for the owner's look: a hands key lists its own open tasks (`tasks.list`) and waits on its own `target:` stream (`tasks.wait`), and the client takes one task, saves each step in its journal, runs the command once and reports it. Slice 4b is what is left of slice 4: the real `git --version` command, the launcher, the key file, how the hands start on a Mac, approving the key in a window, and the host-only run.* **Planned in 5 slices; slice 1, a durable task service (ticket 732), merged 2026-11-11 as [PR 917](https://github.com/usirin/tea-fabrika/pull/917), names its first task, `git --version` on one host. The owner added it to Tier 1 on 2026-11-10.** *It said: to be planned.* The thin slice of hands: a program can ask for a command and see it run |, [brain, hands, window, agent](../direction/brain-hands-window-agent.md) | to be planned | not sized yet | not sized yet |
+| P40 | A | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Planned in 4 slices, tracker ticket 715; slice 1, qualified program identities, merged 2026-11-11 as [PR 939](https://github.com/usirin/tea-fabrika/pull/939): the core counter builds and runs as `fabrika/counter` through the real builder, embedded table and Worker Loader, its registered name still `counter:1`, and a window's route keeps the whole name. Slice 2, ticket 878, merged 2026-11-12 as [PR 1072](https://github.com/usirin/tea-fabrika/pull/1072): explicit repo selection pins the advertised default-branch commit, checks its settings through P38 and saves repository trust through the local instance. P38 slices 1, 2 and 3a satisfy this slice's foundation. permits source folders anywhere on disk. Slice 3, the listed pack build and its settings, is shared with P38's slice 5 and waits on that shared settings work and P34c; slice 4, the person's start and the cold-author check, waits on P42, P14 and P18. P40 is not done until slice 4's cold-author check passes. The owner added it to Tier 1 on 2026-11-10.** *It said, earlier on 2026-11-11: slice 1 is being built, no pull request yet. Before that: to be planned.* The thin slice of programs written outside fabrika's own source: a person can run a program the app's source does not list, as a repo's own pack listed by a `./` path ([0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md)), checked by a cold author |, [packs are programs](../direction/packs-are-programs.md) | P11, P12, P16 for slice 1; P38 slices 1, 2 and 3a for slice 2; P38 slice 5, P34c, P42, P14 and P18 for the later slices | about 30 for slice 1, its tests included | not sized yet |
 | P41 | to be planned | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Planned in 3 slices; slice 1, a request to another program by a named mailbox and its reply (ticket 744), merged 2026-11-11 as [PR 929](https://github.com/usirin/tea-fabrika/pull/929). Slice 2, the same request and reply between two real Process objects (ticket 764), merged 2026-11-12 as [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029): the sender's object asks the Project to save the letter, and the target's `mailed` sets its one alarm. Slice 3, the example a person sees from a pack, waits on P40's pack path, P34c's walls and how a pack asks for its grant. The owner added it to Tier 1 on 2026-11-10.** *It said: to be planned.* The thin slice of programs working together: one program can reach another | | to be planned | not sized yet | not sized yet |
 | P42 | to be planned | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Planned; slice 1, ticket 770, merged as [PR 1011](https://github.com/usirin/tea-fabrika/pull/1011): a program asks the host to start a child. The owner added it to Tier 1 on 2026-11-10.** *It said: to be planned.* The thin slice of a person starting a program: a person can start a program while the app runs | | to be planned | not sized yet | not sized yet |
-| P43 | to be planned | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Planned in 5 slices; slice 1, the merger alone (ticket 765), merged 2026-11-12 as [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): mailed `land`, it reads the change, brings it up to date, waits for its kind's named checks on that head and merges pinned to it, then mails back one reply. It comes with the `CodeHost` and `Ci` contracts in libfabrika, each with an in-memory Layer, and the pack's five settings; `queue.checks` is empty by default, so nothing lands until a repo names its checks. Slice 2, the queue program and the merger's last look at main, merged as [PR 1096](https://github.com/usirin/tea-fabrika/pull/1096); slice 3, both in Durable Objects, builds on P41's slice 2, on main since [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029); slice 4 puts GitHub behind the contracts; slice 5 is the switch. The owner added it to Tier 1 on 2026-11-11.** *It said: to be planned.* The merge queue, stage 1: one queue program holds the line and one merger per change brings it up to date, waits for its checks on that head and merges through `CodeHost`; one merger at a time; tracker ticket 765 | [0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), [0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), [experiment 266](../../experiments/266-what-a-merge-queue-must-do.md) | P34c, P41 | not sized yet | not sized yet |
+| P43 | to be planned | 0159: **waits** ([the four primitives first](#the-four-primitives-first)). **Planned in 5 slices; slice 1, the merger alone (ticket 765), merged 2026-11-12 as [PR 1030](https://github.com/usirin/tea-fabrika/pull/1030): mailed `land`, it reads the change, brings it up to date, waits for its kind's named checks on that head and merges pinned to it, then mails back one reply. It comes with the `CodeHost` and `Ci` contracts in libfabrika, each with an in-memory Layer, and the pack's five settings; `queue.checks` is empty by default, so nothing lands until a repo names its checks. Slice 2, the queue program and the merger's last look at main, merged as [PR 1096](https://github.com/usirin/tea-fabrika/pull/1096); slice 3, both in Durable Objects, builds on P41's slice 2, on main since [PR 1029](https://github.com/usirin/tea-fabrika/pull/1029); slice 4 puts GitHub behind the contracts; slice 5 is the switch. The owner added it to Tier 1 on 2026-11-11.** *It said: to be planned.* The merge queue, stage 1: one queue program holds the line and one merger per change brings it up to date, waits for its checks on that head and merges through `CodeHost`; one merger at a time; tracker ticket 765 | [0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md), [0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md), [experiment 266](../../experiments/266-what-a-merge-queue-must-do.md) | P34c, P41 | not sized yet | not sized yet |
 | P44 | D | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Added 2026-11-11 by the owner. 0125's slice 1, the checklist program (ticket 806), merged as [PR 987](https://github.com/usirin/tea-fabrika/pull/987). The agent's half, slice 1 (ticket 839), merged as [PR 1019](https://github.com/usirin/tea-fabrika/pull/1019): the `items` read port, an optional `note` of 1 to 256 characters (`NOTE_MOST`) on `check`, where a checked item keeps its first note, and ticket 847's three gaps in the laws closed.** The checklist, Tier 1's program:'s slices, plus `items` and `note`. A person adds an item, an agent reads the items and checks one with a note through P25's MCP door, and the person reads the note on screen; ticket 828's window draws it as plain text | | P11 | 6 in slice 1 | about 0.4 for slice 1 |
 | P45 | D | 0159: **needed** ([the four primitives first](#the-four-primitives-first)). **Planned in 3 slices. Slice 1 (ticket 884) merged as [PR 1089](https://github.com/usirin/tea-fabrika/pull/1089): `@kampus/inbox`, one row per fact in first-arrival order, no client or agent input, and no window or boot entry. Brain letters use the notice id space and reach programs without ports; client entry points refuse those ids. Refused or throwing notices are skipped and counted on the span. Only slice 1 is approved; slices 2 and 3 wait on the owner.** A thin `inbox` program: it shows only notices from the brain, read from facts already in the ledger. Its first row is the email recovery notice of, so no toast is built. A dismissal is kept on that device only. Asks, messages, replies, the top bar glance and the phone slice stay in their later tiers | | P11, P36 | 120 in slice 1, including about 25 for brain mail | about 0.2 for slice 1 |
 
@@ -1039,7 +1037,7 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
 18. **Who builds the CI half of "nobody writes their own exam" for `next/`?** **Decided (owner, 2026-11-05): a unit of work is a commit, not a pull request** ([the note](../direction/a-unit-of-work-is-a-commit.md)). An exam change is its own commit by an agent that is not the builder, inside the same pull request; each step records the commit it made; CI walks the commits and stops a `build` commit on an exam path; any exam path touched asks the owner to read it. P32 builds it. *Then, the same day (owner):* each step's agent signs its commits with its own key, and CI decides from the signature, so an unsigned commit or one from an unknown key is `stuck: unsigned_commit`; the `committed` entry is still recorded. This walks back the note's "an exam change goes in a pull request of its own". *The lean was a CI step that fails when a builder's commit touches an exam path, 60%, close to what was decided. Left for P32's plan: where the step keys live and who can read them, rebases, and squash merges, as the note lists.*
 19. **Can a browser tab approve a new device?** **Decided (owner, 2026-11-07): yes, with a passkey.** A tab can approve or remove a device only when the approval is signed by a passkey (WebAuthn) made with user verification required (face, finger or PIN). That makes the tab a person key and an equal master, like a Mac. A tab with only its window key cannot approve. Why: the main browser case is a few friends on browsers and phones with no Mac, so a phone must be able to let a pal in. Still open: the door must verify P-256 passkey signatures beside Ed25519; and since synced passkeys make Apple or Google a way in, the grant records the passkey's backup flags (BE and BS) when it is made. *Decided 2026-11-08 (owner): synced passkeys are accepted, as GitHub accepts them and as NIST SP 800-63B counts them strong enough for AAL2; the flags are still recorded. Two things follow from this answer: a tab whose storage the browser cleared lets itself back in with its own passkey, and the recovery sheet may let in a passkey tab as the recovered device.*
     *Added 2026-11-06. Needed before P10 merges (owner, 2026-11-07: P9 does not wait on it, since its fold changes nothing either way; it said before P9 merges).* The owner decided every device the person owns is a master, and agents never are. **Lean (70%), the owner's.** A browser tab joins and works but cannot approve or remove. Why, as this plan reads it: its key sits in a browser profile that any page's bug or a shared computer can reach, and the menu bar's Approve has a finger behind it. The doubt: the phone tab of Tier 1's demo then cannot let anyone in, which may be the one device a person has with them. A walk of the phone's flow settles it.
-20. **What names the door's start in `InputId`?** **Decided by the owner, 2026-11-08: nothing in the id. An input id is a TypeID, `input_<UUIDv7 in 26 base32 chars>`, like every other thing** ([one id per thing](../../.kalfa/decisions/0011-one-typeid-per-thing.md)). The door's process and its count stay, as their own fields on the entry. Main's door (P10, [PR 502](https://github.com/usirin/tea-fabrika/pull/502)) still makes `in-<process>-<n>`; a build pull request moves it and the entry's `parent` pattern. *Replaced: the 2026-11-07 answer was the door's own process id inside the id, `in-<process>-<n>`, as OTP gives a restart a new pid. "Run" stays an agent run only.*
+20. **What names the door's start in `InputId`?** **Decided by the owner, 2026-11-08: nothing in the id. An input id is a TypeID, `input_<UUIDv7 in 26 base32 chars>`, like every other thing** ([one id per thing](../../.kalfa/decisions/0012-one-typeid-per-thing.md)). The door's process and its count stay, as their own fields on the entry. Main's door (P10, [PR 502](https://github.com/usirin/tea-fabrika/pull/502)) still makes `in-<process>-<n>`; a build pull request moves it and the entry's `parent` pattern. *Replaced: the 2026-11-07 answer was the door's own process id inside the id, `in-<process>-<n>`, as OTP gives a restart a new pid. "Run" stays an agent run only.*
     *Added 2026-11-07. Needed before P10 merges.* `run` in `in-<run>-<n>` names a start of the door's object, not an agent run; the part needs a new name (owner, 2026-11-07). **Lean (70%):** OTP gives a restart a new pid, so the door's own process id carries the start, as P33 does for programs.
 
 <a id="still-open-how-next-reaches-the-lane"></a>

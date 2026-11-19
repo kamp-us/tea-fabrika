@@ -1,14 +1,13 @@
 ---
 date: "2026-11-10"
 scripts: "none"
-summary: "`next/`, ticket 502's spike for decision 0019, run on `@alchemy.run/cloudflare` 2.0.0-beta.84 in local workerd, no deploy, no model, $0. Yes, one object at a time: the stack stays `bundle: false`, and the built file exports Alchemy's bridge class for each Effect object while `Project`, `Process`, `Gateway`, `Control` and `fetch` stay plain. Four changes: `node:` external and Alchemy's runtime flag in our build, each chunk its own file (two files, 3.0 MB against 1.5 MB), a binding named after the class, and Alchemy's stub for callers not ported yet. 124 existing tests pass unchanged, the twin check has 0 findings, and the service and its Node laws did not change. `transactionSync` works through `state.raw`, an alarm fired once and retried after an abort, a hibernated socket kept its attachment and tags. A sibling object cannot be resolved inside a method (`Service not found`); the run first called that a bug and patched it, which was wrong. Corrected 2026-11-10: with no patch, on beta.84 and beta.85, `Sibling.from(Host)` in the Layer's init returned through both objects in 6 of 6 runs, Alchemy's documented way. `RpcCallError` is not in the stub's type. Code on `fabrikalfa/t502-spike`. Not run: a deploy, a type check of the `.from(Host)` shape, the mutation step, the real `Gateway`, `Process` and `Project`"
+summary: "`next/`, ticket 502's spike for an earlier decision, run on `@alchemy.run/cloudflare` 2.0.0-beta.84 in local workerd, no deploy, no model, $0. Yes, one object at a time: the stack stays `bundle: false`, and the built file exports Alchemy's bridge class for each Effect object while `Project`, `Process`, `Gateway`, `Control` and `fetch` stay plain. Four changes: `node:` external and Alchemy's runtime flag in our build, each chunk its own file (two files, 3.0 MB against 1.5 MB), a binding named after the class, and Alchemy's stub for callers not ported yet. 124 existing tests pass unchanged, the twin check has 0 findings, and the service and its Node laws did not change. `transactionSync` works through `state.raw`, an alarm fired once and retried after an abort, a hibernated socket kept its attachment and tags. A sibling object cannot be resolved inside a method (`Service not found`); the run first called that a bug and patched it, which was wrong. Corrected 2026-11-10: with no patch, on beta.84 and beta.85, `Sibling.from(Host)` in the Layer's init returned through both objects in 6 of 6 runs, Alchemy's documented way. `RpcCallError` is not in the stub's type. Code on `fabrikalfa/t502-spike`. Not run: a deploy, a type check of the `.from(Host)` shape, the mutation step, the real `Gateway`, `Process` and `Project`"
 ---
 
 # 248. Does `RecordPart` run as an Alchemy Effect Durable Object, beside the plain classes?
 
 Run 2026-11-09 and 2026-11-10 on origin/main at `d7484976`. **All claims are about `next/`.** This
-is the spike that ticket 502's plan starts with, for decision
-[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md). It ports `RecordPart` for real, adds throwaway probe objects, and runs every question
+is the spike that ticket 502's plan starts with, for decision. It ports `RecordPart` for real, adds throwaway probe objects, and runs every question
 on the installed `@alchemy.run/cloudflare` 2.0.0-beta.84 with a local workerd. No deploy, no model
 called by a script, $0. The code is on the branch `fabrikalfa/t502-spike` (`f1a8d0d4`), which is
 never merged. Its saved outputs are under `next/apps/fabrika/spike/out/` there, and the numbers
@@ -151,7 +150,7 @@ already does.
 - **`Project` and `Gateway`, and `Project` and `Process`, call each other.** They need the patch
   from the first of them that moves. *Wrong: they need no patch. Each takes the other in its
   Layer's init with `.from(Host)`.*
-- **[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) and this spike differ on one
+- **[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) and this spike differ on one
   line.** The spike hands the service `state.raw`, the platform's own state, which is why the
   service and its Node laws did not change. 0042 wants the service on Alchemy's `state.storage`.
   That route was not run: the wrapper has no `transactionSync` (a gap 0042 lists), and its methods
@@ -213,7 +212,7 @@ export const PingLive = Ping.make(
   crossed, and a Schema class instance did not, as in question 5.
 - **Where the per-call rule came from.** phoenix's an earlier decision said the bare per-call lookup
   worked on beta.45. Read only: its commit checked health and registration, not a call between two
-  objects. Decision [0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) took the rule
+  objects. Decision took the rule
   from there and is amended.
 - **beta.85 was run for this one question only.** The bare lookup fails and `.from` works there
   too. The other seven questions were not rerun on it.

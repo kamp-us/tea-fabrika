@@ -47,8 +47,7 @@ rules). `records.ts resolve 0113 0410 0033` (2026-11-16): all three accepted; 00
 0070 and 0113. It holds (one typecheck at
 a time). Reads
  with,,,,,,,,,
- and
-[0054](../../../.kalfa/decisions/0054-tooling-is-domain-packages.md). Each resolves as accepted
+ and. Each resolves as accepted
 (`records.ts resolve`, 2026-11-16).
 
 ## Doubts, at the top

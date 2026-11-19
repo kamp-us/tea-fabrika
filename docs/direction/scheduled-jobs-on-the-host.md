@@ -15,7 +15,7 @@ summary: "A scheduled job is a program that listens to the clock, on a Durable O
 Proposed 2026-10-24. Decided by the owner 2026-11-01.
 
 Its decided rules are in:,
-[0037](../../.kalfa/decisions/0037-scheduled-jobs-only-file-tickets.md),,.
+[0030](../../.kalfa/decisions/0030-scheduled-jobs-only-file-tickets.md),,.
 
 ```ts
 // A sketch, not built. A scheduled job is a program that listens to the clock.

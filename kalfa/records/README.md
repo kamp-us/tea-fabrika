@@ -1,7 +1,7 @@
 # @kalfa/records
 
 Two checks on our records, in our tooling
-([0054](../../.kalfa/decisions/0054-tooling-is-domain-packages.md)). The package is private. It imports
+(). The package is private. It imports
 no product code, and it reads the repo it is run in.
 
 ```text

@@ -7,7 +7,7 @@ summary: "Two services: `Ledger` for the record, `CodeHost` for pull requests, c
 
 Decided 2026-10-11. Both names are working names.
 
-Its decided rules are in: [0018](../../.kalfa/decisions/0018-protocols-once-providers-apart.md),.
+Its decided rules are in: [0017](../../.kalfa/decisions/0017-protocols-live-once.md),.
 
 *2026-10-19: `Ledger` now belongs to tea-host, which gives it to the programs
 it runs; `CodeHost` stays with fabrika. See tea-host.*
@@ -75,7 +75,7 @@ can-it-merge and the queue. See
 [the services fabrika needs](./services-and-our-own-ci.md).*
 
 *2026-11-12: the queue no longer lives with the code. fabrika provides the merge queue itself
-([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)), so in `next/`
+([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)), so in `next/`
 `CodeHost.enqueue` is gone: `CodeHost` reads a change, updates it and performs the merge it is
 told, pinned to a head (`next/packages/libfabrika/src/codehost/CodeHost.ts`). It said, in the block
 above: "the queue lives with the code".*

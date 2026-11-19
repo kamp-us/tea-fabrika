@@ -33,7 +33,7 @@ const stored = <A>(f: () => A) =>
 
 This pattern describes `next/`. A wake handles a call, socket event or alarm and returns.
 The platform can discard JavaScript memory between calls. Later work therefore uses saved state,
-not a waiting fiber. The lifetime rule is [0022](../.kalfa/decisions/0022-objects-never-stay-awake.md);
+not a waiting fiber. The lifetime rule is;
 process-owned storage follows [Three homes for state](../docs/direction/the-cloud-is-one-more-host.md).
 
 ## Process-owned membership

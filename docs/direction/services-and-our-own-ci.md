@@ -41,7 +41,7 @@ const hosts = Ci.ownHosts;         // a job is a lease on the ledger; our machin
 ```
 
 *2026-11-12: the merge queue left `CodeHost`. fabrika provides the queue itself, as its own
-programs ([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)), so in `next/`
+programs ([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)), so in `next/`
 `CodeHost` holds no queue and `CodeHostWrites` has no `enqueue`: the contract is `change`, `update`
 and `merge` (`next/packages/libfabrika/src/codehost/CodeHost.ts`). It said, in the block above:
 `CodeHost`, "the merge queue", and `CodeHostWrites`, "enqueue".*
@@ -163,7 +163,7 @@ desk and every window are views.
     GitHub's and its own today.
 - **`Blobs` exists because the ledger holds no big bytes.** A log, a
   screenshot or a patch goes in by its hash; the ledger keeps the hash. That is
-  the claim-check pattern [0041](../../.kalfa/decisions/0041-changes-stay-local-until-review.md) already
+  the claim-check pattern already
   uses for commits.
 - **`Keys` grows because a fact that crosses machines must say who wrote it,
   and prove it.** The [sync engine note](./a-local-first-sync-engine.md) names

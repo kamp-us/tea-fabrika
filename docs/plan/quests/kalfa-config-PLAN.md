@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is our tooling, in a new top-level folder, `kalfa/config/`, and in `next/`'s libfabrika, which
 then depends on it. Today's version is not touched. It builds
-[decision 0054](https://github.com/kamp-us/tea-fabrika/pull/1423), the first package in its build
+[an earlier decision](https://github.com/kamp-us/tea-fabrika/pull/1423), the first package in its build
 order. Nothing a person sees in a window changes. Three pull requests: first generalize the engine
 in place, then move it, then add `kalfa config get|set`.
 
@@ -52,12 +52,12 @@ get|set`, and the `Kalfa` app other kalfa packages declare their settings with.
   get|set` shape, `config` as a built-in of `kalfa`, and that tooling never takes a `FABRIKA_`
   name.
 -,
-  [0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md): nothing here is shell, and
+  [0017](../../../.kalfa/decisions/0017-protocols-live-once.md): nothing here is shell, and
   nothing calls a command-line tool.
 -: a library is a flat
   `src/` of PascalCase modules with `internal/`. `kalfa/config/src/` keeps the settings room's
   layout as it is.
-- [0043](../../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), read through 0556: a
+-, read through 0556: a
   `kalfa/` package keeps `next/`'s standards, so every lint override that lists `next/**` lists
   `kalfa/**` too.
 - and 0557: the moved
@@ -190,7 +190,7 @@ export const make = <A>(options: { readonly group: Setting.Group<A>; readonly ve
 ```
 
 The `"kalfa": { "cli": "./cli" }` field is left out: `config` is a built-in of `kalfa`, never found
-by discovery (0054). `@kampus/libfabrika` gains `"@kalfa/config": "workspace:*"` and drops the two
+by discovery. `@kampus/libfabrika` gains `"@kalfa/config": "workspace:*"` and drops the two
 TOML packages it no longer imports.
 
 ## One value traced: `leak.words`, a kalfa setting, beside fabrika's files
@@ -367,7 +367,7 @@ Each picks how the code does what 0585 or 0086 already says, so each is mine to 
   `FileSystem` service, so a browser could hand it a layer of its own. A person's settings command
   is a terminal program by its nature.
 - **Typed services only.** Nothing calls a command-line tool
-  ([0018](../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)).
+  ([0017](../../../.kalfa/decisions/0017-protocols-live-once.md)).
 
 ## Who uses it first
 

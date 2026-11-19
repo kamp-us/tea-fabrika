@@ -8,9 +8,13 @@ summary: "`next/`, Tier 1's P5. Retitled 2026-11-06 from \"A lost Mac comes back
 **Proposed 2026-11-05. Decided by the owner, 2026-11-06, except two unknowns on the email path.
 The read call (call 13) and the key's derivation decided 2026-11-09, built by P28.**
 
-Its decided rules are in:,,
-[0028](../../.kalfa/decisions/0028-recovery-words-become-key.md),,,
-[0026](../../.kalfa/decisions/0026-each-client-has-own-key.md),,,,,,,
+Its decided rules are in: [0023](../../.kalfa/decisions/0023-recovery-by-sheet-at-once.md),
+[0024](../../.kalfa/decisions/0024-recovery-words-are-a-key.md),
+[0024](../../.kalfa/decisions/0024-recovery-words-are-a-key.md),
+[0023](../../.kalfa/decisions/0023-recovery-by-sheet-at-once.md),,
+[0022](../../.kalfa/decisions/0022-each-client-has-own-key.md),
+[0022](../../.kalfa/decisions/0022-each-client-has-own-key.md),,,
+[0023](../../.kalfa/decisions/0023-recovery-by-sheet-at-once.md),,,
  (replaces 0338's wait and cancel).
 
 This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),

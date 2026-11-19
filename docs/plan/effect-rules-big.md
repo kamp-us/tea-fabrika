@@ -220,7 +220,7 @@ The config is one block whose `files` list grows. A sketch:
 8. **B1.7, `runtime`.** 6 layers and `Execution`'s `static make`, about 35 caller files. Last of the
    moves: `Runner.ts` is the file every other plan also changes.
 9. **B1.8, `cloudflare`.** The six `static make` leave with the Alchemy port
-   ([0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md), ticket 502), which deletes
+   (ticket 502), which deletes
    `cloudflare/platform.ts`. The port's pull request adds `cloudflare/` and the list becomes
    `next/**`.
 

@@ -22,7 +22,7 @@ outside a thin slice.*
 *Changed 2026-11-10 by:* programs written
 outside fabrika's own source get a thin slice before Tier 5; its shape is not decided yet.
 
-*Changed 2026-11-10 by [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md):* in `next/`, every
+*Changed 2026-11-10 by [0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md):* in `next/`, every
 program is in a pack, so a repo's own programs are a pack in `.fabrika/packs/<name>/`, not
 `programs/deploy/` or `.fabrika/programs`; "one pack's own settings; the pack checks them" is now
 the only place a program's settings live.

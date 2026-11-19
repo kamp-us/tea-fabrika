@@ -5,7 +5,7 @@ summary: "Both versions, today's first. The host's door stamps every input as `E
 
 # Inputs carry their sender, and every write carries its cause
 
-Its decided rules are in: [0030](../../.kalfa/decisions/0030-the-cause-signs-writes.md), [0030](../../.kalfa/decisions/0030-the-cause-signs-writes.md).
+Its decided rules are in: [0026](../../.kalfa/decisions/0026-the-cause-signs-writes.md), [0026](../../.kalfa/decisions/0026-the-cause-signs-writes.md).
 
 **Proposed 2026-11-04.** Walked when Tier 1 starts (owner, 2026-11-08): P11's test-kit law in question 17, approved by the owner 2026-11-08. The owner set the direction on 2026-11-04, and each decided point is
 marked decided below:
@@ -75,7 +75,7 @@ interface Envelope<A> {
   note's host is the brain's door, a run is a process, and the cell is the runner. Each part's row
   and law are in [Tier 1's plan](../plan/tier-1.md#where-inputs-carry-their-sender-lands).
 - **`next/`'s input id is a TypeID,** `input_<26 chars>`, not this note's `in-<host run>-<n>`.
-  Decided by the owner, 2026-11-08, in [one id per thing](../../.kalfa/decisions/0011-one-typeid-per-thing.md). The door's
+  Decided by the owner, 2026-11-08, in [one id per thing](../../.kalfa/decisions/0012-one-typeid-per-thing.md). The door's
   process and its count stay, as their own fields on the entry. The ids in this note's sketches
   are today's version's.
 

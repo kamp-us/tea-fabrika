@@ -92,7 +92,7 @@
 // marks it ready (`Publish.ready`), through the typed PullRequests service.
 // The chain holds every right (the bot's push, the PR, the merge queue, the commit and its signature); a
 // box or the judgment agent holds only its model login
-// (.kalfa/decisions/0031-parent-holds-every-right.md). The steps run the unmodified harness
+// (.kalfa/decisions/0027-parent-holds-every-right.md). The steps run the unmodified harness
 // (.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md).
 //
 // The quest brief is one Markdown file. Its text before the first `## ` heading goes to every step.

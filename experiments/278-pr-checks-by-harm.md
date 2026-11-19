@@ -130,7 +130,7 @@ merge. They answer fast: the whole `check` job is 164 s, typecheck 50 s, lint 66
   request CI "only checks each one in isolation", so "check the combination, before it goes to
   master". [GitHub's merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
   runs the required checks against main plus the changes ahead. It is not offered to this repo
-  (0043). The original "not rocket science rule" post was not reachable (two addresses gave 404),
+  (0034). The original "not rocket science rule" post was not reachable (two addresses gave 404),
   so its wording is not quoted here.
 
 **What exists here today.**

@@ -370,7 +370,7 @@ pull request body. Put the approved ticket's title and text in the body for
 people. Ask demlik to accept that instead of `Closes #N`.**
 
 - Why: no stage needs a GitHub issue once the lane's facts name the ticket.
-  [Push after review](../.kalfa/decisions/0041-changes-stay-local-until-review.md) already makes
+  Push after review already makes
   build and review work from a commit and a fact. No outsider ever wrote a
   demlik issue or comment, so a GitHub copy would have no readers that the
   body does not reach. And comments on a copy reach nobody.

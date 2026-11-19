@@ -4,7 +4,7 @@ Plancheck-Version: 3
 # Ticket 953: one ReBAC core in `next/`, and a start checked against the member who caused it
 
 ```ts
-// next/packages/libfabrika/src/permissions/Model.ts: fabrika's one model, declared once (0029).
+// next/packages/libfabrika/src/permissions/Model.ts: fabrika's one model, declared once (0025).
 export const Model = Rebac.make("fabrika")
   .type("person", {})
   .type("fabrika", {
@@ -36,25 +36,24 @@ All of this is about `next/` only. Today's version is not touched.
 ## The answer first
 
 One pull request, two slices. It builds what
-[0029](../../../.kalfa/decisions/0029-one-rebac-permission-system.md) names as its first slice: the core, with
-[0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md)'s start check as its first real use.
+[0025](../../../.kalfa/decisions/0025-one-rebac-permission-system.md) names as its first slice: the core, with
+[0026](../../../.kalfa/decisions/0026-the-cause-signs-writes.md)'s start check as its first real use.
 
 - **Slice 1, the core.** A new libfabrika module, `permissions/`, on a new layer 3 between the
   ledger and the processes. It holds: relation rows on the ledger, one model declared once in code,
   a right as a typed class whose check gives a sealed `Proof`, a `Denied` error that carries who,
   what and which object, the in-turn check, and two layers of one `Relations` store, one on the
   ledger and one in memory for tests.
-- **Slice 2, the start check (0030).** A start whose cause is an input delivered to the requester is
+- **Slice 2, the start check (0026).** A start whose cause is an input delivered to the requester is
   checked against that input's sender, through the model, and no longer through `StartGrant`. The
-  brain asks the gateway's one signing service who sent the cause (0030), checks `StartProgram` on
+  brain asks the gateway's one signing service who sent the cause (0026), checks `StartProgram` on
   this fabrika, and the start's write needs the proof. The `started` line records the member it was
   checked against. A start with no member's input behind it is checked against the requester's
   recorded member when it has one, else by today's `StartGrant` rule. That was the one open
   question, now answered below: the owner chose (c), and the lead ruled that such a start's `started`
   line records the member it was checked against, by AGENTS.md's data-shape rule (a fact that exists
   only when the record is written goes in now). That record carries the member down the whole chain
-  of starts, which the owner then decided in
-  [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md).
+  of starts, which the owner then decided in.
 - **The runner does not change.** A start already carries its cause: the runner fills
   `From.parent` from the Cmd's letter (`runtime/Runner.ts:1517`, `from(job.parent, job.traceId)`),
   and that is the gateway's input id. The check moves to the brain's side, where the sender is
@@ -83,7 +82,7 @@ One pull request, two slices. It builds what
 - **OpenFGA** (openfga.dev, "Contextual tuples"; not fetched): a check may carry tuples that are not
   stored. Not used here. It is the known way if a later case wants the session's own facts in a
   check.
-- **Phoenix's [ADR 0043](../../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)**
+- **Phoenix's [ADR 0034](../../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)**
   and `packages/authz/src/` on its main, read this session. Each right is a class built by
   `Capability.Relation<Self>()(id, config)`, a `Context.Service<Tag, Grant<Self>>` underneath. The
   proof `Grant` is a branded plain object, never a Schema, made only by `mint`, which the package
@@ -112,30 +111,30 @@ One pull request, two slices. It builds what
 
 ## What is decided, in one place
 
-- [0029](../../../.kalfa/decisions/0029-one-rebac-permission-system.md), binding: one row shape on the ledger,
+- [0025](../../../.kalfa/decisions/0025-one-rebac-permission-system.md), binding: one row shape on the ledger,
   one model declared once, a right as a typed class with a sealed proof tied to its object, the
   check in coordination, agents capped by their person, no outside server, no second system, no
   check on a free string. The first slice is this ticket. The API's exact shape and the package name
   are left to this plan.
-- [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md): a start is checked against the
+- [0026](../../../.kalfa/decisions/0026-the-cause-signs-writes.md): a start is checked against the
   member whose input caused it; `fabsh` and the desk hold no start permission of their own; the
   first rule lets any member start any program; the answer and refusals keep their shape.
 -: a restart or a boot start is the
   brain's own; a timer's start is the process owner's; a process keeps the member whose input
   started it. This slice records that member. The timer rule itself is not built here.
-- [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md),
-  [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md),: the gateway stamps the sender,
+- [0026](../../../.kalfa/decisions/0026-the-cause-signs-writes.md),
+  [0026](../../../.kalfa/decisions/0026-the-cause-signs-writes.md),: the gateway stamps the sender,
   `parent` names the cause, and one signing service, owned by the gateway, answers who signs. The
   start asks that same service, so there is still one authority on who sent an input.
 -: one owner, admins and members. The model
   declares the three as relations on the fabrika object, as 0526 says.
-- [0026](../../../.kalfa/decisions/0026-each-client-has-own-key.md),
-  [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),: the key tree decides who may dial, and a
+- [0022](../../../.kalfa/decisions/0022-each-client-has-own-key.md),,
+  [0022](../../../.kalfa/decisions/0022-each-client-has-own-key.md): the key tree decides who may dial, and a
   `hands` key never writes as a person. The gateway's `membership` already refuses a `hands` key as
   a writer (`gateway/Gateway.ts:365`), so no `hands` key can be a start's sender.
-- [0012](../../../.kalfa/decisions/0012-entries-carry-seen.md): `seen` never decides a grant. The
+-: `seen` never decides a grant. The
   check reads rows by the referee's order only.
-- [0021](../../../.kalfa/decisions/0021-modules-import-lower-layers.md),,,,: placement, the fold as a tea machine,
+-,,,,: placement, the fold as a tea machine,
   Effect Schema, `_tag`.
 
 Choices this plan makes because a note already answers them (the
@@ -276,8 +275,7 @@ export class Relations extends Context.Service<
   `internal/relationsTable.ts` once per entry with `applyCell`, and skips an entry whose `by` is not
   `by` or whose tag is not a row case. A row that does not decode is `bad_row`. `write` runs one
   `LedgerTransaction` turn and appends each change with `by` replaced by the layer's own, as
-  `ProcessManager`'s `line` does. A `LedgerError` becomes `RelationsError` with its cause kept
-  (0021).
+  `ProcessManager`'s `line` does. A `LedgerError` becomes `RelationsError` with its cause kept.
 - `RelationsMemory.layer(changes)` folds the same machine over its changes, and `write` adds to
   them. It is the same fold, so law L8 compares the two layers.
 - The machine's states: one Model, `{ tuples: ReadonlySet<string> }`, and one Msg,
@@ -292,7 +290,7 @@ const ProofTypeId: unique symbol = Symbol.for("@kampus/libfabrika/permissions/Pr
 const KeyId: unique symbol = Symbol("@kampus/libfabrika/permissions/Proof/key"); // module-local, not Symbol.for
 export interface Proof<out P> {
   readonly [ProofTypeId]: P;
-  readonly sender: Sender; // who was checked, both ids kept (0030)
+  readonly sender: Sender; // who was checked, both ids kept (0026)
   readonly permission: string;
   readonly object: string; // the one object this proof is for
 }
@@ -572,7 +570,7 @@ No window changes, so no screenshots.
 ## What this records
 
 - From this pull request on, every child start that a member's input caused names that member on
-  its `started` line, as `member`, with both the key and the person (0030). This is the fact lost
+  its `started` line, as `member`, with both the key and the person (0026). This is the fact lost
   forever if it waits: 0172's process owner, which a timer's start will be checked against. A start
   made without it never gets it.
 - Every start's span records who was checked, for what permission, on which object, and the
@@ -605,8 +603,7 @@ Estimate: 4 steps, $11
 - Whether a mail chain should carry its member. A start in program B caused by mail from program A,
   itself caused by a person's input to A, has no member's input delivered to B, so it is checked
   against B's process's recorded member when it has one, else by today's `StartGrant` rule. That A's
-  member carries down to B through starts, and never through mail, is
-  [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md); the laws pin it.
+  member carries down to B through starts, and never through mail, is; the laws pin it.
 - The gateway answers who sent an input before the look turn, in its own store. A key removed after
   that answer and before the write is not seen by that start, the same gotcha `SessionManager`'s
   `signer` documents today. The relation rows are rechecked in the write turn (L15); the key's
@@ -636,7 +633,7 @@ Estimate: 4 steps, $11
    exists only when the record is written goes in now). "The answer first", slice 2, already said
    "the `started` line records the member it was checked against". The review showed this carries
    the member down the whole chain of starts, and the owner decided that on 2026-11-14, as Unix
-   passes a uid down a process tree: [0030](../../../.kalfa/decisions/0030-the-cause-signs-writes.md).
+   passes a uid down a process tree:.
 
 ## Open questions
 

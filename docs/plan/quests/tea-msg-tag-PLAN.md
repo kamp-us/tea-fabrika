@@ -74,7 +74,7 @@ engine, never runs for us. Demlik issue 961 is that gap in the pure stepping fun
 - **Merger and Queue** keep their `reduce` and their 21 forwarding rows until the ruling. No other
   slice here touches them.
 
-**Step returns, once slice 11 is in.** The owner ruled that a cell answers a pipeable `Step`. The sweep of today's return sites is not in this plan (see "What comes after"). Each
+**Step returns, once slice 11 is in.** The owner ruled that a cell answers a pipeable `Step` ([0008](../../../.kalfa/decisions/0008-tea-cells-answer-a-step.md)). The sweep of today's return sites is not in this plan (see "What comes after"). Each
 slice that writes a return says which form it writes, so no return is written twice:
 
 - slices 2 to 10 write no new return shape: they move keys, types and helpers, and every return they

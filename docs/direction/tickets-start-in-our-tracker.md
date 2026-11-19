@@ -7,8 +7,7 @@ summary: "The tracker is in the first version: tickets are ledger facts, filed t
 
 Decided 2026-10-24, for the pipeline's first version.
 
-Its decided rules are in: [0038](../../.kalfa/decisions/0038-tickets-live-on-our-ledger.md),,,,
-[0038](../../.kalfa/decisions/0038-tickets-live-on-our-ledger.md),.
+Its decided rules are in: [0031](../../.kalfa/decisions/0031-tickets-live-on-our-ledger.md),,,,,.
 
 ```ts
 // A sketch. A ticket is facts on the ledger. No stage reads a GitHub issue.

@@ -179,7 +179,7 @@ below in short. "Was in flight" is as of 10:00 on 2026-11-11.
    20 to 45 more PR-hours draining (estimate). Smallest fix: land PR 933,
  (a green pull
    request lands without a second run); it was red on `test (5)`, fix that first. Later: a merge
-   queue that batches ([0043](../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)), with the
+   queue that batches ([0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)), with the
    hourly run on main catching what a
    skipped rerun misses.
 3. **Lanes parked for the owner overnight.** sm6 141 min (backstop $6 after one $6.50 step),

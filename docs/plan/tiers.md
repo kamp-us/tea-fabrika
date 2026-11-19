@@ -26,7 +26,7 @@ other tiers:
   [Tier 5 laws](#tier-5-laws-decided-2026-11-07) for any agent fabrika starts.
 - From the inbox's later tiers: the inbox past its thin row, so `@person` and an agent's message
   reach it.
-- From no tier: rooms and `join` ([0050](../../.kalfa/decisions/0050-no-dms-rooms-are-open.md), the
+- From no tier: rooms and `join` (the
   [summon guidelines](../direction/summon-guidelines.md#rooms-mentions-and-turns-in-order)).
 
 Three of Tier 1's own rows come with them (owner, 2026-11-13,
@@ -116,12 +116,12 @@ before any builder starts. The size of each, their order and whether Tier 1 spli
 
 | Core idea | Row | What the slice must do | Hardened in |
 |---|---|---|---|
-| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects ([0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md)). | Tier 4: competing claims, leases and moving a task to another host |
-| Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
-| Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
+| Hands | P39 | A program can ask for a command and see it run. A machine that runs tasks dials in with a key granted as `hands` and asks for work with `tasks.take`; the first task is `git --version` on one host a person selects. | Tier 4: competing claims, leases and moving a task to another host |
+| Programs written outside fabrika's own source | P40 | A person can run a program the app's source does not list, as a repo's own pack listed in `fabrika.toml` by a `from` that starts with `./` ([0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md)). That path, not a second way to load a program. The cold author check runs on it. | Tier 5: a repo's own pack; Tier 7: packs from elsewhere and the lock file |
+| Programs working together | P41 | One program can reach another. A program may send mail to another program's named mailbox and get a reply, beside pipes, and the host carries it ([0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md)). | Tier 2: typed pipes; Tier 4: a program that starts another |
 | A person starting a program | P42 | A person can start a program while the app runs. | Tier 2: `fabsh` |
 | An agent fabrika starts | no row yet | fabrika can start one agent run for one bounded job and record how it ended. Where the agent runs: the laptop, as today, until hands and the Tier 5 laws say otherwise. | Tier 5 |
-| A flow fabrika runs | P43, for landing changes | fabrika can run a saved list of typed steps handed to it as data ([0035](../../.kalfa/decisions/0035-agents-hand-over-flows.md)), and stop at an ask. P43 is the pipeline's thin slice for landing changes: the merge queue's first stage, one queue program and one landing program per change, one landing at a time ([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md), [0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)). | Tier 6: the full pipeline and the merge queue's later stages |
+| A flow fabrika runs | P43, for landing changes | fabrika can run a saved list of typed steps handed to it as data ([0029](../../.kalfa/decisions/0029-agents-hand-over-flows.md)), and stop at an ask. P43 is the pipeline's thin slice for landing changes: the merge queue's first stage, one queue program and one landing program per change, one landing at a time ([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md), [0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)). | Tier 6: the full pipeline and the merge queue's later stages |
 
 0078's two slices came with no row; theirs come with their plans. P43 is the first row under a flow
 fabrika runs. Rows that may already half-cover a slice are listed in, as facts each plan checks.
@@ -229,8 +229,7 @@ Decided by the owner from [experiment 229](../../experiments/229-browser-only-fr
 ### Tier 4: hands (proposed split)
 
 This tier builds hands for real. It hardens Tier 1's hands slice, P39, which runs on one host a
-person selects, with no competing claims or leases
-([0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md)).
+person selects, with no competing claims or leases.
 
 - **Transport:** hands as a client; how a client says it takes tasks.
 - **Data:** the queue, claims, leases; every container job records its run seconds and who started
@@ -255,7 +254,7 @@ slices: an agent fabrika starts, and programs written outside fabrika's source (
 - **Coordination:** hands run agents.
 - **App:** `claude` and `codex` programs; repo programs, as a repo's own pack in the repo's
   `.fabrika/packs/<name>/` listed in `fabrika.toml` by its `./` path, lean about 60%
-  ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)); two laws and a restart rule
+  ([0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md)); two laws and a restart rule
   ([below](#tier-5-laws-decided-2026-11-07)).
 - **Desktop (Tuval):** chat tile (not a copy of regular chat; several branches of a conversation at
   once stays possible), asks list; the agent box. *Noted 2026-11-05:*
@@ -283,7 +282,7 @@ Decided by the owner, for when agents run as programs:
 This tier builds the full pipeline for real. It hardens Tier 1's slice of a flow fabrika runs,
 including the merge queue's first stage, P43: Tier 6 adds batches, a cheap lane for docs and field
 rows, and a record of how long each change waited, with the signing stage after
-([0043](../../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md)).
+([0034](../../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md)).
 
 - **Transport:** reconnect and offline, tested hard; D4's poke, the sync-engine note's T7 as a Sub.
 - **Data:** moving data, keeping history cheap, paging.
@@ -411,12 +410,12 @@ Git history keeps the old wording.
   the outside programs slice with a cold agent as the author.
 - 2026-11-10: an agent fabrika
   starts and a flow fabrika runs join the core ideas, with slices from Tier 1.
-- 2026-11-10, [0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md): Tier 5's repo programs are
+- 2026-11-10, [0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md): Tier 5's repo programs are
   a repo's own pack, not `.fabrika/programs`; no tier moves.
 - 2026-11-10: all six slices land in Tier 1,
   and P39 to P42 are added.
-- 2026-11-11, [0027](../../.kalfa/decisions/0027-job-machines-take-their-work.md) and
-  [0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md): the shapes of the hands slice
+- 2026-11-11 and
+  [0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md): the shapes of the hands slice
   and of programs working together.
 - 2026-11-11: the merge
   queue's first stage joins Tier 1 as P43, and Tier 6 hardens it.

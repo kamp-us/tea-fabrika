@@ -75,7 +75,7 @@ test:
     rule.
 - **Tools are served inside the box, and each tool call is a Cmd.**
   - The agent's tools, the one "ask" tool and the typed reads of
-    [helpers](../../.kalfa/decisions/0036-steps-call-helpers.md), run in the program's own
+    helpers, run in the program's own
     process inside the box. A tool that needs the outside writes a Cmd, and
     the Cmd is passed out.
   - The agent sees no change: it calls the same tools.

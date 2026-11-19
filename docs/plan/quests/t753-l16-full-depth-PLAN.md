@@ -133,8 +133,7 @@ Effect code. No upstream package is patched.
 - **The durability trade, named.** Today, a span that ended before a hard isolate kill survives the
   kill. After A, a hard kill in the middle of a call loses all of that call's spans. A clean failure
   or a fiber interruption loses nothing, because the commit is in `Effect.ensuring`. This meets
-  0122 as written, and it matches the three places above. An object sleeps only between calls
-  (0022), so a sleeping object still keeps every span. The pattern row in
+  0122 as written, and it matches the three places above. An object sleeps only between calls, so a sleeping object still keeps every span. The pattern row in
   `.patterns/effect-differences-say-why.md:62` stays true.
 - **Kept as they are:**
   - Refusal counting. A batched span with its own refusal tag, or a refusal-tagged ancestor, is

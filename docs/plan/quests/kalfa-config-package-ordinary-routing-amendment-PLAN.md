@@ -58,7 +58,7 @@ already called by `legs.ts`'s `list` and the real-discovery tests. Removing the 
 from full/changed ordinary discovery lets that project include Kalfa. No new test project,
 runner, queue or selector service is needed.
 
-This applies decisions 0054 and 0590: the package's laws travel with the package, and a changed
+This applies an earlier decision and 0590: the package's laws travel with the package, and a changed
 run selects the affected set while a full trigger selects every configured file. Preserve the
 current shared nine test slots and all current limits, as in the committed CI interface and
 0595. Elm and OTP add no machine to this bounded CI filter repair.

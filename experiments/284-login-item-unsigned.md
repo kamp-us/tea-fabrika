@@ -35,7 +35,7 @@ and no packager in its `package.json`; its `build` script builds the brain. Toda
 (`apps/fabrika`) starts as `electron .`, Electron's own binary running our files. No
 `electron-builder`, `@electron/packager` or forge is in any `package.json`. So the first shape below
 is what runs today, and the other three are what a packaged build could be.
-[0045](../.kalfa/decisions/0045-the-app-starts-the-brain.md) has the app start the brain, so the
+ has the app start the brain, so the
 login item is the app's alone.
 
 ## What ran

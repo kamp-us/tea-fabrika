@@ -71,7 +71,7 @@ Rules:
 ## Where it applies
 
 Domain folds, rules and tea `update`s in `next/`, and synchronous ledger steps
-([0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md)). Stops inside a SQLite
+([0011](../.kalfa/decisions/0011-ledger-step-is-plain-function.md)). Stops inside a SQLite
 transaction, where a throw is how the transaction rolls back
 ([effect-errors-keep-their-cause.md](./effect-errors-keep-their-cause.md), "Fail by yielding"), and
 at a load-time check of a declaration, where a throw is a defect on purpose.

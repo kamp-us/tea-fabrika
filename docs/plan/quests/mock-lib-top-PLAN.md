@@ -73,7 +73,7 @@ and `vitest/no-restricted-vi-methods` goes on for them.
 - **Effect on translating a defect:** `Effect.catchDefect` is "for when you need to report or
   translate defects at integration boundaries" (`effect/src/Effect.ts:5871`, `@stability stable`).
   The generator is that boundary: it turns the platform's failure into its own typed error, as
-  decision 0021 rule 12 asks of a module.
+  an earlier decision rule 12 asks of a module.
 - **The industry:** a random source passed in, not read from a global, is the plain dependency
   injection that lets a UUIDv7 maker be tested with fixed bits; RFC 9562 section 6.2 (the monotonic
   counter methods the generator follows) assumes the random bits come from a CSPRNG the

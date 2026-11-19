@@ -12,7 +12,7 @@ model as facts) and [PR 153](https://github.com/usirin/tea-fabrika/pull/153)
 (every view a program). It starts from 153's text, folds in 135's, settles
 where they clash, and adds what a ticket shows at a glance. Tracker ticket 64.
 
-Its decided rules are in: [0040](../../.kalfa/decisions/0040-build-our-own-tools-first.md),,,,,.
+Its decided rules are in:,,,,,.
 
 Keys renamed 2026-11-03 (short words keep one meaning): the glance's `of` became `total`, and
 `due`'s `on` became `date`.

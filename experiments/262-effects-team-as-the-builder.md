@@ -67,13 +67,13 @@ Decided, each with its source, and never asked again here:
 | Lead tooling follows `next/`'s rules | |
 | Every implicit state machine is made explicit, as a tea machine, one per file | |
 | Try an existing tool before writing a check | |
-| A ledger step is a plain synchronous function inside the transaction | [0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md) |
+| A ledger step is a plain synchronous function inside the transaction | [0011](../.kalfa/decisions/0011-ledger-step-is-plain-function.md) |
 | Each service fails with its own error | |
 | A resource is acquired in a scope | |
 | Tests keep the layers; a database suite is run by the module that owns the driver | |
 | A folder is a module; its rank is a layer | |
 | A service file holds only its contract; layers are sibling files; no static layer; platform code in its folder | |
-| A Durable Object works inside a wake and sleeps | [0022](../.kalfa/decisions/0022-objects-never-stay-awake.md) |
+| A Durable Object works inside a wake and sleeps | |
 | Effect's team is the builder we measure `next/` against |, accepted 2026-11-11, not on main yet |
 | Every exported function that returns an Effect is a named `Effect.fn` | [the `Effect.fn` note](../docs/direction/effect-fn-for-traced-functions.md) |
 | No Promises outside a marked edge | [no Promises](../docs/direction/no-promises.md) |
@@ -405,7 +405,7 @@ are gone (0 on main). The rest is not rechecked. Counts are `rg` patterns, as ab
   `flatMapConditionalToFilterOrFail` (0/2), `deterministicKeys` (40/2, 5 of 42 read). 75% sure.
 - **Leave off, 0 or 1 right of 5:** `preferEffectArray` (358/1,640), `unstableApiUsage` (112/1,314),
   `preferEffectString`, `preferEffectRecord`, `newSchemaClass`, `missingPipeableSignature`,
-  `strictBooleanExpressions`, `schemaSync` (0010), `schemaClassMissingBrand`, `preferSchemaOverJson`,
+  `strictBooleanExpressions`, `schemaSync` (0011), `schemaClassMissingBrand`, `preferSchemaOverJson`,
   `nodeBuiltinImport`, and the test-only Promise checks.
 - **Our rules against theirs:** replace `fabrika/no-data-taggederror` with `preferSchemaTaggedError`
   (90%) and `fabrika/no-raw-try-catch` with `tryCatchInEffectGen` (70%); `fabrika/no-context-tag`

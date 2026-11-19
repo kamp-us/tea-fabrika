@@ -28,7 +28,7 @@ same, and the row in `next-ledger.json` is deleted in the same pull request.
   fault of its own gets an error named after its service, with tagged reasons; `processes/` answers in
   its own words; a test that needs a real database is a suite that `node/` runs.
 - **Decided in kind, open in shape** (slices 4 to 7): 11 product lines read or write a ledger
-  stream directly. [0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md) says who fixes that: the
+  stream directly. says who fixes that: the
   module between adds a service, and that service names none of the ledger's types. It names
   `processes/` for the runtime's case. It does not say what the service is called or how wide it
   is. That is open question 1.

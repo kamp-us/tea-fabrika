@@ -7,8 +7,8 @@ summary: "`next/`, spike S0 of ticket 502's plan, on `@alchemy.run/cloudflare` 2
 
 Run 2026-11-13 on origin/main at `c0aaf4a24`. **All claims are about `next/`.** This is spike S0 of
 [the Alchemy port's plan](../docs/plan/ticket-502-alchemy-port.md), for decisions
-[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) and
-[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md). It answers the questions the plan
+ and
+[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md). It answers the questions the plan
 leaves to S0, so that slices S5, S7 and S8 can be planned.
 
 - **Versions, read from the lockfile:** `alchemy` 2.0.0-beta.85, `@alchemy.run/cloudflare`

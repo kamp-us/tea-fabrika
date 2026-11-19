@@ -585,7 +585,7 @@ now include part 6.
 
 **This is a sketch, not code in the repo.** It changes the `reviewed` fact in
 `packages/pipeline/src/tickets/ticket.ts` and the rule in
-[nothing is pushed before review](../.kalfa/decisions/0041-changes-stay-local-until-review.md), which says only a
+nothing is pushed before review, which says only a
 commit with a passing `reviewed` fact can be pushed.
 
 ```ts

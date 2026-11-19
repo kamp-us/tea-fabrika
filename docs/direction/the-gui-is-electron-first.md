@@ -8,9 +8,7 @@ summary: "The fabrika app is Electron from the start: its main process runs the 
 Decided 2026-10-24. Replaces The GUI is a local web page first
 of 2026-10-22.
 
-Its decided rules are in:,
-[0044](../../.kalfa/decisions/0044-one-electron-app.md),,
-[0045](../../.kalfa/decisions/0045-the-app-starts-the-brain.md),,,.
+Its decided rules are in:,,,,,,.
 
 *2026-11-01: this note is about today's version. For `next/`, see
 [the desktop layer](./the-desktop-layer.md).*

@@ -58,7 +58,7 @@ Each of these differs from Effect's habit, and each reason is recorded.
 
 | Ours | Effect's habit | Reason, and where it is written |
 |---|---|---|
-| Synchronous SQL and ledger steps | async `SqlClient` transactions | a step decides and writes in one transaction ([0010](../.kalfa/decisions/0010-ledger-step-is-plain-function.md); `ledgerStore.ts:5-8`, `NodeSqlite.ts:3`) |
+| Synchronous SQL and ledger steps | async `SqlClient` transactions | a step decides and writes in one transaction ([0011](../.kalfa/decisions/0011-ledger-step-is-plain-function.md); `ledgerStore.ts:5-8`, `NodeSqlite.ts:3`) |
 | A span sink that writes each span to SQLite | an OTLP exporter with an in-memory buffer and a timer | a sleeping object keeps every span (`telemetry/Sink.ts:5-7`) |
 | A stateless HMAC nonce | a challenge kept in memory | a sleeping object loses memory (`GatewayNonce.ts:6`) |
 | The supervisor's backoff as a saved tea machine | a `Schedule` | a `Schedule` cannot be saved across a sleep ([durable-objects-sleep.md](./durable-objects-sleep.md)) |

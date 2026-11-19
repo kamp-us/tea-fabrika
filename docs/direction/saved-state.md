@@ -17,7 +17,7 @@ machine" ([an old host is named, then restarted](./an-old-host-is-named-then-res
 owner approved [experiment 189](../../experiments/189-games-study.md) and asked for this study over
 its top ideas, `seen` first.
 
-Its decided rules are in: [0012](../../.kalfa/decisions/0012-entries-carry-seen.md),,,,,.
+Its decided rules are in:,,,,,.
 
 Built from [experiment 190](../../experiments/190-saved-state.md), which read about twenty makers
 and ran GGPO's sync test on today's quest, and a private page, "Saved state guidelines". Neither is a

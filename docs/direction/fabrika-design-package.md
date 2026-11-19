@@ -11,7 +11,7 @@ in the public [kamp-us/phoenix](https://github.com/kamp-us/phoenix/tree/main/pac
 Moved in P31 ([PR 431](https://github.com/usirin/tea-fabrika/pull/431)): `packages/fabrika-design`
 holds the themes (`src/themes.ts`) and `src/tokens.css`, the tokens with Manti's set from them.
 
-Its decided rules are in: [0052](../../.kalfa/decisions/0052-one-design-package-on-manti.md),,.
+Its decided rules are in:,,.
 
 Decided by the owner, 2026-11-08: every token is TOML data, not only the colors: type sizes,
 fonts, spacing, radius, row heights and motion, with the same build, schema and drift check. It

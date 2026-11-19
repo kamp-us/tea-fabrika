@@ -85,7 +85,7 @@ runtime and on Cloudflare, when a program is loaded at run time, with the ledger
 store?
 
 - If yes, a program's resources are Alchemy resources for real, and an instance and its programs
-  are provisioned one way ([0020](../.kalfa/decisions/0020-library-makes-an-instance.md)).
+  are provisioned one way.
 - If no, this page says exactly what stops it, and sketches the same four functions applied by
   fabrika itself.
 
@@ -335,7 +335,7 @@ removal policy, provider version) has no job here yet:
 
 The resource's life is an explicit tea machine: `absent`, `applying`, `present`,
 `deleting`, folded from those entries. A `ScheduledJob`'s reconcile sets an alarm in the project's
-object and its handler sets the next one ([0022](../.kalfa/decisions/0022-objects-never-stay-awake.md));
+object and its handler sets the next one;
 the job itself is a command that runs, not a resource.
 
 What our own module adds, against Alchemy's engine:

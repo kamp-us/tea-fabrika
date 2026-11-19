@@ -41,7 +41,7 @@ export class Commits extends Context.Service<Commits, {
   1. **All fifteen port now, the five checks and the step runner included.** The owner ordered
      every port. leakgrep, loosening, governance, skillscheck and redact are written in the
      shape a `@kalfa/ci/checks` subpath takes (an `effect/cli` command per check, its services in
-     their own files), so [0054](../../../.kalfa/decisions/0054-tooling-is-domain-packages.md)'s later
+     their own files), so's later
      move is a plain `git mv`. `box` and `mutbox` port too: a port that keeps every command line
      and law counts as the fix 0585 allows the step runner.
   2. **The mutation container's entry is TypeScript on Node's built-ins, each use marked as an
@@ -637,7 +637,7 @@ writes today (`redacted N`, the `.box` facts, the field row, the `phase` lines).
   head, and the review's verdict.
 - `docs/plan/README.md`'s "where we are" names ticket 766's state after each integrator lands.
 - No decision file: this plan builds decided notes, and the three calls in "Doubts" come from
-  rules already in force (0054).
+  rules already in force.
 
 ## Size
 

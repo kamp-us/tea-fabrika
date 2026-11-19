@@ -42,7 +42,7 @@ workspace 3 · ci
 - Opening the pack puts each program in a tile of a new workspace
   ([the desktop layer](./the-desktop-layer.md)). The person rearranges tiles like any other.
 - A program reads GitHub through the `CodeHost` service, never `gh` straight
-  ([0018](../../.kalfa/decisions/0018-protocols-once-providers-apart.md)), and wakes on a timer or a
+  ([0017](../../.kalfa/decisions/0017-protocols-live-once.md)), and wakes on a timer or a
   webhook: its `wake` names its next wake time, as any program's does.
 
 ```ts

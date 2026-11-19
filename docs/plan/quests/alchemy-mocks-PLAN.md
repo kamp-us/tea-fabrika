@@ -8,7 +8,7 @@ All of this is in `next/`. Today's version is not touched. It finishes the part 
 `vi.mock` calls that stand in for Cloudflare's platform module or for Alchemy, in three folders. It
 builds (no `vi.mock` or `vi.doMock`: a
 stand-in comes from the code's own design) and
-[0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) (the platform only through
+[0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) (the platform only through
 Alchemy, amended by 0050 and 0054), follows
  (no list lets broken code pass,
 so each folder's lock lands whole) and
@@ -168,7 +168,7 @@ export const programBox = (Base: EntrypointBase, declared: unknown, build: strin
 };
 ```
 
-`EntrypointBase` is a structural type of our own, so `box.ts` names no platform type (0019). The
+`EntrypointBase` is a structural type of our own, so `box.ts` names no platform type (0018). The
 platform's class has a two-argument constructor, and a class with none (the laws' `Stub.Base`) fits
 it too. It is not taken from `Parameters<typeof makeWorkerBridge>[0]`, which is a union with
 `typeof DurableObject` that a class cannot extend and that `Stub.Base` does not fit. Call, 75%; the
@@ -354,7 +354,7 @@ plan counts them. With them moved, `index.ts` names no raw platform type.
   does not narrow a bound to make it pass. None of these inputs needs a fast-check exception.
 - **Lint, type or test?** C1 to C4, S1 and S2 are tests: they hold what code does. The locks are
   lint. That `box.ts` names no platform module is held by C1's plant (a) for now; a lint rule for it
-  is ticket 506's (0019), and this plan does not take it.
+  is ticket 506's (0018), and this plan does not take it.
 - **What the mocks checked, kept.** A `cloudflare:workers` mock checked nothing: it let `box.ts` load
   in Node. What it relied on, that the box reads nothing from its base, is now C1's. What it hid,
   that the real entry extends the real class, is C2 and C3. The Alchemy mocks checked the props the

@@ -299,7 +299,7 @@ The full table, with a source for each name, is in experiment 250, part 8.
   collecting a stuck commit moved the branch, and the lead fixed it by hand.
 - **Since the walk:**: the lead drives
   work as a flow, a list of typed steps one program runs, and no agent holds a loop.
-  [0035](../../.kalfa/decisions/0035-agents-hand-over-flows.md): an agent that composes work hands
+  [0029](../../.kalfa/decisions/0025-one-rebac-permission-system.md): an agent that composes work hands
   fabrika a flow as data, so the goal is the agent's and the loop is fabrika's.: the flow runner stays a plain tea
   machine for now.
 

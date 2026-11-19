@@ -275,7 +275,7 @@ Each was found by the read; the winner is named. A decision file writes the winn
   are events", elm-first's required `refuse`, P11's required inputs, outputs and writes, and the word
   fact. program-shape wins for `next/`; tea-program keeps its rule for today's version.
 - `agents-commit-as-a-bot` makes the commit inside the box (lines 15-18, 119-121);
-  [0031](../.kalfa/decisions/0031-parent-holds-every-right.md) makes it a call to the parent. 0028
+  [0027](../.kalfa/decisions/0027-parent-holds-every-right.md) makes it a call to the parent. 0028
   wins.
 - `the-test-writer`'s "no login" in its box (line 78) against 0026 and 0028 (the box holds the
   model login). The decisions win.

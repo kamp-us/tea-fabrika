@@ -12,7 +12,7 @@ wears our own token values, never a theme of Manti's or of another project.
 The one exception (2026-11-01) is a person's own theme file, in their own
 config ([themes](./themes.md)). Manti's tokens stay on Radix values by default. Today's version; walked if a tryout is picked (owner, 2026-11-08).
 
-Its decided rules are in: [0052](../../.kalfa/decisions/0052-one-design-package-on-manti.md),.
+Its decided rules are in:,.
 
 **Proposed** (open for the owner, marked where they come up): how the move is
 split into pull requests, and four places where Manti's defaults clash with

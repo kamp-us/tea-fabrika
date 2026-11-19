@@ -1,5 +1,5 @@
 ---
-state: "vision; ledger runtime decided; 2026-10-30: central first and one ephemeral lane, at-most-once (show it, never save it, never decide with it) decided; transport and data decided 2026-10-30, coordination 2026-10-31; 2026-10-31: five layers, not four, and every window dials the brain itself (T3 changed); the first pass's standard per layer replaced, marked in the note; 2026-11-07: a wait never blocks, it answers ready or parked, then a ring (from the owner's call of 2026-11-02); 2026-11-09: in libfabrika a folder is one subject and its layer is a rank in the rule file ([0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md)), named module and layer 2026-11-10; amended in part 2026-11-18 by [0018](../../.kalfa/decisions/0018-protocols-once-providers-apart.md): local first, each place keeps its own ledger copy, and WebRTC joins the WebSocket"
+state: "vision; ledger runtime decided; 2026-10-30: central first and one ephemeral lane, at-most-once (show it, never save it, never decide with it) decided; transport and data decided 2026-10-30, coordination 2026-10-31; 2026-10-31: five layers, not four, and every window dials the brain itself (T3 changed); the first pass's standard per layer replaced, marked in the note; 2026-11-07: a wait never blocks, it answers ready or parked, then a ring (from the owner's call of 2026-11-02); 2026-11-09: in libfabrika a folder is one subject and its layer is a rank in the rule file, named module and layer 2026-11-10; amended in part 2026-11-18 by [0017](../../.kalfa/decisions/0017-protocols-live-once.md): local first, each place keeps its own ledger copy, and WebRTC joins the WebSocket"
 summary: "Signed append-only logs that hosts sync, with leases for one-writer work. The ledger is the first log on it; solo is a team of one. The ledger is one Durable Object everywhere: on Cloudflare for a team, in Miniflare on a laptop (experiment 93), restarted when its memory passes a cap. First step now: every fact says who wrote it. Five layers, bottom to top: transport (one WebSocket per client, to its own gateway; JSON-RPC 2.0; a signed hello with versions; a text ping), data (the ledger: append, read, wait; poke, then pull), coordination (claims, inboxes, the process tree, following OTP), app and desktop; central first, and a browser is always a client. This note holds the lower three (T1 to T8, D1 to D6, C1 to C5)."
 ---
 
@@ -129,7 +129,7 @@ has no single place that can say who was first.
 The owner walked the architecture one layer at a time on 2026-10-30 and
 2026-10-31. It ended with five layers. Each one uses only the layer below it.
 
-*Changed 2026-11-09 (owner, [0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md)): in
+*Changed 2026-11-09 (owner): in
 `next/packages/libfabrika/src` the layers are no longer folders. A folder is one subject, a module,
 and its rank is a library layer: a line in `layer-rules.json` that says which modules a module may
 import. A library layer is not one of the five below. There is no `coordination/` folder; its files

@@ -28,7 +28,7 @@ the one Alchemy patch that some of its spies need first. Today's app is not touc
 the other sweeps of 0555 and stay as they are here. **Amended 2026-11-15 (the laptop lead's
 ruling):** it covers those too, in a slice 5, and also builds
  (no list lets broken code pass)
-and follows [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) (platform
+and follows [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) (platform
 pieces go through Alchemy), with
  for where test layers
 live for the Alchemy patch.
@@ -165,7 +165,7 @@ with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 25 `vi.mock` in 12 f
 | `@effect/platform-node` | 2 | `grant-readers`, `file-services` | yes, slice 5: each entry (`grant.ts`, `dev.ts`) exports its program as an Effect, and the law runs it with the layers it needs, so nothing stands in for `NodeRuntime.runMain` |
 | `rolldown` | 1 | `exam/bytes.integration` | yes, slice 5: the bundler service above; this law is not the wrapper's own, so 0555's exception does not apply |
 | `vi.stubEnv` of `FABRIKA_HOME` 8, `FABRIKA_INSTANCE_PORT` 2, `TYPESAFE_API_KEY` 1, `DO_NOT_TRACK` 1, and 1 by a name that is not a plain string | 13 | `file-services`, `instance-one-file`, `local-instance` laws | yes, slice 5: the readers move to `Config` (`dev.ts:94`, `hands.ts:62` read `process.env.FABRIKA_HOME` today), and each law provides `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))`; `TYPESAFE_API_KEY` stays unset in every law, as the root map's money rule asks |
-| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy belongs to the approved Alchemy mocks plan (PR 1511) |
+| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy belongs to the approved Alchemy mocks plan (PR 1511) |
 | `cloudflare:workers` | 3 | `runtime-recovery`, `door.integration`, `checklist-instance` laws | **no**: 0042's Alchemy work, as in the cloudflare plan |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The seven Alchemy and
@@ -280,7 +280,7 @@ the stub above does not compile. In `@cloudflare/workers-types` 5.20261109.1,
 `getEntrypoint: () => rpc` fails with TS2322, and the `satisfies` fallback does not exist for a
 generic method. A function with one overload, which the type accepts, fails with TS2589 (type
 instantiation is excessively deep). A cast is refused. This stub is Cloudflare's platform type,
-which [0019](../../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) sends through
+which [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) sends through
 Alchemy, and that plan is where platform stand-ins get their typed home. Slice 1 is now three
 sites, A1 to A4, and its `getEntrypoint` spy stays in `instance-one-file.integration.test.ts`
 until that plan's row lands.
@@ -675,7 +675,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | tests | slice 5: the built table handed in |
 | next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 5: the built table and our own modules handed in |
 | next/apps/fabrika/src/error-cause.test.ts | tests | tests | slice 5: the built table handed in |
-| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 5: `./table.ts` handed in; its `cloudflare:workers` mock stays (0019) |
+| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 5: `./table.ts` handed in; its `cloudflare:workers` mock stays (0018) |
 | next/apps/fabrika/src/exam/bytes.integration.test.ts | tests | tests | slice 5: the bundler service in place of `vi.mock("rolldown")` |
 | next/apps/fabrika/dev.ts | build | 12 | slice 5: `FABRIKA_HOME` read through `Config`; the program exported as an Effect for its law |
 | next/apps/fabrika/grant.ts | build | 6 | slice 5: the program exported as an Effect for its law |

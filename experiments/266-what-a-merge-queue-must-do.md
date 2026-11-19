@@ -8,8 +8,8 @@ summary: "Today's lead tooling, plus how others queue merges (Rust bors, bors-ng
 
 Read on 2026-11-11. **This is reading, not a measurement.** Nothing was changed on GitHub or in
 any repo, no model was called beyond the one agent that read, and it cost $0. It is the research
-the owner walked before [0043](../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md) (fabrika
-provides the merge queue), [0043](../.kalfa/decisions/0043-fabrika-owns-the-merge-queue.md) (it is
+the owner walked before [0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md) (fabrika
+provides the merge queue), [0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md) (it is
 built as fabrika programs)
 (its first stage is Tier 1 row P43). It was written as the source for the queue's spec and moved
 here from a scratch file on 2026-11-11.
@@ -38,8 +38,7 @@ stage 2       batches of up to 4 or 5, split in halves on red; not speculation, 
               runners fit about one full CI run at a time (20 jobs, and one run is 16)
 stage 3       a signed entry: who enqueued it, which tree was tested, and the queue's own link
               in the signed chain from the head's tree to the landed tree
-where         a tea machine in a Durable Object that wakes on a call, a check event or an alarm
-              (0022), with the steps as plain Effects; not Cloudflare Workflows for the queue itself
+where         a tea machine in a Durable Object that wakes on a call, a check event or an alarm, with the steps as plain Effects; not Cloudflare Workflows for the queue itself
 ```
 
 The numbers it rests on, read from this repo on 2026-11-11:
@@ -368,11 +367,10 @@ Data shape. Facts lost forever if not written when they happen:
 
 Where it could run in `next/`:
 
-- A program `pipeline/queue` in the pipeline pack ([0023](../.kalfa/decisions/0023-every-program-in-a-pack.md)), with its settings
+- A program `pipeline/queue` in the pipeline pack ([0019](../.kalfa/decisions/0019-every-program-in-a-pack.md)), with its settings
   (`[pack.pipeline.settings] queue.batch`, `queue.timeout`) as `fabrika.toml` values.
 - Its model in a Durable Object, one per repo and base branch. It wakes on a call (enqueue), on a
-  check event, or on an alarm, does one step, sets the next alarm and sleeps
-  ([0022](../.kalfa/decisions/0022-objects-never-stay-awake.md)). A retry with
+  check event, or on an alarm, does one step, sets the next alarm and sleeps. A retry with
   backoff is an alarm, never `Effect.sleep` or a `Schedule` inside a wake.
 - No webhook reaches a laptop, so on the laptop "wait for checks" is an alarm that reads checks
   every 30 to 60 seconds while an entry is testing, and none while the queue is idle. 60 minutes
@@ -483,7 +481,7 @@ What is on the table, read from the installed code:
   (`src/Workflows/DurableObjectEngine.ts`, `NativeEngine.ts`). A local provider maps the workflow
   onto "the local workerd workflow engine" with state under the worker's local storage
   (`src/Workflows/Workflow.ts:1290` in beta.84; in beta.85, installed on 2026-11-11, the phrase is
-  at line 1395). So both paths go through Alchemy (0019) and both run on the laptop with no cloud
+  at line 1395). So both paths go through Alchemy (0018) and both run on the laptop with no cloud
   account.
 
 What fits a workflow: **one entry's landing.** Bring up to date, wait for checks (a
@@ -546,8 +544,8 @@ crash test is simpler.
 The owner walked this research on 2026-11-11. Kept in the record as the research gave it:
 
 - **"One Durable Object holds the queue and every entry's state" was not taken.** Decided instead
-  (0043): one queue program holds the order and the batch, and one small merger per change lands
-  it; they talk by program mail ([0024](../.kalfa/decisions/0024-programs-meet-by-mail.md)),
+  (0034): one queue program holds the order and the batch, and one small merger per change lands
+  it; they talk by program mail ([0020](../.kalfa/decisions/0020-programs-meet-by-mail.md)),
   and crash safety is a program rebuilding from its saved inputs under a supervisor, OTP's shape.
   The settling run the lean asked for (an `effect/workflow` landing beside a machine) was not
   needed: 0110 rules out Workflows and `effect/workflow` in every stage.

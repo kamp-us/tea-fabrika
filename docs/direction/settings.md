@@ -27,11 +27,11 @@ probe. The reading is not a measurement. A tag such as [c5] points at that exper
   and watches folders ([brain, hands, window, agent](./brain-hands-window-agent.md)).
 - **Pack.** One or more programs in a package, and the only place a program lives. It is listed by
   one `[pack.<name>]` table in a `fabrika.toml`, and it declares one settings schema that all its
-  programs read ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)).
+  programs read ([0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md)).
 - **The core pack.** The pack that ships with fabrika, named `fabrika` in every key: `fabrika/tracker`,
   `[pack.fabrika.settings]`. Every other pack sits beside it.
 - **Flow.** Steps written down as data, which fabrika checks and runs as one recorded process
-  ([0035](../../.kalfa/decisions/0035-agents-hand-over-flows.md)). The order of a run's steps lives in a
+  ([0029](../../.kalfa/decisions/0029-agents-hand-over-flows.md)). The order of a run's steps lives in a
   flow, never in a settings file.
 - **Scope.** The files that may set a setting: the person's file, the repo's file, or both. Every
   setting declares it.
@@ -556,7 +556,7 @@ const Remote = Schema.Struct({ from: Schema.String.check(Schema.isPattern(/^[^.]
 const Entry = Schema.Union([Local, Remote]); // plus settings, decoded at load with the pack's own group
 ```
 
-**Decided 2026-11-10 ([0023](../../.kalfa/decisions/0023-every-program-in-a-pack.md)). Confidence 75% for what is new here.**
+**Decided 2026-11-10 ([0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md)). Confidence 75% for what is new here.**
 
 - Settings are per pack, in `[pack.<name>.settings]`, declared by the pack as one `Setting.group`. A
   program reads its pack's settings through a provider scoped to its pack (S6), and sees no other

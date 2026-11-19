@@ -88,7 +88,7 @@ is linked; the others have no other home yet.
   from the six pipeline primitives in `packages/pipeline/src/primitives.ts` and their combos in
   `combos.ts`; talk to typed services,
   never straight to a command-line tool, `gh` included
-  ([0018](../../../../.kalfa/decisions/0018-protocols-once-providers-apart.md)).
+  ().
 
 ## Checks a plan picks
 

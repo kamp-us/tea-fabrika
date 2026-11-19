@@ -42,7 +42,7 @@ description says it: "thin skill wrappers over deterministic CLI verbs".
 - **State on disk.** Each lane is an append-only log, `.fabrika/lanes/<n>/events.jsonl`, folded
   fresh by `fabrika lane status` on every read. Only drive-loop order lives there; verdicts, claims,
   labels and queue position stay on GitHub
-  ([phoenix 0283](../.kalfa/decisions/0009-each-place-keeps-a-copy.md)).
+  ([phoenix 0283](../.kalfa/decisions/0010-each-place-keeps-a-copy.md)).
 - **The brief is code's, not the driver's.** `fabrika lane brief <lane> --task <t>` prints the spawn
   prompt ([`lane/brief-verb.ts`](https://github.com/kamp-us/phoenix/blob/main/packages/fabrika-cli/src/lane/brief-verb.ts)).
   Its format has three sections and nothing else

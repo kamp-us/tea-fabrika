@@ -10,8 +10,7 @@ summary: "Both versions. A review's verdict, a person's yes and the quest's stan
 - Decided to build 2026-11-02, below, settled when built.
 - Built in today's version: `git patch-id` in `packages/pipeline/src/stages/pipeline/carry.ts`.
 
-Its decided rules are in: [0042](../../.kalfa/decisions/0042-a-yes-carries-by-rule.md),
-[0042](../../.kalfa/decisions/0042-a-yes-carries-by-rule.md).
+Its decided rules are in:,.
 
 **Proposed.** Decided by the owner on 2026-11-02 to build, in today's version and in `next/`
 alike. It is settled when it is built. From
@@ -87,7 +86,7 @@ this rule  replay of A's diff onto main: tree of A; the formatter on it: tree of
   as the reviewer reads main's rules, and runs only on the paths the reviewed diff touched. A pull
   request cannot bring the formatter that excuses it.
 
-This changes one line of [nothing is pushed before review](../../.kalfa/decisions/0041-changes-stay-local-until-review.md): "only a commit
+This changes one line of nothing is pushed before review: "only a commit
 with a passing `reviewed` fact can be pushed" becomes "only a commit whose `reviewed` fact carries
 to it as `kept`, or through a glance that said yes".
 

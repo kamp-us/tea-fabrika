@@ -80,7 +80,7 @@ service about the test files it is about to run, right before it runs them, and 
 
 On disposable CI, `gh workflow run plants.yaml --ref <branch> -f plant=host-pnpm-path`. The package's
 `./cli` export is an `effect/cli` command named `quality`, which a future `kalfa` finds through the
-`kalfa.cli` field of this `package.json` (0054).
+`kalfa.cli` field of this `package.json`.
 
 ## Settings
 

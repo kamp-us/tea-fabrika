@@ -65,7 +65,7 @@ Count on 2026-11-15, from the zero lock's own run over this branch (main at `6ea
 
 A warn line names one folder: a package's `src/<name>/**`, the files right in `src/` as `src/*`, or, outside a `src/`, one folder's own files as `<folder>/*`. So a dirty folder never holds back its clean siblings. `law-shape` and `prefer-schema-arbitrary` lines keep the rule's file kinds (`<folder>/**/*{.test.ts,.test.tsx,Test.ts}`), so a warn line never turns a rule on where its base scope has it off. A warn line goes the moment its folder reaches zero: a whole `pnpm lint` run reads the lines from `oxlint --print-config` and fails on one with no fire left, or one that names a file, and says which line to delete. A run on a path skips that check, since it does not see every fire. A folder that blocks never goes back to a warn line.
 
-`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen: one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0052). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze quest takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
+`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen: one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live. That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze quest takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
 
 Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `59cb6a311`, a docs-only change), outside today's version:
 
@@ -277,7 +277,7 @@ runtime import when its `imports` entry names one under any condition, whatever 
 answers. It parses other files with `oxc-parser`, a dev dependency of this folder.
 
 A Worker runtime import is one of the platform's names, the list
-[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md) gives (`cloudflare:*`, `miniflare`,
+[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) gives (`cloudflare:*`, `miniflare`,
 `workerd`, `wrangler`, `@cloudflare/*`), or Alchemy's local runtime
 (`@alchemy.run/cloudflare-runtime`) or libfabrika's `box` and `workers` entries. The rule's
 `platform` list cites 0042 and changes with it. A type-only import of any of them passes, so
@@ -380,7 +380,7 @@ callers (T730's L9) are planted, generated, in `settings-imports.test.ts`.
 
 ### libfabrika's modules
 
-Ticket 477, decision [0021](../.kalfa/decisions/0021-modules-import-lower-layers.md), with the words of (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.
+Ticket 477, decision, with the words of (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.
 
 | Rule | Refuses | Lists, in `.oxlintrc.json` | Tests |
 |---|---|---|---|

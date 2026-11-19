@@ -63,7 +63,7 @@ moves the line here if it does.
   context.
 
 GitHub is not a context. It sits behind an anticorruption layer, in a provider package
-(`@kalfa/provider-github`, [0018](../.kalfa/decisions/0018-protocols-once-providers-apart.md)), so none of
+(`@kalfa/provider-github`), so none of
 its words are ours.
 
 ## Relationships

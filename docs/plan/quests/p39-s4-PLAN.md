@@ -20,8 +20,7 @@ Base read: branch `fabrikalfa/p39-s3` at `c2b8345a6` (slice 3, pull request
 https://github.com/kamp-us/tea-fabrika/pull/1309, reviewed and not merged yet). This slice stacks
 on it. Every code line cited here is read on that branch.
 
-Builds [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),
-[0022](../../../.kalfa/decisions/0022-objects-never-stay-awake.md),,,,,
+Builds,,,,,,
  and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md).
@@ -70,7 +69,7 @@ adds wire beside a sentence of 0102.
   that gives `failed output_limit`.
 - The launcher `next/apps/fabrika/hands.ts`: the hands key on disk, the instance address from
   `instance.port`, the journal file's place as a declared setting.
-- How the hands start on a Mac: started by the app, as the brain is (0045), or a launchd entry of
+- How the hands start on a Mac: started by the app, as the brain is, or a launchd entry of
   its own. A launchd entry waits for the owner.
 - A person approves the hands key in a window: a person presses it.
 - The host-only run of the real command on the owner's Mac, after the lead's read and his yes.
@@ -160,7 +159,7 @@ const Listed = Schema.Struct({
 // jobs.wait { after }     -> ok { rev } now, or parked on `target:<key>` until an append past `after`
 ```
 
-The stream comes from the authenticated identity, never from the params (0027). `jobs.wait`
+The stream comes from the authenticated identity, never from the params. `jobs.wait`
 goes through the same parked-wait path `ledger.wait` uses (`gateway/Gateway.ts:1597-1607`), outside
 the write turn, so the referee rings it when an append lands. A window or agent key calling either
 gets `not_allowed`, as the other jobs calls do (`gateway/Jobs.ts:42`).

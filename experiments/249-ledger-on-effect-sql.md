@@ -77,7 +77,7 @@ more than one way on the same statements.
 | W | Alchemy's `state.storage.sql.exec` | `state.storage.transaction(body)` | an Effect |
 
 S is main today. Sb is the plan's route (b), and what decision
-[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md)'s amendment names for PR 8. E is
+[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md)'s amendment names for PR 8. E is
 "use Effect's SQL modules as shipped". W is "use Alchemy's wrapper for everything".
 
 ## 1. Does the store run on `SqlClient`, on both drivers?
@@ -215,7 +215,7 @@ What each route loses, and how it fails:
 - **W.** A SQL error is a defect (`exec`'s error type is `never`), so the store catches defects to
   keep the ledger's typed `storage`. Laws run only over a stand-in.
 
-**Rooms ([0021](../.kalfa/decisions/0021-modules-import-lower-layers.md)).** On E, E2 and Es, `data/sqlite.ts` (56
+**Rooms.** On E, E2 and Es, `data/sqlite.ts` (56
 lines) and `data/worker-sql.ts` (7 lines) go away: each driver is a Layer picked at the edge, and
 the store asks for `SqlClient`. The `node:sqlite` edge comment goes with them. But `LedgerTurn`
 becomes an Effect API, and about 17 product files call it today. On Sb nothing above `data/`

@@ -32,7 +32,7 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
   except an approved guideline, whose rules `next/` follows as written. Today's library is `@kampus/fabrika-old`
   and today's app is `@kampus/fabrika-app-old`; both are deleted when `next/` takes over.
 - **The design package is shared by both versions,** the one exception to sharing no code
-  ([0052](.kalfa/decisions/0052-one-design-package-on-manti.md)).
+  ().
 
 ## Where to read, where to write
 

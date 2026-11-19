@@ -8,7 +8,7 @@ summary: "`next/`. Each client signs `initialize` with its own key pair; the per
 **Decided by the owner, 2026-11-05.** This is about `next/`. Today's version keeps its GitHub
 sign-in until `next/` replaces it. It answers Tier 1's open question 10.
 
-Its decided rules are in: [0026](../../.kalfa/decisions/0026-each-client-has-own-key.md),.
+Its decided rules are in: [0022](../../.kalfa/decisions/0022-each-client-has-own-key.md),.
 
 ```ts
 // A sketch, next/. Two keys, two jobs, and no third party.

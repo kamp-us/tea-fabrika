@@ -9,7 +9,7 @@ summary: "Reading, not a measurement; `next/`'s planned door (P25, exam only) an
 **This is reading, not a measurement.** Read on 2026-11-10, written up on 2026-11-11. Nothing was
 built, run or paid for. Repo facts were first read at `92ee2dfa2` and rechecked on main on
 2026-11-11; each says which version it is about. It is the reading
-[0035](../.kalfa/decisions/0035-agents-hand-over-flows.md) names under "Not decided here" ("A reading of
+[0029](../.kalfa/decisions/0029-agents-hand-over-flows.md) names under "Not decided here" ("A reading of
 the makers' pages is running"). Nothing here is decided yet.
 
 **The answer: not now, and never for writes.** Keep the tool-per-input door (shape A below) that
@@ -105,7 +105,7 @@ pinned ones does not.
   isolate. "No program's isolation rests on code alone where a wall can hold it." Experiment 173
   found that a 300 ms spin in one isolate stalled every process in a local workerd, and that
   Miniflare does not enforce `limits.cpuMs`.
-- **[0019](../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md), Alchemy.** In `next/`, the
+- **[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md), Alchemy.** In `next/`, the
   Worker Loader is reached through Alchemy's `Cloudflare.WorkerLoader` service, never directly.
 - **, flows.** The lead's multi-step work is
   a flow: "an ordered list of typed steps, saved before it starts. One program runs it. Its position

@@ -224,8 +224,7 @@ fabrika. Tier 1's rows that this needs come first and the others wait. The chang
 [Tier 1](./tier-1.md) where they differ. No row's count changes. *It said: the changed Tier 1 is
 not written yet.*
 
-*2026-11-13, later:* the Alchemy port ([0019](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md),
-ticket 502) is part of this plan and keeps a slot beside the four primitives. One of its objects, `RecordPart`,
+*2026-11-13, later:* the Alchemy port (ticket 502) is part of this plan and keeps a slot beside the four primitives. One of its objects, `RecordPart`,
 landed on 2026-11-11, `Connection` in slice S1 and `Process` in slice S2 of
 [its plan](./ticket-502-alchemy-port.md); `Project` and `Control` are still plain classes.
 
@@ -458,7 +457,7 @@ and Tier 1 had 43 rows. *2026-11-11:* P43, the merge queue's first stage, made 4
 [PR 760](https://github.com/usirin/tea-fabrika/pull/760)): the local instance saves delivery counts,
 writes `dead` and restarts a crashed program, which PR 535 had proved on Node only.
 *2026-11-10:* libfabrika's files move into rooms (ticket 477,
-[0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md)).
+).
 PR 0's exam landed ([PR 732](https://github.com/usirin/tea-fabrika/pull/732)), and PR 1 gives the shared names
 `ProcessId`, `Sql` and `Rev` files of their own ([PR 773](https://github.com/usirin/tea-fabrika/pull/773)).
 → next: one move PR (every file to its room, then floors and fronts, then 0051's renames), then
@@ -471,7 +470,7 @@ supervisor in its own object, and a CPU limit per isolate, all in P34c's plan.
 
 *2026-11-13:* the layering debt has its plan, a draft ([the plan](./layering-debt.md), ticket 921).
 `runtime/`, `access/` and `gateway/` stop importing `ledger/`, as rule 11 of
-[0021](../../.kalfa/decisions/0021-modules-import-lower-layers.md) asks, and the 71 import rows of `next-ledger.json`
+ asks, and the 71 import rows of `next-ledger.json`
 go to zero in seven slices. Nothing of
 it is on main yet. The lead approved slices 1 to 3, which only build 0043,,
  and. Slices 4 to 7 wait on the

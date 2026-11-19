@@ -12,7 +12,7 @@ by invite and approval ([a key per client](./a-key-per-client-and-no-github-trus
 the owner 2026-11-05; this said GitHub as a keys source came in Tier 3). Tier 1 has one person: a new client comes in by the menu bar's
 Approve, and real notes live on the Cloudflare copy, with chaos on a throwaway ledger.*
 
-Its decided rules are in: [0009](../../.kalfa/decisions/0009-each-place-keeps-a-copy.md).
+Its decided rules are in: [0010](../../.kalfa/decisions/0010-each-place-keeps-a-copy.md).
 
 *Renamed 2026-11-10 for `next/`: the door is the gateway, and one client's object is a connection.*
 

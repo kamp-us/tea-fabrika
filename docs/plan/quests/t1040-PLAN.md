@@ -21,9 +21,8 @@ Writer: the plan step for ticket 1040. Version: `next/` only. Today's version is
 Base read: the worktree at `706bac372` (today's main when the lane started). `origin/main` is at
 `ce15d9cb6`, which changed only `docs/plan/` (PR 1307), so every code line cited here holds on both.
 
-Builds [0027](../../../.kalfa/decisions/0027-job-machines-take-their-work.md),
-[0024](../../../.kalfa/decisions/0024-programs-meet-by-mail.md),
-[0022](../../../.kalfa/decisions/0022-objects-never-stay-awake.md),,
+Builds,
+[0020](../../../.kalfa/decisions/0020-programs-meet-by-mail.md),,,
  and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md), umbrella ticket 714.
@@ -57,7 +56,7 @@ doubt is the size of the `Runner.ts` change, which the tests step will feel firs
   timeout is 5 seconds
   ([gen_server](https://www.erlang.org/doc/apps/stdlib/gen_server.html#call/3)). Here the Cmd id
   is the ref, and the answer letter `<cmd-id>/answer` is the tagged reply. Where this leaves OTP: no
-  caller blocks, since a Durable Object never stays awake on its own (0022), and there is no
+  caller blocks, since a Durable Object never stays awake on its own, and there is no
   timeout, since a hands machine may be off for a day; a waiting job stays observable and is never
   reported as success. The "dead caller" rule is kept: a result for a process that has ended is
   never given to its successor (L14).
@@ -295,7 +294,7 @@ hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev,
 ```
 
 Only the machine changes it. `owesHostCmd` (`runtime/Runner.ts:227`) stops counting a hands Cmd in
-`waiting`, so a waiting job sets no backoff alarm (0022). `due` already runs every `mail: true` Cmd
+`waiting`, so a waiting job sets no backoff alarm. `due` already runs every `mail: true` Cmd
 (`runtime/Runner.ts:2160`), so a waiting hands Cmd is asked again on every wake or timer, which is
 cheap: one read in the Project.
 
@@ -521,7 +520,7 @@ report; if none does, it stays.
 |---|---|---|
 | Which hands key a request targets | Yes | `hands.target`, scope `["person"]`, reload `restart`, since `0.0.0`, schema a non-empty key fingerprint or `null`. `Setting.make` requires a default (`settings/Setting.ts`), so the default is `null`, meaning unset: TOML has no null, so a person sets it by writing the key and unsets it by leaving it out. The lead's call |
 | Retry spacing after a lost reply | No new one | The runner's existing backoff, `policy.backoff.minMs`, already a declared program or wiring policy (`runtime/Runner.ts:546-549`). A waiting job has no retry: it is asked on a wake |
-| A timeout on a waiting job | No | There is no timeout behavior in this slice. A job waits and stays observable until the hands finish it or a person reopens it (0027). A timeout would be a new choice, and a setting, in the slice that adds it |
+| A timeout on a waiting job | No | There is no timeout behavior in this slice. A job waits and stays observable until the hands finish it or a person reopens it. A timeout would be a new choice, and a setting, in the slice that adds it |
 | A cap on saved results | No | Results live in job streams on the ledger, which keeps every stream (C5). `Result` is a closed schema; slice 4's `output_limit` bounds its text |
 | The Cmd name and its one command | No | The implemented contract, not a choice between implemented behaviors |
 | `needs` of a command | No | A fact about the command, kept beside it |

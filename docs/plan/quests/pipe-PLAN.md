@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is `next/`. It is the first pipe slice of Tier 1's step 4, and the first of three: the pipe in
 the library, with no shell. It builds the proposed note
-[how a pipe carries output](https://github.com/kamp-us/tea-fabrika/pull/1322) and decisions 0025,
+[how a pipe carries output](https://github.com/kamp-us/tea-fabrika/pull/1322) and decisions 0021,
 0550, 0551 and 0553. A program asks for a pipe with a new built-in Cmd, `pipe`. The brain checks the
 member behind it, checks that the pipe fits on the two programs' declared shapes, and records it
 with both shapes. Each program declares the shape it means: a ticket number is a ticket number, on
@@ -44,11 +44,11 @@ input's shape into the program's declaration, as Effect's own `SchemaRepresentat
 brain can read them without running the code. A new built-in Cmd, `pipe`, goes from the runner to a
 new brain-side service, `Pipes`, which checks the member behind the Cmd, checks that the pipe
 fits on the two declared shapes, and in one ledger turn writes the `piped` row with both
-shapes, the right to send messages as a relation row (0029) and the Cmd's answer. In the turn that
+shapes, the right to send messages as a relation row (0025) and the Cmd's answer. In the turn that
 starts or restarts either end of a live pipe, the brain writes the watch for the reader's live life on the
 writer's live life, so a watch binds one life and the pipe follows the registered name. The writer's
 runner owes one `send_chunks` of the whole value, wrapped as items, each time an output with a live
-pipe changes; a newer value replaces one not yet started (0025). The reader's runner folds the chunk
+pipe changes; a newer value replaces one not yet started (0021). The reader's runner folds the chunk
 messages in its own checkpoint, and at the last one unwraps the items by the writer's declared shape
 and steps the reader's program once with the value. `exit` waits behind an owed send to a piped
 name. When the program that made a pipe stops either end with `stop_child`, the same turn writes
@@ -441,7 +441,7 @@ export const PipeEvent = Schema.TaggedUnion({
     to: Schema.Struct({ name: ProcessName, program: ProgramName, input: Text, hash: Hash, shape: Schema.Json }),
     rule: Schema.Literal(RULE),                   // the rule that judged whether it fits
     requester: Schema.Struct({ name: ProcessName, process: ProcessId }),
-    member: Sender,                               // the member behind the Cmd, checked (0030)
+    member: Sender,                               // the member behind the Cmd, checked (0026)
   },
   unpiped: { pipe: Text, reason: Schema.Literals(["stopped"]) },
 });
@@ -485,7 +485,7 @@ so a refused caller learns nothing it may not see:
 2. A saved `piped` under this id: answer it again, write nothing (a retry).
 3. `stale_sender`: the requester's life is not live, or `Senders` says the cause went to a life that
    ended.
-4. The member: the sender of `from.parent`, else the requester's recorded member (0030), through
+4. The member: the sender of `from.parent`, else the requester's recorded member, through
    `processes/internal/member.ts`. `PipePrograms` on this fabrika, else `forbidden`. No member is
    `forbidden`: 0551 checks the member behind the pipe, and a pipe has no related-pair exception.
 5. `no_output`, then `no_input`: the writer's declaration has no such output, or the reader's has no
@@ -532,7 +532,7 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, M
 
 /** After a step: each changed output with a live pipe owes one whole send to that pipe's reader. */
 const owe = (cmds: ReadonlyArray<Dispatched>, out: Out): ReadonlyArray<Dispatched> => [
-  // Newest wins (0025): an owed send to this pipe that has not saved its seq 0 yet is dropped.
+  // Newest wins (0021): an owed send to this pipe that has not saved its seq 0 yet is dropped.
   ...cmds.filter((c) => !(c.out?.pipe === out.pipe && !started(c))),
   dispatched({ id: `${process.id}/${out.pos}/out/${out.output}`,
     cmd: { type: SEND_CHUNKS, to: out.to, as: out.input, items: PipeItems.wrap(out.shape, out.value) },
@@ -713,7 +713,7 @@ above. The ticket number is `Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))`
 | The output | a port: a whole typed value out, as a Cmd | a message sent to a pid | an output is model state picked by a selector, and the runner, never the program, sends it |
 | The reader's fold | none in the program: a port hands `update` one whole typed value | a `receive` loop that keeps state | we take Elm's for the program, which is handed one Msg per value; the fold of chunk messages is the runner's, one tea machine it steps |
 | The order and the end | none: no processes | per-pair order, one `DOWN` after the last message | we take OTP's; a watch is written for each life by the brain, since OTP's monitor never follows a name and the pipe must |
-| Back pressure | none | none: an unbounded mailbox | we leave both for Unix: a capped inbox and a writer that waits (0024) |
+| Back pressure | none | none: an unbounded mailbox | we leave both for Unix: a capped inbox and a writer that waits (0020) |
 | Whether a pipe fits | the compiler checks a port's type | none: messages are untyped | a structural check on declared shapes, since two packs are built apart |
 
 ## Every line that ends, stops or signals a process
@@ -886,7 +886,7 @@ decision already says. The calls this revision added carry how sure I am.
 - **The check that a pipe fits lives in `processes/`,** a layer the runtime, the client and the entry may all import, so
   it needs no new line in `layer-rules.json`.
 - **Typed services only.** The runner reaches `Pipes` as a service; nothing calls a command-line tool
-  (0018).
+  (0017).
 - **A browser is always a client.** Every piece is JSON messages, Cmds and the Project's RPC.
 - **Both runners wrap and unwrap by the writer's shape on the `piped` row (90%).** 0553 says the
   unwrap follows what the writer declared. One recorded fact read by both ends cannot disagree with
@@ -1071,7 +1071,7 @@ here"; this plan settles neither.
 ## Findings
 
 ```json
-{"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package (0052), so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
+{"_tag": "finding", "id": "2026-11-15-pipe-hues-only-in-todays-app-css", "date": "2026-11-15", "by": "plan", "model": "claude-opus-5-5", "rule": "duplicate", "location": {"path": "apps/fabrika/src/window/window.css", "line": 333}, "says": "In today's version, the six pipe hues of 0478 are literal light-dark() values in the app's window.css and not tokens of the shared design package, so next/'s tuval can only copy them; once the third pipe slice adds them as tokens, today's CSS keeps a second copy.", "proof": "apps/fabrika/src/window/window.css line 333 opens [data-pipe=\"sky\"] with literal values, and the other five hues follow; the design package's color tokens folder holds no pipe token, and rg -i pipe packages/fabrika-design finds only a comment in tile-edge.toml (2026-11-15).", "cost": "Two copies of one hue table drift apart the first time one version's colors change.", "head": "0e36734b7539657f64bc0466b36517bb66291b8b", "ticket": null, "pr": null}
 ```
 
 ## Amendment A-Fits, 2026-11-15

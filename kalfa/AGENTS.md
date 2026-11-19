@@ -1,6 +1,6 @@
 # kalfa/
 
-Our tooling packages, one domain each ([0054](../.kalfa/decisions/0054-tooling-is-domain-packages.md)).
+Our tooling packages, one domain each.
 The [root map](../AGENTS.md) holds here too. This page adds guidelines for imports between kalfa
 packages. They are guidelines, not laws: no check enforces them, and a reviewer may accept a break
 with a reason.

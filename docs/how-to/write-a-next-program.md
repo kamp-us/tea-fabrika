@@ -234,7 +234,7 @@ planned with the pack work.
 | Give it a window | No program has one. The build looks for a `./window` export in the program's package ([node/build/build.ts:56](../../next/packages/libfabrika/src/node/build/build.ts)), but nothing public says what that module exports | The first window, in a browser tab ([the plan](../plan/tier-1.md)) |
 | Let an agent call it | The runner knows an agent sender, but `next/` has no door an agent can dial | Agents through MCP ([the plan](../plan/tier-1.md)) |
 | Answer a read port | Declared and checked; nothing in `next/` calls one yet | With the window and the agent's door |
-| Send an output to another program | Declared only; the runner sends no outputs yet | Pipes are decided in [0024](../../.kalfa/decisions/0024-programs-meet-by-mail.md), not built |
+| Send an output to another program | Declared only; the runner sends no outputs yet | Pipes are decided in [0020](../../.kalfa/decisions/0020-programs-meet-by-mail.md), not built |
 | Build in the shape that will last | `Program.make` above is today's shape | A new shape is decided in [program-shape](../direction/program-shape.md), not built. Expect to rewrite the declaration when it lands |
 
 ## What this page cannot tell you

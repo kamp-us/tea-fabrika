@@ -7,8 +7,8 @@ summary: "Every stage reaches an agent only through one Effect service of ours, 
 
 Decided 2026-10-26 by the owner.
 
-Its decided rules are in: [0034](../../.kalfa/decisions/0034-agents-behind-one-service.md),,
-[0032](../../.kalfa/decisions/0032-login-lent-to-one-sandbox.md).
+Its decided rules are in:,,
+[0028](../../.kalfa/decisions/0028-login-lent-to-one-sandbox.md).
 
 The goal: people bring their own plan with any provider, and a team of any
 size works in one fabrika project. The team shares the work, never a login.

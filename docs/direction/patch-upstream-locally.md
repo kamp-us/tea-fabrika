@@ -27,7 +27,7 @@ gh issue create -R kamp-us/demlik ...  # 2. file the same change upstream
     `<details><summary>The patch we apply locally</summary>`.
   - **One exception (owner, 2026-11-09):** the six Alchemy gaps listed in 0042 are patched and not
     reported as a batch
-    ([0042's amendment](../../.kalfa/decisions/0019-cloudflare-only-through-alchemy.md#amendments)).
+    ([0042's amendment](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md#amendments)).
     Each such patch carries, at its `patchedDependencies` row, a comment with the gap's name and
     `not reported, 0042 amendment 2026-11-09`, so a later bump still knows why the patch exists.
   - **One proved bug per issue (owner, 2026-11-09):** an upstream issue reports one bug we proved,

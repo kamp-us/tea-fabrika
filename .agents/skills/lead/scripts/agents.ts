@@ -6,7 +6,7 @@
 // (Claude's OS sandbox, Codex's permission profile and its own home), unchanged
 // (.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md). The agent holds only its model login;
 // commits, signing, pushes and rows stay with the caller
-// (.kalfa/decisions/0031-parent-holds-every-right.md).
+// (.kalfa/decisions/0027-parent-holds-every-right.md).
 //
 //   const agents = yield* makeStepAgents(sessions, main); // the provider table, once per process
 //   const turned = yield* runTurn(agents, {provider: "codex", folder: box, prompt, answer: Answer, ...});

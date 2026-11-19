@@ -154,8 +154,7 @@ search must find homes too.
   a guideline is one page, and each law or lint principle gets a decision file; a skill keeps only judgment
   and a checked rule leaves it; no list
   lets broken code pass; record
-  tooling and each kind's frontmatter Schema live in `@kalfa/records`
-  ([0054](../.kalfa/decisions/0054-tooling-is-domain-packages.md)), and test, lint and format in
+  tooling and each kind's frontmatter Schema live in `@kalfa/records`, and test, lint and format in
   `@kalfa/quality`; a trusted
   tool before a hand-written one.
 - **Leaned:** [experiment 283](./283-context-audit.md) found 578 of 2,928 skill lines cut with
@@ -358,7 +357,7 @@ Against the three records:
 
 Two cases. A record whose why stands is `accepted`. A record whose why was reversed is `superseded`,
 naming one record. "Amended in part" goes: a partial change edits the rule's home (R2), and the new
-record says in its context what it changed. The status is a Schema in `@kalfa/records` (0054), not
+record says in its context what it changed. The status is a Schema in `@kalfa/records`, not
 a Markdown link in a string.
 
 ```ts
