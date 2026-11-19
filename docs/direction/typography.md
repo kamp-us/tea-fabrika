@@ -28,7 +28,7 @@ from 14 in the low gray to `body` (13, step 12); Activity's mono agent id and co
 same tryout; and the text styles' home in `@kampus/fabrika-design`
 ([one design package](./fabrika-design-package.md)).
 
-Built from [experiment 200](../../experiments/200-typography.md), which read about 20 makers and
+Built from experiment 200 (in the notes), which read about 20 makers and
 tools and checked the ask desk's "Your turn" card, a tracker row and the ticket heading against them,
 and a private page, "Typography guidelines", where the card switches between today and the text
 styles.
@@ -362,4 +362,4 @@ built on them; the next two settle it.
 - Whether a person who zooms the app, as Ableton's one zoom does [t18], keeps the ranks. Manti's
   sizes are in px through our scale; a zoom test at 200% (WCAG 1.4.4) settles it.
 
-Sources are tagged as in [experiment 200](../../experiments/200-typography.md#links).
+Sources are tagged as in experiment 200 (in the notes).

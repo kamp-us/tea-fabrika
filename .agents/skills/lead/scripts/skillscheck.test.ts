@@ -29,8 +29,8 @@ const answer = [
   "n counts blocking classes. Each class lists every affected case. m counts the finding rows in this answer.",
   "Give every finding in that answer, grouped by class, most serious first.",
   "Name each checked decided note and say where the change follows or breaks it.",
-  "Any other actionable finding is one finding row with proof: never a ticket, a fix or only a mention, and never a security hole.",
-  "Give each row as one JSON line in the answer. The lead saves it unchanged as its own file in field/findings/. Do not start another review round for it.",
+  "Any other actionable finding is one finding with proof: never a ticket, a fix or only a mention, and never a security hole.",
+  "Give each one in the answer. The lead records it in the notes. Do not start another review round for it.",
   "End with exactly one answer: line, as the last line.",
 ];
 

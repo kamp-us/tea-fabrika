@@ -34,11 +34,9 @@ how to report. What every step shares is in
 [`AGENTS.md`, "Finish your task"](../../AGENTS.md#finish-your-task): finish the whole task, the routine steps
 that need no approval, and a report a reader with no context can follow.
 
-An agent that meets something wrong outside its task writes one finding row, with proof, and
-keeps going: never a fix, a ticket or only a mention
-(fields in
-[field/README.md](../../field/README.md#a-finding)). A read-only step hands the row over in its
-report, and the lead saves it as its own file in `field/findings/`. A person rates each row, and only a `fix` becomes a ticket.
+An agent that meets something wrong outside its task writes one finding, with proof, and
+keeps going: never a fix, a ticket or only a mention. The step hands it over in its report, and the
+lead records it in the notes, which live outside this repo.
 
 ## Changing a skill
 

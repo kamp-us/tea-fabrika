@@ -64,7 +64,7 @@ type Exception = {what: string; why: string; status: "decided" | "proposed"};
 - **The factory is not a line** (decided 2026-10-29). The factory is one thin
   coordinator program, a hand-written parent around the stage programs, with
   its children listed as jobs under it.
-  [Experiment 168](../../experiments/168-the-factory-is-one-line.md) explored
+  Experiment 168 (in the notes) explored
   `tracker | triage | plan | build | review | ship` as the factory; it ran, and
   it was an exploration, not a plan. What stays is that each stage is a program
   that runs alone and pipes, so a person can run one part again by hand
@@ -91,7 +91,7 @@ Until then the one `useSyncExternalStore` hook stands in, in one file. The lint 
 stand-in goes. It takes a run booted outside React, returns `[state, send]` with
 `send: (msg) => void` ([demlik PR 856](https://github.com/kamp-us/demlik/pull/856)), and reads
 one part through a selector ([demlik PR 859](https://github.com/kamp-us/demlik/pull/859)).
-[Experiment 213](../../experiments/213-tea-react-select.md) ran it under the React Compiler.
+Experiment 213 (in the notes) ran it under the React Compiler.
 A component that boots its own Effect run through `useMachine` is still open
 ([demlik 852](https://github.com/kamp-us/demlik/issues/852)); `next/` hands a window its run.*
 

@@ -372,7 +372,7 @@ The seven open questions, each with its lean. Proposed, not decided.
     team, and a busy terminal never slows a claim.
   - **Claims, inboxes and the process tree stay together** in the project
     object, because one action often changes all three. When
-    [experiment 145](../../experiments/145-many-objects.md) split them, 11 of
+    experiment 145 (in the notes) split them, 11 of
     27 ledger laws broke. Cloudflare's own rule is one object per unit of
     coordination, and these three are one unit.
   - **The project object is today's ledger, nearly unchanged.** Its calls
@@ -568,7 +568,7 @@ other, and `fabrika/tracker` is the core pack's, the pack named `fabrika`.
   Effect bundled in. The hands fetch the locked commit, bundle it and send it
   keyed by its hash; the brain loads it with Worker Loader, with no network,
   one sandbox per process (`hash:pid`, about 7 MB). From
-  [experiment 173](../../experiments/173-worker-loader.md), parts 1 and 2.
+  experiment 173 (in the notes), parts 1 and 2.
   Later, with nothing thrown away: a pure step with Effect once in the core
   (part 2's B, 70%), Cloudflare's real limits, signed bundles, a CPU limit.
 - **A repo's own programs are in this version.** They load only from the

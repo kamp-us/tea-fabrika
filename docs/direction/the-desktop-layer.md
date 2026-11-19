@@ -88,7 +88,7 @@ did({does: "split_right"});            // Ctrl-B % in the window: t2 opens, runn
   line editor state in its model.
 - The window draws typed letters at once and the process confirms them
   (speculative local echo, as mosh does).
-  [Experiment 150](../../experiments/150-browser-desk.md): 14 ms instead of
+  Experiment 150 (in the notes): 14 ms instead of
   95 ms, at 80 ms of network delay.
 - The hands see only the machine work tsh starts, as Cmds. A real terminal
   program in a tile (zsh, vim) is a pty on the hands, whose bytes stream

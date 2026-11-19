@@ -30,10 +30,10 @@ beside its commands ([keybindings](./keybindings-are-configurable.md#keys-and-mo
 focused before ([tile guidelines](./tile-guidelines.md#a-tile-is-a-region)); the box decides what
 crosses, never the program ([programs run in a box](./programs-run-in-a-box.md)).
 
-Built from [experiment 198](../../experiments/198-program-guidelines.md), which read about 20 makers
+Built from experiment 198 (in the notes), which read about 20 makers
 and tools, four of them outside software, and checked today's asks popup against them, and a private
 page, "Program guidelines", with a small fabrika window you can key and click through. Neither is a
-measurement. It takes the eight patterns of [experiment 196](../../experiments/196-ask-desk.md#patterns-found)
+measurement. It takes the eight patterns of experiment 196 (in the notes)
 (the ask desk, on [PR 326](https://github.com/usirin/tea-fabrika/pull/326), not merged), P1 to P8,
 and makes them rules for every program.
 
@@ -546,7 +546,7 @@ open({line: "asks --ask a-approve-8 | ticket", from, via})          // ships whe
 
 - **The line form's bar.** A typed line gets the same type check and the same error words as typing
   it in tsh. A line built at run time goes through `unchecked(line)`, and the desk checks it.
-- **Where it stands.** [Experiment 204](../../experiments/204-typed-lines.md) got the same words on
+- **Where it stands.** Experiment 204 (in the notes) got the same words on
   37 of 40 fixed lines. The 3 gaps are checks the type cannot see: `ticket --ticket 0` and
   `ticket --ticket 1.5` (an integer, at least 1) and `asks --ask a-approve-1.5` (the `AskId`
   pattern). The compiler lets those through and the run-time check refuses them, never the other
@@ -621,7 +621,7 @@ live agent panel       another thing (a run, trace's job)      ticket | trace, t
 **Decided 2026-11-02.** The owner walked each rule, the count's label and the audit's three splits,
 and took each lean. The confidence numbers stay as written, and each doubt names what settles it.
 
-Built from [experiment 201](../../experiments/201-composing-programs.md): an outline and a board,
+Built from experiment 201 (in the notes): an outline and a board,
 split into small programs joined by pipes and shot in today's app, and a read-only audit of where
 one of today's programs holds a second program's job. Neither is a measurement. The rules hold in
 both versions. Today's code moves to them only when a daily fix or a tryout touches it; `next/`
@@ -831,7 +831,7 @@ Waits on you · 3 asks, 1 note
 ### The audit's three splits
 
 The audit read today's version only and found 16 second jobs in 5 places
-([experiment 201](../../experiments/201-composing-programs.md#the-audit)). The owner took the top
+(experiment 201 (in the notes)). The owner took the top
 three.
 
 **Split 1: one read-only reader below the programs. Decided, 85%.** The tracker's folds and its

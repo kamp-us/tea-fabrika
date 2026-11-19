@@ -6,7 +6,7 @@ summary: "`next/`. The rule: in a program's API one word means one thing and the
 # A program's shape: one thing means one thing, and one way to do each job
 
 **Decided 2026-11-08** (owner, after a walk of each part). `next/` only. From
-[experiment 235](../../experiments/235-program-shape.md). Every call, each probed in the
+experiment 235 (in the notes). Every call, each probed in the
 experiment's code: shape 2, values; `Fact` becomes `Event`; `who: "person"` becomes
 `personOnly: true`; an input is plain data; each event brings its own write Cmd, listed in `cmds`;
 tsc lets only a `personOnly` input's Msg into a `personOnly` event's write (the `Schema.brand`

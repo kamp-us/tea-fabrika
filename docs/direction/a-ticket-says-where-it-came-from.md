@@ -5,7 +5,7 @@ summary: "Today's version first. A filing records `from`: the pull request, revi
 
 # A ticket says where it came from
 
-**Decided 2026-11-03 by the owner,** from [experiment 205](../../experiments/205-organizing-work.md):
+**Decided 2026-11-03 by the owner,** from experiment 205 (in the notes):
 a ticket records where it came from, at filing, and tickets stay without a type label. The
 shape of `from` below is **proposed**: the plan for its ticket settles it. Today's version
 first; `next/`'s tracker carries the same key when it is built. Walked when Tier 2 starts (owner, 2026-11-08): filing tickets with their source kept.
@@ -43,7 +43,7 @@ Its decided rules are in:,.
 - Our agents already file follow-ups: tickets 186 to 195 all came out of a pull request, a
   review, a run or a walk, and each says so only in prose.
 - `from` keeps the meaning it already has here: a plan's story says which ticket it came from
-  with `from` ([experiment 105](../../experiments/105-the-plan-lane-dry-run.md)).
+  with `from` (experiment 105 (in the notes)).
 
 ## How sure
 

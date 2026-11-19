@@ -19,7 +19,7 @@ Its decided rules are in:.
 Keys renamed 2026-11-03 (short words keep one meaning): the info Msg's `on` became `active`, the
 word Zed's key binding docs use for a context that holds.
 
-Built from [experiment 184](../../experiments/184-modes.md), which read how about fifteen makers
+Built from experiment 184 (in the notes), which read how about fifteen makers
 and tools do modes and checked today's info mode against them, and a private page, "Mode
 guidelines", with a mode you can enter and leave. Neither is a measurement. It builds on
 [keybindings are configurable](./keybindings-are-configurable.md), decided the same day.

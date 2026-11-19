@@ -16,8 +16,8 @@ a survivor advises and never blocks (2026-11-01).
 
 Its decided rules are in:,,,,,,,.
 
-Built from [experiment 192](../../experiments/192-ui-verification-guidelines.md), which checks the
-seven layers of [experiment 191](../../experiments/191-ui-verification-research.md) against the
+Built from experiment 192 (in the notes), which checks the
+seven layers of experiment 191 (in the notes) against the
 makers' own docs and tonight's two tickets, and a private page, "UI verification guidelines", with a
 window you can break and check. Neither is a measurement. Source tags such as [m7] are experiment
 192's.

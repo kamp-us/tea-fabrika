@@ -3,7 +3,6 @@ import { Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";
-import { isFieldPath } from "../field-check.ts";
 import { options, type Plant, rejects, type Workflow } from "./wiring.test-support.ts";
 
 // Today's CI, serving both versions. Covers triggers.ts: the events, ignored paths, cancels and
@@ -13,10 +12,13 @@ import { options, type Plant, rejects, type Workflow } from "./wiring.test-suppo
 // Ticket 988. A pull request whose every path matches check.yaml's `paths-ignore` starts no run, so
 // each such path must be one changes.mjs already runs no heavy job for: every job changes.mjs
 // names stays off, on a draft and on a ready pull request. Only the field flag
-// may be on, for a row, and `pnpm lint` checks rows (field-check.ts --local). The paths are made
+// may be on, for a row, The paths are made
 // from each pattern, each `*` any name without a `/` as in GitHub's filters (the lint allows no
 // other wildcard), with the repo's own tracked files that match. Plants, each run once on
 // changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
+// A field row (today none remain in this repo): the paths changes.mjs still flags as rows.
+const isFieldPath = (path: string) => /^field\/([^/]+\.jsonl|(findings|notes|runs)\/[^/]*\.json)$/.test(path);
+
 const globOf = (glob: string) =>
   new RegExp(
     `^${glob

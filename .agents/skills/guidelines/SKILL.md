@@ -29,7 +29,7 @@ look step, shots at five layouts, and the other rules a screen follows, moved th
 ### 1. Check what is settled
 
 - Search `.kalfa/guidelines/` (any page on the area), `.kalfa/decisions/`, what is
-  left of `docs/direction/` and `experiments/` for the area.
+  left of `docs/direction/` for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
   and is never asked again.
 - Name the open pull requests on the same area and what they already lean.
@@ -125,7 +125,7 @@ request opens, even when no study is running (owner, 2026-11-08).
 
 ### 6. Write the experiment
 
-`experiments/NN-<area>.md`, with the next free number in `experiments/`. Shape, from 182, 183 and 184:
+The experiment write-up goes in the notes, not this repo. Shape, from 182, 183 and 184:
 
 - The title is the question. Line one: the date read, and **"This is reading, not a
   measurement."** unless something ran. It links the page and names the Design canvas "<Area>
@@ -170,7 +170,7 @@ links it.
   `proposed`. If the folder or its README does not exist yet, create it with this first row.
 - The experiment gets no row: it opens with its own frontmatter (`date`, `scripts`, `summary`, with
   the answer and the $ in `summary`), in the shape
-  [`experiments/README.md`](../../../experiments/README.md#the-experiments) gives.
+  the experiments log (in the notes) gives.
 
 ### 9. Build and publish the deck and the prototype
 
@@ -207,7 +207,7 @@ leakgrep.sh checks added text; private words stay outside the repo.
   with their kinds and leans (or "No lean, the owner picks"), the shape, today's example, what was
   decided, what other open pull requests would change to match, open calls, what it cannot tell
   us. It names the canvas "<Area> guidelines" and the walk page by title, never by link.
-- Log the hand run in `field/` the same day. It lands after the owner's yes.
+- It lands after the owner's yes.
 
 ### 11. Walk the owner through it
 

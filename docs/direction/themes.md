@@ -5,7 +5,7 @@ summary: "`next/`, Tier 2. A theme is the person's own config: one TOML file per
 
 # People bring their own themes
 
-**Decided 2026-11-01 by the owner**, after [experiment 177](../../experiments/177-themes.md). Each
+**Decided 2026-11-01 by the owner**, after experiment 177 (in the notes). Each
 person picks the colors they see. The default way in is a Radix pick. A theme file people already
 use (Base16, Base24, Ghostty) is the other way in, and it keeps its own colors, even though they are
 not Radix steps. `next/` builds this. Nothing is built yet. **Point 4, a theme that fails

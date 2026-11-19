@@ -14,7 +14,7 @@ is decided but still names what would settle it.
 
 Its decided rules are in: [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md), [0013](../../.kalfa/decisions/0013-records-carry-their-build.md), [0006](../../.kalfa/decisions/0006-hot-reload-swaps-one-program.md).
 
-Built from [experiment 183](../../experiments/183-hmr.md), which swapped a program's code under a
+Built from experiment 183 (in the notes), which swapped a program's code under a
 running process in Miniflare and read how about ten tools do it, and a clickable page, "Hot reload
 guidelines", a private page with the six principles you can press.
 
@@ -60,7 +60,7 @@ Six principles, approved 2026-11-01. Each is a lean, with why, cost and how sure
 - **Why:** this is what the owner asked for, and Erlang's default: one module, two versions at
   once, and a process moves at its next call
   ([code loading](https://www.erlang.org/doc/system/code_loading.html)). Programs already load by
-  content hash through Worker Loader ([experiment 173](../../experiments/173-worker-loader.md)),
+  content hash through Worker Loader (experiment 173 (in the notes)),
   so a new version is a new hash and the old one keeps running until it is told.
 - **Cost:** a watcher in `dev.ts`, one `install` call on the brain, and one swap step in the core.
 - **How sure:** 85%. Measured: 23 ms per swap at the median, 26 ms at p95, in Miniflare.
@@ -283,7 +283,7 @@ with fixed seeds, as fast-check properties:
   for later: the host restarts itself onto the new build when no job runs". That is today's
   version. In `next/`, a program change restarts nothing, and a core change restarts workerd while
   tasks keep running in their hands. Its state check per job becomes a state check per process.
-- **[Experiment 173](../../experiments/173-worker-loader.md)'s lean** is one isolate per version by
+- **Experiment 173 (in the notes)'s lean** is one isolate per version by
   content hash. This keeps it, and adds that memory per save is real, so local workerd restarts on
   its mark.
 - **Tracker ticket 67** sketched today's host reloading programs in Node with a `?gen=N` stamp. `next/`

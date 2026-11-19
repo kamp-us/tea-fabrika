@@ -332,11 +332,11 @@ for (const [name, plant, error] of [
     "check.yaml: T2: e2e runs nothing of today's app",
   ],
   [
-    "T6: the promises gate back in check, on the check flag, before the field rows",
+    "T6: the promises gate back in check, on the check flag, before the ratchet step",
     (w: Parsed) => {
-      // On the check flag like every lint step, and before the rows, so check's own step law (F1)
+      // On the check flag like every lint step, and before the ratchet step, so check's own step law (F1)
       // has nothing to say.
-      w.jobs["check"]!.steps.splice(place(w, "check", "field rows"), 0, {
+      w.jobs["check"]!.steps.splice(place(w, "check", "lists only shrink"), 0, {
         name: "promises",
         if: checkFlag,
         env: { BASE: `\${{ github.event.pull_request.base.sha }}` },

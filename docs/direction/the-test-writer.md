@@ -69,7 +69,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
     lock a detail. It becomes a finding the owner rates
     ([every finding is rated](./every-finding-is-rated.md)):
     "fix" sends it back for a test, "noise" lets it live.
-  - Why: in [experiment 124](../../experiments/124-kill-every-survivor.md)
+  - Why: in experiment 124 (in the notes)
     the writer had only `test` and `cannot`, so it killed every mutant it
     could. 3 of its 13 new tests carry junk: an exact marker text, a choice
     nobody made, and a test of Stryker's own string.
@@ -109,16 +109,16 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
 
 ## Why
 
-- **It works.** [Experiment 122](../../experiments/122-verify-writer-replay.md)
+- **It works.** Experiment 122 (in the notes)
   had an agent that was not the builder write one test per promise on three
   demlik tickets. All three failed on the base and passed after the merge,
   in 3 runs of 3, and on one ticket it caught more than the pull request's
   own tests.
 - **It is fast enough.** Typecheck, related tests and the new test together
-  took 3 to 6 s a ticket ([experiment 123](../../experiments/123-check-layer-timings.md)).
+  took 3 to 6 s a ticket (experiment 123 (in the notes)).
 - **It can close the mutation loop.** Given each mutant that lived, it killed
   28 of 29 and argued the last one changes nothing a test can see, for $0.86
-  over three tickets ([experiment 124](../../experiments/124-kill-every-survivor.md)).
+  over three tickets (experiment 124 (in the notes)).
 - **Others do it.** Meta's ACH has an agent write tests to kill mutants that
   live ([Meta 2025](https://arxiv.org/abs/2501.12862)).
 
@@ -135,7 +135,7 @@ us.
   Property's `tool` is `"tla"`, and how that spec shows it can fail (a
   planted break, step 3 of [five steps](./five-steps-for-every-check.md)).
   Decided 2026-10-25 from
-  [experiment 139](../../experiments/139-tla-trace-validation.md): the
+  experiment 139 (in the notes): the
   planner picks the tool; no TLA+ for code that exists; a Property about
   machines working together is a property test on the running host, as in
   experiment 116.

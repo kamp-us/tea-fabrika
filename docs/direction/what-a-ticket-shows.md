@@ -344,7 +344,7 @@ const write = (writer: Writer, fact: unknown) =>
     session may write `answered` (`PERSON_KINDS` in
     `packages/fabrika/src/host/door.ts`). Today's fabrika still has the hole:
     its agents act on GitHub with the owner's own login.
-- **Why not B alone:** [`field/README.md`](../../field/README.md) already
+- **Why not B alone:** the field log (in the notes) already
   notes an agent-written row that says `minutes: 0` on every run, so the
   minutes are measured by hand. A step an agent must
   remember is a step it sometimes forgets, and a crash writes nothing.

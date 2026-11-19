@@ -17,7 +17,7 @@ matching, and that keys and modes come from programs, not packs. Their confidenc
 written, so a later run can test the least sure ones; matching on a non-Latin layout (60%) is
 first.
 
-Built from [experiment 182](../../experiments/182-keybindings.md), which read how about twenty
+Built from experiment 182 (in the notes), which read how about twenty
 tools do it, and a clickable page, "Keybinding guidelines", a private page with twelve rules
 you can press. Neither is a measurement.
 
@@ -545,7 +545,7 @@ The owner approved each lean below on 2026-11-01. The numbers stay as written.
   and a tab, a whole-file failure would be wrong in one of them. Decided 2026-11-01: that binding is off in
   that window only, and said. 80% (was 65%): no app read refuses a file, and
   VS Code's source turns such keys off per window
-  ([experiment 182](../../experiments/182-keybindings.md#apps-with-a-desktop-and-a-web-version)).
+  (experiment 182 (in the notes)).
 - **[The GUI is an Electron app first](./the-gui-is-electron-first.md) lists "keys a project
   cannot rebind" as later.** Keys are the person's now, not a project's, so that item becomes
   "keys a person cannot rebind", which is the table above.

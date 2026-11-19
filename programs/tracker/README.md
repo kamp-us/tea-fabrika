@@ -146,7 +146,7 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   and no call: in the app, Jev is on only when the home holds `jev.key`
   (`apps/fabrika/src/host/jev.ts`). A Jev that fails leaves no hint and says so under the
   problems; the filing stands. Measured in
-  [experiment 167](../../experiments/167-duplicate-hint.md).
+  experiment 167 (in the notes).
 
 - **Areas are the project's parts, and a person makes them.** They live on their own stream,
   `tracker/areas`, as `area_made`, `area_renamed` and `area_merged`

@@ -13,7 +13,7 @@ Decided in the walk itself: the ninth principle of the draft (wrap a platform on
 E1, and the Alchemy port goes first in the fix order; doc comments carry no `@since` yet; an error's reason is a tagged
 error.
 
-Built from [experiment 262](../../experiments/262-effects-team-as-the-builder.md): four reads of
+Built from experiment 262 (in the notes): four reads of
 every `next/` file beside Effect 4.1.2's source, and one run of Effect's own checker,
 `@effect/tsgo` 0.63.0. Neither is a measurement of how the code behaves. There is no Design canvas:
 this study is about code, so the guidelines skill's design steps do not apply. The experiment

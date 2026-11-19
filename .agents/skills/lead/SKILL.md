@@ -67,7 +67,7 @@ unless the runner reports it. The lines are fields, as in phoenix's
 the skill. What is special about this quest goes under `This quest:`, one bullet a fact, and nowhere
 else:
 
-- a call taken after the plan was approved, with its source (an experiment, a finding row);
+- a call taken after the plan was approved, with its source (an experiment, a finding);
 - a file or folder to stay out of, a law that waits on the owner, a clash with another open PR;
 - for a review, the points to look hardest at, each a question with its source.
 
@@ -110,7 +110,6 @@ Use the tests skill for ticket <id>, <title>, <today's tooling or next/>.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  PR: <full URL>
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
-Run row: field/runs/<date>-<quest>-tests<n>.json
 This quest:
 - <facts settled after the plan, laws that wait, folders to stay out of>
 ```
@@ -123,7 +122,6 @@ Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Head: <short SHA>  PR: <full 
 Start: <git pull --ff-only, or merge origin/main because ...>
 Approved plan: .kalfa/quests/<quest>-PLAN.md
 Laws: <the test files the test writer wrote, fast and integration>
-Run row: field/runs/<date>-<quest>-build<n>.json
 This quest:
 - <facts settled after the plan, what the test writer found, clashes with open PRs>
 ```
@@ -135,8 +133,7 @@ was typed for it ran to 5,145 characters; this one carries the same facts:
 Use the tests skill for ticket 1041, pipe plumbing, next/.
 Worktree: ../tf-pipe-plumbing  Branch: fabrikalfa/pipe-plumbing  PR: https://github.com/kamp-us/tea-fabrika/pull/1310
 Start: merge origin/main (the tile slice and docs landed since the branch was cut).
-Approved plan: .kalfa/quests/<quest>-PLAN.md
-Run row: field/runs/2026-11-15-t1041-tests1.json
+Approved plan: .kalfa/quests/t1041-PLAN.md
 This quest:
 - Settled after the plan by experiment 295 (https://github.com/kamp-us/tea-fabrika/pull/1311), the lead's calls:
   mail.chunk is 64 KiB, mail.unread is 256, the cap's maximum is 16,384. A law that pins a default pins these.
@@ -161,7 +158,6 @@ Parent base: <branch and full signed SHA, or origin/main and full SHA>
 Reviewed head: <branch and full SHA>
 Decided notes: <every decided note the PR builds>
 Last fixes: <commit range and report, or none>
-Run row: field/runs/<date>-<quest>-review<n>.json
 Waits for the owner: <no, or what he must decide>
 Look hardest at:
 1. <a call the plan did not spell out, or a doubt, as a question, with its source>
@@ -208,8 +204,8 @@ flowchart TD
    faults. Never ask the owner for this yes. Take it to the owner only when the fix needs a new
    design call, the fix loosens a law, or the same fault has come back a third time.
 5. **A fault is not named and located, or not inside the plan:** stop the quest. Land what works,
-   file the rest as a tracker ticket (`tracker_file`), and write the quest's field note in
-   `field/notes/`. Take it to the owner only if what is left breaks the slice's main job.
+   file the rest as a tracker ticket (`tracker_file`), and write the quest's note in the notes.
+   Take it to the owner only if what is left breaks the slice's main job.
 
 The same test holds for any approval you would ask the owner for:
 when the answer is surely yes, and nothing in it is a new design call, a loosened law, something a
@@ -227,8 +223,7 @@ You do the tests step and the build step together, for the faults below only. Us
 for how a law is written and the build skill for how product code is written; follow both skills'
 standing rules.
 Worktree: ../tf-<name>  Branch: fabrikalfa/<name>  Reviewed head: <full SHA>  PR: <full URL>
-Approved plan: <path>  Review row: field/runs/<date>-<quest>-review<n>.json
-Run row: field/runs/<date>-<quest>-fix<n>.json
+Approved plan: <path>
 
 Faults the review named:
 1. <path:line>: <what is wrong>. Input that shows it: <the call, the Msgs or the value>.
@@ -239,7 +234,7 @@ extend the law that covers its class. See it fail on the reviewed head for that 
 the product code until it passes. Change nothing these faults do not need.
 Commit the law and the fix as separate commits.
 
-This round also: <finding rows to save, the PR's title and description, or nothing>
+This round also: <findings to record, the PR's title and description, or nothing>
 
 End with each fault, its law at file:line, how you saw the law fail and then pass, and the new
 head's full SHA.
@@ -258,7 +253,7 @@ Faults you named:
 Check the fix for these faults and the new law's reach: read each line the fix changed and what
 calls it, and plant a break, by reading or in a scratch copy, to see that the new law reaches the
 fix. If you now think one of your findings was wrong, say so.
-A new fault you notice outside the fix is a finding row or ticket text for the lead. It sends the
+A new fault you notice outside the fix is a finding or ticket text for the lead. It sends the
 quest back only if it breaks the slice's main job.
 End with exactly one answer: line, as the last line: `answer: done <why>`, or
 `answer: send build <why>` (or `send tests`, `send plan`).
@@ -274,7 +269,7 @@ Run the quest for ticket <id>, <title>, <today's tooling or next/>.
 Quest: <quest>. Branch: fabrikalfa/<name>, in the worktree <path>. State file: BOXES/state/<quest>.md.
 Approved plan: <path, including amendments>. Quest brief: <path>.
 Run each step through drive.ts or chain.ts, read its answer, and send fixes to the step that owns the file.
-Commit a lead file (field rows, a plan row, a lockfile) unsigned, with
+Commit a lead file (a plan row, a lockfile) unsigned, with
 `stepcommit.sh --commit-only lead <ticket> <subject> <files>`, and keep its sha.
 When the review says merge-ready: write the PR body file with the pr skill (its first line the title, and a
 `fabrika close ticket <id>` line when the PR finishes the ticket), save loosening.sh's output as a
@@ -342,8 +337,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
-| `fieldrow.ts`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
-| `fieldfile.ts` | save each printed row as its own row file |
+| `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
 Cleanup is the tooling's job: never ask the owner to free disk.
 
@@ -493,11 +487,8 @@ visible, and never weaken the rules to hide this message.
    the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
    never on the owner's laptop.
    box.sh run --step checks order and slots, and saves the run row.
-6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
-   one row file in `field/runs/` (`fieldrow.ts` for Codex, `clauderow.ts` for a Claude agent, a
-   driver included, once it has finished, or drive's `BOXES/<quest>-rows.jsonl`, each saved with
-   `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
-   broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
+6. **After each step:** read drive's last line, the report and the diff. Anything that
+   broke, cost too much, needed a person or worked well goes in the notes. Send a fix to the step that owns the file;
    when a review sent the quest back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error.
@@ -595,7 +586,7 @@ visible, and never weaken the rules to hide this message.
   [the mechanical branch](#the-mechanical-branch) instead. No builder starts before an approved plan and
   tests that exist ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
   not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
-  the steps by hand, each logged in `field/`, and the lead reads every diff, CI and the leak grep
+  the steps by hand, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](SKILL.md) says how.
   [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed
   law must be, and [the lead skill's "Land it" step](#steps) what a
@@ -663,20 +654,13 @@ are for other people's repos only.
 
 Something wrong that your task does not cover is one finding row with proof, then keep going:
 never a fix, a ticket or only a mention, and never a security hole.
-Decision says why.
-[A finding](../../../field/README.md#a-finding) has the fields, the closed `rule` list and what
-counts as proof. The CI `field` job checks each added row's shape.
+Decision says why. The notes live outside this repo.
 
-- **Every brief says it in one line,** for an agent that reads no skill: outside work is a finding
-  row, see `field/README.md`.
-- **A step hands its rows over** in its report or answer, one JSON line each. Save each unchanged
-  as its own file the same day with `fieldfile.ts findings <rows>`, in the pull request it was found
-  during or a rows-only one. Its id is its file name, the date and a short slug. Change only an `id` that is
-  already taken or that is not that shape (an old `<date>-f<nn>` counter). Never drop a row because you disagree
-  with it: a wrong one is rated `noise`.
-- **Never rate a row.** A person does. When the owner rates one, write the `rated` row as their
-  call, and for a `fix` file its ticket with `tracker_file` and put the number in that row.
-- **A `flaky_test` does not wait** for its rating: it gets a ticket and a fix the same day.
+- **Every brief says it in one line,** for an agent that reads no skill: outside work goes in your
+  report as a finding with proof.
+- **A step hands its findings over** in its report or answer. The lead records each one in the
+  notes the same day. Never drop a finding because you disagree with it.
+- **A `flaky_test` does not wait:** it gets a ticket and a fix the same day.
 
 ## Lead tooling is fast-tracked
 
@@ -700,7 +684,7 @@ owner decides -> write .kalfa/decisions/NNNN-slug.md (only if hard to reverse, s
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
 - **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
-  leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
+  leak grep is clean, with no plan, tests, review or review rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
   searches `.kalfa/decisions/`, each context's `GLOSSARY.md` and `docs/direction/` for the topic.
 - **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
@@ -772,8 +756,6 @@ these caps. Each one came from a laptop that became unusable. The caps in
   `.agents/` included, because the root `.ignore` lists them; a new dot folder needs its line
   there. It still skips `node_modules`, `dist` and `runs`. `.claude/skills/` holds links into
   `.agents/skills/`, which rg does not follow, so each skill is searched once.
-- `rg field` skips `field/runs/`, which the root `.gitignore` re-includes with `!/field/runs/`
-  (ripgrep 13). Plain `rg`, `rg .` and `rg field/runs` find those files.
 - `pnpm build` writes `@kampus/fabrika-old`'s `dist/`, what a pack holds. No check needs it; CI
   runs it too.
 

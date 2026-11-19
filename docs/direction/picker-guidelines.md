@@ -24,7 +24,7 @@ Rooms, direct messages, mentions, summon and forks belong to the summon note
 ([PR 425](https://github.com/usirin/tea-fabrika/pull/425), proposed). The picker only lists them as
 a source.
 
-Built from [experiment 219](../../experiments/219-picker-guidelines.md), which read about 20 makers
+Built from experiment 219 (in the notes), which read about 20 makers
 and tools, three of them outside software, and checked today's palette against them, and a Design
 canvas, "Picker guidelines": round 1 built four designs in today's app and shot 74 states, the walk
 joined three of them into one `pick`, and a clickable prototype of it was pressed through all 34

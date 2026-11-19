@@ -122,7 +122,7 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 `deliver` is deleted.
 
 **It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same quest against a fake GitHub. Read
-[experiment 105](./experiments/105-the-plan-lane-dry-run.md) before you try it.
+experiment 105 (in the notes) before you try it.
 
 - **It writes to the repository you name.** It pushes a branch and commits, and opens one pull
   request per plan.
@@ -209,8 +209,8 @@ These still run, but they are not the way forward:
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Write a program for `next/` | [`docs/how-to/write-a-next-program.md`](./docs/how-to/write-a-next-program.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
-| See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
-| See what happened on real tickets | [`field/`](./field/README.md) |
+| See what was tried, and what came back | the experiments log (in the notes) |
+| See what happened on real tickets | the field log (in the notes) |
 
 ## What is in this repository
 
