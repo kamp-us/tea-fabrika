@@ -25,9 +25,10 @@ const INPUT_FOLDERS = new Set(["brief", "briefs", "prompt", "prompts"]);
 // The skill trees. A skill's Markdown is prose or a script's input, never docs.
 const SKILL_TREES = [".agents/skills/", ".claude/skills/"];
 
-// The folders whose docs the admin merge takes (decision 0183): the five it took before, and experiments/,
-// whose write-ups 0183 names as docs.
-const ADMIN_FOLDERS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/", "experiments/"];
+// The folders whose docs the admin merge takes (decision 0183), the five it took before ticket 810. An
+// experiment's write-up is not among them: `records.ts list experiments` reads its frontmatter, so it
+// lands through the queue, as the lead ruled for pull request 1671.
+const ADMIN_FOLDERS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/"];
 
 /** A skill's script, which a lead script or a test runs, whatever its extension. */
 const isScript = (path: string): boolean => /^\.agents\/skills\/[^/]+\/scripts\//.test(path);

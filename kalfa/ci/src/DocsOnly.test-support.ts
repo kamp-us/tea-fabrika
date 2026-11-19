@@ -106,8 +106,14 @@ export const TABLE: readonly Row[] = [
   },
   // Markdown outside the admin merge's folders is docs for CI, and no admin docs.
   { pr: ".patterns/x.md", paths: [".patterns/x.md"], docsOnly: true, adminDocs: false },
-  // An experiment's write-up is admin docs: 0183 names it as docs, and experiments/ is an admin folder.
-  { pr: "experiments/300-x.md", paths: ["experiments/300-x.md"], docsOnly: true, adminDocs: true },
+  // Pull request 1671, an experiment's write-up alone, on 2026-11-19. It is docs only, so it is armed, but
+  // not admin docs: records.ts reads its frontmatter, and the lead ruled it lands through the queue.
+  {
+    pr: "1671",
+    paths: ["experiments/300-carry-approvals-across-merges.md"],
+    docsOnly: true,
+    adminDocs: false,
+  },
   // A package's, a program's or a fixture's AGENTS.md is read by a test or a program: code.
   { pr: "packages/a/AGENTS.md", paths: ["packages/a/AGENTS.md"], docsOnly: false, adminDocs: false },
   // pnpm lint hashes vendor/anti-slop/src against its pin, so an AGENTS.md there is read too.
