@@ -10,7 +10,7 @@ One person who belongs to a fabrika, acting through keys of kind `human`.
 _Avoid_: person, user, account, member
 
 **Client**:
-A browser tab, app window, agent bridge or job machine signed in with its own key.
+A browser tab, app window, agent bridge or a machine that runs tasks, signed in with its own key.
 _Avoid_: who, session, connection, user
 
 **Client key**:
