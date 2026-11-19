@@ -120,6 +120,7 @@ import { Archive, type BucketCalls } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { SinkError } from "../telemetry/Trace.ts";
+import { AdmissionError } from "../transport/Admissions.ts";
 import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   ChildReplies,
@@ -483,6 +484,14 @@ export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Ef
     ),
   );
 
+// A storage failure leaves as its reason alone, bare or inside the hello's AdmissionError, so no cause crosses RPC.
+// Any other error, a GatewayError in an AdmissionError included, passes as it is.
+const renderedStorage = <E>(error: E): E | LedgerError => {
+  const lower: unknown = Schema.is(AdmissionError)(error) ? error.cause : error;
+
+  return Schema.is(LedgerError)(lower) ? new LedgerError({ reason: lower.reason }) : error;
+};
+
 // Project initialization and calls cross RPC as rendered errors. Keep storage details inside the library.
 const projectStorage = Effect.fnUntraced(function* <A, E, R>(
   work: Effect.Effect<A, E, R>,
@@ -510,7 +519,7 @@ const projectStorage = Effect.fnUntraced(function* <A, E, R>(
 
   return yield* work.pipe(
     Effect.withTracer(safe),
-    Effect.mapError((error) => (Schema.is(LedgerError)(error) ? new LedgerError({ reason: error.reason }) : error)),
+    Effect.mapError(renderedStorage),
     Effect.catchDefect(() => Effect.fail(new LedgerError({ reason: "storage" }))),
   );
 });
