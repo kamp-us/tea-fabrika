@@ -146,9 +146,9 @@ it("property: a merge queue's group and a push get the flags a pull request gets
       ...options,
       examples: [
         // pinned: Markdown alone, the one-file decision that started 18 of 18 jobs in the queue.
-        [[".decisions/0174-a-queue-run-follows-its-paths.md"], "merge_group"],
+        [[".kalfa/decisions/0174-a-queue-run-follows-its-paths.md"], "merge_group"],
         // pinned: the same decision file as a push to main, which started every job after its merge.
-        [[".decisions/0174-a-queue-run-follows-its-paths.md"], "push"],
+        [[".kalfa/decisions/0174-a-queue-run-follows-its-paths.md"], "push"],
         // pinned: next/ alone, where a pull request skips the build.
         [["next/packages/libfabrika/src/a.ts"], "push"],
       ],
@@ -536,7 +536,7 @@ it("property: a push of Markdown no check reads, field rows or skill prose start
       expect(ci.jobs(paths, "push", false)).toMatchObject(quietJobs);
     }),
     // pinned: one decision file, the push that started every job.
-    { ...options, examples: [[[".decisions/0175-every-run-follows-its-paths.md"]]] },
+    { ...options, examples: [[[".kalfa/decisions/0175-every-run-follows-its-paths.md"]]] },
   );
 });
 

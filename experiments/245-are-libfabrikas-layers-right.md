@@ -19,7 +19,7 @@ history, and two tool runs (code-graph 0.15.0, structure-sweep 0.3.9 with Jev `j
 - **Macro: the order is right, the walls are not.** The ladder of imports holds and is checked. But
   the wall between `coordination/` and `app/` cuts two subjects in half, `transport/` is not the
   bottom of anything, and the rule "the app layer never imports data" holds only on paper.
-- **For the two decisions about to be amended:** [0034](../.decisions/0034-libfabrika-folders-are-bounded-contexts.md)'s
+- **For the two decisions about to be amended:**'s
   rule "the layer picks the folder" puts about 3,100 of the 9,800 core lines in a context the
   glossary does not give them. A `Ledger/` folder of layers 2 and 3 would hold 27 files and five
   subjects, and it is the group whose files change together least.
@@ -232,7 +232,7 @@ does four jobs:
 | Route a request: `route`, nine methods (`door/door.ts:233-243`) | 1063-1506 | the door |
 | Stamp and check writes for the runner: `accept`, `append`, `sign`, `checkDelivery` | 1507-1733 | the door |
 
-[0032](../.decisions/0032-libraries-take-effects-file-layout.md) already has the shape for this:
+ already has the shape for this:
 `Door.ts` with its parts in `Door/`. The second job is the one that could leave: it is membership
 logic that today needs `transport/waiting.ts`, five coordination files and the door's store.
 

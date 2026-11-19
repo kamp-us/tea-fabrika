@@ -5,7 +5,7 @@ Plancheck-Version: 3
 
 This is `next/`. It builds piece 4 of [Tier 1](../tier-1.md) ("Pipes, for built-ins first"), the
 parts nothing on screen depends on, all bound by
-[0109](../../../.decisions/0109-a-pipe-is-saved-program-mail.md) (a pipe is saved program mail).
+[0020](../../../.kalfa/decisions/0020-programs-meet-by-mail.md) (a pipe is saved program mail).
 Two pull requests: the measurement that picks the two defaults lands first, then the plumbing.
 
 ```ts
@@ -226,7 +226,7 @@ export const mailChunk = Setting.make("mail.chunk", {
 
 - The brain reads them at its edge and hands them in: `mail.unread` to `ProgramMailLedger.layer`
   (`cloudflare/runtime.ts:878`), and `mail.chunk` to the runner as a new `RunnerOptions.chunk`
-  (`cloudflare/runtime.ts:2234`). No machine reads a file (0086). `RunnerOptions.chunk` is
+  (`cloudflare/runtime.ts:2234`). No machine reads a file. `RunnerOptions.chunk` is
   required and is the setting's byte size, as `cap` is required, so the runner keeps no default of
   its own (the fix round after review).
 - The upper bound of `mail.chunk` is 1 MiB, below the 2,000,000-byte row cap (`ledger/Log.ts:211`)
@@ -282,7 +282,7 @@ is `process_w1/4/1`.
 
 Experiment 294 (the number `records.ts next experiments` gave, 2026-11-15), as
 `experiments/294-inbox-cap.md` on main, with the script `experiments/294-inbox-cap.ts` kept only on
-its branch, `fabrikalfa/294-inbox-cap` (0027).
+its branch, `fabrikalfa/294-inbox-cap`.
 
 - **What it runs on:** main's own `LedgerSql` and `LedgerTransactionSql` on node:sqlite in a temp
   folder, WAL with `synchronous=OFF` as experiment 258 did. No network, no key, $0. Under
@@ -313,7 +313,7 @@ its branch, `fabrikalfa/294-inbox-cap` (0027).
 ## Laws
 
 Fast laws run on every pull request. Laws on real SQLite, workerd or real runners are
-`*.integration.test.ts` and run on the 3-hour schedule (0536), as program mail's laws already do.
+`*.integration.test.ts` and run on the 3-hour schedule, as program mail's laws already do.
 
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
@@ -402,7 +402,7 @@ Whichever lands second rebases: the cap check goes inside 1092's `commit` before
 **What the shell's pipe will need from this later:** the runner's chunked send, called for an
 output's value in place of a program's Cmd (the same cut, wait and per-pair order); `Chunk.input`
 and `join` on the reader's side; the right for a pipe's writer to reach its reader (open, below);
-and the wiring itself (0159).
+and the wiring itself.
 
 ## Calls taken
 

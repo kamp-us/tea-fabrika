@@ -7,9 +7,7 @@ summary: "Jev is measured by agreement with the big model, never trusted to remo
 
 Decided 2026-10-10.
 
-Its decided rules are in: [0412](../../.decisions/0412-jev-is-measured-by-agreement.md),
-[0413](../../.decisions/0413-a-jev-question-is-narrow.md),
-[0414](../../.decisions/0414-jev-at-volume-uses-hand-labels.md).
+Its decided rules are in:,,.
 
 ## What was decided
 

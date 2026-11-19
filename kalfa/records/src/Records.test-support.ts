@@ -78,58 +78,7 @@ export const cliLayers = (root: string, files: Files) =>
     ),
   );
 
-/** A decision as the repo writes it: `id` unquoted, the status words as given, `successor` quoted. */
-export const record = (options: {
-  readonly id: string;
-  readonly status?: string;
-  readonly successor?: string;
-  readonly title?: string;
-  readonly body?: ReadonlyArray<string>;
-}) => {
-  const title = options.title ?? "A rule that holds";
-
-  return `${[
-    "---",
-    `id: ${options.id}`,
-    `title: ${title}`,
-    `status: ${options.status ?? "accepted"}`,
-    ...(options.successor === undefined ? [] : [`successor: "${options.successor}"`]),
-    "date: 2026-11-18",
-    "tags: [records, rules]",
-    "---",
-    "",
-    `# ${options.id}: ${title}`,
-    "",
-    ...(options.body ?? ["The rule, in plain words."]),
-  ].join("\n")}\n`;
-};
-
-/** The line, counted from 1, of the first line that starts with `start`. */
-export const lineOf = (text: string, start: string) => text.split("\n").findIndex((line) => line.startsWith(start)) + 1;
-
-export const pad = (n: number) => String(n).padStart(4, "0");
-
-/** A decision's number, as a Schema has a property draw it. */
-export const Number4 = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9999 }));
-
-/** `numbers` made different from each other, each moved on to the next free number from where it drew. */
-export const distinct = (numbers: ReadonlyArray<number>) => {
-  const used = new Set<number>();
-
-  return numbers.map((n) => {
-    let next = n;
-
-    while (used.has(next)) {
-      next = (next % 9999) + 1;
-    }
-
-    used.add(next);
-
-    return next;
-  });
-};
-
-/** Words that no check reads as a patch: none of `rest`, `holds`, `carried`, `forward`, `amendments`. */
+/** Words for a name or a line of prose. */
 const WORDS = [
   "layer",
   "check",
@@ -154,11 +103,6 @@ const WORDS = [
 ] as const;
 
 export const Words = Schema.Array(Schema.Literals(WORDS)).check(Schema.isBetweenLength(2, 8));
-
-export const Phrasing = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 7 }));
-
-/** A line of prose from drawn words. */
-export const sentence = (words: ReadonlyArray<string>) => `${words.join(" ")}.`;
 
 /** A file name's slug from drawn words. */
 export const slugOf = (words: ReadonlyArray<string>) => words.slice(0, 3).join("-");

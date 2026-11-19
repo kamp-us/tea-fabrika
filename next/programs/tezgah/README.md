@@ -1,7 +1,7 @@
 # tezgah
 
 `fabrika/tezgah`, the window manager of `next/`, the new version of fabrika, as a program in the
-brain (0274). It holds each workspace's layout and focus, and it starts and stops the processes its
+brain (0035). It holds each workspace's layout and focus, and it starts and stops the processes its
 tiles show. Read [`src/program.ts`](./src/program.ts) beside this page.
 
 Each person has one tezgah process, `tezgah:<the person id's body>`: the brain boots the founder's.
@@ -25,7 +25,7 @@ and one focus. The shapes a window reads, and the layout's geometry, are the lib
 | `did tezgah.split_right` / `tezgah.split_down` | Asks for one start of a new `fabrika/checklist` named `checklist:<the tile id's body>`. When it answers, the new tile goes after `from` with half its share (right or below) and takes focus. If `from` closed while the start waited, the tile goes after the focused tile. A refused start drops the split. |
 | `did tezgah.close` | Removes `from` at once. Its share goes to the part before it. When it had focus, focus goes to the next tile in reading order, else the one before. When tezgah started the tile's process (`child`), it stops it with `stop_child`, which ends it with `shutdown`. |
 
-Layout changes wait for the brain; a window never adds a tile itself (0167). A split names its new
+Layout changes wait for the brain; a window never adds a tile itself. A split names its new
 tile's id, minted by the window, so the window that asked can find it.
 
 ## `refuse`

@@ -2,24 +2,24 @@ Approved by the lead agent, builds 0584, 0581, 0536, 0539, 0544, 0541; body 1a16
 Plancheck-Version: 3
 
 ```ts
-// A sketch: the whole idea. A test's kind follows what it uses (0584), and code reads it both ways.
+// A sketch: the whole idea. A test's kind follows what it uses, and code reads it both ways.
 type Kind =
   | { readonly _tag: "plain" }                          // reads repo files, or runs on stand-ins
   | { readonly _tag: "integration"; readonly uses: Real } // starts or reaches a real thing
 
 type Real = "instance" | "workerd" | "electron" | "process" | "signal" | "port" | "network"
-  | "disk" // a SQLite file or a temp folder: medium in Google's sizes, so integration (0584)
+  | "disk" // a SQLite file or a temp folder: medium in Google's sizes, so integration
 
 // Where each kind runs, after this plan:
 //   plain next/ law      every pull request and queue group its change reaches   (as today)
 //   plain tooling law    every pull request and queue group its change reaches   (new, amends 0539)
-//   .integration. law    main's full run only                                    (0536, 0581)
+//   .integration. law    main's full run only
 ```
 
 # Pull request check runs every plain law: a test's kind follows what it uses (ticket 1073, sev0)
 
 Today's version, CI tooling and next/'s test names. Ticket 1073. Decision
-[0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md) is written in this same pull
+ is written in this same pull
 request; it amends 0539, 0544 and 0536 in part and cites 0581.
 
 ## Calls taken
@@ -29,7 +29,7 @@ request; it amends 0539, 0544 and 0536 in part and cites 0581.
   sizes (Software Engineering at Google, chapter 11): a small test may not touch the file system, and
   a test that uses local disk is medium; 0584 maps medium and up to `.integration.`. It agrees with
   0536 and experiment 292, which count a SQLite file and temp files as real. It also fits
-  [0541](../../../.decisions/0541-ci-speed-has-a-goal-and-a-daily-check.md)'s limit: the 83 next/
+'s limit: the 83 next/
   files in this group take about 2,805 s at pull request depth (71 measured), and a pull request
   that touches `Sql.ts` would reach most of them, about 9 minutes a leg on 5 legs. 0584 and the tests
   skill carry the line, and the lint rule holds it: a plain law that writes to disk fails.
@@ -122,7 +122,7 @@ type Verdict =
 - **Direction 2, `.integration.` opens nothing:** `test-kind.ts` walks each `*.integration.test.ts`
   file's imports (relative paths and our workspace packages' `exports` maps) and fails a file that
   reaches no starter of any `_tag`, `disk` included. Before writing a reader, the build tries
-  `code-graph . --graph` ([0040](../../../.decisions/0040-existing-tools-before-hand-written.md)),
+  `code-graph . --graph`,
   which `pnpm lint:layers` already runs; if its graph leaves out test files or `node:` imports, the
   reader in `oxlint-plugins/script-reads.mjs` is the fallback.
 - **Direction 1 through helpers** (a plain test that reaches a starter only through a helper's
@@ -140,8 +140,7 @@ type Verdict =
 - **The scope** is every test file under next/ and the tooling folders. Slice 1 covers next/; each
   tooling slice adds its folder to the check's folder scope and renames that folder in the same pull
   request, and slice 4 removes the scope list. A folder list is a scope, not a list of broken
-  files: no file is excused inside it
-  ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)).
+  files: no file is excused inside it.
 
 ### The projects
 
@@ -190,7 +189,7 @@ const picked = sized && (need.next === "all" || need.tooling)
 - Workflow lint T1 (`.github/ci/workflow-lint/merge-line.ts`, 0539) today fails any pull request or
   queue vitest call that names a project outside next/. It changes to: a call names only `next`,
   `tooling` or `next-visual`, never `next-integration`, `tooling-integration` or `today`. That is a
-  law loosened by an owner ruling (0584), so it is decided, not new.
+  law loosened by an owner ruling, so it is decided, not new.
 - The merge queue runs the same selection (legs.ts's `LINE` holds `merge_group`).
 - The full run still runs every project.
 
@@ -241,10 +240,10 @@ tooling test files and every next/ test. The build owns the skill text and the t
 
 | File | Change | Product lines expected | Owner | Slice | How judged |
 |---|---|---|---|---|---|
-| `.decisions/0584-a-tests-kind-follows-what-it-uses.md` | New, in this plan's pull request | docs | lead | 0 | the owner's ruling |
-| `.decisions/0539-the-merge-line-runs-no-tooling-tests.md` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
-| `.decisions/0544-every-reviewed-pull-request-is-armed.md` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
-| `.decisions/0536-real-resource-tests-run-only-on-the-schedule.md` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
+| `a tests kind follows what it uses` | New, in this plan's pull request | docs | lead | 0 | the owner's ruling |
+| `the merge line runs no tooling tests` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
+| `every reviewed pull request is armed` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
+| `real resource tests run only on the schedule` | Status: amended in part by 0584 | docs | lead | 0 | adr skill |
 | `.agents/skills/tests/SKILL.md` | Done in this pull request: the real-resource bullet says 0584's definition, local disk included | docs | lead | 0 | 0584 |
 | `oxlint-plugins/integration-test-name.ts` | 0584's openers: add `process.kill`, the workerd starters, a remote `fetch` literal, `NodeServices.layer` with `ChildProcess.make`; drop Rolldown; the message says the full run, not the 3-hour schedule | 40 | tests | 1 | 0584 |
 | `oxlint-plugins/integration-test-name.test.ts` | K1, K2 | tests | tests | 1 | laws |
@@ -301,16 +300,16 @@ stay split off a plain part.
 |---|---|---|---|---|---|
 | `next/apps/fabrika/e2e/chaos-revoke.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net in its own code |
 | `next/apps/fabrika/e2e/reload.test-support.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net through reload.test-support.ts, record-wire.test-support.ts, port.test-support.ts |
-| `next/apps/fabrika/e2e/stored.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/e2e/stored.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/apps/fabrika/src/brain-life.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, signal, net in its own code |
 | `next/apps/fabrika/src/build-command.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/apps/fabrika/src/build.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/apps/fabrika/src/chaos.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Chaos.test-support.ts |
+| `next/apps/fabrika/src/build.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/chaos.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Chaos.test-support.ts |
 | `next/apps/fabrika/src/checklist-instance.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts, Process.test-support.ts |
-| `next/apps/fabrika/src/checklist-runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/apps/fabrika/src/door-recovery.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/apps/fabrika/src/door.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/apps/fabrika/src/exam/bytes.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/checklist-runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/door-recovery.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/door.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/exam/bytes.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/apps/fabrika/src/exam/client-manager-contract.integration.test.ts`, `next/apps/fabrika/src/exam/client-manager-contract.test.ts` | `git mv`, first to second | tests | tests | 1 | reaches no real thing: it reads repo files in its own process, Rolldown in memory |
 | `next/apps/fabrika/src/exam/clock.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through plant.ts |
 | `next/apps/fabrika/src/exam/commits-git-chain.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through commits-git.test-support.ts, commits.ts |
@@ -332,12 +331,12 @@ stay split off a plain part.
 | `next/apps/fabrika/src/exam/one-store-hook.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/exam/ratchet.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/exam/react-rules.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through plant.ts |
-| `next/apps/fabrika/src/exam/secret-types.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/exam/secret-types.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/apps/fabrika/src/exam/tsconfig-scope.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/exam/twin.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/file-services.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/hands-launcher.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net in its own code |
-| `next/apps/fabrika/src/inbox-runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/inbox-runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/apps/fabrika/src/input-recording.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts, instance-database.test-support.ts |
 | `next/apps/fabrika/src/instance-database.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/apps/fabrika/src/instance-one-file.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net in its own code |
@@ -345,7 +344,7 @@ stay split off a plain part.
 | `next/apps/fabrika/src/instance-wire.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net, signal in its own code |
 | `next/apps/fabrika/src/local-instance.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net through rss.fixture.ts, record-wire.test-support.ts, port.test-support.ts |
 | `next/apps/fabrika/src/memory-replace.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, net in its own code |
-| `next/apps/fabrika/src/port-home-guard.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/apps/fabrika/src/port-home-guard.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/apps/fabrika/src/port-home.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts, port-home.test-support.ts |
 | `next/apps/fabrika/src/port.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net in its own code |
 | `next/apps/fabrika/src/record.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts |
@@ -363,90 +362,90 @@ stay split off a plain part.
 | `next/apps/fabrika/src/worker-monitor.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts |
 | `next/apps/fabrika/src/worker-supervision.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, signal through workerd.test-support.ts, instance-database.test-support.ts, record-wire.test-support.ts |
 | `next/apps/fabrika/src/worker-usage.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | net through record-wire.test-support.ts, port.test-support.ts, instance-database.test-support.ts |
-| `next/packages/libfabrika/src/access/AccessSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/access/Authorization.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/access/ClientManager.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/cloudflare/supervision.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/ledger/Ledger.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/ledger/LedgerTurnReads.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/ledger/Log.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/ledger/Rings.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Children.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/ChildrenMember.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/CodeStore.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/ExitReason.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Monitor.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Monitors.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/ProgramMail.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
-| `next/packages/libfabrika/src/node/ProgramMailReads.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
-| `next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
-| `next/packages/libfabrika/src/node/RecordPart.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through RecordPart.test-support.ts |
-| `next/packages/libfabrika/src/node/RecordPartResources.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through RecordPart.test-support.ts |
-| `next/packages/libfabrika/src/node/RecoveryJournal.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/RecoveryStoreReads.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Relations.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Reload.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/Replies.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/StartChild.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
-| `next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
-| `next/packages/libfabrika/src/node/StartChildExit.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
-| `next/packages/libfabrika/src/node/Watchers.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/access/SessionManager.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/access/SessionSender.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/build/build-assets.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/access/AccessSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/access/Authorization.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/access/ClientManager.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/cloudflare/supervision.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/gateway/GatewayRevocation.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/ledger/Ledger.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/ledger/LedgerSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/ledger/LedgerTurnReads.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/ledger/Log.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/ledger/Rings.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Children.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/ChildrenMember.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/CodeStore.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/ExitReason.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Monitor.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Monitors.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Nemesis.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/ProgramMail.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
+| `next/packages/libfabrika/src/node/ProgramMailReads.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
+| `next/packages/libfabrika/src/node/ProgramMailRuntime.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through ProgramMail.test-support.ts, Process.test-support.ts |
+| `next/packages/libfabrika/src/node/RecordPart.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through RecordPart.test-support.ts |
+| `next/packages/libfabrika/src/node/RecordPartResources.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through RecordPart.test-support.ts |
+| `next/packages/libfabrika/src/node/RecoveryJournal.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/RecoveryStoreReads.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Relations.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Reload.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/Replies.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/StartChild.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
+| `next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
+| `next/packages/libfabrika/src/node/StartChildExit.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through StartChild.test-support.ts |
+| `next/packages/libfabrika/src/node/Watchers.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/access/SessionManager.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/access/SessionSender.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/build/build-assets.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/packages/libfabrika/src/node/build/css.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/build/css.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/build/error-cause.integration.test.ts`, `next/packages/libfabrika/src/node/build/error-cause.test.ts` | `git mv`, first to second | tests | tests | 1 | reaches no real thing: it reads repo files in its own process and gives FileSystem generated failures, a stand-in |
 | `next/packages/libfabrika/src/node/client/CommandsNode.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process, signal in its own code |
 | `next/packages/libfabrika/src/node/client/JournalSqlite.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/packages/libfabrika/src/node/client/KeyFile.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/client/KeyFile.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through dev.fixture.ts |
 | `next/packages/libfabrika/src/node/dev/dev-errors.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/dev/dev-recording.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through dev.fixture.ts |
 | `next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through dev.fixture.ts |
-| `next/packages/libfabrika/src/node/dev/local-dev.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/dev/local-dev.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process through Launchd.test-support.ts |
-| `next/packages/libfabrika/src/node/ledger/LedgerStreams.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/ledger/LedgerStreams.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/node/repositories/OpenRepository.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/packages/libfabrika/src/node/repositories/RepositoryTrust.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/runtime/RunnerHands.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/runtime/RunnerInit.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/settings/Load.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/node/tasks/TasksDiscovery.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through TasksLedger.test-support.ts |
-| `next/packages/libfabrika/src/node/tasks/TasksLedger.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through TasksLedger.test-support.ts |
-| `next/packages/libfabrika/src/presence/Connections.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessLifecycle.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessManager.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessStreams.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessTextCaps.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/processes/ProcessWindow.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/runtime/RecoveryGaps.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/runtime/Runner.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/runtime/RunnerOptions.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
-| `next/packages/libfabrika/src/telemetry/Records.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/telemetry/Sink.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/repositories/RepositoryTrust.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/runtime/RunnerHands.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/runtime/RunnerInit.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/settings/Load.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/node/tasks/TasksDiscovery.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through TasksLedger.test-support.ts |
+| `next/packages/libfabrika/src/node/tasks/TasksLedger.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through TasksLedger.test-support.ts |
+| `next/packages/libfabrika/src/presence/Connections.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessLifecycle.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessManager.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessSpans.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessStreams.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessTextCaps.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/processes/ProcessWindow.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/runtime/RecoveryGaps.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/runtime/Runner.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/runtime/RunnerOptions.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/runtime/RunnerSupervision.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder through Process.test-support.ts |
+| `next/packages/libfabrika/src/telemetry/Records.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/telemetry/Sink.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/packages/libfabrika/src/telemetry/internal/measurements.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 | `next/packages/libfabrika/src/transport/Sshsig.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
 | `next/packages/libfabrika/src/transport/SshsigWebauthn.integration.test.ts` | None: stays `.integration.` | 0 | tests | none | process in its own code |
-| `next/programs/counter/src/runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/programs/pipeline/src/node/queue.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
-| `next/programs/pipeline/src/node/runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium (0584) | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/programs/counter/src/runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/programs/pipeline/src/node/queue.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
+| `next/programs/pipeline/src/node/runner.laws.integration.test.ts` | None: stays `.integration.`: local disk is medium | 0 | tests | none | writes a SQLite file or temp folder itself |
 
 ## The sweep: tooling's 133 test files
 
@@ -637,7 +636,7 @@ median about 145 s.
   every plain next/ test; it now picks the 45 plain tooling files too, on the same legs, sized by the
   same 240 s budget.
 - **Stays under the goal: 75% sure.** The doubt is the 44 unmeasured plain tooling files. What settles it: the first slice-5 run's time table rows, and the daily
-  speed job (0541), which opens its issue if a stage goes over.
+  speed job, which opens its issue if a stage goes over.
 
 ## Is this a setting?
 
@@ -657,7 +656,7 @@ median about 145 s.
   each file was judged.
 - **Field rows** for each step, the same day, as the lead skill says.
 - **The measured false alarms** for both directions on main go in the rule's README section, with
-  the commit they were counted at (0523).
+  the commit they were counted at.
 - **No glossary word is coined.** "Plain law" and "`.integration.` law" are used as the tests skill
   already uses them; the build adds one `.glossary/TERMS.md` row only if a reviewer finds the word
   missing.

@@ -442,7 +442,7 @@ What the owner sees: `pnpm lint` reads CSS, and six rules, each with its count.
 - **False alarms, measured before the rules land.**
   - Every fire of each rule is counted on the tree (`window.css`, 4,012 lines; `manti-reset.css`; `tokens.css`).
   - Every fire is counted again on an outside set, read in place and never copied in: Manti 0.13.0's `dist/*.css` (about 1,875 lines), React Flow 12.12.0's `style.css`, and `experiments/142-web-terminals/page.css`.
-  - Each fire is checked by hand against what the rule means. The counts, the declarations scanned and every false fire go in an experiment write-up under the number `records.ts next experiments` gives, with its own frontmatter (0522).
+  - Each fire is checked by hand against what the rule means. The counts, the declarations scanned and every false fire go in an experiment write-up under the number `records.ts next experiments` gives, with its own frontmatter.
   - A rule with a false fire is fixed before the pull request lands (see "No warnings" above).
 - **Moving tests into these rules is a proposal only.** Nothing moves in this pull request. The proposals are below.
 

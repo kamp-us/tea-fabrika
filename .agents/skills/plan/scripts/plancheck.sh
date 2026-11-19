@@ -253,7 +253,7 @@ if draft == "owners":
     print(json.dumps(owned)); sys.exit(0)
 FORM = "`Estimate: <n> steps, $<d>`, both above zero"
 def estimate():
-    # Version 3: the Size section ends with one Estimate line, the quest's budget (.decisions/0076).
+    # Version 3: the Size section ends with one Estimate line, the quest's budget.
     # The quest chain's estimateIn reads the first line anywhere, fences included, that says "estimate",
     # "<n> steps" and "$<d>", so any second such line is refused: it could set the backstop.
     reads = lambda l: re.search(r"\bestimate\b.*?\b\d+\s+steps?\b.*?\$\s?\d", l, re.I)

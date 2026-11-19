@@ -25,9 +25,9 @@ interface EarlyRefusal {
 
 - `docs/direction/settings.md`, S5 and "The oldest fabrika a repo's file works with", requires
   invalid-value errors to show the scalar and requires the repo minimum to be checked first.
-  Decision 0086 carries both rules into `next/`. This amendment applies those existing rules.
-- Decision 0579 requires `it.prop` or `it.effect.prop`, Schema inputs and a seed in setup.
-  Decision 0411 requires the moved properties to keep their size, runs and coverage.
+  an earlier decision carries both rules into `next/`. This amendment applies those existing rules.
+- an earlier decision requires `it.prop` or `it.effect.prop`, Schema inputs and a seed in setup.
+  an earlier decision requires the moved properties to keep their size, runs and coverage.
 - At the named head, generic `settings/Load.ts` reads the repo, calls `Files.supported`, then
   reads the person file. K4 currently calls only `Files.validate`, so deleting the first check
   escapes it. The product already has the required behavior.

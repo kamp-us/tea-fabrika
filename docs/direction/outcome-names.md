@@ -8,7 +8,7 @@ summary: "`done`, `send`, `ask`, `skip`, `stuck`. Passing it on is `verb:who:why
 Decided 2026-10-11. Built for the ship machine first; the other stages are
 still to be checked against it.
 
-Its decided rules are in: [0396](../../.decisions/0396-every-step-answers-in-five-verbs.md).
+Its decided rules are in:.
 
 *2026-10-22: every stage is built on it now. Each writes its own words with
 `outcomesOf`, in its own `outcome.ts`: sort, plan, catch-up, task, build,
@@ -19,7 +19,7 @@ review, ship, the quest and the operate loop.*
 `reason`: `{ _tag: "send", to: "builder", reason: "checks_red" }`. Today's code, and this note's
 examples of it, keep `why` (and `kind`) until that code goes. Ticket 337's sweep renames `next/`'s code, and
 the lint rules `eslint/id-denylist` and `fabrika/no-question-word-key` keep a `why` name from coming
-back there ([0081](../.decisions/0081-no-question-word-names.md)).*
+back there.*
 
 ```text
 passing it on:   verb : who : why        send:builder:checks_red
@@ -61,7 +61,7 @@ And every outcome has a name written by one grammar:
 ```
 
 2026-11-10: in `next/` and `.agents/`, the ask's `who` key is `to`, as `send` says it
-([0081](../../.decisions/0081-no-question-word-names.md)'s amendment). The spelled name does not change.
+('s amendment). The spelled name does not change.
 
 Code does a `switch` on the data. People, logs, the ledger and a drawing of
 the machine read the name. One function makes the name from the data, so the

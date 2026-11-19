@@ -9,8 +9,7 @@ summary: "`next/`, main at `ce15d9cb6`, node:sqlite on real files, five runs per
 Measured on 2026-11-15 for ticket 1041 (pipe plumbing), on main at `ce15d9cb6`. **Every claim is
 about `next/`** (`next/packages/libfabrika/src/ledger` and `processes`), never today's version. The
 script stays on the branch `fabrikalfa/295-inbox-cap`; only this write-up goes to main, and the raw
-samples went to the owner's private archive
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). No model was called,
+samples went to the owner's private archive. No model was called,
 no network was used, and nothing cost money.
 
 **The answer.** Applied as the plan writes them, the rules give:

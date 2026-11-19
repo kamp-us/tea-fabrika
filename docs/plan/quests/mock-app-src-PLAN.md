@@ -21,18 +21,17 @@ expect(yield* Recorder.calls(ClientManager, "write")).toEqual([]);
 
 This is `next/`: the app's `src/` folder with its `exam/`, plus the product files in libfabrika and
 the one Alchemy patch that some of its spies need first. Today's app is not touched. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md) and
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md), on the Recorder as built
+ and, on the Recorder as built
 (`next/packages/vitest/src/Recorder.ts`, the
 [pattern](../../../.patterns/a-law-watches-calls-with-a-recorder.md)). It covers `vi.fn`,
 `toHaveBeenCalled*` and `vi.spyOn` only. The folder's `vi.mock`, `vi.doMock` and `vi.stubEnv` are
 the other sweeps of 0555 and stay as they are here. **Amended 2026-11-15 (the laptop lead's
 ruling):** it covers those too, in a slice 5, and also builds
-[0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md) (no list lets broken code pass)
-and follows [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) (platform
+ (no list lets broken code pass)
+and follows [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) (platform
 pieces go through Alchemy), with
-[0538](../../../.decisions/0538-kampus-vitest-holds-the-test-primitives.md) for where test layers
-live and [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) for the Alchemy patch.
+ for where test layers
+live for the Alchemy patch.
 
 ## Doubts, read these first
 
@@ -51,14 +50,14 @@ fixes the folder's other `vi` hits it can, and the folder's lock stays out of th
   `crypto` refusal. On Effect's `Digest` those laws must plant a defect instead, which is a changed
   law the owner says yes to. Slice 3 waits on the answer; slices 1 and 2 do not.
 - **Open question 2 decides one `vi.fn` (lean 70%).** (Answered 2026-11-15: a watched callback goes
-  through a service (0555), as the transport row says. The plain-list lean is marked wrong.)
+  through a service, as the transport row says. The plain-list lean is marked wrong.)
   `inputs.name` in the gateway's settings is a plain function of our own API. Two approved rows
   disagree on what replaces a `vi.fn` on such a callback: the recorder plan's `transport/` row says
   "becomes a service", the oxlint-plugins plan says "a plain list the test owns". It is in slice 3.
 - **The lock stays out of this sweep (amendment 2026-11-15, the laptop lead's ruling; this closes
   open question 3).** Slice 5 fixes 33 of the folder's 40 other `vi` hits, but seven stand in for
   Alchemy or `cloudflare:workers` and wait on 0042's Alchemy work, so the folder cannot reach
-  zero, and no narrower interim lock is allowed (0524). See "The other `vi` hits 0555 bans".
+  zero, and no narrower interim lock is allowed. See "The other `vi` hits 0555 bans".
 - **The Alchemy patch (70%).** Slice 2 patches `@alchemy.run/cloudflare-runtime`'s Node `Workerd`
   to spawn through Effect's `ChildProcessSpawner`, as the recorder plan's row says. That keeps
   workerd's fourth file descriptor, the control pipe the laws write `listen` events to. Effect's
@@ -118,7 +117,7 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
 | `door…:1027,1899,1916`, `runtime…:869` | `crypto.subtle.digest` is not called on a rate refusal, or fails once | (amended 2026-11-15, open question 1's answer) a stand-in crypto handed in with `WebCrypto.layer`, whose `subtle.digest` keeps each body it is asked and rejects or answers as the law says; its list stays `[]` on a rate refusal | `Gateway.ts` and `cloudflare/runtime.ts` read `WebCrypto.WebCrypto`, slice 3 |
 | `door…:1030,1041` T843 `named` | `inputs.name` is not called on a rate refusal | (amended 2026-11-15, open question 2's answer) the gateway asks an `InputNames` service for an input's name, and the law records it with `Recorder.layer(InputNames, …)`; `Recorder.calls(InputNames)` is `[]` | `Gateway.ts` asks `InputNames`, and the program's `inputs.name` becomes that service's layer, slice 3 |
 | `door…:1032,1043` T843 `next` | no process id is drawn on a rate refusal | `Recorder.layer(ProcessIdGenerator, …)` in the law's world; `controls.next` already reads that service | none |
-| `runtime…:876,893` | an R2 `put` never runs when the checksum digest fails | a typed R2 stand-in whose `put` pushes onto a list the law owns: a platform object, not a service (0554, 0557) | none for this one, but it shares a law with the digest |
+| `runtime…:876,893` | an R2 `put` never runs when the checksum digest fails | a typed R2 stand-in whose `put` pushes onto a list the law owns: a platform object, not a service | none for this one, but it shares a law with the digest |
 | `runtime…:310` | the startup build gets the law's parent span | the product gives the startup build a parent span | `cloudflare/runtime.ts`, slice 3 |
 | `runtime-recovery…:1181` | the configure delivery is logged by Effect's logger (spies on `log`, `error` and `warn`) | `TestConsole`, through a `Console` the project runtime is given, read with `logLines`, `errorLines` and (amended 2026-11-15, ruling 4) app-e2e's `warnLines` | `cloudflare/runtime.ts`, slice 3 |
 | `local-instance…:84,91,158,223` | `fetch` to the dev server, and `process.kill` never sent | the `FetchHttpClient.Fetch` stand-in, and the signal service of the `libfabrika/src/node/dev` slice | that slice's `process.kill` move, slice 4 |
@@ -140,8 +139,7 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
   `src/core/test/Docker.test.ts:180`). Their Node `Workerd` alone calls `node:child_process`
   directly (`dist/core/node/workerd/Workerd.mjs:212`) and exports no way to hand it a spawn. The
   patch makes `Workerd` do what the package's `Docker` already does. Alchemy's main branch was not
-  read here, so whether upstream already changed this is not known. The build reads it first
-  ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
+  read here, so whether upstream already changed this is not known. The build reads it first.
 - **Wrapping a real service to watch it** is `Layer.unwrap` in Effect (`Layer.ts:1621`, stable):
   an Effect that reads the real service answers a layer. The Recorder's own `layer` is built the
   same way (`Recorder.ts:217`). So the "wrap form" the recorder plan left to this slice needs no
@@ -154,8 +152,7 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
 
 The laptop lead ruled that `vi.mock`, `vi.doMock` and `vi.stubEnv` are 0555's own targets, so this
 sweep fixes those hits too, and that a folder's lock lands whole in the one fold pull request only
-once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass
-([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). Counted on main at `0683861`
+once the folder is at zero. No interim narrower lock: that would be a list letting broken code pass. Counted on main at `0683861`
 with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 25 `vi.mock` in 12 files, 2
 `vi.doMock` in 1 file, 13 `vi.stubEnv` in 3 files. Each row's way is 0555's own, from its
 "Consequences".
@@ -168,7 +165,7 @@ with `rg -o 'vi\.(mock|doMock|stubEnv)\('` over the folder: 25 `vi.mock` in 12 f
 | `@effect/platform-node` | 2 | `grant-readers`, `file-services` | yes, slice 5: each entry (`grant.ts`, `dev.ts`) exports its program as an Effect, and the law runs it with the layers it needs, so nothing stands in for `NodeRuntime.runMain` |
 | `rolldown` | 1 | `exam/bytes.integration` | yes, slice 5: the bundler service above; this law is not the wrapper's own, so 0555's exception does not apply |
 | `vi.stubEnv` of `FABRIKA_HOME` 8, `FABRIKA_INSTANCE_PORT` 2, `TYPESAFE_API_KEY` 1, `DO_NOT_TRACK` 1, and 1 by a name that is not a plain string | 13 | `file-services`, `instance-one-file`, `local-instance` laws | yes, slice 5: the readers move to `Config` (`dev.ts:94`, `hands.ts:62` read `process.env.FABRIKA_HOME` today), and each law provides `ConfigProvider.layer(ConfigProvider.fromUnknown({ ... }))`; `TYPESAFE_API_KEY` stays unset in every law, as the root map's money rule asks |
-| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy belongs to the approved Alchemy mocks plan (PR 1511) |
+| `alchemy/Deploy`, `../alchemy.run.ts`, and `vi.doMock` of `alchemy` and `@alchemy.run/cloudflare` | 4 | `local-instance`, `instance-one-file` laws | **no**: these stand in for Alchemy itself, which [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) makes the platform's one way in; how a law swaps Alchemy belongs to the approved Alchemy mocks plan (PR 1511) |
 | `cloudflare:workers` | 3 | `runtime-recovery`, `door.integration`, `checklist-instance` laws | **no**: 0042's Alchemy work, as in the cloudflare plan |
 
 **So the folder cannot reach zero in this sweep, and its lock stays out.** The seven Alchemy and
@@ -283,7 +280,7 @@ the stub above does not compile. In `@cloudflare/workers-types` 5.20261109.1,
 `getEntrypoint: () => rpc` fails with TS2322, and the `satisfies` fallback does not exist for a
 generic method. A function with one overload, which the type accepts, fails with TS2589 (type
 instantiation is excessively deep). A cast is refused. This stub is Cloudflare's platform type,
-which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) sends through
+which [0018](../../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) sends through
 Alchemy, and that plan is where platform stand-ins get their typed home. Slice 1 is now three
 sites, A1 to A4, and its `getEntrypoint` spy stays in `instance-one-file.integration.test.ts`
 until that plan's row lands.
@@ -355,7 +352,7 @@ const crypto = yield* WebCrypto.WebCrypto;
 // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
 const digest = yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", bytes), catch: fail });
 
-// next/packages/libfabrika/src/gateway/InputNames.ts, the contract only (0095). A sketch; the
+// next/packages/libfabrika/src/gateway/InputNames.ts, the contract only. A sketch; the
 // name is the build's to confirm, and a glossary row follows if it stays.
 export class InputNames extends Context.Service<
   InputNames,
@@ -428,8 +425,8 @@ that slice's service as it lands and adds no service of its own.
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "fn": "Watch calls with a Recorder, or keep a plain list the test owns (0579).",
-        "spyOn": "Put the call behind a service and record it in the law's layer (0555)."
+        "fn": "Watch calls with a Recorder, or keep a plain list the test owns.",
+        "spyOn": "Put the call behind a service and record it in the law's layer."
       }
     ]
   }
@@ -444,7 +441,7 @@ this folder joins that five-method block the day it is at zero for all five, and
 joins when the folder is. The two-method override above is the first sketch. Read as written, the
 ruling leaves no lock on the files that still hold the other sweeps' calls, and on this plan's
 files that is all but one (see the doubts). The laptop lead ruled the same day (this closes open
-question 3): no file list and no narrower override in between (0524). The override above does not
+question 3): no file list and no narrower override in between. The override above does not
 land in this sweep; the folder's lock lands whole, with all five methods, on the day the folder is
 at zero, after 0042's Alchemy work.
 
@@ -457,11 +454,10 @@ at zero, after 0042's Alchemy work.
   and `spyOn` refused the folder has none: its `vi.mock` factories build their stand-ins from plain
   functions. The doubt: `vi.mocked` or a `vi.mock` factory could still hand a law a mock. What would
   settle it: the review reads the folder at zero for any matcher left.
-- No warn level and no list of leftovers
-  ([0524](../../../.decisions/0524-no-list-lets-broken-code-pass.md)). The `files` list names files
+- No warn level and no list of leftovers. The `files` list names files
   that are at zero, so it lets nothing broken pass.
 - **Is this a setting?** No. Where a lint rule applies is a code rule of the repo, not a choice a
-  person makes in `fabrika.toml` ([0069](../../../.decisions/0069-choices-are-settings.md)).
+  person makes in `fabrika.toml`.
 
 **Amendment (2026-11-16, lead ruling): the lock is a pair.** oxlint's
 `vitest/no-restricted-vi-methods` does not refuse a call chained onto the `vi` call, in oxlint
@@ -476,7 +472,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -493,11 +489,11 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry.
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 },
@@ -509,11 +505,11 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
     "eslint/no-restricted-properties": [
       "error",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 },
@@ -525,11 +521,11 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
     "eslint/no-restricted-properties": [
       "warn",
       // Written out again, since an override replaces options: the `JSON.parse` entry and the four Reflect entries (`Reflect.get`, `Reflect.set`, `Reflect.has`, `globalThis.Reflect`).
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -571,7 +567,7 @@ The folder's lock still does not land in this sweep (the laptop lead's ruling of
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -611,13 +607,12 @@ plant is what the review runs once to see it red.
   throw of any value from the stand-in crypto's `digest`, and today's check, a `crypto` refusal
   with that value as its cause. C5 is the same. No digest law changes what it checks.
 - Real resources: B3 and D1 run a real workerd or a real child, and are `*.integration.test.ts`
-  files already, run on the schedule (0536). A stand-in cannot replace the real child there, since
+  files already, run on the schedule. A stand-in cannot replace the real child there, since
   what they check is a real port and a real process. They are not new, so 0581's "why no stand-in"
   is already answered. B1 runs Alchemy's real code on fake children, so it stays a plain test.
-  Amendment 2026-11-16: B3's shutdown law sends a real process signal. Under
-  [0594](../../../.decisions/0594-safe-checks-direct-mac-ci.md), that law and any selected check
+  Amendment 2026-11-16: B3's shutdown law sends a real process signal. Under, that law and any selected check
   whose body or cleanup sends real signals run on eligible disposable Linux or macOS CI, never
-  the owner's laptop, with proof before the first review (0178). A law need not be Mac-specific
+  the owner's laptop, with proof before the first review. A law need not be Mac-specific
   to need that route. The selected runner must support its dependencies, isolation and cleanup.
 - No law reads a secret, so no `[secrets]` flow is needed.
 - Lint, type or test? A8 and the lock are lint. A6 and A7 test that the config does what it says.
@@ -680,7 +675,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | tests | slice 5: the built table handed in |
 | next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 5: the built table and our own modules handed in |
 | next/apps/fabrika/src/error-cause.test.ts | tests | tests | slice 5: the built table handed in |
-| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 5: `./table.ts` handed in; its `cloudflare:workers` mock stays (0042) |
+| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 5: `./table.ts` handed in; its `cloudflare:workers` mock stays (0018) |
 | next/apps/fabrika/src/exam/bytes.integration.test.ts | tests | tests | slice 5: the bundler service in place of `vi.mock("rolldown")` |
 | next/apps/fabrika/dev.ts | build | 12 | slice 5: `FABRIKA_HOME` read through `Config`; the program exported as an Effect for its law |
 | next/apps/fabrika/grant.ts | build | 6 | slice 5: the program exported as an Effect for its law |
@@ -694,7 +689,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/start-child.test-support.ts | tests | tests | slice 5 (amendment 2026-11-16): `childProject(programs)` takes the table |
 | next/apps/fabrika/src/runtime-quotas.laws.test.ts | tests | tests | slice 5 (amendment 2026-11-16): from PR 1366; its 2 table mocks go, the table handed in |
 
-- Every test layer named stays beside its service (0538). The app's other test files that build
+- Every test layer named stays beside its service. The app's other test files that build
   `Gateway.layer` gain the `Mac` and `SecureRandom` layers and an `InputNames` layer in slice 3
   (amended 2026-11-15), each a one-line `Layer.provide`. Libfabrika's own gateway tests get the same line in the slice that makes the
   move. The tests step lists every file the new requirement reaches before it starts.
@@ -733,7 +728,7 @@ Amendment 2026-11-16: these searches confirm the helpers already chosen above; t
 - **Effect's `crypto` services for `Mac` and `SecureRandom`,** 85%: the makers' own, already
   imported by the app. The digest's error model was open question 1, now answered.
 - **A typed list for `fetch` and for R2's `put`,** 85%: `fetch` is a function reference, not an
-  Effect service, and R2 is a platform object (0554, 0557). The Recorder watches Effect services
+  Effect service, and R2 is a platform object. The Recorder watches Effect services
   only (its pattern doc, "Where it applies").
 - **The lock is its own override banning `fn` and `spyOn`,** 85%: the folder still has `vi.mock`
   and `vi.stubEnv`, which other sweeps clear.
@@ -746,19 +741,18 @@ Amendment 2026-11-16: these searches confirm the helpers already chosen above; t
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - Tests step, each slice: `pnpm format`, `pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144`,
   then the slice's verified-safe narrow test paths under the repo's machine caps. Read the
   selected tests and their cleanup first; an `.integration.` filename alone gives no clearance.
   B3's real-signal shutdown check and any other selected real-signal law run on eligible
-  disposable Linux or macOS CI, never the owner's laptop, with proof before the first review
-  (0594). Each plant is run once on an eligible runner and recorded in the step's report.
+  disposable Linux or macOS CI, never the owner's laptop, with proof before the first review. Each plant is run once on an eligible runner and recorded in the step's report.
 - Build: the same narrow paths after its change. Slice 2 also reruns
   `next/apps/fabrika/src/exam/alchemy-lifecycle.test.ts` after `pnpm install --frozen-lockfile`.
 - The lead's changed-files pass runs explicit verified-safe paths locally and obtains remote
-  proof for selected real-signal laws separately, then runs the one type check per slice (0594).
+  proof for selected real-signal laws separately, then runs the one type check per slice.
 
 ## Size
 
@@ -863,7 +857,7 @@ None.
 
 ## Current execution and history rule, 2026-11-17
 
-Read every selected law, helper and cleanup before a local run (0594), including a selected
+Read every selected law, helper and cleanup before a local run, including a selected
 plain law that imports a real process implementation. Static no-signal statements are not
 clearance. All real process-signal, launchd and real Electron checks run on eligible disposable
 CI before review. Bring branches forward with an ordinary merge preserving both sides, never a

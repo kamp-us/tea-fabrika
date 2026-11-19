@@ -1,7 +1,7 @@
 ---
 date: "2026-11-14"
 scripts: "none committed; the counts came from `gh run list`, `gh api .../runs/<id>/jobs`, job logs and a static count, each named below; raw data stayed under runs/"
-summary: "Repo-wide test audit at 2c7a4e76a, read-only, phoenix's test-audit method. 834 test files: next/ 280 (2,624 tests in CI), today's version 455 (4,618 static cases), tooling 99 (about 1,970 tests in CI). Cheap tests are not the cost: in next/, 1,984 tests under 1 s take 322 s, and 111 tests (4%) take 66% of the time; they are generated laws over real SQLite, git, workerd and browsers. In 13 hours of CI on 2026-11-14 (300 runs, 15,057 machine-minutes) the merge queue took 46%, 58% of its groups failed, and next/'s tests were 58% of all minutes. Top fixes: the merge queue runs what a pull request runs, tooling tests leave the queue and main, property laws over real IO run a PR count with the full count on a schedule, the shard table becomes data, and the flaky real-IO laws get fixed. Today's tests are already ruled out (0525)."
+summary: "Repo-wide test audit at 2c7a4e76a, read-only, phoenix's test-audit method. 834 test files: next/ 280 (2,624 tests in CI), today's version 455 (4,618 static cases), tooling 99 (about 1,970 tests in CI). Cheap tests are not the cost: in next/, 1,984 tests under 1 s take 322 s, and 111 tests (4%) take 66% of the time; they are generated laws over real SQLite, git, workerd and browsers. In 13 hours of CI on 2026-11-14 (300 runs, 15,057 machine-minutes) the merge queue took 46%, 58% of its groups failed, and next/'s tests were 58% of all minutes. Top fixes: the merge queue runs what a pull request runs, tooling tests leave the queue and main, property laws over real IO run a PR count with the full count on a schedule, the shard table becomes data, and the flaky real-IO laws get fixed. Today's tests are already ruled out."
 ---
 
 # 291. Test audit: how many tests we need, where CI's minutes go, and what runs where
@@ -17,7 +17,7 @@ summary: "Repo-wide test audit at 2c7a4e76a, read-only, phoenix's test-audit met
   ones cost almost nothing: 1,984 of `next/`'s tests take under 1 s each and 322 s in all. I found 8
   tooling tests that check copied data, not behavior (owner candidates, below). Today's 4,618 cases
   do not earn their place any more, and the owner already ruled them out
-  ([0525](../.decisions/0525-todays-version-is-frozen.md); pull request
+  (pull request
   [1221](https://github.com/kamp-us/tea-fabrika/pull/1221) removes them).
 - **Where the minutes go.** In 13 hours of CI (300 runs of `check`, 2026-11-14 07:40 to 20:38 UTC,
   15,057 machine-minutes):
@@ -235,7 +235,7 @@ that file.
 - **A fixed seed.** Almost every law uses seed 119120. So every CI run checks the same cases in the
   same order. Run 150 of 200 on every pull request is the same input every time.
 - **A fresh world per case.** The real-IO laws build a new temp folder, database or repo for each
-  run, on purpose (decisions 0061, 0062). That is the trust they give; it is also why a run costs
+  run, on purpose (an earlier decision, 0062). That is the trust they give; it is also why a run costs
   0.5 to 3 s.
 - **A boot per scenario.** `instance-wire` starts `dev.ts` and workerd 13 times. `resources.laws`
   starts a child Vitest with a browser per run.
@@ -342,7 +342,7 @@ plus the full count on the schedule.
   program, the "every machine has laws" rule.
 - `instance-records` kills and replaces workerd on purpose; one instance per file does not fit it.
 
-**Today's version.** 455 files, about 4,618 cases. Decision 0525 already removes them, in flight in
+**Today's version.** 455 files, about 4,618 cases. an earlier decision already removes them, in flight in
 1221. In this window they cost 1,297 min (9%): their test and lane steps, apt, and Electron e2e.
 
 **A flake with no record.** `ProgramMailRuntime.test.ts`, "P41: a request and its answer between two
@@ -364,7 +364,7 @@ says what it changes (delete, merge, speed up or move) and what trust it costs.
 | 5 | Real-git laws use `Sources.test.ts`'s split: 20 real-git runs, the rest injected (`RepositoriesGit`, `OpenRepository`) | speed up | ~650 | 2.5 | ~260 | fewer real-git draws per pull request; the logic keeps its full count through the injected runs |
 | 6 | A pull request that changes only CI tooling runs one small `next/` leg, not all of `next/`: drop `**/.github/**` from the triggers for `next/` | move | ~320 | 1.5 | ~210 | a broken `next` job definition shows on the smoke leg only; the rest in the queue or schedule |
 | 7 | `build.test.ts` builds the good app once per file and reuses it; the failure cases keep their own builds | speed up | ~200 | 1.5 | ~130 | a guess at 60%: if a case mutates the shared output, cases can hide each other |
-| 8 | The flaky real-IO laws are fixed, each at its cause (0036): T753 L16, P41, runtime L4 (1202), A13 (1245), checklist L13, LedgerStreams A5 | speed up | ~1,600 direct, plus each requeue | ~12 | ~130 | none; this is owed work |
+| 8 | The flaky real-IO laws are fixed, each at its cause: T753 L16, P41, runtime L4 (1202), A13 (1245), checklist L13, LedgerStreams A5 | speed up | ~1,600 direct, plus each requeue | ~12 | ~130 | none; this is owed work |
 | 9 | Heavy real-IO files run one to a worker (a Vitest project of their own with `maxWorkers: 1`, or a weight in `Shards`) | speed up | unknown | 2 | unknown | none; a guess that it removes the "loaded machine" timeouts |
 | 10 | `instance-wire` shares one booted instance per file for the scenarios that do not stop it | speed up | ~140 | 2 | ~70 | shared state between scenarios: one can hide or cause another's failure |
 
@@ -378,7 +378,7 @@ are set per call, so `configureGlobal` cannot reach them; one helper can. A sket
 
 ```ts
 // next/packages/libfabrika/src/testing/Runs.ts (a sketch; the name and home are open)
-// One choice, declared once (0069): how many generated cases a law runs here.
+// One choice, declared once: how many generated cases a law runs here.
 // "pr" scales each law's count down to its floor; "full" runs what the law asks for.
 const scale = process.env["FABRIKA_LAW_RUNS"] === "full" ? 1 : 0.2;
 
@@ -400,7 +400,7 @@ refuse a bare number in `numRuns` or `runs` in `next/`, so a new law cannot skip
 |---|---|---|
 | [1256](https://github.com/kamp-us/tea-fabrika/pull/1256) | the first red job cancels the run on a pull request and in the queue | ~2,800 of the 5,700 red-run minutes on pull requests and the queue (a guess at half) |
 | [1258](https://github.com/kamp-us/tea-fabrika/pull/1258) | a push the queue tested skips `test`, `next` and `e2e`; two fewer machines a run | ~700 (8 pushes at ~87 min, its own table) |
-| [1221](https://github.com/kamp-us/tea-fabrika/pull/1221) | today's tests, fixtures and jobs go (0525) | ~1,300 |
+| [1221](https://github.com/kamp-us/tea-fabrika/pull/1221) | today's tests, fixtures and jobs go | ~1,300 |
 | [1252](https://github.com/kamp-us/tea-fabrika/pull/1252) | W3 builds its fill once; StartChild and the jobs laws split into files | part of the 581 s floor and ~380 s |
 | [1241](https://github.com/kamp-us/tea-fabrika/pull/1241) | the heaviest file starts first on each leg | wall time, ~250 s a leg; few machine-minutes |
 | [1202](https://github.com/kamp-us/tea-fabrika/pull/1202), [1245](https://github.com/kamp-us/tea-fabrika/pull/1245) | runtime L4 and A13 flakes | part of fix 8 |
@@ -444,9 +444,9 @@ None of these is done. Each needs the owner's yes, because it narrows what a law
 
 ## 7. What runs where
 
-Read first: [0066](../.decisions/0066-mutation-runs-on-a-schedule.md) (mutation on a schedule, never
-a step), [0175](../.decisions/0175-every-run-follows-its-paths.md) (every run follows its paths; a
-scheduled full suite "not decided"), [0525](../.decisions/0525-todays-version-is-frozen.md) (no test
+Read first: (mutation on a schedule, never
+a step) (every run follows its paths; a
+scheduled full suite "not decided") (no test
 or job for today's version), `check.yaml`, `changes.mjs` and `legs.ts`. The owner's direction for
 this audit: the merge line never runs the full suite, a schedule does, and main runs only `next/`
 tests.
@@ -461,13 +461,12 @@ everything.**
 | merge queue | the group's pull requests work together | the same selection as a ready pull request, over the group's diff | 67 green, 90 red | about a ready PR's cost |
 | push to main | nothing new when the queue tested it (1258); for an admin merge, the `next/` tests its diff reaches | `next/` only, `--changed` from `before` | 27 green | near 0 for queue merges |
 | schedule, every 3 hours on main's head if it moved | the whole repo, at full strength | all of `next/` and its e2e at the full run count, all tooling tests; a red run files one ticket with the range | none today | ~60 machine-min a run, ~480 a day |
-| schedule, hourly (0066) | the laws catch mutants | mutation, as today | as today | as today |
+| schedule, hourly | the laws catch mutants | mutation, as today | as today | as today |
 
 Why every 3 hours: a full run costs about 60 machine-min (`next` was 47 min a green queue run, plus
 tooling on 2 machines). Hourly would be ~1,440 machine-minutes a day; every 3 hours ~480. Today the
 queue and main spent about 8,300 machine-minutes in 13 hours. Every 3 hours means a bug only the
-full run sees reaches main and waits up to 3 hours to be named. That is a setting, not a decision
-(0069): the interval is a number the owner may change.
+full run sees reaches main and waits up to 3 hours to be named. That is a setting, not a decision: the interval is a number the owner may change.
 
 What the schedule needs, so its red is useful: it runs on a commit, prints the commit range since
 its last green run, and files one tracker ticket. The fixed seed stays on pull requests, so a red PR

@@ -61,7 +61,7 @@ One line: where the quest is, whether it is done, and what waits on the owner.
   sorted what needs a person first. On 2026-08-20, nine of its first ten
   "waiting on a human" rows were for issues already closed, most shipped days
   before
-  ([phoenix ADR 0322](https://github.com/kamp-us/phoenix/blob/main/.decisions/0322-closed-issue-lanes-demote-at-read-time.md)).
+  ([phoenix ADR 0022](../../.kalfa/decisions/0022-each-client-has-own-key.md)).
   An ask on a finished ticket is not waiting on anyone.
 - **Why "idle" is a branch.** A quest that nobody drives looks the same as a
   quest that is fine, unless the view says so.

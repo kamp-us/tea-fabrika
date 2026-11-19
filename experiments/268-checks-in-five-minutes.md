@@ -10,10 +10,9 @@ Measured on 2026-11-11 from GitHub's own run data, landed the same day. **This i
 recorded CI runs, not an experiment run:** no test ran locally and no workflow changed. It is about
 **today's CI** (`.github/workflows/check.yaml` and `commits.yaml`), which checks both versions.
 Sample: the last 40 merged pull requests (885 to 944, all merged 2026-11-11), the green `check` run
-and the `commits` run at each one's final head. The raw pulls are not kept in git
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). One agent read; no
+and the `commits` run at each one's final head. The raw pulls are not kept in git. One agent read; no
 model call of its own, $0. It serves
-[0106](../.decisions/0106-a-pull-requests-checks-finish-in-five-minutes.md)'s budget: a pull
+'s budget: a pull
 request's checks finish in five minutes at most.
 
 Where a whole-suite run's time goes in short (about 1,000 s, the lane step before the rest step,
@@ -203,7 +202,7 @@ loosening, it waits on the owner, and it is not recommended.
 
 - Canceling superseded main runs (fix 3).
 - Any paid or larger runner, or a plan change. *Later the same day the owner chose free CI
-  ([0112](../.decisions/0112-checks-run-on-free-ci.md), from [experiment 261](./261-checks-on-cloudflare-containers.md)),
+  (from [experiment 261](./261-checks-on-cloudflare-containers.md)),
   which answers this one: no paid runner.*
 - Any new third-party action (none is proposed).
 - Any narrowing of `--changed` or the rerun triggers (rejected above).

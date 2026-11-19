@@ -1,16 +1,15 @@
 ---
 date: "2026-11-11"
 scripts: "none; reading, nothing ran"
-summary: "Both versions' notes under `docs/direction/`, at `67864f7bf`, after 0115's move; step 2 of 0130. Of 151 notes, 114 can go with no owner call: 21 delete now, 34 fold into an existing decision, 44 need their missed rules written first, 6 become experiments, 3 patterns, 6 go to the private archive. 37 need the owner, as 18 yes/no questions, among them 5 long notes whose reasoning fits no short decision file. The 0115 move missed 258 rule flags in 62 notes. `follows/`'s four files stay apart under 0017; the lean is `.patterns/follows/`. Agent time only, $0; tokens not recorded."
+summary: "Both versions' notes under `docs/direction/`, at `67864f7bf`, after 0115's move; step 2 of 0130. Of 151 notes, 114 can go with no owner call: 21 delete now, 34 fold into an existing decision, 44 need their missed rules written first, 6 become experiments, 3 patterns, 6 go to the private archive. 37 need the owner, as 18 yes/no questions, among them 5 long notes whose reasoning fits no short decision file. The 0115 move missed 258 rule flags in 62 notes. `follows/`'s four files stay apart under 0017; the lean is `.kalfa/patterns/follows/`. Agent time only, $0; tokens not recorded."
 ---
 
 # 280. Sorting the direction notes: what kind each one is, and where it goes
 
 Read on 2026-11-11. **This is reading, not a measurement.** Seven agents read every note under
-`docs/direction/` at commit `67864f7bf`, once 0115's seven pull requests had merged (decisions 0200
+`docs/direction/` at commit `67864f7bf`, once 0115's seven pull requests had merged (an earlier decision
 to 0521). Each note was checked against the decision files it links and that link it. Nothing ran,
-and no note was moved or deleted. It is step 2 of
-[0130](../.decisions/0130-every-piece-of-knowledge-has-one-home.md): the count by kind, and the list
+and no note was moved or deleted. It is step 2 of: the count by kind, and the list
 of notes that need the owner. It covers both versions' notes; each row says which version where the
 note does.
 
@@ -31,7 +30,7 @@ its rules are written as decision files. The owner's 37 hold the other 99.
 | **All notes** (not counting `follows/` and the README) | **151** |
 
 `docs/direction/follows/` holds four more files: the README and the Elm, Kubernetes and OTP tables.
-[0017](../.decisions/0017-each-model-we-follow-has-one-table.md) keeps them, and 0130 does not
+ keeps them, and 0130 does not
 name them. They are listed apart below and asked about in question 18.
 
 ```text
@@ -122,7 +121,7 @@ Each is one yes/no. The lean, why, cost and confidence follow.
 17. **`one-parent-stages-as-slots`: is only "the pipeline is one parent, with the steps as its
     children" decided, and the slot bullets history?** Lean: yes. Why: the 2026-10-22 line names
     only the idea. Cost: one short decision file; the rest is archived. Confidence: 70%.
-18. **`follows/`: move the four files to `.patterns/follows/` and amend 0017's path, keeping its
+18. **`follows/`: move the four files to `.kalfa/patterns/follows/` and amend 0017's path, keeping its
     one-row-per-behavior rule?** Lean: yes. Why: 0130 removes `docs/direction/` but names no new
     home, a table of our code against a model is "how the code is shaped now", and 0130 says the
     move changes no rule, so the path change needs the amendment. Cost: 0017's amendment, about 10
@@ -135,7 +134,7 @@ Each is one yes/no. The lean, why, cost and confidence follow.
 - **Kind** is 0130's: `reasoning` (decided rules moved, reasoning left), `study` (an experiment),
   `shape` (a pattern), `guide` (a how-to or guideline), `history` (the archive), `proposed`.
 - **Links in** counts files that link the note, from a `rg` of its file name: AG for AGENTS.md, DEC
-  `.decisions/`, PAT `.patterns/`, AGT the skills, PLAN `docs/plan/`, CODE code files, DIR other
+  `.decisions/`, PAT `.kalfa/patterns/`, AGT the skills, PLAN `docs/plan/`, CODE code files, DIR other
   notes, OTH experiments, `field/`, the glossary and other docs. A zero is left out.
 - **Missed** means a decided rule in the note that no decision file holds. A reader flagged it
   with its line number. The list is at the end.
@@ -211,7 +210,7 @@ Each keeps a short leftover, such as a code block, a table or a few lines of why
 | `secrets-are-redacted` | reasoning | 0320, 0321 | "How it is held" (lint table and `redacted.test.ts`); Why for path-named edge files; "What it does not cover" list; 85% doubt | DEC 4, PLAN 1, CODE 5, DIR 2, OTH 2 | fold 0320: the lint table and test go in its Context; the "does not cover" gaps list goes to the private archive, since gap lists stay out of the public repo; then delete |
 | `sort-answers-yes-or-no` | reasoning | 0369, 0372 to 0376; "owner does not approve the PR" is 0014 here, 0071 and 0082 for the product | "Why" (later needs a wake-up, priority meant "not now"); the bar's Open list (code-seen rules to research, Jev out of no), which 0374 points back to | DEC 6, CODE 6, DIR 11, OTH 7 | fold 0372 (the Why) and 0374 (the open list, since 0374 says "open in the note"); then delete |
 | `tea-is-the-engine` | reasoning | 0254 | The "Why" bullets (two durable models break Elm first; cluster cannot sleep, 20 s first call) and the opening turn sketch. Evidence is in experiment 174. | DEC 1, PLAN 2, DIR 1, OTH 6 | fold 0254: the turn sketch and the two "Why" bullets go in its Context. Note 0254 still says cluster returns "in a note", which 0130 ends. |
-| `the-desktop-layer` | reasoning | 0274, 0275, 0276, 0277, 0278, 0279, 0280 | The `Desktop` type sketch, the one-example block, experiment 150's 14 ms vs 95 ms echo, WezTerm's bug links. Stale: Miniflare named directly (0042). | DEC 9, PLAN 2, DIR 10, OTH 4 | fold 0274: the type sketch and the example go in its Context; the echo number is experiment 150's. Then delete. |
+| `the-desktop-layer` | reasoning | 0274, 0275, 0276, 0277, 0278, 0279, 0280 | The `Desktop` type sketch, the one-example block, experiment 150's 14 ms vs 95 ms echo, WezTerm's bug links. Stale: Miniflare named directly (0018). | DEC 9, PLAN 2, DIR 10, OTH 4 | fold 0274: the type sketch and the example go in its Context; the echo number is experiment 150's. Then delete. |
 | `tickets-start-in-our-tracker` | reasoning | 0340, 0341, 0342, 0343, 0344, 0345, 0346, 0347 | "Why" (Rule of Two, prompt-injection sources), about 15 lines. "Still open": the PR watcher lean with its alarm sketch, webhooks through a tunnel, ticket ids as a guess | DEC 9, CODE 2, DIR 11, OTH 3 | fold 0340: the "who writes the ticket is the guard" why; the still-open leans go to archive |
 | `top-bar-name` | reasoning | 0495 | "What we saw" shots table (5 rows); the Linear clash and 60% / 55% sureness; "What this cannot tell us", 4 bullets | DEC 1, DIR 5, OTH 2 | fold 0495: the Linear clash and the shots table go in its Context, then delete |
 | `typography` | reasoning | 0457, 0458, 0459, 0460 (makers read in experiment 200) | The full `textStyles` map with weights; `DescriptionList` sketch; the traced-value block; the names doubt (vs Material); "A tryout in today's version" list; "Manti ideas" (issue 135 comment) | DEC 4, DIR 4, OTH 3 | fold 0457: the map, the description list sketch and the names doubt; tryout list to docs/plan, Manti ideas to archive |
@@ -288,7 +287,7 @@ How the code is shaped now. `effect-code-guidelines` and `new-combos` also hold 
 |---|---|---|---|---|---|
 | `effect-code-guidelines` | guide | 0120, 0118, 0119; patterns for E1, E2, E3, E5, E6, E8 | E4 and E7 before/after blocks (no imports-and-ids pattern); "Smaller calls"; fix order; cost table. MISSED, below | DEC 1, OTH 3 | pattern: `effect-imports-and-ids.md` (E7), E4 into `effect-state-and-time`; smaller calls folded into 0120 |
 | `new-combos` | shape | none; 0079 answers one open point | The six combos (Rate, Controls, Brief, Poll, ask grown, guarded files grown) and their sketches, built in `packages/pipeline/src/`. Open: ratings before blocking, Poll's clock | DEC 1, CODE 5, DIR 2, OTH 1 | pattern: `pipeline-combos` (today's version); the four missed rules fold into a new decision; then delete |
-| `the-frame` | shape | 0490, 0491, 0492, 0493, glossary Frame section | The four part tables: 50 parts, each with industry word, source link and today's `file:line`. "Nobody decides these yet" (12 part words, proposed). Open: is a popover footer pressable; `%3` vs tmux pane ids. | DEC 6, PLAN 1, DIR 5, OTH 1 | pattern: `.patterns/frame-parts.md`, today's app frame mapped to code, diagram first. The 12 proposed words go to the glossary's open clashes. |
+| `the-frame` | shape | 0490, 0491, 0492, 0493, glossary Frame section | The four part tables: 50 parts, each with industry word, source link and today's `file:line`. "Nobody decides these yet" (12 part words, proposed). Open: is a popover footer pressable; `%3` vs tmux pane ids. | DEC 6, PLAN 1, DIR 5, OTH 1 | pattern: `.kalfa/patterns/frame-parts.md`, today's app frame mapped to code, diagram first. The 12 proposed words go to the glossary's open clashes. |
 
 ### Goes to the private archive (6)
 
@@ -337,9 +336,9 @@ History nothing builds from. Their decided parts, if any, are already in decisio
 | `every-wait-is-a-queue` | proposed | glossary (`<pid>/dead`), 0482 (asks in one queue) | Queue as a ledger view, readers per queue, per-stage caps; today's dead-letter pack (2026-10-20) | CODE 1, DIR 3, OTH 3 | owner: retire or keep for Tier 6 |
 | `experiments-behind-a-service` | proposed | 0218, 0027 | `Experiments` service sketch, programs table, money combo, gaps list | CODE 2, DIR 1, OTH 1 | owner: archive the proposal |
 | `fabsh-grows-into-a-language` | proposed | none | The whole vision: grammar, highlighting, completion from the desk | DIR 2 | owner: a vision walked at Tier 5 |
-| `tea-program` | proposed | 0433, 0434, 0435, 0436, 0437, 0438, 0439, 0440, 0441 | The note is still "Proposed" for today's version: pipe acks and outbox, ids down a pipe, `call`, one live copy per id, run as a span, fit widening, the "Why" and "What it costs" lists, the dropped first shape. Today's code is its only other home. | DEC 10, CODE 1, DIR 11, OTH 10 | owner: undecided parts of a today's-version API that `next/` replaced with `Program.make` (0256). |
+| `tea-program` | proposed | 0433, 0434, 0435, 0436, 0437, 0438, 0439, 0440, 0441 | The note is still "Proposed" for today's version: pipe acks and outbox, ids down a pipe, `call`, one live copy per id, run as a span, fit widening, the "Why" and "What it costs" lists, the dropped first shape. Today's code is its only other home. | DEC 10, CODE 1, DIR 11, OTH 10 | owner: undecided parts of a today's-version API that `next/` replaced with `Program.make`. |
 | `the-ledger-goes-to-cloudflare` | proposed | 0051, 0283, 0284, 0285, 0286, 0287, 0288, 0289, 0290 | Leans never decided but built: door stamps every writer, agent `Grant`, `PersonOnly` kinds (section 2); members facts (4); doorbell tail and away state (5); talk's three rules (10). Cost table (7), the proof branches (1), section 9's split cost. Scope for `next/` unsettled (experiment 271, item 20). | DEC 9, PLAN 2, CODE 3, DIR 13, OTH 9 | owner: settle scope, then archive; cost table and proof study fold into experiment 144. |
-| `ship-stage-rules` | reasoning | none; 0049 and 0097 hold only "behind main ships as it is" | All other rules: closed or draft PR is a skip; comment routing by writer; red checks rerun once per head; pending and queue waits have limits | DEC 3, DIR 3, OTH 3 | owner: today's ship is paused and the merge queue (0107, 0110) replaces it, so archive or write as a decision |
+| `ship-stage-rules` | reasoning | none; 0049 and 0097 hold only "behind main ships as it is" | All other rules: closed or draft PR is a skip; comment routing by writer; red checks rerun once per head; pending and queue waits have limits | DEC 3, DIR 3, OTH 3 | owner: today's ship is paused and the merge queue (0034, 0034) replaces it, so archive or write as a decision |
 
 ### Owner, questions 4 to 17: one real call each (14)
 
@@ -366,14 +365,14 @@ History nothing builds from. Their decided parts, if any, are already in decisio
 
 | Note | Kind | Rules held in | Left that nothing holds | Links in | Move |
 |---|---|---|---|---|---|
-| `follows/README` | shape | 0017 (the table rule, the four columns, the not-yet-decided DDD, Linear, tmux and i3 tables) | The index table's row counts, which are stale: it says Kubernetes 11 rows and 10 differ, and the file says 13 and 12 | AG 1, DEC 2, PLAN 0, PAT 0, AGT 1, CODE 0, DIR 1, OTH 1 | owner: lean `.patterns/follows/README.md`, with the counts fixed and 0017's path amended |
-| `follows/elm` | shape | 0017 (the shape); each row cites its own decision or `path:line` | The 12-row table itself, a living comparison against code at `5b1171ed` | AG 0, DEC 1, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.patterns/follows/elm.md`, after the owner's yes on the README row |
-| `follows/kubernetes` | shape | 0017 | The 13-row table; its "Coming: 0016" line | AG 0, DEC 2, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.patterns/follows/kubernetes.md`, after the owner's yes |
-| `follows/otp` | shape | 0017; rows draw on experiment 239 | The 28-row table; its "Coming: 0016" line | AG 0, DEC 6, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 2, OTH 1 | pattern: `.patterns/follows/otp.md`, after the owner's yes |
+| `follows/README` | shape | 0017 (the table rule, the four columns, the not-yet-decided DDD, Linear, tmux and i3 tables) | The index table's row counts, which are stale: it says Kubernetes 11 rows and 10 differ, and the file says 13 and 12 | AG 1, DEC 2, PLAN 0, PAT 0, AGT 1, CODE 0, DIR 1, OTH 1 | owner: lean `.kalfa/patterns/follows/README.md`, with the counts fixed and 0017's path amended |
+| `follows/elm` | shape | 0017 (the shape); each row cites its own decision or `path:line` | The 12-row table itself, a living comparison against code at `5b1171ed` | AG 0, DEC 1, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.kalfa/patterns/follows/elm.md`, after the owner's yes on the README row |
+| `follows/kubernetes` | shape | 0017 | The 13-row table; its "Coming: 0016" line | AG 0, DEC 2, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 1, OTH 0 | pattern: `.kalfa/patterns/follows/kubernetes.md`, after the owner's yes |
+| `follows/otp` | shape | 0017; rows draw on experiment 239 | The 28-row table; its "Coming: 0016" line | AG 0, DEC 6, PLAN 0, PAT 0, AGT 0, CODE 0, DIR 2, OTH 1 | pattern: `.kalfa/patterns/follows/otp.md`, after the owner's yes |
 
 ## The order to remove them in
 
-Nothing starts before the owner has seen this count and the questions (0130). Every pull request
+Nothing starts before the owner has seen this count and the questions. Every pull request
 below removes notes and, in the same pull request, rewrites every link to them, removes their rows
 from `docs/direction/README.md`, and carries 0130's table: one row per removed note, saying where
 each part went. Links are counted in files that link a note; the glossary alone links notes 212
@@ -419,7 +418,7 @@ times.
   a commit link, and that is many files.
 - **How many decision files the missed rules become.** The readers' guesses add up to about 100 to
   130 new files, more if the five long notes split finely. A rule the title would hide gets its own
-  file (0115), so the number grows with care.
+  file, so the number grows with care.
 - **Small things the readers found on the way:** `an-input-can-take-anything` still says proposed,
   but `anyInput` is built in today's code. 0254 still says the cluster idea returns "in a note",
   which 0130 ends. 0461's Consequences still call the Manti clashes proposed, but 0510 answers

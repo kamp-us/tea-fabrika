@@ -198,5 +198,5 @@ The withdrawn defaults are Process/Project recovery writes 48,330 / 3,710,
 recovery bytes 12,029,030 / 4,638,130, Process writes 320 and Project replay bytes
 5,500. Ordinary work and accumulated retained data had distorted those readings.
 Recovery bytes now measure a rolling-minute rate; retained totals stay recorded
-without that limit, under decision 0152. The door's envelope is infrastructure
-work under decision 0153 and does not add a third program write.
+without that limit, under an earlier decision. The door's envelope is infrastructure
+work under an earlier decision and does not add a third program write.

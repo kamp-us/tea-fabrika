@@ -1,6 +1,6 @@
 ---
 date: "2026-11-13"
-summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at `14f96d9a3`. No rule has a whole check: six have part of one (E1, E2, E3, E4, E7, 0252) and four have none (E5, E6, E8, 0095). Every one is broken somewhere: 13 hand guards and 14 raw crypto lines (E1), 33 `instanceof` and 10 `Cause.squash` (E2), 3 inferred service types (E3), 19 static layers (E5, 0095), about 394 exports with no doc block and about 119 plan codes (E6), 321 named-import lines in `next/packages` (E7), 13 exported `fnUntraced` (0252). E1, E2, E6, E7 and 0252 still leak in files added by the newest 15 commits; E5 does not. The note's fix order stopped after step 2: no rule from step 3 or step 5 has landed. `effectFnOpportunity` is on while 0252's text says it stays off. The counts are grep heuristics, wider than the note's, with no false alarm rate measured."
+summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at `14f96d9a3`. No rule has a whole check: six have part of one (E1, E2, E3, E4, E7, 0252) and four have none (E5, E6, E8, 0095). Every one is broken somewhere: 13 hand guards and 14 raw crypto lines (E1), 33 `instanceof` and 10 `Cause.squash` (E2), 3 inferred service types (E3), 19 static layers (E5, 0095), about 394 exports with no doc block and about 119 plan codes (E6), 321 named-import lines in `next/packages` (E7), 13 exported `fnUntraced`. E1, E2, E6, E7 and 0252 still leak in files added by the newest 15 commits; E5 does not. The note's fix order stopped after step 2: no rule from step 3 or step 5 has landed. `effectFnOpportunity` is on while 0252's text says it stays off. The counts are grep heuristics, wider than the note's, with no false alarm rate measured."
 ---
 
 # 282. Which of the Effect guidelines have a check, and where does `next/` break them today?
@@ -8,12 +8,12 @@ summary: "`next/`; $0. E1 to E8 of 0120, with 0095 and 0252, on `origin/main` at
 Read on 2026-11-13, on `origin/main` at `14f96d9a3`. It is about `next/`, the new version. Nothing
 ran but `git grep`: no model, no key, no network, **$0**. No script is kept, because each count is
 one grep, and each pattern is written beside its number below. This page was written on its branch
-from its first line ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)).
+from its first line.
 
-The guidelines are E1 to E8 in [0120](../.decisions/0120-effect-code-guidelines.md), told at length
+The guidelines are E1 to E8 in, told at length
 in [Effect code guidelines](../docs/direction/effect-code-guidelines.md). Two neighbors they lean on
-are read too: [0095](../.decisions/0095-a-service-file-holds-only-its-contract.md) (a service file
-holds only its contract) and [0252](../.decisions/0252-effect-fn-for-exported-effects.md)
+are read too: (a service file
+holds only its contract)
 (`Effect.fn` for exported effects).
 
 **The answer: the guidelines are written, and most of them are not held by code.**
@@ -84,8 +84,8 @@ Kind: lint, then taste. **Check: partly built.**
   request 958. Our `fabrika/no-wall-clock` (`.oxlintrc.json:833`) blocks clock reads.
 - **Off:** `globalFetchInEffect` and `globalDateInEffect`.
 - **Not written:** `fabrika/no-hand-guard` and `fabrika/no-raw-crypto`.
-- **The pattern docs exist:** `.patterns/effect-reach-for-what-ships.md` and
-  `.patterns/effect-crypto-through-services.md`.
+- **The pattern docs exist:** `.kalfa/patterns/effect-reach-for-what-ships.md` and
+  `.kalfa/patterns/effect-crypto-through-services.md`.
 
 Broken today:
 
@@ -143,7 +143,7 @@ its cause (ticket 695), so the note's "92 of 113 cause drops" no longer holds.
 
 The hard parts go in `internal/`, and the `layer` is one line. Kind: pattern, plus lint for the
 service type, plus taste for the cut. **Check: partly built.** The pattern doc exists
-(`.patterns/effect-long-body-is-a-shelf.md`, pull request 961). `fabrika/written-service-type` is
+(`.kalfa/patterns/effect-long-body-is-a-shelf.md`, pull request 961). `fabrika/written-service-type` is
 not written.
 
 Broken today:
@@ -192,13 +192,13 @@ sampled look like local data (`next/packages/libfabrika/src/runtime/WatchersSql.
 
 ## E5: a layer asks for what it needs
 
-It never builds its own dependencies, and the service file is its contract (0095). Kind: lint plus
+It never builds its own dependencies, and the service file is its contract. Kind: lint plus
 pattern. **Check: no.**
 
 - `fabrika/no-static-layer` is not written. 0095 requires it, and no pull request or commit adds
   it.
 - `strictEffectProvide` is off.
-- Only the pattern doc exists: `.patterns/effect-services-and-layers.md`.
+- Only the pattern doc exists: `.kalfa/patterns/effect-services-and-layers.md`.
 
 Broken today:
 
@@ -226,7 +226,7 @@ No plan codes and no history in comments. Kind: lint, then taste. **Check: no.**
 - The docs lint rule is not built. The note's fix order puts it in step 5. Ticket 900 ("a lint rule
   holds E6") showed as open, at triage.
 - The plan-code rule is not written.
-- Only the pattern doc exists: `.patterns/doc-comments.md`.
+- Only the pattern doc exists: `.kalfa/patterns/doc-comments.md`.
 
 Broken today. The heuristic: an `export` line whose line above does not end in `*/`, with
 `internal/` and tests left out.
@@ -291,7 +291,7 @@ request 1109 fixed one id, and `284ad0536` fixed another.
 ## E8: where we differ from Effect, the file says why
 
 At the code, with the record that decided it. Kind: taste. **Check: no.** It is review only. The
-pattern doc exists: `.patterns/effect-differences-say-why.md`.
+pattern doc exists: `.kalfa/patterns/effect-differences-say-why.md`.
 
 Broken today. This is a read of the note's 6 keep-list sites, not a count:
 

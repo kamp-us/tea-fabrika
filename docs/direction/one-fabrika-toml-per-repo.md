@@ -14,15 +14,15 @@ blog post 10 (deleted from main; see the tag `archive/2026-11-09`); the first co
 ([the tiers](../plan/tiers.md)).*
 
 *Added 2026-11-10: a choice that makes sense as a value here must be one, in both versions and in
-`next/` now ([0069](../../.decisions/0069-choices-are-settings.md)). This note's limits on what a
+`next/` now. This note's limits on what a
 setting may be still hold. The foundation for loading settings in `next/` moved from Tier 5 to
 Tier 1 by 0069. 0069 does not move repo programs or packs; 0068, below, gives programs written
 outside a thin slice.*
 
-*Changed 2026-11-10 by [0068](../../.decisions/0068-tiers-carry-every-part.md):* programs written
+*Changed 2026-11-10 by:* programs written
 outside fabrika's own source get a thin slice before Tier 5; its shape is not decided yet.
 
-*Changed 2026-11-10 by [0083](../../.decisions/0083-every-program-in-a-pack.md):* in `next/`, every
+*Changed 2026-11-10 by [0019](../../.kalfa/decisions/0019-every-program-in-a-pack.md):* in `next/`, every
 program is in a pack, so a repo's own programs are a pack in `.fabrika/packs/<name>/`, not
 `programs/deploy/` or `.fabrika/programs`; "one pack's own settings; the pack checks them" is now
 the only place a program's settings live.
@@ -53,7 +53,7 @@ Each setting still has one home: the theme pick is `theme` in `fabrika.toml`,
 each theme is its own file, and keys are in `keybindings.toml`. So "one
 spelling" holds.*
 
-*Changed 2026-11-10 by [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the home's
+*Changed 2026-11-10 by:* the home's
 cache of pack code is `~/.fabrika/cache/packs/`, not `packs/`.
 
 - **Decided:**
@@ -171,7 +171,7 @@ acme/tools/.fabrika/packs/deploy-kit/   where the pack lives
     project run the same pack code.
   - `~/.fabrika/packs/` only caches code, keyed by commit, like Go's module
     cache. Projects pinned to the same commit share one copy.
-    *Changed 2026-11-10 by [0085](../../.decisions/0085-pack-cache-under-cache-folder.md):* the
+    *Changed 2026-11-10 by:* the
     cache is `~/.fabrika/cache/packs/`.
   - A pack only one person wants goes in `~/.fabrika/fabrika.toml`, with its
     own lock in the home. When both name the same pack, the project's pin

@@ -67,7 +67,7 @@ not proof for this package. The new consumer law supplies current proof.
 
 Read versions are rslib 1.0.5, Effect and `@effect/vitest` 4.1.3, TypeScript 7.0.2, Vitest 5.0.5,
 toml-eslint-parser 1.0.3 and toml-patch 3.3.2. Reuse those installed versions. No package is patched.
-The installed Effect `AGENTS.md` was read. Decisions 0556 and 0585 keep the package private;
+The installed Effect `AGENTS.md` was read. an earlier decision and 0585 keep the package private;
 registry publication, licensing and a release service are outside this slice.
 
 ## Exact moves

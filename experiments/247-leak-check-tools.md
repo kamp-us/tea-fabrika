@@ -23,8 +23,7 @@ were read from their own docs and not run.
   and a tool does not know them either. gitleaks flagged 3 of 3 re-indented lines, and its
   baseline did not help. Ours flagged them too until PR 709; now it reads them as old text.
 - **Read each pushed commit on its own.** gitleaks reads a push commit by commit. The owner
-  decided on 2026-11-10 that our check does too
-  ([0048](../.decisions/0048-leak-check-reads-each-commit.md)), built in
+  decided on 2026-11-10 that our check does too, built in
   [PR 744](https://github.com/usirin/tea-fabrika/pull/744).
 
 ```sh
@@ -42,17 +41,15 @@ Read from the source, not from a summary.
 - **What it reads.** A unified diff on stdin, or one whole draft file with `--text <file>`. In
   diff mode it reads the added lines.
 - **What feeds it.** `botpush.mjs` hands it the branch's change from main, before any key is read
-  or any network call is made. Since decision 0048 it also hands it each pushed commit.
+  or any network call is made. Since an earlier decision it also hands it each pushed commit.
 - **Private words.** Plain strings, one per line, matched as substrings in any letter case. The
   list is a private file under `~/.fabrika`, or the path in `FABRIKA_LEAK_WORDS`. The check refuses
   a list that sits inside the repo. This experiment never read the list.
-- **Machine paths.** Home and temp folders, by the rule of
-  [0011](../.decisions/0011-leak-check-allows-plain-tmp-paths.md).
+- **Machine paths.** Home and temp folders, by the rule of.
 - **Keys.** Provider key shapes and a private key block's first line. The lengths were copied
   from gitleaks' own rule file, as the comment in `leakgrep.sh` says.
 - **Spacing, since PR 709 (ticket 500).** An added line that only changes the spacing of a line the
-  same file's diff removes is read as old text
-  ([0047](../.decisions/0047-respaced-line-is-old-text.md)).
+  same file's diff removes is read as old text.
 - **Two house rules that are not leaks.** An em dash, and a link to a design canvas.
 - **How it fails.** Exit 1 on any hit, and it names only the kind and the added line's number,
   never the text. Exit 2 when it cannot read its input. It fails closed: any hit stops the push for
@@ -158,7 +155,7 @@ half right.
 - *Which text is a key* is the part a tool does better. It is a list of provider shapes that
   somebody else keeps current.
 - *Which lines to check* is where our edge cases came from: a plus at the start of a line (field
-  note 2026-11-08-204), a temp path in a test (decision 0011), and a re-indent (ticket 500). A
+  note 2026-11-08-204), a temp path in a test (an earlier decision), and a re-indent (ticket 500). A
   tool does not know these either. gitleaks reads the same `git log -p` and flags a re-indented
   line again. Its baseline matches on commit and line, so a new commit is a new finding.
 - *What counts as private here* is ours alone: the private words, the machine paths and decision
@@ -182,7 +179,7 @@ half right.
    Tracker ticket 547 holds this work.
 3. **Read each pushed commit on its own.** gitleaks does, and so do the push hooks git itself
    offers. Decided by the owner on 2026-11-10 as
-   [0048](../.decisions/0048-leak-check-reads-each-commit.md) and built in
+ and built in
    [PR 744](https://github.com/usirin/tea-fabrika/pull/744). The spacing case needs nothing
    more in ours: PR 709 covers it, and better than `-b`.
 4. **One check, not two.** `drive.ts` should call `leakgrep.sh` and lose its own copy. 85% sure.

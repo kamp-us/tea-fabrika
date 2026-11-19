@@ -4,9 +4,9 @@ Plancheck-Version: 3
 # Ticket 502: the rest of the Alchemy port
 
 Everything here is about `next/`. Today's version is not changed. Nothing is built. This plan
-builds [0041](../../.decisions/0041-object-classes-are-effect-objects.md), with its amendments, and
-the rows of [0042](../../.decisions/0042-platform-pieces-go-through-alchemy.md) that move with it.
-[0181](../../.decisions/0181-the-alchemy-port-keeps-a-slot.md) gives it a slot.
+builds, with its amendments, and
+the rows of [0018](../../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md) that move with it.
+ gives it a slot.
 
 ```mermaid
 flowchart LR
@@ -126,15 +126,14 @@ More counts, so a slice can check itself:
 - **Alchemy's own decisions and patterns:** none found in the installed package, which ships
   `src/`, `lib/` and a README. The local source checkout is at beta.77, older than the installed
   one, so nothing here is taken from it.
-- **phoenix,** which moved first: its decisions 0028 and 0032 and its pattern doc, all linked from
+- **phoenix,** which moved first: its decisions 0027 and 0032 and its pattern doc, all linked from
   0041. Its per-call sibling rule failed when run here and is replaced (0041, Amendments).
 - **OTP.** A `gen_server` keeps its callback module, the shell, apart from the logic it calls.
   That is the thin class of [an object class stays thin](../direction/object-classes-stay-thin.md).
-- **Effect.** A service is a contract and a Layer in sibling files
-  ([0095](../../.decisions/0095-a-service-file-holds-only-its-contract.md)). An object's Layer
+- **Effect.** A service is a contract and a Layer in sibling files. An object's Layer
   follows it: `ConnectionObject.layer(...)`, read through its module.
 
-Existing tools first ([0040](../../.decisions/0040-existing-tools-before-hand-written.md)). The
+Existing tools first. The
 first plan asked for a hand-written lint rule against a bare sibling lookup in a method. It is not
 needed: the type checker already refuses it. A method that yields a sibling needs that sibling,
 and a contract whose methods need nothing does not accept it (experiment 248, question 5). So that
@@ -183,7 +182,7 @@ export type ConnectionShape = {
   readonly probe: (session: string) => Effect.Effect<number | null, LedgerError>;
 };
 
-// cloudflare/ConnectionObject.ts: the Layer, a sibling file (0095). It decides nothing.
+// cloudflare/ConnectionObject.ts: the Layer, a sibling file. It decides nothing.
 export const layer = (options: ConnectionOptions) =>
   Connection.make(
     Effect.gen(function* () {
@@ -231,7 +230,7 @@ What each slice changes in that picture:
   ```ts
   // cloudflare/CloudflareSql.ts today
   transaction: (step) => storage.transactionSync(step),
-  // after, a sketch: the step stays a plain function (0050), and no raw handle is needed
+  // after, a sketch: the step stays a plain function (0011), and no raw handle is needed
   transaction: (step) => storage.transaction(Effect.sync(step)),
   ```
 
@@ -283,22 +282,22 @@ owner's own answer.
   they stay, and no wire shape changes in this port.
 - **No patch is planned.** Each form above exists in the installed source. If a run finds a real
   gap, the slice patches it locally and files the issue that day, after the read
-  [0054](../../.decisions/0054-read-upstream-before-patching-it.md) asks for. The auto-response
+ asks for. The auto-response
   pair in S6 is one of 0042's six listed gaps: it stays one marked edge line, with no issue.
-- **An object's Layer is a sibling file read through its module** (0095): `ConnectionObject.layer`,
+- **An object's Layer is a sibling file read through its module**: `ConnectionObject.layer`,
   `ProcessObject.layer`, `ProjectObject.layer`. `RecordPartLive` takes the same form in S5, which
   rewrites that file anyway.
-- **States** ([0037](../../.decisions/0037-implicit-state-machines-made-explicit.md)): the shells
+- **States**: the shells
   add none. A shell builds its service once and hands calls to it. The saved wake and the alarm
   stay in the Process service, untouched.
-- **Sleep** ([0105](../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md)): a
+- **Sleep**: a
   Layer starts no timer and no fiber that waits. The alarm slot's type has no failure, so a failed
   alarm dies as a defect and the platform retries it, as a rejected Promise does today.
-- **Scope** ([0061](../../.decisions/0061-resources-are-acquired-in-a-scope.md)): the service is
+- **Scope**: the service is
   built in the instance's scope. The `ManagedRuntime` each class holds today goes with the class.
 - **A browser as a client:** not touched. These are calls inside the brain.
 - **S5 changes the turn for every store in one pull request.** 0050 decides the route, and
-  [0099](../../.decisions/0099-no-number-caps-a-pull-request.md) decides the size: a slice is cut by
+ decides the size: a slice is cut by
   what works on its own, never to fit a count. The `Sql` contract has one turn, and two shapes of
   it side by side would be a port inside the port. The cost is the widest diff of the nine, across
   six modules that primitives lanes also change, so the lead counts the open lanes in those files
@@ -352,8 +351,7 @@ After S4:
 
 ## Laws
 
-Ask of each: lint, type or test? A law that needs the real local runtime is host-only
-([0178](../../.decisions/0178-host-only-laws-run-first.md)). Laws 2, 4, 5, 9, 10, 12 and 13 are:
+Ask of each: lint, type or test? A law that needs the real local runtime is host-only. Laws 2, 4, 5, 9, 10, 12 and 13 are:
 they start workerd through Alchemy, so they run outside a step's box, before the first review. On
 the owner's Mac they wait for the lead's read of every line that signals a process and for the
 owner's yes. The scenarios that stop the runtime by its process id are in the app's `brain-life`
@@ -382,13 +380,13 @@ slice's object so it holds for the plain class and for the bridge class alike.
 | 14. No product file in the app's `src/` imports `cloudflare:*` | lint | lint | import `DurableObject` from `cloudflare:workers` in a product file |
 | 15. The twin still finds every object the stack binds, by its class name | test | fc.record: binding names, a repeated key and a spread, as the twin's laws have them; default runs | skip a binding whose key is the class name |
 
-As [0093](../../.decisions/0093-laws-walk-plants-run-once.md) has it, each plant is run once and
+As has it, each plant is run once and
 recorded, not kept as a test. Law 3 runs on Node: the helper is plain code, so the mutation run
 reaches it. Law 11 runs on Node too, on the plain `control` function with `props` passed in.
 
 ## Is it a setting?
 
-A setting is a value in `fabrika.toml` ([0069](../../.decisions/0069-choices-are-settings.md)).
+A setting is a value in `fabrika.toml`.
 Each new choice was asked:
 
 - **`Control` as a branch or its own Worker:** no. It is how the brain is built, not a choice a
@@ -425,8 +423,7 @@ What is lost if not recorded now: the first fact. The others can be made again f
 
 Tests, shared suites, test support, the exam folder, the lint config and saved fixtures are exam
 paths, so the tests step writes them. Product files are the build step's. S0 writes only its
-write-up to main; its code stays on its branch
-([0027](../../.decisions/0027-experiment-results-live-in-a-private-archive.md)).
+write-up to main; its code stays on its branch.
 
 | Path | Owner | Slice | Product lines expected | What changes |
 |---|---|---|---|---|
@@ -435,7 +432,7 @@ write-up to main; its code stays on its branch
 | `next/apps/fabrika/src/instance-wire.test.ts` | tests | S1, S7 | tests | law 2, unchanged cases; law 12 |
 | `next/apps/fabrika/src/port-home.laws.test.ts` `fixtures/next/port-home` | tests | S1, then S2, S3, S5, S8 | tests | new: law 5 and its saved home |
 | `next/apps/fabrika/src/port-home.test-support.ts` `next/apps/fabrika/src/port-home-guard.test.ts` | tests | S1 | tests | new: the writer of law 5's home refuses a home that holds an absolute path under the person's home folder, the temp folder or the repo root, sqlite cells included, and its law (the lead's amendment of 2026-11-13) |
-| `next/packages/libfabrika/src/telemetry/Sink.test.ts` `next/packages/libfabrika/src/node/dev/supervision-spans.test.ts` | tests | S1 | tests | [0186](../../.decisions/0186-stored-stack-frames-name-no-folder.md)'s laws: no stored frame names a folder, nothing else is lost, and the supervision law reads each frame by its name, file name, line and column (the lead's amendment of 2026-11-13; the same laws as pull request 1012) |
+| `next/packages/libfabrika/src/telemetry/Sink.test.ts` `next/packages/libfabrika/src/node/dev/supervision-spans.test.ts` | tests | S1 | tests |'s laws: no stored frame names a folder, nothing else is lost, and the supervision law reads each frame by its name, file name, line and column (the lead's amendment of 2026-11-13; the same laws as pull request 1012) |
 | `next/packages/libfabrika/src/cloudflare/ObjectService.test.ts` | tests | S1 | tests | new: law 3 |
 | `next/packages/libfabrika/src/cloudflare/connection.test.ts` | tests | S1, S6 | tests | its fake state follows the service in S6 |
 | `next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts` `next/apps/fabrika/src/scheduled-job-alarm.test.ts` `next/apps/fabrika/src/worker-supervision.test.ts` | tests | S2, S5 | tests | law 10 on the real `Process` |
@@ -468,7 +465,7 @@ write-up to main; its code stays on its branch
 | `next/packages/libfabrika/src/node/dev/dev.ts` `next/packages/libfabrika/src/node/dev/dev-recording.ts` | build | S4, S7 | 30 | the Node doubles follow the Effect contracts; the control binding names no entrypoint |
 | `next/packages/libfabrika/src/node/build/build.ts` `next/apps/fabrika/src/build.ts` | build | S8 | 80 | the brain phase hands its plugins to Alchemy's bundler |
 | `node-kinds.json` | build | S1, S2, S3, S8 | 4 | names each bridge export; the row goes with `brain.ts` |
-| `.glossary/TERMS.md` `.patterns/effect-services-and-layers.md` `.patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `.decisions/0041-object-classes-are-effect-objects.md` `.decisions/0042-platform-pieces-go-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
+| `.kalfa/glossary/GLOSSARY-MAP.md` `.kalfa/patterns/effect-services-and-layers.md` `.kalfa/patterns/durable-objects-sleep.md` `docs/direction/object-classes-stay-thin.md` `docs/direction/no-promises.md` `docs/plan/README.md` `object classes are effect objects` `.kalfa/decisions/0018-cloudflare-only-through-alchemy.md` | build | each slice | docs | the words and patterns as built; "where we are now"; a dated pointer in 0041 and 0042 when S8 lands |
 
 No screenshots: no window changes.
 
@@ -569,5 +566,5 @@ The one question this plan had, whether both instances still get the same bytes 
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-13-t502-first-plan-is-not-in-git","date":"2026-11-13","by":"plan","model":"claude-fable-5-2","rule":"doc_drift","location":{"path":".decisions/0041-object-classes-are-effect-objects.md","line":221},"says":"0041 folds two tickets into the port as \"PR 7 and PR 8\" of a plan whose list of pull requests, and whose amendments A1 to A10, are in no file in git.","proof":"`git log --all --oneline --diff-filter=A --name-only -- 'docs/plan/*502*' '*t502*plan*'` prints nothing. Pull request 763's body cites \"the signed T502 plan, amendments A1 to A10\", and tracker ticket 502 says the plan is a file in a step's working folder.","cost":"A reader cannot tell which of the eight pull requests are done, or what the ten amendments decided, without rebuilding it from three pull requests.","head":"5c72400255ffdd8f9e4478b1647cba224bdddda3","ticket":"kamp-us/tea-fabrika#502","pr":null}
+{"_tag":"finding","id":"2026-11-13-t502-first-plan-is-not-in-git","date":"2026-11-13","by":"plan","model":"claude-fable-5-2","rule":"doc_drift","location":{"path":"object classes are effect objects","line":221},"says":"0041 folds two tickets into the port as \"PR 7 and PR 8\" of a plan whose list of pull requests, and whose amendments A1 to A10, are in no file in git.","proof":"`git log --all --oneline --diff-filter=A --name-only -- 'docs/plan/*502*' '*t502*plan*'` prints nothing. Pull request 763's body cites \"the signed T502 plan, amendments A1 to A10\", and tracker ticket 502 says the plan is a file in a step's working folder.","cost":"A reader cannot tell which of the eight pull requests are done, or what the ten amendments decided, without rebuilding it from three pull requests.","head":"5c72400255ffdd8f9e4478b1647cba224bdddda3","ticket":"kamp-us/tea-fabrika#502","pr":null}
 ```

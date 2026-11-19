@@ -4,7 +4,7 @@ Tracker ticket **280**. Approved with the amendments below (lead, 2026-11-08). *
 
 ## Lead amendments
 
-The draft walked back two lines of [the Program.make note, now 0256](../../.decisions/0256-a-program-is-one-program-make.md): "nothing is written twice" (it passed `state.schema`, `msg` and a schema per write port again) and "the runner reads the model and Msg schemas off the machine" (it said no tea patch was needed). It also left out two owner calls from 2026-11-08. Fixed here.
+The draft walked back two lines of the Program.make note, now 0256: "nothing is written twice" (it passed `state.schema`, `msg` and a schema per write port again) and "the runner reads the model and Msg schemas off the machine" (it said no tea patch was needed). It also left out two owner calls from 2026-11-08. Fixed here.
 
 ### A1. The tea patch, in the shape of demlik#897
 
@@ -313,7 +313,7 @@ Paths are repo-relative. Counts estimate added or changed lines after P12 and P3
 | `docs/plan/README.md` | Record the repair and P14 dependency | 8 | lead |
 | `docs/plan/tier-1.md` | Update P11 and P14 dependencies | 8 | lead |
 | `docs/plan/tier-1-detail.md` | Separate authoring from load checking; update examples | 45 | lead |
-| `.glossary/TERMS.md` | Correct the `next/` program definition | 8 | lead |
+| `.kalfa/glossary/GLOSSARY-MAP.md` | Correct the `next/` program definition | 8 | lead |
 | `field/runs.jsonl`, `field/notes.jsonl` | Record each step and the confirmed gap | 12 | lead |
 
 About **1,540 changed or added lines**, including the saved plan. The test writer repeats the program search on the merged base. Any further runnable test declaration belongs to tests; any further product declaration belongs to build.

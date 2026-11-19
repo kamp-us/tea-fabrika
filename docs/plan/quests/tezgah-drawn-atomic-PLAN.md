@@ -1,7 +1,7 @@
-Approved by the lead agent, builds slice A of the two-flakes plan (0036), as the lead (fabrikaa-merger) approved it on 2026-11-18; body c0cf5aca14ba
+Approved by the lead agent, builds slice A of the two-flakes plan, as the lead (fabrikaa-merger) approved it on 2026-11-18; body c0cf5aca14ba
 Plancheck-Version: 3
 
-# Slice A of the two-flakes plan: `drawn` and `foldDrawn` read each region in one non-waiting call, in next/ (tickets 1166 and L33, decision 0036)
+# Slice A of the two-flakes plan: `drawn` and `foldDrawn` read each region in one non-waiting call, in next/ (tickets 1166 and L33, an earlier decision)
 
 This is slice A of the two-flakes plan (`0001-two-flakes-plan.md` on branch
 `fabrikalfa/mail-session_01WuXcauHMQJS7qtW6UxMkzV`, commit 7937a668), copied here for this pull
@@ -26,10 +26,8 @@ The fix removes the cause. No timeout grows, nothing is retried, nothing is skip
 
 What was read, so a reader can check each claim.
 
-- Decisions: [0036](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0036-a-flaky-test-is-fixed.md),
-  [0052](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0052-tests-never-depend-on-the-machine.md),
-  [0536](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)
-  and [0594](https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0594-safe-checks-direct-mac-ci.md).
+- Decisions:,,
+.
 - Finding row on main: `field/findings/2026-11-18-tezgah-focus-runs-past-its-wait-limit.json`.
 - Code on main at 84f51f801 (after PR 1562): in the app's e2e folder, `tezgah.test-support.ts`,
   `tezgah-focus.visual.test.ts`, `tezgah-fold.visual.test.ts` and `p14.test-support.ts`.
@@ -116,7 +114,7 @@ Lint, type or test? Each of these is a behavior, so a test. A shape rule would f
 auto-waiting Playwright read inside `drawn`". It cannot be told from a needed `waitFor` by syntax,
 so it stays a review point, and T1 holds it.
 
-T1 is `*.visual.test.ts` (0536). No law here needs launchd, real Electron or process signals, so
+T1 is `*.visual.test.ts`. No law here needs launchd, real Electron or process signals, so
 no host-only run comes before the review. T2's 30 runs come from CI, never from the owner's
 laptop.
 

@@ -26,7 +26,7 @@ test:
 | A bad ticket can... | A: key inside | B: key outside |
 |---|---|---|
 | steal the keys | yes | no, nothing real is there |
-| push code | anywhere, as the owner | only to its own branch, and only after review passes ([push after review](../../.decisions/0392-push-is-a-step-after-review.md)) |
+| push code | anywhere, as the owner | only to its own branch, and only after review passes (push after review) |
 | spend on the model account | from anywhere, later | only inside this job, under the box's limit |
 
 ## What was decided
@@ -49,16 +49,14 @@ test:
     container for each job), `Sandbox.os` (Anthropic's
     [sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime),
     for machines that cannot run Docker) or `Sandbox.none` (today's way).
-  - *Added 2026-11-09
-    ([0045](../../.decisions/0045-test-steps-run-in-containers.md)):* the lead tooling's steps get
+  - *Added 2026-11-09:* the lead tooling's steps get
     the same kind of box first. A step that needs ports, sockets or its own processes runs in a
     container with its own network, starting with the mutation step. The OS sandbox is never
     opened to let a step listen.
   - fabrika's own part is a runner inside the box and the host's side of the
     line format. The program's code is the same in all three.
   - Requirement (owner, 2026-11-09): the `Sandbox` service removes a job's box and its files when
-    the job's quest lands, saving its work first; no person cleans up or frees disk
-    ([0019](../../.decisions/0019-nothing-stale.md)).
+    the job's quest lands, saving its work first; no person cleans up or frees disk.
   - A program already has a command line's shape
     ([tea-program](./tea-program.md)): flags are argv, inputs are stdin,
     outputs are events. They cross the wall as one JSON line each, checked by
@@ -77,7 +75,7 @@ test:
     rule.
 - **Tools are served inside the box, and each tool call is a Cmd.**
   - The agent's tools, the one "ask" tool and the typed reads of
-    [helpers](../../.decisions/0416-a-step-calls-a-helper.md), run in the program's own
+    helpers, run in the program's own
     process inside the box. A tool that needs the outside writes a Cmd, and
     the Cmd is passed out.
   - The agent sees no change: it calls the same tools.

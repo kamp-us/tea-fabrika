@@ -16,8 +16,7 @@ trusting any line that says an agent could not see a file.
 - Scripts are not kept on main. On 2026-11-09 every experiment script, its `lib/` helpers and
   the five harness packages were removed. They are all on the branch
   `fabrikalfa/archive-2026-11-09`, and a write-up that names a script means that copy.
-- Results and assets are not kept on main either
-  ([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)). On 2026-11-09
+- Results and assets are not kept on main either. On 2026-11-09
   every file here that was not a top-level write-up (`results/`, the `NN-name/` folders,
   `failures/`, shots, JSON and patches: 610 files, about 40 MB) moved to the owner's private
   archive, at the same paths. Git history holds every one too: a path a write-up names under
@@ -27,7 +26,7 @@ trusting any line that says an agent could not see a file.
 - A new write-up quotes the numbers it uses inline. Raw results and assets go to the private
   archive; a script writes raw samples under `runs/`, which git ignores, or to a path a flag names.
 - The write-ups left here shrink over time: a write-up nothing cites goes once its lesson is in
-  `.decisions/`, `.patterns/` or `docs/direction/`.
+  `.decisions/`, `.kalfa/patterns/` or `docs/direction/`.
 - [open-questions.md](./open-questions.md) is the list of open questions the
   log kept up to experiment 20.
 
@@ -44,8 +43,7 @@ when the confidence is at or above a floor.
 
 ## The experiments
 
-This folder keeps no table of its write-ups
-([0522](../.decisions/0522-no-folder-keeps-an-index-table.md)). The lead's command prints one line
+This folder keeps no table of its write-ups. The lead's command prints one line
 per write-up as it is on `origin/main`, then the next free number, which is the one a new write-up
 takes:
 

@@ -44,7 +44,7 @@ The test for any file in next/apps/fabrika:
     no   ->  it may stay in the app (its choices: which programs, which settings, its window)
 ```
 
-Changed 2026-11-11 ([0126](../../.decisions/0126-the-library-makes-an-instance-from-an-apps-choices.md)):
+Changed 2026-11-11:
 the list used to say "wiring, the deploy stack, what starts things". That named kinds of file, not
 kinds of content, and the brain's object classes and the deploy stack fail the test above. They
 move into the library. The app keeps choices.

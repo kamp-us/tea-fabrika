@@ -1,6 +1,6 @@
 # 289. When a person presses a desk key, should the window move first or wait for the brain?
 
-**Summary.** `next/`, the desk (decision 0278). Answer: move first, and let the brain's answer win.
+**Summary.** `next/`, the desk (an earlier decision). Answer: move first, and let the brain's answer win.
 Every multiplayer system read here moves first and lets the server correct it; only Cloudflare's
 plain chat demo waits. Measured in local workerd
 (Miniflare 4.20260730.0): one focus key's round trip over one WebSocket to one Durable Object is

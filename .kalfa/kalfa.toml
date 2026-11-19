@@ -1,0 +1,30 @@
+# Where each kind of record lives, and what goes in it. Agents read this file directly.
+[[records]]
+name = "decisions"
+path = ".kalfa/decisions/"
+prompt = "Matt Pocock's ADR format. Write one only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one."
+
+[[records]]
+name = "glossary"
+path = ".kalfa/glossary/"
+prompt = "GLOSSARY-MAP.md is the map of bounded contexts. Each context's words live in its own GLOSSARY.md, in Matt Pocock's glossary format: only words a caller of that context sees."
+
+[[records]]
+name = "guidelines"
+path = ".kalfa/guidelines/"
+prompt = "One design area's rules, approved by the owner. Change a rule only by editing its page, in a pull request the owner says yes to."
+
+[[records]]
+name = "patterns"
+path = ".kalfa/patterns/"
+prompt = "How the code is shaped now, one doc per pattern. When a doc and the source disagree, the source wins and the doc gets fixed."
+
+[[records]]
+name = "runbooks"
+path = ".kalfa/runbooks/"
+prompt = "One file per operation done by hand, written the first time it is done for real."
+
+[[records]]
+name = "retro"
+path = ".kalfa/retro/"
+prompt = "Matt Pocock's retro format: one file per session worth learning from."

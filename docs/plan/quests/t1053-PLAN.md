@@ -87,9 +87,9 @@ Counted on `origin/main` at `98bcdfa22` with a syntax-tree scan of every `.ts` a
   memory, not fetched.
 - **Ours.** `exit(pid, input: ExitReason, origin: From)` is typed and still decoded, while
   `msg(input: unknown)` beside it is not. Decision
-  [0215](../../../.decisions/0215-untrusted-input-never-throws.md) picks the call: the wire goes
+ picks the call: the wire goes
   through `decodeUnknownEffect`, and `make` is for a value our own code builds.
-  [0554](../../../.decisions/0554-no-reflect-get-set-has.md) says a field is read through its type
+ says a field is read through its type
   or a decode.
 
 ## The nine slices
@@ -208,8 +208,8 @@ export const News = Schema.TaggedUnion({
 export type News = typeof News.Type;
 ```
 
-No `_tag` is written by hand anywhere in this slice (decision 0562 on main,
-`.decisions/0562-nothing-teaches-the-wrong-shape.md`, and the rule `fabrika/no-hand-tag`). A value
+No `_tag` is written by hand anywhere in this slice (an earlier decision on main,
+`nothing teaches the wrong shape`, and the rule `fabrika/no-hand-tag`). A value
 is made with its case's maker, `News.cases.granted.make(...)`. The one place that tells the cases apart
 is the Connection's door, with `News.match`, which `Schema.TaggedUnion` ships in the installed
 4.1.2 beside `guards`, `isAnyOf` and `matchOrElse` (`node_modules/effect/src/Schema.ts:6528` to
@@ -397,7 +397,7 @@ type from the binding and the shape.
   publish. If a measurement shows it, the Connection door, whose only caller is the Project, is the
   one to drop.
 - **A close code is 4000 to 4999, and 4003 stays where the gateway writes it today. 85%.** Is it a
-  setting (0069)? No: it is a protocol constant the client's `Link` reads as "key removed".
+  setting? No: it is a protocol constant the client's `Link` reads as "key removed".
 - **`fab.gateway.news` is recorded now. 85%.** One line. It holds the case's name and never the
   nonce or the view.
 - **Patch.ts is typed here and replaced later. 85%.** E1 says to delete it for `effect/JsonPatch`.
@@ -516,5 +516,5 @@ None.
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-15-view-update-tagged-type-not-tag","date":"2026-11-15","by":"plan","model":"claude-fable-5-2","rule":"rule_break","location":{"path":"next/packages/libfabrika/src/runtime/Entry.ts","line":47},"says":"In next/, the view update a watcher is sent is a union of ours tagged with `type` (\"whole\" or \"patch\"), where decision 0214 says every union we define is tagged `_tag`. It is not a tea Msg or a third-party shape, the two cases 0214 leaves alone.","proof":"next/packages/libfabrika/src/runtime/Entry.ts:48 reads `| { readonly type: \"whole\"; readonly rev: number; readonly view: View }`, and .decisions/0214-unions-are-tagged-with-tag.md reads \"Every union we define uses `_tag`, written by Effect Schema\". The client decodes the same key at next/packages/libfabrika/src/client/WindowMachine.ts:380.","cost":"A rename is a change to the wire every client reads, so it grows harder with each client. Ticket 1053 keeps `type` and makes the union a Schema.","head":"98bcdfa226f92fb702ae4a42ea19aa1a0592ad01","ticket":"kamp-us/tea-fabrika#1053","pr":null}
+{"_tag":"finding","id":"2026-11-15-view-update-tagged-type-not-tag","date":"2026-11-15","by":"plan","model":"claude-fable-5-2","rule":"rule_break","location":{"path":"next/packages/libfabrika/src/runtime/Entry.ts","line":47},"says":"In next/, the view update a watcher is sent is a union of ours tagged with `type` (\"whole\" or \"patch\"), where an earlier decision says every union we define is tagged `_tag`. It is not a tea Msg or a third-party shape, the two cases 0214 leaves alone.","proof":"next/packages/libfabrika/src/runtime/Entry.ts:48 reads `| { readonly type: \"whole\"; readonly rev: number; readonly view: View }`, and unions are tagged with tag reads \"Every union we define uses `_tag`, written by Effect Schema\". The client decodes the same key at next/packages/libfabrika/src/client/WindowMachine.ts:380.","cost":"A rename is a change to the wire every client reads, so it grows harder with each client. Ticket 1053 keeps `type` and makes the union a Schema.","head":"98bcdfa226f92fb702ae4a42ea19aa1a0592ad01","ticket":"kamp-us/tea-fabrika#1053","pr":null}
 ```

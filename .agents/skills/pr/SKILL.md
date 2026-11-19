@@ -110,8 +110,7 @@ one line of checks.
 - **New names.** Each name the diff adds, a type, a service, a function, a file, a setting or a
   record field, gets one line: the name, what the industry calls it, and a link to a source that
   says so, such as a maker's docs or the context's `GLOSSARY.md`. A name we coined says what it was
-  searched against and why no industry word fits
-  ([0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md)).
+  searched against and why no industry word fits.
   `land.ts queue` and `land.ts arm` refuse a pull request whose diff exports a name this part does
   not name (`.agents/skills/lead/scripts/pr/Names.ts`).
 - **Laws and checks.** Each law by its exact test title, with what it protects in a few words. Then
@@ -119,19 +118,17 @@ one line of checks.
   yet: a check nobody ran is said as plainly as a green one. Then `loosening.sh`'s output and, when
   it had hits, the lead's hand check of each.
 - **Not in this pull request.** What the next slices add, by slice. Each finding row written or
-  handed over. Never defend the size: no number caps a pull request
-  ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)).
+  handed over. Never defend the size: no number caps a pull request.
 - **How it looks.** List each shot by state and layout, link the comment that holds them, and name
   the head they were taken at. Say what looks broken, empty or wrong in each. The shots are attached
   with `gh`'s `--attach` and never committed
-  ([0160](../../../.decisions/0160-pr-shots-are-never-committed.md), and "Show it running" and
+  (and "Show it running" and
   "Shoot more than one layout" in
   [the changing-the-product reference](../guidelines/references/changing-the-product.md)).
 - **Steps.** Keep the table the tooling wrote: step, box, outcome, list dollars, total. One line
   above it says which parts were the pipeline's steps and which were the lead's. Work done by hand
   after the last step (a type fix, a merge of main) gets its own honest line there.
-- **The closing phrase** stands on a line of its own, and only when the merge finishes the ticket
-  ([0015](../../../.decisions/0015-a-pr-phrase-closes-its-tickets.md)). A slice that leaves its
+- **The closing phrase** stands on a line of its own, and only when the merge finishes the ticket. A slice that leaves its
   ticket open leaves the phrase out and says so under Why this change.
 
 ## A quest's description is written twice
@@ -157,8 +154,7 @@ repo is public". The ones a description breaks most:
 - A pull request or an issue is a full URL. A decision or a note is a full URL too: a relative link
   does not resolve in a description.
 - No personal names, no account names, no machine paths, and nothing a person typed in a chat.
-- No session link. A credit line for the agent is fine
-  ([0187](../../../.decisions/0187-a-commit-may-credit-its-agent.md)).
+- No session link. A credit line for the agent is fine.
 
 ## Send it
 
@@ -192,8 +188,7 @@ output as its own last section, so do not paste it twice.
 
 ## Could become a check
 
-Each of these is a rule code could hold. It stays here until its check lands
-([0408](../../../.decisions/0408-skills-keep-only-judgment.md)).
+Each of these is a rule code could hold. It stays here until its check lands.
 
 - The title is one clause: not empty, not the draft's placeholder, no second sentence.
 - `## What this does` is there, with 3 to 6 bullets, before a quest's pull request is marked ready or

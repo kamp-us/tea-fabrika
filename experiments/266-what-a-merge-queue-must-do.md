@@ -1,18 +1,18 @@
 ---
 date: "2026-11-11"
 scripts: "none; reading, nothing ran"
-summary: "Today's lead tooling, plus how others queue merges (Rust bors, bors-ng, Zuul, GitLab trains, GitHub's queue, Mergify, Aviator, Graphite), and how phoenix and demlik use GitHub's queue (squash, `ALLGREEN`, 5 to build and 5 to merge, 5-minute wait). The rule all of them follow: test the exact tree that will land, on the main it lands on, before main moves. On 2026-11-10, 147 merges landed and 23 touched code. One full CI run is 16 jobs and GitHub Free runs 20 at once, so running merges side by side does not fit. So: stage 1 lands one change at a time; stage 2 batches 4 or 5 and splits a red batch in halves; stage 3 has the queue sign a link from the checked tree to the landed tree, closing 0098's gap. Workflows cost $0 above the plan, but they keep control state as a position in code (0037, 0046). Lean, about 75%: a tea machine in one Durable Object, with alarms. The owner kept \"no Workflows\" and chose one queue program plus one merger per change, talking by mail; the cheap lane moved to the \"better\" stage. Decided as 0107, 0110 and 0111. No model, $0."
+summary: "Today's lead tooling, plus how others queue merges (Rust bors, bors-ng, Zuul, GitLab trains, GitHub's queue, Mergify, Aviator, Graphite), and how phoenix and demlik use GitHub's queue (squash, `ALLGREEN`, 5 to build and 5 to merge, 5-minute wait). The rule all of them follow: test the exact tree that will land, on the main it lands on, before main moves. On 2026-11-10, 147 merges landed and 23 touched code. One full CI run is 16 jobs and GitHub Free runs 20 at once, so running merges side by side does not fit. So: stage 1 lands one change at a time; stage 2 batches 4 or 5 and splits a red batch in halves; stage 3 has the queue sign a link from the checked tree to the landed tree, closing 0098's gap. Workflows cost $0 above the plan, but they keep control state as a position in code. Lean, about 75%: a tea machine in one Durable Object, with alarms. The owner kept \"no Workflows\" and chose one queue program plus one merger per change, talking by mail; the cheap lane moved to the \"better\" stage. Decided as 0107, 0110 and 0111. No model, $0."
 ---
 
 # 266. What must a merge queue do, and how should fabrika's own be built?
 
 Read on 2026-11-11. **This is reading, not a measurement.** Nothing was changed on GitHub or in
 any repo, no model was called beyond the one agent that read, and it cost $0. It is the research
-the owner walked before [0107](../.decisions/0107-fabrika-provides-the-merge-queue.md) (fabrika
-provides the merge queue), [0110](../.decisions/0110-merge-queue-is-fabrika-programs.md) (it is
-built as fabrika programs) and [0111](../.decisions/0111-merge-queue-stage-1-is-a-tier-1-row.md)
+the owner walked before [0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md) (fabrika
+provides the merge queue), [0034](../.kalfa/decisions/0034-fabrika-owns-the-merge-queue.md) (it is
+built as fabrika programs)
 (its first stage is Tier 1 row P43). It was written as the source for the queue's spec and moved
-here from a scratch file on 2026-11-11 ([0128](../.decisions/0128-a-write-up-is-born-in-the-repo.md)).
+here from a scratch file on 2026-11-11.
 
 **Versions.** Claims about "today" mean today's lead tooling (`.agents/skills/lead/scripts/`),
 which lands changes for both versions. Claims about the queue to build are about `next/`. Here
@@ -38,8 +38,7 @@ stage 2       batches of up to 4 or 5, split in halves on red; not speculation, 
               runners fit about one full CI run at a time (20 jobs, and one run is 16)
 stage 3       a signed entry: who enqueued it, which tree was tested, and the queue's own link
               in the signed chain from the head's tree to the landed tree
-where         a tea machine in a Durable Object that wakes on a call, a check event or an alarm
-              (0105), with the steps as plain Effects; not Cloudflare Workflows for the queue itself
+where         a tea machine in a Durable Object that wakes on a call, a check event or an alarm, with the steps as plain Effects; not Cloudflare Workflows for the queue itself
 ```
 
 The numbers it rests on, read from this repo on 2026-11-11:
@@ -51,7 +50,7 @@ The numbers it rests on, read from this repo on 2026-11-11:
 - Pull request `check` runs, last 25 green: 0 to 24 minutes, code pull requests about 7 to 24
   (`gh run list -w check`). Main's push runs: 13 to 24 minutes, and 2 of the last 40 were red,
   the "main red for one CI run" cost that
-  [0097](../.decisions/0097-a-green-pull-request-lands-without-catching-up.md) accepted.
+ accepted.
 - One full `check` run was 16 jobs: `changes`, `field`, `check`, `e2e` (macOS), `test` x6, `next`
   x6 (`.github/workflows/check.yaml`). Rechecked on main 2026-11-11: those 16, plus a small
   `ci-required` job that reads the others' results, so 17. GitHub Free gives **20 concurrent
@@ -203,12 +202,10 @@ Both sibling repos are owned by an organization, so they have GitHub's queue.
   check, a governance check); demlik requires `test-and-build`.
 - **How checks reach the queue:** phoenix adds `merge_group:` to every workflow that makes a
   required check, and reads the base from `github.event.merge_group.base_sha` and the head from
-  `github.event.merge_group.head_sha` ([phoenix 0132](https://github.com/kamp-us/phoenix/blob/main/.decisions/0132-merge-queue-for-base-freshness.md)).
+  `github.event.merge_group.head_sha` (phoenix 0132).
   demlik has no `merge_group:` at all: its `build.yaml` runs on `push` to `"**"`, which matches
   the `gh-readonly-queue/main/...` branch, so the check lands on the group's sha that way.
-- **What phoenix's ship step expects** ([0132](https://github.com/kamp-us/phoenix/blob/main/.decisions/0132-merge-queue-for-base-freshness.md),
-  [0313](https://github.com/kamp-us/phoenix/blob/main/.decisions/0313-a-queue-dwell-is-a-wait-not-a-park.md),
-  [0048](https://github.com/kamp-us/phoenix/blob/main/.decisions/0048-ship-it-merge-actor.md)):
+- **What phoenix's ship step expects**:
   - ship enqueues with `gh pr merge --squash --auto` and succeeds on "enqueued and green", not
     "merged"; the merge and the ticket close happen later.
   - `allow_auto_merge` must be on, or every enqueue jams (their outage, phoenix issue 1817, about
@@ -225,8 +222,7 @@ reason, or stuck", read once and cheaply, with the head it was pinned to.
 ## 3. What today's lead scripts do that a queue must keep
 
 All of this is today's lead tooling, run on the laptop. Rechecked against main on 2026-11-11:
-every script named is still there, and `catchup.sh` is still shell (its port is due under
-[0113](../.decisions/0113-no-shell-or-python-scripts.md)).
+every script named is still there, and `catchup.sh` is still shell (its port is due under).
 
 | Job | Where today | Keep in the queue? |
 | --- | --- | --- |
@@ -235,23 +231,23 @@ every script named is still there, and `catchup.sh` is still shell (its port is 
 | Leak grep on the net change and on each commit sent | `botpush.mjs` → `leakgrep.sh` | yes, before any push; fails closed |
 | Wait for `check`, `e2e`, `commits`, `next (1..6)` on the exact sha, up to an hour; a skipped job counts as done | `catchup.sh` | yes, as an event wait with a limit |
 | Trust `commits` only as one `pull_request_target` run of main's `commits.yaml`, made by GitHub Actions, for this ticket | `catchup.sh` | yes: it is the security core of the check |
-| Lint on the true merge when main moved after the checks | `freshmain.ts` (0049, 0097) | stage 1 makes it unneeded for code (main cannot move under the entry); stays for the cheap lane |
-| Squash pinned to the head (`--match-head-commit`, or REST `sha` when `gh` says BEHIND) | `catchup.sh` (0049) | yes: `CodeHost.merge(pr, head)` |
-| Land a gh stack bottom-up | `catchup.sh` → `gh stack merge` (0004) | yes, one entry per stack |
-| Size line against 600 product lines, advice only | `sizecap.ts` (0087) | record it on the entry |
-| Close each ticket the body names, `fabrika close ticket <N>`, with a comment naming the merge | `catchup.sh` `close_named` (0015) | yes, after "landed" is confirmed on main |
+| Lint on the true merge when main moved after the checks | `freshmain.ts` | stage 1 makes it unneeded for code (main cannot move under the entry); stays for the cheap lane |
+| Squash pinned to the head (`--match-head-commit`, or REST `sha` when `gh` says BEHIND) | `catchup.sh` | yes: `CodeHost.merge(pr, head)` |
+| Land a gh stack bottom-up | `catchup.sh` → `gh stack merge` | yes, one entry per stack |
+| Size line against 600 product lines, advice only | `sizecap.ts` | record it on the entry |
+| Close each ticket the body names, `fabrika close ticket <N>`, with a comment naming the merge | `catchup.sh` `close_named` | yes, after "landed" is confirmed on main |
 | Keep the checked head as `refs/keep/pr/<n>`, remove boxes and the lane's worktree | `catchup.sh` `sweep` | stays on the laptop; the queue only says "landed" |
-| Loosening check and the lead's hand check | `loosening.sh`, before `catchup.sh` (0014) | **before** enqueue: a gate on who may enqueue, not a queue step |
+| Loosening check and the lead's hand check | `loosening.sh`, before `catchup.sh` | **before** enqueue: a gate on who may enqueue, not a queue step |
 | Pull the main checkout after merges | by hand | once per burst, after the queue goes idle, not per merge |
 
-The signed chain ([0098](../.decisions/0098-the-signed-chain-covers-the-branch-not-main.md)):
+The signed chain:
 step links live as git notes on `refs/notes/fabrika`; "CI decides from the signature, never from
 the author, the message or a trailer" (`next/apps/fabrika/src/exam/commits.ts:3`). So the squash
 commit's author and message do not matter to the chain, which is good news for any queue. When
 read, the post-merge `chain` asked `last.to === trees.get(squash)`: the last link must end at the
 landed tree. On main on 2026-11-11 that line is `commits.ts:366`, and it also accepts
 `last.to === placed.head`, the head that was checked, which is 0098's rule in code. When a pull
-request lands behind main without a catch-up (0097), the landed tree is never signed by anyone:
+request lands behind main without a catch-up, the landed tree is never signed by anyone:
 the gap 0098 states in its costs ("the chain no longer proves the squash's tree by itself"). A
 queue can close it: stage 3 below.
 
@@ -267,7 +263,7 @@ merge notes dated 2026-11-11 were on main when read, only findings):
 - Finding `2026-11-10-f36`: `field/runs.jsonl`'s `merge=union` works only in local git, so
   GitHub calls a pull request with a run row DIRTY whenever main adds rows, starts no
   `pull_request` checks, and the script waits an hour for checks that never come. (Rows are files
-  now, [0090](../.decisions/0090-each-field-row-is-a-file.md), which removes most of this.)
+  now, which removes most of this.)
 - Notes `2026-11-10-06` and `-11`: `commits` said `broken_chain` only because main moved (the
   reason for 0098).
 - Notes `2026-11-10-08`, `-09`, `-15`: a whole-tree format sweep (pull request 736) conflicted
@@ -371,13 +367,10 @@ Data shape. Facts lost forever if not written when they happen:
 
 Where it could run in `next/`:
 
-- A program `pipeline/queue` in the pipeline pack ([0083](../.decisions/0083-every-program-in-a-pack.md),
-  [0084](../.decisions/0084-own-pack-listed-by-path.md)), with its settings
-  (`[pack.pipeline.settings] queue.batch`, `queue.timeout`) as `fabrika.toml` values
-  ([0069](../.decisions/0069-choices-are-settings.md)).
+- A program `pipeline/queue` in the pipeline pack ([0019](../.kalfa/decisions/0019-every-program-in-a-pack.md)), with its settings
+  (`[pack.pipeline.settings] queue.batch`, `queue.timeout`) as `fabrika.toml` values.
 - Its model in a Durable Object, one per repo and base branch. It wakes on a call (enqueue), on a
-  check event, or on an alarm, does one step, sets the next alarm and sleeps
-  ([0105](../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md)). A retry with
+  check event, or on an alarm, does one step, sets the next alarm and sleeps. A retry with
   backoff is an alarm, never `Effect.sleep` or a `Schedule` inside a wake.
 - No webhook reaches a laptop, so on the laptop "wait for checks" is an alarm that reads checks
   every 30 to 60 seconds while an entry is testing, and none while the queue is idle. 60 minutes
@@ -427,7 +420,7 @@ Batches, not speculation, because of runner capacity:
   2 of 40 times, so a batch of 5 would split about 1 time in 4 if clashes were independent (a
   guess; it needs the replay). k = 4 or 5 matches phoenix's and demlik's 5. Wait at most 5 minutes
   to fill a batch, as they do.
-- A flaky test is fixed, never rerun until green ([0036](../.decisions/0036-a-flaky-test-is-fixed.md)).
+- A flaky test is fixed, never rerun until green.
   So a red batch is split, not retried. Only outside faults are retried.
 
 A lease: the worker holds a lease on the queue (holder, `until` by the referee's clock), so a
@@ -449,7 +442,7 @@ still so), or the batch is opened as a draft pull request, as Aviator and Mergif
 ### Stage 3: secure
 
 - **Who may enqueue:** only an actor holding a lead-signed "ready" fact for that ticket and head:
-  every step passed, CI green, leak grep clean, loosening checked (0014). The queue checks that
+  every step passed, CI green, leak grep clean, loosening checked. The queue checks that
   fact; it does not redo the judgment.
 - **Who may skip the line:** the owner, and the lead for a red-main fix, each recorded.
 - **What a signed entry proves:** the queue signs one link with its own key, from the head's tree
@@ -488,7 +481,7 @@ What is on the table, read from the installed code:
   (`src/Workflows/DurableObjectEngine.ts`, `NativeEngine.ts`). A local provider maps the workflow
   onto "the local workerd workflow engine" with state under the worker's local storage
   (`src/Workflows/Workflow.ts:1290` in beta.84; in beta.85, installed on 2026-11-11, the phrase is
-  at line 1395). So both paths go through Alchemy (0042) and both run on the laptop with no cloud
+  at line 1395). So both paths go through Alchemy (0018) and both run on the laptop with no cloud
   account.
 
 What fits a workflow: **one entry's landing.** Bring up to date, wait for checks (a
@@ -501,9 +494,9 @@ priority and the lease are shared state that many events change, not a list of s
 instance has no view of the others, so a workflow-only queue still needs one single writer that
 holds the order, which on this platform is a Durable Object. Also:
 
-- [0037](../.decisions/0037-implicit-state-machines-made-explicit.md) says control state is one
+- says control state is one
   named type, "never flags, a position in code or an order two parties assume", and
-  [0046](../.decisions/0046-one-tea-machine-per-file.md) says it is a tea machine. A workflow's
+ says it is a tea machine. A workflow's
   journal is a position in code: "where am I" is "which step ran last". An entry's states would
   live there, not in a Model a test can read.
 - `effect/workflow` is unstable, and Alchemy's engines are beta.
@@ -538,7 +531,7 @@ So money does not pick between them; the design rules do.
 
 **Lean, as the research gave it:** a tea machine in one Durable Object for the queue, alarms for
 every wait and retry, steps as plain Effects run inside a wake or by the hands, and no Cloudflare
-Workflows in stage 1. About 75% sure. Why: it keeps control state in one Model (0037, 0046), fits
+Workflows in stage 1. About 75% sure. Why: it keeps control state in one Model, fits
 0105 directly, and is one platform piece instead of two. Cost: we write resume logic ourselves (a
 Model reload is cheap here, since each step is one call and the Model says which). Doubt: if one
 landing grows to many slow steps on the hands, a durable step list may read better than a Model
@@ -551,8 +544,8 @@ crash test is simpler.
 The owner walked this research on 2026-11-11. Kept in the record as the research gave it:
 
 - **"One Durable Object holds the queue and every entry's state" was not taken.** Decided instead
-  (0110): one queue program holds the order and the batch, and one small merger per change lands
-  it; they talk by program mail ([0103](../.decisions/0103-a-program-may-mail-another-by-name.md)),
+  (0034): one queue program holds the order and the batch, and one small merger per change lands
+  it; they talk by program mail ([0020](../.kalfa/decisions/0020-programs-meet-by-mail.md)),
   and crash safety is a program rebuilding from its saved inputs under a supervisor, OTP's shape.
   The settling run the lean asked for (an `effect/workflow` landing beside a machine) was not
   needed: 0110 rules out Workflows and `effect/workflow` in every stage.

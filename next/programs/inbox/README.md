@@ -1,6 +1,6 @@
 # The inbox program
 
-The thin inbox program for `next/`, built on [0151](../../../.decisions/0151-a-thin-inbox-is-a-tier-1-row.md).
+The thin inbox program for `next/`, built on.
 Slice 1 holds notices from the brain as rows in a program view. It shows nothing on screen and
 has no boot entry.
 

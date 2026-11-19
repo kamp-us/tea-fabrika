@@ -6,11 +6,8 @@ Plancheck-Version: 3
 This is `next/` and our lint tooling. Today's app is not touched. It is one later slice of the
 recorder plan ([`recorder-PLAN.md`](./recorder-PLAN.md), "Size", the row for
 `libfabrika/src/node`): 4 `vi.fn` calls, 0 `toHaveBeenCalled*`, 0 `vi.spyOn`, all platform
-namespace doubles, so platform fakes and not the Recorder. It builds
-[0555](../../../.decisions/0555-no-vi-mock-or-domock.md),
-[0557](../../../.decisions/0557-kalfa-vitest-is-the-test-toolbox.md),
-[0579](../../../.decisions/0579-property-laws-use-it-prop.md) and
-[0554](../../../.decisions/0554-no-reflect-get-set-has.md), which puts the fakes of Cloudflare
+namespace doubles, so platform fakes and not the Recorder. It builds,,
+ and, which puts the fakes of Cloudflare
 objects in the test package. Not in this slice: `node/dev`, `node/client` and `node/repositories`,
 which have their own plans.
 
@@ -38,8 +35,7 @@ RECORD: Stub.make<Env["RECORD"]>(unexpected, {
   with TS1261, and a case-insensitive disk, as on a Mac, sees one file. **Wrong, kept as the
   record:** `Objects.ts`. Every place below that named it now says `ObjectCalls.ts`, and the laws
   import it as `../cloudflare/ObjectCalls.ts` (from `RunnerAdmission.integration.test.ts`) and
-  `./ObjectCalls.ts` (from `ProjectAuditTest.ts`). The name, checked in one line: no question word
-  (0081), and both words are the industry's, Cloudflare's Durable Object and the RPC call it takes
+  `./ObjectCalls.ts` (from `ProjectAuditTest.ts`). The name, checked in one line: no question word, and both words are the industry's, Cloudflare's Durable Object and the RPC call it takes
   (OTP's `gen_server:call`, as the services' own comment says; `records.ts find "object calls
   name"` found no settled name for this file, and no other file in `cloudflare/` on main clashes
   with it in any case).
@@ -50,7 +46,7 @@ RECORD: Stub.make<Env["RECORD"]>(unexpected, {
   - (a) The lock's `eslint/no-restricted-properties` is at `error`, not this plan's `warn`. Those
     files have no `JSON.parse` fire, and `lint.ts` fails a `warn` line with no fire left ("has no
     fire left in next/packages/libfabrika/src/node/*.ts"), so the rule blocks at zero there, as
-    [0523](../../../.decisions/0523-advice-rules-block-where-clean.md) asks of a folder at zero.
+ asks of a folder at zero.
   - (b) The block writes out `Data.TaggedError` and `JSON.parse` again, as the signing note asks,
     since an override replaces a rule's options. `Data.TaggedError` is on main but not on the slice
     branch's base `b510ed2`, so the fold with main keeps it.
@@ -97,7 +93,7 @@ RECORD: Stub.make<Env["RECORD"]>(unexpected, {
   tsc with TS2322 at `RunnerAdmission.integration.test.ts:134` and `:142`. And `effect-tsgo
   diagnostics` reports Effect's checks only, so it cannot settle a type law; libfabrika's own
   `tsc --noEmit -p .` does.
-- **The law is an `.integration.` law (certain).** It runs on the schedule (0536), not on every pull
+- **The law is an `.integration.` law (certain).** It runs on the schedule, not on every pull
   request. The tests step may run it in its box, since the step rules allow an `.integration.` law
   its files reach; it takes up to 10 minutes.
 
@@ -192,11 +188,11 @@ const environment: ProjectAuditTest.Harness["environment"] = (box, accept, usage
     "vitest/no-restricted-vi-methods": [
       "error",
       {
-        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-        "mock": "Give the code a service and provide a test layer (0555).",
-        "doMock": "Give the code a service and provide a test layer (0555).",
-        "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-        "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+        "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder.",
+        "mock": "Give the code a service and provide a test layer.",
+        "doMock": "Give the code a service and provide a test layer.",
+        "spyOn": "Put the call behind a service and record it with a Recorder.",
+        "stubEnv": "Read through Config and provide a ConfigProvider layer."
       }
     ]
   }
@@ -217,7 +213,7 @@ Each choice, decided in one line:
   and 6 `vi.stubEnv`. A glob `*` does not cross a `/`, so the subfolders stay out until their
   slices. 85%.
 - **All five methods in one block, `fn` included.** 0555 bans four. `vi.fn` is a `vi` mechanism
-  `@kalfa/vitest` does not export (0557), and 0579 names the Recorder as what replaces it. The top
+  `@kalfa/vitest` does not export, and 0579 names the Recorder as what replaces it. The top
   folder is at zero for all five after this slice, so the block blocks at zero (0523's bar). 85%.
 - **One block per folder, each with the same five messages.** oxlint takes the last matching
   override's options for a rule, so a later block for a subfolder must list all five again, not add
@@ -237,7 +233,7 @@ block bans, each with the same message as that member's entry in the vitest rule
 `no-restricted-properties` matches the member access `vi.spyOn` itself, so it refuses the call
 with another call chained on; the vitest rule keeps what only it sees, such as `v.spyOn` after
 `import { vi as v }`. Both are trusted rules, as
-[0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md) asks, and no rule of ours is
+ asks, and no rule of ours is
 written. The upstream issue is [oxc#29656](https://github.com/oxc-project/oxc/issues/29656),
 filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
 `no-restricted-properties` half stays until oxc fixes it.
@@ -252,17 +248,17 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     "eslint/no-restricted-properties": [
       // Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): `error`, as the code
       // has it. Wrong, kept as the record: `warn`. These files have no JSON.parse fire, and lint.ts
-      // fails a warn line with no fire left, so the rule blocks at zero here (0523).
+      // fails a warn line with no fire left, so the rule blocks at zero here.
       "error",
       // Written out again, since an override replaces options (amendment, same ruling): the
       // `Data.TaggedError` entry, on main though not on the slice's base b510ed2, and `JSON.parse`.
       { "object": "Data", "property": "TaggedError", "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)." },
-      { "object": "JSON", "property": "parse", "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)." },
-      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
-      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
-      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder (0555, 0579)." },
-      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer (0555)." }
+      { "object": "JSON", "property": "parse", "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (an earlier decision)." },
+      { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder." },
+      { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer." },
+      { "object": "vi", "property": "spyOn", "message": "Put the call behind a service and record it with a Recorder." },
+      { "object": "vi", "property": "stubEnv", "message": "Read through Config and provide a ConfigProvider layer." }
     ]
   }
 }
@@ -323,7 +319,7 @@ in `R` and provides a test layer (Effect's `Layer.mock`, the Recorder's base). S
 service takes the object's registered name first, and stays an Effect member the Recorder records.
 
 ```ts
-// next/packages/libfabrika/src/cloudflare/ObjectCalls.ts, the contract only (0095). A sketch.
+// next/packages/libfabrika/src/cloudflare/ObjectCalls.ts, the contract only. A sketch.
 // Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): ObjectCalls.ts.
 // Wrong, kept as the record: Objects.ts, which differs from objects.ts beside it only in case (TS1261).
 import { Context } from "effect";
@@ -463,7 +459,7 @@ Each choice, decided in one line:
   `leave.laws.test.ts`, `mail.test.ts`, `reload.laws.test.ts`) keep working unchanged, and only the
   audit walk takes the lower layer.
 - **Is this a setting?** No: how the Project reaches its objects is code structure, nothing a person
-  running fabrika picks (0069).
+  running fabrika picks.
 - **What fact is lost if not recorded now?** None: the calls are the same calls, and the Recorder
   keeps only a test run's record.
 
@@ -489,7 +485,7 @@ idFromName` still for a binding member the stubs left out. The steps as first wr
 
 ## Laws
 
-Current rule for new or rewritten properties (0579, 0411): use `it.prop` or `it.effect.prop`
+Current rule for new or rewritten properties: use `it.prop` or `it.effect.prop`
 with Schema inputs. The `fc.*` names in the rows below describe the source read for this plan,
 not a future runner choice. Keep every input range, size, run count, pinned case and failure
 check. Keep a fast-check input only with an explicit nearby 0411 reason for unsupported data
@@ -513,7 +509,7 @@ that moving a runner keeps the same first failing case.
   (amendment 2026-11-16, merge session ruling on node-s1's tests round 2; wrong, kept as the
   record: `Objects.ts`) and `projectLayerWithoutObjects`, the test file does not compile. That is the tests step's red: M3 and
   M4 go green at the build's head.
-- No law needs the real machine, so none is host-only (0178). M3 is an `.integration.` law already;
+- No law needs the real machine, so none is host-only. M3 is an `.integration.` law already;
   no new one is added. No law reads a secret.
 
 ## Files
@@ -526,7 +522,7 @@ that moving a runner keeps the same first failing case.
 | oxlint-plugins/plants.test.ts | tests | tests | M1: `VI_METHODS`' lines refused exactly in every folder of every block that sets the rule, as the `REFLECT` scenario does |
 | field/runs/2026-11-15-mock-node-tests1.json | tests | docs | the tests step's run row, with its plants |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | tests | amendment 2026-11-16 (merge session ruling on node-s1): `Harness` gains `objects(box, accept)`, a layer of `ProcessObjects` and `RecordObjects`; `environment` drops `accept`; `projectWalk` calls `projectLayerWithoutObjects` and provides `harness.objects`. No law of the suite changes |
-| next/packages/libfabrika/src/cloudflare/ObjectCalls.ts | build | 30 | amendment 2026-11-16: new, the contract only (0095): `ByName`, `ProcessObjects`, `RecordObjects`. Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): named `ObjectCalls.ts`; wrong, kept as the record: `Objects.ts`, which clashes in case with `objects.ts` |
+| next/packages/libfabrika/src/cloudflare/ObjectCalls.ts | build | 30 | amendment 2026-11-16: new, the contract only: `ByName`, `ProcessObjects`, `RecordObjects`. Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): named `ObjectCalls.ts`; wrong, kept as the record: `Objects.ts`, which clashes in case with `objects.ts` |
 | next/packages/libfabrika/src/cloudflare/ProcessObjectsRpc.ts | build | 25 | amendment 2026-11-16: new, `layer(stub)`, each member through `ProcessClient.make(stub(object))` |
 | next/packages/libfabrika/src/cloudflare/RecordObjectsRpc.ts | build | 12 | amendment 2026-11-16: new, `layer(stub)`, each member through `stub(object)` |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 35 | amendment 2026-11-16: the Project's seven `ProcessClient.make(processStub(...))` calls ask `ProcessObjects`; `recordLayer` reads `RecordObjects`; `projectLayerWithoutObjects` is today's `projectLayer` body, and `projectLayer` provides both Rpc layers from `env`; `processLayer` provides `RecordObjectsRpc.layer` |
@@ -577,14 +573,14 @@ and Effect 4.1.3's `Layer`.
   ruling on node-s1):** the two services are provided with `Recorder.layer`; still no law reads a
   call, see the doubts.
 - **Is this a setting?** No. Which `vi` methods are refused, and where, is a rule on our own source,
-  held by lint, and nothing a person running fabrika picks (0069).
+  held by lint, and nothing a person running fabrika picks.
 - **What fact is lost if not recorded now?** None. The doubles live only inside one test run.
 
 ## Validation
 
 With concurrent workers, local safe test runs use `nice -n 19 pnpm exec vitest run
 --maxWorkers=1` on the named narrow paths. Keep the repo's shared-resource caps. Planned doc
-comments carry no `@stability` before the first release (0574); citations of Effect's own source
+comments carry no `@stability` before the first release; citations of Effect's own source
 tags are historical source facts.
 
 - The tests step: `pnpm format`, then `pnpm lint` (with `NODE_OPTIONS=--max-old-space-size=6144` in
@@ -697,7 +693,7 @@ Stub.make is present on current main from PR 1481, with the typed rest signature
 amendment records. The original wait for an unbuilt PR 1433 is historical, not a current blocker.
 Read and reuse that implementation; do not relax Stub.make or copy a second platform fake.
 
-Read every exact selected law, helper and cleanup before local execution (0594). An integration
+Read every exact selected law, helper and cleanup before local execution. An integration
 filename or the earlier no-host claim gives no clearance. Any selection reaching real process
 signals, launchd or real Electron runs on eligible disposable CI before review. Keep isolation
 for other real resources where needed. Narrow the local changed selection to verified-safe

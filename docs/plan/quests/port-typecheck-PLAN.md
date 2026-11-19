@@ -30,34 +30,24 @@ ticket: 766 (the 0113 ports), this slice: `scripts/typecheck.sh`
 
 Writer: the plan step. Version: **today's tooling** (`scripts/`, the root `package.json`, `.github/ci`,
 lead scripts and skills). `next/` is not touched. Lead tooling is fast-tracked, and its code
-follows `next/`'s rules ([0033](../../../.decisions/0033-agents-code-follows-next-rules.md)).
+follows `next/`'s rules.
 
 Base read: `origin/main` at `59910b0a4`, which holds pull request
 https://github.com/kamp-us/tea-fabrika/pull/1419 (merged as `5c1e6b0`, after the brief was written).
 So this plans against 1419's merged script, its six laws in `scripts/typecheck.integration.test.ts`,
 and its `FABRIKA_TYPECHECK_COMPILER` lines in `scripts/caps.test.ts`. Every line cited is read there.
 
-Builds three decisions: [0113](../../../.decisions/0113-no-shell-or-python-scripts.md) (port
+Builds three decisions: (port
 behind services, each with a real layer and a test layer),
-[0410](../../../.decisions/0410-the-machine-caps-live-in-code.md) with its 2026-11-15 amendment
+ with its 2026-11-15 amendment
 (the caps are code, and the typecheck lock may be a pid lock at the same single path, merged in
 https://github.com/kamp-us/tea-fabrika/pull/1509), and
-[0033](../../../.decisions/0033-agents-code-follows-next-rules.md) (lead tooling follows `next/`'s
+ (lead tooling follows `next/`'s
 rules). `records.ts resolve 0113 0410 0033` (2026-11-16): all three accepted; 0033 is amended by
-0070 and 0113. It holds [0012](../../../.decisions/0012-twelve-agents-at-once.md) (one typecheck at
+0070 and 0113. It holds (one typecheck at
 a time). Reads
-[0040](../../../.decisions/0040-existing-tools-before-hand-written.md) with
-[0587](../../../.decisions/0587-new-helpers-and-names-cite-sources.md),
-[0054](../../../.decisions/0054-read-upstream-before-patching-it.md),
-[0061](../../../.decisions/0061-resources-are-acquired-in-a-scope.md),
-[0062](../../../.decisions/0062-test-files-keep-the-floors.md),
-[0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md),
-[0250](../../../.decisions/0250-effect-modules-first-node-at-an-edge.md),
-[0029](../../../.decisions/0029-format-and-names-follow-effect.md),
-[0069](../../../.decisions/0069-choices-are-settings.md),
-[0178](../../../.decisions/0178-host-only-laws-run-first.md),
-[0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) and
-[0585](../../../.decisions/0585-kalfa-is-six-domain-packages.md). Each resolves as accepted
+ with,,,,,,,,,
+ and. Each resolves as accepted
 (`records.ts resolve`, 2026-11-16).
 
 ## Doubts, at the top
@@ -397,7 +387,7 @@ Notes:
 - **Host-only laws:** I1 to I6 (real processes, real signals, `pgrep` and `ps`). They run before the
   first review: in the build's box on Linux, then CI's full run on the branch
   (`gh workflow run scheduled.yaml --ref fabrikalfa/port-typecheck`). On the owner's Mac they run
-  only after the lead's read of their signal lines and the owner's yes (0178). The local host-only
+  only after the lead's read of their signal lines and the owner's yes. The local host-only
   guard refuses them otherwise.
 - **Every plant** is run once by the step that owns the law and recorded in its run row, never
   committed.
@@ -428,7 +418,7 @@ Notes:
 ## Is anything here a setting?
 
 - The lock path and the compiler name stay environment overrides that only a test sets, as ticket
-  1008 and 1419 decided; they are not `fabrika.toml` settings, since no person picks them (0069).
+  1008 and 1419 decided; they are not `fabrika.toml` settings, since no person picks them.
   0585 says no tooling name takes `FABRIKA_`. The brief keeps the names and every law sets them, so
   the rename belongs with 0585's sweep of `FABRIKA_` tooling names, not here. Call, 80%.
 - The 250 ms lock poll, the one-second compiler poll and the 2 s start-time slack are constants:
@@ -450,8 +440,8 @@ Notes:
 | `.agents/skills/build/SKILL.md:57, 62`, `tests/SKILL.md:130`, `mutation/SKILL.md:192` | `typecheck.ts`; line 62 says it takes the one lock |
 | `.agents/skills/lead/scripts/skillscheck.sh:19`, `skillscheck.test.ts:415` | the pinned caps sentence names `typecheck.ts` |
 | `docs/direction/skills-hold-only-judgment.md:30` | names `typecheck.ts` and "one fixed lock" instead of "one fixed OS lock" |
-| `.decisions/0410-the-machine-caps-live-in-code.md:24` | not edited: its 2026-11-15 amendment (pull request 1509) already allows the pid lock at the same single path |
-| `.decisions/0113-no-shell-or-python-scripts.md:28, 80` | not edited: a count on a date |
+| `the machine caps live in code:24` | not edited: its 2026-11-15 amendment (pull request 1509) already allows the pid lock at the same single path |
+| `no shell or python scripts:28, 80` | not edited: a count on a date |
 | `experiments/272`, `282`, `283`, `296` | not edited: records of what was true then |
 | `field/runs/2026-11-15-typecheck-lock-linux-fix1.json`, `field/findings/2026-11-14-typecheck-lock-path-has-no-law.json` | not edited: rows are only added |
 | `pr758-typecheck.out:1` | not edited: a stray log in git, a finding below |
@@ -678,8 +668,7 @@ The rest that follows from it:
   blocks name them (L1, already green). Becoming a package changes no lint glob.
 - `scripts/typecheck.integration.test.ts`, `scripts/caps.test.ts` and the other `scripts/` files stay
   out of the new program, as they were out of `.agents`' include.
-- Is this a setting? No: which files a tsconfig checks is the build's shape, which no person picks
-  (0069).
+- Is this a setting? No: which files a tsconfig checks is the build's shape, which no person picks.
 
 ### One run traced
 
@@ -781,7 +770,7 @@ returned. Law N3 kills only holders, never a breaker, so it cannot reach the cas
 inner `lock` is a lock like any other, so its own `_trylock` (lines 298-343) meets a dead `.break`
 with EEXIST, calls its own `_testlock`, and breaks it under `.break.break`. `timeout=0` means a
 `.break` held by a live process is never waited on: the caller reports the lock held and tries
-again later. The old sentence stays in step 4, marked **Wrong**. Decision 0567 also covers these
+again later. The old sentence stays in step 4, marked **Wrong**. an earlier decision also covers these
 files: `records.ts resolve 0567 0033 0410` (2026-11-16) prints all three accepted. 0567 holds in
 "our tooling", 0033 puts lead tooling under `next/`'s rules, and the lead-tooling lint block
 already names `scripts/typecheck*`. The lead accepted that scope.
@@ -819,7 +808,7 @@ only one breaks the old label and only one holds the lock.
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | N7, new: a `.break` left by a dead breaker, a gone holder's label, and two live takers B and C, run in the review's order by `Deferred` gates on the in-memory FileSystem, never give two live holders: one `hold` returns, the other waits until it is released, then holds. Red on today's code at `e63d54c` | test | scenario: the review's order, 1 to 6 above | on the fixed code, put back `fs.remove(breaker)` for a stale `.break`: both hold, red | scripts/typecheck-lock.test.ts |
-| L3, new: no `scripts/typecheck*` file compares `_tag` by hand (0567); `anti-slop-effect/no-manual-tag-comparison` covers them | lint | lint | a `seen._tag === "held"` put back in `LocksFile.ts`: `pnpm lint` fails | .oxlintrc.json |
+| L3, new: no `scripts/typecheck*` file compares `_tag` by hand; `anti-slop-effect/no-manual-tag-comparison` covers them | lint | lint | a `seen._tag === "held"` put back in `LocksFile.ts`: `pnpm lint` fails | .oxlintrc.json |
 
 No law is loosened or moved. N3 and N4 stay as written.
 
@@ -828,8 +817,7 @@ No law is loosened or moved. N3 and N4 stay as written.
 - **The tests step** writes N7 in `scripts/typecheck-lock.test.ts` and shows it red on today's code.
   It turns the 16 hand `_tag` comparisons in `scripts/typecheck.test.ts` (6) and
   `scripts/typecheck-lock.test.ts` (10) into each known union's own matcher, then Effect's
-  `Match` module when no own matcher exists. `Predicate.isTagged` is only for unknown input
-  ([0567](../../../.decisions/0567-a-tagged-value-is-matched.md)). It adds
+  `Match` module when no own matcher exists. `Predicate.isTagged` is only for unknown input. It adds
   `scripts/typecheck.ts`, `scripts/typecheck/**`, `scripts/typecheck.test.ts` and
   `scripts/typecheck-lock.test.ts` to the
   `anti-slop-effect/no-manual-tag-comparison` block in `.oxlintrc.json` (L3). L3 is then red on
@@ -845,7 +833,7 @@ No law is loosened or moved. N3 and N4 stay as written.
   `Effect.catchIf` does not exempt known values from 0567. Each existing handler and unmatched
   error stays the same. Then N7, N3, N4 and `pnpm lint` are green, and the build runs N7's
   plant once and records it in its row.
-- **The same reviewer** rechecks (0177).
+- **The same reviewer** rechecks.
 
 ### Files, amended
 
@@ -881,7 +869,7 @@ prints four lines, one per glob:
 No step owned `anti-slop.ts`.
 
 **The lead's ruling (option a).** Count first, read-only, then widen the lock's scope to what can
-reach zero, with its own law and plant. Decision 0563's scope is `next/` and "our tooling", and the
+reach zero, with its own law and plant. an earlier decision's scope is `next/` and "our tooling", and the
 first fix round already took `scripts/typecheck*` as lead tooling under 0567 and 0033; the lead
 accepted that scope there, so this widens no decision. Call, 85%: 0563 names three tooling folders
 by name, and `scripts/` is not one of them; if the owner reads that list as closed, it is his call.
@@ -896,7 +884,7 @@ only edit above this section.
 How the lock works, read from `anti-slop.ts`: it covers all ten taken rules (`TAKEN`), not one. One
 oxlint run reads the folders in `ROOTS` with every taken rule on, and counts each rule's hits per
 scope folder. For each rule, `add` is every scope folder with no hit that the rule's block does not
-name, and lint prints one "has no hit left in <folder>: add the folder to its block (0563)" line for
+name, and lint prints one "has no hit left in <folder>: add the folder to its block" line for
 each. So "turning on" a new scope folder means it must be named, at once, in the block of every taken
 rule that has no hit there, and stays unnamed where the rule has hits.
 
@@ -935,7 +923,7 @@ a scope folder only by equal text, so the 0567 block would have to name `scripts
 four globs, and lint would be red on the 3 `effect-arbitrary.test.ts` lines above: a new job, outside
 the ticket. So `folders()` gains the port's four globs, exactly as the 0567 block names them. Call,
 90%: they are the only globs the block lists, and the port is the only part of `scripts/` that
-follows `next/`'s rules (0033) so far.
+follows `next/`'s rules so far.
 
 ```ts
 // oxlint-plugins/anti-slop.ts, sketch: the typecheck's port joins the scope as four globs.
@@ -986,7 +974,7 @@ moves before then, lint names the difference. Each entry goes after a block's `n
 asks for all 28; none is a list of leftovers.
 
 Is this a setting? No: which folders a lint rule covers is the repo's lint config, which no person
-picks per run (0069).
+picks per run.
 
 ### One run traced
 
@@ -1025,7 +1013,7 @@ since `lock` is. No law is loosened or moved.
 - **The build** has nothing new. Its first-fix-round work stands. From now on a hit of any rule
   that names the port's globs is red there too: for example a cast with no `SAFETY` comment in
   `scripts/typecheck/**`.
-- **The same reviewer** rechecks (0177).
+- **The same reviewer** rechecks.
 
 ### Files, amended
 
@@ -1156,5 +1144,5 @@ keeps the same assertions, input reach and global seed.
 ## Findings
 
 ```json
-{"_tag":"finding","id":"2026-11-16-stray-typecheck-log-in-git","date":"2026-11-16","by":"plan","model":"claude-opus-5-5","rule":"dead_code","location":{"path":"pr758-typecheck.out","line":1},"says":"Today's repo root tracks pr758-typecheck.out, a saved pnpm typecheck log that no program, test or doc reads, added by a pull request about decision 0569.","proof":"git ls-files pr758-typecheck.out prints the path; git log -- pr758-typecheck.out shows only 30f9e07 (pull request 1384, decision 0569 amended); its first line is '$ sh scripts/typecheck.sh' and the next a Node version warning; rg -n pr758 finds no reader.","cost":"A raw run output in git, against 0027's rule that results stay out of it, and one more stale hit for every search of typecheck.sh.","head":"59910b0a4c84a36d4088d961dac3fdf756222d01","ticket":766,"pr":null}
+{"_tag":"finding","id":"2026-11-16-stray-typecheck-log-in-git","date":"2026-11-16","by":"plan","model":"claude-opus-5-5","rule":"dead_code","location":{"path":"pr758-typecheck.out","line":1},"says":"Today's repo root tracks pr758-typecheck.out, a saved pnpm typecheck log that no program, test or doc reads, added by a pull request about an earlier decision.","proof":"git ls-files pr758-typecheck.out prints the path; git log -- pr758-typecheck.out shows only 30f9e07 (pull request 1384, an earlier decision amended); its first line is '$ sh scripts/typecheck.sh' and the next a Node version warning; rg -n pr758 finds no reader.","cost":"A raw run output in git, against 0027's rule that results stay out of it, and one more stale hit for every search of typecheck.sh.","head":"59910b0a4c84a36d4088d961dac3fdf756222d01","ticket":766,"pr":null}
 ```

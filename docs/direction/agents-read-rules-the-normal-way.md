@@ -7,8 +7,7 @@ summary: "Every agent reads `AGENTS.md` and `CLAUDE.md` itself, subfolder files 
 
 Decided 2026-10-26 by the owner.
 
-Its decided rules are in: [0399](../../.decisions/0399-agents-read-rule-files-themselves.md),
-[0400](../../.decisions/0400-a-repos-agent-settings-stay-out.md).
+Its decided rules are in:,.
 
 Keys renamed 2026-11-03 (short words keep one meaning): `at` became `ref`.
 

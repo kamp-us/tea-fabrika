@@ -21,11 +21,9 @@ Writer: the plan step for ticket 1040. Version: `next/` only. Today's version is
 Base read: the worktree at `706bac372` (today's main when the lane started). `origin/main` is at
 `ce15d9cb6`, which changed only `docs/plan/` (PR 1307), so every code line cited here holds on both.
 
-Builds [0102](../../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md),
-[0103](../../../.decisions/0103-a-program-may-mail-another-by-name.md),
-[0105](../../../.decisions/0105-a-durable-object-never-stays-awake-on-its-own.md),
-[0069](../../../.decisions/0069-choices-are-settings.md),
-[0086](../../../.decisions/0086-settings-are-declared-once.md) and
+Builds,
+[0020](../../../.kalfa/decisions/0020-programs-meet-by-mail.md),,,
+ and
 [brain, hands, window, agent](../../direction/brain-hands-window-agent.md). Row P39 of
 [`docs/plan/tier-1.md`](../tier-1.md), umbrella ticket 714.
 
@@ -58,18 +56,17 @@ doubt is the size of the `Runner.ts` change, which the tests step will feel firs
   timeout is 5 seconds
   ([gen_server](https://www.erlang.org/doc/apps/stdlib/gen_server.html#call/3)). Here the Cmd id
   is the ref, and the answer letter `<cmd-id>/answer` is the tagged reply. Where this leaves OTP: no
-  caller blocks, since a Durable Object never stays awake on its own (0105), and there is no
+  caller blocks, since a Durable Object never stays awake on its own, and there is no
   timeout, since a hands machine may be off for a day; a waiting job stays observable and is never
   reported as success. The "dead caller" rule is kept: a result for a process that has ended is
   never given to its successor (L14).
 - **OTP `gen_statem`.** State plus event gives actions and the next state
   ([gen_statem](https://www.erlang.org/doc/system/statem.html)). The delivery is one small tea
-  machine with that shape (0037, 0046).
+  machine with that shape.
 - **Temporal.** An activity's result is recorded in the workflow's own history before the workflow
   code sees it, and a replay reads the recorded result instead of running the activity again
   ([Temporal activities](https://docs.temporal.io/activities)). This is our answer letter in the
-  program's inbox: a replay folds the letter and never asks the hands again
-  ([0230](../../../.decisions/0230-replay-reruns-code-only.md)).
+  program's inbox: a replay folds the letter and never asks the hands again.
 - **tea 0.25.0** ships `work-queue` and `idempotency` model slices (read in
   `node_modules/@demlik/tea/dist/work-queue/index.d.ts` and `idempotency/index.d.ts`). Both keep a
   pending and done cache inside one program's Model. Not used: here the dedupe is the ledger's own
@@ -105,7 +102,7 @@ The five-slice plan read main at `4ba80a31b`. What changed for this slice:
 - The five-slice plan's states `pending`, `submitted`, `result`, `answered` become `pending`,
   `waiting`, `result`, `answered` here: `waiting` says what the Cmd is doing, and the job module
   already uses `requested` for the other side.
-- The 600-line ceiling is gone (0099).
+- The 600-line ceiling is gone.
 
 ## Calls the lead made for this plan
 
@@ -116,8 +113,8 @@ These are the lead's, from the brief, and this plan builds them as given:
    a host in the app open, and this slice draws nothing). Built as `hands.target`, below.
 2. **The delivery records are new ledger rows,** each with every fact it keeps and why. See
    [Records](#records).
-3. **A law that needs ports, sockets or a real local instance runs in a container (0045) and is
-   named `*.integration.test.ts` (0536).** Nothing here runs on a person's Mac. This slice has no
+3. **A law that needs ports, sockets or a real local instance runs in a container and is
+   named `*.integration.test.ts`.** Nothing here runs on a person's Mac. This slice has no
    law that needs ports or sockets; its SQLite-file twins are `*.integration.test.ts` and run on the
    schedule.
 
@@ -154,7 +151,7 @@ export const needs = (command: Command): ReadonlyArray<string> =>
 ### The contract the runner talks to
 
 ```ts
-// runtime/HandsJobs.ts, new. The contract only (0095).
+// runtime/HandsJobs.ts, new. The contract only.
 export const Ask = Schema.Struct({
   /** The dispatched Cmd's id, `<process>/<pos>/<index>`; it is the job's id too. */
   id: Schema.NonEmptyString,
@@ -263,7 +260,7 @@ so it never leads back to execution. `JobsError` and the machine's `Reason` gain
 ### The delivery machine
 
 ```ts
-// runtime/internal/handsDelivery.ts, new. One hands Cmd's delivery (0037, 0046).
+// runtime/internal/handsDelivery.ts, new. One hands Cmd's delivery.
 const State = Schema.TaggedUnion({
   /** Saved as dispatched; the Project has not confirmed the request. Owed: the backoff retries it. */
   pending: {},
@@ -297,7 +294,7 @@ hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev,
 ```
 
 Only the machine changes it. `owesHostCmd` (`runtime/Runner.ts:227`) stops counting a hands Cmd in
-`waiting`, so a waiting job sets no backoff alarm (0105). `due` already runs every `mail: true` Cmd
+`waiting`, so a waiting job sets no backoff alarm. `due` already runs every `mail: true` Cmd
 (`runtime/Runner.ts:2160`), so a waiting hands Cmd is asked again on every wake or timer, which is
 cheap: one read in the Project.
 
@@ -387,7 +384,7 @@ With `hands.target` unset, step 3 answers `refused`, no job stream is written, a
 
 Seed **119120** for every generated law. Each walk reads the state it has reached and picks the
 next move from what is possible there: a Cmd really dispatched, a job really finished, a cut at a
-real boundary (0093). Shrinking replays the shorter walk. Each walk requires its transition to
+real boundary. Shrinking replays the shorter walk. Each walk requires its transition to
 happen at least once, so an empty walk cannot pass. The oracle keeps its own record of finished
 jobs, placed letters and folded answers; it never calls the product's step function.
 
@@ -421,7 +418,7 @@ The four rules map onto these laws:
 | A duplicate never steps the program twice | L13 |
 | An old process's answer never enters its successor | L14, J1 |
 
-"Fast" means the suite runs on in-memory layers on the merge line (0536): `node:sqlite` at
+"Fast" means the suite runs on in-memory layers on the merge line: `node:sqlite` at
 `:memory:`, opened and closed in a scope, as `ledger/LedgerTransaction.test.ts:14-18` does. "File
 twin" means the same suite on SQLite files in a `*.integration.test.ts` runner on the 3-hour
 schedule. No law here needs a port, a socket, workerd or a container. No law is host-only, and
@@ -523,7 +520,7 @@ report; if none does, it stays.
 |---|---|---|
 | Which hands key a request targets | Yes | `hands.target`, scope `["person"]`, reload `restart`, since `0.0.0`, schema a non-empty key fingerprint or `null`. `Setting.make` requires a default (`settings/Setting.ts`), so the default is `null`, meaning unset: TOML has no null, so a person sets it by writing the key and unsets it by leaving it out. The lead's call |
 | Retry spacing after a lost reply | No new one | The runner's existing backoff, `policy.backoff.minMs`, already a declared program or wiring policy (`runtime/Runner.ts:546-549`). A waiting job has no retry: it is asked on a wake |
-| A timeout on a waiting job | No | There is no timeout behavior in this slice. A job waits and stays observable until the hands finish it or a person reopens it (0102). A timeout would be a new choice, and a setting, in the slice that adds it |
+| A timeout on a waiting job | No | There is no timeout behavior in this slice. A job waits and stays observable until the hands finish it or a person reopens it. A timeout would be a new choice, and a setting, in the slice that adds it |
 | A cap on saved results | No | Results live in job streams on the ledger, which keeps every stream (C5). `Result` is a closed schema; slice 4's `output_limit` bounds its text |
 | The Cmd name and its one command | No | The implemented contract, not a choice between implemented behaviors |
 | `needs` of a command | No | A fact about the command, kept beside it |
@@ -538,7 +535,7 @@ Facts that exist only when they happen, kept now:
 |---|---|---|---|
 | `requested` (slice 1's event, now written from this path) | `job:<cmd-id>` | The request: Cmd id, exact process, registered name, pack-qualified program, command, `needs`, `target`, program build, settings hash, parent input, trace. The writer: `by` and `for` (the process owner's key and person), `sentAt` (the runner's clock), `seen`, `parent`, `traceId`, `build`. The referee's `rev` and `arrivedAt` | Which process and build asked, for whom, caused by which input, and which settings chose the host: none of it can be rebuilt later |
 | `collected` (new) | `job:<cmd-id>` | `process` (the generation that took the result), `letter` (the answer letter's id), the same writer facts, `rev`, `arrivedAt` | Which result went to which process generation, and when, on the job itself |
-| The answer letter (existing line, new body) | `<name>/inbox`, id `<cmd-id>/answer` | `m`: `hands_ok` with the typed `Result` and the Cmd echo, or `hands_err` with its reason, and `at` (the runner's clock); the line's `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`; its `rev` and `pos` | The program's recorded input: a replay folds it and never asks the hands again (0230). A refusal for an unset `hands.target` is kept here, the only row it gets |
+| The answer letter (existing line, new body) | `<name>/inbox`, id `<cmd-id>/answer` | `m`: `hands_ok` with the typed `Result` and the Cmd echo, or `hands_err` with its reason, and `at` (the runner's clock); the line's `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`, `build`; its `rev` and `pos` | The program's recorded input: a replay folds it and never asks the hands again. A refusal for an unset `hands.target` is kept here, the only row it gets |
 | `stepped:<cmd-id>/answer` (existing) | the process's own stream | The input, its `pos`, the build that folded it, and the writer facts | The confirmation that the answer folded: the delivery is done |
 | `cmd.answered` (existing) | the old process's stream | The answer, the Cmd id, the old build | When an answer is in flight across a restart, the old life keeps it, as today (`runtime/Runner.ts:1824-1845`) |
 

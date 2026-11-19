@@ -27,7 +27,7 @@ cloudflare and runtime folders. Its row lists 86 hits and steps tests, review.
 The tests record reports a later base count of 88. These are historical counts,
 not measurements made by this planner.
 
-Decision 0589's amendments govern delivery. Judgment slices add no checker lock,
+an earlier decision's amendments govern delivery. Judgment slices add no checker lock,
 LOCKED row or separate pull request. They are reviewed before joining the judgment
 fold. E88 has no product build step.
 
@@ -70,7 +70,7 @@ Its reported green tests and five plants were not rerun here.
    4.1.3 builds that layer with port 0 and no host. The old tests explicitly bound
    127.0.0.1. A loopback URL does not constrain the listener's bind.
 5. E88 adds library barrel imports in ProjectAuditTest, entry-flows, readers,
-   index, p14, Built and ProcessStore. Decision 0577 requires namespace imports,
+   index, p14, Built and ProcessStore. an earlier decision requires namespace imports,
    including paths such as effect/crypto/Digest. Unrelated import debt belongs
    to E61.
 6. PersonKey conflicts with the glossary. A person key signs grants and never

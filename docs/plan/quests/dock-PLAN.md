@@ -144,7 +144,7 @@ does get it, and its Bash commands inherit the CLI's environment.
   supervisor ends it or when the supervisor itself ends; a linked process that loses its parent
   exits. A shutdown is `exit(Child, shutdown)`, then `kill` after the child spec's timeout
   (https://www.erlang.org/doc/apps/stdlib/supervisor.html, as the memory-restart plan read it on
-  2026-11-15; not fetched again here). In our code the tree is Effect's scopes (0061), the link is
+  2026-11-15; not fetched again here). In our code the tree is Effect's scopes, the link is
   the stdin pipe, and the shutdown is Effect's spawner: SIGTERM to the child's process group, then
   SIGKILL after `forceKillAfter`
   (`node_modules/@effect/platform-node-shared/dist/NodeChildProcessSpawner.js` at 4.1.2, lines 418
@@ -336,13 +336,13 @@ Notes on the laws:
 - **Where each runs.** L1 to L3 are in memory and run on every pull request in the `today`
   project. L4 to L6 start real Node processes (the fake), as `manager.dismiss.laws.test.ts` does
   today, so they run in the `today` project too and on a laptop under the caps. L7 and L8 are
-  host-only (0178): they need a real macOS session and the real Electron binary, which today's CI
+  host-only: they need a real macOS session and the real Electron binary, which today's CI
   never downloads. The file skips itself unless `FABRIKA_HOST_LAWS=1`, as P19's law does with
   its own key.
 - **Every plant is run once** by the tests step and recorded in its report and run row, never
   committed.
 
-**Host-only laws: L7 and L8.** They run before the first review (0178), on GitHub's macOS runner, in
+**Host-only laws: L7 and L8.** They run before the first review, on GitHub's macOS runner, in
 a new manual job in `.github/workflows/host.yaml` (`workflow_dispatch`, plus its own paths: the
 host test file and `harness.ts`), shaped like its `launchd` job, with `pnpm --dir adapters install
 --ignore-workspace --frozen-lockfile` and an Electron restore. The runner is thrown away after the
@@ -447,7 +447,7 @@ Estimate: 4 steps, $14
   of the app's code. Read, not explained by any comment there; L7 shows whether it matters for us.
 - Whether the Dock itself ever shows a helper. `lsappinfo` is LaunchServices' list, not the Dock.
 - Whether codex-acp has a timer or handle that keeps it alive after stdin closes even as Node. L8
-  says yes or no; if yes, that is an upstream bug report with L8's run as its repro (0054).
+  says yes or no; if yes, that is an upstream bug report with L8's run as its repro.
 - Whether a signed, packaged app will keep the `runAsNode` fuse on. There is none yet; the
   direction note names the same doubt for the host (line 605).
 - What an agent's command does with an empty `ELECTRON_RUN_AS_NODE` in a tool other than Electron.
@@ -458,18 +458,17 @@ Estimate: 4 steps, $14
 None.
 
 Every call above builds a settled note: the switch (the GUI direction note), when a helper ends
-(T1 and the host outliving the app), the scope (0061) and where the host-only laws run (0178).
+(T1 and the host outliving the app), the scope and where the host-only laws run.
 
 ## Amendment, 2026-11-15
 
-Made by the lead after the build and the review, on decision
-[0533](../../../.decisions/0533-today-keeps-its-tests-off-ci.md): CI runs none of today's tests.
+Made by the lead after the build and the review, on decision: CI runs none of today's tests.
 
 - **No `helpers` job.** `.github/workflows/host.yaml` is not changed, and its row in the files
   table is void. Where this plan says L7 and L8 run on GitHub's macOS runner, read: they run by
   hand on the owner's Mac, with the one command in the head comment of
   `packages/fabrika/src/agents/acp/helpers.host.test.ts`, only after the lead's read of every
-  line that inspects or ends a process and the owner's yes (0178).
+  line that inspects or ends a process and the owner's yes.
 - **What that changes for L8.** No runner is thrown away. If L8 fails, the adapter and its
   children stay running on that Mac, the failure message lists their pids, and a person ends
   them by hand. The test itself sends no signal.
@@ -479,7 +478,7 @@ Made by the lead after the build and the review, on decision
   before `open` starts anything, so an interrupt inside `open` closes it too. The review read
   it and found it better than the plan's shape.
 - **The plan file moved** from `docs/plan/lanes/` to `docs/plan/quests/` when main renamed the
-  folder (0546).
+  folder.
 
 ## Findings
 

@@ -1,7 +1,7 @@
 ---
 date: "2026-11-14"
 scripts: "The daily measure is committed: .agents/skills/lead/scripts/ci-speed.ts, run by .github/workflows/ci-speed.yaml. The one-off analysis (fetch, step times, waits, the vitest list runs, the model) stayed under runs/ci-goal/ in the worktree and is not committed; every number below names the run or job it came from."
-summary: "Can CI hit the owner's speed goal (PR checks 3/5 min, merge queue 3/5, last push to merged 8/15, median/worst 10%) once decisions 0534 and 0535 land? Measured from GitHub's API over 1,000 check runs (2026-11-12 18:41 to 2026-11-14 21:18 UTC), 12,392 jobs and 129 merged PRs. As it stands after 0534 and 0535, no stage is likely to make it: PR checks about 20%, the queue about 10%, last push to merged about 10% (its median is fine; its worst 10% is set by waits outside CI). The long pole of a light next/ PR is no longer the tests a change reaches: it is the 40 reader tests (824 s) that every sized run adds, a few files that stay over 100 s at fast depth, the serial legs job and the 115 s lint chain. Half of the 10 sampled next/ PRs reach 260 or more of next/'s 271 test files through imports, so changed-only does not shrink them. Runner wait is near zero under 10 running jobs and grows to a median 5 to 18 minutes at the cap of 20 with a backlog; 0534 and 0535 cut use from 87% to an estimated 16% of capacity, which should remove it. Five small changes, each named with its effect, take the PR and queue stages to about 85% and 80%; the last stage's worst 10% needs a change in when the lead enqueues, a call for the owner."
+summary: "Can CI hit the owner's speed goal (PR checks 3/5 min, merge queue 3/5, last push to merged 8/15, median/worst 10%) once an earlier decision and 0535 land? Measured from GitHub's API over 1,000 check runs (2026-11-12 18:41 to 2026-11-14 21:18 UTC), 12,392 jobs and 129 merged PRs. As it stands after 0534 and 0535, no stage is likely to make it: PR checks about 20%, the queue about 10%, last push to merged about 10% (its median is fine; its worst 10% is set by waits outside CI). The long pole of a light next/ PR is no longer the tests a change reaches: it is the 40 reader tests (824 s) that every sized run adds, a few files that stay over 100 s at fast depth, the serial legs job and the 115 s lint chain. Half of the 10 sampled next/ PRs reach 260 or more of next/'s 271 test files through imports, so changed-only does not shrink them. Runner wait is near zero under 10 running jobs and grows to a median 5 to 18 minutes at the cap of 20 with a backlog; 0534 and 0535 cut use from 87% to an estimated 16% of capacity, which should remove it. Five small changes, each named with its effect, take the PR and queue stages to about 85% and 80%; the last stage's worst 10% needs a change in when the lead enqueues, a call for the owner."
 ---
 
 # 293. CI speed goal: can we hit PR 3 min, queue 3 min, merge 8 min?
@@ -226,7 +226,7 @@ G  F with k = 0.4                                         2.3       3.3       22
   1243. This model does not cover it, and it can be the long pole of such a PR.
 
 **Merge queue.** The queue now holds only code PRs; docs PRs are admin-merged. A group runs the PR's
-selection over the group's diff (0534), so its time is about a PR run's. Today, of 32 PRs with a
+selection over the group's diff, so its time is about a PR run's. Today, of 32 PRs with a
 green group: entering to the group's start was 0.3 minutes median (99.8 worst 10%), the group 22.8
 (54.0), and green to merged 5.8 (83.9). The last is the queue's order: with `HEADGREEN` and 2 builds
 at once, a green group waits for the one ahead to merge. After 0534 and 0535, with groups about as
@@ -364,15 +364,15 @@ so the "today" job shapes in sections 1 and 6 are out of date. From `git log ori
 - **Change 4, the slow files:** not done as a split. Three of the four files named are now
   real-resource tests (`instance-wire`, `instance-records` and `Runner`, each
   `*.integration.test.ts`), which pull requests and the merge queue no longer run
-  ([pull request 1278](https://github.com/kamp-us/tea-fabrika/pull/1278), decision 0536).
+  ([pull request 1278](https://github.com/kamp-us/tea-fabrika/pull/1278), an earlier decision).
   `RepositoriesGit.test.ts` still runs on the merge line.
 - **Change 5, a group a ready run already tested:** landed in
   [pull request 1283](https://github.com/kamp-us/tea-fabrika/pull/1283).
-- **Change 6, the enqueue timing:** not landed. Decision 0540
+- **Change 6, the enqueue timing:** not landed. an earlier decision
   ([pull request 1288](https://github.com/kamp-us/tea-fabrika/pull/1288)) sets the queue's order,
   not when the lead enqueues.
 - **The tooling tests** are off the merge line: check.yaml's `test` job is gone
-  ([pull request 1289](https://github.com/kamp-us/tea-fabrika/pull/1289), decision 0539). Section 1's
+  ([pull request 1289](https://github.com/kamp-us/tea-fabrika/pull/1289), an earlier decision). Section 1's
   `test` job row and section 6's "about 3 of tooling tests" in a ready run's 19 machine-minutes no
   longer apply.
 - **0535's fast depth**, the `k` of section 6, has not landed: its pull request,

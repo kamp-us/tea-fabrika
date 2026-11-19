@@ -1,5 +1,5 @@
 // T695, next/. The ledger's translated errors keep the failure they wrap (decision 0043 rule 12,
-// `.patterns/effect-errors-keep-their-cause.md`). A suite on any `Sql`, read through its module as
+// `.kalfa/patterns/effect-errors-keep-their-cause.md`). A suite on any `Sql`, read through its module as
 // `LedgerCauseTest.suite(law, fresh, corrupt)`; the module that owns the driver runs it (0062).
 //
 // Audit sites: `Ledger.ts:86` (a rejected stub call), `Ledger.ts:91` (an answer that does not

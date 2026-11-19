@@ -9,15 +9,14 @@ summary: "Reading, not a measurement; `next/`'s planned door (P25, exam only) an
 **This is reading, not a measurement.** Read on 2026-11-10, written up on 2026-11-11. Nothing was
 built, run or paid for. Repo facts were first read at `92ee2dfa2` and rechecked on main on
 2026-11-11; each says which version it is about. It is the reading
-[0074](../.decisions/0074-agent-hands-over-a-flow.md) names under "Not decided here" ("A reading of
+[0029](../.kalfa/decisions/0029-agents-hand-over-flows.md) names under "Not decided here" ("A reading of
 the makers' pages is running"). Nothing here is decided yet.
 
 **The answer: not now, and never for writes.** Keep the tool-per-input door (shape A below) that
 `next/`'s exam already pins. When a real job needs bulk work, add two tools beside it:
 
 - a **read-only** code tool: the agent's script may call only inputs that write nothing (Gather);
-- a **flow tool**: the agent hands fabrika a flow as data, the same shape the lead already uses
-  ([0064](../.decisions/0064-the-lead-drives-with-flows.md)). Fabrika checks it and runs it as its
+- a **flow tool**: the agent hands fabrika a flow as data, the same shape the lead already uses. Fabrika checks it and runs it as its
   own process.
 
 That is shape D. **Lean: 65% sure.** The doubt: whether an agent writes a good flow as data as
@@ -101,18 +100,18 @@ pinned ones does not.
 
 ## The rules this has to keep
 
-- **[0020](../.decisions/0020-programs-get-hard-walls.md), hard walls.** Each program gets a
+- **[0007](../.kalfa/decisions/0007-otp-supervision-per-program.md), hard walls.** Each program gets a
   quota (writes per minute, storage, time per step), its own supervisor object, and a CPU cap per
   isolate. "No program's isolation rests on code alone where a wall can hold it." Experiment 173
   found that a 300 ms spin in one isolate stalled every process in a local workerd, and that
   Miniflare does not enforce `limits.cpuMs`.
-- **[0042](../.decisions/0042-platform-pieces-go-through-alchemy.md), Alchemy.** In `next/`, the
+- **[0018](../.kalfa/decisions/0018-cloudflare-only-through-alchemy.md), Alchemy.** In `next/`, the
   Worker Loader is reached through Alchemy's `Cloudflare.WorkerLoader` service, never directly.
-- **[0064](../.decisions/0064-the-lead-drives-with-flows.md), flows.** The lead's multi-step work is
+- **, flows.** The lead's multi-step work is
   a flow: "an ordered list of typed steps, saved before it starts. One program runs it. Its position
   is stored state, so a resume needs nothing in memory." The steps are the six primitives. No agent
   holds a loop.
-- **[0070](../.decisions/0070-flow-runner-stays-a-machine.md).** For now the flow runner is a plain tea machine on tea's Effect engine, not a
+- **.** For now the flow runner is a plain tea machine on tea's Effect engine, not a
   `Program.make`, because no program can yet run outside fabrika's app.
 - **[A browser is always a client](../docs/direction/a-browser-is-always-a-client.md).** A protocol
   may not need Node, a Unix socket, files or WebSocket-level frames.
@@ -128,7 +127,7 @@ pinned ones does not.
   in code which combo comes next."
 
 Settled check, on 2026-11-10: `git grep -i "code mode"` over `docs/`, `experiments/`, `.decisions/`,
-`field/` and `.glossary/` found nothing. On 2026-11-11 it finds only 0074's line that points here.
+`field/` and `.kalfa/glossary/` found nothing. On 2026-11-11 it finds only 0074's line that points here.
 
 ## The known way, from the makers
 
@@ -277,7 +276,7 @@ notes_save({ value: { note: "n-91c2", base: 7, body: "..." } }); // {version: 8}
 - **How it fails:** loudly and per call. A refused call is one line in words. Pydantic's runs show
   the weak spot: at 200 items, some models stopped making calls or got the arithmetic wrong.
 - **Browser:** yes. MCP stops at the bridge; the bridge is a client on the WebSocket.
-- **Walls:** the program's own (0020). An agent cannot cross programs except through its own
+- **Walls:** the program's own (0007). An agent cannot cross programs except through its own
   context.
 - **Record now:** already planned. Add one thing: the MCP client's own call id beside the letter,
   so a letter matches the agent's transcript. Today's version logs it; Tier 1's detail says an MCP
@@ -337,7 +336,7 @@ flow_start({ flow: [
   { _tag: "act", input: "notes_save", value: { note: "n-91c2", base: 7, body: "..." } },
 ] });
 // Fabrika decodes it with Effect Schema against each input's own schema and the agent's grant,
-// saves it, then runs it as a process: the 0064 flow runner, a tea machine (0070).
+// saves it, then runs it as a process: the 0064 flow runner, a tea machine.
 // Records: {_tag: "flow_saved", flow, hash, by, for}, then each step's letter as today, with
 // intent = intentOf(process, index).
 ```
@@ -350,9 +349,7 @@ and 0070 says no program runs outside the app yet. Kept as a later option.
 - **Lost:** loops and branches over results. A list cannot say "for each note with TODO". The agent
   must read first, then write the list. `combos.ts` warns against a pipeline language; a list with
   no branches is not one, and should stay that way.
-- **Holds:** resume is fabrika's own, from stored position
-  ([0064](../.decisions/0064-the-lead-drives-with-flows.md),
-  [0037](../.decisions/0037-implicit-state-machines-made-explicit.md)). Each step is an Act with an
+- **Holds:** resume is fabrika's own, from stored position. Each step is an Act with an
   intent from `intentOf`, so a resend is one write. An `ask` can wait days. The whole plan is
   visible before anything acts, so a Check or a person can read it. This is CaMeL's split:
   untrusted results cannot change a plan already saved.
@@ -396,7 +393,7 @@ Why:
 
 - It keeps exact resume without asking agents to write deterministic code. B needs Temporal's whole
   discipline from code no person reviewed. C and D get resume from the flow runner fabrika already
-  chose (0064, 0070).
+  chose.
 - It keeps the walls as walls. In D, a read script is held off writes by which stubs it was given,
   which Cloudflare says "cannot be forged". In B, the only thing between an injected tool result and
   a write loop is the agent's judgment.

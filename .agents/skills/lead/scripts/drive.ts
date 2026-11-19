@@ -8,7 +8,7 @@
 //
 // The agent runs through today's fabrika agents package on its ACP rows (./agents.ts): Codex or
 // Claude Code, unchanged, in the harness's own containment, with only its model login
-// (.decisions/0026, 0028). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
+// (.kalfa/decisions/0001-fabrika-never-owns-agent-loop.md). `--agent codex-exec` runs the installed `codex exec` plainly instead, on
 // the user's own Codex config and Codex's own sandbox (./codexexec.ts). The box's git data sits outside the box, where the harness lets no
 // command write it, so the agent commits nothing: it reads git through a view (`gitView`), leaves
 // its changes in the tree, and drive copies them into a fresh worktree of the main checkout and
@@ -1897,7 +1897,7 @@ export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuc
 
 /** What a mutation agent is told about the run that already happened in the container. */
 export const mutboxTail = (report: string, skip: boolean) =>
-  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
+  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network. Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
 
 /** mutbox.ts's command line for one step: the build is the step's start head, arm a the quest's root. */
 export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string> => [
@@ -2045,7 +2045,7 @@ drive.ts reads your report, then one JSON object at its very end (its schema fol
 
 const MIN_FREE_GB = 20;
 
-/** At most this many code agents run at once on the laptop (decision 0012). */
+/** At most this many code agents run at once on the laptop. */
 export const AGENT_CAP = 12;
 
 /** A step's start is refused once the agents running reach the cap. */

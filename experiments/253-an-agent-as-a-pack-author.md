@@ -48,8 +48,7 @@ setup at 20:51 and the last author step at 20:57. So the minutes below are small
 agent's minutes: an agent reads 600 lines of types in seconds. What a gap costs a person is the
 reading, not the clock.
 
-The program is on the branch `fabrikalfa/exp-agent-pack-author`, not on main
-([0027](../.decisions/0027-experiment-results-live-in-a-private-archive.md)): `program.ts` (81
+The program is on the branch `fabrikalfa/exp-agent-pack-author`, not on main: `program.ts` (81
 lines), `program.laws.test.ts` (162 lines, 6 laws), `runner.laws.test.ts` (261 lines, 1 law). The
 lockfile gains its row there too, and so does `boundary-rules.json` (gap 13).
 
@@ -94,11 +93,11 @@ short, and the package was picked up by the workspace with no edit outside it.
 
 | Gap | Home |
 |---|---|
-| 1, load a program the app does not list | [0068](../.decisions/0068-tiers-carry-every-part.md) (a thin slice of "programs written outside fabrika's own source" before Tier 5) and [0069](../.decisions/0069-choices-are-settings.md) (the program list as a `fabrika.toml` setting; Tier 1's P38, ticket 664). 0069 also bans the test-only option this run found |
+| 1, load a program the app does not list | (a thin slice of "programs written outside fabrika's own source" before Tier 5) (the program list as a `fabrika.toml` setting; Tier 1's P38, ticket 664). 0069 also bans the test-only option this run found |
 | 2, a window | Tier 1's P14, the first window ([tier-1](../docs/plan/tier-1.md)) |
 | 6, an agent's door | Tier 1's P25, agents through MCP |
 | 8, the program's shape | [program-shape](../docs/direction/program-shape.md), decided, not built |
-| 3, a runner test kit | Partly: [0070](../.decisions/0070-flow-runner-stays-a-machine.md) names the seven services as why nothing outside the app can run a program. Nothing plans a kit for authors |
+| 3, a runner test kit | Partly: names the seven services as why nothing outside the app can run a program. Nothing plans a kit for authors |
 | 4, 5, 7, 9, 10, 11, 12, 13 | No home. No decision asks for a `next/` tutorial, a distinct refusal reason for "person only", an author's README, renaming `./node/local-stage`, or a program package that joins the boundary rules on its own |
 
 0068 and 0069 cover the gap that blocks the job. The rest of the cost is in the gaps with no home:

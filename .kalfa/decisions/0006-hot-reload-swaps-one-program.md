@@ -1,0 +1,3 @@
+# Hot reload swaps one program at a time
+
+`next/` has hot reload from the first slice: saving a program's file swaps only that program, at each of its processes' next step, while the app, the brain and every other program run on. A process keeps its state when the new code's state schema decodes it; if not, that one process refuses the swap and keeps its old code, with a Restart button, never a guess. A window takes the program's new view code from the brain by hash, never from Vite, because a browser tab on Cloudflare has no dev server, and it rebuilds only that tile when its model no longer decodes.
