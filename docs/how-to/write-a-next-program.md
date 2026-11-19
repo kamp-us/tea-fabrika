@@ -1,8 +1,7 @@
 # Write a program for `next/`
 
 For anyone writing a program for `next/`, the new version of fabrika. **Every claim here is about
-`next/`** and was read from main's source, cited as `path:line`. The two tutorials in
-[`docs/tutorials/`](../tutorials/) teach today's version (`@kampus/fabrika-old`), not this one.
+`next/`** and was read from main's source, cited as `path:line`. The old tutorials teach today's version (`@kampus/fabrika-old`), not this one, and are in the notes.
 
 A program is a pure tea machine plus what it declares: its saved state, its view, when it refuses an
 input, who may send each input, and when it wants to wake. It gets no clock, key, ledger or service

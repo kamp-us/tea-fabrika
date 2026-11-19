@@ -396,7 +396,6 @@ jobs:
             packages/*/node_modules/.cache/tsc
             kalfa/*/node_modules/.cache/tsc
             programs/*/node_modules/.cache/tsc
-            docs/tutorials/*/node_modules/.cache/tsc
             oxlint-plugins/node_modules/.cache/tsc
             .github/ci/node_modules/.cache/tsc
             .agents/node_modules/.cache/tsc

@@ -80,9 +80,6 @@ runs TypeScript as it is.
 
 ## Where to go next
 
-- **Run programs on hosts, and kill one:** the tutorial
-  [Two hosts, one ledger](../../docs/tutorials/two-hosts/README.md), then
-  [Agents on two hosts](../../docs/tutorials/agents/README.md).
 - **Hand tsh your own programs:** [the shell's README](./src/shell/README.md).
 - **Use tsh and the pipeline on a repository:** the [repository README](../../README.md).
 - **Look up one part:** the part's own README, listed under [The parts](#the-parts).

@@ -208,7 +208,6 @@ These still run, but they are not the way forward:
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Write a program for `next/` | [`docs/how-to/write-a-next-program.md`](./docs/how-to/write-a-next-program.md) |
-| Learn today's host by doing it | Tutorial: [Two hosts, one ledger](./docs/tutorials/two-hosts/README.md), then [Agents on two hosts](./docs/tutorials/agents/README.md) |
 | Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
 | See what was tried, and what came back | [`experiments/`](./experiments/README.md) |
 | See what happened on real tickets | [`field/`](./field/README.md) |
@@ -246,9 +245,7 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app-old`: the fabrika app, a
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
-- [`docs/tutorials/`](./docs/tutorials/): tutorials, with their finished files type-checked.
-- `docs/`: drafts too: [`review-machine.md`](./docs/review-machine.md) and
-  [`ship-machine.md`](./docs/ship-machine.md).
+- `docs/`: the design notes in `direction/`, and `settings-reference.md`.
 - `fixtures/`: toy projects the tests use.
 
 ## Working on this repository

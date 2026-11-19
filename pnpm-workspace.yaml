@@ -1,5 +1,4 @@
 # packages: what other code may build on. programs: one runnable tea program each.
-# docs/tutorials: a tutorial's finished files, type-checked so it cannot drift.
 # apps: what a person opens, on top of everything else. Nothing imports an app.
 # oxlint-plugins: this repo's own lint rules, type-checked and tested like the rest.
 # next/apps: the new version's app (AGENTS.md, "Two versions, side by side"). So far its exam folder.
@@ -8,7 +7,6 @@ packages:
   - packages/*
   - kalfa/*
   - programs/*
-  - docs/tutorials/*
   - oxlint-plugins
   - .github/ci
   # .agents: the skills and the lead's own scripts, type-checked here (ticket 486). It names no
@@ -131,7 +129,7 @@ catalog:
   zod: 4.6.7
 
 catalogs:
-  # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
+  # Today's version (packages/, programs/, apps/), held at the tea it runs on, with
   # its patch, while next/ moves to `_tag` (decision 0569). Goes when today's version goes.
   old:
     '@demlik/tea': 0.25.0

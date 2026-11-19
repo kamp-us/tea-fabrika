@@ -46,10 +46,9 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
 | Know what was tried and what came back | [`experiments/README.md`](./experiments/README.md) and `ls experiments`, then the write-up | `experiments/NN-short-title.md`, as [its README](./experiments/README.md) says. Raw results go to the private archive, never into git; a script stays on its own branch, named in the write-up |
 | Know what happened on real tickets | [`field/README.md`](./field/README.md), then `field/notes/` and `field/runs/` | One file per agent run and one per thing that broke, cost too much, needed a person or worked well, the same day |
 | Report something wrong that your task does not cover | [`field/README.md`](./field/README.md#a-finding) | One row file in `field/findings/`, with proof, then keep going; never a security hole |
-| Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
+| Understand a design that is still a draft | `docs/` | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
 | Build the new version, or change today's machines (`packages/fabrika`, `packages/pipeline`, `programs/*`) | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/`; today's machines are frozen, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as their map and each part's own README | Code in `next/`, with its test beside it as `name.test.ts`: all new work goes there. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
 | Do an operation by hand: a sev, a wipe of the dev and test homes | [`.kalfa/runbooks/`](./.kalfa/runbooks/), the one file for that operation | One file there, the first time the operation is done for real |
-| Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | The run's rows in `field/`, the same day |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
 
@@ -126,7 +125,6 @@ more than about five minutes that CI runs anyway.
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
 | A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite |
 | A script under `experiments/` | `pnpm lint`, and run the changed script once yourself: it is outside the typecheck |
-| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](./.agents/skills/guidelines/references/changing-the-product.md)) |
 
 - **Never switch a lint rule off to pass, and an unused export fails lint**:

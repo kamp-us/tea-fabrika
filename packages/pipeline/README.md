@@ -115,7 +115,7 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - Five verbs, and one way to spell an answer: `send:builder:checks_red`, `ask:owner:approval`, `done:part`.
   - A stage writes only its own words (`outcomesOf`). `nameOf` makes the name from the data.
   - The name's pattern is a type, so a misspelled name does not compile.
-- `stages/ship/`: one pull request in, one typed outcome out, no agent ([`docs/ship-machine.md`](../../docs/ship-machine.md)).
+- `stages/ship/`: one pull request in, one typed outcome out, no agent (`docs/ship-machine.md`).
   - `outcome.ts`: its own words for the five verbs, 24 names in all.
   - `facts.ts`: the facts it reads. `gate.ts`: go, wait, or the one reason not to.
   - `ready.ts`: "ready to merge" as a value that exists only with its proof: a passing verdict row for every criterion at the head, and green checks at that head. The enqueue and merge Cmds take nothing else.
@@ -126,7 +126,7 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - `look.ts`: the machine stepped as far as its first write or wait, with that write handed back, never sent.
   - `program.ts`: the `ship` program, the thing you start. A mode as its flag, pull requests told on its input `pr` at any time, a fresh run of the machine per pull request, one at a time. `CodeHost` and `CodeHostWrites` come through Effect's context.
   - Its live runs: [experiment 56](../../experiments/56-first-live-run-of-the-ship-machine.md), and [63](../../experiments/63-ship-as-a-program.md) for ship as a program.
-- `stages/review/`: one pull request at one head commit in, one typed outcome and a report out ([`docs/review-machine.md`](../../docs/review-machine.md), last section).
+- `stages/review/`: one pull request at one head commit in, one typed outcome and a report out (`docs/review-machine.md`, last section).
   - `pack.ts`: code reads everything a reviewer needs. `gate.ts`: stops before any agent when a required check is red or the pack is not whole.
   - `reviewer.ts`: the one agent. It gets a copy of the code at the commit, three read tools (Read, Grep, Glob) and the tools its machine opens to it (`tools.ts`, such as filing a note), and fills a form of rows and findings.
   - `sheet.ts`: code checks the form and gives each finding an id. A form it refuses goes back to a new run with its problems, up to a limit of tries.
@@ -134,7 +134,7 @@ Moved to `@kampus/fabrika-old` in experiment 114, because nothing in them is the
   - `machine.ts`: the review machine around the reviewer. `program.ts`: the `review` program. It only reads: a note the reviewer files goes out on the output `note`, and nothing is posted.
   - `outcome.ts`: its own words for the five verbs, 19 names in all.
   - The rubric texts tsh hands the live `review` are in `rubrics/`, unless `tsh.toml` names a folder.
-  - Tested on recorded answers under `fixtures/review/`, with a scripted reviewer. Its real runs: [`docs/review-machine.md`](../../docs/review-machine.md), "The three runs beside today's reviewer".
+  - Tested on recorded answers under `fixtures/review/`, with a scripted reviewer. Its real runs: `docs/review-machine.md`, "The three runs beside today's reviewer".
 - `code-host-github.ts`, `codeowners.ts`: `CodeHost` on GitHub, the read side only.
   - A pull request's facts for the ship gate, read through `gh` GraphQL calls at one head commit.
   - The owner's approval comes from the base branch's CODEOWNERS (which files are protected, who owns them) and the approving reviews at the head.
@@ -186,7 +186,7 @@ Tests run on scripted services and recorded answers under `fixtures/`. None need
 - [`docs/direction/every-machine-has-laws.md`](../../docs/direction/every-machine-has-laws.md): what `laws/` enforces.
 - [`docs/direction/packs-are-programs.md`](../../docs/direction/packs-are-programs.md): the core side of packs.
 - [`docs/direction/where-each-piece-lives.md`](../../docs/direction/where-each-piece-lives.md): why the pipeline is its own package.
-- [`docs/ship-machine.md`](../../docs/ship-machine.md) and [`docs/review-machine.md`](../../docs/review-machine.md): the ship and review stages.
+- `docs/ship-machine.md` and `docs/review-machine.md`: the ship and review stages.
 - Experiment 82 in the [experiments index](../../experiments/README.md): what moved into the pipeline and why.
 - [Experiment 103](../../experiments/103-move-without-loss.md): moved into `@kampus/fabrika-old`.
 - [Experiment 114](../../experiments/114-the-pipeline-moves-out.md): moved out again, into this package.

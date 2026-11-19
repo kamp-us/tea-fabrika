@@ -14,7 +14,7 @@ example of the idea, not the shape a rebuild copies
 ship stage with the ship machine (`createOperator(slots, { ship: "machine" })`,
 `SHIP=machine` in `src/operate.ts`). It is off by default, tested against
 scripted services only, and not yet run on a real ticket. See "Under the
-operator" in [`../ship-machine.md`](../ship-machine.md).*
+operator" in the ship machine draft, in the notes.*
 
 *2026-10-12 (UTC): the first swap has run once, on one docs-only pull request.
 kamp-us/demlik#561 merged with the ship machine in the ship stage and no
