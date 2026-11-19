@@ -1,8 +1,7 @@
 # Working in this repo
 
 A map for any agent or person picking up work here. Read
-this first, then [`docs/plan/README.md`](./docs/plan/README.md) for where the work stands, then
-[`docs/direction/README.md`](./docs/direction/README.md) for why.
+this first, then [`docs/direction/README.md`](./docs/direction/README.md) for why. What is next lives on the tracker.
 
 ## What this repo is
 
@@ -15,8 +14,7 @@ all kept here on purpose, so they can be analysed later.
 
 `next/` is what we are building, on the decisions; its rules are in `next/AGENTS.md`. Everything else is what we use
 today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/` grows beside today's version
-([0002](./.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)). How far it is:
-[where we are](./docs/plan/README.md#where-we-are-now).
+([0002](./.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)).
 
 - **Know which version your work is in** before you read or change code. Your brief or ticket says so. If it does not,
   all new work is `next/`, and if you still cannot tell, ask.
@@ -39,17 +37,16 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
 
 | You want to | Read | Write |
 |---|---|---|
-| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) | The plan docs, in the same pull request as the work |
+| Know what is next and who has the move | The tracker | The tracker |
 | Know what the owner decided | [`.kalfa/decisions/`](./.kalfa/decisions/); see [Decision discovery](#decision-discovery) | `.kalfa/decisions/NNNN-slug.md`, with [`/adr`](./.agents/skills/adr/SKILL.md), only for a hard-to-reverse choice |
 | Know where this is going and why, or where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/`](./docs/direction/README.md), the long design notes, and [`docs/direction/follows/`](./docs/direction/follows/README.md) | No new note is written there: long reasoning a decision needs goes in the decision's own Context, or in the experiment that holds its evidence; a follows row changes in the pull request that changes that behavior; no folder keeps an index table |
 | Know what a word means | [`.kalfa/glossary/GLOSSARY-MAP.md`](./.kalfa/glossary/GLOSSARY-MAP.md), the map of the contexts; each context's `GLOSSARY.md` is written when its words are decided | The term, with an `_Avoid_` line, in its context's `GLOSSARY.md`, in the pull request that coins or renames a word |
 | Know how the code is shaped now | [`.kalfa/patterns/README.md`](./.kalfa/patterns/README.md) and `rg -n '^(where|when):' .kalfa/patterns`, then the doc for your change. When a doc and the source disagree, the source wins | `.kalfa/patterns/<name>.md`, with the [write-pattern skill](./.agents/skills/write-pattern/SKILL.md) |
 | Know a design area's guidelines, or write them for one area | `.kalfa/guidelines/<area>.md`, read whole; [the guidelines skill](./.claude/skills/guidelines/SKILL.md) to write them | An edit to the page, in a pull request the owner says yes to; what that skill lists, in its shape |
 | Know what was tried, what happened on real tickets, or report something wrong outside your task | The notes: experiments, field rows and findings live in the owner's private notes, outside this repo | Say it in your report with proof, then keep going; never a fix, and never a security hole. The lead records it in the notes |
-| Understand a design that is still a draft | `docs/` (for example [`docs/review-machine.md`](./docs/review-machine.md)) | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
+| Understand a design that is still a draft | `docs/` | A draft there. When a draft settles a direction, record the decision with [`/adr`](./.agents/skills/adr/SKILL.md); its long reasoning goes in the decision's own Context |
 | Build the new version, or change today's machines (`packages/fabrika`, `packages/pipeline`, `programs/*`) | [`next/AGENTS.md`](./next/AGENTS.md), then `docs/direction/`; today's machines are frozen, with the top-level [`README.md`](./README.md#what-is-in-this-repository) as their map and each part's own README | Code in `next/`, with its test beside it as `name.test.ts`: all new work goes there. Outside a package, import it by its name, never by a path; inside one, by relative path. Toy projects used by tests live in `fixtures/` |
 | Do an operation by hand: a sev, a wipe of the dev and test homes | [`.kalfa/runbooks/`](./.kalfa/runbooks/), the one file for that operation | One file there, the first time the operation is done for real |
-| Learn a package by doing it | [`docs/tutorials/`](./docs/tutorials/), one folder per tutorial | A folder there with a `package.json` whose `typecheck` covers the files. Run every step on a fresh clone before it lands |
 | Run a real ticket through the pipeline | [the how-to](./docs/how-to/run-a-pipeline-ticket.md) and [its rules](./docs/how-to/run-a-pipeline-ticket.md#the-rules-for-a-live-run) | What happened, in the notes |
 | Look at a live run's state and logs | `runs/` on your own machine | Nothing by hand. `runs/` is ignored by git and is never committed |
 
@@ -94,7 +91,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 
 Product work goes plan, test writer, build, one review. A ticket with a fix command (lint autofix, codemod, rename) takes
 the mechanical branch: run it over the whole repo, one pull request per rule, no plan, no test writer. No agent approves a pull request. The rest is in
-[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands), [the plan](./docs/plan/README.md#how-a-change-lands) and
+[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands) and
 [the tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws).
 
 ## Before you design anything
@@ -125,7 +122,6 @@ more than about five minutes that CI runs anyway.
 | A skill script, or Markdown that a program or skill reads | as code, below |
 | Code, in `next/` or today's version | `pnpm lint`, a narrow vitest path while you work, `--changed origin/main` once at the end, then one `pnpm typecheck`. Never the full suite locally |
 | A dependency's version | as code, but narrow paths in place of `--changed`, which a lockfile change makes the full suite |
-| A tutorial's files | `pnpm typecheck`, and every step on a fresh clone |
 | A program's window | as code, plus shots from the real built app at the five layouts ([Changing the product](./.agents/skills/guidelines/references/changing-the-product.md)) |
 
 - **Never switch a lint rule off to pass, and an unused export fails lint**:

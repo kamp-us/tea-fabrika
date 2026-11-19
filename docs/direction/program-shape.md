@@ -161,7 +161,7 @@ them today), and the Cmd list the runner reads at runtime. tea does not change.
 
 ## What it walks back, by name
 
-- [Tier 1's P11](../plan/tier-1-detail.md#programs-as-p11-built-it) and its plan's item 9: `inputs`,
+- Tier 1's P11 and its plan's item 9: `inputs`,
   `outputs` and `writes` required, `{}` for none. Now left out when empty, and `writes` is read off
   `cmds`.
 - P11's one `write` Cmd that every program declares: now each event brings its own.

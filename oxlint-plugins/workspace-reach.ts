@@ -1,6 +1,6 @@
 // `pnpm lint:reach`: every workspace package is reached, so a part nothing uses cannot stay in the
 // repo (decision 0003). A package is reached when the root package.json or a reached package names
-// it as a dependency. A start is a package nothing may depend on by its role: an app, a tutorial,
+// it as a dependency. A start is a package nothing may depend on by its role: an app,
 // this lint package, CI's own package. Today's version only: next/ is left out while it grows.
 //
 //   node oxlint-plugins/workspace-reach.ts            # this repo
@@ -13,8 +13,8 @@ import { dirname, join } from "node:path";
 import { Array as Arr, pipe, Predicate, Record as Rec, Result } from "effect";
 import { parse } from "yaml";
 
-/** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
-const STARTS = ["apps/*", "docs/tutorials/*", "oxlint-plugins", ".github/ci"];
+/** Folders whose packages are starts: nothing depends on an app or a tool. */
+const STARTS = ["apps/*", "oxlint-plugins", ".github/ci"];
 
 /** next/ is left out while it grows: Tier 1 builds a piece before its app names it. */
 const LEFT_OUT = /^next\//;

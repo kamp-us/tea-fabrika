@@ -29,8 +29,7 @@ look step, shots at five layouts, and the other rules a screen follows, moved th
 ### 1. Check what is settled
 
 - Search `.kalfa/guidelines/` (any page on the area), `.kalfa/decisions/`, what is
-  left of `docs/direction/`, `docs/plan/` (README, `tiers.md`,
-  `tier-1.md`) for the area.
+  left of `docs/direction/` for the area.
 - Write down each decided point with its source. A decided point is marked decided everywhere
   and is never asked again.
 - Name the open pull requests on the same area and what they already lean.
@@ -208,8 +207,7 @@ leakgrep.sh checks added text; private words stay outside the repo.
   with their kinds and leans (or "No lean, the owner picks"), the shape, today's example, what was
   decided, what other open pull requests would change to match, open calls, what it cannot tell
   us. It names the canvas "<Area> guidelines" and the walk page by title, never by link.
-- It lands by
-  [the plan's rule](../../../docs/plan/README.md#how-a-change-lands), after the owner's yes.
+- It lands after the owner's yes.
 
 ### 11. Walk the owner through it
 

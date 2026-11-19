@@ -63,6 +63,6 @@ How sure: 90%. The owner decided it. The doubt is only Tier 3's join screen, whi
 
 - How a second person's invite is carried: *decided 2026-11-07 (owner):* a one-time link, also
   shown as a QR code, that expires in a day, sent by an admin or the owner; the ledger records the
-  join and who invited ([Tier 3's invites](../plan/tiers.md#tier-3s-invites-owner-2026-11-07)).
+  join and who invited (Tier 3's invites).
   It said: a code, a link or a QR, open until Tier 3.
 - Whether a lookup on GitHub is worth building at all. Nothing needs it yet.

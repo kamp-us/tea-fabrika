@@ -111,7 +111,7 @@ keys --map    the board (D), the same program and the same keys
 Decided by the owner today. **Tier 1 reads the file.** **The keybindings program is in Tier 2,**
 since that is where the desk arrives as a program with split, close and prefix keys, so the
 program arrives with the keys it edits. The `themes` program, and reading theme files, is in Tier
-2 too. Both are now in [the tiers](../plan/tiers.md).
+2 too. Both are now in the tiers.
 
 ### K5: the prefix is a setting, and `<prefix>` stands in for it
 
@@ -437,7 +437,7 @@ escape   exit                mode = {_tag: "normal"}; table: notes' tile keys ag
 - A resize mode, which moves the edges between tiles, belongs to no single tile. i3 ships one in
   its default config as a binding mode ([i3 binding modes](https://i3wm.org/docs/userguide.html#binding_modes)).
 - Lean: such a mode belongs to the desk, `[mode.desk.resize]`. That works only once the desk is a
-  program, which is Tier 2 ([the tiers](../plan/tiers.md)). Until then it has no program to name it.
+  program, which is Tier 2 (the tiers). Until then it has no program to name it.
 - **75% sure.** The doubt: whether every mode that spans tiles is the desk's, or a window needs a
   home of its own. Building resize in Tier 2 settles it.
 

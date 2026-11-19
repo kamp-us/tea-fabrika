@@ -1,6 +1,6 @@
 import { Result } from "effect";
 import fc from "fast-check";
-// Laws Q1 to Q3 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: `Target.find` picks the one mutant a
+// Laws Q1 to Q3 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: `Target.find` picks the one mutant a
 // plant names by its code shape (mutator, the node's text and Stryker's replacement), and refuses
 // loudly when it finds the shape twice or never. Pure: the instrumenter's mutant list is an input.
 //

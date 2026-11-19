@@ -1,4 +1,4 @@
-// next/: law L1 of the approved plan (docs/plan/quests/effect-413-PLAN.md). From effect 4.1.3 on,
+// next/: law L1 of the approved plan (.kalfa/quests/effect-413-PLAN.md). From effect 4.1.3 on,
 // `isAnyOf` on a tagged union takes only that union's own tags, so a misspelled tag is a compile
 // error rather than a check that is false forever. The lead and CI run the compiler; Vitest does not
 // typecheck, so the body holds type assertions only (0527).

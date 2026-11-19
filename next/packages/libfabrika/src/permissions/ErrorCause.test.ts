@@ -1,4 +1,4 @@
-// T1062 slice 1, next/: L4 of docs/plan/quests/error-cause-PLAN.md (decision 0568). The session's
+// T1062 slice 1, next/: L4 of .kalfa/quests/error-cause-PLAN.md (decision 0568). The session's
 // sender check makes `SendersError` with no failure below it (`access/SessionSenders.ts:22`, a key
 // that no longer belongs), so its cause may be missing: `Schema.optional(Schema.Defect())`, never
 // `Schema.optionalKey`, and never `Schema.Unknown`. A cause written as `undefined` decodes, an

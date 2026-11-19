@@ -75,7 +75,7 @@ the scale   over 8, so H4 says split. It went as one PR of 249 files.
 ## Which version
 
 - **Today's tracker first.** Tickets, their `started` and `ended` facts and the watcher's `pr`
-  fact live there now, and [ticket 117](../plan/README.md) is the first real quest. The planner
+  fact live there now, and ticket 117 is the first real quest. The planner
   writes the estimate, the quest writes the fact, and the ticket window shows both.
 - **`next/` later,** when its tracker exists: the same two names and the same fold, with `_tag`.
 - **The field log** (`field/README.md`) changes too, for hand work: see

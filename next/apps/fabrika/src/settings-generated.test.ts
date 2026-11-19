@@ -3,48 +3,30 @@
 // oxlint-plugins/settings-imports.test.ts, so the file reaches no real thing and is plain again.
 //
 // The shape these tests hold the app and libfabrika to:
-// - The committed `next/apps/fabrika/person.json` and `repo.json` are, byte for byte,
-//   `JsonSchema.format(JsonSchema.make(Files.schema(Declarations.all, file)))`: stable JSON with one
-//   trailing newline. `docs/settings-reference.md` holds `Reference.markdown(Declarations.all)`
-//   whole, with the docs step's own words around it. `settings-generate.ts` writes all three
-//   through those functions, so regenerating changes nothing.
-// - All three outputs depend on the declarations alone, never on their order, and a changed doc or
-//   default reaches every output that shows that declaration.
+// - The two schemas and the reference are made from the declarations alone, never from their order,
+//   and a changed doc or default reaches every output that shows that declaration. None of them is
+//   committed: they are made when read.
 // - L9, that only the start files import the TOML adapter and only the adapter imports its parser, is
 //   oxlint's own `no-restricted-imports`; its law is oxlint-plugins/settings-imports.test.ts (0591).
-import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Files from "@kalfa/config/Files";
 import * as JsonSchema from "@kalfa/config/JsonSchema";
 import * as Reference from "@kalfa/config/Reference";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Setting from "@kampus/libfabrika/settings/Fabrika";
-import { Array as Arr, String as Str, Effect, FileSystem, Path, Result, Schema, Record as Rec } from "effect";
+import { Array as Arr, String as Str, Result, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const check = { seed: SEED, numRuns: 100 };
 
-/** The three generated outputs for a group, as the generation entry writes them. */
+/** The three outputs for a group. */
 const outputs = <A>(group: Setting.Group<A>) => ({
   person: Files.schema(group, "person").pipe(JsonSchema.make, JsonSchema.format),
   repo: Files.schema(group, "repo").pipe(JsonSchema.make, JsonSchema.format),
   reference: Reference.markdown(group),
 });
-
-const committed = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem,
-    path = yield* Path.Path;
-
-  const app = path.resolve(import.meta.dirname, "..");
-
-  return {
-    person: yield* fs.readFileString(path.join(app, "person.json")),
-    repo: yield* fs.readFileString(path.join(app, "repo.json")),
-    reference: yield* fs.readFileString(path.resolve(app, "../../../docs/settings-reference.md")),
-  };
-}).pipe(Effect.provide(NodeServices.layer), Effect.runPromise);
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -82,7 +64,7 @@ const grouped = (ds: Declared) =>
     ),
   );
 
-describe("L1, the generated schemas and reference stay fresh and deterministic", () => {
+describe("L1, the schemas and reference are deterministic", () => {
   it.prop(
     "T843 generated settings: person scope carries both rate declarations and repo scope rejects them (50 runs)",
     {
@@ -114,18 +96,6 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     },
     { arbitrary: { seed: SEED, runs: 50 } },
   );
-  it("format: the committed person.json, repo.json and reference are what generation writes", async () => {
-    // format: editors read the two schemas and people read the reference exactly as committed, so
-    // the committed bytes must be the generator's output for the shipped declarations.
-    const files = await committed;
-    const fresh = outputs(Declarations.all);
-    expect(files.person).toBe(fresh.person);
-    expect(files.repo).toBe(fresh.repo);
-    expect(files.reference).toContain(fresh.reference);
-    expect(Str.endsWith("}\n")(fresh.person) && !Str.endsWith("\n\n")(fresh.person)).toBe(true);
-    expect(Str.endsWith("}\n")(fresh.repo) && !Str.endsWith("\n\n")(fresh.repo)).toBe(true);
-  });
-
   it("outputs ignore declaration order, and a changed doc or default reaches each output that shows it", () => {
     fc.assert(
       fc.property(

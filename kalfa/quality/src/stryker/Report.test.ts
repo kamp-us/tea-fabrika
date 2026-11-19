@@ -1,4 +1,4 @@
-// Laws Q4, Q5 and Q13 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: the answer a plant run gives
+// Laws Q4, Q5 and Q13 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: the answer a plant run gives
 // from Stryker's JSON report. Stryker remaps test ids to "0", "1" and so on before it writes the
 // report, so a mutant's `killedBy` names no test: it has to be looked up in the report's `testFiles`.
 //

@@ -1093,7 +1093,7 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 60 }) } },
 );
 
-// Ticket 1053 slice 1, next/: L2, L8 and L9 of the plan (docs/plan/quests/t1053-PLAN.md), written
+// Ticket 1053 slice 1, next/: L2, L8 and L9 of the plan (.kalfa/quests/t1053-PLAN.md), written
 // before the build. What a client's socket is told is one Schema, `News` (runtime/News.ts), and the
 // Connection object's `notify` is its door: it decodes the value once and tells the cases apart
 // once.

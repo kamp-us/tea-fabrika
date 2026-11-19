@@ -68,7 +68,7 @@ Ctrl-B a          the top bar's popup: 4 asks, about 2 min  the glance: each row
 ## Which version
 
 - **`next/`:** all of it, as one asks program: its tile from Tier 2, its glance in the top bar with
-  the asks list in Tier 5 ([tiers](../plan/tiers.md)). The facts land with the one ask (ticket 90) in whatever tier first asks a
+  the asks list in Tier 5 (tiers). The facts land with the one ask (ticket 90) in whatever tier first asks a
   person; `rec` and `took` go on from that day, since what they hold exists only then.
 - **Today's version (`apps/fabrika`, `programs/tracker`, `packages/pipeline`):** not changed by this
   note. Ticket 117's asks are the running example, read on main. Four small tryouts are offered at
@@ -470,7 +470,7 @@ it costs a person a week.
 - **Elm or OTP.** A supervisor restarts what it can and escalates what it cannot; the desk is where
   the escalation lands ([jidoka](./jidoka-and-andon.md)).
 - **What holds it.** PR 11's route table, where a fixable row cannot be a stop and a missing row
-  fails `pnpm typecheck` ([self-fix PR 11](../plan/pipeline-self-fix.md#pr-11-every-outcome-has-a-route-and-a-fixable-stop-never-stops)).
+  fails `pnpm typecheck` (self-fix PR 11).
   The desk's row type is `ask | stop`, so a stop cannot be answered `y`.
 - **Accessibility.** A stop is told once, politely; an ask that needs a person now is the asking
   marker's assertive line ([tile guidelines](./tile-guidelines.md#what-a-screen-reader-is-told)).

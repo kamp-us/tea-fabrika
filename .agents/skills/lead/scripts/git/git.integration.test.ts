@@ -1,4 +1,4 @@
-// S2 of docs/plan/quests/port-scripts-0113-PLAN.md: the real-layer set for the shared Git service.
+// S2 of .kalfa/quests/port-scripts-0113-PLAN.md: the real-layer set for the shared Git service.
 // GitProcess.layer runs real git; GitTest.layer answers from a model in memory. Each law builds a
 // small real repository in a temp folder from a generated history, gives the same history to the
 // model, and and sees both layers answer alike.

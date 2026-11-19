@@ -1,7 +1,7 @@
 # SSHSIG vectors for `next/`
 
 Saved signatures made once by real `ssh-keygen -Y sign` (OpenSSH), for the grant law p27 and the
-signature shape law p44 in [the Tier 1 detail](../../../docs/plan/tier-1-detail.md#properties).
+signature shape law p44 in the Tier 1 detail.
 The first exam pull request (P1) holds them, so the owner reads them. `transport/sshsig.ts` (P7) is
 checked against them.
 

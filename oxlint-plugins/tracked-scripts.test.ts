@@ -1,4 +1,4 @@
-// S1 of docs/plan/quests/port-scripts-0113-PLAN.md: the lint hold on 0113. The check is the only
+// S1 of .kalfa/quests/port-scripts-0113-PLAN.md: the lint hold on 0113. The check is the only
 // thing holding the rule, so each law runs `check` on generated tracked paths and file heads in
 // memory: no git, no process, no temp folder. `pnpm lint` runs the same function over this repo's
 // real `git ls-files`, so the repo's own state is held there.

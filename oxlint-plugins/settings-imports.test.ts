@@ -29,13 +29,9 @@ const word = fc.stringMatching(/^[a-z][a-z0-9]{2,7}$/);
 const caller = fc.oneof(
   // The exact start files: they choose the adapter.
   fc.constantFrom(...START).map((file) => ({ file, adapter: true, parser: false })),
-  // Every other app file, the generation entry and sibling tests included.
+  // Every other app file, sibling tests included.
   fc
-    .constantFrom(
-      "next/apps/fabrika/settings-generate.ts",
-      "next/apps/fabrika/build.ts",
-      "next/apps/fabrika/src/settings-generated.test.ts",
-    )
+    .constantFrom("next/apps/fabrika/build.ts", "next/apps/fabrika/src/settings-generated.test.ts")
     .map((file) => ({ file, adapter: false, parser: false })),
   fc
     .tuple(

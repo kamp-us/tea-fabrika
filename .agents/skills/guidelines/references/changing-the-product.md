@@ -9,7 +9,7 @@ a window lives in `apps/`, `programs/` and `next/` alike.
   An outside tool that "works fine" is no reason to skip an in-app feature, and a design that needs
   Docker, a second server or a second app to start fails.
 - **The first slice works, later slices harden.** Each tier is a whole vehicle
-  ([tiers](../../../../docs/plan/tiers.md)). Each person answers for their own agents, so a first slice does
+  (tiers). Each person answers for their own agents, so a first slice does
   not defend against them; strangers on a public address are a different case. Tier size never
   pushes work out: split the tier, and say what a new idea changes now. Make it work, then better,
   then secure.

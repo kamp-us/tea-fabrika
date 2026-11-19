@@ -3646,7 +3646,7 @@
       "rules": { "fabrika/jsdocs": "off" }
     },
     {
-      // Q8 (decision 0600, docs/plan/quests/kalfa-quality-stryker-PLAN.md): @kalfa/quality reaches no product. An override replaces a rule's options, so this repeats the base entries and adds its own.
+      // Q8 (decision 0600, .kalfa/quests/kalfa-quality-stryker-PLAN.md): @kalfa/quality reaches no product. An override replaces a rule's options, so this repeats the base entries and adds its own.
       "files": ["kalfa/quality/**"],
       "rules": {
         "eslint/no-restricted-imports": [

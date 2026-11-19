@@ -44,8 +44,7 @@ All of it is in `next/`. Today's version is not touched.
 ## Why this change
 
 Ticket 714, the thin slice of hands: this is slice 2 of 5, so the ticket stays open and there is no
-closing phrase. Plan row
-[P39](https://github.com/kamp-us/tea-fabrika/blob/main/docs/plan/tier-1.md#the-pull-requests-one-at-a-time).
+closing phrase. Plan row P39.
 
 ## How it works
 

@@ -1,4 +1,4 @@
-// T753 L16 full-depth fix, next/. A6 of the plan (docs/plan/quests/t753-l16-full-depth-PLAN.md): a call
+// T753 L16 full-depth fix, next/. A6 of the plan (.kalfa/quests/t753-l16-full-depth-PLAN.md): a call
 // into an object commits the spans it ended together, before it answers. A real Project and a real Process
 // object run on in-memory SQLite and in-memory platform handles; only Cloudflare's handles, the Worker
 // Loader transport and the Record stub are doubled. The laws count the sink's transactions that landed spans

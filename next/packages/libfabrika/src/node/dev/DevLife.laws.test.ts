@@ -1,7 +1,7 @@
 // T708, next/. The dev server's life is one tea machine; every law walks its real reducer from init.
 // The walk reads the folded state before it picks each move (0093), and an independent reference
 // written from the plan's transition table checks each step. The memory restart plan
-// (docs/plan/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
+// (.kalfa/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
 import { applyCell } from "@demlik/tea";
 import * as Arr from "effect/Array";
 import * as Predicate from "effect/Predicate";

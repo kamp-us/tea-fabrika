@@ -19,7 +19,7 @@ import { type Entry, type Journal, JournalError } from "./Journal.ts";
 import type * as JournalStore from "./JournalStore.ts";
 
 /**
- * T1062 slice 3, L3 (docs/plan/quests/error-cause-client-PLAN.md, decision 0568): the one product
+ * T1062 slice 3, L3 (.kalfa/quests/error-cause-client-PLAN.md, decision 0568): the one product
  * maker of JournalError passes the store's failure (`JournalStore.ts:13-14`), so its cause is
  * required and no other site can leave it out. Never called.
  * Plant: make `Journal.ts:57` `Schema.optional(Schema.Defect())` again; the `@ts-expect-error` goes

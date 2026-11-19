@@ -1,4 +1,4 @@
-// T1062 slice 1, next/: L4 of docs/plan/quests/error-cause-PLAN.md (decision 0568). Some sites make
+// T1062 slice 1, next/: L4 of .kalfa/quests/error-cause-PLAN.md (decision 0568). Some sites make
 // `SettingsError` (`Files.ts:98`, an `invalid` built from a rule) and `SnapshotError`
 // (`Snapshot.ts:157`, a hash that does not match) with no failure below them, so their cause may be
 // missing: `Schema.optional(Schema.Defect())`, never `Schema.optionalKey`, and never

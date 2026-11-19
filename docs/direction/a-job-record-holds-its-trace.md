@@ -8,7 +8,7 @@ summary: "Jaeger goes. A job (a root run and every run it starts, like a process
 **Decided, in pieces:**
 
 - One `JobRecord` per job, for every program: decided 2026-10-28, below.
-- Its build: in the approved [Tier 1 plan](../plan/tier-1.md), P37.
+- Its build: in the approved Tier 1 plan, P37.
 
 Its decided rules are in:,.
 
@@ -27,7 +27,7 @@ another, so a job is one process. This note's "run" is today's word; in
 0.23.0's otel traces agent runs only. *Changed 2026-11-07 (owner): it said `Effect.withSpan`;
 see [`Effect.fn` for traced functions](./effect-fn-for-traced-functions.md).* The letters stay in the ledger forever,
 and any state rebuilds by replay. Later tiers add the rest of the record.
-[Tier 1's P37](../plan/tier-1.md#monitoring-is-in-tier-1) builds it.
+Tier 1's P37 builds it.
 
 ```ts
 // A sketch. One Durable Object per host job, in the project's ledger Worker,

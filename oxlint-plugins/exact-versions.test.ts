@@ -173,7 +173,7 @@ describe("a pnpm-workspace.yaml", () => {
   });
 });
 
-// E1 (docs/plan/quests/tea-msg-tag-PLAN.md): a named catalog's pointer is exact too, since its entry
+// E1 (.kalfa/quests/tea-msg-tag-PLAN.md): a named catalog's pointer is exact too, since its entry
 // is checked exact in pnpm-workspace.yaml's `catalogs.<name>`. Today's version sits on `catalog:old`.
 // Plant (a): `POINTERS` left as it was, so `catalog:old` is refused. Plant (b): a pointer pattern that
 // takes any text after `catalog:`, so `catalog:^1` passes. Each run holds every case below at once,

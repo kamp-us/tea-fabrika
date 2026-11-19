@@ -22,9 +22,7 @@ libfabrika
 - The shell is `fabsh`. `tsh` stays in today's version.
 - Hands, a window and an agent dial the brain, and `client` means any of them at the door
   ([brain, hands, window, agent](../docs/direction/brain-hands-window-agent.md)).
-- In the planner step here, the lead's check of a plan's open questions becomes code. No merged
-  pull request has been built this way yet
-  ([where we are](../docs/plan/README.md#where-we-are-now)).
+- In the planner step here, the lead's check of a plan's open questions becomes code.
 
 ## What lint holds
 

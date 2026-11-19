@@ -36,23 +36,12 @@ const quiet = (path, shown) => kind(path) !== "code" || shown.includes(path);
 
 /**
  * check.yaml's `paths-ignore` for a pull request: a pull request that changes only these starts no
- * run at all (ticket 988). Plan files and row files, a few of the quiet paths above. Each `*`
- * stands for any name without a `/`, as in GitHub's filters, and no other wildcard is used, so a
- * folder named `brief` under docs/plan/ is never matched. Skill prose stays out: the changes job's
+ * run at all (ticket 988). Signed plans and row files, a few of the quiet paths above. Each `*`
+ * stands for any name without a `/`, as in GitHub's filters, and no other wildcard is used, so a folder named `brief` under .kalfa/quests/ is never matched. Skill prose stays out: the changes job's
  * skills check reads it. workflow-lint.ts holds check.yaml to exactly this list, and its test holds
  * every path the list matches to no heavy job here. `pnpm lint` checks the rows instead, with
- * field-check.ts's `--local`. A quest's plans live in docs/plan/quests/; the folder was
- * docs/plan/lanes/ before the rename (0546), and that path stays on the list, so a pull request
- * still open with plan files there is treated the same.
- */
-export const ignored = [
-  "docs/plan/*.md",
-  "docs/plan/quests/*.md",
-  "docs/plan/lanes/*.md",
-  "field/findings/*.json",
-  "field/notes/*.json",
-  "field/runs/*.json",
-];
+ * field-check.ts's `--local`. */
+export const ignored = [".kalfa/quests/*.md", "field/findings/*.json", "field/notes/*.json", "field/runs/*.json"];
 
 /**
  * A file under .agents/skills/: no next/ test reads one. Today's only file there that is no script

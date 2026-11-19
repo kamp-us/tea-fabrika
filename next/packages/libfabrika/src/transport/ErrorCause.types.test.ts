@@ -1,4 +1,4 @@
-// T1062 slice 1, next/: L3 of docs/plan/quests/error-cause-PLAN.md (decision 0568). The transport's
+// T1062 slice 1, next/: L3 of .kalfa/quests/error-cause-PLAN.md (decision 0568). The transport's
 // one WebCrypto edge makes `WebCryptoError` from what WebCrypto rejected with (`internal/binary.ts:106`),
 // so its cause is required and no site can leave it out. The compiler checks these lines
 // (`pnpm typecheck`); Vitest does not typecheck, so the body holds type assertions only (0527).

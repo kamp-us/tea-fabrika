@@ -159,7 +159,7 @@ type FastCheck = {
 
 ## The mutation queue, `next/` only, decided 2026-11-01
 
-A program in Tier 6, under "Pipeline stages, schedules" in [the tiers](../plan/tiers.md).
+A program in Tier 6, under "Pipeline stages, schedules" in the tiers.
 
 ```ts
 // A sketch. The queue's state, as data in the ledger.
