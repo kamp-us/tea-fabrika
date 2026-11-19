@@ -9,6 +9,11 @@ name: host
 # when the launchd code, the test, a brain file only this test runs, or this file changes, or by hand:
 #
 #   gh workflow run host.yaml --ref <branch>
+#
+# By hand, `-f suite=<name>` runs one fixed suite: l13 (the default), e88-r6, box or p8. `p8` is the
+# SIGKILL law of .github/ci/progress-reporter.integration.test.ts (P8), on `ubuntu-latest`: a branch
+# proof run never starts an `.integration.` law (decision 0602), so this suite is where that law
+# runs on a disposable machine before main's full run does.
 on:
   pull_request:
     paths:
@@ -26,7 +31,7 @@ on:
         type: choice
         required: true
         default: l13
-        options: [l13, e88-r6, box]
+        options: [l13, e88-r6, box, p8]
 
 permissions:
   contents: read
@@ -176,4 +181,30 @@ jobs:
         with:
           name: box
           path: ${{ runner.temp }}/box*
+          if-no-files-found: error
+
+  p8:
+    if: github.event_name == 'workflow_dispatch' && inputs.suite == 'p8'
+    # The runner kind where P8 failed in main's full run; macOS is not needed for a real SIGKILL.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: P8 law
+        env:
+          FABRIKA_TEST_DEPTH: full
+        run: |
+          git rev-parse HEAD > "$RUNNER_TEMP/p8-head.txt"
+          pnpm exec vitest run --project tooling-integration --maxWorkers=1 --fileParallelism=false --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/p8.json" \
+            .github/ci/progress-reporter.integration.test.ts
+      - name: P8 proof
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p8
+          path: ${{ runner.temp }}/p8*
           if-no-files-found: error

@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-records-cleanup-9-build1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-18T16:56:57-08:00",
+  "ended": "2026-11-18T17:07:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "step": "build",
+  "model": "haiku",
+  "effort": "max",
+  "outcome": "pass",
+  "why": "Slice 9, the last slice, of docs/plan/quests/rules-and-records-build-PLAN.md. It turns the records check on in pnpm lint. Four decision titles that held a colon and a space are now quoted in their frontmatter (0099, 0105, 0255, 0582), with no word changed. The link check skips docs/plan/quests/, a signed plan held by its body hash, and L5 gets a quests file in its history list. The root lint script runs node kalfa/records/src/bin.ts check (L10). One builder and no test writer, because the plan is signed and the brief named the laws.",
+  "note": "Model and effort are the values the brief asked for: haiku and max. The session ran on Haiku 5.5, and that is the model the commit credits. Started is the first date call of this build, a few minutes after the first read; ended is the time this row was written, before the last commit. Usage and cost are not recorded. Node here is v22.23.5, not the pinned 26.13.0, and volta is not installed, so the narrow vitest runs used CI=1 to pass the local pinned-Node gate. The commit has no session link, as decision 0187 keeps session links out of commits. One pnpm typecheck ran, and the list ratchet exited 0. Full pnpm lint runs passed at 17:03, 17:17 and 17:22 and failed at 17:08, 17:10, 17:13, 17:20, 17:25 and 17:26 (Los Angeles time). Each failure was in lint:promise-types, which died with EPIPE after the kernel killed a process for lack of memory during the parallel run. The parallel parts peak near 14.6 GB of 16 GB on this machine. Twenty-one parts without the records entry passed at 17:15 with the same peak. A run at 17:29 on the final head passed with GOMEMLIMIT=2GiB set in the shell: a Go soft memory limit, and the TypeScript 7 processes are Go binaries, but its effect is not measured. A finding row for this goes to the lead in the builder's report.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "costUsd": null,
+  "billed": null,
+  "base": "75b436003569fdb25f7f815504caafec137a0c4d",
+  "plants": [
+    {
+      "law": "L5, kalfa/records/src/Links.test.ts",
+      "plant": "kalfa/records/src/Links.ts: docs/plan/quests/ dropped from HISTORY. L5 red: the test sees one link finding too many, and the real check prints docs/plan/quests/full-run-cadence-PLAN.md:33. The entry was put back, and L5 is green again.",
+      "result": "red"
+    },
+    {
+      "law": "L10, package.json",
+      "plant": ".decisions/0556-kalfa-holds-our-tooling-packages.md with a ## Amendments heading and a line under it. pnpm lint: 1 of 22 parts failed, the records check, with its one finding at .decisions/0556-kalfa-holds-our-tooling-packages.md:115. The heading was removed with git checkout, and pnpm lint passed with 22 of 22 parts.",
+      "result": "red"
+    }
+  ]
+}

@@ -274,6 +274,12 @@ const valid = (label: string, extra: string) => ({
       // SAFETY: changes' steps are object literals, widened to plain maps so a plant can add, move or retype a field.
       steps: [
         { name: "checkout", uses: "actions/checkout@v7", with: { "fetch-depth": 0, "persist-credentials": false } },
+        // The classifier's pinned Node and its link to @kalfa/ci, before the classify step.
+        { name: "setup node for the classifier", uses: "actions/setup-node@v7", with: { "node-version": "26.13.0" } },
+        {
+          name: "link @kalfa/ci",
+          run: "mkdir -p .github/ci/node_modules/@kalfa && ln -s ../../../../kalfa/ci .github/ci/node_modules/@kalfa/ci",
+        },
         classify,
         { name: "skills check", run: "sh .agents/skills/lead/scripts/skillscheck.sh", if: "!cancelled()" },
         { name: "tracked files", run: "node oxlint-plugins/gitignore.mjs", if: "!cancelled()" },

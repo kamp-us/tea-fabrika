@@ -39,10 +39,11 @@ accepted records, each `.runbooks/sev-*.md` has the level-two headings Trigger, 
 Comms, and `.agents/skills/sev/SKILL.md` links every sev runbook and none that is not there.
 
 The link check reads `AGENTS.md` and `CLAUDE.md` files, `.agents/skills/`, `docs/guidelines/`,
-`.runbooks/`, `docs/plan/`, `.patterns/` and `.glossary/` (Markdown), and the comments of tracked
-`.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does not read `.decisions/`, `experiments/`,
-`field/` or `docs/direction/`, which are history, nor fenced code, nor symlinks. A bare number is not
-a link.
+`.runbooks/`, `docs/plan/` (but not `docs/plan/quests/`, below), `.patterns/` and `.glossary/`
+(Markdown), and the comments of tracked `.ts`, `.tsx`, `.js`, `.mjs`, `.sh` and `.yaml` files. It does
+not read `.decisions/`, `experiments/`, `field/`, `docs/direction/` or `docs/plan/quests/`, which are
+history, nor fenced code, nor symlinks. A signed plan in `docs/plan/quests/` is a record of what was
+agreed, held by its body hash, so the check skips it. A bare number is not a link.
 
 Markdown is read by micromark into mdast (`mdast-util-from-markdown` with GitHub's tables, the
 reader `programs/markdown` uses), so a link's text may wrap and a table cell is its own block. The

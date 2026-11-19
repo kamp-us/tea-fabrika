@@ -1,0 +1,27 @@
+{
+  "name": "@kalfa/ci",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The docs-only classifier (decisions 0183, 0180 and 0090): which changed path is code, instruction text or docs, shared by CI's changes job and the lead's tools, with no dependencies so CI can run it before any install.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./DocsOnly": "./src/DocsOnly.ts",
+    "./DocsOnly.test-support": "./src/DocsOnly.test-support.ts",
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@kampus/vitest": "workspace:*",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

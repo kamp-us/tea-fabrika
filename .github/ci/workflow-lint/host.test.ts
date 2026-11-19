@@ -17,7 +17,13 @@ const run = (workflow: Record<string, unknown>) =>
 const boxRun = (workflow: Record<string, unknown>) =>
   allSteps(job(workflow, "box")).find((step) => step["name"] === "Box laws")!;
 
-it("format: host.yaml keeps L13 as default and exposes the fixed E88 R6 and box dispatches", () => {
+const p8Steps = (workflow: Record<string, unknown>) => allSteps(job(workflow, "p8"));
+
+const p8Run = (workflow: Record<string, unknown>) => p8Steps(workflow).find((step) => step["name"] === "P8 law")!;
+
+const p8Proof = (workflow: Record<string, unknown>) => p8Steps(workflow).find((step) => step["name"] === "P8 proof")!;
+
+it("format: host.yaml keeps L13 as default and exposes the fixed E88 R6, box and P8 dispatches", () => {
   expect(lintHost(JSON.stringify(hostFile()))).toEqual([]);
 });
 
@@ -51,9 +57,9 @@ it("scenario: different suites keep separate groups and newer pushes retain thei
       }
     });
 
-  expect(new Set(["l13", "e88-r6", "box"].map((suite) => group("same-head", suite))).size).toBe(3);
+  expect(new Set(["l13", "e88-r6", "box", "p8"].map((suite) => group("same-head", suite))).size).toBe(4);
 
-  for (const suite of ["l13", "e88-r6", "box"]) {
+  for (const suite of ["l13", "e88-r6", "box", "p8"]) {
     expect(group("old-head", suite, 1128)).toBe(group("new-head", suite, 1128));
   }
 
@@ -88,7 +94,14 @@ for (const [name, plant, rule] of [
   [
     "another suite",
     (w) => {
-      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "all"];
+      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box", "p8", "all"];
+    },
+    "H1",
+  ],
+  [
+    "p8 missing from the suite's options",
+    (w) => {
+      map(input(w)["suite"])["options"] = ["l13", "e88-r6", "box"];
     },
     "H1",
   ],
@@ -224,6 +237,83 @@ for (const [name, plant, rule] of [
       delete allSteps(job(w, "box")).find((step) => step["name"] === "Box proof")!["if"];
     },
     "H7",
+  ],
+  [
+    "p8 runs on every event",
+    (w) => {
+      delete job(w, "p8")["if"];
+    },
+    "H9",
+  ],
+  [
+    "p8 runs on macOS",
+    (w) => {
+      job(w, "p8")["runs-on"] = "macos-15";
+    },
+    "H9",
+  ],
+  [
+    "p8 has no time limit",
+    (w) => {
+      delete job(w, "p8")["timeout-minutes"];
+    },
+    "H9",
+  ],
+  [
+    "p8 runs another test file",
+    (w) => {
+      p8Run(w)["run"] = String(p8Run(w)["run"]).replace("progress-reporter.integration.test.ts", "another.test.ts");
+    },
+    "H9",
+  ],
+  [
+    "p8 runs a second test file",
+    (w) => {
+      p8Run(w)["run"] = `${String(p8Run(w)["run"]).trimEnd()} .github/ci/proof.test.ts`;
+    },
+    "H9",
+  ],
+  [
+    "p8 clears CI",
+    (w) => {
+      map(p8Run(w)["env"])["CI"] = "";
+    },
+    "H9",
+  ],
+  [
+    "p8 spoofs an approval",
+    (w) => {
+      job(w, "p8")["env"] = { FABRIKA_HOST_RUN_OWNER_APPROVED: "1" };
+    },
+    "H9",
+  ],
+  [
+    "p8 ignores a failed law",
+    (w) => {
+      p8Run(w)["continue-on-error"] = true;
+    },
+    "H9",
+  ],
+  [
+    "p8 uses fast depth",
+    (w) => {
+      map(p8Run(w)["env"])["FABRIKA_TEST_DEPTH"] = "fast";
+    },
+    "H9",
+  ],
+  [
+    "p8 proof is saved only after a passing law",
+    (w) => {
+      p8Proof(w)["if"] = "success()";
+    },
+    "H9",
+  ],
+  [
+    "p8 proof saves another path",
+    (w) => {
+      map(p8Proof(w)["with"])["path"] = `\${{ runner.temp }}/*`;
+    },
+    "H9",
   ],
   [
     "different suites share one concurrency group",

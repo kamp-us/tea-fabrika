@@ -13,6 +13,7 @@ import {
   Option,
   Path,
   Queue,
+  Ref,
   Result,
   Schema,
   Stream,
@@ -236,7 +237,18 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
     ),
   );
 
-  const stderr = yield* Effect.forkChild(handle.stderr.pipe(Stream.runDrain));
+  // What the child's reporter said on stderr. Only its own fixed `vitest-progress:` advisory lines are kept
+  // (they hold no path), so a cutoff wait that ends empty can print them. The stream is still drained.
+  const advisories = yield* Ref.make<ReadonlyArray<string>>([]);
+
+  const stderr = yield* Effect.forkChild(
+    handle.stderr.pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.filter((line) => line.startsWith("vitest-progress:")),
+      Stream.runForEach((line) => Ref.update(advisories, (all) => [...all, line].slice(-20))),
+    ),
+  );
 
   if (mode === "cutoff") {
     const observed = yield* Effect.raceFirst(
@@ -269,6 +281,9 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
   if (mode === "cutoff") {
     expect(yield* handle.isRunning).toBe(true);
 
+    // The last journal the wait read, for the failure line below. It decides nothing.
+    const seen = yield* Ref.make<Timings | null>(null);
+
     // Worker stdout can precede Vitest's throttled reporter RPC. A decoded append is the acknowledgement.
     const observation = Effect.scoped(
       Effect.gen(function* () {
@@ -281,6 +296,7 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
 
         yield* Effect.raceFirst(Deferred.await(watching), Queue.take(changes));
         let current = yield* collect(environment, scratch, io, 0);
+        yield* Ref.set(seen, current);
 
         while (
           !(
@@ -296,6 +312,7 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
         ) {
           yield* Queue.take(changes);
           current = yield* collect(environment, scratch, io, 0);
+          yield* Ref.set(seen, current);
         }
 
         return current;
@@ -309,6 +326,20 @@ for (let i = 0; i < ${cases}; i++) test("probe " + i, async () => { process.stdo
       observation.pipe(Effect.timeoutOption("30 seconds"), Effect.map(Option.getOrNull)),
       Effect.exit(handle.exitCode).pipe(Effect.as(null)),
     );
+
+    // Evidence only, no verdict (ticket 1170): a wait that ends empty prints what the journal last held and what
+    // the child's reporter said, so the next red run is not blind. The not-null check below still fails the law.
+    if (before === null) {
+      const line = `CI_PROGRESS_CUTOFF ${JSON.stringify({
+        ...identities,
+        last: yield* Ref.get(seen),
+        advisories: yield* Ref.get(advisories),
+      })}`;
+
+      expect(line).not.toContain(scratch);
+      yield* Console.log(line);
+    }
+
     expect(before).not.toBeNull();
 
     if (before === null) {
