@@ -452,7 +452,7 @@ not a question for the owner (0069). Paths are under `next/apps/fabrika/` unless
 | `--child`, `--parent` | `dev.ts:13` | no, plumbing | one process to its own child |
 | the home folder | `dev.ts:56` | no; stays `FABRIKA_HOME` | the files live there (2026-10-30) |
 | no telemetry | `dev.ts:36` | no, a wall | fabrika sends nothing out on its own |
-| restart policy | P34, the glossary's `Policy` | no, a program fact, 60% | OTP keeps intensity in the supervisor's code |
+| restart policy | P34, the old glossary's `Policy` (git history at 52aebb8) | no, a program fact, 60% | OTP keeps intensity in the supervisor's code |
 | the person's keys | P20, `keybindings.toml` | yes, its own file | decided (K4) |
 | hot reload | P15 | no | decided behavior; nobody turns it off |
 | email code, 10 minutes, 5 tries | P36 | no, a security limit | it weakens recovery |
@@ -783,9 +783,9 @@ Not filed. One small fix the owner may pick:
   its setting `review.human-approvals`.
 - **"The pack checks them"** (the 2026-10-05 note): the core runs the schema the pack declares, at
   load. The pack still owns the rules.
-- **The glossary's `setting` row** says a setting "does not change during a run". A `live` setting
-  arrives as input; the row is amended with this note.
-- **The glossary's `Policy` row** keeps restart policy out of settings, as OTP does, at 60%.
+- **The old glossary's `setting` row** (git history at 52aebb8) said a setting "does not change during a run". A `live` setting
+  arrives as input; the row was amended with this note.
+- **The old glossary's `Policy` row** (git history at 52aebb8) kept restart policy out of settings, as OTP does, at 60%.
 - **`next/`'s `~/.fabrika/instance.json`** mixes saved flags with founding facts. The 2026-10-30 note
   says "State is not settings". P38 splits it.
 

@@ -412,7 +412,7 @@ scout#bar > @scout/<person>#review is this right?     (another member's scout: t
 - **The address.** `@<agent>[/<person>][#<thread>]`. The `/` right after the agent says whose agent;
   the `#` says which thread. `@scout #7 twice?`, with a space, is prose: the address ends at the
   first space (S2).
-- **Clash with a word we have.** The glossary's `thread` (decided 2026-11-05) is the talk with an
+- **Clash with a word we have.** The old glossary's `thread` (decided 2026-11-05, git history at 52aebb8) was the talk with an
   agent about one spot, and "cannot open without a spot". A named thread typed in tsh has no spot.
   The row needs the owner's word on whether a spot thread is one kind of this thread (see
   [where this differs](#where-this-differs-from-settled-notes)).
@@ -650,13 +650,13 @@ record.
 - **`room` is the word.** It is Matrix's word for exactly this: a named place with members, where a
   DM is one kind. Slack's "thread" means a chain of replies under one message, so "thread" for this
   would mean two things. Slack's and Discord's "channel" is close, but a person does not call a DM a
-  channel, and the glossary already uses "channel" loosely for a transport (its ephemeral lane row).
+  channel, and the old glossary (git history at 52aebb8) already used "channel" loosely for a transport (its ephemeral lane row).
   "Room" covers both the named place and the DM with one word. Lean, 80%.
 - **`DM`** is Slack's, Discord's and Matrix's word for a room with two members.
   **Walked back 2026-11-13** ([0158](../../.decisions/0158-no-dms-only-rooms.md)): fabrika does not
   use the word. In those three a DM is read by its members only, and no room here is private.
 - **`mention`** is the word Slack, Discord, Matrix and Linear all use for `@name` in a message.
-- **The glossary** gets rows for `room` and `DM`, and its `thread` row now says what it is not: a
+- **The old glossary** (git history at 52aebb8) got rows for `room` and `DM`, and its `thread` row said what it was not: a
   room. Whether the spot talk of [talk where you work](./talk-where-you-work.md) becomes a room is
   not decided here (see [where this differs](#where-this-differs-from-settled-notes)).
 
@@ -900,9 +900,9 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
 
 - **Talk where you work** says `@` is read "before tsh's shell words". This keeps that and writes
   it as the grammar's first rule. Not a walk back.
-- **The glossary's `summon` row** (`.glossary/TERMS.md`) still says there is no `summon` word in
-  tsh; the 2026-11-06 decision changed that. The row needs updating, in this pull request or the
-  build's.
+- **The old glossary's `summon` row** (git history at 52aebb8) still said there is no `summon` word in
+  tsh; the 2026-11-06 decision changed that. The reset of 2026-11-18 removed the row, so the word
+  waits for its context's `GLOSSARY.md`.
 - **The settled sketch** shows the prompt free while claude answers. S6 is decided foreground
   (2026-11-07), so that part of the sketch is walked back; `bg` gives the prompt back by choice.
 - **Talk where you work, `next/` section,** said nothing runs between turns. The owner corrected it
@@ -910,9 +910,9 @@ Offered, not filed. A guess: about 650 lines with tests, 5 to 7 agent hours, 55%
   back, by the owner.
 - **S3's two-people lean** refused talking to another person's agent. T3 allows it. A walk back,
   by the owner.
-- **The glossary's `thread` row** said a thread cannot open without a spot, and T2's named threads
-  had none. R1 settles the clash for tsh: a named talk is a room, and the glossary now has `room` and
-  `DM` rows and a `thread` row that says it is not a room. Still open: whether the spot talk of
+- **The old glossary's `thread` row** (git history at 52aebb8) said a thread cannot open without a spot, and T2's named threads
+  had none. R1 settles the clash for tsh: a named talk is a room, and the old glossary had `room` and
+  `DM` rows and a `thread` row that said it is not a room. Still open: whether the spot talk of
   [talk where you work](./talk-where-you-work.md) (the box, then the thread tile) becomes a room
   with the spot recorded on it. Lean yes, 65%, since one word for one idea; the doubt is that a
   spot talk has a home on the thing, which a room does not. A `fork` row waits for the build's pull

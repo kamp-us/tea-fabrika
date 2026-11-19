@@ -32,7 +32,8 @@ for the product code.
    file. A law that looks wrong is not edited: finish everything else and report it with file and
    line. A patch to a package (tea, demlik, Manti, Effect, Alchemy) the plan does not name, after
    the read [0054](../../../.decisions/0054-read-upstream-before-patching-it.md) asks for, goes back
-   to plan, never into the build.
+   to plan, never into the build. A `GLOSSARY.md` the plan's files table names gets the terms the plan
+   lists, each as a `**Term**:` entry with its meaning and an `_Avoid_:` line ([0617](../../../.decisions/0617-glossary-reset-to-a-map.md)).
 4. **Write it to be read:** plain names by the repo's rules (no `makeThing`, no `thingLayer`, no
    question-word names, short everyday data keys, `_tag` for unions, Effect Schema), small modules
    with one job each, and invalid states made unrepresentable. A generated file the plan lists

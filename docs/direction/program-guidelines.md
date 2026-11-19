@@ -459,7 +459,7 @@ asks          now `inbox` (decided 2026-11-03, below); the top bar glued a verb 
 
 **The running example: `inbox`.** Today it is the frame's menu, not a program (G1); in `next/` it is
 the inbox program (Tier 5). **Decided 2026-11-03** in the glossary walk
-([`.glossary/TERMS.md`](../../.glossary/TERMS.md), inbox in the tracker): the asks program is named
+(the old glossary, git history at 52aebb8, inbox in the tracker): the asks program is named
 **inbox**, as Linear's Inbox, "your notification center" ([Inbox](https://linear.app/docs/inbox)).
 It is a person's list of things waiting, the open asks first, and the owner's desk is the inbox.
 This reverses this note's earlier ruling that `inbox` was out because a ledger stream is called an

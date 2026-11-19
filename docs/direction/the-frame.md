@@ -1,12 +1,12 @@
 ---
 state: "decided 2026-11-03, undecided parts proposed; today's version; walked if a tryout is picked"
-summary: "Both versions, today's app read on main. One place that names the 50 parts of fabrika's window (the top bar, the tiles, the status bar, what opens over the tiles), each with a plain meaning, the industry's word with a source, the note that decides it, and where it is built. Fourteen clashes, each decided with the owner: \"chassis\" becomes frame; \"popup\" goes for popover and menu; the bottom line becomes the status bar; the action bar and the keys line become one toolbar, with key hints for words that press nothing; the ask desk becomes the inbox program; the desk becomes tezgah; the 4px between tiles is the divider, with an i3-style resize mode; \"window\", \"panel\", \"zoom\" and \"ask\" each keep one meaning. The words are in `.glossary/TERMS.md`. The parts nobody decides yet stay proposed. The Design canvas comes next."
+summary: "Both versions, today's app read on main. One place that names the 50 parts of fabrika's window (the top bar, the tiles, the status bar, what opens over the tiles), each with a plain meaning, the industry's word with a source, the note that decides it, and where it is built. Fourteen clashes, each decided with the owner: \"chassis\" becomes frame; \"popup\" goes for popover and menu; the bottom line becomes the status bar; the action bar and the keys line become one toolbar, with key hints for words that press nothing; the ask desk becomes the inbox program; the desk becomes tezgah; the 4px between tiles is the divider, with an i3-style resize mode; \"window\", \"panel\", \"zoom\" and \"ask\" each keep one meaning. The words were in the old glossary (git history at 52aebb8). The parts nobody decides yet stay proposed. The Design canvas comes next."
 ---
 
 # The frame: every part of the window, named once
 
-**Decided 2026-11-03.** Today's version; walked if a tryout is picked (owner, 2026-11-08). The words below were picked by the owner one by one and are in the
-glossary, [`.glossary/TERMS.md`](../../.glossary/TERMS.md), under Frame. The parts listed under
+**Decided 2026-11-03.** Today's version; walked if a tryout is picked (owner, 2026-11-08). The words below were picked by the owner one by one and were in the
+old glossary (git history at 52aebb8), under Frame. The parts listed under
 "Nobody decides these yet" stay **proposed**. Reading only: no code, no tests, nothing ran. This
 note names each part of fabrika's window in one place, so the owner and every agent use the same
 word for the same part. It decides no look and no behavior. Those stay in the notes it links. The
@@ -22,7 +22,7 @@ name, popovers, modes, keybindings, the ask desk, fold not tabs, tracker views),
 [experiment 196](../../experiments/196-ask-desk.md), from
 program guidelines (pull request 332, proposed, `docs/direction/program-guidelines.md` on its own
 branch), from the naming sweep's app rows (proposed), from
-[the glossary](../../.glossary/TERMS.md), and from today's
+the old glossary (git history at 52aebb8), and from today's
 app on main (`apps/fabrika/src/window/frame.tsx`, `frame.ts`, `desk.tsx`, `pop.tsx`,
 `apps/fabrika/src/desk/`, `apps/fabrika/README.md`).
 
@@ -97,7 +97,7 @@ README have it, and no direction note owns the word.
 
 | Our word | What it is | Industry's word | Decided by | Built today |
 |---|---|---|---|---|
-| tezgah | Tuval's window manager: every workspace, its layout, its focus, the prefix and the close question, as one machine. Codename, as Mutter is GNOME's and KWin is KDE's. In `next/`, the program `fabrika/tezgah`. Today's code and notes say desk. | window manager ([i3][i3]); session ([tmux][tmux]) | [Glossary](../../.glossary/TERMS.md), [the desktop layer](./the-desktop-layer.md) | `apps/fabrika/src/desk/desk.ts:134` (`Open`), still named desk |
+| tezgah | Tuval's window manager: every workspace, its layout, its focus, the prefix and the close question, as one machine. Codename, as Mutter is GNOME's and KWin is KDE's. In `next/`, the program `fabrika/tezgah`. Today's code and notes say desk. | window manager ([i3][i3]); session ([tmux][tmux]) | old glossary (git history at 52aebb8), [the desktop layer](./the-desktop-layer.md) | `apps/fabrika/src/desk/desk.ts:134` (`Open`), still named desk |
 | desktop | `next/`: only layer 5, Tuval, the desktop environment. Its window manager, tezgah, places tiles, owns focus and routes keys. | the part KDE or GNOME plays (the note's own words) | [The desktop layer](./the-desktop-layer.md), `next/` | Not built |
 | workspace | One numbered layout inside the desk, with one focused tile. | workspace ([i3][i3]); window ([tmux][tmux]) | [The desktop layer](./the-desktop-layer.md), W4 | `desk.ts:122` |
 | container | A row or a column of tiles; nested ones alternate. | container ([i3][i3], AeroSpace) | [Fold, not tabs](./fold-not-tabs.md) | `desk/layout/node.ts:96`, `desk.tsx:626-693` |
@@ -109,8 +109,8 @@ README have it, and no direction note owns the word.
 | edge | The tile's 1px outline, apart from the divider. | pane border ([tmux][tmux]) | [Tile guidelines](./tile-guidelines.md#edge) | `window.css:279` (box-shadow today) |
 | tile states | Focused, asking the close question, closing, zoomed, and the dimmed tiles when the link is lost. | active pane ([tmux][tmux]); focused ([i3][i3]) | [Tile guidelines](./tile-guidelines.md) | `desk.tsx:568,592,597-601,854,867` |
 | accessible name | What a screen reader hears entering a tile: `tracker, t2, pipe A, 1 of 2, sends to ticket`. The older notes say "the region's name". | accessible name ([APG, names][apg-name]); region landmark ([APG][apg-land]) | [Tile guidelines](./tile-guidelines.md#a-tile-is-a-region) (`tileName`) | Old words only, `desk.tsx:571` |
-| divider | The 4px between two open tiles; drag it to resize. At rest it is not a Tab stop. In resize mode (decided, not built) it is a focused `role="separator"` that `h j k l` move. Code calls it `.border`. | divider ([macOS HIG][hig-split], `NSSplitView`); window splitter ([APG][apg-split]) | [Glossary](../../.glossary/TERMS.md), [tile guidelines](./tile-guidelines.md#resize-gap) (its gap section changes: focusable only in resize mode) | `desk.tsx:674-679`, `window.css:258` (`.border`) |
-| resize mode | i3's resize mode. A prefix key enters it; the status bar shows RESIZE and a screen reader hears "Resize mode on". `h j k l` move the focused tile's divider; Escape or Enter leave. Needs a Manti `Splitter` option so the trigger is not a Tab stop at rest: a `pnpm patch` first, then a Manti pull request with the owner's yes. | resize mode ([i3][i3]); `resize-pane` ([tmux][tmux]) | [Glossary](../../.glossary/TERMS.md) | Not built |
+| divider | The 4px between two open tiles; drag it to resize. At rest it is not a Tab stop. In resize mode (decided, not built) it is a focused `role="separator"` that `h j k l` move. Code calls it `.border`. | divider ([macOS HIG][hig-split], `NSSplitView`); window splitter ([APG][apg-split]) | old glossary (git history at 52aebb8), [tile guidelines](./tile-guidelines.md#resize-gap) (its gap section changes: focusable only in resize mode) | `desk.tsx:674-679`, `window.css:258` (`.border`) |
+| resize mode | i3's resize mode. A prefix key enters it; the status bar shows RESIZE and a screen reader hears "Resize mode on". `h j k l` move the focused tile's divider; Escape or Enter leave. Needs a Manti `Splitter` option so the trigger is not a Tab stop at rest: a `pnpm patch` first, then a Manti pull request with the owner's yes. | resize mode ([i3][i3]); `resize-pane` ([tmux][tmux]) | old glossary (git history at 52aebb8) | Not built |
 | split | Make a new tile beside (`C-b \|`) or under (`C-b -`) the focused one. | split-window ([tmux][tmux]); split ([i3][i3]) | [Fold, not tabs](./fold-not-tabs.md) | `desk/keys.ts:82-83` |
 | turn | `C-b Space` swaps a container between row and column. | layout toggle split ([i3][i3]) | [Fold, not tabs](./fold-not-tabs.md); the sweep leans `toggle`, 60% | `keys.ts:93` |
 | fold, strip | `C-b f` folds a tile into a thin strip that keeps its place; a click opens it. | none in the list; window shading (EWMH), Ableton Live's fold ([fold note](./fold-not-tabs.md#why)) | [Fold, not tabs](./fold-not-tabs.md) | `keys.ts:94`, `desk.tsx:699-715` |
@@ -120,7 +120,7 @@ README have it, and no direction note owns the word.
 
 | Our word | What it is | Industry's word | Decided by | Built today |
 |---|---|---|---|---|
-| status bar | The one line under the tiles: where you are, and the key you just pressed. Stays monospace. Today's code and the older notes say bottom line. | status bar ([VS Code][vsc-status]); status line ([tmux][tmux]) | [Glossary](../../.glossary/TERMS.md), [popovers](./popovers.md) (stays mono), [tile guidelines](./tile-guidelines.md#bottom-status-line) | `frame.tsx:787-893` (`BottomLine`) |
+| status bar | The one line under the tiles: where you are, and the key you just pressed. Stays monospace. Today's code and the older notes say bottom line. | status bar ([VS Code][vsc-status]); status line ([tmux][tmux]) | old glossary (git history at 52aebb8), [popovers](./popovers.md) (stays mono), [tile guidelines](./tile-guidelines.md#bottom-status-line) | `frame.tsx:787-893` (`BottomLine`) |
 | here word | The focused tile, what it takes and sends, its neighbors in its line. | none found | Nobody | `frame.tsx:824-826`, `frame.ts:426` |
 | job item | The job the tile runs: `%3 seq --to 9 \| tally 2m +1`. | the pane's current command in the status line ([tmux][tmux]) | Nobody | `frame.tsx:947-965` |
 | prefix line | After `C-b`: `PREFIX · N new · x close · ...`, from the key table. A key hint. | none in the list; which-key in Emacs and Neovim | [Keybindings](./keybindings-are-configurable.md) (one table, shown everywhere) | `frame.tsx:801-812`, `frame.ts:112` |
@@ -143,8 +143,8 @@ README have it, and no direction note owns the word.
 | keycap | One key drawn as a cap, with the Mac's glyphs: `⌃B` `A`. The bars write `C-b a`. | `kbd` (HTML); keycaps (Linear's stylesheet, [popovers](./popovers.md)) | [Popovers](./popovers.md#3-the-rule) | `pop.tsx:47` (`Caps`) |
 | footer | A popover's last row only: the key hints its rows do not show. Once the inbox list is a program, its footer is that program's toolbar. | none in the list | [Popovers](./popovers.md#3-the-rule) (a key no row shows sits in the footer) | `pop.tsx:157-170`; typed by hand in `frame.tsx:421-426` (`ASKS_FOOT`) |
 | glance | `next/`: a program's small view in the top bar's popover; the inbox list becomes the inbox program's glance. Keeps this meaning (decided). | none found; Linear's peek is the nearest (program guidelines, call 7, now moved to experiment 206) | [Ask desk](./ask-desk.md#one-asks-program-two-views); "any program may have one" moved to experiment 206 | Not built: today the inbox list is the frame's own menu |
-| toolbar | A row of buttons built from a program's `commands`, each with its key printed on it, `role="toolbar"`. It is the action bar and the keys line in one. | toolbar ([APG][apg-toolbar]; view toolbar, [VS Code][vsc-ux]) | [Glossary](../../.glossary/TERMS.md); proposed in [experiment 196](../../experiments/196-ask-desk.md#patterns-found) P8 (75%), program guidelines G7 R1 and C11 | Not built |
-| key hints | Words that name keys and cannot be pressed: the prefix line, a mode's keys on the status bar. | none needed | [Glossary](../../.glossary/TERMS.md) | `frame.tsx:801-820` |
+| toolbar | A row of buttons built from a program's `commands`, each with its key printed on it, `role="toolbar"`. It is the action bar and the keys line in one. | toolbar ([APG][apg-toolbar]; view toolbar, [VS Code][vsc-ux]) | old glossary (git history at 52aebb8); proposed in [experiment 196](../../experiments/196-ask-desk.md#patterns-found) P8 (75%), program guidelines G7 R1 and C11 | Not built |
+| key hints | Words that name keys and cannot be pressed: the prefix line, a mode's keys on the status bar. | none needed | old glossary (git history at 52aebb8) | `frame.tsx:801-820` |
 
 That is 50 parts in four tables.
 
@@ -152,8 +152,8 @@ That is 50 parts in four tables.
 
 Each is one word for two things, or two words for one thing
 ([use the industry's names](./use-the-industrys-names.md): "a bug to fix"). The owner picked each
-one on 2026-11-03. **Decided 2026-11-03** below means the word is settled and is in the
-[glossary](../../.glossary/TERMS.md); the percent is the lean the owner was shown. None is in code
+one on 2026-11-03. **Decided 2026-11-03** below means the word is settled and was in the
+old glossary (git history at 52aebb8); the percent is the lean the owner was shown. None is in code
 yet.
 
 ### 1. "Frame" and "chassis"
@@ -242,7 +242,7 @@ tracker views 5        Glance = Schema.Union([...]): what a ticket shows at a gl
   `Glance` becomes `Status`, since its section already calls it "the status line", and the sweep
   picks `Status` (Linear's word) for a ticket's top line.
 - **Doubt kept:** `Status` sits close to experiment 73's `status`. Both mean "how one thing is
-  now", and the glossary now keeps them in two contexts, but a reader may stop on it.
+  now", and the old glossary (git history at 52aebb8) kept them in two contexts, but a reader may stop on it.
 
 ### 6. "Window" means four things
 

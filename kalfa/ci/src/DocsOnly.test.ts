@@ -172,3 +172,15 @@ it("property: isAdminDocs is the docs kind under the admin merge's five folders,
     options,
   );
 });
+
+it("property: a GLOSSARY.md is code in any folder, since records.ts reads it", () => {
+  const dirs = fc.array(word, { maxLength: 4 }).map((below) => below.map((dir) => `${dir}/`).join(""));
+
+  fc.assert(
+    fc.property(dirs, (dir) => {
+      expect(kind(`${dir}GLOSSARY.md`), dir).toBe("code");
+      expect(docsOnly([`${dir}GLOSSARY.md`]), dir).toBe(false);
+    }),
+    options,
+  );
+});

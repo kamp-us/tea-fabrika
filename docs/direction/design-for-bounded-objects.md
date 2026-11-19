@@ -102,7 +102,7 @@ if (sql.databaseSize >= CAP) return {_tag: "rolled", next: `job/${pid}/${part + 
   full disk, so the sink never blocks a step.
 - **The `<part>` key is new.** P37's row in `docs/plan/tier-1.md:302` says "one object per run" and
   "The run number is P33's". The word "run" there is being swept to "process", as
-  `.glossary/TERMS.md` has it; a restart is a new process, as in OTP.
+  the old glossary (git history at 52aebb8) had it; a restart is a new process, as in OTP.
 
 ### Old ledger stretches are sealed
 

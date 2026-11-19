@@ -272,7 +272,7 @@ double make, rename, merge, pickers and filter doors for one act
 ([reuse before special rules](../../.decisions/0421-reuse-before-special-rules.md)). Area's best parts (numbers,
 merge, the guess) are what phoenix's labels lacked, so every label gets them. Linear does it this
 way [l1]; Jira and Shortcut do not [j1] [s1]. The doubt: an area may need an owner or a strategy
-(L6), and the glossary already says an area has an owner, which no decided note gives it. Since
+(L6), and the old glossary (git history at 52aebb8) already said an area has an owner, which no decided note gives it. Since
 numbers carry over, a later graduation moves no ticket. What would settle it: the pipeline
 strategies call.
 
@@ -354,7 +354,7 @@ out unless the owner picks it.
   This note decides the other way (call 1). A1 and A2, which are decided, hold either way.
 - **[Tracker views are programs](./tracker-views-are-programs.md)** sketches
   `labeled {add, drop}` with label strings. Here they are numbers, as areas taught.
-- **The glossary's `area` row** says "Not a label that gates a build". That holds: a label in the
+- **The old glossary's `area` row** (git history at 52aebb8) said "Not a label that gates a build". That holds: a label in the
   Area group gates nothing. Its `project` row calls an area "the long-lived grouping with an
   owner"; no decided note gives an area an owner, and L6 says what happens if one does.
 

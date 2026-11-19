@@ -102,7 +102,8 @@ merge without a review?"), then search for each:
 ```sh
 node .agents/skills/lead/scripts/governance.ts
 node .agents/skills/lead/scripts/records.ts find "<the question>"
-rg -il '<word>' .decisions docs/direction .glossary
+rg -il '<word>' .decisions docs/direction
+rg -il --glob 'GLOSSARY.md' '<word>'
 ```
 
 `find` ranks live records by the rare words they share with the question, as phoenix's `adr sweep`
@@ -141,15 +142,15 @@ in an open PR may never merge. Use the file name you just read, not one you reme
 
 ## 6. Words
 
-If the decision coins or renames a word, add its row to [`.glossary/TERMS.md`](../../../.glossary/TERMS.md)
-in the same PR, and name it in a closing `## Records` section.
+If the decision coins or renames a word, add it to its context's `GLOSSARY.md` (find the context in [`.glossary/TERMS.md`](../../../.glossary/TERMS.md)),
+with an `_Avoid_` line, in the same PR, and name it in a closing `## Records` section.
 
 ## 7. Open the PR
 
 One decision per PR. Run `pnpm format`, `pnpm lint` and the leak grep, commit with the step-commit
 skill as `lead`, push, open it. It merges on green CI with a clean leak grep
 ([the lead skill](../lead/SKILL.md#decisions-land-at-once)). Report the file path and whether a
-glossary row was added.
+glossary term was added.
 
 ## Diagrams
 

@@ -108,7 +108,7 @@ is linked; the others have no other home yet.
 ## Check what is settled first
 
 Before any question to the owner, design question, recommendation
-or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/` and the plan for the
+or plan, search `.decisions/`, each context's `GLOSSARY.md`, `docs/direction/`, `experiments/` and the plan for the
 topic. Start with `node .agents/skills/lead/scripts/records.ts find "<words>"`, which ranks those
 records (and `.patterns/`, `.runbooks/`) on `origin/main` by the rare words they share with yours,
 then `rg` for what its shortlist cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its

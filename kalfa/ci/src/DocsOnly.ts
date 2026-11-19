@@ -93,17 +93,22 @@ const isInstruction = (path: string): boolean => isSkillProse(path) || isToolMar
 export const isRow = (path: string): boolean =>
   /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
 
+/** A context's glossary: a file named `GLOSSARY.md`, at the root or in any folder. `records.ts find` reads every one (0617). */
+const isGlossary = (path: string): boolean => path === "GLOSSARY.md" || path.endsWith("/GLOSSARY.md");
+
 /**
- * Markdown that a program or a test reads, so a change to it is code. Briefs, prompts and fixtures are
+ * Markdown that a program or a test reads, so a change to it is code. Every `GLOSSARY.md` is read, in
+ * whichever folder its context lives (0617). Briefs, prompts and fixtures are
  * inputs, skill prose in a brief or prompt folder included. An `AGENTS.md` or `CLAUDE.md` that
  * `isInstructionMap` holds for is instruction text and is never read this way: `next/AGENTS.md` is not one.
  *
  * @category predicates
  */
 export const reads = (path: string): boolean =>
-  path.endsWith(".md") &&
-  (READ_TREES.some((tree) => path.startsWith(tree)) || inInputFolder(path)) &&
-  !isInstructionMap(path);
+  isGlossary(path) ||
+  (path.endsWith(".md") &&
+    (READ_TREES.some((tree) => path.startsWith(tree)) || inInputFolder(path)) &&
+    !isInstructionMap(path));
 
 /**
  * What kind of change a path is: `code`, `instructions` or `docs`, as the top of this file says. Markdown

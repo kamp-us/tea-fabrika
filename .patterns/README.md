@@ -9,7 +9,7 @@ one with the [write-pattern skill](../.agents/skills/write-pattern/SKILL.md).
 flowchart LR
   shape["a code shape agents rely on"] --> patterns[".patterns/name.md"]
   why["why it was chosen"] --> decisions[".decisions/NNNN-slug.md"]
-  word["what a word means"] --> glossary[".glossary/TERMS.md"]
+  word["what a word means"] --> glossary[".glossary/TERMS.md, then GLOSSARY.md"]
   measured["what was measured"] --> experiments["experiments/NN-title.md"]
 ```
 

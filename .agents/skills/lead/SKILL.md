@@ -725,7 +725,7 @@ owner decides -> write .decisions/NNNN-slug.md -> its own docs PR -> merge on gr
 - **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
   leak grep is clean, with no plan, tests, review or field rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
-  searches `.decisions/`, `.glossary/` and `docs/direction/` for the topic.
+  searches `.decisions/`, each context's `GLOSSARY.md` and `docs/direction/` for the topic.
 - **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
   and that package's decisions, as [0054](../../../.decisions/0054-read-upstream-before-patching-it.md)
   asks of upstream. Then say what the code does, what breaks, each option with its cost, and your

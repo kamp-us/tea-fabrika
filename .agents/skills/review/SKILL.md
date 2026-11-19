@@ -52,11 +52,19 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      check job names each clone the diff adds; say for each whether it is a real copy.
    - Each new name (type, service, function, file, setting, record field) has its line under the
      description's `## New names`: the industry's word, with a source that says it. Check each line
-     against `.glossary/TERMS.md` and [the names rule](../../../docs/direction/use-the-industrys-names.md):
-     one word per idea, the glossary's word where it has one, and a plain gloss for an obscure one.
-     A line whose source does not name the thing is a finding.
+     against its context's `GLOSSARY.md` (the contexts are in `.glossary/TERMS.md`) and
+     [the names rule](../../../docs/direction/use-the-industrys-names.md): one word per idea, the
+     glossary's word where it has one, and a plain gloss for an obscure one. A line whose source
+     does not name the thing is a finding.
+   - Domain words are in the glossary ([domain-modeling skill](https://github.com/kamp-us/tea-fabrika/pull/1668),
+     [0617](../../../.decisions/0617-glossary-reset-to-a-map.md)). A domain word names a thing the
+     project is about, not a library or industry term the pull request's `## New names` cites.
+     Every new domain word in the change (code names, plan text, examples) must be in its
+     context's `GLOSSARY.md` with an `_Avoid_` line, or it is a finding. The plan lists these
+     words and the build writes them; check both. The word is the industry's where one exists,
+     else a short everyday word. A context with no glossary yet gets the file in this pull request.
    - Names follow `AGENTS.md` for its version (`_tag`, no `xOf`, short everyday keys, no question
-     words, "run" means an agent run in `next/`) and `.glossary/TERMS.md`. Effect code follows
+     words, "run" means an agent run in `next/`) and the context's `GLOSSARY.md`. Effect code follows
      `node_modules/effect/AGENTS.md` and [0023](../../../.decisions/0023-next-follows-effects-code-style.md).
      Readability and module shape count: say where the code is hard to read and why.
    - Every new law is a property test over generated inputs (fast-check, `@demlik/tea/pbt` or
@@ -83,7 +91,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - `sh .agents/skills/lead/scripts/loosening.sh $(git merge-base origin/main HEAD) HEAD`: read
      every hit and say whether any law is truly loosened.
-   - The docs rows the plan gives the lead (plan docs, glossary rows, follows rows): say which are
+   - The docs rows the plan gives the lead (plan docs, glossary terms, follows rows): say which are
      owed and missing.
    - Shots on the pull request when the plan asks for them, at its layouts: the brief names the
      comment that holds them. A shot committed only to show the pull request running is a defect
