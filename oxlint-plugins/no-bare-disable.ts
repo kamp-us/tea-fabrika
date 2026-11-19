@@ -9,7 +9,7 @@
 // here on, the next line, this line), with no rule named, with no ` -- <why>`, or spelled `eslint-`.
 //
 // The Effect checker (`@effect/tsgo`) has its own ignore comment, held the same way (0565, law L3
-// of docs/plan/quests/effect-sweep-PLAN.md): a line comment of its own that starts with the
+// of .kalfa/quests/effect-sweep-PLAN.md): a line comment of its own that starts with the
 // next-line form, names each check with its level, then gives ` -- <why>`, as in
 // `// <directive>-next-line preferEffectArray:off -- the platform hands back a plain array`, where
 // `<directive>` is the checker's `@effect-` word. `@effect/tsgo` 0.63.0 reads that word anywhere in

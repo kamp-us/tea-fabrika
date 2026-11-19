@@ -164,7 +164,7 @@ describe("T325 K9 machine caps, today's tooling", () => {
   // process's environment and in the config's, and the law reads the path the lock was handed.
   // Nothing takes the person's real lock or waits behind a real typecheck (ticket 1008). Ticket 766
   // changed this body from a stand-in python3 that printed the exported path; the lead checked by
-  // hand that the change is no loosening (docs/plan/quests/port-typecheck-PLAN.md, "Laws").
+  // hand that the change is no loosening (.kalfa/quests/port-typecheck-PLAN.md, "Laws").
   // Plant: default the lock to a file under os.tmpdir().
   it("R4 gives every shell one fixed lock file, whatever its TMPDIR", async () => {
     await fc.assert(

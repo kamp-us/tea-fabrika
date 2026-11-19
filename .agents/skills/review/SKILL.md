@@ -7,7 +7,7 @@ description: Do the one review of a ticket's whole diff, read-only, against its 
 
 You read every commit since `origin/main` and judge the change against the approved plan and the
 decided notes it builds. You change no product or test file. Your verdict is what lets the lead
-merge ([how a change lands](../../../docs/plan/README.md#how-a-change-lands)).
+merge.
 
 The brief gives the facts: the ticket, its version, the worktree, branch and reviewed head, the
 approved plan, the decided notes, the last fixes, and what to look hardest at this round
@@ -87,7 +87,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      A scenario only supplements the property. Report a missing marker or flow law as a defect.
    - `sh .agents/skills/lead/scripts/loosening.sh $(git merge-base origin/main HEAD) HEAD`: read
      every hit and say whether any law is truly loosened.
-   - The docs rows the plan gives the lead (plan docs, glossary terms, follows rows): say which are
+   - The docs rows the plan gives the lead (glossary terms, follows rows): say which are
      owed and missing.
    - Shots on the pull request when the plan asks for them, at its layouts: the brief names the
      comment that holds them. A shot committed only to show the pull request running is a defect.

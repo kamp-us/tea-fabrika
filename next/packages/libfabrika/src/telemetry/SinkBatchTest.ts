@@ -1,4 +1,4 @@
-// T753 L16 full-depth fix, next/. The driver (node/SinkBatch.test.ts) owns the in-memory SQLite (0062). A1 to A5 of the plan (docs/plan/quests/t753-l16-full-depth-PLAN.md):
+// T753 L16 full-depth fix, next/. The driver (node/SinkBatch.test.ts) owns the in-memory SQLite (0062). A1 to A5 of the plan (.kalfa/quests/t753-l16-full-depth-PLAN.md):
 // the spans of one call commit together, before the call ends, through the sink's own tracer.
 // Decision 0122: a record is flushed before each call ends. The sink here is real, on in-memory SQLite;
 // only the transaction log below watches it. The laws go through `SpanSink.layer`, `sink.batch`,

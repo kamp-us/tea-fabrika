@@ -27,7 +27,7 @@ each small ticket runs its quest   plan, tests, build, ...          today's vers
 ## What was decided
 
 - **The flow above is how a large plan enters the pipeline.** The owner expects to use it a lot.
-- **[`docs/plan/tier-1.md`](../plan/tier-1.md) stays as it is, as the free-form input.** Its
+- **`docs/plan/tier-1.md` stays as it is, as the free-form input.** Its
   PR letters and order are what the planner reads, and it may change them.
 - **Tier 1's approval of 2026-11-01 covers what it builds and why.** It does not cover the
   breakdown. The owner approves the planner's plan before any builder starts.
@@ -40,7 +40,7 @@ each small ticket runs its quest   plan, tests, build, ...          today's vers
   logs it in `field/`.
 - **No splitter gets built on today's version.**
 - **The whole flow is a requirement for `next/`,** in
-  [Tier 6](../plan/tiers.md#a-requirement-the-whole-plan-flow). That covers the artifact, the
+  Tier 6. That covers the artifact, the
   ticket, the planner's plan, the owner's yes and several small tickets from one plan, and a
   rerun after a partial filing must not file twice.
 - **That is where the exception ends.** No second project gets split by hand without the
@@ -135,5 +135,5 @@ a new one, so it could file every ticket again.
   may be too large or too small to be a ticket. The owner's look is the only check.
 - **Whether the owner can approve so many tasks** in one look, or needs them walked step by step.
 - **How `next/` reaches the quest.** That question stays open as
-  [`tier-1.md`](../plan/tier-1.md#still-open-how-next-reaches-the-quest) says.
+  `tier-1.md` says.
 - **Whether the size of the route not taken was right.** I read the code and did not sketch it.

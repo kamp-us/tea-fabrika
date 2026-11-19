@@ -3,7 +3,7 @@
 // layers and ask GitHub nothing. The gate's process laws run the real leakgrep.sh, on a word list in
 // a temp folder, and a scripts folder with no leakgrep.sh in it.
 //
-// R6 of docs/plan/quests/sev-runbooks-PLAN.md (0611): a sev fix is admin-merged in both levels. Assumed
+// R6 of .kalfa/quests/sev-runbooks-PLAN.md (0611): a sev fix is admin-merged in both levels. Assumed
 // exports of Merge.ts, which the build writes:
 // - `Route.cases.admin.make({ sev0, sev0Fixes, sev1 })`: `sev0` every branch an open sev0 allows (as land.ts
 //   passes it today), `sev0Fixes` the ones of those that `open --allow` and `next` named, and `sev1` the one branch
@@ -259,7 +259,7 @@ const roleFor = (level: "sev1" | "sev0", listing: Listing) =>
   listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "none";
 
 describe("merge: a sev fix is admin-merged in both levels, on current main (0611)", () => {
-  // R6 of docs/plan/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
+  // R6 of .kalfa/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
   // requests alike (0603), and the ancestor check holds for a fix only (0611): a ready pull request there lands
   // with no catch-up. Plants: drop the ancestor check (a fix whose head lacks main is admitted: red); ask the
   // ancestor check of a ready pull request too (a sev0 ready one behind main is refused: red); read the sev1 fix

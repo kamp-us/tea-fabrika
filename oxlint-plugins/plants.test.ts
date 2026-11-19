@@ -1533,7 +1533,7 @@ describe("an ignore comment names its rules and says why", () => {
     ["eslint, the next line", `// eslint-disable-next-line\n${SECRET}\n`],
     ["eslint, in full", `// eslint-disable-next-line fabrika/no-secret-env -- why\n${SECRET}\n`],
     ["JSX", `export const a = (\n\t<a>\n\t\t{/* oxlint-disable-next-line */}\n\t\t<b />\n\t</a>\n);\n`],
-    // L3 of docs/plan/quests/effect-sweep-PLAN.md: the Effect checker's own ignore comment.
+    // L3 of .kalfa/quests/effect-sweep-PLAN.md: the Effect checker's own ignore comment.
     ["the checker's, no reason", `// ${CHECKER}-next-line preferEffectArray:off\n${SECRET}\n`],
     ["the checker's, the whole file", `// ${CHECKER} preferEffectArray:off -- why\n${SECRET}\n`],
     ["the checker's, skip-file", `// ${CHECKER} skip-file\n${SECRET}\n`],

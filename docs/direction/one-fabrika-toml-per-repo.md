@@ -11,7 +11,7 @@ blog post 10 (deleted from main; see the tag `archive/2026-11-09`); the first co
 
 *Noted 2026-11-01: this note is about today's version. In `next/`, repo programs in
 `.fabrika/programs` are Tier 5 and packs are Tier 7, both proposed
-([the tiers](../plan/tiers.md)).*
+(the tiers).*
 
 *Added 2026-11-10: a choice that makes sense as a value here must be one, in both versions and in
 `next/` now. This note's limits on what a

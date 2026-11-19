@@ -7,7 +7,7 @@ summary: "Today's version. The pipeline asks a person only for a judgment only a
 
 **Decided 2026-11-01**, the rules in [what was decided](#what-was-decided). The details
 under them are leans, each marked with how sure, and the owner approved them with the plan on 2026-11-01. Today's version (`packages/pipeline`,
-`programs/pipeline`). The plan that builds it is [pipeline-self-fix](../plan/pipeline-self-fix.md).
+`programs/pipeline`). The plan that builds it is pipeline-self-fix.
 Revised 2026-11-01 against the twelve principles of
 [the pipeline guidelines](./pipeline-guidelines.md), from experiment 186, merged in
 [PR 290](https://github.com/usirin/tea-fabrika/pull/290). A `P` number below is one of those

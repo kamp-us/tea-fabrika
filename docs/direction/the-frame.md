@@ -62,7 +62,7 @@ window                              the app's one OS window
 - **Today's version (`apps/fabrika`):** most parts are built. Each row below gives the file and
   line on main at this commit.
 - **`next/`:** nothing is on main yet. `next/` keeps today's frame rules (bars mono, words joined by
-  ` · `, no item backgrounds), as [Tier 1's detail](../plan/tier-1-detail.md) says, and adds parts
+  ` · `, no item backgrounds), as Tier 1's detail says, and adds parts
   of its own: tezgah as a program in Tier 2, the inbox program's glance in Tier 5, the menu bar
   extra's icon in Tier 1. A row says `next/` when only `next/` has decided it.
 - **Proposed only:** a row says so when its only source is a proposed note or an experiment.

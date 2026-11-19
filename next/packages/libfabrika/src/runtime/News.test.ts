@@ -1,4 +1,4 @@
-// Ticket 1053 slice 1, next/: L1 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// Ticket 1053 slice 1, next/: L1 of the plan (.kalfa/quests/t1053-PLAN.md), written before the
 // build. What a client's socket is told is one Schema, `News`, and the view update inside it is
 // `Published`: an `Update` with the pid of the process it came from.
 //

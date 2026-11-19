@@ -203,7 +203,7 @@ These still run, but they are not the way forward:
 
 | You want to | Go to |
 |---|---|
-| Know what is next, and who has the move | [`docs/plan/`](./docs/plan/README.md) |
+| Know what is next, and who has the move | The tracker |
 | Run a ticket through the pipeline | [`docs/how-to/run-a-pipeline-ticket.md`](./docs/how-to/run-a-pipeline-ticket.md) |
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |

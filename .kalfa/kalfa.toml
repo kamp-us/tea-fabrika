@@ -25,6 +25,11 @@ path = ".kalfa/runbooks/"
 prompt = "One file per operation done by hand, written the first time it is done for real."
 
 [[records]]
+name = "quests"
+path = ".kalfa/quests/"
+prompt = "One signed plan per ticket, approved by the owner before its tests are written. The test writer, the builder and the review read it as the contract. When its pull request lands, the quest moves to the notes repo."
+
+[[records]]
 name = "retro"
 path = ".kalfa/retro/"
 prompt = "Matt Pocock's retro format: one file per session worth learning from."

@@ -1,4 +1,4 @@
-// T753 L16 full-depth fix, next/. B1 to B3 of the plan (docs/plan/quests/t753-l16-full-depth-PLAN.md): a
+// T753 L16 full-depth fix, next/. B1 to B3 of the plan (.kalfa/quests/t753-l16-full-depth-PLAN.md): a
 // runner reads its process's lifecycle once per serial step, and what it does follows the process table.
 // The driver owns SQLite and the process table (0062); this suite owns the laws, over the runner's public
 // calls: `msg`, `due`, `open` and `restart`, and the process table's own lines. The driver counts the

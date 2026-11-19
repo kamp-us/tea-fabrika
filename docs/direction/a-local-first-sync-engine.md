@@ -12,7 +12,7 @@ summary: "Signed append-only logs that hosts sync, with leases for one-writer wo
 - **Decided 2026-10-30 and 2026-10-31:** [the five layers](#decided-2026-10-30-and-2026-10-31-five-layers-central-first),
   and layers 1 to 3 written down here: transport (2026-10-30, T3 changed 2026-10-31),
   data (2026-10-30) and coordination (2026-10-31). They are planned: Tier 1 builds them
-  ([Tier 1](../plan/tier-1.md)).
+  (Tier 1).
 - **Still a vision, not planned and not sized:** [the picture](#the-picture) of hosts
   that sync by gossip, [why the design already allows it](#why-the-design-already-allows-it)
   and [open](#open). [The hard part](#the-hard-part-a-claim)'s leases were decided
@@ -312,7 +312,7 @@ connect.pipe(Effect.retry(reconnect));
   hands still run as a login service (launchd through SMAppService on the Mac,
   systemd on the VM) and own the local brain's life. The menubar is required,
   and Quit there stops the service.
-  *Changed 2026-11-01, from [Tier 1's plan](../plan/tier-1.md), approved the same day
+  *Changed 2026-11-01, from Tier 1's plan, approved the same day
   and not built: Tier 1 has no hands, and the Electron app starts the brain itself as a plain
   launchd service, so nothing starts at login. The menu bar is part of that app. Quit
   stops the brain. Whether hands still run as a login service is for Tier 4.*
@@ -359,7 +359,7 @@ What local Miniflare gives us, from our own experiments:
 **Open in transport:** the extra hop through the gateway on Cloudflare is not
 measured (a keystroke-echo test would measure it). JSON-RPC's weight per
 message is not measured. ~~How a browser gets its grant is open (lean: a QR code
-from the Mac).~~ *Settled for `next/` by [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built:* the
+from the Mac).~~ *Settled for `next/` by Tier 1's plan, approved 2026-11-01 and not built:* the
 menu bar's row, Approve and a finger, on both instances; QR is in Tier 7. The owner already picked
 two pieces of it: the menu bar in the first slice, and keeping the one-time link. Background browser tabs slow their timers, which may make a tab
 look away.
@@ -395,7 +395,7 @@ interface Data {
 ```
 
 *Changed 2026-11-07, from Tier 1's P6, building the owner's call of 2026-11-02 that a
-wait is data ([Tier 1's detail, Cloudflare](../plan/tier-1-detail.md#cloudflare)): a
+wait is data (Tier 1's detail, Cloudflare): a
 wait never blocks. It answers at once, `{_tag: "ready", rev}` with the stream's newest
 rev, or `{_tag: "parked"}`. A parked wait leaves a ring, a row in the project object's
 own SQLite, and the first append past its `after` rings the waiter once. It said `wait`
@@ -505,7 +505,7 @@ const pid = "process_01jc9q4w7z3m8n5r2t6v0xkb4f";
   (5 in 5 s by default), with doubling backoff (100 ms to 800 ms). Past the
   brake it writes `down` with its `until`, and tries again then; nothing
   escalates to a parent. Strategies, restart types and escalation wait for
-  Tier 4 ([Tier 1's slice](../plan/tier-1.md)). The decision above stands.
+  Tier 4 (Tier 1's slice). The decision above stands.
   *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)):*
   Tier 1's supervision is OTP's top-level supervisor. One root per brain, its children the
   brain's named programs, `one_for_one`, child specs with OTP's restart types, and OTP's

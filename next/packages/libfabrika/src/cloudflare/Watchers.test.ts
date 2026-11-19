@@ -1,6 +1,6 @@
 // next/, W5: Project route absence is evidence of departure; RPC failure is not.
 //
-// Ticket 1053 slice 1, L7 of the plan (docs/plan/quests/t1053-PLAN.md), written before the build.
+// Ticket 1053 slice 1, L7 of the plan (.kalfa/quests/t1053-PLAN.md), written before the build.
 // The contract L7 pins, in cloudflare/Publish.ts: `make(sql, send)` gives two fronts over one route
 // lookup. `publish(client, update)` takes a `Published`, sends it as one `view` news and answers
 // `sent`, or `gone` with no route. `notify(client, news)` sends its `News` as it is, and sends

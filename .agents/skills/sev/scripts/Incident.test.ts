@@ -263,7 +263,7 @@ const watching = (dir: string, held: Array<ReadonlyArray<Level.Entry>>) =>
 const asked = (args: ReadonlyArray<unknown>) => JSON.stringify(args);
 
 describe("close starts main's full run", () => {
-  // R9 of docs/plan/quests/sev-runbooks-PLAN.md (0611). Needs `WorkflowRuns.dispatch(workflow, ref)`, in the
+  // R9 of .kalfa/quests/sev-runbooks-PLAN.md (0611). Needs `WorkflowRuns.dispatch(workflow, ref)`, in the
   // contract and in WorkflowRunsTest, which the build writes; a call is read as the Recorder keeps it, so
   // the law reads the workflow and the ref from the arguments wherever they stand.
   // Plant: close dispatches before the loop's end line is written, or before the last cancel was asked:
@@ -360,7 +360,7 @@ describe("fix", () => {
   /** One step of a walk: a pick among the moves the model allows now, and a branch to name. */
   const Step = Schema.Struct({ pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 99 })), at: Schema.Int });
 
-  // R7 of docs/plan/quests/sev-runbooks-PLAN.md (0611). Needs `Incident.fix(home, branch)` and `Incident.drop(home)`
+  // R7 of .kalfa/quests/sev-runbooks-PLAN.md (0611). Needs `Incident.fix(home, branch)` and `Incident.drop(home)`
   // (`sev.ts fix --drop`), and a sev1 level that reads the named fix as `fix: string | null`; the build writes them.
   // A named fix is merged when its pull request is, which `fix` reads through the `PullRequests` service: the merge
   // writes nothing to the sev log, so the log alone cannot say.

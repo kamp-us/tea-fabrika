@@ -3,7 +3,7 @@
 // extension, by a `#!` line naming a shell or Python (the lead's ruling on S1's review, recorded in
 // the plan's S1 row). It is a lint step, not an oxlint rule, since oxlint reads only
 // JavaScript and TypeScript and never sees a `.sh` file; it reads git's tracked files, so a person's
-// untracked scratch script is left alone (docs/plan/quests/port-scripts-0113-PLAN.md, "The lint
+// untracked scratch script is left alone (.kalfa/quests/port-scripts-0113-PLAN.md, "The lint
 // hold").
 //
 //   node oxlint-plugins/tracked-scripts.ts            # this repo

@@ -13,7 +13,7 @@ users only ever see "fabrika".
 
 Its decided rules are in: [0035](../../.kalfa/decisions/0035-desk-lives-in-the-brain.md), [0036](../../.kalfa/decisions/0036-shell-is-a-regular-program.md).
 
-*Changed 2026-11-01, for `next/`, from [Tier 1's plan](../plan/tier-1.md), approved the same
+*Changed 2026-11-01, for `next/`, from Tier 1's plan, approved the same
 day and not built. Tuval is a package, `@kampus/tuval`: fabrika is the logic, and Tuval is what is
 drawn from it. The new version's shell is `fabsh`, so below, `tsh` means `fabsh`. The desk is
 a program, `next/programs/desk`, built in as `fabrika/desk`, and it arrives in Tier 2 with
@@ -173,7 +173,7 @@ const electron = {cannot: ["Cmd-Q", "Cmd-H"]};
 
 Added 2026-11-01, for `next/`. The owner settled the shape: the menu bar is in the first
 slice and part of the Electron app, and a person only opens the app, which starts the brain.
-The details are [Tier 1's plan](../plan/tier-1.md), approved 2026-11-01 and not built.
+The details are Tier 1's plan, approved 2026-11-01 and not built.
 
 ```text
 open   write <home>/brain.plist, then  launchctl bootstrap gui/<uid> <home>/brain.plist

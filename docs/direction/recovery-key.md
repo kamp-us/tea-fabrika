@@ -17,7 +17,7 @@ Its decided rules are in: [0023](../../.kalfa/decisions/0023-recovery-by-sheet-a
 [0023](../../.kalfa/decisions/0023-recovery-by-sheet-at-once.md),,,
  (replaces 0338's wait and cancel).
 
-This is about `next/`. It is Tier 1's P5, the backup's design pass ([the plan](../plan/tier-1.md)),
+This is about `next/`. It is Tier 1's P5, the backup's design pass (the plan),
 and the owner reads it before anyone writes a test for P28. Nothing here is built. The research
 behind several calls is experiment 216, how products do recovery kits
 ([PR 405](https://github.com/usirin/tea-fabrika/pull/405)), and experiment 217, email recovery and
@@ -390,7 +390,7 @@ export const mayAdd = (members: Members, signer: string, add: Add):
   without a visit. **Lean, 70%,** not yet settled. What would settle it: a phone as approver, which
   the plan puts later. *Changed 2026-11-07 (owner): a tab can approve when the approval is signed by
   a passkey (WebAuthn) made with user verification required; that tab is a person key. A tab with
-  only its window key still cannot ([Tier 1's question 19](../plan/tier-1.md#open-questions)).*
+  only its window key still cannot (Tier 1's question 19).*
 - **A recovery key may** let in one new device and drop keys, once. It never grants a tab or an
   agent. The sheet's only job is to bring a device back.
 - **Anyone can re-check it later** with `ssh-keygen -Y verify`, since the signed text and the

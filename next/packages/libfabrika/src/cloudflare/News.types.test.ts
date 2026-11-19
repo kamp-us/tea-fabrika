@@ -1,4 +1,4 @@
-// Ticket 1053 slice 1, next/: L4 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// Ticket 1053 slice 1, next/: L4 of the plan (.kalfa/quests/t1053-PLAN.md), written before the
 // build. In the cloud files every hop that carries what a socket is told takes `News`, and every hop
 // that carries a view update on its way to a client takes `Published`. None names it `unknown`. The
 // type checker reads the law; Vitest does not typecheck, so the lead and CI run it with

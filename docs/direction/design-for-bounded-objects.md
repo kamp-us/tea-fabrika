@@ -167,7 +167,7 @@ walk).
   Tier 1 one per process. This adds parts: one process's record is many objects, chained by
   `rolled`.
 - **Raw health rows are no longer deleted after about 2 weeks**
-  ([monitoring](../plan/tier-1.md#monitoring-is-in-tier-1) said so). From 2026-11-07 (owner) they
+  (monitoring said so). From 2026-11-07 (owner) they
   move to R2 instead; the hourly summary is still written first.
 - **P6's row cap** of 2,000,000 bytes (`referee.ts:28`, "flag 13") is stricter than Cloudflare's
   8 MB today. It is safe and does not change here.

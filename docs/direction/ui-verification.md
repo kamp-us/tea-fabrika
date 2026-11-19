@@ -54,9 +54,9 @@ one change traced: ticket 143 adds "esc leaves" to info mode's bottom line
   (`themes.test.ts`) and a layer 2 law on real WebAssembly (`terminal.replay.test.ts`). Both tickets
   are the running example, read on their branches, not on main.
 - **`next/`:** reads this as its rule for every window, from Tier 1's first screen. Tier 1 already
-  asks "screenshots, the owner's yes" on each pull request ([tier 1](../plan/tier-1.md)); this note
+  asks "screenshots, the owner's yes" on each pull request (tier 1); this note
   says what runs before that yes, so the owner looks at less. A pack that holds the layers waits for
-  Tier 7, as packs do ([tiers](../plan/tiers.md)).
+  Tier 7, as packs do (tiers).
 
 ## The shape
 

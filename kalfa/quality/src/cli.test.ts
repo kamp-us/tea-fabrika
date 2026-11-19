@@ -1,4 +1,4 @@
-// The other half of law Q14 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: the command tree's names.
+// The other half of law Q14 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: the command tree's names.
 // Effect's `Command` type does not carry its subcommands' names, so cli.types.test.ts can pin only the
 // root, and the tree itself is read here.
 //

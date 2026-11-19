@@ -17,8 +17,7 @@ when to keep going and how to write for a reader who saw none of the work.
 ## Steps
 
 1. **Look around first.** Read `AGENTS.md` whole, then `next/AGENTS.md` for `next/` work, then
-   `docs/plan/README.md`, the tier rows the brief names (`docs/plan/tier-1.md`, `tier-1-detail.md`),
-   every direction note a row cites, and any note `rg -n "<row or word>" docs` finds. Open the code
+   the ticket on the tracker, every direction note it cites, and any note `rg -n "<row or word>" docs` finds. Open the code
    the plan will change and its neighbors before you design anything. Read
    [the design reference](references/design.md) too: the rules a plan or a design follows, moved
    there from `AGENTS.md`.
@@ -27,14 +26,14 @@ when to keep going and how to write for a reader who saw none of the work.
    Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
    its decisions, patterns and source, and name its answer or say you found none.
 3. **Check what is settled** before you call anything open: `.kalfa/decisions/`, `docs/direction/`,
-   `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Run
+   `experiments/`, and the settled-search tool the brief names, if any. Run
    `rg -il "<words>" .kalfa/decisions .kalfa/glossary docs/direction .kalfa/patterns .kalfa/runbooks` for each open
    question, in two or three wordings, and read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
    this project.
 5. **Write the plan** in the shape below, to the path the brief names (by default
-   `docs/plan/quests/<quest>-PLAN.md` in the worktree). With no path in the brief, your final message
+   `.kalfa/quests/<quest>-PLAN.md` in the worktree). With no path in the brief, your final message
    is the whole plan.
 
 ## The shape

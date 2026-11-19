@@ -1,4 +1,4 @@
-// Test support for the plant runner's laws (decision 0600, docs/plan/quests/kalfa-quality-stryker-PLAN.md):
+// Test support for the plant runner's laws (decision 0600, .kalfa/quests/kalfa-quality-stryker-PLAN.md):
 // a source file built from known pieces, and the mutant list Stryker's instrumenter would make for
 // it, so a law knows exactly where each node is without asking the code it tests.
 //

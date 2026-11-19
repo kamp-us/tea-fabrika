@@ -45,7 +45,7 @@ guidelines", a private page with the six principles you can press.
 ### H0: hot reload in `next/` from day one
 
 Decided by the owner on 2026-11-01. Tier 1 ships with it, not a later tier, and
-[Tier 1's rules](../plan/tier-1.md#rules-that-bind) carry the line.
+Tier 1's rules carry the line.
 
 ## What was decided with it
 
@@ -141,7 +141,7 @@ export const upcast = (raw: unknown) => (isRecord(raw) && "n" in raw ? {count: r
   makes a throw a crash: a fresh letter is counted toward its delivery limit, and the process
   restarts after its backoff on the same build. It does not roll back. Which comes first when a
   step throws after a swap, H4's rollback or P34's crash and restart, is open on P15's row in
-  [Tier 1](../plan/tier-1.md).
+  Tier 1.
   *Amended 2026-11-09 (owner, [0007](../../.kalfa/decisions/0007-otp-supervision-per-program.md)): P34c makes the restart at once, with no backoff, and past
   the brake the name is `failed` until a person restarts it. The H4 question stays open.*
 

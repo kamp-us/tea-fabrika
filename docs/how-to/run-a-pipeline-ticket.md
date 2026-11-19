@@ -19,7 +19,7 @@ A live run changes a real repository. Each rule was learned from a run.
 - The target repository's own merge rules apply. Never merge by hand, never arm auto-merge, never
   push to its main branch. A change lands only through the ship stage.
 - A pull request that went by hand is not a live run, and neither is what is left once a quest is
-  finished and stuck. Each lands by [the plan's rule](../plan/README.md#how-a-change-lands).
+  finished and stuck. Each lands by [the repo's rule](../../AGENTS.md#how-a-change-lands).
 - No agent approves a pull request or answers a question the quest put to a person: that rule is in
   [the map](../../AGENTS.md#how-a-change-lands).
 - A dry run is read-only. It starts no agent that could claim or change a real ticket.
@@ -44,7 +44,7 @@ An agent goes through this list and tells the owner what is missing.
 
 1. **[PR 267](https://github.com/usirin/tea-fabrika/pull/267) is merged.** Until it is, the quest cannot
    handle what real agents answer.
-2. **The owner answered the question in [the plan](../plan/README.md#where-we-are-now):** may this
+2. **The owner answered the question in the tracker:** may this
    first run go without a box? The quest has no box setting for head code: the install, the checks and
    the mutants run as the person. So a "no" means this run does not happen until head code is boxed.
    Lean: yes, 75%.
@@ -192,7 +192,7 @@ spent rounds ends `stuck: rounds_spent`), and the same line goes on where the pi
    again. A pull request already pushed takes main in by a merge. Its new head is pushed again before
    the merge question, after a fresh review if the old one does not stand there.
 4. **Inside a live run nothing but ship merges.** If the quest cannot go on, what is left is a by-hand
-   change, under [the by-hand rule](../plan/README.md#how-a-change-lands): the owner's yes, green CI,
+   change, under [the by-hand rule](../../AGENTS.md#how-a-change-lands): the owner's yes, green CI,
    and an agent merges after a leak grep. The other choice is a new ticket. Say exactly what is left:
    a claim, a branch, a pull request.
 5. Log it in `field/`. A stuck quest teaches as much as a merged one.

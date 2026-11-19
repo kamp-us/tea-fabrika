@@ -1,4 +1,4 @@
-// Laws Q9 and Q10 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: a plant runs only once its target is
+// Laws Q9 and Q10 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: a plant runs only once its target is
 // certain, and `inPlace` follows the package edge. Run on the in-memory stand-ins: `MutantsMemory`
 // for Stryker (it counts the calls it is asked for) and a file system held in a record.
 //

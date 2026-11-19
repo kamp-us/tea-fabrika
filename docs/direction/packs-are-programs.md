@@ -9,7 +9,7 @@ Proposed 2026-10-18. Walked when Tier 7 starts (owner, 2026-11-08): add-on packs
 
 *Changed 2026-11-01, for `next/`, proposed: packs wait for Tier 7. A program package in
 `next/programs/` is already the shape a pack has, and repo programs in `.fabrika/programs`
-come first, in Tier 5, lean about 60% ([the tiers](../plan/tiers.md)).*
+come first, in Tier 5, lean about 60% (the tiers).*
 
 *Changed 2026-11-10 by:* programs written
 outside fabrika's own source get a thin slice before Tier 5; repo programs and packs harden it later.

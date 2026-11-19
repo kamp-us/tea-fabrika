@@ -103,7 +103,7 @@ in the decision.
 - *Changed 2026-10-31:* from "everything in `next/`, by hand" to every pull request, through
   the programs. The by-hand steps are now the exception for a step that cannot run yet.
 - *Changed 2026-11-01:* ticket 115 is no longer the first full try. Its plan was replaced by
-  [Tier 1](../plan/tier-1.md), which waits for the pipeline.
+  Tier 1, which waits for the pipeline.
 - *Changed 2026-11-05 (owner):* Tier 1 no longer waits for the pipeline. Ticket 117 ran
   eight quests in five days ($35.37) and stopped at the test writer twice; four steps after it
   have never met real code. The pipeline does not follow the program guidelines the rest of

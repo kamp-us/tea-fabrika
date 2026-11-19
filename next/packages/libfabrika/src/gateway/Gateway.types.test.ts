@@ -67,7 +67,7 @@ it("type: the door's monitor option takes a ref, a pid, the client case of Recip
   expectTypeOf<Parameters<MonitorOption>>().toHaveProperty("length").toEqualTypeOf<4>();
 });
 
-// Ticket 1053 slice 1, next/: L5 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// Ticket 1053 slice 1, next/: L5 of the plan (.kalfa/quests/t1053-PLAN.md), written before the
 // build. The door builds what a client's socket is told, so its `notify` option takes `News`, never
 // `unknown`. The type checker reads the law; the lead and CI run it with `pnpm typecheck`.
 // Plant: put `unknown` back on `Options.notify`.

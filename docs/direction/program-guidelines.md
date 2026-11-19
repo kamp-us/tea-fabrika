@@ -87,7 +87,7 @@ C-b a, Enter again                                             opened {tile: "t5
 - **`next/`:** all of it. Programs exist from Tier 1 (`Program` on
   [PR 223](https://github.com/usirin/tea-fabrika/pull/223): name, machine, msg, view; Tier 1 adds
   refuse, inputs and outputs). The desk, which carries out `open`, `leave` and the way back, arrives
-  as a program in Tier 2 ([tiers](../plan/tiers.md)). The asks program and its glance come in Tier 5.
+  as a program in Tier 2 (tiers). The asks program and its glance come in Tier 5.
   So `location` and the focus history go in with Tier 2's desk, and every program written from then
   on says its location.
 - **Today's version (`apps/fabrika`, `programs/*`):** not changed by this note. Today's asks popup

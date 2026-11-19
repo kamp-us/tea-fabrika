@@ -13,13 +13,13 @@ until the owner confirms it.
 
 ## Start here
 
-Read these in order. The plan's own way in is [`docs/plan/`](../plan/README.md). `next/` is the
+Read these in order. The plan's own way in is `docs/plan/`. `next/` is the
 new version, and "today's" is the one in daily use.
 
 1. [Control lives in code](./control-in-code.md): both versions.
 2. [Clean slate](./clean-slate.md): why two versions, side by side.
 3. [Every pull request goes through the pipeline's steps](./next-is-a-pipeline-pre-run.md): both versions, and the order of work.
-4. [The tiers](../plan/tiers.md): `next/`, what comes when.
+4. The tiers: `next/`, what comes when.
 5. [A local-first sync engine is the base](./a-local-first-sync-engine.md): `next/`, layers 1 to 3.
 6. [The cloud is one more host](./the-cloud-is-one-more-host.md): `next/`, layer 4, the app.
 7. [The desktop layer](./the-desktop-layer.md): `next/`, layer 5, and the menu bar.

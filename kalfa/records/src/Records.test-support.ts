@@ -1,4 +1,4 @@
-// Stand-ins and data for the laws of `@kalfa/records` (S8, docs/plan/quests/rules-and-records-build-PLAN.md):
+// Stand-ins and data for the laws of `@kalfa/records` (S8, .kalfa/quests/rules-and-records-build-PLAN.md):
 // a repo held in a record, so no law starts git or writes a folder.
 //
 // `world(root, files)` is one repo: `files` maps a repo-relative path to its text, or to

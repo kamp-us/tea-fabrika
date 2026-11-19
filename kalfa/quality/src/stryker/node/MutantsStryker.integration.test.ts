@@ -1,4 +1,4 @@
-// Law Q11 of docs/plan/quests/kalfa-quality-stryker-PLAN.md: real Stryker 10.1.1 answers a plant. It starts
+// Law Q11 of .kalfa/quests/kalfa-quality-stryker-PLAN.md: real Stryker 10.1.1 answers a plant. It starts
 // Stryker's own processes in a temp folder, so no stand-in can show the form of the report it writes,
 // which the answer (Q4) and its vector (Q5) rest on. It runs on disposable CI or a cloud box
 // (decision 0594), never on a person's laptop.

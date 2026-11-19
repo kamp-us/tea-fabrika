@@ -1,8 +1,7 @@
 # Working in this repo
 
 A map for any agent or person picking up work here. Read
-this first, then [`docs/plan/README.md`](./docs/plan/README.md) for where the work stands, then
-[`docs/direction/README.md`](./docs/direction/README.md) for why.
+this first, then [`docs/direction/README.md`](./docs/direction/README.md) for why. What is next lives on the tracker.
 
 ## What this repo is
 
@@ -15,8 +14,7 @@ all kept here on purpose, so they can be analysed later.
 
 `next/` is what we are building, on the decisions; its rules are in `next/AGENTS.md`. Everything else is what we use
 today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/` grows beside today's version
-([0002](./.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)). How far it is:
-[where we are](./docs/plan/README.md#where-we-are-now).
+([0002](./.kalfa/decisions/0002-next-grows-beside-today.md), [clean slate](./docs/direction/clean-slate.md)).
 
 - **Know which version your work is in** before you read or change code. Your brief or ticket says so. If it does not,
   all new work is `next/`, and if you still cannot tell, ask.
@@ -39,7 +37,7 @@ today (`packages/`, `programs/`, `apps/`), and a map of which jobs exist. `next/
 
 | You want to | Read | Write |
 |---|---|---|
-| Know what is next and who has the move | [`docs/plan/README.md`](./docs/plan/README.md), then [`tiers.md`](./docs/plan/tiers.md) and [`tier-1.md`](./docs/plan/tier-1.md) | The plan docs, in the same pull request as the work |
+| Know what is next and who has the move | The tracker | The tracker |
 | Know what the owner decided | [`.kalfa/decisions/`](./.kalfa/decisions/); see [Decision discovery](#decision-discovery) | `.kalfa/decisions/NNNN-slug.md`, with [`/adr`](./.agents/skills/adr/SKILL.md), only for a hard-to-reverse choice |
 | Know where this is going and why, or where `next/` follows a model (OTP, Elm, Kubernetes) and where it leaves it | [`docs/direction/`](./docs/direction/README.md), the long design notes, and [`docs/direction/follows/`](./docs/direction/follows/README.md) | No new note is written there: long reasoning a decision needs goes in the decision's own Context, or in the experiment that holds its evidence; a follows row changes in the pull request that changes that behavior; no folder keeps an index table |
 | Know what a word means | [`.kalfa/glossary/GLOSSARY-MAP.md`](./.kalfa/glossary/GLOSSARY-MAP.md), the map of the contexts; each context's `GLOSSARY.md` is written when its words are decided | The term, with an `_Avoid_` line, in its context's `GLOSSARY.md`, in the pull request that coins or renames a word |
@@ -96,7 +94,7 @@ For every agent, whatever its step. A step's skill adds its own rules and its ow
 
 Product work goes plan, test writer, build, one review. A ticket with a fix command (lint autofix, codemod, rename) takes
 the mechanical branch: run it over the whole repo, one pull request per rule, no plan, no test writer. No agent approves a pull request. The rest is in
-[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands), [the plan](./docs/plan/README.md#how-a-change-lands) and
+[the lead skill](./.agents/skills/lead/SKILL.md#how-a-change-lands) and
 [the tests skill](./.agents/skills/tests/SKILL.md#new-and-changed-laws).
 
 ## Before you design anything

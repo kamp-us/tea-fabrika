@@ -1,4 +1,4 @@
-// Law Q7 of docs/plan/quests/kalfa-quality-stryker-PLAN.md (decisions 0069 and 0585): each setting is one
+// Law Q7 of .kalfa/quests/kalfa-quality-stryker-PLAN.md (decisions 0069 and 0585): each setting is one
 // Effect Config with one default, read from `KALFA_QUALITY_STRYKER_<KEY>` or from `quality.stryker.<key>`
 // in a provider the edge hands in. The environment wins over the provider, an absent value is the
 // default, an out-of-range value fails naming its key, and a `FABRIKA_` name is never read.

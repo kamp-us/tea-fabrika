@@ -1,4 +1,4 @@
-// Ticket 1053 slice 1, next/: L3 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// Ticket 1053 slice 1, next/: L3 of the plan (.kalfa/quests/t1053-PLAN.md), written before the
 // build. A view is JSON at every place the runner names it, so a view update can be a Schema's type
 // and no hop has to call it `unknown`. The type checker reads the law; Vitest does not typecheck, so
 // the lead and CI run it with `pnpm typecheck`.

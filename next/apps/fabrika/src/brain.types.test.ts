@@ -1,5 +1,5 @@
 import { expectTypeOf, it } from "@effect/vitest";
-// Ticket 1053 slice 1, next/: L6 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// Ticket 1053 slice 1, next/: L6 of the plan (.kalfa/quests/t1053-PLAN.md), written before the
 // build. The app's Project object class is the last hop that named a view update `unknown`: its
 // `publish` takes the library's `Published`. The type checker reads the law; Vitest does not
 // typecheck, so the lead and CI run it with `pnpm typecheck`.

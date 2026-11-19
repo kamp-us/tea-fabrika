@@ -22,8 +22,8 @@ marked decided below:
 - **Decided, the shape:** the stamped input is `Envelope<A> = {id, by, at, input}`. In `next/` it is
   `{id, by, arrivedAt, input}`, since `next/` renamed the referee's clock (owner, 2026-11-05).
 - **Decided, `cause` in `next/` (owner, 2026-11-05):** `next/`'s ledger `Entry` gets `cause` in
-  Tier 1's P6, and the rest of this note lands in P10 and P11 ([where it
-  lands](../plan/tier-1.md#where-inputs-carry-their-sender-lands)).
+  Tier 1's P6, and the rest of this note lands in P10 and P11 (where it
+  lands).
 - **Decided, traces:** a trace mirrors the cause with an OpenTelemetry span link. A trace never
   decides who signs.
 - **Decided, what goes:** the shared tile study's other way, a press in an agent's job running as
@@ -73,7 +73,7 @@ interface Envelope<A> {
   written without it never gets it back. In `next/` the clocks are `arrivedAt` and `sentAt`
   (renamed the same day), so its envelope is `{id, by, arrivedAt, input}`. In `next/`'s words this
   note's host is the brain's door, a run is a process, and the cell is the runner. Each part's row
-  and law are in [Tier 1's plan](../plan/tier-1.md#where-inputs-carry-their-sender-lands).
+  and law are in Tier 1's plan.
 - **`next/`'s input id is a TypeID,** `input_<26 chars>`, not this note's `in-<host run>-<n>`.
   Decided by the owner, 2026-11-08, in [one id per thing](../../.kalfa/decisions/0012-one-typeid-per-thing.md). The door's
   process and its count stay, as their own fields on the entry. The ids in this note's sketches
