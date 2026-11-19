@@ -8,10 +8,7 @@
   },
   { "glob": "next/**/*.test.ts", "why": "next/'s tests" },
   { "glob": "next/**/*.test.tsx", "why": "next/'s tests" },
-  {
-    "glob": "next/**/*Test.ts",
-    "why": "next/'s shared suites, read as RecordPartTest.suite(open) (test files keep to the layers too)"
-  },
+  { "glob": "next/**/*Test.ts", "why": "next/'s shared suites, read as RecordPartTest.suite(open)" },
   { "glob": "next/**/*.test-support.ts", "why": "next/'s test support: the stores and fixtures laws run on" },
   {
     "glob": "next/**/tsconfig.json",
@@ -53,10 +50,7 @@
   { "glob": ".oxfmtrc.json", "why": "the format settings" },
   { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
   { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
-  {
-    "glob": "vendor/**",
-    "why": "the lint rules we take as they ship, at their pinned commit (we use the anti-slop plugin as it ships, never our own copy of its rules)"
-  },
+  { "glob": "vendor/**", "why": "the lint rules we take as they ship, never our own copy, at their pinned commit" },
   { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
   { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
   {
@@ -81,18 +75,9 @@
     "why": "the owner's ledger of functions left out of the React Compiler"
   },
   { "glob": "unreachable-ledger.json", "why": "the owner's ledger of dead exports" },
-  {
-    "glob": "next-ledger.json",
-    "why": "next/'s list of old lint breaks, which only shrinks (no check reads a list that lets broken code pass)"
-  },
-  {
-    "glob": "agents-ledger.json",
-    "why": "lead tooling's list of old lint breaks, which only shrinks (no check reads a list that lets broken code pass)"
-  },
-  {
-    "glob": "node-kinds.json",
-    "why": "names code-graph treats as used; each must be bound by that name (no check reads a list that lets broken code pass)"
-  },
+  { "glob": "next-ledger.json", "why": "next/'s list of old lint breaks, which only shrinks" },
+  { "glob": "agents-ledger.json", "why": "lead tooling's list of old lint breaks, which only shrinks" },
+  { "glob": "node-kinds.json", "why": "names code-graph treats as used; each must be bound by that name" },
   { "glob": "package.json", "why": "the root scripts: lint, test, typecheck and this check" },
   { "glob": "pnpm-lock.yaml", "why": "the exact dependencies the tests and checks run" },
   { "glob": "tsconfig.base.json", "why": "the type checker's strictness" },
