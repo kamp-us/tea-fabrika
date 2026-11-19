@@ -24,8 +24,11 @@ follows [`next/AGENTS.md`](../../../next/AGENTS.md). Two pure rule files go into
 ([0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md)). The app imports kalfa
 packages only: nothing from `next/`'s libraries (`@kampus/libfabrika`, `@kampus/tuval`, the
 programs) and nothing from today's `packages/`, `programs/` and `apps/`. Nothing in `kalfa/` or in
-the rest of `next/` imports the app (law L2). One slice changes two of today's lead scripts, named
-where they come up. This plan replaces the plan of
+the rest of `next/` imports the app (law L2). Slices 5 and 6 change two of today's lead scripts,
+and slice 7 adds one and deletes today's message branches, each named where it comes up. Lead
+tooling under `.agents/` is the repo's tooling, which
+[0525](../../../.decisions/0525-todays-version-is-frozen.md) lists as "not covered" by the freeze
+(read on main), so none of this touches today's frozen version. This plan replaces the plan of
 [pull request 1279](https://github.com/kamp-us/tea-fabrika/pull/1279), which the owner held on
 2026-11-14 and which the review of it sent back.
 
@@ -37,7 +40,7 @@ the older ones.
 
 ## Doubt first
 
-Three calls are under 80%. Each is taken, with the branch it would undo.
+Four calls are under 80%. Each is taken, with the branch it would undo.
 
 - **Where the app lives: `next/apps/fabrikalfa`, named `@kampus/fabrikalfa`. The lead took this
   call (about 75%).** [0616](../../../.decisions/0616-providers-are-one-package-each.md)'s glossary
@@ -65,6 +68,18 @@ Three calls are under 80%. Each is taken, with the branch it would undo.
   (`fabrikalfa/t810-docs-only-classifier`, `kalfa/ci/src/DocsOnly.ts`). The rest come from other
   tickets, three of them not filed yet, in the order under [Order](#order). Slice 1 waits for all
   of them.
+- **Who reads the lead's inbox (75%).** The owner's call says "the lead and the merger read it".
+  The plan reads "the merger" as the lead's own session that lands pull requests, to which today's
+  messages on branches are addressed beside the lead, not fabrikalfa's `merger` program: that
+  program takes asks, and nothing in it decides on a status line. So slice 7 keeps one mailbox,
+  `lead`, with one inbox stream that both lead sessions read, each at its own place. **What it
+  undoes:** if the owner meant the `merger` program, the stream is `merger/inbox`, merger's `In`
+  gains a `message` case, and a program reads only its own inbox
+  ([0103](../../../.decisions/0103-a-program-may-mail-another-by-name.md)), so the lead would need
+  its own stream as well. The doubt also covers usage rows: on 2026-11-19 the child sessions refused
+  to send usage rows on a relayed yes, and they were right (a message on a branch says so). So no
+  agent is asked to send usage rows until the owner's own answer to
+  [open question 1](#open-questions) is written as a decision.
 
 ## What changes, in one paragraph
 
@@ -83,7 +98,11 @@ pull request's missing or stuck required check. `freeze` cancels CI runs in a se
 main's own `check` runs. `settings` applies the repo and queue settings from a file and reports
 drift every hour. `tokens` vends one-hour push tokens for `fabrikalfa/*` branches, so the App's
 private key leaves the laptop. GitHub's queue stays in charge until merger passes the code host's
-conformance laws and its shadow run.
+conformance laws and its shadow run. The Worker also keeps the lead's mailbox: cloud and local
+agents send their messages (status, a plan ready, usage rows) to it through the door, with their
+environment's caller token, and the lead's sessions read it. Once it works, today's message
+branches (`fabrikalfa/mail-session_*`) and their watchers are deleted, and usage rows leave the
+public repo for the ledger. Until then the message branches stay as the stopgap.
 
 ## Builds on
 
@@ -129,11 +148,16 @@ What must land before each slice, in order. Each line needs the lines above it u
    `@kalfa/codehost` and `@kalfa/provider-github` if 1190 left them out.
 9. **Slice 2,** checks and the gates, after slice 1.
 10. **Slice 3,** the policy and freeze, after slice 1. It may land before or after slice 2.
-11. **Slice 4,** merger in shadow, after slices 2 and 3: it uses the gates and freeze's output.
-12. **Slice 5,** tokens and `botpush.mjs`, after slices 1 and 3 (the policy) and the owner's
+11. **Slice 7,** the lead's inbox, after slice 1 (the Worker, the ask route, the ledger's journal
+    and inbox streams from lines 6 and 7) and slice 3 (the WritePolicy door and caller tokens). It
+    needs nothing from slices 2, 4, 5 and 6, so it may land before or after any of them. Its last
+    step, the deletion of today's message branches, waits for one week of messages through it (see
+    [the slice](#the-leads-inbox)).
+12. **Slice 4,** merger in shadow, after slices 2 and 3: it uses the gates and freeze's output.
+13. **Slice 5,** tokens and `botpush.mjs`, after slices 1 and 3 (the policy) and the owner's
     `agents` ruleset ([Rollout](#rollout-in-the-order-the-owner-sees-it), step 5).
-13. **Slice 6,** merger live through `land.ts arm`, after slice 4's shadow run reaches 10 matches.
-14. **Later, on the owner's answer to [open question 2](#open-questions):** merger's admin merge
+14. **Slice 6,** merger live through `land.ts arm`, after slice 4's shadow run reaches 10 matches.
+15. **Later, on the owner's answer to [open question 2](#open-questions):** merger's admin merge
     live, with a second App.
 
 ## How others do it
@@ -269,6 +293,32 @@ Each decides how the code does what a note already says. A percentage is how sur
 - **CI by OIDC is part of the policy, and its code waits for its first user.** No workflow asks
   fabrikalfa for anything today, so the trust-policy reader is a later slice; the WritePolicy
   question settles its shape now. 80%.
+- **The lead's inbox is Runtime's mailbox, not a new piece.** The lead is an agent, and an agent is
+  a program ([agents are programs](../../../docs/direction/agents-are-programs.md)), so its
+  mailbox is a process's one inbox stream with many writers (0601), named `lead/inbox` as `next/`
+  names a name's inbox `<name>/inbox` (`next/packages/libfabrika/src/processes/Mailbox.ts`). What
+  lands in it is a message (0547, 0582). A Send is a ledger append with an id, saved before it is
+  delivered, so a resend under the same id is one entry (0103, 0601). No fabrikalfa program steps
+  it: its reader is the lead itself, a client, as a person's inbox is registered under their name
+  (the glossary's `inbox (tracker)` row). 80%.
+- **One stream, two readers, each with its own place.** Both lead sessions read `lead/inbox`; each
+  message says `to: "lead"` or `to: "merger"` so a reader acts on its own, as both read every
+  message branch today. A reader's place is an `acked` entry on `lead/acked`, the glossary's `ack
+  (inbox)` shape (Kafka's committed offset). 75%, the doubt under [Doubt first](#doubt-first).
+- **A full inbox answers `full`, and a message too big is refused** (0109: an inbox has a cap on
+  unread messages, and a Send to a full one answers `full`). Unread counts from the `lead` reader's
+  place, since the lead reads every message. The cap and the size are 0582's `mailbox.capacity`
+  and `mailbox.chunk`, in `.fabrikalfa/fabrikalfa.toml`. 85%.
+- **Reads wait instead of poll.** `GET /inbox/lead` uses the ledger's `wait` (0601's storage
+  primitive), up to 30 seconds, so the lead's watcher becomes one waiting read, not a loop over
+  branches. 80%.
+- **Usage rows go to the ledger, and nowhere public.** A usage message carries counts only, today's
+  usage file's row (message id, time, session, model, token counts), never message text. The lead
+  reads them from the inbox. Nothing copies them into git; the per-step `field/runs/` rows that
+  `clauderow.ts` writes are not changed by this slice. 85%.
+- **The message branches are copied into the private archive before they are deleted**
+  ([0027](../../../.decisions/0027-experiment-results-live-in-a-private-archive.md)'s archive): they
+  hold the lead's coordination record of the past weeks, which nothing else holds. 80%.
 
 ## The shape
 
