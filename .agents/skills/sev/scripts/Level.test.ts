@@ -4,9 +4,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Result, Schema, Array as Arr, pipe } from "effect";
-import * as Arbitrary from "effect/Arbitrary";
-import * as Land from "../../lead/scripts/land.ts";
+import { Arbitrary, Effect, FileSystem, Option, Path, Result, Schema, Array as Arr, pipe } from "effect";
 import * as Level from "./Level.ts";
 
 const AT = "2026-11-14T19:00:00.000Z";
@@ -386,11 +384,10 @@ describe("the admin route names a fix as Level says (0611)", () => {
       const sev0 = Result.getOrThrow(folded);
       const read = readIssues(given);
 
-      expect(Land.routeFromLog(entries, sev0, read)).toEqual(
+      expect(Level.routeFromLog(entries, sev0, read)).toEqual(
         sev0._tag === "open"
-          ? { _tag: "admin", sev0: [...sev0.allow], sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)), sev1: null }
+          ? { sev0: [...sev0.allow], sev0Fixes: Level.sev0Fixes(entries.slice(sev0.index)), sev1: null }
           : {
-              _tag: "admin",
               sev0: [],
               sev0Fixes: [],
               sev1: Result.isSuccess(read) ? Level.sev1Fix(entries, read.success) : null,
@@ -417,12 +414,12 @@ describe("the admin route names a fix as Level says (0611)", () => {
 
   it("pinned: an unreadable issue list names no sev1 fix and still builds the admin route, so a docs-only merge is not refused (0611, fail closed; the 2026-11-19 review)", () => {
     expect(
-      Land.routeFromLog(
+      Level.routeFromLog(
         [fixLine("fabrikalfa/x", [1333])],
         Level.Sev0.cases.closed.make({}),
         Result.fail("gh issue list exited 1"),
       ),
-    ).toEqual({ _tag: "admin", sev0: [], sev0Fixes: [], sev1: null });
+    ).toEqual({ sev0: [], sev0Fixes: [], sev1: null });
   });
 });
 

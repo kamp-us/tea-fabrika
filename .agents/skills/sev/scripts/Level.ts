@@ -143,6 +143,22 @@ export const sev0Fixes = (lines: ReadonlyArray<Entry>): ReadonlyArray<string> =>
   return named;
 };
 
+/**
+ * The admin route the log gives, as the lead's merge reads it (0611): an open sev0 lists its branches
+ * and which of them are fixes, and names no sev1 fix; with none open, the one fix `sev.ts fix` named,
+ * while an issue it answers is open. A branch the log does not name is no fix. The open issues are
+ * `Result`: when they did not read, no sev1 fix is named (fail closed), and the rest of the route is
+ * still given, so a docs-only merge needs no fix (0183).
+ */
+export const routeFromLog = (
+  entries: ReadonlyArray<Entry>,
+  sev0: Sev0,
+  issues: Result.Result<ReadonlyArray<Alert>, string>,
+): { readonly sev0: Array<string>; readonly sev0Fixes: Array<string>; readonly sev1: string | null } =>
+  sev0._tag === "open"
+    ? { sev0: [...sev0.allow], sev0Fixes: [...sev0Fixes(entries.slice(sev0.index))], sev1: null }
+    : { sev0: [], sev0Fixes: [], sev1: Result.isSuccess(issues) ? sev1Fix(entries, issues.success) : null };
+
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
 export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
   switch (entry._tag) {
