@@ -1,6 +1,6 @@
 ---
 id: 0255
-title: Every npm version the repo names is exact, catalog: or workspace:*, never a range, tag or alias, and pnpm lint fails on anything else
+title: "Every npm version the repo names is exact, catalog: or workspace:*, never a range, tag or alias, and pnpm lint fails on anything else"
 status: accepted
 date: 2026-10-31
 tags: [dependencies, versions, pnpm, catalog, lint, both-versions]
