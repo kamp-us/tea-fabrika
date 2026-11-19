@@ -18,11 +18,14 @@ const programs = { merger, checks, freeze, settings, tokens }; // each is Progra
 
 # Plan: ticket 1003, fabrikalfa's day-one programs, `merger`, `checks`, `freeze`, `settings` and `tokens`, on today's stack
 
-**Which version:** neither `next/` nor today's version. This is `kalfa/`, which follows `next/`'s
-rules ([0537](../../../.decisions/0537-infra-holds-our-own-small-services.md),
-[0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md)). It imports nothing from
-`next/` or from today's `packages/`, `programs/` and `apps/`. One slice changes two of today's lead
-scripts, named where they come up. This plan replaces the plan of
+**Which version:** `next/`. The app is `next/apps/fabrikalfa`, beside `next/apps/fabrika`, and it
+follows [`next/AGENTS.md`](../../../next/AGENTS.md). Two pure rule files go into `kalfa/ci`, a
+`@kalfa` package, which follows `next/`'s rules too
+([0556](../../../.decisions/0556-kalfa-holds-our-tooling-packages.md)). The app imports kalfa
+packages only: nothing from `next/`'s libraries (`@kampus/libfabrika`, `@kampus/tuval`, the
+programs) and nothing from today's `packages/`, `programs/` and `apps/`. Nothing in `kalfa/` or in
+the rest of `next/` imports the app (law L2). One slice changes two of today's lead scripts, named
+where they come up. This plan replaces the plan of
 [pull request 1279](https://github.com/kamp-us/tea-fabrika/pull/1279), which the owner held on
 2026-11-14 and which the review of it sent back.
 
@@ -36,15 +39,22 @@ the older ones.
 
 Three calls are under 80%. Each is taken, with the branch it would undo.
 
-- **Where the app lives: `kalfa/fabrikalfa`, named `@kalfa/fabrikalfa` (65%).** 0616 makes
-  fabrikalfa an app, "the same tier as fabrika", and the glossary row says it is not a kalfa package.
-  0556 says every package that is our infra takes the `@kalfa` scope and lives in `kalfa/`, its
-  consequences name this very package, and 0537 puts its services in `kalfa/`. 0601 lets a
-  `Program.make` program live in `next/` or `kalfa/` only. So the plan reads 0616 as "an app, not a
-  protocol, provider or tooling library": it sits at the top of the kalfa import graph, joins
-  Layers, and nothing imports it. The other branch is `next/apps/fabrikalfa` as
-  `@kampus/fabrikalfa`; it would undo 0556's scope rule and put a tool we use to ship beside the
-  product it ships. A rename later is one `git mv` and one name.
+- **Where the app lives: `next/apps/fabrikalfa`, named `@kampus/fabrikalfa`. The lead took this
+  call (about 75%).** [0616](../../../.decisions/0616-providers-are-one-package-each.md)'s glossary
+  row says fabrikalfa is "an app, the same tier as fabrika" and "not a kalfa package", and fabrika's
+  app is `next/apps/fabrika`. `kalfa/` holds protocols, providers and tooling libraries. An app
+  depends on kalfa packages, never the other way round, so the app sits beside fabrika's app and
+  `kalfa/` never imports it. The name follows `next/`'s own convention: every package under `next/`
+  is `@kampus/<name>` (`@kampus/fabrika`, `@kampus/libfabrika`, `@kampus/tuval`), and 0556's binding
+  constraint "a `@kalfa` package lives in `kalfa/`, nowhere else" rules out `@kalfa` here.
+  **What it undoes:** 0537's decision that the small services we run to ship fabrika live in
+  `kalfa/`, and 0556's matching bullet ("the services of 0537 live in `kalfa/`"), for this one app.
+  It also undoes 0556's consequence that "the merge queue's package takes the `@kalfa` scope",
+  which named this package's old name, `@kampus/fabrikalfa`, as infra; 0556 marks its consequences
+  as the lead's reading, not the owner's words, and 0616 came later. The other branch is
+  `kalfa/fabrikalfa` as `@kalfa/fabrikalfa`, the earlier plan's: it would keep 0537 and 0556 as
+  written and read 0616's "tier" as a role, not a folder. Moving back is one `git mv`, one name and
+  one `boundary-rules.json` row.
 - **Long work through tea's `owed()` (70%).** 0601 says long work uses `owed()` and
   `dispatch(msg, { answerTo })`, read in the patch. It leaves open the name of the piece a program
   uses for it and how private answers work. The plan uses it in one place, merger's wait for
@@ -53,12 +63,13 @@ Three calls are under 80%. Each is taken, with the branch it would undo.
 - **The packages it builds on do not exist on main yet (75% they land as named).** On main today:
   `kalfa/config`, `kalfa/quality` and `kalfa/records`. `@kalfa/ci` is on ticket 810's branch
   (`fabrikalfa/t810-docs-only-classifier`, `kalfa/ci/src/DocsOnly.ts`). The rest come from other
-  tickets, in the table under [Builds on](#builds-on). Slice 1 waits for all of them.
+  tickets, three of them not filed yet, in the order under [Order](#order). Slice 1 waits for all
+  of them.
 
 ## What changes, in one paragraph
 
-A new app package, `@kalfa/fabrikalfa` at `kalfa/fabrikalfa`: one Cloudflare Worker deployed with
-Alchemy, which hosts five programs, each written as `Program.make(name)(fn)` with its pipes (0601).
+A new app package, `@kampus/fabrikalfa` at `next/apps/fabrikalfa`, beside fabrika's app: one
+Cloudflare Worker deployed with Alchemy, which hosts five programs, each written as `Program.make(name)(fn)` with its pipes (0601).
 The Worker takes GitHub's webhooks at `POST /github`, asks from clients at `POST /ask`, views at
 `GET /view/<program>`, and Cloudflare's cron triggers. It turns each into one input for one
 program's inbox. Each program's state and every step are in that program's journal, the `Journal`
@@ -79,23 +90,57 @@ conformance laws and its shadow run.
 | Package | What fabrikalfa uses | On main? | Brought by |
 |---|---|---|---|
 | `@kalfa/quality/vitest` | `it.effect.prop`, `runsFor`, `lawsOn(memory, real)` (0538) | no | ticket 1189 |
-| `@kalfa/codehost` | pull requests, merges (enqueue, admin), comments, labels, the conformance suites (0614) | no | ticket 1190 |
+| `@kalfa/codehost` | pull requests, merges (enqueue, admin), comments, labels, the conformance suites (0614); rulesets and repo settings, or slice 1 adds them | no | ticket 1190 |
 | `@kalfa/ci` | `Runs` (0612), `DocsOnly` (ticket 810), the gates this plan adds | branch only | tickets 810 and 1191 |
 | `@kalfa/provider-github` | the GitHub Layers for codehost and ci, the App's credentials (0616) | no | ticket 1192 |
-| `@kalfa/program` | `Program.make`, `Journal`, `Errors`, `Machine`, `Supervisor` (0601) | no | no ticket found; 0601's build order |
-| `@kalfa/ledger` | `Ledger`, its memory Layer, the `journal` Layer, `WritePolicy` (0601, 0616) | no | no ticket found; 0601's build order |
-| `@kalfa/provider-cloudflare` | the Durable Object Ledger and program hosting on Workers (0616) | no | no ticket found |
+| `@kalfa/program` | `Program.make`, `Journal`, `Errors`, `Machine`, `Supervisor` (0601) | no | a ticket to be filed by the lead, its own plan |
+| `@kalfa/ledger` | `Ledger`, its memory Layer, the `journal` Layer, `WritePolicy` (0601, 0616) | no | a ticket to be filed by the lead, its own plan |
+| `@kalfa/provider-cloudflare` | the Durable Object Ledger and program hosting on Workers (0616) | no | a ticket to be filed by the lead, its own plan |
 
 The tracker was not readable from this step, so the ticket numbers are the brief's, in its order.
-`@kalfa/provider-github` is the new name for `@kalfa/github` (pull request 1662). The three without
-a ticket are 0601's build order: tea's logged store, `@kalfa/program`'s v0, `@kalfa/ledger`, then
-the provider. The lead files those tickets if they are missing.
+`@kalfa/provider-github` is the new name for `@kalfa/github` (pull request 1662). The lead files a
+ticket for each of the three new packages, and each gets its own plan; they follow 0601's build
+order: tea's logged store (already the repo's tea patch), `@kalfa/program`'s v0, `@kalfa/ledger`,
+then the provider.
+
+**Rulesets and repo settings.** 0614 lists "repo labels and variables" for `@kalfa/codehost`, and
+`settings` needs rulesets and repo settings (merge methods, branch deletion) too. If ticket 1190's
+plan leaves them out, slice 1 adds them: a `Rulesets` and a `RepoSettings` service in
+`@kalfa/codehost`, each with its memory Layer and conformance suite, and their GitHub Layers in
+`@kalfa/provider-github`. The files are in the files table, marked "only if 1190 leaves them out".
+The service names are a sketch; 1190's plan settles them if it takes them.
+
+## Order
+
+What must land before each slice, in order. Each line needs the lines above it unless it says so.
+
+1. Ticket 1189: `@kalfa/quality/vitest`, which every law here runs on.
+2. Ticket 1190: `@kalfa/codehost`, the code host protocol and its conformance suites.
+3. Tickets 810 and 1191: `@kalfa/ci`, with `Runs` and `DocsOnly`. It may land before or beside
+   1190; `ship` needs 1190's services, the rest does not.
+4. Ticket 1192: `@kalfa/provider-github`, after 1190 and 1191, since it provides both.
+5. `@kalfa/program`: a ticket to be filed by the lead, its own plan. It needs only tea's patch, so
+   it may run beside lines 1 to 4.
+6. `@kalfa/ledger`: a ticket to be filed by the lead, its own plan, after `@kalfa/program`, whose
+   `Journal` interface it builds on (0616).
+7. `@kalfa/provider-cloudflare`: a ticket to be filed by the lead, its own plan, after
+   `@kalfa/ledger`.
+8. **Slice 1,** the app and settings, after lines 1 to 7. It adds rulesets and repo settings to
+   `@kalfa/codehost` and `@kalfa/provider-github` if 1190 left them out.
+9. **Slice 2,** checks and the gates, after slice 1.
+10. **Slice 3,** the policy and freeze, after slice 1. It may land before or after slice 2.
+11. **Slice 4,** merger in shadow, after slices 2 and 3: it uses the gates and freeze's output.
+12. **Slice 5,** tokens and `botpush.mjs`, after slices 1 and 3 (the policy) and the owner's
+    `agents` ruleset ([Rollout](#rollout-in-the-order-the-owner-sees-it), step 5).
+13. **Slice 6,** merger live through `land.ts arm`, after slice 4's shadow run reaches 10 matches.
+14. **Later, on the owner's answer to [open question 2](#open-questions):** merger's admin merge
+    live, with a second App.
 
 ## How others do it
 
 Read this session unless marked. `docs.github.com` was not reachable from this step, so every
-GitHub API fact below is from memory, marked so; the tests step records a real response for each
-as a `vector:` fixture before the build relies on it.
+GitHub API fact below is from memory, marked so. The marks stay, under one rule for the tests step,
+written under [Validation](#validation): a `vector:` fixture for each fact comes first.
 
 - **Elm and OTP.** Each program is one process with private state and a mailbox, as an OTP
   `gen_server` is, and a supervisor restarts it (0601's `Program.supervise`). Programs talk by
@@ -115,7 +160,11 @@ as a `vector:` fixture before the build relies on it.
   `GET /sts/exchange?scope=<repo>&identity=<name>` with its OIDC token as the bearer; the App checks
   the token against that policy and mints an installation token with only the policy's
   `permissions`. The App asks GitHub for a superset of permissions and narrows each token. Octo STS
-  runs as an App of its own, apart from any App that merges.
+  is its own GitHub App, "a GitHub App called `octo-sts` that acts like a Security Token Service",
+  installed by an org admin, whose one job is minting narrowed tokens. Its README says an org with an
+  IP allow list "should self-host octo-sts with their own GitHub App", from container images and a
+  Terraform module. So the known way gives token minting an App of its own, apart from what else an
+  org's Apps do. That is the shape of [open question 2](#open-questions).
 - **GitHub App installation tokens, from memory:** `POST /app/installations/{id}/access_tokens`
   with `repositories` and `permissions` narrows a token to those; it lasts one hour; no permission
   narrows it to a branch. A branch limit is a ruleset, and a ruleset's bypass list names who may
@@ -145,7 +194,26 @@ as a `vector:` fixture before the build relies on it.
 
 Each decides how the code does what a note already says. A percentage is how sure.
 
-- **The app is `kalfa/fabrikalfa`, `@kalfa/fabrikalfa` (65%).** See [Doubt first](#doubt-first).
+- **The app is `next/apps/fabrikalfa`, `@kampus/fabrikalfa`: the lead's call (about 75%).** See
+  [Doubt first](#doubt-first).
+- **The boundary row is a new library type, `next-fabrikalfa`,** not `next-app`. `next-app` lets
+  fabrika's app import libfabrika, tuval and the programs, and fabrikalfa imports none of them; it
+  imports only kalfa packages. A type of its own holds that, and no other type lists it, so nothing
+  in `kalfa/` or `next/` may import the app (law L2). 90%.
+- **The libfabrika test, applied** (`next/AGENTS.md`: would a from-scratch client write this file
+  again?). fabrikalfa is no libfabrika client: it composes kalfa packages, so the test asks instead
+  whether a second bot on kalfa would write the file again. The programs, the policy, the callers,
+  the ask schemas, the routes and the settings file's schema are fabrikalfa's own rules (0616: "who
+  may ask the bot for what is fabrikalfa's own rule"). The pure rules a second bot would want are
+  already in `@kalfa/ci`. The one file left is `Webhook.ts`'s signature check and event schemas: it
+  stays in the app until a second user of GitHub's webhooks appears, then moves to
+  `@kalfa/provider-github`, since no protocol of 0612 or 0614 names incoming events yet. 80%.
+- **Names follow `next/`'s words** (`next/AGENTS.md`, "Words", 0212): in `next/`, a bare "run"
+  means an agent run only. So no input tag of the app is `run`: a GitHub check run reaches checks as
+  `check`, and a workflow run reaches freeze as `workflow`, GitHub's own event names (`check_run`,
+  `workflow_run`), as libfabrika's `ci/Ci.ts` names its `CheckRun`. `Runs` stays, the name `@kalfa/ci`
+  owns (0612). The two clocks of a ledger entry are `arrivedAt` and `sentAt` in `next/`'s words; in
+  the journal sketch, `at` is tea's own record field and `sentAt` is the writer's. 85%.
 - **One Worker, one Durable Object process per program,** each found by its name, with one journal
   stream and one inbox stream (0601, "Durable Objects as the model"; 0537, "one Worker"). 95%.
 - **A program's input function does the deciding and the GitHub call in one step.** A crash
@@ -195,8 +263,9 @@ Each decides how the code does what a note already says. A percentage is how sur
   actor not on its bypass list. 80%.
 - **tokens refuses while the App holds any bypass.** A token carries its App's bypass, so a push
   token from an App that may pass main's rules could merge past them. merger's admin merge needs
-  that bypass, so it runs live only after the owner's bypass step, and at that step tokens moves to
-  an App of its own, as Octo STS is (below, "Waits on the owner"). 90%.
+  that bypass, so it runs live only after the owner's answer to
+  [open question 2](#open-questions), a second App, and admin merges stay with
+  `land.ts merge --admin` until then. 90%.
 - **CI by OIDC is part of the policy, and its code waits for its first user.** No workflow asks
   fabrikalfa for anything today, so the trust-policy reader is a later slice; the WritePolicy
   question settles its shape now. 80%.
@@ -206,10 +275,10 @@ Each decides how the code does what a note already says. A percentage is how sur
 ### Package layout
 
 ```text
-kalfa/fabrikalfa/            @kalfa/fabrikalfa: the app; nothing imports it
+next/apps/fabrikalfa/          @kampus/fabrikalfa: the app, beside next/apps/fabrika; nothing imports it
   package.json                 private; scripts typecheck, deploy (alchemy deploy), dev
-  tsconfig.json
-  alchemy.run.ts               the Worker, one Durable Object class per program, cron triggers, secrets
+  tsconfig.json                as fabrika's app's: the base config and the Effect language service
+  alchemy.run.ts               the Worker, one thin Durable Object class per program, cron triggers, secrets
   README.md
   src/
     Worker.ts                  fetch (POST /github, POST /ask, GET /view/<program>) and scheduled
@@ -225,16 +294,38 @@ kalfa/fabrikalfa/            @kalfa/fabrikalfa: the app; nothing imports it
     settings/Desired.ts        the file's schema: programs' settings and the repo's wanted state
     settings/Drift.ts          wanted against live, pure
     tokens/Tokens.ts           the tokens program
-  test/vectors/                recorded webhook payloads and GitHub answers, each labeled vector:
+fixtures/next/fabrikalfa      recorded webhook payloads and GitHub answers, each labeled vector:
 kalfa/ci/src/Gates.ts          green, leftovers (pure)
 kalfa/ci/src/Freeze.ts         verdict (pure)
 ```
 
-`pnpm-workspace.yaml` already lists `kalfa/*`, the root `vitest.config.ts` already runs
-each kalfa package's `src` tests, and `.oxlintrc.json` already holds `kalfa/**` to `next/`'s rules. None
-of the three changes. `boundary-rules.json` gets one library type, `kalfa-app`, for
-`kalfa/fabrikalfa`, which may import the kalfa protocol and provider packages and is imported by
-none. `exam-paths.json` gets `kalfa/fabrikalfa/test/**`.
+What the move into `next/` means for the repo's own files, each read on main:
+
+- `pnpm-workspace.yaml` already lists `next/apps/*` and `kalfa/*`. Not changed.
+- `vitest.config.ts` already runs `next/apps/*/src/**/*.test.{ts,tsx}` in its `next` project, and
+  `kalfa/*/src/**` for `kalfa/ci`'s tests. Not changed.
+- `exam-paths.json` already holds `next/`'s globs for tests, test support and tsconfig files, and
+  the glob for `next/`'s saved fixtures, so the app's tests, test support, tsconfig and vectors are
+  exam paths with no new row. Not changed. The vectors live in `fixtures/next/fabrikalfa`,
+  where `next/`'s saved vectors already live, not in a folder of the app's own.
+- `layer-rules.json` puts all of `next/apps` in its top layer, `next-apps`, which imports any lower
+  layer and which no layer may import. Not changed.
+- `boundary-rules.json` gets one library type, `next-fabrikalfa`, and the row
+  `"next/apps/fabrikalfa": "next-fabrikalfa"`. Its `imports` list only kalfa types: `kalfa-config`,
+  `kalfa-quality`, and the types tickets 1190 to 1192 and the three new tickets give `@kalfa/codehost`,
+  `@kalfa/ci`, `@kalfa/provider-github`, `@kalfa/program`, `@kalfa/ledger` and
+  `@kalfa/provider-cloudflare`. No type lists `next-fabrikalfa`, so nothing imports the app (L2).
+  A new `next/` package with no row fails `pnpm lint:boundaries` (experiment 253, gap 13).
+- `.oxlintrc.json` already holds `next/**` and `next/apps/**` to `next/`'s rules, which now reach the
+  app: `fabrika/no-promises`, `fabrika/no-static-layer` (a service file holds only its contract,
+  0095), `fabrika/isolate-boundary` (`Fetcher` and `ctx.exports` stay out of the app), the test
+  rules. It gets one override, for L1: `eslint/no-restricted-imports` refuses `@kalfa/provider-*` in
+  the program folders and in `Ask.ts`, `Policy.ts`, `Callers.ts` and `Webhook.ts`. An override
+  replaces a rule's options, so it repeats the `next/**` block's import bans, as the file's other
+  overrides do.
+- `next/AGENTS.md`'s rules that lint does not hold yet apply too: the platform through Alchemy
+  (0042), and an object class stays thin (0041): each program's Durable Object class holds what
+  Workers gives it and one handoff to `@kalfa/provider-cloudflare`'s program host.
 
 ### The ask protocol
 
@@ -242,7 +333,7 @@ Protocols first: every client speaks the same tagged JSON over HTTPS, so a brows
 and a CI job are the same kind of client.
 
 ```ts
-// kalfa/fabrikalfa/src/Ask.ts, a sketch.
+// next/apps/fabrikalfa/src/Ask.ts, a sketch.
 export const Ask = Schema.TaggedUnion({
   merger: { input: Merger.Asks },   // arm, admin
   freeze: { input: Freeze.Asks },   // next
@@ -268,7 +359,7 @@ fabrikalfa's own rule. So the interface is the ledger's, and the rule is this La
 Send into a program's inbox, which is a ledger append, so the policy is asked before every append.
 
 ```ts
-// kalfa/fabrikalfa/src/Policy.ts, a sketch. The table is the open owner question below.
+// next/apps/fabrikalfa/src/Policy.ts, a sketch. The table is the open owner question below.
 const may = {
   github: ["merger.event", "checks.event", "freeze.event", "settings.event"],
   clock: ["checks.tick", "freeze.tick", "settings.tick"],
@@ -286,12 +377,12 @@ export const layer = Layer.succeed(WritePolicy, WritePolicy.of({
 Caller tokens: one random token per environment (the laptop's boxes, a cloud session, the lead
 session). The Worker keeps only each token's SHA-256, in the Secrets Store, and compares in
 constant time. The token itself stays in that environment: on the laptop, a file under
-`~/.kalfa/fabrikalfa/` that is never mounted into a box for the lead's.
+`~/.fabrikalfa/` that is never mounted into a box for the lead's.
 
 ### merger
 
 ```ts
-// kalfa/fabrikalfa/src/merger/Merger.ts, a sketch on 0601's API.
+// next/apps/fabrikalfa/src/merger/Merger.ts, a sketch on 0601's API.
 export const Asks = Schema.TaggedUnion({
   arm: { pr: Pr, head: Sha, leaks: Schema.Literal("clean") },  // land.ts ran the leak gate this run
   admin: { pr: Pr, head: Sha },                                // the lead, in a sev0, the named fix
@@ -379,17 +470,17 @@ every refused ask is recorded with who asked and why it was refused.
 ### checks
 
 ```ts
-// kalfa/fabrikalfa/src/checks/Checks.ts, a sketch.
+// next/apps/fabrikalfa/src/checks/Checks.ts, a sketch.
 export const In = Schema.TaggedUnion({
   settings: { required: Names, missing: Minutes, stuck: Minutes },
   ready: { pr: Pr, head: Sha, at: Schema.Number },         // opened, ready_for_review, synchronize
   gone: { pr: Pr },                                        // closed, converted to draft
-  run: { pr: Pr, head: Sha, name: Schema.String, status: Status, at: Schema.Number }, // check_run
+  check: { pr: Pr, head: Sha, name: Schema.String, status: Status, at: Schema.Number }, // check_run
   tick: { at: Schema.Number },
 });
 const Watched = Schema.Struct({
   head: Sha, since: Schema.Number,
-  runs: Schema.Record(Schema.String, Schema.Struct({ status: Status, since: Schema.Number })),
+  checks: Schema.Record(Schema.String, Schema.Struct({ status: Status, since: Schema.Number })), // by name
   flagged: Schema.Array(Schema.Struct({ name: Schema.String, reason: Schema.Literals(["missing", "stuck"]) })),
 });
 const State = Schema.Struct({ required: Names, missing: Minutes, stuck: Minutes, prs: Schema.Record(PrKey, Watched) });
@@ -402,13 +493,13 @@ const State = Schema.Struct({ required: Names, missing: Minutes, stuck: Minutes,
 ### freeze
 
 ```ts
-// kalfa/fabrikalfa/src/freeze/Freeze.ts, a sketch.
+// next/apps/fabrikalfa/src/freeze/Freeze.ts, a sketch.
 export const Asks = Schema.TaggedUnion({ next: { pr: Pr, branch: Schema.String } }); // the lead only
 export const In = Schema.TaggedUnion({
   ...Asks.cases,
   issue: { number: Schema.Number, open: Schema.Boolean, sev0: Schema.Boolean, at: Schema.Number }, // issues events
   issues: { open: Schema.Array(Schema.Number) },                // the read of open sev0 issues, on start
-  run: { run: Run },                                            // workflow_run requested or in progress
+  workflow: { run: Run },                                       // workflow_run requested or in progress
   tick: { at: Schema.Number },                                  // sweep the unfinished runs
 });
 const State = Schema.TaggedUnion({
@@ -416,7 +507,7 @@ const State = Schema.TaggedUnion({
   calm: {},
   sev0: { issues: Schema.NonEmptyArray(Schema.Number), since: Schema.Number, fix: Schema.NullOr(Fix) },
 });
-// run and tick: while sev0, each unfinished run gets @kalfa/ci's Freeze.verdict(run, fix); a cancel goes
+// workflow and tick: while sev0, each unfinished run gets @kalfa/ci's Freeze.verdict(run, fix); a cancel goes
 // through Runs.cancel (0612) and its answer is in the new state's `canceled` count. next is refused
 // unless sev0, and replaces the fix (one at a time, 0611). Its output, { open, fix }, is piped to merger.
 ```
@@ -466,7 +557,7 @@ restrict = ["creation", "update", "deletion"]
 ```
 
 ```ts
-// kalfa/fabrikalfa/src/settings/Settings.ts, a sketch.
+// next/apps/fabrikalfa/src/settings/Settings.ts, a sketch.
 export const In = Schema.TaggedUnion({
   pushed: { commit: Sha, paths: Schema.Array(Schema.String) },  // push to main
   tick: { at: Schema.Number },                                   // hourly
@@ -490,7 +581,7 @@ const State = Schema.Struct({
 ### tokens
 
 ```ts
-// kalfa/fabrikalfa/src/tokens/Tokens.ts, a sketch.
+// next/apps/fabrikalfa/src/tokens/Tokens.ts, a sketch.
 export const Asks = Schema.TaggedUnion({ push: {} });
 export const In = Schema.TaggedUnion({ ...Asks.cases, settings: { live: Live } });
 const State = Schema.Struct({
@@ -512,7 +603,7 @@ later, so it is written from the first vend.
 ### The Worker
 
 ```ts
-// kalfa/fabrikalfa/src/Worker.ts, a sketch of what each route does.
+// next/apps/fabrikalfa/src/Worker.ts, a sketch of what each route does.
 // POST /github     verify X-Hub-Signature-256 with Mac.verify (constant time) or 401 with nothing kept;
 //                  Webhook.decode(event, body) -> [program, input] | null; Send with id = X-GitHub-Delivery,
 //                  so a delivery GitHub sends twice is one message (tea's logged admission keeps the first).
@@ -556,32 +647,37 @@ refusal.
 | G1, `green` answers green exactly when every required name's latest run at the head is a success, neutral or skipped; `red` when any is another conclusion; `pending` when one has none, default runs | test | fc.record: required names and runs with every conclusion, out of order | count an older run over the latest: red | kalfa/ci/src/Gates.test.ts |
 | G2, `leftovers` keeps exactly the paths ending `.rej` or `.orig`, at any depth, default runs | test | fc.array: repo paths with and without the two endings | match `.orig` anywhere in the name: red | kalfa/ci/src/Gates.test.ts |
 | F1, `verdict` keeps a `merge_group` run, the named fix's runs and `check` push runs on main, and cancels every other run, main's `scheduled` run included, default runs | test | fc.record: runs with every event, branch and workflow, a fix or none | keep main's scheduled run: red; cancel main's check push run: red | kalfa/ci/src/Freeze.test.ts |
-| M1, merger arms only an open, ready, into-main pull request at the asked head, with no leftovers, not red, outside a sev0; every refusal is a `Refused` with its reason and the state unchanged, 200 runs | test | fc.record: pull requests, heads, paths, check runs and sev states on the memory layers | arm a red pull request: red; change state on a refusal: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
-| M2, merger admin-merges only in a sev0, only the named fix, only green at the head, only when main's head is an ancestor of the head, as a squash pinned to the head, 200 runs | test | fc.record: sev states, fixes, commit graphs and checks on the memory layers | skip the ancestor check: red; merge a second fix while one is named: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
-| M3, in shadow mode merger makes no `Merges` write; its count of matching arms in a row resets on a mismatch; live needs both `shadow` matches and the file's `mode = "live"`, default runs | test | fc.array: arm asks, GitHub armed events and settings inputs in fc.shuffledSubarray order | enqueue in shadow: red; keep the count on a mismatch: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
-| M4, every write a fake protocol Layer records has one journal message with the same id, its `by` and both clocks, and an applied state that holds its answer, for every program, 100 runs | test | fc.array: inputs to all five programs on memory layers and the memory Ledger | call `Comments.post` from the Worker, outside a step: red | kalfa/fabrikalfa/src/Journal.test.ts |
-| M5, a step that dies after its write is handed out again and makes the same write once more, which the protocol answers as done: one arm, one admin merge, one cancel, one comment, default runs | test | fc.record: the step and the point it dies at, on memory layers | an enqueue that arms twice: red | kalfa/fabrikalfa/src/Journal.test.ts |
-| M6, an answer dispatched with `answerTo` an id that is not owed is refused and changes no state; a merged event for a pull request merger never armed is a plain input, default runs | test | fc.record: answers with owed and unknown ids | apply an unknown answer: red | kalfa/fabrikalfa/src/merger/Merger.test.ts |
-| C1, checks flags a required check missing `missing` minutes after the head, never before, once per pull request, head and name; a new head starts again, default runs | test | fc.array: ready, run and tick inputs with times | flag at once: red; flag twice: red | kalfa/fabrikalfa/src/checks/Checks.test.ts |
-| C2, checks flags a run queued or in progress for `stuck` minutes once, and a completed run is never flagged stuck, default runs | test | fc.array: run status changes and ticks | flag a completed run: red | kalfa/fabrikalfa/src/checks/Checks.test.ts |
-| Z1, freeze is in sev0 exactly while an open issue carries `sev0`, rebuilt from the open issues on start; from `unread` it cancels nothing, default runs | test | fc.array: issue events, then a cleared journal and an issues read | cancel before the read: red; end on one of two issues closing: red | kalfa/fabrikalfa/src/freeze/Freeze.test.ts |
-| Z2, freeze cancels through `Runs.cancel` exactly the runs `verdict` cancels, and `next` is refused outside a sev0 and replaces the one fix, default runs | test | fc.array: runs, next asks and ticks in a sev0 and out | keep two fixes: red; cancel a kept run: red | kalfa/fabrikalfa/src/freeze/Freeze.test.ts |
-| S1, `diff(wanted, live)` is empty exactly when they match, and names each difference by its path, default runs | test | fc.record: wanted and live settings, one field changed at a time | ignore the order of required checks only one way: red | kalfa/fabrikalfa/src/settings/Settings.test.ts |
-| S2, settings writes only on a push to main that changed its file, the hourly tick never writes, and no write ever holds a bypass list, 200 runs | test | fc.array: pushes, ticks and files with bypass lists that differ | write on a tick: red; write a bypass list: red | kalfa/fabrikalfa/src/settings/Settings.test.ts |
-| T1, tokens vends only while the agents ruleset is ok and the App is on no bypass list, and every vend's record is in the journal before the answer leaves, default runs | test | fc.record: settings outputs and push asks | vend with a bypass: red; answer before the step commits: red | kalfa/fabrikalfa/src/tokens/Tokens.test.ts |
-| P1, the door admits an ask exactly as the policy table says, for each caller kind and each program input, and a refused ask appends nothing, default runs | test | fc.record: caller kinds crossed with every input tag | let an agent ask `merger.admin`: red | kalfa/fabrikalfa/src/Policy.test.ts |
-| P2, a caller token is found by its hash, compared in constant time; an unknown, short or changed token answers 401 and appends nothing, 200 runs | test | fc.uint8Array: tokens with one byte flipped | compare with `===` on strings: red | kalfa/fabrikalfa/src/Policy.test.ts |
-| W1, a body signed with the webhook secret passes; a changed byte in body or header, a missing header or another secret answers 401 with nothing appended, 200 runs | test | fc.uint8Array: bodies and secrets with one byte flipped | skip the check on an empty body: red | kalfa/fabrikalfa/src/Webhook.test.ts |
-| W2, each recorded payload decodes to its program and input, and an event no program uses gives null | test | vector: one recorded payload per event and action, from a real delivery to the App | drop `closed` with `merged: true`: red | kalfa/fabrikalfa/src/Webhook.test.ts |
-| W3, a delivery id seen twice is one journal message, default runs | test | fc.array: deliveries with ids from a small set | append before the id check: red | kalfa/fabrikalfa/src/Worker.test.ts |
-| X1, [secrets] the App's private key, the webhook secret, caller tokens and minted tokens never appear in a journal record, an output, an error, a view, a comment body or a span attribute, 100 runs | test | fc.string: generated secrets planted in every input, answer and failure path | put the minted token in the vend record: red | kalfa/fabrikalfa/src/Secrets.test.ts |
-| K1, every law above runs on `@kalfa/codehost`'s and `@kalfa/ci`'s test Layers, which pass those packages' own conformance suites, through `@kalfa/quality/vitest`'s `lawsOn` | test | scenario: the protocols' test Layers, composed in the test support | hand-write a fake that skips a conformance law: red | kalfa/fabrikalfa/src/Fabrikalfa.test-support.ts |
-| L1, only `App.ts`, `Worker.ts` and `alchemy.run.ts` import a provider package; every program imports protocols only (0616) | lint | lint | import `@kalfa/provider-github` in Merger.ts: `pnpm lint` fails | boundary-rules.json |
-| Y1, each program's input function takes only its `In` union's members; an input with an unknown `_tag` fails to compile | type | type | add an untyped input to `match`: typecheck fails | kalfa/fabrikalfa/src/merger/Merger.ts |
+| M1, merger arms only an open, ready, into-main pull request at the asked head, with no leftovers, not red, outside a sev0; every refusal is a `Refused` with its reason and the state unchanged, 200 runs | test | fc.record: pull requests, heads, paths, check runs and sev states on the memory layers | arm a red pull request: red; change state on a refusal: red | next/apps/fabrikalfa/src/merger/Merger.test.ts |
+| M2, merger admin-merges only in a sev0, only the named fix, only green at the head, only when main's head is an ancestor of the head, as a squash pinned to the head, 200 runs | test | fc.record: sev states, fixes, commit graphs and checks on the memory layers | skip the ancestor check: red; merge a second fix while one is named: red | next/apps/fabrikalfa/src/merger/Merger.test.ts |
+| M3, in shadow mode merger makes no `Merges` write; its count of matching arms in a row resets on a mismatch; live needs both `shadow` matches and the file's `mode = "live"`, default runs | test | fc.array: arm asks, GitHub armed events and settings inputs in fc.shuffledSubarray order | enqueue in shadow: red; keep the count on a mismatch: red | next/apps/fabrikalfa/src/merger/Merger.test.ts |
+| M4, every write a fake protocol Layer records has one journal message with the same id, its `by` and both clocks, and an applied state that holds its answer, for every program, 100 runs | test | fc.array: inputs to all five programs on memory layers and the memory Ledger | call `Comments.post` from the Worker, outside a step: red | next/apps/fabrikalfa/src/Journal.test.ts |
+| M5, a step that dies after its write is handed out again and makes the same write once more, which the protocol answers as done: one arm, one admin merge, one cancel, one comment, default runs | test | fc.record: the step and the point it dies at, on memory layers | an enqueue that arms twice: red | next/apps/fabrikalfa/src/Journal.test.ts |
+| M6, an answer dispatched with `answerTo` an id that is not owed is refused and changes no state; a merged event for a pull request merger never armed is a plain input, default runs | test | fc.record: answers with owed and unknown ids | apply an unknown answer: red | next/apps/fabrikalfa/src/merger/Merger.test.ts |
+| C1, checks flags a required check missing `missing` minutes after the head, never before, once per pull request, head and name; a new head starts again, default runs | test | fc.array: ready, check and tick inputs with times | flag at once: red; flag twice: red | next/apps/fabrikalfa/src/checks/Checks.test.ts |
+| C2, checks flags a run queued or in progress for `stuck` minutes once, and a completed run is never flagged stuck, default runs | test | fc.array: check status changes and ticks | flag a completed run: red | next/apps/fabrikalfa/src/checks/Checks.test.ts |
+| Z1, freeze is in sev0 exactly while an open issue carries `sev0`, rebuilt from the open issues on start; from `unread` it cancels nothing, default runs | test | fc.array: issue events, then a cleared journal and an issues read | cancel before the read: red; end on one of two issues closing: red | next/apps/fabrikalfa/src/freeze/Freeze.test.ts |
+| Z2, freeze cancels through `Runs.cancel` exactly the runs `verdict` cancels, and `next` is refused outside a sev0 and replaces the one fix, default runs | test | fc.array: runs, next asks and ticks in a sev0 and out | keep two fixes: red; cancel a kept run: red | next/apps/fabrikalfa/src/freeze/Freeze.test.ts |
+| S1, `diff(wanted, live)` is empty exactly when they match, and names each difference by its path, default runs | test | fc.record: wanted and live settings, one field changed at a time | ignore the order of required checks only one way: red | next/apps/fabrikalfa/src/settings/Settings.test.ts |
+| S2, settings writes only on a push to main that changed its file, the hourly tick never writes, and no write ever holds a bypass list, 200 runs | test | fc.array: pushes, ticks and files with bypass lists that differ | write on a tick: red; write a bypass list: red | next/apps/fabrikalfa/src/settings/Settings.test.ts |
+| T1, tokens vends only while the agents ruleset is ok and the App is on no bypass list, and every vend's record is in the journal before the answer leaves, default runs | test | fc.record: settings outputs and push asks | vend with a bypass: red; answer before the step commits: red | next/apps/fabrikalfa/src/tokens/Tokens.test.ts |
+| P1, the door admits an ask exactly as the policy table says, for each caller kind and each program input, and a refused ask appends nothing, default runs | test | fc.record: caller kinds crossed with every input tag | let an agent ask `merger.admin`: red | next/apps/fabrikalfa/src/Policy.test.ts |
+| P2, a caller token is found by its hash, compared in constant time; an unknown, short or changed token answers 401 and appends nothing, 200 runs | test | fc.uint8Array: tokens with one byte flipped | compare with `===` on strings: red | next/apps/fabrikalfa/src/Policy.test.ts |
+| W1, a body signed with the webhook secret passes; a changed byte in body or header, a missing header or another secret answers 401 with nothing appended, 200 runs | test | fc.uint8Array: bodies and secrets with one byte flipped | skip the check on an empty body: red | next/apps/fabrikalfa/src/Webhook.test.ts |
+| W2, each recorded payload decodes to its program and input, and an event no program uses gives null | test | vector: one recorded payload per event and action, from a real delivery to the App | drop `closed` with `merged: true`: red | next/apps/fabrikalfa/src/Webhook.test.ts |
+| W3, a delivery id seen twice is one journal message, default runs | test | fc.array: deliveries with ids from a small set | append before the id check: red | next/apps/fabrikalfa/src/Worker.test.ts |
+| X1, [secrets] the App's private key, the webhook secret, caller tokens and minted tokens never appear in a journal record, an output, an error, a view, a comment body or a span attribute, 100 runs | test | fc.string: generated secrets planted in every input, answer and failure path | put the minted token in the vend record: red | next/apps/fabrikalfa/src/Secrets.test.ts |
+| K1, every law above runs on `@kalfa/codehost`'s and `@kalfa/ci`'s test Layers, which pass those packages' own conformance suites, through `@kalfa/quality/vitest`'s `lawsOn` | test | scenario: the protocols' test Layers, composed in the test support | hand-write a fake that skips a conformance law: red | next/apps/fabrikalfa/src/Fabrikalfa.test-support.ts |
+| L1, only `App.ts`, `Worker.ts` and `alchemy.run.ts` import a provider package; every program imports protocols only (0616) | lint | lint | import `@kalfa/provider-github` in Merger.ts: `pnpm lint` fails | .oxlintrc.json |
+| L2, the app imports only kalfa packages, and no package in `kalfa/` or `next/` imports the app | lint | lint | import `@kampus/fabrikalfa` from `kalfa/ci`, or `@kampus/libfabrika` from the app: `pnpm lint:boundaries` fails | boundary-rules.json |
+| R1, only if ticket 1190 leaves them out: the memory Layers of `Rulesets` and `RepoSettings` pass their conformance suites, and a read after a write answers what was written, default runs | test | fc.record: rulesets and repo settings, one field changed at a time | a memory Layer that drops `required` on write: red | kalfa/codehost/src/RulesetsTest.ts |
+| R2, only if ticket 1190 leaves them out: no `Rulesets` write takes a bypass list, so no caller can write one (0603) | type | type | add `bypass` to the write input: the test's type assertion fails to compile | kalfa/codehost/src/Rulesets.ts |
+| Y1, each program's input function takes only its `In` union's members; an input with an unknown `_tag` fails to compile | type | type | add an untyped input to `match`: typecheck fails | next/apps/fabrikalfa/src/merger/Merger.ts |
 
 The tests step runs each plant once and records it in its report and run row, never committed. The
 `vector:` payloads in W2 come from real deliveries to the App, recorded once with the event, action
-and date, before the build relies on them.
+and date, before the build relies on them. They live in `fixtures/next/fabrikalfa`, with a README
+that says how each was recorded. The rule for every GitHub fact marked "from memory" is under
+[Validation](#validation).
 
 **No host-only law.** Nothing needs the owner's Mac. Every law runs on memory layers and the memory
 Ledger on every pull request (0536, 0581). The deploy, the shadow run and the live Ledger are the
@@ -591,48 +687,60 @@ owner's and the lead's, under [Rollout](#rollout-in-the-order-the-owner-sees-it)
 
 | File | Change | Product lines expected | Owner | Slice |
 |---|---|---|---|---|
-| `kalfa/fabrikalfa/package.json` | the app: private, its kalfa dependencies, scripts | 30 | build | 1 |
-| `kalfa/fabrikalfa/tsconfig.json` | as `kalfa/config`'s | tests | tests | 1 |
-| `kalfa/fabrikalfa/README.md` | what runs, how to deploy, the owner's steps | docs | build | 1 |
-| `kalfa/fabrikalfa/alchemy.run.ts` | the Worker, the program objects, cron triggers, secrets | 70 | build | 1 |
-| `kalfa/fabrikalfa/src/Worker.ts` | the four routes | 90 | build | 1 |
-| `kalfa/fabrikalfa/src/Webhook.ts` | verify, decode | 110 | build | 1 |
-| `kalfa/fabrikalfa/src/Ask.ts` | the ask protocol schemas | 40 | build | 1 |
-| `kalfa/fabrikalfa/src/App.ts` | the Layers joined | 60 | build | 1 |
-| `kalfa/fabrikalfa/src/settings/Settings.ts` | the settings program | 120 | build | 1 |
-| `kalfa/fabrikalfa/src/settings/Desired.ts` | the file's schema | 60 | build | 1 |
-| `kalfa/fabrikalfa/src/settings/Drift.ts` | the pure diff | 50 | build | 1 |
+| `next/apps/fabrikalfa/package.json` | the app: private, its kalfa dependencies, scripts | 30 | build | 1 |
+| `next/apps/fabrikalfa/tsconfig.json` | as fabrika's app's: extends the base config, the Effect language service, Node and Workers types | tests | tests | 1 |
+| `next/apps/fabrikalfa/README.md` | what runs, how to deploy, the owner's steps | docs | build | 1 |
+| `next/apps/fabrikalfa/alchemy.run.ts` | the Worker, the program objects, cron triggers, secrets | 70 | build | 1 |
+| `next/apps/fabrikalfa/src/Worker.ts` | the four routes | 90 | build | 1 |
+| `next/apps/fabrikalfa/src/Webhook.ts` | verify, decode | 110 | build | 1 |
+| `next/apps/fabrikalfa/src/Ask.ts` | the ask protocol schemas | 40 | build | 1 |
+| `next/apps/fabrikalfa/src/App.ts` | the Layers joined | 60 | build | 1 |
+| `next/apps/fabrikalfa/src/settings/Settings.ts` | the settings program | 120 | build | 1 |
+| `next/apps/fabrikalfa/src/settings/Desired.ts` | the file's schema | 60 | build | 1 |
+| `next/apps/fabrikalfa/src/settings/Drift.ts` | the pure diff | 50 | build | 1 |
 | `.fabrikalfa/fabrikalfa.toml` | the first file, in shadow mode | 30 | build | 1 |
-| `kalfa/fabrikalfa/src/Fabrikalfa.test-support.ts` | the memory world: protocol test Layers, memory Ledger | tests | tests | 1 |
-| `kalfa/fabrikalfa/src/settings/Settings.test.ts` | S1, S2 | tests | tests | 1 |
-| `kalfa/fabrikalfa/src/Webhook.test.ts` | W1, W2 | tests | tests | 1 |
-| `kalfa/fabrikalfa/src/Worker.test.ts` | W3 | tests | tests | 1 |
-| `kalfa/fabrikalfa/src/Journal.test.ts` | M4, M5, grown each slice | tests | tests | 1 |
-| `kalfa/fabrikalfa/src/Secrets.test.ts` | X1, grown each slice | tests | tests | 1 |
-| `kalfa/fabrikalfa/test/vectors/README.md` | how each vector was recorded | tests | tests | 1 |
-| `exam-paths.json` | `kalfa/fabrikalfa/test/**` | 1 | tests | 1 |
-| `boundary-rules.json` | the `kalfa-app` type and its row, L1 | 8 | tests | 1 |
+| `next/apps/fabrikalfa/src/Fabrikalfa.test-support.ts` | the memory world: protocol test Layers, memory Ledger | tests | tests | 1 |
+| `next/apps/fabrikalfa/src/settings/Settings.test.ts` | S1, S2 | tests | tests | 1 |
+| `next/apps/fabrikalfa/src/Webhook.test.ts` | W1, W2 | tests | tests | 1 |
+| `next/apps/fabrikalfa/src/Worker.test.ts` | W3 | tests | tests | 1 |
+| `next/apps/fabrikalfa/src/Journal.test.ts` | M4, M5, grown each slice | tests | tests | 1 |
+| `next/apps/fabrikalfa/src/Secrets.test.ts` | X1, grown each slice | tests | tests | 1 |
+| `fixtures/next/fabrikalfa` | the recorded vectors, each labeled `vector:` with its call and date | tests | tests | 1 |
+| `fixtures/next/fabrikalfa/README.md` | how each vector was recorded, beside the vectors | tests | tests | 1 |
+| `boundary-rules.json` | the `next-fabrikalfa` type and its row, L2 | 8 | tests | 1 |
+| `.oxlintrc.json` | one override for L1: no `@kalfa/provider-*` import outside `App.ts`, `Worker.ts` and `alchemy.run.ts`, repeating the `next/**` block's bans | 20 | tests | 1 |
 | `pnpm-lock.yaml` | the new package's links | tests | tests | 1 |
-| `pnpm-workspace.yaml` | not changed: it already lists `kalfa/*` | none | tests | 1 |
-| `vitest.config.ts` | not changed: it already runs each kalfa package's `src` tests | none | tests | 1 |
-| `.oxlintrc.json` | not changed: `kalfa/**` already has `next/`'s rules | none | tests | 1 |
+| `exam-paths.json` | not changed: its `next/` globs for tests, test support and tsconfig files, and for `next/`'s saved fixtures, already cover the app | none | tests | 1 |
+| `layer-rules.json` | not changed: `next/apps` is already its top layer, `next-apps` | none | tests | 1 |
+| `pnpm-workspace.yaml` | not changed: it already lists `next/apps/*` and `kalfa/*` | none | tests | 1 |
+| `vitest.config.ts` | not changed: its `next` project already runs `next/apps/*/src` and `kalfa/*/src` tests | none | tests | 1 |
 | `package.json` | not changed: `pnpm -r typecheck` reaches a new workspace package | none | tests | 1 |
+| `kalfa/codehost/src/Rulesets.ts` | only if 1190 leaves them out: the `Rulesets` service's contract, R2 | 40 | build | 1 |
+| `kalfa/codehost/src/RulesetsMemory.ts` | only if 1190 leaves them out: its memory Layer | 50 | build | 1 |
+| `kalfa/codehost/src/RulesetsTest.ts` | only if 1190 leaves them out: its conformance suite, R1 | tests | tests | 1 |
+| `kalfa/codehost/src/RepoSettings.ts` | only if 1190 leaves them out: the `RepoSettings` service's contract (merge methods, branch deletion) | 30 | build | 1 |
+| `kalfa/codehost/src/RepoSettingsMemory.ts` | only if 1190 leaves them out: its memory Layer | 40 | build | 1 |
+| `kalfa/codehost/src/RepoSettingsTest.ts` | only if 1190 leaves them out: its conformance suite, R1 | tests | tests | 1 |
+| `kalfa/codehost/package.json` | only if 1190 leaves them out: exports the two services | 2 | build | 1 |
+| `kalfa/provider-github/src/Rulesets.ts` | only if 1190 leaves them out: the GitHub Layer for `Rulesets` | 70 | build | 1 |
+| `kalfa/provider-github/src/RepoSettings.ts` | only if 1190 leaves them out: the GitHub Layer for `RepoSettings` | 40 | build | 1 |
+| `kalfa/provider-github/package.json` | only if 1190 leaves them out: exports the two Layers | 2 | build | 1 |
 | `kalfa/ci/src/Gates.ts` | `green`, `leftovers` | 40 | build | 2 |
 | `kalfa/ci/package.json` | exports `./Gates` and `./Freeze` | 2 | build | 2 |
 | `kalfa/ci/src/Gates.test.ts` | G1, G2 | tests | tests | 2 |
-| `kalfa/fabrikalfa/src/checks/Checks.ts` | the checks program | 160 | build | 2 |
-| `kalfa/fabrikalfa/src/checks/Checks.test.ts` | C1, C2 | tests | tests | 2 |
-| `kalfa/fabrikalfa/src/Policy.ts` | the WritePolicy Layer | 60 | build | 3 |
-| `kalfa/fabrikalfa/src/Callers.ts` | caller tokens to identities | 50 | build | 3 |
-| `kalfa/fabrikalfa/src/Policy.test.ts` | P1, P2 | tests | tests | 3 |
+| `next/apps/fabrikalfa/src/checks/Checks.ts` | the checks program | 160 | build | 2 |
+| `next/apps/fabrikalfa/src/checks/Checks.test.ts` | C1, C2 | tests | tests | 2 |
+| `next/apps/fabrikalfa/src/Policy.ts` | the WritePolicy Layer | 60 | build | 3 |
+| `next/apps/fabrikalfa/src/Callers.ts` | caller tokens to identities | 50 | build | 3 |
+| `next/apps/fabrikalfa/src/Policy.test.ts` | P1, P2 | tests | tests | 3 |
 | `kalfa/ci/src/Freeze.ts` | `verdict` | 40 | build | 3 |
 | `kalfa/ci/src/Freeze.test.ts` | F1 | tests | tests | 3 |
-| `kalfa/fabrikalfa/src/freeze/Freeze.ts` | the freeze program | 110 | build | 3 |
-| `kalfa/fabrikalfa/src/freeze/Freeze.test.ts` | Z1, Z2 | tests | tests | 3 |
-| `kalfa/fabrikalfa/src/merger/Merger.ts` | the merger program, shadow and live, Y1 | 230 | build | 4 |
-| `kalfa/fabrikalfa/src/merger/Merger.test.ts` | M1, M2, M3, M6 | tests | tests | 4 |
-| `kalfa/fabrikalfa/src/tokens/Tokens.ts` | the tokens program | 110 | build | 5 |
-| `kalfa/fabrikalfa/src/tokens/Tokens.test.ts` | T1 | tests | tests | 5 |
+| `next/apps/fabrikalfa/src/freeze/Freeze.ts` | the freeze program | 110 | build | 3 |
+| `next/apps/fabrikalfa/src/freeze/Freeze.test.ts` | Z1, Z2 | tests | tests | 3 |
+| `next/apps/fabrikalfa/src/merger/Merger.ts` | the merger program, shadow and live, Y1 | 230 | build | 4 |
+| `next/apps/fabrikalfa/src/merger/Merger.test.ts` | M1, M2, M3, M6 | tests | tests | 4 |
+| `next/apps/fabrikalfa/src/tokens/Tokens.ts` | the tokens program | 110 | build | 5 |
+| `next/apps/fabrikalfa/src/tokens/Tokens.test.ts` | T1 | tests | tests | 5 |
 | `.agents/skills/lead/scripts/botpush.mjs` | asks tokens for its push token; the keychain path goes | 40 | build | 5 |
 | `.agents/skills/lead/scripts/botpush.test.ts` | its laws on a fake tokens answer | tests | tests | 5 |
 | `.agents/skills/lead/scripts/pr/Arm.ts` | asks merger to arm, in live mode | 40 | build | 6 |
@@ -642,49 +750,69 @@ owner's and the lead's, under [Rollout](#rollout-in-the-order-the-owner-sees-it)
 
 ## Existing tools
 
-- `kalfa/fabrikalfa/alchemy.run.ts`: searched `rg -l "alchemy.run" packages next` and found
-  `packages/ledger-server`'s stack, which passes settings as one JSON env value. It is today's
-  version, so it is read, not imported; the new stack follows its shape on `@kalfa/provider-cloudflare`.
-- `kalfa/fabrikalfa/src/Worker.ts`: searched `@kalfa/provider-cloudflare`'s planned exports (0616:
+- `next/apps/fabrikalfa/alchemy.run.ts`: searched `rg -l "alchemy.run" packages next` and found
+  fabrika's app's stack in `next/apps/fabrika` (`Alchemy.Stack`, `Cloudflare.Workers.Worker`, its
+  Durable Object bindings, settings as one JSON env value checked under Workers' 5 KB limit) and
+  `packages/ledger-server`'s, today's version. The new stack follows fabrika's app's shape, its
+  neighbor in `next/apps`. It imports neither: fabrika's stack reads `@kampus/libfabrika`'s settings
+  type, which this app may not import (L2), and today's code is never imported from `next/`.
+- `next/apps/fabrikalfa/src/Worker.ts`: searched `@kalfa/provider-cloudflare`'s planned exports (0616:
   program hosting on Workers) and `@alchemy.run/cloudflare` beta.85's Worker form; none routes
   webhooks or asks. This file is the four routes only.
-- `kalfa/fabrikalfa/src/Webhook.ts`: searched npm for `@octokit/webhooks`, which verifies and types
+- `next/apps/fabrikalfa/src/Webhook.ts`: searched npm for `@octokit/webhooks`, which verifies and types
   GitHub events but brings its own Promise API and types; searched the repo
   (`rg -n "X-Hub-Signature" .`), none. Effect's `Mac.verify` does the check
   ([the crypto pattern](../../../.patterns/effect-crypto-through-services.md)), and Schema decodes
   the few events used.
-- `kalfa/fabrikalfa/src/Ask.ts`: searched `@kalfa/transport` (0601, not built) and Effect's `Rpc`.
+- `next/apps/fabrikalfa/src/Ask.ts`: searched `@kalfa/transport` (0601, not built) and Effect's `Rpc`.
   `Rpc` fits a typed client; the ask stays plain tagged JSON so a browser tab and `botpush.mjs`
   speak it without an Effect client. Moving it onto `Rpc` later changes no program.
-- `kalfa/fabrikalfa/src/App.ts`: searched for a composer in the kalfa packages; kalfa/AGENTS.md
-  says Layers are joined at the top, which is this app. None exists.
-- `kalfa/fabrikalfa/src/Policy.ts`: searched `@kalfa/ledger`'s `WritePolicy` (0601, the
+- `next/apps/fabrikalfa/src/App.ts`: searched for a composer in the kalfa packages; none exists.
+  `kalfa/AGENTS.md` says Layers are joined at the top, by the `kalfa` command and libfabrika; this
+  app is a third top, as 0616's "the app that composes Layers".
+- `next/apps/fabrikalfa/src/Policy.ts`: searched `@kalfa/ledger`'s `WritePolicy` (0601, the
   interface, not built) and `next/`'s person-only rules
   (`rg -n "personOnly" next/packages/libfabrika/src`), which are fabrika's. This is fabrikalfa's
   Layer of the ledger's interface.
-- `kalfa/fabrikalfa/src/Callers.ts`: searched Effect's `Mac` and `Hash` and the repo
+- `next/apps/fabrikalfa/src/Callers.ts`: searched Effect's `Mac` and `Hash` and the repo
   (`rg -n "constantTime" .`), which finds tea's `constantTimeEqual` in `@demlik/tea/do`; Effect's
   `Mac.verify` compares in constant time and is used instead, through the crypto pattern.
-- `kalfa/fabrikalfa/src/settings/Settings.ts`: searched github/safe-settings, whose shape it
+- `next/apps/fabrikalfa/src/settings/Settings.ts`: searched github/safe-settings, whose shape it
   follows; its code is Node and Probot, so none is taken.
-- `kalfa/fabrikalfa/src/settings/Desired.ts`: searched `@kalfa/config` (`kalfa/config/src/Toml.ts`,
+- `next/apps/fabrikalfa/src/settings/Desired.ts`: searched `@kalfa/config` (`kalfa/config/src/Toml.ts`,
   `Codec.ts`), which parses and decodes the file; this is only the file's schema.
-- `kalfa/fabrikalfa/src/settings/Drift.ts`: searched npm's `deep-diff` and Effect's `Equal`;
+- `next/apps/fabrikalfa/src/settings/Drift.ts`: searched npm's `deep-diff` and Effect's `Equal`;
   `Equal` compares, and a field-by-field walk on the decoded values names each path, so no package.
-- `kalfa/fabrikalfa/src/checks/Checks.ts`: searched `.agents/skills/lead/scripts/pr/Queue.ts`
+- `next/apps/fabrikalfa/src/checks/Checks.ts`: searched `.agents/skills/lead/scripts/pr/Queue.ts`
   (reads `ci-required` once) and `ci-speed.ts` (speed numbers, not stuck runs); neither watches a
   pull request over time.
-- `kalfa/fabrikalfa/src/freeze/Freeze.ts`: searched the sev skill's `Freeze.ts` and `Level.ts`
+- `next/apps/fabrikalfa/src/freeze/Freeze.ts`: searched the sev skill's `Freeze.ts` and `Level.ts`
   (today's laptop loop and log). Its rule is rethought as `kalfa/ci/src/Freeze.ts`'s `verdict`, its
   loop becomes cron ticks and webhooks; nothing is imported from `.agents/`.
-- `kalfa/fabrikalfa/src/merger/Merger.ts`: searched `pr/Arm.ts`, `pr/Merge.ts` and `pr/Queue.ts`
+- `next/apps/fabrikalfa/src/merger/Merger.ts`: searched `pr/Arm.ts`, `pr/Merge.ts` and `pr/Queue.ts`
   (today's arm and admin merge) and `next/programs/pipeline`'s merger (0110). The gates are read
   from them and rethought; none is imported.
-- `kalfa/fabrikalfa/src/tokens/Tokens.ts`: searched Octo STS (its own Go service, the shape
+- `next/apps/fabrikalfa/src/tokens/Tokens.ts`: searched Octo STS (its own Go service, the shape
   followed) and `botpush.mjs` (mints with `createSign` from the keychain key on the laptop). The
   minting call is `@kalfa/provider-github`'s credentials Layer; this program decides and records.
 - `kalfa/ci/src/Gates.ts`: searched `kalfa/ci/src/DocsOnly.ts` on ticket 810's branch and
   `pr/Queue.ts`'s inline `ci-required` read; no shared `green` or leftover check exists.
+- `kalfa/codehost/src/Rulesets.ts`, only if ticket 1190 leaves it out: searched 0614's services
+  (pull requests, merges, pushes, reviews and comments, repo labels and variables), which hold no
+  ruleset, and libfabrika's `codehost` folder, which holds `change`, `update` and `merge` only. A
+  contract file, as 1190 shapes its other services (0095).
+- `kalfa/codehost/src/RulesetsMemory.ts`, only if ticket 1190 leaves it out: searched the same and
+  found no memory Layer for rulesets; it is the contract's sibling memory Layer (0095).
+- `kalfa/codehost/src/RepoSettings.ts`, only if ticket 1190 leaves it out: searched 0614's services
+  and libfabrika's `codehost` folder, which hold no merge-method or branch-deletion setting. A
+  contract file.
+- `kalfa/codehost/src/RepoSettingsMemory.ts`, only if ticket 1190 leaves it out: searched the same;
+  its sibling memory Layer.
+- `kalfa/provider-github/src/Rulesets.ts`, only if ticket 1190 leaves it out: searched the lead's
+  scripts for a ruleset call (`rg -n "rulesets" .agents/skills/lead/scripts`) and found none; the
+  Layer calls GitHub's REST API through the provider's own client, as its other Layers do.
+- `kalfa/provider-github/src/RepoSettings.ts`, only if ticket 1190 leaves it out: searched the same
+  scripts and found no repo settings call; a Layer like the one above.
 - `kalfa/ci/src/Freeze.ts`: searched the sev skill's `Freeze.ts` `verdict`, which keeps the queue's
   and the allowed branch's runs and cancels main's push runs. 0611 changed that rule; the new one is
   pure and lives where 0612 puts admission.
@@ -718,18 +846,31 @@ Each new choice, asked (0069):
   the drift history.
 - `field/runs/` rows for each step, by the lead, and a field note for the shadow run.
 - `.glossary/TERMS.md` and `docs/plan/README.md`, as in the files table.
-- No `.decisions/` file: 0537, 0601, 0611, 0612, 0614 and 0616 hold the rulings. The owner's answer
-  to the open question is written as a decision the turn he gives it.
+- No `.decisions/` file: 0537, 0601, 0611, 0612, 0614 and 0616 hold the rulings. The owner's answers
+  to the open questions are written as decisions the turn he gives them.
+- If the lead's call on where the app lives stands, 0537's and 0556's lines that put 0537's services
+  in `kalfa/` no longer hold for this app. Whether they get a note in place (0605) is the lead's
+  call, in a docs pull request of its own, not in this plan's slices.
 
 ## Validation
 
 - The tests step: `pnpm format`, `nice -n 15 pnpm exec vitest run --maxWorkers=3` on the slice's
-  test files, `pnpm lint`. Each plant run once and recorded. No GitHub call and no Cloudflare call.
+  test files, `pnpm lint`. Each plant run once and recorded. No law makes a GitHub call or a
+  Cloudflare call.
+- **A rule for the tests step: a vector first, for every fact marked "from memory".** Each GitHub
+  API fact this plan marks "from memory" may stay in the plan as it is. No law leans on one until the
+  tests step holds a `vector:` fixture of a real response for it, in `fixtures/next/fabrikalfa`,
+  labeled with the call, the date and where it was recorded. The facts: which conclusions pass a
+  required check (G1); the installation token request's fields and its one hour (T1); that a
+  ruleset bypass is per actor and no token narrows it (T1, open question 2); the webhook payloads
+  (W2); and, for the later OIDC slice, the Actions token's claims. A call that needs the App's key is
+  made by the lead or the owner, outside any box, and the tests step labels what it is handed. A
+  vector that disagrees with the plan sends the plan back before the build starts.
 - The lead runs one typecheck and the leak grep, outside any box.
 
 ## Rollout, in the order the owner sees it
 
-1. **Slice 1 lands, and the owner deploys from his Mac:** `pnpm --filter @kalfa/fabrikalfa deploy`
+1. **Slice 1 lands, and the owner deploys from his Mac:** `pnpm --filter @kampus/fabrikalfa deploy`
    with the App's private key and a new webhook secret in the shell for that one command; Alchemy
    writes them into the Secrets Store (0537). **Waits on the owner:** the App's webhook URL set to
    the Worker's `/github` with that secret, the events `pull_request`, `check_run`, `workflow_run`,
@@ -749,11 +890,11 @@ Each new choice, asked (0069):
    `botpush.mjs` asks tokens, and the App's key can leave the laptop's keychain.
 6. **Slice 6, after shadow:** the file's `mode = "live"` lands as a reviewed change, and `land.ts
    arm` asks merger. GitHub's queue still merges.
-7. **Waits on the owner, later:** the App's bypass on main, for merger's admin merge in a sev. A
-   token carries its App's bypass, so at that step tokens moves to an App of its own with no bypass,
-   as Octo STS runs as its own App. Until then T1 keeps tokens refusing, and admin merges stay with
-   `land.ts merge --admin`. That is a new App, so it comes to the owner as a yes or no then; his
-   2026-11-14 answer was about the queue.
+7. **Waits on the owner, later: [open question 2](#open-questions), a second GitHub App.** merger's
+   admin merge in a sev needs an App on main's bypass list, and a push token carries its App's
+   bypass. Until the owner answers and, on a yes, makes the second App, T1 keeps tokens refusing if
+   the App it vends from ever holds a bypass, and admin merges stay with `land.ts merge --admin`. His
+   2026-11-14 answer (the existing App) was about the queue and the day-one programs.
 
 ## Later slices, not built now
 
@@ -769,7 +910,7 @@ Each new choice, asked (0069):
 ## Earlier owner answers, kept and dropped
 
 - **Kept:** the existing fabrikalfa App (2026-11-14), for every program day one. The step that
-  needs a second App is named in Rollout step 7, not taken.
+  needs a second App is open question 2, asked now and taken only at Rollout step 7.
 - **Kept:** a sev0 is an open issue labeled `sev0`, closing it ends it, rebuilt from the open
   issues on start (2026-11-14, Tide's shape).
 - **Dropped:** a PR labeled `sev0-fix` lands in a freeze. 0611 (2026-11-18) replaced it: the label
@@ -783,9 +924,14 @@ Each new choice, asked (0069):
 
 ## What the review of the old plan flagged, and what changed
 
-- **The `infra/` folder and `@kampus` names:** the app is `kalfa/fabrikalfa`, `@kalfa/fabrikalfa`
-  (0556, 0537); tests use `@kalfa/quality/vitest`, not `@kampus/vitest` (0538). No path is named
-  `infra/`.
+- **The `infra/` folder and `@kampus` names:** no path is named `infra/`, and tests use
+  `@kalfa/quality/vitest`, not `@kampus/vitest` (0538). The complaint was about tooling names and the
+  folder. The app itself is now `@kampus/fabrikalfa` at `next/apps/fabrikalfa`, the lead's call on
+  0616, because `next/`'s packages are all `@kampus` and 0556 keeps `@kalfa` inside `kalfa/`. Read
+  against 0556 itself, that is not the whole story: 0556's consequences also said this package, then
+  named `@kampus/fabrikalfa`, "takes the `@kalfa` scope" because "it is infra". That line is the
+  lead's reading at the time, and 0616, later, calls fabrikalfa an app and not a kalfa package. This
+  plan undoes that line, as [Doubt first](#doubt-first) says.
 - **A hand-written tea 0.25 machine tree:** each job is a `Program.make` program (0601), on tea
   0.29.0 and its patch, which the plan never names in a program's API. Only `Machine` reaches tea,
   for the owed landing.
@@ -821,10 +967,11 @@ Each new choice, asked (0069):
   busy flag. If it does, merger takes GitHub's answer as a plain input, as the call says.
 - **Whether `@kalfa/codehost` covers rulesets and repo settings.** 0614 lists "repo labels and
   variables"; settings needs rulesets too. If ticket 1190's plan leaves them out, slice 1 adds them
-  to `@kalfa/codehost` and `@kalfa/provider-github`, which adds files to it.
+  to `@kalfa/codehost` and `@kalfa/provider-github`: the ten rows marked "only if 1190 leaves them
+  out" in the files table, about 275 lines.
 - **GitHub's facts are from memory,** since its docs were not reachable here: which conclusions
   pass a required check, the token request's fields, that a ruleset bypass is per actor. The
-  vectors check the answers; the bypass point is checked once by reading the API before slice 5.
+  marks stay; the tests step records a vector for each before a law leans on it (Validation).
 - **The cost of a Durable Object per program and a cron every 5 minutes** is not measured. It is
   far inside the Workers Paid plan by a guess (about 12 wakes an hour per program), not by data.
 - **Per-environment tokens cannot tell two agents in one environment apart.** The journal names
@@ -834,16 +981,23 @@ Each new choice, asked (0069):
 ## Open questions
 
 1. **Who may ask fabrikalfa for what: the `WritePolicy` of 0601.** The plan's table: GitHub itself, known by its webhook signature, sends events only; CI, known by a GitHub Actions OIDC token that matches a trust policy file in the repo (Octo STS style), may ask only for a push token; an agent, known by its environment's caller token (one token per environment: the laptop's boxes, a cloud session), may ask merger to arm and tokens for a push token; the lead, known by a caller token of its own that is never mounted into a box, may also name the sev fix and ask merger for an admin merge, which merger takes only while a sev0 is open. Yes, or say which line changes. Lean: yes, 70% sure. Why: it is the least each caller needs today, every ask is checked at the door before it reaches a journal, and no person meets a prompt in the daily flow. What it costs: a per-environment token cannot tell two agents in one environment apart, so the journal names the environment, not the agent; the lead's power rests on one file on the laptop staying out of every box; and the CI half is built only when a workflow first asks. What would settle the doubt: a read of the box mounts in `drive.ts` and `box.sh` showing no box can read the lead's file, and the owner's word on whether an agent run should have its own identity later.
+2. **A second GitHub App, so that push tokens and main's bypass never sit on one App.** merger's admin merge in a sev needs an App on main's bypass list, and a push token carries its App's bypass, so T1 keeps tokens refusing while the App it vends from holds any bypass. The plan asks for a second App, made and installed by the owner only when merger's admin merge is to go live (Rollout step 7), never before. The existing `fabrikalfa` App keeps the webhook, the programs and the push tokens, and stays on no bypass list. The new App holds only main's bypass and only what an admin merge needs (`contents: write`, `pull_requests: write`), has no webhook, is used by merger alone, and keeps its key in the Secrets Store (0537). Yes; or no, and admin merges stay with `land.ts merge --admin` for good while merger's admin path, built and tested on memory layers in slice 4, never runs live; or yes with the jobs swapped, so the new App vends push tokens and the existing App takes the bypass. Lean: yes, as written, 70% sure. Why: it keeps T1 true without giving up merger's admin merge; the App on the bypass list does one rare, powerful thing, so its key is the one most worth keeping narrow; and every push and draft pull request stays `fabrikalfa[bot]`'s, the identity 0401 gives agents. The known way splits the same: Octo STS (https://github.com/octo-sts/app) is a GitHub App of its own whose one job is minting narrowed tokens, and its README tells an org that cannot use the hosted one to "self-host octo-sts with their own GitHub App". The swapped branch follows Octo STS more literally, but pushes would then come from a second bot name while commits still name `fabrikalfa[bot]`. What it costs: one App made and installed once by the owner, a few minutes once and no recurring prompt; a second private key in the Secrets Store and in any key rotation; sev admin merges show the second App's bot as the merger in the history; and `@kalfa/provider-github`'s credentials Layer takes two Apps, a small change at Rollout step 7. What would settle the doubt: a `vector:` read of GitHub's ruleset API showing that a bypass is per actor and that no token narrows it (from memory today), recorded before Rollout step 7; and the owner's word on whether a second bot name on sev admin merges is fine in the history.
 
 ## Size
 
-Six pull requests, each lands whole, in the order the owner sees them. About 1,800 product lines
-and about 14 agent hours across the steps, 60% sure; the doubts are at the end of this section.
+Six pull requests, each lands whole, in the order the owner sees them. About 1,600 product lines,
+or about 1,850 if slice 1 adds rulesets and repo settings, and about 14 agent hours across the
+steps, 60% sure; the doubts are at the end of this section. The move into `next/apps` changes no
+slice's size: the `exam-paths.json` line goes and the `.oxlintrc.json` override for L1 comes.
 
 1. Slice 1, the app and settings: the package, the stack, the Worker's routes, the webhook check,
    the ask schemas, the Layers, the settings program with its file, schema and diff, and the first
-   laws (S1, S2, W1 to W3, M4, M5, X1, K1, L1): about 760 lines. Waits for the packages listed
-   under Builds on.
+   laws (S1, S2, W1 to W3, M4, M5, X1, K1, L1, L2): about 690 lines, the files table's sum (the
+   earlier draft said 760). If ticket 1190 leaves out rulesets and repo settings, slice 1 also adds
+   them, with R1 and R2: the `Rulesets` and `RepoSettings` contracts, memory Layers and conformance
+   suites in `kalfa/codehost/src/`, their GitHub Layers in `kalfa/provider-github/src/`, and both
+   packages' `package.json` exports, about 275 lines more, about 965 in all. Waits for every line
+   above it under [Order](#order).
 2. Slice 2, checks and the gates: about 200 lines, with G1, G2, C1, C2.
 3. Slice 3, the policy and freeze: about 260 lines, with P1, P2, F1, Z1, Z2.
 4. Slice 4, merger in shadow, its live and admin paths on memory layers: about 230 lines, with M1
@@ -855,10 +1009,12 @@ Priced from the `@kalfa/quality/stryker` quest, a new kalfa package of about thi
 (`field/runs/2026-11-18-kalfa-quality-stryker-*.json`: tests $6.92, build $3.80, review $5.55, a
 fix $2.20 and its recheck $7.74, list dollars), and the old plan's basis, ticket 290's lane. Slices
 1 and 4 are larger, about $30 each for tests, build and review; slices 2, 3 and 5 about $20 each;
-slice 6 about $10; four send-backs at about $10 each. 60% sure: the doubts are `@kalfa/program`'s
-API, which every program sketch leans on, and how much of `@kalfa/codehost` slice 1 must add.
+slice 6 about $10; four send-backs at about $10 each. If slice 1 adds rulesets and repo settings,
+its three steps cost about $40, not $30; at about even odds that adds about $10 to the budget. 60%
+sure: the doubts are `@kalfa/program`'s API, which every program sketch leans on, and whether
+ticket 1190 covers rulesets.
 
-Estimate: 22 steps, $170
+Estimate: 22 steps, $180
 
 ## Findings
 
