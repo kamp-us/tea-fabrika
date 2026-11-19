@@ -230,11 +230,23 @@ export const fix = Effect.fn("Incident.fix")(function* (home: string, branch: st
   yield* Console.log(`sev: the fix now landing is ${branch}`);
 });
 
-/** Lets go of the named sev1 fix, so another can be named; says so when none is named. */
+/**
+ * Lets go of the named sev1 fix, so another can be named; says so when none is named. An unreadable
+ * issue list is refused, never read as no open issues: whether the fix named still stands depends on
+ * the open issues (a newer one expires it), so the log alone cannot say. Refusing fails closed (0611);
+ * the lead runs `fix --drop` again once GitHub answers.
+ */
 export const drop = Effect.fn("Incident.drop")(function* (home: string) {
   const { entries } = yield* Level.read(home);
-  const issues = yield* Effect.result((yield* Alerts).open);
-  const open = issues._tag === "Success" ? issues.success : [];
+
+  const open = yield* (yield* Alerts).open.pipe(
+    Effect.mapError((e) =>
+      Level.Refused.make({
+        reason: `the open ci-scheduled issues could not be read (${e.reason}); run fix --drop again when GitHub answers`,
+      }),
+    ),
+  );
+
   const named = Level.sev1Fix(entries, open);
 
   if (named === null) {
