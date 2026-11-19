@@ -1,7 +1,8 @@
 ---
 id: 0596
 title: At most eight tracker tickets are active
-status: superseded by [0597](0597-eight-workers-before-twelve.md)
+status: superseded
+successor: "0597"
 date: 2026-11-16
 tags: [operations, tickets, agents, resources]
 ---

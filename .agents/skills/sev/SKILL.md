@@ -58,8 +58,8 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   request is armed once its review passed, as any other is
   ([0544](../../../.decisions/0544-every-reviewed-pull-request-is-armed.md)). Visual and real-resource tests do not run on pull
   requests ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)), and
-  tooling tests run only locally and on the schedule
-  ([0539](../../../.decisions/0539-the-merge-line-runs-no-tooling-tests.md)). On 2026-11-14 a
+  neither does a tooling law that starts a process
+  ([0584](../../../.decisions/0584-a-tests-kind-follows-what-it-uses.md)). On 2026-11-14 a
   rename broke a visual law, and nothing showed it until a pull request with the `visual` label ran.
   Read main's first full run after the fix lands before you call it fixed.
 - **A full run's word is its verdict.** A red full run ends `failure`, on main and on a branch.
