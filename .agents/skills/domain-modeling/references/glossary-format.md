@@ -1,41 +1,62 @@
-# The format of a context's words
+<!-- Matt Pocock's GLOSSARY-FORMAT.md, kept as he wrote it (MIT, see ../../UPSTREAM-mattpocock-skills-LICENSE). The one change for this repo: his GLOSSARY-MAP.md is our `.glossary/TERMS.md` (0617). -->
 
-A context's words are rows in a table, one row per word. The map says where each context's rows
-are written. Today the map is [`.glossary/TERMS.md`](../../../../.glossary/TERMS.md). The map also
-says how the contexts meet, and how a word that crosses a border translates.
+# GLOSSARY.md Format
 
-A context starts with a line or two that says what the context is and why it exists. Its rows
-follow, in a table with three cells:
+## Structure
 
 ```md
-| Term | Definition | Not |
-|---|---|---|
-| Order | A request from a customer to buy goods, placed and tracked until it is fulfilled. | Purchase, transaction |
-| Invoice | A request for payment sent to a customer after delivery. | Bill, payment request |
-```
+# {Context Name}
 
-- **Term:** the one word the project uses, picked from its synonyms.
-- **Definition:** one or two sentences. Say what the thing is, not what it does. Cite the decision
-  or the note that settles it, by its relative link.
-- **Not:** the old names, the wrong names, and the nearby words a reader may mix it up with.
+{One or two sentence description of what this context is and why it exists.}
+
+## Language
+
+**Order**:
+{A one or two sentence description of the term}
+_Avoid_: Purchase, transaction
+
+**Invoice**:
+A request for payment sent to a customer after delivery.
+_Avoid_: Bill, payment request
+
+**Customer**:
+A person or organization that places orders.
+_Avoid_: Client, buyer, account
+```
 
 ## Rules
 
-- **Be opinionated.** When several words name one concept, pick the best one and list the others
-  under Not.
-- **Keep definitions tight.** One or two sentences. Define what it is, not what it does.
-- **Only this context's words.** A timeout or an error type is not one of a context's words, even
-  when the context uses it a lot. Before you add a word, ask: is this unique to this context, or a
-  general programming concept? Only the first belongs.
-- **One meaning per context.** A word with two meanings inside one context is a bug. A word that
-  means something else in a second context gets a row there too, and the map names the boundary.
-  A word that appears in two contexts carries its context in its key, such as `inbox (ledger)`.
-- **Check the industry's word first**
-  ([names](../../../../docs/direction/use-the-industrys-names.md)).
-- **Group under headings** only when natural clusters appear. A flat list is fine when every term
-  belongs to one area.
-- **Add or change a row in the same pull request that coins or renames a word.**
-- **No implementation detail.** A glossary is not a spec or a scratch pad. It holds words and
-  nothing else.
+- **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others under `_Avoid_`.
+- **Keep definitions tight.** One or two sentences max. Define what it IS, not what it does.
+- **Only include terms specific to this project's context.** General programming concepts (timeouts, error types, utility patterns) don't belong even if the project uses them extensively. Before adding a term, ask: is this a concept unique to this context, or a general programming concept? Only the former belongs.
+- **Group terms under subheadings** when natural clusters emerge. If all terms belong to a single cohesive area, a flat list is fine.
 
-Adapted from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT license).
+## Single vs multi-context repos
+
+**Single context (most repos):** One `GLOSSARY.md` at the repo root.
+
+**Multiple contexts:** A `.glossary/TERMS.md` (his `GLOSSARY-MAP.md`) at the repo root lists the contexts, where they live, and how they relate to each other:
+
+```md
+# Glossary Map
+
+## Contexts
+
+- [Ordering](./src/ordering/GLOSSARY.md): receives and tracks customer orders
+- [Billing](./src/billing/GLOSSARY.md): generates invoices and processes payments
+- [Fulfillment](./src/fulfillment/GLOSSARY.md): manages warehouse picking and shipping
+
+## Relationships
+
+- **Ordering → Fulfillment**: Ordering emits `OrderPlaced` events; Fulfillment consumes them to start picking
+- **Fulfillment → Billing**: Fulfillment emits `ShipmentDispatched` events; Billing consumes them to generate invoices
+- **Ordering ↔ Billing**: Shared types for `CustomerId` and `Money`
+```
+
+The skill infers which structure applies:
+
+- If `.glossary/TERMS.md` (his `GLOSSARY-MAP.md`) exists, read it to find contexts
+- If only a root `GLOSSARY.md` exists, single context
+- If neither exists, create a root `GLOSSARY.md` lazily when the first term is resolved
+
+When multiple contexts exist, infer which one the current topic relates to. If unclear, ask.
