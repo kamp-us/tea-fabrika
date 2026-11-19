@@ -14,8 +14,9 @@
 // - A fix is admitted only when its head holds origin/main's head, which Merge reads through the `Branches`
 //   service (`behind(oid)` is 0 when the head holds main), beside `ci-required` and the leak gate. A ready pull
 //   request in a sev0 lands with no catch-up (0603), and still needs `ci-required` green, as a sev0 branch does today.
-// - `Done`'s admin case says why: `for` is `docs`, `fix` or `ready`, and `level` is `sev0` or `sev1` for a fix or a
-//   ready one (the plan's "One value traced through", step 6).
+// - `Done`'s admin case says why: `for` is `fix`, `ready` or `asked`, and `level` is `sev0` or `sev1` for a fix or a
+//   ready one, and `null` when the owner asked (any other pull request). Every admin merge needs `ci-required` green
+//   at the head, docs included.
 // The `sev` label is no input of Merge in B1: PullRequests reads none, and the route alone grants, so a label
 // alone grants nothing by construction and no law here can vary it.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -56,13 +57,12 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
     Match.orElse(() => ({ leakText: hit })),
   );
 
-const Files = Schema.Literals(["docs", "code", "none"]);
+/** What the pull request changes: docs only, or code. Admin merge treats both alike. */
+const Files = Schema.Literals(["docs", "code"]);
 
 const FILES = {
   docs: [".kalfa/decisions/0583-a-room.md", "field/notes/2026-11-15-x.json", "docs/plan/README.md"],
-  // One file that is not docs is enough, even in a docs folder.
   code: [".kalfa/decisions/0583-a-room.md", "docs/tutorials/one/package.json"],
-  none: [],
 } as const;
 
 type World = {
@@ -121,25 +121,20 @@ const gate = [
 
 describe("merge: the lead's one way to merge by hand runs the leak gate first", () => {
   // Plants: merge before the gate, or past a refusal from it; skip the commit or the word grep;
-  // admin-merge a pull request with one file that is not docs; admin-merge a sev0 fix on a red head.
+  // admin-merge on a red or missing ci-required, docs only or not.
   it.effect.prop(
-    "property: GitHub's merge is asked once, pinned to the head, only when all three leak checks passed, and --admin only for a docs-only pull request or a branch an open sev0 allows whose ci-required is green",
+    "property: GitHub's merge is asked once, pinned to the head, only when all three leak checks passed and ci-required is green, by the queue or by --admin, whatever the files are",
     {
       route: Schema.Literals(["queue", "admin"]),
       leak: Leak,
       files: Files,
-      sev0: Schema.Boolean,
-      required: Schema.Literals(["success", "failure"]),
+      required: Schema.Literals(["success", "failure", "pending"]),
     },
-    ({ route, leak, files, sev0, required }) =>
+    ({ route, leak, files, required }) =>
       Effect.gen(function* () {
         const m = memory({ leak, files, required });
-        const { answer, leaks } = yield* merged(m, route === "queue" ? queue : admin(sev0 ? [branch] : []));
-        const clean = leak === "clean";
-        const docs = files === "docs";
-
-        const merges =
-          route === "queue" ? clean && required === "success" : clean && (docs || (sev0 && required === "success"));
+        const { answer, leaks } = yield* merged(m, route === "queue" ? queue : admin());
+        const merges = leak === "clean" && required === "success";
 
         const asked = route === "queue" ? "enqueue" : "admin";
         expect(m.github.calls).toEqual(merges ? [{ _tag: asked, number: 1415, oid }] : []);
@@ -147,11 +142,6 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
 
         if (merges) {
           expect(leaks).toEqual(gate);
-        }
-
-        // An admin merge GitHub's rules would not allow refuses before any grep runs.
-        if (route === "admin" && !docs && !sev0) {
-          expect(leaks).toEqual([]);
         }
       }),
   );
@@ -181,32 +171,58 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     }),
   );
 
-  it.effect("scenario: a clean docs-only pull request is admin-merged at its head, and the line says why", () =>
-    Effect.gen(function* () {
-      const m = memory();
-      const done = yield* merge(m, admin());
-      expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
-      expect(Merge.line(done)).toBe(
-        `pr 1415: admin-merged at ${oid}, docs only (0183); read the push run on main next`,
-      );
-    }),
+  it.effect(
+    "scenario: a clean pull request with ci-required green is admin-merged at its head, code or docs, and the line says the owner asked",
+    () =>
+      Effect.gen(function* () {
+        for (const files of ["code", "docs"] as const) {
+          const m = memory({ files });
+          const done = yield* merge(m, admin());
+          expect(done).toMatchObject({ _tag: "admin", for: "asked", level: null });
+          expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
+          expect(Merge.line(done)).toBe(
+            `pr 1415: admin-merged at ${oid}, the owner asked; read the push run on main next`,
+          );
+        }
+      }),
   );
 
   it.effect(
-    "vector: --admin on a pull request with a file that is not docs names it and refuses; one that changes no files refuses; a `Plan:` title refuses",
+    "scenario: --admin on a red or missing ci-required refuses with the check's name, for code and for docs, and nothing merges",
     () =>
       Effect.gen(function* () {
-        // The reason names the file that is not docs; which levels it says do not hold the branch is the
-        // build's wording (0611 adds the sev1 fix to what 0532 said), so only the file and the pull request are read.
-        const code = yield* Effect.flip(merge(memory({ files: "code" }), admin()));
-        expect(code).toMatchObject({ _tag: "NotMerged" });
-        expect(code.reason).toContain("pr 1415");
-        expect(code.reason).toContain("docs/tutorials/one/package.json");
-        const none = yield* Effect.flip(merge(memory({ files: "none" }), admin()));
-        expect(none).toMatchObject({ reason: "pr 1415: it changes no files, so it is not docs only; refused" });
-        const plan = yield* Effect.flip(merge(memory({ title: "Plan: a room" }), admin()));
-        expect(plan.reason).toContain("its title starts `Plan:`");
+        for (const files of ["code", "docs"] as const) {
+          for (const required of ["failure", "pending"] as const) {
+            const m = memory({ files, required });
+            const refused = yield* Effect.flip(merge(m, admin()));
+            expect(refused).toMatchObject({ _tag: "NotMerged" });
+            expect(refused.reason).toContain("pr 1415");
+            expect(refused.reason).toContain("not a success; not merged");
+            expect(m.github.calls).toEqual([]);
+          }
+        }
       }),
+  );
+
+  it.effect("scenario: --admin on a pull request with no ci-required job at its head refuses as missing", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      const none = Layer.mergeAll(m.layer, ChecksTest.layer([Option.none()], ""));
+
+      const refused = yield* Effect.flip(
+        Merge.merge({ dir: ".", pr: 1415, route: admin() }).pipe(Effect.provide(none)),
+      );
+
+      expect(refused.reason).toContain("is missing at");
+      expect(m.github.calls).toEqual([]);
+    }),
+  );
+
+  it.effect("scenario: a `Plan:` title refuses --admin", () =>
+    Effect.gen(function* () {
+      const plan = yield* Effect.flip(merge(memory({ title: "Plan: a room" }), admin()));
+      expect(plan.reason).toContain("its title starts `Plan:`");
+    }),
   );
 
   it("vector: the admin merge call is the queue's pinned squash with --admin and nothing else", () => {
@@ -254,18 +270,18 @@ const routeFor = (level: "sev1" | "sev0", listing: Listing, alsoY: boolean) => {
         : admin([], null, []);
 };
 
-/** What the branch is to the route: the plan's AdminFor, `fix` or `ready` (0603), or nothing. */
+/** What the branch is to the route: `fix` or `ready`, and any other branch is `asked`, the owner's own ask. */
 const roleFor = (level: "sev1" | "sev0", listing: Listing) =>
-  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "none";
+  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "asked";
 
 describe("merge: a sev fix is admin-merged in both levels, on current main (0611)", () => {
   // R6 of .kalfa/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
   // requests alike (0603), and the ancestor check holds for a fix only (0611): a ready pull request there lands
   // with no catch-up. Plants: drop the ancestor check (a fix whose head lacks main is admitted: red); ask the
   // ancestor check of a ready pull request too (a sev0 ready one behind main is refused: red); read the sev1 fix
-  // as any branch (a sev1 that names fix y admits x); skip ci-required; admit a branch the level does not name.
+  // as any branch (a sev1 that names fix y admits x); skip ci-required; ask the catch-up of a branch the level does not name as a fix.
   it.effect.prop(
-    "property: --admin lands a code pull request only as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch) or a ready one (a sev0's `allow` branch); each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, a ready one no catch-up",
+    "property: --admin lands a pull request as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch), a ready one (a sev0's `allow` branch) or one the owner asked for; each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, the others no catch-up",
     {
       level: Schema.Literals(["sev1", "sev0"]),
       listing: Listing,
@@ -285,7 +301,6 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
         const leakOk = !faults.includes("leak");
 
         const m = memory({
-          files: "code",
           head: X,
           required: ciOk ? "success" : ci,
           leak: leakOk ? "clean" : leak,
@@ -294,14 +309,20 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
 
         const { answer } = yield* merged(m, routeFor(level, listing, alsoY));
 
-        const merges = role !== "none" && ciOk && leakOk && (role === "ready" || holds);
+        const merges = ciOk && leakOk && (role !== "fix" || holds);
 
         expect(m.github.calls).toEqual(merges ? [{ _tag: "admin", number: 1415, oid }] : []);
         expect(answer._tag).toBe(merges ? "Success" : "Failure");
 
         if (merges && answer._tag === "Success") {
-          // Why it was allowed is the plan's AdminFor: a fix at its level, or a ready one in a sev0.
-          expect(answer.success).toMatchObject({ _tag: "admin", pr: 1415, oid, for: role, level });
+          // Why it was allowed: a fix at its level, a ready one in a sev0, or the owner asked, with no level.
+          expect(answer.success).toMatchObject({
+            _tag: "admin",
+            pr: 1415,
+            oid,
+            for: role,
+            level: role === "asked" ? null : level,
+          });
         }
       }),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 200, full: 600 }) } },
@@ -310,7 +331,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
   // Plants: give two missing parts one reason (the ancestor refusal says "not the fix"); let a failed leak
   // check refuse as NotMerged.
   it.effect.prop(
-    "property: each part a fix lacks refuses on its own, at either level: not the fix, ci-required not a success, and a head behind main each give a different reason, and a leak hit is the gate's refusal",
+    "property: each part a fix lacks refuses on its own, at either level: ci-required not a success and a head behind main give different reasons, and a leak hit is the gate's refusal",
     {
       level: Schema.Literals(["sev1", "sev0"]),
       ci: Schema.Literals(["failure", "pending"]),
@@ -321,7 +342,6 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
       Effect.gen(function* () {
         // The one thing that is wrong in each world; every other part is right for the fix.
         const worlds = {
-          notTheFix: { route: routeFor(level, "other", false), world: {} },
           ciNotSuccess: { route: routeFor(level, "fix", false), world: { required: ci } },
           behindMain: { route: routeFor(level, "fix", false), world: { behind } },
         } as const;
@@ -329,7 +349,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
         const reasons: Array<string> = [];
 
         for (const { route, world } of Object.values(worlds)) {
-          const m = memory({ files: "code", head: X, ...world });
+          const m = memory({ head: X, ...world });
           const { answer } = yield* merged(m, route);
           const refused = answer._tag === "Failure" ? answer.failure : null;
           expect(refused).toMatchObject({ _tag: "NotMerged" });
@@ -339,7 +359,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
 
         expect(new Set(reasons).size, reasons.join(" | ")).toBe(Object.keys(worlds).length);
 
-        const hit = memory({ files: "code", head: X, leak });
+        const hit = memory({ head: X, leak });
         const { answer } = yield* merged(hit, routeFor(level, "fix", false));
         expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
         expect(hit.github.calls).toEqual([]);
@@ -354,7 +374,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
     "scenario: a sev1 fix whose head holds main, with ci-required green and a clean gate, is admin-merged at its head as a fix",
     () =>
       Effect.gen(function* () {
-        const m = memory({ files: "code", head: X });
+        const m = memory({ head: X });
         const done = yield* merge(m, admin([], X));
         expect(done).toMatchObject({ _tag: "admin", for: "fix", level: "sev1" });
         expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
@@ -365,12 +385,12 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
     "scenario: in a sev0, a ready pull request that `allow` added lands with no catch-up, and a fix of `open --allow` or `next` behind main does not (0603, 0611)",
     () =>
       Effect.gen(function* () {
-        const ready = memory({ files: "code", head: X, behind: 4 });
+        const ready = memory({ head: X, behind: 4 });
         const done = yield* merge(ready, routeFor("sev0", "ready", false));
         expect(done).toMatchObject({ _tag: "admin", for: "ready", level: "sev0" });
         expect(ready.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
 
-        const fix = memory({ files: "code", head: X, behind: 4 });
+        const fix = memory({ head: X, behind: 4 });
         expect(yield* Effect.flip(merge(fix, routeFor("sev0", "fix", false)))).toMatchObject({ _tag: "NotMerged" });
         expect(fix.github.calls).toEqual([]);
       }),
