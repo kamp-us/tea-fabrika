@@ -215,8 +215,8 @@ type Program = {
 - **What holds it.** The load refuses a prefix two programs claim, a prefix that is a tsh word, and
   a prefix that is one of the four symbols.
 - **Doubt and cost.** One letter per program runs out. Two letters, or the program's name, are the
-  fallback. The word "prefix" already names `C-b` in the frame's glossary; that clash is listed
-  there until it is settled. About 40 lines.
+  fallback. The word "prefix" already names `C-b` in the old glossary (git history at 52aebb8); that clash stays open
+  until it is settled. About 40 lines.
 - **Today: breaks.** No scope.
 
 ### Q5: people and agents: `@` is one prefix, Ask is one row
@@ -431,8 +431,8 @@ Offered, not filed:
   pick with the commands scope and every key shown.
 - **The prototype draws a dim behind the box** (its scrim, at 35% black). Popovers ruled the palette
   has no dim (the owner, 2026-11-06). The canvas is off, not the design.
-- **"Prefix" already means `C-b`** in the frame's glossary. Q4 gives it a second meaning in the same
-  context, so it is listed as an open clash in `.glossary/TERMS.md` until one of the two is renamed.
+- **"Prefix" already means `C-b`** in the old glossary (git history at 52aebb8). Q4 gives it a second
+  meaning in the same context, so it is an open clash until one of the two is renamed.
 - **The summon note (PR 425, proposed)** owns rooms, mentions, direct messages and `/` in room
   names. If it changes them, Q5 and Q3's room rows follow it.
 

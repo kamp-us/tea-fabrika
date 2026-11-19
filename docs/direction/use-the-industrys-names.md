@@ -8,7 +8,9 @@ summary: "A thing with a proper name in the industry keeps it; an obscure one ge
 **Decided, in pieces:**
 
 - The rule: decided 2026-10-18, below.
-- The glossary: it exists, [`.glossary/TERMS.md`](../../.glossary/TERMS.md).
+- The glossary: reset on 2026-11-18. The map is [`.glossary/TERMS.md`](../../.glossary/TERMS.md);
+  each context's terms live in its own `GLOSSARY.md`, with an `_Avoid_` line
+  ([0617](../../.decisions/0617-glossary-reset-to-a-map.md)).
 - The sweep's picks: made 2026-10-24 and 2026-10-28 (the naming sweep).
 - The two-domains rule: replaced 2026-11-03 by [we follow DDD](./we-follow-ddd.md).
 
@@ -35,16 +37,17 @@ Decided 2026-10-18.
   {kind: "accept"}                 // refine: the owner takes a stuck draft as it is
   ```
 
-- **Proposed 2026-10-24: the settled names live in a glossary,** `.glossary/`
-  in the shape the fabrika glossary skill keeps: one term, one row, one
-  meaning. It is the "short glossary page" below.
+- **Proposed 2026-10-24: the settled names live in a glossary,** in the shape
+  the fabrika glossary skill keeps: one term, one meaning, with an `_Avoid_`
+  line. The 2026-11-18 reset keeps that shape, one `GLOSSARY.md` per context
+  (see the first bullet above). It is the "short glossary page" below.
 
 ## Still to do
 
 - **A naming sweep.** List every exported name. For each one, find the name
   the industry uses for it, mark where ours differs or where one word means
   two things, and propose a change. The owner picks, then one rename pass and
-  a short glossary page.
+  the terms in each context's `GLOSSARY.md`.
   Drafted for the pipeline stages on 2026-10-24 and widened to every new
   package on 2026-10-28 (proposed): the naming sweep.
 - `kind` in tea-program stays for now. It is the first name the sweep checks:

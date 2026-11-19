@@ -64,7 +64,7 @@ export const ticket = Program.make({
 
 Shape 2, values, with six changes (owner, 2026-11-08):
 
-1. **`Fact` becomes `Event`.** The industry's word, as in event sourcing. The glossary row is
+1. **`Fact` becomes `Event`.** The industry's word, as in event sourcing. The old glossary's row (git history at 52aebb8) was
    renamed in the same pull request; older notes still say fact.
 2. **`personOnly: true` says person-only,** on an input and on an event. Only `true` is allowed;
    left out means anyone may send it or cause it. `who: "person"` goes.

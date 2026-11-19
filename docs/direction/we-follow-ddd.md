@@ -1,13 +1,14 @@
 ---
 state: "decided 2026-11-03; 2026-11-09: inside libfabrika a folder is a module, not a context ([0043](../../.decisions/0043-rooms-on-floors.md), named 2026-11-10 by [0091](../../.decisions/0091-modules-and-layers.md))"
-summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The eight contexts and the context map in `.glossary/TERMS.md` are decided too."
+summary: "Both versions. Bounded contexts and a ubiquitous language as Evans defines them: inside one context a word has one meaning; across two it may differ, and the glossary's context map names the boundary and how the word translates. First case: inbox is a stream others write to in the ledger and a person's list of things waiting in the tracker; the asks program is `inbox`. Replaces the 2026-10-24 two-domains softening. The rule is decided; the context list in `.glossary/TERMS.md` is a draft map, checked with Event Storming."
 ---
 
 # We follow Domain-Driven Design
 
-**Decided 2026-11-03 by the owner.** Both versions. The rule, the eight contexts drawn in
-[the glossary](../../.glossary/TERMS.md) and its context map are all decided, in the same pull
-request ([PR 362](https://github.com/usirin/tea-fabrika/pull/362)).
+**Decided 2026-11-03 by the owner.** Both versions. The rule is decided, in the same pull request
+([PR 362](https://github.com/usirin/tea-fabrika/pull/362)). The context list in
+[the map](../../.glossary/TERMS.md) is a draft, checked with Event Storming on real flows, and its
+borders may move.
 
 ```text
 ledger context    inbox   a stream others write to: build:7/inbox
@@ -32,7 +33,7 @@ One word, two meanings, two contexts, and one line that says how they meet. That
 - **The map is `.glossary/TERMS.md`; each context's words live in its own `GLOSSARY.md`,** written
   when they are decided. The map names the contexts and how they relate.
 - **The old glossary is gone from the tree** (reset 2026-11-18, it stays in git history). It was
-  one 650-line file and read as noise. Words are decided again, one context at a time, and today's
+  one 700-line file and read as noise. Words are decided again, one context at a time, and today's
   code's words are translated in the context that meets them.
 - **First case: inbox keeps both meanings.** In the ledger context it is a stream others write to
   (`build:7/inbox`, the transactional inbox pattern). In the tracker context it is a person's list
@@ -73,7 +74,7 @@ One word, two meanings, two contexts, and one line that says how they meet. That
 
 ## How a reader knows which context they are in
 
-- **The path.** Each context's section in the glossary names the paths that belong to it.
+- **The path.** The table below names the paths that belong to each context.
 
   ```text
   packages/pipeline, programs/pipeline                    pipeline
@@ -107,7 +108,7 @@ One word, two meanings, two contexts, and one line that says how they meet. That
   context's `GLOSSARY.md` with an `_Avoid_` line (the review skill). No program checks the glossary's
   shape yet.
 - **Later, a drift check.** A weekly `fabrika glossary drift` run that files a ticket for each new
-  word without a row. Not built; its own change.
+  word without a term. Not built; its own change.
 - **Review.** Names are checked on every pull request, prose included (AGENTS.md, "Names").
 
 ## What it cannot tell us

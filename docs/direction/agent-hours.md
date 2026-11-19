@@ -106,7 +106,7 @@ The rule is [use the industry's names](./use-the-industrys-names.md). The candid
   published unit measures an agent's own time on a task, so "agent hour" is the plain compound,
   not a coined word. It is already in AGENTS.md and about a dozen of our docs.
 - **The doubt.** METR's "a one-hour task" is a skilled person's hour. A reader may take "a
-  one-agent-hour ticket" to mean that. So the glossary row says: an agent hour is the agent's own
+  one-agent-hour ticket" to mean that. So the old glossary's row (git history at 52aebb8) said: an agent hour is the agent's own
   clock, and a one-hour METR task may take an agent minutes. ACU is the nearest industry word, and
   if fabrika ever bills for agent work, ACU's shape (work done, waits left out) is the one to copy.
 

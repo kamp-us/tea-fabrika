@@ -31,7 +31,7 @@ canvas, "Keys editor guidelines". Neither is a measurement. It builds on
 [keybindings are configurable](./keybindings-are-configurable.md), decided 2026-11-01, and changes
 none of its calls. The words are the industry's: a **keyboard map** (the view), a **keyboard
 layout** (which character each key types) and a **physical layout** (where the keys sit, QMK's and
-VIA's word); see the glossary's Frame section.
+VIA's word); see the old glossary's Frame section (git history at 52aebb8).
 
 ```tsx
 // A sketch, today's version. The editor machine stays as it is (keys/machine.ts); only its view moves.
@@ -284,7 +284,7 @@ reported is read again on every start.
 ## Where this differs from settled notes
 
 - [The frame](./the-frame.md): the shortcuts list was "in the palette's box". It is now a program
-  in a tile. That row changes in this pull request, and so do the glossary's shortcuts list and
+  in a tile. That row changes in this pull request, and so do the old glossary's shortcuts list (git history at 52aebb8) and
   palette rows.
 - [Popovers](./popovers.md) drew the keys panel as a popover over the desk; this moves it into a
   tile. Its other rules (sans, keycaps, Escape closes what it opened) still hold.

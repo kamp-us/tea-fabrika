@@ -26,7 +26,7 @@ return [armed, [{type: "fire", fault: Fault.cases.abort.make({target: "gateway",
 
 **Approved by the owner on 2026-11-13, with that day's changes:** the Electron app beside the
 browser tab, the thin menu bar, the cloud instance alongside, and recovery first after done
-([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)).
+([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).
 
 [0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md) changed what is built next in
 `next/`: the four primitives, `fabsh`, pipes, `summon` and `join`, working for real with whatever
@@ -52,7 +52,7 @@ fabsh$ #bug-17 @scout here is the failing run  scout answers in the room, which 
 
 Done is the four primitives working for real, never a thin slice and never a stub. Each piece is
 built the way its decision or note designs it, and today's version shows what working means for it
-([0159's amendments](../../.decisions/0159-fabsh-pipes-summon-join-first.md#amendments)).
+([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).
 
 Done is seen in the Electron app and in a browser tab (owner, 2026-11-13, 0159's third amendment).
 The two are built side by side from the first piece that draws, and a piece that draws is not done
@@ -487,8 +487,8 @@ Listed, not resolved.
   ended and focus is the desk process's, one per workspace, as 0274 and
   [0277](../../.decisions/0277-size-belongs-to-the-viewer.md) say. Focus per window stays a named fast
   follow in 0277, not decided.*
-- **The glossary's `room` row against R3.** The row's example is `fork #bug-17 at 12 as bar`
-  (`.glossary/TERMS.md:421`); R3 decided no message numbers and the order `as bar at "footer"`
+- **The old glossary's `room` row against R3** (git history at 52aebb8). The row's example is `fork #bug-17 at 12 as bar`
+  (line 421 of that file); R3 decided no message numbers and the order `as bar at "footer"`
   (`docs/direction/summon-guidelines.md:537`). R3 wins. The row is not fixed here: it gets its own
   change.
 - **Checked and dropped:** R5's example still says "your DM with scout"
@@ -718,7 +718,7 @@ Read [AGENTS.md](../../AGENTS.md#two-versions-side-by-side) first. It holds for 
 
 **How `next/` is written:**
 
-- **Effect all the way.** A Promise appears only in a one-line edge the platform demands ([no Promises](../direction/no-promises.md)). The word stays **edge**, Effect's own. **An edge is a line marked with an edge comment, opted in where it stands** (owner, 2026-11-05, [question 13](#open-questions)): `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`. Without it, `Effect.tryPromise`, `Effect.promise`, Promise syntax and Effect's run functions fail everywhere in `next/`. A build commit that adds an edge comment does not block: the pull request asks the owner, one line each with its reason, `[ok] [no]`. P35 builds it. [The glossary](../../.glossary/TERMS.md#shared-names) has the word. *Changed 2026-11-05 (owner): earlier that day an edge was a file on a written list, the 18 whole paths in P2's `no-effect-run-outside-edge`, and this plan leaned on holding `Effect.tryPromise` to that list. Both are walked back: a list of files let a whole file wrap Promises, and a comment marks the one line.*
+- **Effect all the way.** A Promise appears only in a one-line edge the platform demands ([no Promises](../direction/no-promises.md)). The word stays **edge**, Effect's own. **An edge is a line marked with an edge comment, opted in where it stands** (owner, 2026-11-05, [question 13](#open-questions)): `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`. Without it, `Effect.tryPromise`, `Effect.promise`, Promise syntax and Effect's run functions fail everywhere in `next/`. A build commit that adds an edge comment does not block: the pull request asks the owner, one line each with its reason, `[ok] [no]`. P35 builds it. The old glossary (git history at 52aebb8) had the word. *Changed 2026-11-05 (owner): earlier that day an edge was a file on a written list, the 18 whole paths in P2's `no-effect-run-outside-edge`, and this plan leaned on holding `Effect.tryPromise` to that list. Both are walked back: a list of files let a whole file wrap Promises, and a comment marks the one line.*
   - **What P2's rules do not hold yet.** `no-promises` sees Promise syntax, not Promise values, so today `Effect.tryPromise(() => fetch(url))` passes it in any file. P35 closes that: `Effect.tryPromise` fails like `Effect.promise` unless an edge comment stands over it. A Promise reached with no Promise syntax at all, such as a platform call returned from a helper, still passes; only types would see it.
 - **Secrets are `Redacted` at the read** ([secrets are redacted](../direction/secrets-are-redacted.md)). The lint rules catch only `process.env` and `Redacted.value`, so each row that reads a secret names it in its plan and adds a law that it stays home: a search over frames, ledger rows and log lines, as the recovery note's is. The rows: P19 (sealed key bytes), P21 and P23 (the one-time link's pass), P25 (an agent's key file) and P28 (the 12 words). Lean 70%, from the audit of 2026-11-06.
 - **An object class stays thin:** what the platform gives it and a one-line handoff. The logic runs on Node in tests ([the note](../direction/object-classes-stay-thin.md)).
@@ -911,7 +911,7 @@ Most of the order above is a choice. **These parts are not, and each says why:**
 | [Programs: one job, a location](../direction/program-guidelines.md) | decided 2026-11-03 | Nothing. "Tier 1 adds refuse, inputs and outputs", as the detail has it; "`location` and the focus history go in with Tier 2's desk". |
 | [Designs are drawn on Claude Design](../direction/design-on-claude-design.md) | decided 2026-11-03 | Nothing built. A Tier 1 screen that gets a design pass is drawn there, on the shared design package. |
 | [Autonomy is measured trust](../direction/autonomy-is-measured-trust.md) | decided 2026-11-03, measures proposed | How a pull request lands: "A merge never waits on the owner". Its row per merge (M1) is proposed and nothing writes it yet. See [how it is built now](#how-it-is-built-now). |
-| [We follow Domain-Driven Design](../direction/we-follow-ddd.md) | decided 2026-11-03 | Words: "The glossary is `next/`'s language". A pull request that coins a word adds its row under its context: ledger for layers 2 and 3, clients for layer 1, runtime for layer 4, frame for Tuval. |
+| [We follow Domain-Driven Design](../direction/we-follow-ddd.md) | decided 2026-11-03 | Words: "The glossary is `next/`'s language". A pull request that coins a word adds its term to its context's `GLOSSARY.md`: ledger for layers 2 and 3, clients for layer 1, runtime for layer 4, frame for Tuval. |
 | [Use the industry's names](../direction/use-the-industrys-names.md) | changed 2026-11-03 | Nothing beyond the DDD note, which replaced its two-domains rule. |
 | [A ticket says where it came from](../direction/a-ticket-says-where-it-came-from.md) | decided 2026-11-03, shape proposed | Nothing. "`next/`'s tracker carries the same key when it is built", in Tier 2. |
 | [React Compiler from day one](../direction/react-compiler.md) | decided 2026-11-03 | What Tier 1 builds, already in this plan: the rules and `lint:compiler` in P2, Rolldown with the Compiler in P12, the time through a Cmd. Size: about 230 lines in the exam, by the detail; about 60 lines changed in `build.ts` and about 40 for the `now` Cmd, by the note. |
@@ -965,7 +965,7 @@ const Write = Schema.TaggedUnion({caused: {cause: CauseText, fact: Schema.Unknow
 | The test-kit law: for any input told by sender S, every write it causes is signed S; random inputs, both senders, interleaved, across queued writes | P11 | p69 |
 | An OpenTelemetry span link mirrors the cause and never decides who signs | P10, P11 | With their spans, on P37's sink. *Changed 2026-11-07 (owner): it said Tier 1 has no traces, so this waited.* |
 
-- **The glossary already has both envelopes:** `envelope (runtime)` for this one and the ledger's for an entry's wrapper, with how they meet.
+- **The old glossary (git history at 52aebb8) already had both envelopes:** `envelope (runtime)` for this one and the ledger's for an entry's wrapper, with how they meet.
 - **A queued press across a restart.** The note says today's version loses it: the Model comes back, and the cause table does not. In `next/`, a process wakes by folding its inbox, so the table could come back from the log if each inbox letter keeps the `InputId` the door gave it. Lean, 60%: P11's plan checks that fold and, if it holds, adds "a restart between a press and its queued write still signs by the press" to p69. If the fold cannot tell a spent cause from a live one, it stays a known gap, written down in P11's pull request.
 - **The door cannot check a cause yet.** A known gap, as the note says: the entry records it now, so a later step can.
 - **The test-kit law's walk** ([question 17](#open-questions)) was approved by the owner 2026-11-08, as P11's plan writes p69. The signing service was decided 2026-11-07 as the door's `SessionManager`, and an agent's stated reason as `traceId` (questions 16 and 15).
@@ -1052,7 +1052,7 @@ The owner answers these. **As of 2026-11-05, nothing here stops the first wave.*
     ```
 
     The door stamps the person's ask as `input_01m6ye20k9fhnav1pe07y14pms` and the agent's next input as `input_01m6ye21rsedksvnmvq1esbpn6`. The agent's line has `parent: input_01m6ye21rsedksvnmvq1esbpn6`, so it is signed as the agent, and `traceId: t1` ties it back to the person's ask. *Ids changed 2026-11-08 ([question 20](#open-questions)): an input id is a TypeID, `input_<26 chars>`. This example said `in-process_<26 chars>-<n>`, the shape main's door still makes until a build pull request moves it.* *It was, below:*
-    *Added 2026-11-05, from [the inputs note](../direction/inputs-carry-their-sender.md#open-an-agents-stated-reason). Needed before any agent's line carries a person's message as its reason; no Tier 1 row does, so it blocks nothing here.* A line claude runs because the person asked cannot be signed by its cause's sender and also carry the person's message as its cause. **Lean, the note's (70%):** two links, as event stores keep two ids. `cause` is the direct one and signs, so claude's line is claude's; the person's message rides as its stated reason (`asked` in the note's sketch), checked only for delivery, shown, and never deciding. The owner's call is the key's name and whether a reason is worth keeping at all.
+    *Added 2026-11-05, from [the inputs note](../direction/inputs-carry-their-sender.md#decided-an-agents-stated-reason). Needed before any agent's line carries a person's message as its reason; no Tier 1 row does, so it blocks nothing here.* A line claude runs because the person asked cannot be signed by its cause's sender and also carry the person's message as its cause. **Lean, the note's (70%):** two links, as event stores keep two ids. `cause` is the direct one and signs, so claude's line is claude's; the person's message rides as its stated reason (`asked` in the note's sketch), checked only for delivery, shown, and never deciding. The owner's call is the key's name and whether a reason is worth keeping at all.
 16. **The signing service.** **Decided (owner, 2026-11-07): `SessionManager`, owned by the door.** The door stamped every input, so it is the one authority over "who sent input X", the way one gen_server owns a table in OTP. A process asks it over one RPC. The four refusals stay as the inputs note writes them, with `cause` now named `parent`. The doubt: one extra round trip per write. A cache in the process could cut it, but would go stale.
 
     ```ts

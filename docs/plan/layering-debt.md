@@ -86,7 +86,7 @@ Every number here is from a command run on 2026-11-13 in one checkout at `48460b
 - **OTP has no such rule.** An OTP application may call any application it depends on. Rule 11
   is ours, by the owner's ruling, and this plan follows the ruling.
 - **EventStoreDB** names the two calls on a named stream `appendToStream` and `readStream`, with
-  an expected revision. The glossary's `entry` row already follows its fields. Not fetched today.
+  an expected revision. The old glossary's `entry` row (git history at 52aebb8) already followed its fields. Not fetched today.
 
 ## What is decided, in one place
 
@@ -113,8 +113,8 @@ Read whole for this plan: 0043 with its amendments, 0055, 0062,
 - **0168:** the list goes to zero, no row is added, and a slice deletes exactly the rows it fixed.
 
 None of 0055's errors is built yet: `processes/Mailbox.ts` still fails with `LedgerError` and
-answers the ledger's `Appended`. The glossary rows for `MailboxError` and `ProcessManagerError`
-say so.
+answers the ledger's `Appended`. The old glossary's rows (git history at 52aebb8) for `MailboxError` and `ProcessManagerError`
+said so.
 
 ## The 17 product lines, one by one
 
@@ -555,4 +555,4 @@ built) is work this plan needs, so it is in the plan.
 ## Open questions
 
 1. May `processes/` get one small service that appends to, reads and waits on a named stream for libfabrika's own modules, checks who may write, and is not offered to programs? Lean: yes, 75%. Why: 0043 already asks for this function for the runtime's store, and access and the gateway need the same three calls. Cost: about 230 product lines, one new word in the glossary, and a service that stands close to the future `Topic`. Doubt: it may turn out a thin copy of the ledger; the Tier 2 walk on `Topic` would settle it. If no: slices 4, 6 and 7 need a narrower service each, named by the owner.
-2. Are `Streams`, `Item`, `Placed` and `appendWhen` the right words? Lean: `Streams` yes, 60%, as the glossary's own word for a named part of the log, plural as Effect names a service that holds many. The other three are placeholders, 50%.
+2. Are `Streams`, `Item`, `Placed` and `appendWhen` the right words? Lean: `Streams` yes, 60%, as the old glossary's own word (git history at 52aebb8) for a named part of the log, plural as Effect names a service that holds many. The other three are placeholders, 50%.

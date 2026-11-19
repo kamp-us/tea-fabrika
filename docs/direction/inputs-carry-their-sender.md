@@ -108,7 +108,7 @@ const Write = Schema.TaggedUnion({
   assignment (OWASP API Security Top 10 2023, API3). Decided in
   [0140](../../.decisions/0140-gateway-refuses-client-id-and-by.md): refused and counted in the
   gateway's hourly metric, never recorded, and a write with no cause is `own`.
-- **`at` and not `said`.** `at` is the referee's clock, as the [glossary](../../.glossary/TERMS.md)
+- **`at` and not `said`.** `at` is the referee's clock, as the old glossary (git history at 52aebb8)
   says. No sender gives its own clock today; if one does later, it goes in `said`, kept out of the
   deciding code's types. In `next/` the two are `arrivedAt` and `sentAt`.
 - **The cause is carried by the program, in its Msg, in any queue in its Model, and in the Cmd's
@@ -210,8 +210,8 @@ value is logged through its schema, with a `Redacted` value hidden
 
 [Saved state](./saved-state.md) already says "envelope" for a ledger entry's wrapper (D3's `by`,
 `said`, `at`, and `seen`; in `next/`, `by`, `sentAt`, `arrivedAt`, `seen` and now `cause`). That is the Ledger context. This envelope is a stamped input at the
-host's door, the Runtime context. The glossary keys it `envelope (runtime)`, and the context map
-says how the two meet: an input's envelope causes a write; the write's entry has its own envelope,
+host's door, the Runtime context. The old glossary (git history at 52aebb8) keyed it `envelope (runtime)`, and the old context map
+said how the two meet: an input's envelope causes a write; the write's entry has its own envelope,
 which now names the cause.
 
 ## What it undoes
