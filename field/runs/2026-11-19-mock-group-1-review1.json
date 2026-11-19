@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-19",
+  "run": "2026-11-19-mock-group-1-review1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": "kamp-us/tea-fabrika#1665",
+  "started": "2026-11-18T17:26:28-08:00",
+  "ended": "2026-11-18T17:40:00-08:00",
+  "parent": "2026-11-19-mock-group-1-build1",
+  "active": null,
+  "role": "step",
+  "step": "review",
+  "model": "opus",
+  "effort": "high",
+  "outcome": "fail",
+  "why": "The one review of mock group 1 for ticket 1067, in next/ and our lint tooling, at 490bd55b3 on fabrikalfa/mock-group-1, merge base 2ecb19720 (main), whose diff from main is exactly the three build commits. Sent back to build (send build), for one blocking class. next/packages/libfabrika/src/processes/ProcessIdGenerator.ts:28 adds a new static member, layerWithGenerator, to a class that extends Context.Service. Decision 0095 says no static member of any kind on a service class and that new code in next/ follows this from now, and next/AGENTS.md lists the rule; fabrika/no-static-layer does not fire only because processes/ is not yet one of its folders. The static is not needed: with main's ProcessIdGenerator.ts left as it is, law M3 reaches the generator's random draw through Effect's WebCrypto reference, provided outside ProcessIdGenerator.layer, because SecureRandom.layerWebCrypto reads that reference when Id.Generator.layer is built in the law's context (a scratch run: 7 of 7 green). The fix: restore ProcessIdGenerator.ts to main, have M3 provide WebCrypto.layer with a Stub.make stand-in whose getRandomValues fills 255 or throws the marker, and correct the pattern doc's lines about layerWithGenerator. Everything else holds: the M3 law keeps every case, Schema, run count and check of main with no spy and no try/finally; the new pair of lock blocks keeps every entry the four file sets took on main, covers only top files with src/*, sits after the node/repositories pair and before client/, and a vi fire there blocks at warn; the L10 and V1 laws are real. One non-blocking finding: three Gateway.ts line numbers in .patterns/effect-crypto-through-services.md were right at the build base but moved 6 lines with the merge of main.",
+  "note": "Node 22.23.5 first on PATH (the repo pins 26.13.0), TYPESAFE_API_KEY unset. Ran in a worktree of my own at 490bd55b3: pnpm install --frozen-lockfile (exit 0). pnpm lint: 20 of 21 parts passed, oxlint 0 blocking and 1224 advice, field check 2 added rows; lint:promise-types died with EPIPE from the type server when run in parallel and passed alone with 0 findings. pnpm typecheck in next/packages/libfabrika and then in oxlint-plugins: both exit 0. CI=1 nice -n 15 pnpm exec vitest run --maxWorkers=3 on next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts (7 passed; it is the only non-integration test under processes/ that uses ProcessIdGenerator), and on oxlint-plugins/plants.test.ts, oxlint-plugins/advice.test.ts and next/packages/libfabrika/src/runtime/EffectFunctions.test.ts, a caller of ProcessIdGenerator.layer (3 files, 300 passed). loosening.sh: four hits, none a loosened law; the removed expect in V1 is the JSON.parse level check, now error in folders at zero as before and warning only in the four folders that join here. Config check: the new blocks' no-restricted-properties lists equal the JSON.parse warn blocks' lists plus the five vi entries, read from oxlint --print-config; planting every banned line in a product and a test file of src/, gateway/, processes/, telemetry/, telemetry/internal/, ledger/, client/ and node/ and linting with main's config and the branch's lost no fire and gained only vi fires, in the first five folders alone. Experiment, not a plant: with main's ProcessIdGenerator.ts and M3 providing ProcessIdGenerator.layer then WebCrypto.layer of a stand-in crypto (a cast, scratch only), 7 of 7 passed. Every plant and the experiment were put back with git checkout, and git status was clean after each. Not run: the full suite, the changed-files run, any integration, launchd, Electron or process-signal law.",
+  "driver_caused": false,
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (V1 coverage)",
+      "plant": ".oxlintrc.json: processes/** deleted from the first block of the new vi pair",
+      "result": "red"
+    },
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (M1's VI_PROPERTIES scenario and V1)",
+      "plant": ".oxlintrc.json: the five vi entries dropped from eslint/no-restricted-properties in both new blocks",
+      "result": "red"
+    },
+    {
+      "law": "M4, oxlint-plugins/plants.test.ts (V1's JSON.parse level and L10's levels)",
+      "plant": ".oxlintrc.json: both new blocks' eslint/no-restricted-properties raised from warn to error",
+      "result": "red"
+    },
+    {
+      "law": "L10, oxlint-plugins/plants.test.ts (block order)",
+      "plant": ".oxlintrc.json: the new pair moved ahead of the node/repositories pair",
+      "result": "red"
+    },
+    {
+      "law": "M3, next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts",
+      "plant": "the law provides Id.Generator.layer in place of generatorWith(...)",
+      "result": "red"
+    },
+    {
+      "law": "M3, next/packages/libfabrika/src/processes/ProcessIdGenerator.test.ts",
+      "plant": "ProcessIdGenerator.layerWithGenerator provides Id.Generator.layer itself, so the law's generator is ignored",
+      "result": "red"
+    }
+  ]
+}
