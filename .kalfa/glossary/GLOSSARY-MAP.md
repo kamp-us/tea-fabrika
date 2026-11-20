@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eight exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery and Incidents. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Nine exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents and Reconciliation. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -57,8 +57,9 @@ moves the line here if it does.
   human or agent may do: relations, permissions, checks and roles.
 - **Configuration** (`kalfa/config/GLOSSARY.md`): the values a program runs with, and where each
   one came from.
-- **Reconciliation** (`kalfa/reconciliation/GLOSSARY.md`): a file says what should be true (desired
-  state), it is compared with what is live, and drift is reported and reconciled.
+- **Reconciliation** ([`kalfa/reconciliation/GLOSSARY.md`](../../kalfa/reconciliation/GLOSSARY.md)): the
+  project's kalfa config says what should be true (desired state), it is compared with what is live,
+  and drift is reported or reconciled.
 - **Incidents** ([`kalfa/incidents/GLOSSARY.md`](../../kalfa/incidents/GLOSSARY.md)): an incident and its
   severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
 - **Secrets** (`kalfa/secrets/GLOSSARY.md`): a value few may read, known to others only by its name;
@@ -104,6 +105,10 @@ its words are ours.
   rule may escalate to, are Permissions' answers.
 - **Reconciliation uses Code hosting** for a host's live settings, such as its rules. Who may push
   where is one of those rules.
+- **Reconciliation reads its desired state through Configuration,** from the project's kalfa config.
+  Drift is Reconciliation's word, and Configuration does not use it.
+- **Check** means two things: in Permissions, running a permission; in Reconciliation, comparing the
+  desired state with the live state.
 - **Code hosting uses Secrets** to sign an access grant's request; the key never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.
