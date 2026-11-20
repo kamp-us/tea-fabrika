@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Nine exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation and Secrets. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Ten exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets and Leak guard. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -64,8 +64,8 @@ moves the line here if it does.
   severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
 - **Secrets** ([`kalfa/secrets/GLOSSARY.md`](../../kalfa/secrets/GLOSSARY.md)): a value few may read, known to others only by its name;
   fetched, or used to sign without leaving.
-- **Leak guard** (`kalfa/leak-guard/GLOSSARY.md`): checking text before it goes public against a list
-  of private words, with a refusal that really stops the write.
+- **Leak guard** ([`kalfa/leak-guard/GLOSSARY.md`](../../kalfa/leak-guard/GLOSSARY.md)): checking text before it goes public
+  against its rules, such as a list of private words, with a refusal that really stops the write.
 - **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in a thread, in a chat app or in a
   pull request's comments.
 - **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
@@ -112,6 +112,8 @@ its words are ours.
 - **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.
+- **Verdict** means two things: in Delivery, whether a change candidate passed its checks; in Leak
+  guard, pass or refusal for one public write.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
   what they may do, or read a setting, and none owns the question's words.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
