@@ -13,8 +13,14 @@ _Avoid_: plugin, checker, integration
 ### Tests
 
 **Law**:
-A test that must hold. A plant must make it fail, which shows the law can fail at all.
+A test that must hold. A plant must make it fail, which shows the law can fail at all. A law carries its own
+plants.
 _Avoid_: spec, assertion, case
+
+**Label**:
+What kind of law a law is: scenario, vector, pinned, format or type, or a property. A law names its label in how it
+is declared, never in its title.
+_Avoid_: prefix, tag, kind
 
 **Depth**:
 How far one test run goes: fast or full. A law over real input and output reads its number of cases from the depth,
@@ -44,12 +50,13 @@ _Avoid_: mutation, fault, bug
 
 **Plant**:
 One mutant, picked by its shape in the code (the file, the kind of break, the original text and its replacement),
-with the law that must kill it.
+with the law that must kill it. It is written on that law.
 _Avoid_: seeded bug, fault injection, mutant (for the pair)
 
 **Catalog**:
-A repo's list of plants. Each plant's name is unique in it.
-_Avoid_: registry, plant list, manifest
+A repo's plants, gathered from its laws. No file lists them. Each plant's name is unique in it; one plant gathered
+from several test files is still one plant.
+_Avoid_: registry, plant list, manifest, plant file
 
 **Survey**:
 A list of every mutant on some lines of a file, with what happened to each, used to find the shape of a new plant.
