@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Fourteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control and Conversation. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Fifteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation and Code hosting. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -70,7 +70,7 @@ moves the line here if it does.
   chat app or in a pull request's comments, the comments under a line of code included.
 - **Source control** ([`kalfa/git/GLOSSARY.md`](../../kalfa/git/GLOSSARY.md)): git itself, in git's own words:
   repository, ref, commit, push, rebase. Not GitHub.
-- **Code hosting** (`kalfa/codehost/GLOSSARY.md`): what a remote host adds on top of git: a proposal
+- **Code hosting** ([`kalfa/codehost/GLOSSARY.md`](../../kalfa/codehost/GLOSSARY.md)): what a remote host adds on top of git: a proposal
   to merge one ref into another, reviews, the host's checks, its rules, and access grants
   (short-lived credentials the host gives out). Built from Source control's words.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
@@ -113,8 +113,21 @@ its words are ours.
   where is one of those rules.
 - **Reconciliation reads its desired state through Configuration,** from the project's kalfa config.
   Drift is Reconciliation's word, and Configuration does not use it.
-- **Check** means two things: in Permissions, running a permission; in Reconciliation, comparing the
-  desired state with the live state.
+- **Check** means three things: in Permissions, running a permission; in Reconciliation, comparing the
+  desired state with the live state; in Code hosting, a named mark the host keeps on one commit. CI's builds show on
+  the host as checks.
+- **Host** is Code hosting's word: a remote that adds change requests, reviews, checks, rules and access grants.
+  Shared names' platform and Identity's device avoid "host" because they mean other things.
+- **Change request** is one word for one thing in Delivery and Code hosting. Code hosting knows its source and target
+  branches and its state; Delivery adds changesets, approvals and the queue.
+- **Merge** means three things, and none is bare: Delivery lands; Source control makes a merge commit; Code hosting
+  marks a change request merged, which Delivery's landing causes.
+- **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one, and Delivery's
+  carry rule alone says how long it covers.
+- **Rule** means two things: in Leak guard, a check on outgoing text; in Code hosting, a ref rule (a limit on matching
+  refs) is never called a bare rule.
+- **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it, as
+  it does for Conversation's speaker. A sender is still only the client the gateway stamped.
 - **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.

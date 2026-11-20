@@ -57,7 +57,7 @@ A change request marked to go to the front of the queue. The mark comes from out
 _Avoid_: hotfix, revert, urgent
 
 **Verdict**:
-Whether a change candidate passed or failed the checks that count for it. Until it has one, it has no verdict.
+Whether a change candidate passed or failed, read from its build's verdict. Until it has one, it has no verdict.
 _Avoid_: status, result, build, check, green, red
 
 **Hold**:
