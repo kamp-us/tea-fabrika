@@ -1,5 +1,5 @@
 // typecheck.ts: what CI's `typecheck` job says about a quest's pushed head. Today's lead tooling
-// (0064). No push waits on a laptop typecheck: CI runs it (0133), as its own job in check.yaml, so
+// (the lead drives work by writing a flow that one program runs, and no agent holds a loop). No push waits on a laptop typecheck: CI runs it, as its own job in check.yaml, so
 // its answer comes the moment that one job ends, never after the whole run. chain.ts reads it right
 // after the pull request opens, before loosening.sh:
 //

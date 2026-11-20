@@ -1,4 +1,4 @@
-// Flow.ts: a flow is a named, ordered list of typed steps, as data (0064). Today's lead tooling,
+// Flow.ts: a flow is a named, ordered list of typed steps, as data (the lead drives work by writing a flow that one program runs, and no agent holds a loop). Today's lead tooling,
 // read through its module. A flow file default-exports one:
 //
 //   export default Flow.make("land-0065", [Step.act("format", { dir }), Step.check("lint", { dir })]);

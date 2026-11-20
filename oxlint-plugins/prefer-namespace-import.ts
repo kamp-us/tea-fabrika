@@ -1,4 +1,4 @@
-// E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, the form
+// E2 of the Effect-check sweep (libraries import Effect by namespace, programs and apps by the barrel): a library imports each Effect module by its path, the form
 // Effect's own source uses. Effect's checker reports `preferNamespaceImport` for the named form
 // and has no fix on its command line, so this rule reports the same imports and writes the fix, and
 // `pnpm format` applies it (`lint.ts --fix`): no hand edit and no find-and-replace over the tree.
@@ -82,7 +82,7 @@ export const preferNamespaceImport: CreateRule = {
         if (refused.length > 0) {
           context.report({
             node,
-            message: `${refused.join(", ")} from "${source}" is no module of Effect, so it has no namespace form (0577). Import the function from the module that holds it, by hand.`,
+            message: `${refused.join(", ")} from "${source}" is no module of Effect, so it has no namespace form (libraries import Effect by namespace, programs and apps by the barrel). Import the function from the module that holds it, by hand.`,
           });
 
           return;
@@ -90,7 +90,7 @@ export const preferNamespaceImport: CreateRule = {
 
         context.report({
           node,
-          message: `Import each Effect module by its path: \`import * as X from "${source}/X"\` (0577, E2). Fix: \`pnpm format\` writes it.`,
+          message: `Import each Effect module by its path: \`import * as X from "${source}/X"\` (libraries import Effect by namespace, programs and apps by the barrel, E2). Fix: \`pnpm format\` writes it.`,
           fix: (fixer) => fixer.replaceText(node, lines.join("\n")),
         });
       },

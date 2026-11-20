@@ -7,10 +7,10 @@
 //   fabrika(secret-types)    P12: a secret read (entropy, an Authorization header, a control binding's
 //                            token) enters `Redacted` at its source.
 //   fabrika(tsconfig-scope)  every TypeScript file of a `next/` package is in the program its
-//                            `typecheck` script checks (0524: no list lets broken code pass).
+//                            `typecheck` script checks (no list lets broken code pass).
 //
 // The secret and scope checks were the exam's (`secret-types.integration.test.ts` and
-// `tsconfig-scope.integration.test.ts`) until 0591 made them part of this command; their planted
+// `tsconfig-scope.integration.test.ts`) until the exam-to-lint rule made them part of this command; their planted
 // laws are in `promise-types.test.ts`.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Path, Schema, Stream } from "effect";

@@ -107,7 +107,7 @@ export const pathIn = (context: Context): string => {
 
 /**
  * Whether a file is held to `next/`'s rules: `next/` itself, and the lead tooling under `.agents/`,
- * which agents read and copy (0033).
+ * which agents read and copy (lead tooling under .agents/ follows next/'s code rules).
  */
 export const heldToNext = (file: string): boolean => file.startsWith("next/") || file.startsWith(".agents/");
 

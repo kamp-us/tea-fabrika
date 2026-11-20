@@ -1,6 +1,6 @@
 // movecheck.ts: says where a pull request did more than move. Lead tooling for ticket 477, run on our
-// own laptop; it is not product. libfabrika's files move into modules over 16 pull requests (decision
-// 0043), and a move must change no line of logic.
+// own laptop; it is not product. libfabrika's files move into modules over 16 pull requests (libfabrika
+// has one folder per subject, and the rule file says who may import whom), and a move must change no line of logic.
 //
 //   movecheck <base> <head> --moves <table>      a move PR: only the table's renames, files that only
 //                                                follow them and the named files change, and each
@@ -21,7 +21,7 @@
 // in the folder it is run from. One line per fault on stdout, a total on stderr. Exit 0 when clean, 1
 // on any fault, 2 when it could not run.
 //
-// Existing tools looked at first (decision 0040):
+// Existing tools looked at first (an existing, widely used tool comes before a hand-written one):
 //   - git's own rename detection (https://git-scm.com/docs/git-diff, `-M`). Used here to read the
 //     diff. It gives a likeness in percent, so it cannot say that only specifiers changed.
 //   - TypeScript's parser, to find the specifiers. The installed `typescript@7.0.2` gives a program

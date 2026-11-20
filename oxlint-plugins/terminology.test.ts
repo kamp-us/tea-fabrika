@@ -1,7 +1,7 @@
 import { Array as Arr, Record as Rec } from "effect";
-// Ticket 688, next/. Decision 0091: a folder of libfabrika is a module and its rank is a layer, so
+// Ticket 688, next/. The rule that a folder of libfabrika's src/ is a module and its rank is a layer: a folder of libfabrika is a module and its rank is a layer, so
 // the old words do not come back as names in next/. oxlint's own `eslint/id-denylist` holds it
-// (0040), from `.oxlintrc.json`'s `next/**` override, and this suite plants each edge case of the
+// (an existing, widely used tool comes before a hand-written one), from `.oxlintrc.json`'s `next/**` override, and this suite plants each edge case of the
 // plan at a real path with the repo's own config.
 //
 // The rule reads names only. It reports a declaration, a reference to a declared name, an object
@@ -82,13 +82,13 @@ const files = {
   [`${APP}/plant.test.ts`]: declared,
   [`${SRC}/ledger/Plant.test.ts`]: declared,
   [`${APP}/plant.test.tsx`]: declared,
-  // A conversation room is 0091's other meaning: one explained suppression, on its one line.
+  // A conversation room is the module and layer rename's other meaning: one explained suppression, on its one line.
   [`${APP}/conversation.ts`]: file(
-    "// oxlint-disable-next-line eslint/id-denylist -- a conversation room (0091), not a module",
+    "// oxlint-disable-next-line eslint/id-denylist -- a conversation room (a folder of libfabrika's src/ is a module and its rank is a layer), not a module",
     'export const room = { id: "lobby" };', // 3
     "export const floor = 2;", // 4: the neighbor the suppression does not reach
   ),
-  // The renamed rule, configured as `fabrika/modules`, on the plan's plant of 0043.
+  // The renamed rule, configured as `fabrika/modules`, on the plan's plant of the module-and-layer rule.
   [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
 };
 
@@ -111,7 +111,7 @@ describe("eslint/id-denylist: the old library words as names in next/", () => {
   });
 
   // Plant: add `module` or `layer` to the list.
-  it("scenario: module, modules, layer, layers and the renamed compounds pass, the new words of 0091", () => {
+  it("scenario: module, modules, layer, layers and the renamed compounds pass, the new words of the module and layer rename", () => {
     expect(linted(denylist, `${APP}/new.ts`)).toEqual([]);
   });
 
@@ -136,7 +136,7 @@ describe("eslint/id-denylist: the old library words as names in next/", () => {
   });
 
   // Plant: narrow the override's `files` to product files, `next/**/!(*.test).ts`.
-  it("scenario: a test file in next/ is held as product code is, since 0062 gives tests no exemption", () => {
+  it("scenario: a test file in next/ is held as product code is, since the rule that test files keep to the layers gives tests no exemption", () => {
     for (const path of [`${APP}/plant.test.ts`, `${SRC}/ledger/Plant.test.ts`, `${APP}/plant.test.tsx`]) {
       expect(linted(denylist, path), path).toEqual([2]);
     }

@@ -1,8 +1,8 @@
-// `pnpm lint:node-kinds`: every name in `node-kinds.json` is real (0524, ticket 933, L6). The file
+// `pnpm lint:node-kinds`: every name in `node-kinds.json` is real (no check reads a list that lets broken code pass, ticket 933, L6). The file
 // names exports that code-graph treats as used, so a made-up name would hide a dead export. Each name
 // must be exported by a file its glob matches, and bound by that same string somewhere else in
 // `next/`, as the platform binds a class by its name. This was the exam's `node-kinds.test.ts` until
-// 0591 made it a lint command; its laws are in `node-kinds.test.ts`.
+// The exam-to-lint rule made it a lint command; its laws are in `node-kinds.test.ts`.
 //
 // The glob is package-relative, as in code-graph 0.15.0's `conventionMatcher`: "src/brain.ts" matches
 // `src/brain.ts` inside the nearest folder with a package.json. A glob's homes leave out only the files

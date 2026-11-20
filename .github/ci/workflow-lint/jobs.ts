@@ -6,8 +6,7 @@ import { compact, map, type Rule } from "./shared.ts";
 
 export const jobLaws: Rule = ({ jobs }, require) => {
   // Each gated job needs changes alone, and runs unless every flag it runs on is false
-  // (required.mjs's `gates`): check on check or field rows, next on next, which already holds the
-  // sizing.
+  // (required.mjs's `gates`): check on check, next on next, which already holds the sizing.
   for (const name of gated) {
     if (name === "related") {
       continue;
@@ -22,9 +21,8 @@ export const jobLaws: Rule = ({ jobs }, require) => {
       ), `${name} must run after classifier failure and skip only when its flags are false`);
   }
 
-  // F3. legs and field are steps of changes and check now, so no job of either name comes back.
-  require(!("legs" in jobs) &&
-    !("field" in jobs), "F3: no legs or field job: changes sizes next, and check checks the rows");
+  // F3. legs is a step of changes now, and field rows are gone, so no job of either name comes back.
+  require(!("legs" in jobs) && !("field" in jobs), "F3: no legs or field job: changes sizes next");
 
   // A job with no limit runs for GitHub's 360 minute default when a step hangs (ticket 496).
   for (const [name, job] of Rec.toEntries(jobs)) {

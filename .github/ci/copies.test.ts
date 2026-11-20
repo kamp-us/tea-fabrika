@@ -1,4 +1,4 @@
-// Today's CI: copies.ts's laws (0587). jscpd's own report shape, read as its json reporter writes
+// Today's CI: copies.ts's laws (a new helper names the tools it searched, and a new name cites the industry's word). jscpd's own report shape, read as its json reporter writes
 // it, and the advice lines made from it. Nothing here runs jscpd.
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
@@ -36,13 +36,13 @@ const REAL = JSON.stringify({
 
 const side = (name: string, from: number, to: number) => ({ name, startLoc: { line: from }, endLoc: { line: to } });
 
-describe("copies: a pull request's new clones as advice (0587)", () => {
+describe("copies: a pull request's new clones as advice (a new helper names the tools it searched, and a new name cites the industry's word)", () => {
   // Plants: read the report as some other shape, or put the warning on the older side.
   it("vector: a real jscpd report's new clone becomes one warning on its second side that names the first", () => {
     const report = decodeReport(REAL);
     expect(Option.isSome(report)).toBe(true);
     expect(advice(Option.getOrThrow(report).duplicates)).toEqual([
-      "::warning file=.agents/skills/lead/scripts/pr/QueueCopy.ts,line=16,endLine=294,title=copied code (advice)::279 lines, 1961 tokens, the same as .agents/skills/lead/scripts/pr/Queue.ts:16-294. Reuse it or say why not in ## Existing tools (0587).",
+      "::warning file=.agents/skills/lead/scripts/pr/QueueCopy.ts,line=16,endLine=294,title=copied code (advice)::279 lines, 1961 tokens, the same as .agents/skills/lead/scripts/pr/Queue.ts:16-294. Reuse it or say why not in ## Existing tools (a new helper names the tools it searched, and a new name cites the industry's word).",
     ]);
   });
 

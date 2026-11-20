@@ -1,6 +1,6 @@
-// L3 of the trusted-rules swap (decision 0573): the Effect checker's `preferSchemaTaggedError` holds
+// L3 of the trusted-rules swap (a trusted lint rule replaces ours where it catches as much): the Effect checker's `preferSchemaTaggedError` holds
 // every type-checked class beside `fabrika/no-data-taggederror`, so the checker's level is a law.
-// Each tsconfig the repo tracks is read the way the checker reads it (0577, through test-helpers/effect-config.ts):
+// Each tsconfig the repo tracks is read the way the checker reads it (libraries import Effect by namespace, programs and apps by the barrel, through test-helpers/effect-config.ts):
 // its `extends` chain is followed and the checker's plugin block merged key by key, so a project
 // inherits the base's level unless it sets its own. The level that results is `error` in every
 // tracked tsconfig, and no override it ends with, its own or one it inherits, sets it lower for any path.

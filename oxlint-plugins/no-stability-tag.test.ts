@@ -1,4 +1,4 @@
-// `fabrika/no-stability-tag`, E1 of the Effect-check sweep (0574). Law 1 runs in process through
+// `fabrika/no-stability-tag`, E1 of the Effect-check sweep (no @stability tag until the first release, and each unstable Effect part is named once). Law 1 runs in process through
 // oxlint's RuleTester on generated doc blocks and reads the exact text the fix writes. Law 2 lints
 // planted files at their real paths with the repo's own `.oxlintrc.json`, so the scope is the
 // config's: the four folders fire, the 16 files of pull request 1366 included, and every other path does not.

@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
 // Ticket 737, G2. `fabrika/service-id` asks a libfabrika service ID for the package, its file's path,
-// then `.Name` when the service is named otherwise (decision 0023). The fixtures are the rule's own
-// inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
+// then `.Name` when the service is named otherwise (next/ follows Effect's code style and doc comments). The fixtures are the rule's own
+// inputs (each law is a property that walks the machine, and each plant is run once, never kept), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import { Array as Arr, Effect, pipe, Record as Rec, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
@@ -232,7 +232,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   );
 
   // Law 9 of docs/plan/effect-rules-small.md. The rule blocks since ticket 909, so it starts at zero
-  // (decision 0168). The real tree is the input: no generator can stand in for the IDs that are there.
+  // (an old lint break is fixed, never kept in a list). The real tree is the input: no generator can stand in for the IDs that are there.
   it("scenario: replayed over libfabrika's own source, the rule finds nothing", () => {
     const ran = spawnSync(
       join(root, "node_modules/.bin/oxlint"),

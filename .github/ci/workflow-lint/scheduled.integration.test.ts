@@ -6,7 +6,7 @@ import { Schema } from "effect";
 import { parse } from "yaml";
 
 // Today's CI, serving both versions. These children only read YAML on stdin. No signals, network,
-// application processes or files are changed. Plant (S7, run once and restored): put the 0595
+// application processes or files are changed. Plant (S7, run once and restored): put the shared-slots rule
 // version of scheduled.ts back, so its `jobSlots` takes the nine `scheduled-test-` slots; then the
 // old shape prints the sentinel and the pinned case fails, and every generated split is refused, so
 // the positive law fails too.
@@ -19,7 +19,7 @@ const sentinel = "scheduled job slots conform\n";
 const run = (input: string, args = ["--job-slots"]) =>
   spawnSync(process.execPath, [script, ...args], { input, encoding: "utf8" });
 
-// 0598's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
+// The scheduled-groups rule's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
 // branch's proof, the rest; each `tests` leg's pin is its group's number, the first legs of each map
 // taking groups 1 to N in order, as SC20 asks.
 const Workflow = Schema.Struct({
@@ -177,11 +177,11 @@ it.prop(
   { arbitrary: { runs: 3 } },
 );
 
-// S7's pinned case: main's scheduled.yaml before 0598 (the 0595 shape at 955a82d), built here from
-// today's file with the pieces 0595 had put back: `GAP_MINUTES` alone in `env`, nine `scheduled-test-`
-// slots for the tests and changed jobs, `MOST` and `max-parallel` of nine. A branch cut before 0598
+// S7's pinned case: main's scheduled.yaml before the scheduled-groups rule (the shared-slots rule shape at 955a82d), built here from
+// today's file with the pieces the shared-slots rule had put back: `GAP_MINUTES` alone in `env`, nine `scheduled-test-`
+// slots for the tests and changed jobs, `MOST` and `max-parallel` of nine. A branch cut before the scheduled-groups rule
 // carries this file; its proof run is refused at preflight until it merges main.
-it("pinned: the stdin CLI refuses the 0595 shape, so a branch not yet on main's refuses preflight", () => {
+it("pinned: the stdin CLI refuses the shared-slots rule shape, so a branch not yet on main's refuses preflight", () => {
   const w = parse(source);
   w.env = { GAP_MINUTES: 60 };
   w.jobs.select.steps.find((step: { id?: string }) => step.id === "set").env.MOST = 9;

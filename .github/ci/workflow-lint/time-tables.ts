@@ -17,14 +17,14 @@ export const timeTableEnv = (report: string) => ({
   REPORT: `\${{ runner.temp }}/${report}`,
 });
 
-// check.yaml's test jobs, each with the Vitest report its time table reads: next alone, since 0539
+// check.yaml's test jobs, each with the Vitest report its time table reads: next alone, since the no-tooling-tests-on-the-merge-line rule
 // took the tooling tests' job off the merge line.
 export const TIMED_LEGS = [
   ["next", "next.json"],
   ["related", "related.json"],
 ] as const;
 
-// A timings upload's `with:`, whole. `retention-days` is a setting (0069), so only its being there is
+// A timings upload's `with:`, whole. `retention-days` is a setting (a choice that makes sense as a setting is a setting, declared once), so only its being there is
 // held, as for the record's upload. Its name starts `timings-`, so it can never be taken for a
 // tested-tree record, which `matched` (changes.mjs) finds by its `tested-<tree>-<base>` name (Q1).
 const TIMINGS = {

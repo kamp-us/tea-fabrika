@@ -102,30 +102,9 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
   );
 });
 
-it("10: check, which also holds the field row check, skips only when check and field both said exactly false", () => {
-  // Field rows alone start check for its row step. Plant, run once on required.mjs and restored:
-  // gates.check as ["check"] alone (red: a skip with field "true" passed).
-  fc.assert(
-    fc.property(green, flag, flag, (needs, check, rows) => {
-      needs["changes"]!.outputs!["check"] = check;
-      needs["changes"]!.outputs!["field"] = rows;
-      needs["check"] = { result: "skipped", outputs: {} };
-      const others = gated.filter((other) => other !== "check" && needs[other]!.result === "skipped");
-      const meant = check === "false" && rows === "false";
-      expect(judge(needs).pass).toBe(
-        meant && others.every((job) => gates[job].every((flag) => needs["changes"]!.outputs![flag] === "false")),
-      );
-      expect(judge(needs).lines).toContain(
-        meant ? "check: skipped, as changes said, pass" : "check: skipped, but it should have run, fail",
-      );
-    }),
-    options,
-  );
-});
-
-it("scenario: the gates are the jobs check.yaml gates, with check on its own flag and field", () => {
+it("scenario: the gates are the jobs check.yaml gates, each on its own flag", () => {
   expect(gates).toEqual({
-    check: ["check", "field"],
+    check: ["check"],
     typecheck: ["typecheck"],
     next: ["next"],
     select: ["related"],
@@ -172,34 +151,26 @@ it("7: changes or a gated job missing from needs fails, and is named", () => {
 it("the verdict passes exactly when every job passes on its own", () => {
   // An oracle written apart from the judge: random results and flags for every job.
   fc.assert(
-    fc.property(
-      fc.record({ changes: result, field: flag }),
-      fc.tuple(...gated.map(() => fc.tuple(result, flag))),
-      (top, rows) => {
-        const outputs: Record<string, string | undefined> = {
-          ...Rec.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
-          field: top.field,
-        };
+    fc.property(fc.record({ changes: result }), fc.tuple(...gated.map(() => fc.tuple(result, flag))), (top, rows) => {
+      const outputs: Record<string, string | undefined> = Rec.fromEntries(gated.map((name, i) => [name, rows[i]![1]]));
 
-        const needs: Record<string, Job> = {
-          changes: { result: top.changes, outputs },
-          ...Rec.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
-        };
+      const needs: Record<string, Job> = {
+        changes: { result: top.changes, outputs },
+        ...Rec.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
+      };
 
-        const passes = (name: string) =>
-          needs[name]!.result === "success" ||
-          (needs[name]!.result === "skipped" &&
-            // SAFETY: `gated` is a tuple of job names; it is read as a plain string list only to ask if it holds `name`.
-            (gated as readonly string[]).includes(name) &&
-            top.changes === "success" &&
-            (Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? []).every(
-              (flag) => outputs[flag] === "false",
-            ) &&
-            (name !== "check" || top.field === "false"));
+      const passes = (name: string) =>
+        needs[name]!.result === "success" ||
+        (needs[name]!.result === "skipped" &&
+          // SAFETY: `gated` is a tuple of job names; it is read as a plain string list only to ask if it holds `name`.
+          (gated as readonly string[]).includes(name) &&
+          top.changes === "success" &&
+          (Object.entries(gates).find(([gate]) => gate === name)?.[1] ?? []).every(
+            (flag) => outputs[flag] === "false",
+          ));
 
-        expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
-      },
-    ),
+      expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
+    }),
     options,
   );
 });
@@ -217,7 +188,7 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   const good = JSON.stringify({
     changes: {
       result: "success",
-      outputs: { check: "false", field: "false", typecheck: "false", next: "true", related: "false" },
+      outputs: { check: "false", typecheck: "false", next: "true", related: "false" },
     },
     check: { result: "skipped", outputs: {} },
     typecheck: { result: "skipped", outputs: {} },
@@ -236,7 +207,7 @@ it("scenario: the main reads NEEDS from env, prints one line per job and exits 1
   expect(run(undefined).status).toBe(1);
 });
 
-// 0134's amendment (2026-11-11): changes.mjs's `jobs` decides what a draft and a ready pull request
+// The push-every-commit rule's amendment (2026-11-11): changes.mjs's `jobs` decides what a draft and a ready pull request
 // run, and this judge reads the same outputs. A draft's skips pass; on a ready pull request, any
 // job its flags said must run that skips or fails cannot pass, so the heavy jobs a draft skipped
 // cannot be skipped again once it is ready.
@@ -260,7 +231,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
 
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
-  // A job runs when any of its flags is on: check for lint or for field rows.
+  // A job runs when any of its flags is on.
   for (const name of gated) {
     needs[name] = { result: needed(flags, name) ? "success" : "skipped" };
   }
@@ -268,7 +239,7 @@ const ran = (flags: Record<string, boolean>): Record<string, Job> => {
   return needs;
 };
 
-// 0174: a merge queue's group skips jobs by its paths, and the queue takes this one check from it.
+// A merge queue's run starts only the checks its changed files need: a merge queue's group skips jobs by its paths, and the queue takes this one check from it.
 it("property: a merge queue's group passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -289,7 +260,7 @@ it("property: a merge queue's group passes with the jobs its paths skip; it fail
   );
 });
 
-// 0175: a push to main skips the jobs its paths do not need.
+// Every run that can read its changed paths picks its jobs from them: a push to main skips the jobs its paths do not need.
 it("property: a push passes with the jobs its paths skip; it fails when a job it needs skips", () => {
   fc.assert(
     fc.property(
@@ -310,9 +281,9 @@ it("property: a push passes with the jobs its paths skip; it fails when a job it
   );
 });
 
-// 0534: on the merge queue's group and a push to main, next runs the tests their change reaches, so
+// On the merge queue's group and a push to main, next runs the tests their change reaches, so
 // it skips when the size step picked none (changes' `next`, which the size step prints first). That
-// skip passes, as changes said. No run has a test job to skip since 0539.
+// skip passes, as changes said. No run has a test job to skip since the no-tooling-tests-on-the-merge-line rule.
 it("property: on the merge line past the pull request a skipped next passes only when changes said so", () => {
   // Plant: let a skip pass on any flag but "true" (red: next skipped with the size step's output
   // empty passed).

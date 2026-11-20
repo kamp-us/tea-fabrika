@@ -1,4 +1,4 @@
-// In next/, a running copy of fabrika is an instance, never a stage (0080). Today's version keeps
+// In next/, a running copy of fabrika is an instance, never a stage. Today's version keeps
 // its pipeline stages, so this rule reads only `next/` paths.
 //
 // What it reads: identifiers (escaped ones by their decoded name), string literals by their
@@ -21,7 +21,7 @@ import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };
 
-const MESSAGE = "Say instance for a running copy of fabrika in next/; stage was renamed (0080).";
+const MESSAGE = "Say instance for a running copy of fabrika in next/; stage was renamed.";
 
 const RUN = /\p{L}+/gu;
 

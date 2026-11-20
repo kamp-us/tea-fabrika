@@ -10,7 +10,7 @@ const script = process.env.T318_SKILLSCHECK_SCRIPT ?? join(import.meta.dirname, 
 // These fixtures are independent of the checker: deleting a checker clause must fail a law.
 const exam = [
   "Every new or changed law is a property, or an example labeled vector, format, pinned or scenario with its reason.",
-  // pinned: 0066, mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
+  // pinned: the scheduled-mutation rule, mutation left the pull request's steps, so loosening.sh alone is the zero-hit check.
   "Zero hits from loosening.sh mean no owner read is needed.",
   "The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list in the PR. Only real loosening waits on the owner.",
 ];
@@ -36,7 +36,7 @@ const answer = [
 
 const sections: Record<string, Record<string, string[]>> = {
   ".agents/skills/review/SKILL.md": { "3. **Check:**": check, "4. **Answer**": answer },
-  // One home a clause (0130, experiment 283): what a law must be is the tests skill's, and what a
+  // One home a clause (every piece of knowledge has one home, experiment 283): what a law must be is the tests skill's, and what a
   // loosening.sh hit means is the lead's landing step's.
   ".agents/skills/tests/SKILL.md": { "## New and changed laws": [exam[0]!] },
   ".agents/skills/lead/SKILL.md": {
@@ -429,7 +429,7 @@ const slice1bClauses = [
     "K20",
     "For a new property, use `@effect/vitest`'s `it.prop` or `it.effect.prop` with an existing Schema, or its own Effect Arbitrary exported beside it; write fast-check data only where Effect has nothing or to push edge cases.",
   ],
-  // Ticket 523, decision 0035: the finding rule has one home, the lead skill (0130, experiment 283).
+  // Ticket 523, the rule that an agent that finds work outside its task writes one finding and keeps going: the finding rule has one home, the lead skill (every piece of knowledge has one home, experiment 283).
   [
     "lead",
     "Outside your task",

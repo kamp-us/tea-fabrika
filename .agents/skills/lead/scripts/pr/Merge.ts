@@ -8,8 +8,9 @@
 //           for every admin merge -> for a sev fix, also origin/main's head in its history -> one
 //           pinned squash with --admin, past the queue. "Admin" skips the queue, never a green
 //           ci-required. It says why it was allowed: a sev fix at either level (the sev1's named fix,
-//           or a sev0's `open --allow` or `next` branch, 0611), a ready pull request an open sev0
-//           allows (0603), or, for any other, that the owner asked.
+//           or a sev0's `open --allow` or `next` branch, as a sev fix is admin-merged one at a time on
+//           current main), a ready pull request an open sev0 allows (no pull request is in a stack,
+//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, that the owner asked.
 //
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
@@ -31,7 +32,7 @@ export const Route = Schema.TaggedUnion({
   admin: {
     /** Every branch an open sev0 allows (a fix or a ready pull request), and none when no sev0 is open. */
     sev0: Schema.Array(Schema.String),
-    /** The ones of `sev0` that `open --allow` and `next` named, the fixes; `allow` added the rest (0603). */
+    /** The ones of `sev0` that `open --allow` and `next` named, the fixes; `allow` added the rest (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order). */
     sev0Fixes: Schema.Array(Schema.String),
     /** The one branch the sev log names as a sev1's fix now landing, or `null`. */
     sev1: Schema.NullOr(Schema.String),
@@ -111,8 +112,8 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
     return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
   }
 
-  // A fix holds main's head (0611): the next fix is tested on top of it. A ready pull request in a sev0
-  // lands with no catch-up first (0603).
+  // A fix holds main's head (a sev fix is admin-merged one at a time on current main): the next fix is tested on top of it. A ready pull request in a sev0
+  // lands with no catch-up first (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order).
   if (allowed.for === "fix") {
     const branches = yield* Branches;
 
@@ -156,8 +157,8 @@ export const line = (done: Done): string =>
         d.for === "asked"
           ? "the owner asked"
           : d.for === "fix"
-            ? `a ${d.level} fix (0611)`
-            : "a ready pull request in a sev0 (0603)"
+            ? `a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
+            : "a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
       }; read the push run on main next`,
     merged: (d) => `pr ${d.pr}: already merged at ${d.commit}`,
   });

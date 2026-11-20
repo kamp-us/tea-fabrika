@@ -15,7 +15,7 @@ import {
 } from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
-// the parser's pass left next, a pull request, a merge queue group and a push to main alike (0534);
+// the parser's pass left next, a pull request, a merge queue group and a push to main alike (the merge line runs only the tests a change reaches, and a schedule runs every test);
 // legs.ts itself prints the full matrix for a run of all of next/ with no base commit. The setup
 // also runs for the parser's pass, and reads the first pass alone.
 const SIZED = "(steps.same.outputs.next||steps.diff.outputs.next)!='false'";
@@ -36,7 +36,7 @@ const LEGS_OUTPUTS = [
 ] as const;
 
 // The size step's base is the run's own: the pull request's, the merge queue group's, or what main
-// held before the push (0534), the classify step's BASE.
+// held before the push (the merge line runs only the tests a change reaches, and a schedule runs every test), the classify step's BASE.
 const SIZE_ENV = {
   EVENT: `\${{ github.event_name }}`,
   FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter || 'next/ kalfa/' }}`,
@@ -111,7 +111,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   }
 
   // S1. The size step (legs.ts) runs after the parser's pass, on every run that tests next: a pull
-  // request, a merge queue group and a push to main (0534), so none of them runs the whole suite,
+  // request, a merge queue group and a push to main (the merge line runs only the tests a change reaches, and a schedule runs every test), so none of them runs the whole suite,
   // and a run of the reader tests alone starts only the legs they need. Its install and its sizing
   // may fail without failing changes, so a failure there is the full matrix, never a skipped next.
   require(sizing !== undefined &&

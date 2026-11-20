@@ -1,5 +1,5 @@
 // unlisted.ts: list every branch, on the laptop or pushed, that holds commits not on main and has no
-// open pull request, and apart from them the ones whose work is on main already (0134). Today's lead
+// open pull request, and apart from them the ones whose work is on main already (every commit is pushed when it is made, with a draft pull request from the first commit). Today's lead
 // tooling, run on our own laptop; it is not product. The lead runs it every round.
 //
 //   node unlisted.ts    run in the main checkout; one line per branch, then a count

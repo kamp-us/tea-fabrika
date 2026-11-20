@@ -27,7 +27,7 @@ const count = (xs: readonly Finding[], x: Finding) =>
 
 const root = fc.constantFrom(...Arr.map(LEDGERS, (ledger) => ledger.root));
 
-describe("agents-ledger.json and next-ledger.json, 0033", () => {
+describe("agents-ledger.json and next-ledger.json, the rule that .agents/ follows next/'s code rules", () => {
   it("each finding is waived or blocks, never both, and order is kept", () => {
     fc.assert(
       fc.property(fc.array(finding), fc.array(finding), root, (entries, findings, at) => {
@@ -103,7 +103,7 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
   });
 });
 
-describe("`.agents/` code is held to next/'s rules, 0033", () => {
+describe("`.agents/` code is held to next/'s rules, the rule that .agents/ follows next/'s code rules", () => {
   const script = ".agents/skills/x/scripts/a.ts";
   const test = ".agents/skills/x/scripts/a.test.ts";
 

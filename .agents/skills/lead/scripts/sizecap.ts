@@ -1,31 +1,31 @@
-// sizecap.ts: a pull request's size, recorded and printed. No number caps a pull request (0099,
-// which removed 0087's cap). Today's lead tooling, run on our own laptop; it is not product.
+// sizecap.ts: a pull request's size, recorded and printed. No number caps a pull request: the no-size-cap
+// rule removed the slices rule's cap. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   sizecap plan <plan.md>         at plan time: the plan's expected product lines and its slices
 //   sizecap diff <base> <head>     at landing time: the changed product lines from the merge base of
 //                                  <base> and <head> to <head>, with one warning past ADVICE_LINES
 //
-// Both print and never refuse: size picks who looks, never whether it lands (0099). Exit 0 when it
+// Both print and never refuse: size picks who looks, never whether it lands (no number caps the size of a pull request). Exit 0 when it
 // ran, 2 when it could not. `plan` checks no slice against a number; it only says when a slice
-// records no estimate, since 0099 keeps each slice's estimate on record.
+// records no estimate, since the no-size-cap rule keeps each slice's estimate on record.
 //
-// 0099 says the warning's number comes from our own merged pull requests (the lean: larger than 95
+// The no-size-cap rule says the warning's number comes from our own merged pull requests (the lean: larger than 95
 // of every 100 of them, without generated files and lockfiles). Nothing computes that yet, so
-// ADVICE_LINES is 0087's starting number, which no source favors; it is advice, never a limit.
+// ADVICE_LINES is the slices rule's starting number, which no source favors; it is advice, never a limit.
 //
 // A product line is an added or deleted line, as `git diff --numstat` counts them with rename
 // detection, in a file under `next/`, `apps/`, `programs/` or `packages/` (AGENTS.md: product code
 // is `next/` and today's app) that is none of these, which are counted apart from product lines:
 //   test       a `.test.` or `.test-support.` file, anything under `fixtures/` or an `e2e/` folder,
 //              an `e2e.ts` runner, and under `next/` a shared suite named `XTest.ts`, which a test
-//              file runs as `SinkTest.suite(nodeSql)` (0029, 0062) (0087 leans to tests not counting)
+//              file runs as `SinkTest.suite(nodeSql)` (the repo formats and names code as Effect does; test files keep to the layers too) (the slices rule leans to tests not counting)
 //   docs       Markdown, and anything under `docs/`
 //   lock       `pnpm-lock.yaml`, `package-lock.json`, `yarn.lock`, `*.lock`
 //   generated  a file `.gitattributes` marks `linguist-generated` at the head, as GitHub's diff
-//              hides it (0087 names it as the known way)
+//              hides it (the slices rule names it as the known way)
 //   binary     a file git cannot count lines in, such as a shot; counted in files
 // Every other changed line, lead tooling, CI and root settings included, is `other`. Whether those
-// pull requests are covered was open in 0087, so they are printed and not counted as product.
+// pull requests are covered was open in the slices rule, so they are printed and not counted as product.
 //
 // A plan states its size in two places (the newest plan shape, the settings plan of ticket P38):
 //   - a files table with a "Product lines expected" column: each cell that starts with a whole
@@ -33,7 +33,7 @@
 //   - a `## Size` section whose numbered items are the slices, each saying "<n> lines" or
 //     "<n> product lines"
 //
-// Existing tools looked at first (decision 0040):
+// Existing tools looked at first (an existing, widely used tool comes before a hand-written one):
 //   - `git diff --numstat` (https://git-scm.com/docs/git-diff): used. It counts the lines; this file
 //     only sorts the paths.
 //   - `git check-attr --source` (https://git-scm.com/docs/git-check-attr): used, to read
@@ -92,7 +92,7 @@ import { ChildProcess } from "effect/process";
 
 /**
  * Past this many product lines, `diff` asks whether the pull request should have been sliced. Advice
- * only (0099): 0087's starting number, kept until a count from our own merged pull requests replaces it.
+ * only (no number caps the size of a pull request): the slices rule's starting number, kept until a count from our own merged pull requests replaces it.
  */
 export const ADVICE_LINES = 600;
 
@@ -108,7 +108,7 @@ const LOCKS = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]);
 /** A file name that ends in `Test.ts` or `Test.tsx`, with a capital T and at least one character before it. */
 const SUITE = /.Test\.tsx?$/;
 
-/** Whether `path` is one of `next/`'s shared suites, read as `SinkTest.suite(nodeSql)` (0029, 0062). */
+/** Whether `path` is one of `next/`'s shared suites, read as `SinkTest.suite(nodeSql)` (the repo formats and names code as Effect does; test files keep to the layers too). */
 export const isSharedSuite = (path: string): boolean =>
   pipe(path, Str.startsWith("next/")) && SUITE.test(Str.split(path, "/").at(-1) ?? "");
 
@@ -190,7 +190,9 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
 /** The one line `diff` prints; past `advice` product lines it asks about slicing, and nothing more. */
 export const diffLine = (tally: Tally, advice: number): string => {
   const warning =
-    tally.product > advice ? `, more than ${advice}: should it have been sliced? (advice only, 0099)` : "";
+    tally.product > advice
+      ? `, more than ${advice}: should it have been sliced? (advice only, no number caps the size of a pull request)`
+      : "";
 
   const apart = `${tally.test} test, ${tally.docs} docs, ${tally.lock} lock, ${tally.generated} generated, ${tally.other} other lines, ${tally.binary} binary files`;
 
@@ -334,7 +336,7 @@ export const readPlan = (text: string): PlanSize => {
   };
 };
 
-/** What the plan check advises, each a line the lead reads. None compares a size with a number (0099). */
+/** What the plan check advises, each a line the lead reads. None compares a size with a number (no number caps the size of a pull request). */
 export const Advice = Schema.TaggedUnion({
   unsized: { order: Schema.Int, name: Schema.String },
   unknown: {},
@@ -349,7 +351,7 @@ export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
         slice.lines === null ? [Advice.cases.unsized.make({ order: slice.order, name: slice.name })] : [],
       );
 
-const ADVICE = "(advice only, 0099)";
+const ADVICE = "(advice only, no number caps the size of a pull request)";
 
 export const adviceLine = (advice: Advice): string => {
   switch (advice._tag) {

@@ -1,6 +1,6 @@
 // `no-promises` (exam item 1), its oxlint half: every Promise shape fires in next/, Effect's own Promise
 // calls with them, and the Effect ones pass. An edge comment covers only the next physical line. These
-// plants were the exam's (next/apps/fabrika/src/exam/no-promises.integration.test.ts) until 0591 moved
+// plants were the exam's (next/apps/fabrika/src/exam/no-promises.integration.test.ts) until the exam-to-lint rule moved
 // them here; the typed half's laws are in promise-types.test.ts. Plant: skip `Stream.toAsyncIterable` in
 // the rule, and line 26 of `fires` passes.
 import { describe, expect, it } from "vitest";

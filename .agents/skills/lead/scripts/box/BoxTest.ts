@@ -1,6 +1,6 @@
 import { Array as Arr, String as Str, pipe, Effect, FileSystem, Formatter, Layer, Option } from "effect";
 import type { Path, Scope } from "effect";
-// BoxTest: the laws of the box command, as suites a world runs (0062). A world makes MAIN and one clean box
+// BoxTest: the laws of the box command, as suites a world runs (test files keep to the layers too). A world makes MAIN and one clean box
 // in a fresh temp folder and gives the layers rm runs on: `BoxTest.memory` answers Git and the runs/
 // move from memory, `BoxTestGit.world` uses real git and RunsFs, so the memory one stays honest.
 //

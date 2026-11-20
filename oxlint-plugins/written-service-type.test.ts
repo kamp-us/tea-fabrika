@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 // Ticket 908, law 5 of docs/plan/effect-rules-small.md. `fabrika/written-service-type` fires exactly
-// when a service's type holds `ReturnType`, `Effect.Success` or a `typeof` query (decision 0095).
+// when a service's type holds `ReturnType`, `Effect.Success` or a `typeof` query (a service file holds only its contract, and each layer is its own file).
 // Each generated file runs in process through oxlint's RuleTester; one oxlint run over the first
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.

@@ -2,7 +2,7 @@
 // product (ticket 652).
 //
 // A quest agent never runs a lead-only step: the session's permission check refuses it the lead
-// key, and rightly (0056). So the quest agent's last act is `ready`, and the lead session runs the
+// key, and rightly (the lead runs a refused push or merge of a step itself only in the named cases). So the quest agent's last act is `ready`, and the lead session runs the
 // mechanical tail with `run`:
 //
 //   land.ts ready <quest> --tree <dir> [--body <file> --loosening <file>]
@@ -30,7 +30,7 @@
 //       queue        as `land.ts queue <pr> --wait` below
 //
 //   land.ts queue <pr> [--wait]
-//     the lead session, for any pull request whose steps passed (pr/Queue.ts, 0162): refuses one
+//     the lead session, for any pull request whose steps passed (pr/Queue.ts, a pull request whose steps passed lands on green CI and a clean leak check alone): refuses one
 //     that is closed, a draft or not into main; leak-greps its net change, each of its commits and
 //     its title and description, which become the squash commit's text; reads `ci-required` at its
 //     head, once, or with --wait again each minute for up to an hour, in the background; then one
@@ -39,13 +39,13 @@
 //     --admin, no --auto, no other merge method.
 //
 //   land.ts arm <pr>
-//     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
+//     the lead session, the one way merge when ready is turned on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green; every pull request whose review passed has merge when ready on, and main's full run catches what slips; pr/Arm.ts): refuses
 //     one that is not open, not into main, or titled `Plan:`; runs the leak gate (pr/Leaks.ts) on its
 //     net change, each of its commits and its title and description, and refuses on any hit or on a
 //     grep that could not run; reads the proof run (scheduled.yaml) on its branch at its head, the
-//     full set or, since 0590, the changed set, and refuses one that is red or not ended, printing
+//     full set or, since the proof-run rule, the changed set, and refuses one that is red or not ended, printing
 //     each job that is not green, its failed steps and its failing test lines. With no run at the
-//     head it arms, as 0544 allows, and says so in one line, unless the branch's newest run at an
+//     head it arms, as the arm-every-reviewed-pull-request rule allows, and says so in one line, unless the branch's newest run at an
 //     older head is not green or is a changed-set run, which proves only that head's change. Then
 //     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
 //
@@ -53,17 +53,17 @@
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare
 //     `gh pr merge`. Without --admin, as `queue`. With --admin, an admin merge past the queue, which
 //     skips the queue and never a green check: every one needs `ci-required` green at the head,
-//     docs included. It lands a sev fix at either level (0611: the branch `sev.ts fix` named in a
+//     docs included. It lands a sev fix at either level (a sev fix is admin-merged one at a time on current main: the branch `sev.ts fix` named in a
 //     sev1, or one `open --allow` or `next` named in a sev0), a ready pull request a sev0 `allow`ed
-//     (0603), or any other pull request the owner asked for. A fix also needs origin/main's head in
+//     (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), or any other pull request the owner asked for. A fix also needs origin/main's head in
 //     its history. Every one runs the leak gate first, on the change, each commit, the title and the
 //     description, and refuses on any hit or on a grep that could not run.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
-//     comment naming the pull request and its merge commit (0015), and starts one box cleanup sweep
-//     (`gcloop.ts kick`, 0101), which removes the quest's boxes and worktree. Not merged: one line
+//     comment naming the pull request and its merge commit (a merge closes only the tickets its pull request names with our own phrase), and starts one box cleanup sweep
+//     (`gcloop.ts kick`, box cleanup runs on a timer and after a merge, never on a step's start path), which removes the quest's boxes and worktree. Not merged: one line
 //     saying how it stands. Running it again closes nothing twice.
 //
 //   land.ts close-named <pr>...
@@ -74,7 +74,7 @@
 // so a refused run changes nothing. It never resolves a conflict and never reads a key.
 //
 // Each part is an exported Effect (readReady, checkTree, draftPr, mergeMain, leakCheck, signLead,
-// push, openPr, queue), so the lead's flows (0064, ticket 656) can run them as steps; `run` only
+// push, openPr, queue), so the lead's flows (the lead drives work by writing a flow that one program runs, and no agent holds a loop, ticket 656) can run them as steps; `run` only
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -120,7 +120,7 @@ const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 /**
  * The files a PR is made of: its body (first line the title) and the loosening check's output, the
- * one exam output a PR carries (0014, as amended by 0066: mutation runs hourly on main, not in a PR).
+ * one exam output a PR carries (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call, as amended by the scheduled-mutation rule: mutation runs hourly on main, not in a PR).
  */
 const PrFiles = Schema.Struct({ body: Schema.String, loosening: Schema.String });
 
@@ -137,7 +137,7 @@ class Ready extends Schema.Class<Ready>("Ready")({
 }) {}
 
 /**
- * `state/<quest>.land.json`. One written before decision 0546 names the quest `lane`: it reads as
+ * `state/<quest>.land.json`. One written before the rule that a lane is called a quest names the quest `lane`: it reads as
  * `quest`, and a new one says `quest`.
  */
 const ReadyJson = Schema.fromJsonString(Schema.Union([Ready, Ready.pipe(Schema.encodeKeys({ quest: "lane" }))]));
@@ -237,7 +237,7 @@ const planOwners = Effect.fnUntraced(function* (main: string, plan: string | und
   return ran.code === 0 ? Schema.decodeUnknownOption(Owners)(ran.out).pipe(Option.getOrElse(() => ({}))) : {};
 });
 
-/** The PR body as it will be posted: the quest's body file, then the loosening check's output (0014, 0066). */
+/** The PR body as it will be posted: the quest's body file, then the loosening check's output (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call; mutation testing runs on a schedule against main, not in a pull request). */
 const prBody = (body: string, loosening: string) => {
   const [first = "", ...rest] = body.split("\n");
   const fence = (t: string) => ["```text", t.trimEnd() || "(empty)", "```"];
@@ -334,7 +334,7 @@ const ready = Command.make(
   }),
 );
 
-// The steps, one exported Effect each, so a flow (0064, ticket 656) can run them one by one. Each
+// The steps, one exported Effect each, so a flow (the lead drives work by writing a flow that one program runs, and no agent holds a loop, ticket 656) can run them one by one. Each
 // takes the quest's facts and gives back what the next one needs; `run` below is a thin caller.
 
 /** The quest as the lead lands it: what the quest agent recorded, the ticket, and env.sh's paths. */
@@ -444,7 +444,7 @@ export const mergeMain = Effect.fn("land.mergeMain")(function* ({ ready, env }: 
   return { main, merged: behind };
 });
 
-/** Leak-greps the branch's net change from main and each commit a push would send (0048). */
+/** Leak-greps the branch's net change from main and each commit a push would send (the leak check reads each pushed commit on its own). */
 export const leakCheck = Effect.fn("land.leakCheck")(function* ({ ready }: Quest, main: string) {
   const leakgrep = `${HERE}/leakgrep.sh`;
 
@@ -728,7 +728,7 @@ const armCommand = Command.make(
   }),
 );
 
-/** The admin route the sev log gives, read in the main checkout (Level.routeFromLog builds it, 0611). */
+/** The admin route the sev log gives, read in the main checkout (Level.routeFromLog builds it, a sev fix is admin-merged one at a time on current main). */
 const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
   const unread = (reason: string) => new Refused({ check: "merge", reason, output: "" });
 

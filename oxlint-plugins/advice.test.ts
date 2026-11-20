@@ -1,4 +1,4 @@
-// Ticket 930 (0523): the five old advice rules block wherever their folder is at zero, and advise
+// Ticket 930 (a lint rule blocks wherever its code is clean): the five old advice rules block wherever their folder is at zero, and advise
 // only where a warn override at the end of the config names their folder. Ticket 948 adds the docs
 // rule, `fabrika/jsdocs`, the same way: six in all. These laws read
 // `advice.ts` in process, and run the real `lint.ts` and oxlint in a small temp repo of their own.
@@ -67,7 +67,7 @@ const MEMBERS = [
 ];
 
 describe("T930 L1 a fire advises only when it is one of the six and graded a warning", () => {
-  // Reflect ban L2 (0554), in process: of oxlint's own rule, only the JSON.parse fire advises.
+  // Reflect ban L2 (a field is read through its type or a decode, never past it with Reflect), in process: of oxlint's own rule, only the JSON.parse fire advises.
   // Plant: make `advises` read the code alone again, and a Reflect fire at warning advises.
   it("is true exactly for the six at severity warning, of no-restricted-properties only the JSON.parse fire, and false for an error or any other rule", () => {
     const seen = { parse: false, reflect: false };
@@ -202,7 +202,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
 
   symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
   symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-  // The real config loads the vendored anti-slop plugins from here (0563).
+  // The real config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
@@ -234,7 +234,7 @@ const HINT = "decode with Effect Schema, not a bare JSON.parse";
 const parse = (level: string) => [level, { object: "JSON", property: "parse", message: HINT }];
 
 /**
- * The frozen version's override, as the real config writes it (0525): both top-level rules "warn"
+ * The frozen version's override, as the real config writes it (today's version is frozen and takes no new work): both top-level rules "warn"
  * there, and fabrika-design carved back to "error". It is not a dirty-folder line, so no fire under
  * these paths is ever needed to keep a whole run passing.
  */
@@ -451,7 +451,7 @@ describe("T930 L2 through lint.ts and oxlint, one of the five blocks in a clean 
   }, 120_000);
 
   // scenario: the repo's own config fails closed. A folder nobody listed blocks, the frozen version
-  // still advises until the freeze quest takes it out of lint, and fabrika-design stays live (0456).
+  // still advises until the freeze quest takes it out of lint, and fabrika-design stays live (fabrika's design lives in one package both versions import).
   it("scenario: under the real config an Effect.promise blocks in a new folder and in fabrika-design, and advises under apps/", () => {
     const { text } = PLANTS["fabrika(no-effect-promise)"];
     const config = readFileSync(join(ROOT, ".oxlintrc.json"), "utf8");
@@ -692,12 +692,31 @@ describe("T930 L10 the five stop saying they only advise", () => {
   }, 120_000);
 });
 
-/** The Reflect ban's four entries (0554), each with its own hint, as the config writes them. */
+/** The Reflect ban's four entries (a field is read through its type or a decode, never past it with Reflect), each with its own hint, as the config writes them. */
 const BAN = [
-  { object: "Reflect", property: "get", message: "Decode with Schema, or narrow first (0554)." },
-  { object: "Reflect", property: "set", message: "Assign through the type (0554)." },
-  { object: "Reflect", property: "has", message: "Narrow with Predicate.hasProperty (0554)." },
-  { object: "globalThis", property: "Reflect", message: "Name Reflect directly, so lint can read the call (0554)." },
+  {
+    object: "Reflect",
+    property: "get",
+    message:
+      "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect).",
+  },
+  {
+    object: "Reflect",
+    property: "set",
+    message: "Assign through the type (a field is read through its type or a decode, never past it with Reflect).",
+  },
+  {
+    object: "Reflect",
+    property: "has",
+    message:
+      "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect).",
+  },
+  {
+    object: "globalThis",
+    property: "Reflect",
+    message:
+      "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect).",
+  },
 ];
 
 /**
@@ -861,7 +880,7 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
   // file of client/ end at error, and client/'s with both retry entries; and a file that ends at warn
   // sits in a folder that holds a real JSON.parse fire, counted at the grain the warn glob is written
   // for (topOf, directOnly), so a glob cannot reach a folder that blocks today and keep the stale
-  // warn-line law (T930 L3, per glob) quiet. No list of folders is pinned (0524).
+  // warn-line law (T930 L3, per glob) quiet. No list of folders is pinned (no check reads a list that lets broken code pass).
   // The limit, stated as it is: a sample of the real tree. A glob for a kind of file that no tracked
   // file has could still pass, and a folder at warn is judged by a fire in any of its files.
   // A glob that only client/ meets cannot fail it: client/'s block comes last, so those files end

@@ -42,7 +42,7 @@ const fixture = Effect.gen(function* () {
 const allGreen = (jobs: ReadonlyArray<Job>): ReadonlyArray<Job> =>
   jobs.map((job) => ({ ...job, conclusion: "success" }));
 
-/** A job of a run in today's shape (0590), with no step: only its name and how it ended are read. */
+/** A job of a run in today's shape (a branch's proof run runs only the tests its change reaches), with no step: only its name and how it ended are read. */
 const job = (id: number, name: string, conclusion: string): Job => ({
   id,
   name,
@@ -189,7 +189,7 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 
-describe("arm: merge when ready goes on over a green full run, or none at the head as 0544 allows", () => {
+describe("arm: merge when ready goes on over a green full run, or none at the head as the arm-every-reviewed-pull-request rule allows", () => {
   // scenario: the run that was read as "the queue canceled it" twice on 2026-11-15.
   it.effect(
     "scenario: run 43776563690, one leg's vitest step failed and the other nine canceled, refuses; it names the red leg's failed step and failing tests, and arms nothing",
@@ -242,9 +242,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // vector: 0544's path, word for word: fallback guidance describes automatic CI without starting local work.
+  // vector: the arm-every-reviewed-pull-request rule's path, word for word: fallback guidance describes automatic CI without starting local work.
   it.effect(
-    "vector: no full run arms with the 0544 line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
+    "vector: no full run arms with the arm-every-reviewed-pull-request rule line and automatic CI guidance; a green run at an older head arms with the same line; a docs pull request's line says it starts no full run",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -252,15 +252,15 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const tail = `merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`;
         const none = memory({ stands: "none" }, red);
         expect(Arm.line(yield* arm(none))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const stale = memory({ stands: "older" }, red);
         expect(Arm.line(yield* arm(stale))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); ${tail}`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); ${tail}`,
         );
         const docs = memory({ stands: "none", files: ["docs/plan/README.md", ".kalfa/glossary/GLOSSARY-MAP.md"] }, red);
         expect(Arm.line(yield* arm(docs))).toBe(
-          `pr 1092: no full run at ${head}; arming as 0544 allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
+          `pr 1092: no full run at ${head}; arming as the arm-every-reviewed-pull-request rule allows (a docs-only pull request (@kalfa/ci/DocsOnly) starts no full run); ${tail}`,
         );
         expect([...none.github.calls, ...stale.github.calls, ...docs.github.calls]).toEqual([
           ...armedAt,
@@ -331,7 +331,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // Plants: arm on the run's top line; let a skip pass on any job; refuse a head with no run (0544);
+  // Plants: arm on the run's top line; let a skip pass on any job; refuse a head with no run (every pull request whose review passed has merge when ready on, and main's full run catches what slips);
   // arm over a red or unfinished run at the head, or over an older head's run that is not green; arm
   // a plan or a closed one.
   it.effect.prop(
@@ -358,7 +358,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
             state,
             base,
             title: plan ? "Plan: per-program quotas" : "Per-program quotas",
-            files: docsOnly ? [".kalfa/decisions/0573-x.md", "field/notes/x.json"] : ["docs/x.md", "next/x.ts"],
+            files: docsOnly ? [".kalfa/decisions/0573-x.md", "docs/y.md"] : ["docs/x.md", "next/x.ts"],
             jobs: isRed ? red.jobs : withSkip,
           },
           red,
@@ -373,12 +373,12 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       }),
   );
 
-  // 0590: a branch's proof run tests the full set or the changed set. Plants, each run once on
+  // A branch's proof run runs only the tests its change reaches: a branch's proof run tests the full set or the changed set. Plants, each run once on
   // Arm.ts and restored: `kind` reads every run as full (red: the changed-set run at the older head
   // arms); a changed-set run at an older head arms with the note as a full one does (red: the same);
   // the report skips by design, as before pull request 1404 (red: the runs with a skipped report arm).
   it.effect(
-    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with 0544's note",
+    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with the arm-every-reviewed-pull-request rule's note",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -388,21 +388,21 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         for (const kind of ["changed", "zero"] as const) {
           const at = memory({ stands: "green", jobs: shaped(kind) }, red);
           expect(Arm.line(yield* arm(at)), kind).toBe(
-            `pr 1092: changed-set run ${RED} green on every job at ${head}, the tests this change reaches (0590); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+            `pr 1092: changed-set run ${RED} green on every job at ${head}, the tests this change reaches (a branch's proof run runs only the tests its change reaches); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
           );
           expect(at.github.calls, kind).toEqual(armedAt);
 
           const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
           const refused = yield* Effect.flip(arm(stale));
           expect(refused.reason, kind).toBe(
-            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); automatic ready and queue CI provide the required checks`,
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (a branch's proof run runs only the tests its change reaches); automatic ready and queue CI provide the required checks`,
           );
           expect(stale.github.calls, kind).toEqual([]);
         }
 
         const full = memory({ stands: "older", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(full))).toBe(
-          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as the arm-every-reviewed-pull-request rule allows (automatic ready and queue CI provide the required checks); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
         const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
         expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
@@ -451,7 +451,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
   );
   // Plants: skip the names check, or run it after the arm.
   it.effect(
-    "scenario: a green pull request whose diff exports a name its description does not name is refused with that name and arms nothing; with the line it arms (0587)",
+    "scenario: a green pull request whose diff exports a name its description does not name is refused with that name and arms nothing; with the line it arms (a new helper names the tools it searched, and a new name cites the industry's word)",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -833,7 +833,7 @@ describe("automatic ready CI, with its related tooling legs, as the current-head
           const answer = yield* Effect.result(arm(m));
           const line = answer._tag === "Success" ? Arm.line(answer.success) : "";
 
-          // A refusing verdict refuses the arm; no verdict arms on the 0544 line, which never says docs only.
+          // A refusing verdict refuses the arm; no verdict arms on the arm-every-reviewed-pull-request rule line, which never says docs only.
           expect(answer._tag === "Failure", found.name).toBe(found.stands === "red");
           expect(line.includes("docs only (@kalfa/ci/DocsOnly)"), found.name).toBe(false);
           expect(m.github.calls, found.name).toEqual(found.stands === "red" ? [] : armedAt);

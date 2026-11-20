@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. The full run's gate (0581): the first job of scheduled.yaml,
+// Today's CI, serving both versions. The full run's gate (main's full run starts on a push to main and an hourly catch-up): the first job of scheduled.yaml,
 // which says whether this run starts the tests. A push to main or the hourly catch-up starts them
 // only when no full run on main started within the gap (`GAP_MINUTES`, a setting beside the cron
 // line), and only on a head that has had no full run; a hand start always does.

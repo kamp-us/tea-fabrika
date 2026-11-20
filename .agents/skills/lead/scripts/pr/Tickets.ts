@@ -1,5 +1,5 @@
-// Tickets: what the landing path asks the app's own tracker once a pull request has merged (0015):
-// which tickets are open, one comment, one close. This file is the contract only (0095):
+// Tickets: what the landing path asks the app's own tracker once a pull request has merged (a merge closes only the tickets its pull request names with our own phrase):
+// which tickets are open, one comment, one close. This file is the contract only (a service file holds only its contract, and each layer is its own file):
 // `TicketsCli.layer` posts through today's app's `post` command as agent:lead, `TicketsTest.layer`
 // keeps the tickets in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";

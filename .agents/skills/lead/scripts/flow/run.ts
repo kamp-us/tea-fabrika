@@ -1,4 +1,4 @@
-// run.ts: run one flow end to end in this process, with no agent holding the loop (0064). Today's
+// run.ts: run one flow end to end in this process, with no agent holding the loop (the lead drives work by writing a flow that one program runs, and no agent holds a loop). Today's
 // lead tooling, run on our own laptop; it is not product. Run it in the background and read the last
 // line only: one JSON object with how the flow ended.
 //

@@ -1,4 +1,4 @@
-// Step.ts: one step of a flow, as data (0064). Today's lead tooling, read through its module:
+// Step.ts: one step of a flow, as data (the lead drives work by writing a flow that one program runs, and no agent holds a loop). Today's lead tooling, read through its module:
 // `Step.act("format", { dir })`. A step's kind is one of the six pipeline primitives
 // (packages/pipeline/src/primitives.ts names them):
 //

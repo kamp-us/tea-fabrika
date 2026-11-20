@@ -443,7 +443,7 @@ describe("T325 R5 leakgrep defaults and token lengths, today's tooling", () => {
   });
 });
 
-describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () => {
+describe("T396 leakgrep plain /tmp paths, today's tooling (a plain path under /tmp passes the leak check, one whose first part ends in a dash and a number never does)", () => {
   const run = (text: string) => {
     const dir = mkdtempSync(join(tmpdir(), "lg-tmp-"));
 
@@ -465,13 +465,13 @@ describe("T396 leakgrep plain /tmp paths, today's tooling (decision 0011)", () =
     }
   };
 
-  // vector: AGENTS.md asks test homes to use a short path under /tmp; 0011 lets it through.
+  // vector: AGENTS.md asks test homes to use a short path under /tmp; the plain-/tmp-path rule lets it through.
   it("vector: a short test home under /tmp passes", () => {
     const ran = run("/" + "tmp/fh.abc");
     expect(ran.status, ran.stderr).toBe(0);
   });
 
-  // pinned: 0011 keeps these flagged. A /tmp first part ending in -<number> may hold a user id,
+  // pinned: the plain-/tmp-path rule keeps these flagged. A /tmp first part ending in -<number> may hold a user id,
   // and the other four are home or per-user temp folders.
   for (const leak of ["/" + "tmp/claude-501/x", "/private/" + "tmp/x", "/" + "var/folders/ab/x", "/" + "Users/x"]) {
     it(`pinned: ${leak.replace(/^\//, "")} is a machine path`, () => {

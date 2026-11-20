@@ -1,6 +1,6 @@
 import { Array as Arr, Record as Rec } from "effect";
 // In next/, a resource is released by the scope that acquired it, never by an `afterEach` or
-// `afterAll` that a thrown error or a killed test can skip (0061). oxlint's own `vitest/no-hooks`
+// `afterAll` that a thrown error or a killed test can skip (anything that holds a resource is acquired in a scope, so the scope releases it). oxlint's own `vitest/no-hooks`
 // holds it, set in the repo's config to allow the two setup hooks. Each planted file sits at a
 // generated path, so the config's globs are under test with the rule.
 import * as fc from "fast-check";

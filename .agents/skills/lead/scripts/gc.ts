@@ -30,7 +30,7 @@
 // Every keep is printed with its reason, so a box that never goes is seen (field note
 // 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
 //
-// Last, mutbox.ts removes what the mutation container left in Docker (0045).
+// Last, mutbox.ts removes what the mutation container left in Docker (a step that needs ports or its own processes and network isolation runs in a container).
 //
 // It never runs a command inside a box: it reads the box's git data with hooks off, and fetches
 // from it into the main checkout, as `box.sh fetch` does. One line per box removed, then a total.
@@ -127,7 +127,7 @@ export const decide = (s: Seen): Verdict => {
     return keep(`touched ${Math.round(s.idle / 60_000)} min ago`);
   }
 
-  // A stuck box is kept for the lead to read, until its quest lands (0019).
+  // A stuck box is kept for the lead to read, until its quest lands (the tooling removes a quest's boxes and worktrees when it lands).
   if (s.stuck !== null && s.stuck < STUCK && !s.merged) {
     return keep(`stuck, kept by drive ${Math.round(s.stuck / HOUR)} h ago`);
   }
@@ -816,7 +816,7 @@ const main = Effect.fn("gc.main")(function* () {
     console.log(`${dry ? "would remove" : "removed"} worktree ${path}: ${verdict.reason}, ${mb} MB`);
   }
 
-  // The mutation container's leftovers (0045): a container a dead run left, and images over a
+  // The mutation container's leftovers (a step that needs ports or its own processes and network isolation runs in a container): a container a dead run left, and images over a
   // week old. mutbox.ts knows which are safe to remove, and keeps a live run's. Each of its Docker
   // calls has its own bound; GC_SECONDS is a second guard, so a hung Docker never holds the chain
   // (2026-11-10: a `docker ps` here never returned, and two quests sat 1 h 50 min).

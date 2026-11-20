@@ -34,7 +34,7 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { String as Str, pipe, Array as Arr, Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
-/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (a tea Msg, Cmd and Sub are keyed on _tag; nothing shows an agent a banned shape, so shape rules cover tests and tooling too).
  *  A law hands over only the fields it reads, so a case holds the key alone. */
 const Tag = Schema.TaggedUnion({
   save: {},

@@ -53,7 +53,7 @@ import {
 } from "./chain.ts";
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 
-/** The key of each Msg, Cmd and answer these laws write or expect, made by its schema (0569, 0562).
+/** The key of each Msg, Cmd and answer these laws write or expect, made by its schema (a tea Msg, Cmd and Sub are keyed on _tag; nothing shows an agent a banned shape, so shape rules cover tests and tooling too).
  *  A law hands a cell or expects of a Cmd only the fields it reads, so a case holds the key alone. */
 const Tag = Schema.TaggedUnion({
   start: {},
@@ -79,7 +79,7 @@ const Tag = Schema.TaggedUnion({
 // Today's tooling. The quest machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
-// Every step the chain can start at, and the quest's own steps (0066: no mutation step).
+// Every step the chain can start at, and the quest's own steps (mutation testing runs on a schedule against main, not in a pull request: no mutation step).
 const step = fc.constantFrom(...STEPS);
 
 const questStep = fc.constantFrom(...QUEST_STEPS);
@@ -110,7 +110,7 @@ const line = (o: string, head: string, reason = "why", listUsd: number | null = 
   listUsd,
 });
 
-/** The machine's limits: 0076's intensity of 3 in 5, and a backstop only when one is given. */
+/** The machine's limits: the quest budget rule's intensity of 3 in 5, and a backstop only when one is given. */
 const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3): Limits => ({
   maxSteps,
   maxStucks,
@@ -143,7 +143,7 @@ const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
-  // 0066: a quest's steps are tests -> build -> review; a mutation step (a quest started there)
+  // Mutation testing runs on a schedule against main, not in a pull request: a quest's steps are tests -> build -> review; a mutation step (a quest started there)
   // hands to review. Plants: build hands to mutation; mutation hands to build; skip stops the walk.
   it("property: done walks tests -> build -> review -> open; a started mutation goes to review; skip walks the same way", () => {
     const walk: Record<StepName, string> = {
@@ -291,7 +291,7 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
     expect(judgedOf("I think the build should run again").toString()).toBe(judgedOf("").toString());
     expect(judgedOf("answer: send plan fix it")._tag).toBe("park");
     expect(judgedOf("")._tag).toBe("park");
-    // pinned: 0066, a quest has no mutation step, so an older answer that names one parks.
+    // pinned: the scheduled-mutation rule, a quest has no mutation step, so an older answer that names one parks.
     expect(judgedOf("answer: send mutation rerun it")).toEqual({ _tag: "park", reason: "rerun it" });
   });
 });
@@ -421,7 +421,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
     expect(Arr.sort(Rec.keys(cut.sections), Order.String)).toEqual(Arr.sort([...STEPS, "pr"], Order.String));
   });
 
-  // 0066: a brief needs no `## mutation`; an older one that has it is accepted. Plants: demand
+  // Mutation testing runs on a schedule against main, not in a pull request: a brief needs no `## mutation`; an older one that has it is accepted. Plants: demand
   // every STEPS section; refuse a brief that has mutation; drop pr from the needed list.
   it("property: a brief lacks only what its start needs: quest steps and pr always, mutation only to start there", () => {
     const sections = fc.subarray([...STEPS, "pr"]);
@@ -536,7 +536,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     }
   });
 
-  // 0066. Plants: route build's done to mutation; let a judgment or a send start mutation.
+  // The scheduled-mutation rule. Plants: route build's done to mutation; let a judgment or a send start mutation.
   it("property: no path from a quest started at tests, build or review ever runs mutation", () => {
     const answer = fc.oneof(
       outcome.map((o) => ({ _tag: "line" as const, o })),
@@ -599,7 +599,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     );
   });
 
-  // A quest parked inside its mutation step before 0066 is not stranded. Plants: refuse a mutation
+  // A quest parked inside its mutation step before the scheduled-mutation rule is not stranded. Plants: refuse a mutation
   // start; send a started mutation's done to build; run mutation twice.
   it("property: a quest started at mutation runs that one step, then review", () => {
     fc.assert(
@@ -813,7 +813,7 @@ describe("the host step runs before every review of a new head, today's tooling"
     );
   });
 
-  // 0076 with the host step: its round is a step and its send a send back. Plants: give the host
+  // The quest budget rule with the host step: its round is a step and its send a send back. Plants: give the host
   // step no round; leave its mark out of the window; count a host stuck against the quest.
   it("scenario: a host send is a send back in the budget's window, and the host round counts toward the backstop", () => {
     const h = pipe("a", Str.repeat(40));
@@ -870,7 +870,7 @@ describe("the host step runs before every review of a new head, today's tooling"
   });
 });
 
-describe("CI's typecheck job answers once the pull request opens, with no laptop typecheck (0133), today's tooling", () => {
+describe("CI's typecheck job answers once the pull request opens, with no laptop typecheck (no push waits on a local typecheck, since CI runs it), today's tooling", () => {
   const machine = makeMachine(limits(16));
 
   type Machine = typeof machine;
@@ -976,7 +976,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     );
   });
 
-  it("scenario: a red typecheck that fills the intensity window stops the quest (0076)", () => {
+  it("scenario: a red typecheck that fills the intensity window stops the quest (a quest stops at its budget, or when its steps keep failing close together)", () => {
     // 2 in 5 here, so one earlier send and the red one trip it.
     const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
     const [m] = reviewed(pipe("a", Str.repeat(40)), 1, tight);
@@ -1197,7 +1197,7 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     );
   });
 
-  // 0066: a quest that ran no mutation step claims none. Plants: always name mutation; name a
+  // Mutation testing runs on a schedule against main, not in a pull request: a quest that ran no mutation step claims none. Plants: always name mutation; name a
   // Claude step that never ran.
   it("property: the body names Claude only for steps the quest ran on it, mutation only when it ran", () => {
     fc.assert(
@@ -1496,7 +1496,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
     expect(Rec.keys(row)).toContain("date");
   });
 
-  // 0093: a step's plants go from its answer's JSON object to its field row. Plants run once, both
+  // Each law is a property that walks the machine, and each plant is run once, never kept: a step's plants go from its answer's JSON object to its field row. Plants run once, both
   // red: stepRow drops `plants`; Answer has no `plants` key.
   it("the plants a step's answer names decode with it and land on its row whole, and a row with none has no plants key", () => {
     const plant = fc.record({ law: fc.string(), plant: fc.string(), result: fc.constantFrom("red", "green") });
@@ -1533,7 +1533,7 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
   });
 });
 
-describe("T675 a quest stops at its budget (0076), today's tooling", () => {
+describe("T675 a quest stops at its budget (a quest stops at its budget, or when its steps keep failing close together), today's tooling", () => {
   const big = 1_000;
 
   const stepOn = (limit: Limits) => {
@@ -1741,7 +1741,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
         dollars: 5.25,
       });
       expect(m.end.reason).toBe(
-        "intensity: 3 of the last 4 steps were sent back or stuck on the work (2 sent back, 1 stuck on the work; 1 stuck on a tool, not counted; the limit is 3 in 5). Spent so far: 4 steps, $5.25. Answer redo, cut scope or drop (0076).",
+        "intensity: 3 of the last 4 steps were sent back or stuck on the work (2 sent back, 1 stuck on the work; 1 stuck on a tool, not counted; the limit is 3 in 5). Spent so far: 4 steps, $5.25. Answer redo, cut scope or drop (a quest stops at its budget, or when its steps keep failing close together).",
       );
     }
   });
@@ -1822,9 +1822,9 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     expect(estimateIn("estimate 12 steps and $15.50")).toEqual({ steps: 12, dollars: 15.5 });
   });
 
-  // pinned: chain records on disk from before 0076 carry no fault, no dollars and no stop.
-  // Plants: read only `quest`; write the old `lane` key back. Decision 0546: the record keeps its word.
-  it("pinned: a chain record written before 0076 still reads, with no fault and no dollars, and its `lane` as `quest`", () => {
+  // pinned: chain records on disk from before the quest budget rule carry no fault, no dollars and no stop.
+  // Plants: read only `quest`; write the old `lane` key back. The rule that a lane is called a quest: the record keeps its word.
+  it("pinned: a chain record written before the quest budget rule still reads, with no fault and no dollars, and its `lane` as `quest`", () => {
     const old = {
       lane: "p14",
       pr: null,
@@ -1873,7 +1873,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
         dollars: 31.4,
       }),
     ).toBe(
-      "backstop: the quest reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
+      "backstop: the quest reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (a quest stops at its budget, or when its steps keep failing close together).",
     );
   });
 });

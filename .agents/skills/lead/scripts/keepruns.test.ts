@@ -1,6 +1,6 @@
 // Today's tooling. keepruns.sh's laws, kept with their titles and assertions, now on its port: the
 // Runs service's real layer on the file system, `box/RunsFs.ts`, run here on a disk in memory over
-// Effect's own `FileSystem.layerNoop`, so no case touches the real disk or starts a process (0113).
+// Effect's own `FileSystem.layerNoop`, so no case touches the real disk or starts a process (no shell or Python script enters the repo).
 // The rm suite's real-git world (`box/BoxTestGit.ts`) runs the same layer on the real disk.
 //
 // The disk keeps the facts the laws lean on: a symlink is its own entry that `lstat` and `readLink`

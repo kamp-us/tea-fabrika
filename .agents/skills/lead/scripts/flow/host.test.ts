@@ -263,8 +263,8 @@ exec "$@"
       }),
     ));
 
-  // Plant: read only `quest`, so a flow saved before decision 0546 no longer runs its host step.
-  it("scenario: args a flow saved before decision 0546, with the quest under `lane`, still parse", () =>
+  // Plant: read only `quest`, so a flow saved before the rule that a lane is called a quest no longer runs its host step.
+  it("scenario: args a flow saved before the rule that a lane is called a quest, with the quest under `lane`, still parse", () =>
     ran(
       Effect.gen(function* () {
         const runner = runners.host ?? (() => Effect.die("no host runner"));
@@ -459,7 +459,7 @@ describe("the quest's state file", () => {
     ));
 
   // Plants: keep the old `lane` key beside `quest`; start the file over when it says `lane`.
-  it("scenario: a state file drive wrote before decision 0546 names the quest `lane`; the host entry joins it, and the file then says `quest`", () =>
+  it("scenario: a state file drive wrote before the rule that a lane is called a quest names the quest `lane`; the host entry joins it, and the file then says `quest`", () =>
     ran(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;

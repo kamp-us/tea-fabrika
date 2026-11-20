@@ -954,7 +954,7 @@ describe("T321 K2 box start, today's tooling", () => {
   // Plant: inspect only the current branch's links, or block on any branch that shares the
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
-  // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (0090).
+  // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (each field row is its own file).
   it("K2 refuses a shared ticket only when another live branch carries its links", () => {
     const places = [
       "main",
@@ -1188,7 +1188,7 @@ describe("T321 K2 box start, today's tooling", () => {
     );
   });
 
-  // Plant: drop --quest, or drop --lane, the flag's spelling before decision 0546.
+  // Plant: drop --quest, or drop --lane, the flag's spelling before the rule that a lane is called a quest.
   it("scenario: K2 saves the quest's name as `quest:`, given as --quest or as the old --lane", () => {
     each(["--quest", "--lane"] as const, (spelling) =>
       fixture((b) => {
@@ -1674,7 +1674,7 @@ describe("T321 K3 step order and rows, today's tooling", () => {
 
               if (kind.startsWith("quest-row")) {
                 // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
-                // A box made before decision 0546 names its quest under `lane:`, read as well.
+                // A box made before the rule that a lane is called a quest names its quest under `lane:`, read as well.
                 const key = kind === "quest-row-lane-key" ? "lane" : "quest";
                 appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
                 write(

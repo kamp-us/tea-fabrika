@@ -138,7 +138,7 @@ describe("planted machines", () => {
     "l/split.sync.laws.test.ts": "syncTest(split, opts);",
   };
 
-  // Each test plants its own folder in its own scope, which removes it when the test ends (0061).
+  // Each test plants its own folder in its own scope, which removes it when the test ends (anything that holds a resource is acquired in a scope, so the scope releases it).
   const root = Effect.acquireRelease(
     Effect.sync(() => {
       const folder = mkdtempSync(join(tmpdir(), "next-exam-"));

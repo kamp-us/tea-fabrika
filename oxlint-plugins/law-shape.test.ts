@@ -1,7 +1,7 @@
-// The edge cases, listed before the rule was written (0040), each a line of the generated file below:
+// The edge cases, listed before the rule was written (an existing, widely used tool comes before a hand-written one), each a line of the generated file below:
 // - `describe` is not a test: only the tests inside it are read.
 // - `it.each(rows)(...)`, `it.for(rows)(...)` and `test.skip.each(rows)(...)` are tests: a hand-written
-//   table of cases is what 0093 replaces, unless its title is labeled.
+//   table of cases is what the laws-and-plants rule replaces, unless its title is labeled.
 // - `it.skip`, `it.only`, `it.fails` and `it.skipIf(c)(...)` are read like `it`. `it.todo` is not
 //   read, with a body or without. `it.layer(L)(...)` is a group, so only the tests in it are read.
 // - A helper that wraps `it` is read at its own `it`: a property there passes, and a title that is
@@ -9,7 +9,7 @@
 // - A property inside a labeled example passes, and fires nothing twice. Under `type:` it fires.
 // - A template title is judged by its text before the first `${}`, and not judged when that text
 //   could still become a label.
-// - A shared suite file (`SinkTest.ts`, 0062) is read, and a test file that only calls
+// - A shared suite file (`SinkTest.ts`, test files keep to the layers too) is read, and a test file that only calls
 //   `SinkTest.suite(...)` holds no test.
 // - A body that calls a function this file declares is read through it; an imported helper is not.
 //   A body given by name is read the same way, so under `type:` an imported one fires.
@@ -24,7 +24,7 @@
 //   a space. Two tokens before it, an id with another sign, an id glued to the label, or a label
 //   only in a comment still fire.
 // - A `type:` body holds `expectTypeOf` and `assertType` chains, with `type` and `interface`
-//   declarations among them, and nothing else that runs (0527). A call in a chain's argument, in a
+//   declarations among them, and nothing else that runs (a law checked only by the compiler takes the type label). A call in a chain's argument, in a
 //   function written there, a `const`, an `if`, `await`, `yield`, `new`, a tagged template,
 //   `import()`, an empty body, `it.prop` and `fc.assert` each fire, with the type message.
 // - The two names count from a value import of `vitest` or `@effect/vitest`, named, renamed or
@@ -426,7 +426,7 @@ const lintOne = (text: string) => {
 };
 
 // scenario: T930 L7, `pnpm lint`'s own runner fails on an unlabeled law in a `next/` folder at zero,
-// and its message names both shapes and the five labels (0093, 0523, 0527).
+// and its message names both shapes and the five labels (each law is a property that walks the machine, and each plant is run once, never kept; a lint rule blocks wherever its code is clean; a law checked only by the compiler takes the type label).
 it("scenario: T930 L7 lint.ts blocks on an unlabeled law in a clean folder and names both shapes", () => {
   const ran = lintOne('import { it } from "vitest";\n\nit("adds one", () => {});\n');
   expect(ran.stdout).toContain(CODE);
@@ -438,7 +438,7 @@ it("scenario: T930 L7 lint.ts blocks on an unlabeled law in a clean folder and n
 });
 
 // scenario: T971 L4, `pnpm lint`'s own runner fails on a type: law that also checks at run time, in a
-// `next/` folder at zero, and says what a type: body may hold (0527).
+// `next/` folder at zero, and says what a type: body may hold (a law checked only by the compiler takes the type label).
 it("scenario: T971 L4 lint.ts blocks a type: law whose body runs a check, with the type message", () => {
   const ran = lintOne(
     'import { expect, expectTypeOf, it } from "vitest";\n\nit("type: one is a number", () => {\n  expectTypeOf(1).toBeNumber();\n  expect(1).toBe(1);\n});\n',

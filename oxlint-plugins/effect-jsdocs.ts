@@ -1,4 +1,4 @@
-// Effect's own block grammar, copied, not written: what makes one doc block right (E6, 0023).
+// Effect's own block grammar, copied, not written: what makes one doc block right (E6, next/ follows Effect's code style and doc comments).
 //
 // Source: Effect-TS/effect, packages/tools/jsdocs/src/Jsdocs.ts, at the tag effect@4.1.2.
 // - Lines 973 to 1608, unchanged in what they do: parseLooseJSDocBlock, parseJSDocBlock,
@@ -22,7 +22,7 @@
 //   `lines[index]` (14), `lines[headingIndex]` (3) and a regex group, `match[1]` (3). Each index is
 //   in range where Effect reads it, so the value is the same at runtime.
 // `@since` stays as Effect asks it: `jsdocs.ts` drops that one ask while libfabrika has no release
-// (0118). On an Effect bump, diff these lines again.
+// (doc comments carry no @since tag until libfabrika has a released version). On an Effect bump, diff these lines again.
 //
 // MIT License
 //

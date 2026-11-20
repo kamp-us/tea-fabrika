@@ -271,7 +271,7 @@ describe("a named catalog's pointer", () => {
 // version, never a bare name or a range, which pnpm would apply to whatever version it installs, a
 // later release included. A row at a version nothing installs is pnpm's own refusal, so this check
 // passes it: the install fails with ERR_PNPM_UNUSED_PATCH, which is how the bump that takes demlik's
-// next release finds tea's old 0.29.0 row (0569, and 0040: the existing tool wins). Plants, each run
+// next release finds tea's old 0.29.0 row (a tea Msg, Cmd and Sub are keyed on _tag; an existing, widely used tool comes before a hand-written one: the existing tool wins). Plants, each run
 // once: (a) `inWorkspace` reads no `patchedDependencies`; (b) `refusedPatches` takes any text after
 // the `@` as a version; (c) a row at a version no catalog pins is refused, as pnpm already does.
 describe("a patchedDependencies row", () => {

@@ -1,6 +1,6 @@
 // Push a worktree's branch as fabrikalfa[bot]. When the worktree has step notes, they go with the
 // branch in one atomic push, after the remote's notes are merged in. Without notes (every commit is
-// plain, decisions 0161 and 0164) the branch alone is pushed and the remote's notes are not touched.
+// plain, the rule that today's tooling signs no commit with a step key and the rule that the bot pushes agent branches with no step signature) the branch alone is pushed and the remote's notes are not touched.
 // The app key is read from the keychain into memory only; the token is never printed or written.
 // usage: node botpush.mjs <worktree> <branch> [src=HEAD]   (branch "-" pushes only the step notes,
 // and refuses a worktree that has none)
@@ -103,7 +103,7 @@ if (!draft) {
       input: diff,
       stdio: ["pipe", "inherit", "inherit"],
     });
-    // Decision 0048: each commit this push sends is read on its own, beside the branch's net change
+    // The leak check reads each pushed commit on its own: each commit this push sends is read on its own, beside the branch's net change
     // above. A commit a ref of origin already holds is not sent, so it is not read again.
     execFileSync("sh", [leakgrep, "--commits", src, "--not", "--remotes=origin"], {
       cwd: dir,

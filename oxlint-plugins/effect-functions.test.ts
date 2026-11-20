@@ -1,5 +1,5 @@
 // T285, PR 1, next/. Plants are source fixtures, as in the other rules' tests here. They were the exam's
-// (next/apps/fabrika/src/exam/effect-functions.integration.test.ts) until 0591 moved them here; the span
+// (next/apps/fabrika/src/exam/effect-functions.integration.test.ts) until the exam-to-lint rule moved them here; the span
 // law on CI's `edges` step went to next/apps/fabrika/src/exam/edges.integration.test.ts. Plant: skip the
 // curried wrapper (an arrow returned by an arrow is not named), and line 7 stops firing.
 import { Array as Arr } from "effect";

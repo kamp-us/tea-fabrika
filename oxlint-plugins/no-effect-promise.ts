@@ -18,9 +18,9 @@
 // genuine exception is a per-line `// oxlint-disable-next-line fabrika/no-effect-promise -- <reason>`.
 //
 // In this repo it blocks in every folder at zero, and advises only in a folder that the config's
-// warn override at the end still names (0523). Experiment 125 read its 8 fires on main when it was
+// warn override at the end still names (a lint rule blocks wherever its code is clean). Experiment 125 read its 8 fires on main when it was
 // written: all 8 kept their code, 7 of them for the case Effect's docs give `Effect.promise` (a
-// promise that cannot reject). 0523 sets that count aside: a pull request that makes a folder block
+// promise that cannot reject). The block-where-clean rule sets that count aside: a pull request that makes a folder block
 // reports the fires it met and each disable line, so a rule that needs a narrower scope shows there.
 import type { CreateRule } from "@oxlint/plugins";
 import { grouped, plainCall } from "./match.ts";

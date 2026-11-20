@@ -1,5 +1,5 @@
 /**
- * The Stryker options for one plant (decision 0600): one `mutate` place, one test file, bail off, so
+ * The Stryker options for one plant (testing, linting and formatting live in @kalfa/quality): one `mutate` place, one test file, bail off, so
  * the report says which tests killed the mutant. Plain data in Stryker's own keys (its
  * `stryker-core.json` schema). Pure.
  */

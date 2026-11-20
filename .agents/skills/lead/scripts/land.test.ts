@@ -61,7 +61,7 @@ type World = {
   readonly wip?: boolean;
   /** `ci-required` failed at the pushed head. */
   readonly red?: boolean;
-  /** The ready record names the quest `lane`, as one written before decision 0546 does. */
+  /** The ready record names the quest `lane`, as one written before the rule that a lane is called a quest does. */
   readonly laneKey?: boolean;
 };
 
@@ -272,7 +272,7 @@ describe("land.ts, today's tooling", () => {
         /^gh pr create -R owner\/repo --head fabrikalfa\/t652-fixture --title T652 fixture: one quest --body-file /,
       ),
       "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit",
-      // The names check (0587) reads the diff after the leak grep and before `ci-required`.
+      // The names check (a new helper names the tools it searched, and a new name cites the industry's word) reads the diff after the leak grep and before `ci-required`.
       "gh api --paginate repos/owner/repo/pulls/77/files --jq .[] | {path: .filename, patch: (.patch // null)}",
       expect.stringMatching(
         /^gh api -i repos\/owner\/repo\/commits\/[0-9a-f]{40}\/check-runs .*check_name=ci-required/,
@@ -285,8 +285,8 @@ describe("land.ts, today's tooling", () => {
     expect(got.state).not.toMatch(/landed|merged PR/);
   });
 
-  // Plant: read only `quest`, so a quest made ready before decision 0546 cannot land.
-  it("scenario: a ready record that names the quest `lane`, written before decision 0546, lands as a new one does", () => {
+  // Plant: read only `quest`, so a quest made ready before the rule that a lane is called a quest cannot land.
+  it("scenario: a ready record that names the quest `lane`, written before the rule that a lane is called a quest, lands as a new one does", () => {
     const got = land({ ...fine, laneKey: true });
     expect(got.code, got.err).toBe(0);
     expect(got.calls.at(-1)).toBe(`gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`);

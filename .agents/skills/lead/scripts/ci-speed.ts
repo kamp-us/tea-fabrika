@@ -8,7 +8,7 @@
 //   node .agents/skills/lead/scripts/ci-speed.ts --issue         also open, add to or close the issue
 //
 // With --issue, a stage over its goal opens one `ci-scheduled` issue titled "CI speed", or adds the
-// day's numbers to the open one, and a day with every stage within its goal closes it (0541 allows
+// day's numbers to the open one, and a day with every stage within its goal closes it (the CI speed goal allows
 // this measure that one label). ci-speed.yaml runs it once a day with --issue. It exits 0 either way:
 // the issue is the alarm, not a red job.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";

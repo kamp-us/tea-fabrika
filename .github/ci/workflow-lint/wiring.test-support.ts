@@ -93,12 +93,12 @@ export const testEnv = {
   BASE: `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`,
 };
 
-// 0524, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
+// The no-pass-list rule, ticket 933 (L7): the check job's one ratchet step, which holds every list file to shrinking.
 export const ratchet = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
 
 export const probe = "steps.diff.outputs.probe == 'true'";
 
-// The check job's steps, each on its own flag (ticket 985): lint on check, the rows on field.
+// The check job's steps, each on the check flag (ticket 985).
 export const checkFlag = `\${{ needs.changes.outputs.check != 'false' }}`;
 
 const name = fc.string({ maxLength: 20 });
@@ -109,14 +109,14 @@ export const onE2e = "startsWith(matrix.shard, 'e2e-')";
 
 export const e2eCommand = `pnpm exec vitest run --project next-visual $CHANGED --shard "\${SHARD#e2e-}" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"`;
 
-// 0536: the vitest step tests the `next` project alone, on every event.
+// A test that needs a real resource runs only in main's full run: the vitest step tests the `next` project alone, on every event.
 const vitestCommand =
   'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
 
-// 0536: a pull request that asked for its visual tests.
+// A test that needs a real resource runs only in main's full run: a pull request that asked for its visual tests.
 export const visualLabel = "contains(github.event.pull_request.labels.*.name, 'visual')";
 
-// 0536: where next's full fallback starts the visual legs, a push to main and a labeled pull request.
+// A test that needs a real resource runs only in main's full run: where next's full fallback starts the visual legs, a push to main and a labeled pull request.
 export const visualRoute = `(github.event_name == 'push' || ${visualLabel})`;
 
 const automatic = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
@@ -124,11 +124,11 @@ const automatic = parse(readFileSync(new URL("../../workflows/check.yaml", impor
 // Chromium is fetched only once a visual file exists.
 const visualFiles = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.visual.test.tsx') != ''";
 
-// 0534: the end-to-end legs narrow from changes' `base`, the commit the size step sized them from, on
+// The merge line runs only the tests a change reaches, and a schedule runs every test: the end-to-end legs narrow from changes' `base`, the commit the size step sized them from, on
 // every run it sized: a pull request, a merge queue group and a push to main alike.
 const changedFromBase = `\${{ needs.changes.outputs.base && format('--changed={0} --passWithNoTests', needs.changes.outputs.base) || '' }}`;
 
-// Before 0534: on a pull request only, so the merge queue and main ran every end-to-end file.
+// Before the changed-tests rule: on a pull request only, so the merge queue and main ran every end-to-end file.
 export const changedOnPullRequests = `\${{ github.event_name == 'pull_request' && format('--changed={0} --passWithNoTests', github.event.pull_request.base.sha) || '' }}`;
 
 // The vitest step's paths: changes' size step's list on a sized run, reader tests included, else changes'
@@ -146,7 +146,7 @@ export const nextLegs = (count: number) => [
 
 // S1: the matrix is changes' `shards`, else a fallback (legs.ts): the full matrix on a push to main
 // and on a pull request with the `visual` label, the vitest legs alone everywhere else, the merge
-// queue among them (0536, E10).
+// queue among them (a test that needs a real resource runs only in main's full run, E10).
 export const sizedLegs = (legs: readonly unknown[], plain: readonly unknown[] = ["1", "2", "3", "4", "5"]) =>
   `\${{ fromJSON(needs.changes.outputs.shards || (${visualRoute} && '${JSON.stringify(legs)}' || '${JSON.stringify(plain)}')) }}`;
 
@@ -251,9 +251,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       // SAFETY: every value below is a string, and the wider map type lets a plant add or remove an output.
       outputs: {
-        ...Rec.fromEntries(
-          ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
-        ),
+        ...Rec.fromEntries(["check", "typecheck", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`])),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
         // prints next once more.
         next: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
@@ -338,10 +336,7 @@ const valid = (label: string, extra: string) => ({
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
             ...Rec.fromEntries(
-              ["check", "typecheck", "field", "build"].map((key) => [
-                key.toUpperCase(),
-                `\${{ steps.diff.outputs.${key} }}`,
-              ]),
+              ["check", "typecheck", "build"].map((key) => [key.toUpperCase(), `\${{ steps.diff.outputs.${key} }}`]),
             ),
             NEXT: `\${{ steps.size.outputs.next || steps.same.outputs.next || steps.diff.outputs.next }}`,
             FILTER: `\${{ steps.same.outputs.filter || steps.diff.outputs.filter }}`,
@@ -367,7 +362,7 @@ const valid = (label: string, extra: string) => ({
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
       needs: "changes",
-      if: `${guard("check").slice(0, -4)} || needs.changes.outputs.field != 'false') }}`,
+      if: guard("check"),
       "timeout-minutes": 10,
       // SAFETY: check's steps are object literals, widened to plain maps so plants can edit any field.
       steps: [

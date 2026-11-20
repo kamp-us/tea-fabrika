@@ -1,5 +1,5 @@
 // BoxTestGit.world: the rm suite's world on real git and the real runs/ move (RunsFs on the real
-// disk), in the case's own temp folder with its own HOME and no global or system Git config (0052).
+// disk), in the case's own temp folder with its own HOME and no global or system Git config (a test never depends on the person's machine).
 // It keeps the memory world honest: the same plans, with real index flags, real changes and real
 // retention.
 

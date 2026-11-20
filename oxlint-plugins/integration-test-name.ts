@@ -1,7 +1,7 @@
-// 0584: a test's kind follows what it uses. Vitest picks a file's project by its name
+// A test's kind follows what it uses. Vitest picks a file's project by its name
 // (vitest.config.ts's projects), and only plain files run on pull requests and the merge queue, so a
 // `next/` test file whose own code starts a real thing must be named `*.integration.test.ts`, or
-// `*.visual.test.ts` for a browser or Electron, and runs on main's full run (0536, 0581).
+// `*.visual.test.ts` for a browser or Electron, and runs on main's full run (a test that needs a real resource runs only in main's full run; main's full run starts on a push to main and an hourly catch-up).
 //
 // What counts as a real thing is starters.ts's, which test-kind.ts reads too: a process, a socket,
 // a browser, the local instance or workerd, a signal, the network, a SQLite file or a temp folder.
@@ -20,7 +20,7 @@ export const integrationTestName: CreateRule = {
   meta: {
     messages: {
       opens:
-        "`{{call}}` starts {{drives}}, a real thing, so this file runs on main's full run, never on a pull request (0584): name it `{{name}}.integration.test.ts`, or `.visual.test.ts` for a browser or Electron, beside the module it tests. Or run the law on the interface's in-memory layer.",
+        "`{{call}}` starts {{drives}}, a real thing, so this file runs on main's full run, never on a pull request (a test's kind follows what it uses, never its name): name it `{{name}}.integration.test.ts`, or `.visual.test.ts` for a browser or Electron, beside the module it tests. Or run the law on the interface's in-memory layer.",
     },
   },
   create(context) {

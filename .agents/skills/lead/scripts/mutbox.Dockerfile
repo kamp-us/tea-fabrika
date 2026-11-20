@@ -1,4 +1,4 @@
-# The mutation container's image (0045). Today's lead tooling, not product.
+# The mutation container's image (a step that needs ports or its own processes and network isolation runs in a container). Today's lead tooling, not product.
 # Built with the network on, run with `--network none`. mutbox.ts builds it from a folder that
 # holds only this file, mutbox-entry.sh and the commit's lockfile, workspace file and patches,
 # so the image holds no secret and no file from outside the checkout.

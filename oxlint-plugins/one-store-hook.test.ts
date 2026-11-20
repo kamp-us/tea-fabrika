@@ -1,5 +1,5 @@
 // `next/`, exam item 13, C4: React's store hook has no allowed file; tea's value is kept.
-// These laws were the exam's (next/apps/fabrika/src/exam/one-store-hook.integration.test.ts) until 0591
+// These laws were the exam's (next/apps/fabrika/src/exam/one-store-hook.integration.test.ts) until the exam-to-lint rule
 // moved them here. Plant: drop the rule's `void` call branch, and each `void` line stops firing.
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -210,7 +210,7 @@ describe("one-store-hook", () => {
     try {
       copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
       symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
-      // The config loads the vendored anti-slop plugins from here (0563).
+      // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
       symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       mkdirSync(dirname(join(at, OTHER_CALLS)), { recursive: true });
       writeFileSync(join(at, OTHER_CALLS), otherCalls);

@@ -1,4 +1,4 @@
-// Today's lead tooling. Publish's laws (0134) on the test layers: nothing here pushes or asks GitHub.
+// Today's lead tooling. Publish's laws (every commit is pushed when it is made, with a draft pull request from the first commit) on the test layers: nothing here pushes or asks GitHub.
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
@@ -42,7 +42,7 @@ const memory = (
 
 const ask = (branch: string, head: string): Publish.Ask => ({ dir: ".", branch, head, text });
 
-describe("publish: a commit is pushed when it is made, with a draft PR from the first commit (0134)", () => {
+describe("publish: a commit is pushed when it is made, with a draft PR from the first commit", () => {
   it.effect.prop(
     "property: the leak grep runs first, the head reaches its branch, and a draft opens only when none is open",
     { b: Branch, head: Sha, already: Already },
@@ -137,7 +137,7 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   );
 });
 
-describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (0134)", () => {
+describe("ready: a quest's steps passed, so its pull request takes the brief's words and is ready (every commit is pushed when it is made, with a draft pull request from the first commit)", () => {
   it.effect.prop(
     "property: the PR gets the brief's text, a draft is marked ready, a ready one is left as it is",
     { b: Branch, head: Sha, already: Already },

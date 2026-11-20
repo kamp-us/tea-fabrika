@@ -64,7 +64,7 @@ const PATCH_KEY = /^(?:@[^@/\s]+\/)?[^@/\s]+@(.*)$/;
 /** A patch row names one exact version (`name@1.2.3`), never a bare name or a range: pnpm applies
  * such a row to whatever version it installs, a later release included. A row at a version nothing
  * installs is pnpm's own refusal, not this check's: the install fails with ERR_PNPM_UNUSED_PATCH, so
- * the bump that takes a release finds its old row there (decision 0569). */
+ * the bump that takes a release finds its old row there (a tea Msg, Cmd and Sub are keyed on _tag). */
 const refusedPatches = (file: string, patched: unknown): readonly string[] =>
   isMap(patched)
     ? pipe(

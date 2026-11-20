@@ -65,7 +65,7 @@ it.prop(
         workflow.jobs.related.steps.find((step: { name?: string }) => step.name === "results").with.path =
           `\${{ runner.temp }}/tested.json`;
         break;
-      // Plants for 0598: the merge line takes no job group (R1), and no check.yaml job holds a
+      // Plants for the scheduled-groups rule: the merge line takes no job group (R1), and no check.yaml job holds a
       // `scheduled-` one (R2). Each gives one job a group of the stated kind.
       case "next_group":
         workflow.jobs.next.concurrency = { group: "scheduled-proof-1", queue: "max", "cancel-in-progress": false };
@@ -132,7 +132,7 @@ it.prop(
   { arbitrary: { seed: 119120, runs: 400, size: 100 } },
 );
 
-// T1076 D3 and D4, with Q1's negative cases, after decision 0602: main's full run keeps the archive, so
+// T1076 D3 and D4, with Q1's negative cases, after the rule that integration laws run only in main's full run: main's full run keeps the archive, so
 // the real check.yaml holds the consumer fault step and the one new select output, and no receipt and no
 // archive upload. Each isolated fault is given to the real, accepted workflow alone, so another rule's
 // error cannot mask it. The original generated fault property above and its input domain stay as they are.
@@ -184,7 +184,7 @@ const swapped = (text: unknown, from: string, to: string): string => {
   return after;
 };
 
-/** The two steps this lane kept on the merge line before 0602 moved the keep to main's full run. */
+/** The two steps this lane kept on the merge line before the integration-laws rule moved the keep to main's full run. */
 const OLD_RECEIPT = (): Step => ({
   name: "package receipt",
   id: "receipt",
@@ -227,7 +227,7 @@ it("scenario: D3 the real workflow has one consumer fault step in related alone,
   expect(order).toEqual(order.toSorted((a, b) => a - b));
 
   // The fault step is related's alone; no job of check.yaml holds a receipt or an archive upload, and
-  // nothing uploads a name starting `kalfa-config-`: main's full run keeps the archive (0602).
+  // nothing uploads a name starting `kalfa-config-`: main's full run keeps the archive.
   for (const [name, job] of Object.entries<Step>(workflow.jobs)) {
     const steps: Step[] = job["steps"] ?? [];
 

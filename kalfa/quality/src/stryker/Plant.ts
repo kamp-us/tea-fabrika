@@ -1,5 +1,5 @@
 /**
- * A plant, as the catalog writes it (decision 0600): a Stryker-made mutant named by its code shape,
+ * A plant, as the catalog writes it (testing, linting and formatting live in @kalfa/quality): a Stryker-made mutant named by its code shape,
  * and the law that must kill it. Only schemas and one pure helper live here, so importing
  * `@kalfa/quality/stryker` loads no Stryker (law Q15).
  */

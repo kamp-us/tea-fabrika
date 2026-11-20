@@ -44,7 +44,7 @@ const PatchRow = Schema.fromJsonString(Patch);
 
 /**
  * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
- * checked. It carries no `--admin`, no `--auto` and no other merge method (0162).
+ * checked. It carries no `--admin`, no `--auto` and no other merge method (a pull request whose steps passed lands on green CI and a clean leak check alone).
  */
 export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyArray<string> => [
   "pr",
@@ -57,14 +57,14 @@ export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyAr
   oid,
 ];
 
-/** The admin merge, pr/Merge.ts's alone (0183, 0532): the same pinned squash, past the queue. */
+/** The admin merge, pr/Merge.ts's alone (the lead admin-merges a docs-only pull request after checking it is not broken; a sev0 is the owner's call, and it freezes CI and lands ready pull requests one at a time): the same pinned squash, past the queue. */
 export const adminArgs = (repo: string, number: number, oid: string): ReadonlyArray<string> => [
   ...mergeArgs(repo, number, oid),
   "--admin",
 ];
 
 /**
- * Merge when ready, as the lead turns it on (0530): a squash, and `expectedHeadOid` pins it to the
+ * Merge when ready, as the lead turns it on (the lead turns on merge when ready once the steps passed, and GitHub queues it on green): a squash, and `expectedHeadOid` pins it to the
  * head that was checked, so a push after the check leaves it off.
  */
 export const ARM = `mutation($id: ID!, $oid: GitObjectID!) {

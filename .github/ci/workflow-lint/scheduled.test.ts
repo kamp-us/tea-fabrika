@@ -8,8 +8,8 @@ import { parse } from "yaml";
 import { lintScheduled } from "./scheduled.ts";
 
 // Today's CI, serving both versions. Covers scheduled.ts's laws on scheduled.yaml, the full run of
-// all of next/ and every tooling test on main (0534), which a push to main or the hourly catch-up
-// starts through its gate, at most once an hour (0581). Each generated workflow is the real
+// all of next/ and every tooling test on main (the merge line runs only the tests a change reaches, and a schedule runs every test), which a push to main or the hourly catch-up
+// starts through its gate, at most once an hour (main's full run starts on a push to main and an hourly catch-up). Each generated workflow is the real
 // one with what does not change its meaning varied, and each plant is applied to it alone, so an
 // unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
 // dropped, and that turned this law red.
@@ -75,7 +75,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
   return found[0]!;
 };
 
-// SC22 (the 0602 amendment): the two steps of `tests` that keep the tested @kalfa/config archive.
+// SC22 (the integration-laws rule amendment): the two steps of `tests` that keep the tested @kalfa/config archive.
 const RECEIPT = "node .github/ci/related.ts --receipt";
 
 const FOLDER = `\${{ runner.temp }}/kalfa-config-package`;
@@ -99,15 +99,15 @@ const put = (w: Workflow, name: string, before: string) => {
   list.splice(list.indexOf(step(w, "tests", before)), 0, moved!);
 };
 
-// What may change without changing what the full run does: the catch-up's minute (0581 fixes the
-// cron hourly, and its minute stays a choice), the gap (a setting, 0069, an hour at least), the
+// What may change without changing what the full run does: the catch-up's minute (the full-run timing rule fixes the
+// cron hourly, and its minute stays a choice), the gap (a setting, a choice that makes sense as a setting is a setting, declared once, an hour at least), the
 // workflow group's case and spacing, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
   Predicate.isString(value) ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
-// 0598's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
+// The scheduled-groups rule's split of the nine test groups: MAIN_SLOTS for main's full run (1 to 8), PROOF_SLOTS for a
 // branch's proof, the rest. A `tests` group takes the prefix and the pin map by the ref, so the
 // workflow holds two maps, each leg's number in its group; a first leg of each map takes group 1 to N
 // in order, and every other leg any group (SC19, SC20).
@@ -154,7 +154,7 @@ type Variation = readonly [
   string,
 ];
 
-// The same draw as a Schema, for the laws that run as `it.prop` (0579).
+// The same draw as a Schema, for the laws that run as `it.prop` (a property law is it.prop with Schemas, and test hooks are not exported).
 const Varied = Schema.Tuple([
   Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 59 })),
   Schema.Int.check(Schema.isBetween({ minimum: 60, maximum: 1440 })),
@@ -190,7 +190,7 @@ const vary = ([minute, minutes, main, gap, mainTail, proofTail, numeric, upper, 
   w.env = { GAP_MINUTES: minutes, MAIN_SLOTS: main, PROOF_SLOTS: proof };
 
   w.concurrency["group"] = `${upper ? "SCHEDULED" : "scheduled"}-\${{${gap}github.ref${gap}}}`;
-  // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (0598).
+  // The count of groups is a setting, and `max-parallel` of the test job and MOST are its copies (the merge line leaves the scheduled job groups).
   w.jobs["tests"]!.strategy!["max-parallel"] = spaced(`\${{ ${REF} && ${main} || ${proof} }}`, gap);
   w.jobs["changed"]!.strategy!["max-parallel"] = proof;
   step(w, "select", "set").env!["MOST"] = proof;
@@ -318,7 +318,7 @@ const remap = (w: Workflow, change: (main: Record<string, string>, proof: Record
 
 // SC18's message, which a scenario on the next limit expects beside SC13's.
 const CHANGED_RULE =
-  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (0602), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
+  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (integration laws run only in main's full run), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
 
 it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => {
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
@@ -326,7 +326,7 @@ it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => 
 
 // S5. Plant, run once on the real scheduled.yaml and restored: e2e-1 first in the matrix, in group 1
 // before tooling-1 (red: the order differs).
-it("vector: the real scheduled.yaml's start order, both pin maps and both counts are decision 0598's", () => {
+it("vector: the real scheduled.yaml's start order, both pin maps and both counts are the scheduled-groups rule's", () => {
   // From run 44155250216's leg times (tooling-1 11.7 min, 3 11.6, 2 10.7, 5 10.1, tooling-2 9.3, ...):
   // the five longest legs first, one to a group, then each leg behind the group that frees first. The
   // proof's four groups are the same order by longest processing time first (Graham, 1969).
@@ -485,7 +485,10 @@ const rotationPlants: [string, (w: Workflow) => void][] = [
     },
   ],
   ["SC19: rotation has a JSON list", (w) => void changedRotation(w, upTo(counts(w).proof))],
-  ["SC19: rotation runs over nine groups, as 0595's did", (w) => void changedRotation(w, rotationSlots(9))],
+  [
+    "SC19: rotation runs over nine groups, as the shared-slots rule's did",
+    (w) => void changedRotation(w, rotationSlots(9)),
+  ],
   [
     "SC19: rotation has malformed JSON",
     (w) => {
@@ -522,7 +525,7 @@ const rotationPlants: [string, (w: Workflow) => void][] = [
 ];
 
 const plants: [string, (w: Workflow) => void][] = [
-  // SC1: a push to main, the hourly catch-up and a hand start, nothing else (0581); no merge line
+  // SC1: a push to main, the hourly catch-up and a hand start, nothing else (main's full run starts on a push to main and an hourly catch-up); no merge line
   // event runs the whole suite. The plants of SC1, SC5, SC6 and SC14 to SC16 were each run once on
   // scheduled.ts with its rule dropped, over a draft of the new scheduled.yaml that was then
   // restored, and each turned its law red.
@@ -536,8 +539,8 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC1: a push to any branch starts it", (w) => (w.on["push"] = {})],
   ["SC1: a push to main skips some paths", (w) => (w.on["push"] = { branches: ["main"], "paths-ignore": ["docs/**"] })],
   ["SC1: no hand start", (w) => Reflect.deleteProperty(w.on, "workflow_dispatch")],
-  // SC16: the gap, a setting of an hour at least (0581's binding constraint), and the two counts of
-  // groups (0598): the env is these three, nothing else.
+  // SC16: the gap, a setting of an hour at least (the full-run timing rule's binding constraint), and the two counts of
+  // groups (the merge line leaves the scheduled job groups): the env is these three, nothing else.
   ["SC16: a gap of half an hour", (w) => (w.env = { ...w.env, GAP_MINUTES: 30 })],
   ["SC16: a gap a minute short of an hour", (w) => (w.env = { ...w.env, GAP_MINUTES: 59 })],
   ["SC16: a gap in words", (w) => (w.env = { ...w.env, GAP_MINUTES: "1h" })],
@@ -746,7 +749,7 @@ const plants: [string, (w: Workflow) => void][] = [
       )),
   ],
   [
-    "SC19: tests uses 0595's scheduled-test- names",
+    "SC19: tests uses the shared-slots rule's scheduled-test- names",
     (w) =>
       (w.jobs["tests"]!.concurrency!["group"] =
         `scheduled-test-\${{ fromJSON('${JSON.stringify(pinsIn(w)[0])}')[matrix.shard] }}`),
@@ -1044,7 +1047,7 @@ const plants: [string, (w: Workflow) => void][] = [
       s["run"] = String(s["run"]).replace("--project next-visual ", "--project next-visual --changed=main ");
     },
   ],
-  // 0536: a project, not a path, picks each leg's files. Each plant was run once on the real
+  // A test that needs a real resource runs only in main's full run: a project, not a path, picks each leg's files. Each plant was run once on the real
   // scheduled.yaml too, and restored.
   [
     "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
@@ -1053,7 +1056,7 @@ const plants: [string, (w: Workflow) => void][] = [
       s["run"] = String(s["run"]).replace("$PROJECTS ", "next/ ");
     },
   ],
-  // 0602: main's full run runs every real-resource law, and a branch's full set none. Plants, each
+  // Main's full run runs every real-resource law, and a branch's full set none. Plants, each
   // run once on scheduled.ts and restored: SC7's PROJECTS check dropped (red on the first three, the
   // fourth caught by the command check above it).
   [
@@ -1085,7 +1088,7 @@ const plants: [string, (w: Workflow) => void][] = [
     },
   ],
   [
-    "SC7: the end-to-end legs run the old runner, which 0536 removed",
+    "SC7: the end-to-end legs run the old runner, which the real-resource rule removed",
     (w) => {
       const s = step(w, "tests", "end to end");
       s["run"] = String(s["run"]).replace(
@@ -1133,7 +1136,7 @@ const plants: [string, (w: Workflow) => void][] = [
       );
     },
   ],
-  // 0602 and 0584: main's full run runs every tooling law that starts a process, and a branch's full
+  // Integration laws run only in main's full run; a test's kind follows what it uses, never its name: main's full run runs every tooling law that starts a process, and a branch's full
   // set none. Plants, each run once on scheduled.ts and restored: SC8's PROJECTS check dropped (red on
   // the first two, and on "tooling runs today's tests too" and "tooling loses its projects" above;
   // the third is caught by the command check above it).
@@ -1231,7 +1234,7 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC5: the results upload gets the token",
     (w) => (step(w, "tests", "results").env = { GITHUB_TOKEN: `\${{ github.token }}` }),
-  ], // SC15 and SC17, 0590: main's push, catch-up and hand start run every test. Plants, each run once
+  ], // SC15 and SC17, the proof-run rule: main's push, catch-up and hand start run every test. Plants, each run once
   // on scheduled.ts and restored: SC15's `if` check dropped (red on SC15's first three here, and on
   // its three older ones above); SC17's `if` check dropped (red on SC17's first three).
   [
@@ -1320,7 +1323,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC21: the law input is missing", (w) => Reflect.deleteProperty(hand(w), "law")],
   ["SC21: the law is required", (w) => (hand(w)["law"]!["required"] = true)],
   ["SC21: the law has a default of a path", (w) => (hand(w)["law"]!["default"] = ".github/ci/proof.test.ts")],
-  // SC22, the 0602 amendment: main's full run keeps the tested @kalfa/config archive, once, on the leg
+  // SC22, the integration-laws rule amendment: main's full run keeps the tested @kalfa/config archive, once, on the leg
   // that ran the package law. Each plant is applied to the real file alone, and was run once on
   // scheduled.ts with SC22's rule it breaks dropped, and that turned its case red.
   ["SC22: the receipt on the visual legs", (w) => (receipt(w)["if"] = `success() && ${REF} && !${ON_TOOLING}`)],
@@ -1418,7 +1421,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   ["SC9: the receipt takes another flag", (w) => (receipt(w)["run"] = `${RECEIPT} --fault`)],
   ["SC9: the receipt is a second command", (w) => (receipt(w)["run"] = `${RECEIPT} && pnpm test`)],
-  // SC18, 0590: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
+  // SC18, the proof-run rule: a changed set's legs. Plants, each run once on scheduled.ts and restored: SC18's
   // `if` check dropped (red on the first two); its command checks dropped (red on the next four);
   // its limit checks dropped (red on the three limits).
   ["SC18: the changed legs run on main too", (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true'")],
@@ -1426,7 +1429,7 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC18: the changed legs start on a set of zero files",
     (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
   ],
-  // 0602: a changed leg runs no real-resource law, so it names no next-integration project.
+  // Integration laws run only in main's full run: a changed leg runs no real-resource law, so it names no next-integration project.
   // proof.test.ts holds the same list against proof.ts's PROJECTS.
   [
     "SC18: a changed leg runs the real-resource laws, which only main's full run runs",
@@ -1555,7 +1558,7 @@ it("SC6 scenario: on the real scheduled.yaml, the tooling legs or the next legs 
 });
 
 it("SC6 scenario: on the real scheduled.yaml, the per-run budget counts the larger of the two counts at the tests' step, so 6 more jobs there make 11 machines and 5 make 10", () => {
-  // 0598: main runs 5 legs at once and a proof 4, but a run is one or the other, so the step holds the
+  // The merge line leaves the scheduled job groups: main runs 5 legs at once and a proof 4, but a run is one or the other, so the step holds the
   // larger, 5. Plant, run once on scheduled.ts and restored: the smaller count taken (red: 6 more jobs
   // at 4 make 10 and pass).
   const BUDGET_RULE = "scheduled.yaml: SC6: its jobs take at most 10 machines at once, half of the 20 runners";
@@ -1645,7 +1648,7 @@ it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {
   );
 });
 
-// SC22's retention is a setting (0069): any whole number of days from 1 is held, and nothing else.
+// SC22's retention is a setting (a choice that makes sense as a setting is a setting, declared once): any whole number of days from 1 is held, and nothing else.
 // Plant, run once on scheduled.ts and restored: SC22's whole-number check dropped (red: 0, a part of
 // a day and text pass).
 it("SC22 property: the archive's retention is any whole number of days from 1, and no zero, part of a day or text", () => {

@@ -2,7 +2,7 @@
 // or `fabrika/no-effect-run-outside-edge` is `// oxlint-disable-next-line <rule> -- edge: <why>`,
 // names only those two rules, and gives a reason. Each wrong comment stands over a line that really
 // fires, so only this rule speaks. These planted laws were the exam's
-// (next/apps/fabrika/src/exam/edge-comment.integration.test.ts) until 0591 moved them here. The
+// (next/apps/fabrika/src/exam/edge-comment.integration.test.ts) until the exam-to-lint rule moved them here. The
 // `.oxlintrc.json` laws stay plain in next/apps/fabrika/src/exam/edge-config.test.ts, where pull request
 // 1420 (K11) put them so they run on every pull request. Plant: accept `Edge:` as `edge:` in the rule,
 // and the `edge-capital` case passes.

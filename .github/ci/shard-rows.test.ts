@@ -114,7 +114,7 @@ it("L2: stale rows are exactly next/ or Kalfa rows whose file Vitest does not se
 // L3. Plants, each run once on shard-rows.ts and restored: narrow the next/ globs to `*.test.ts`,
 // so the scratch folder's view.test.tsx is lost (red); add `next/apps/*/e2e/**/*.test.ts`, so the
 // app's end-to-end files are found (red).
-// 0536: the vitest legs' files are the `next` and `next-integration` projects; a visual file, which
+// A test that needs a real resource runs only in main's full run: the vitest legs' files are the `next` and `next-integration` projects; a visual file, which
 // the end-to-end legs run, is never one, and an integration file in the e2e folder is.
 it.live(
   "scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist",
@@ -178,7 +178,7 @@ it.live(
 
 // T967, E8, today's CI about next/. The end-to-end selection is the `next-visual` project as
 // Vitest reads it: every `*.visual.test.ts(x)` under next/, at any depth, beside the module it
-// tests (0536), and no other file, whatever its folder.
+// tests (a test that needs a real resource runs only in main's full run), and no other file, whatever its folder.
 it.live("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", () =>
   Effect.gen(function* () {
     // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
@@ -230,7 +230,7 @@ const testPath = fc
   .map(([top, name, src, folders, file, end]) => [top, name, src, ...folders, file + end].join("/"));
 
 // L3, the class: the file set is Vitest's own selection on any tree, the `next` and
-// `next-integration` projects' together (0536), and a new exclude in the config is read on every call. Plants, each run once on shard-rows.ts and restored: the reviewed
+// `next-integration` projects' together (a test that needs a real resource runs only in main's full run), and a new exclude in the config is read on every call. Plants, each run once on shard-rows.ts and restored: the reviewed
 // `node:fs` globSync, which skips dot folders and dot files (red, `next/apps/a/src/.a.test.ts`
 // lost); read the excludes once at load, so the pushed exclude is ignored (red).
 // Each run gets its own folder and its own Vitest: one Vitest reused over a changed tree kept its
@@ -328,7 +328,7 @@ it.live("scenario: L4 the Node entry passes the real table and file set to the r
   }),
 );
 
-// 0536: a next/ test file runs on exactly one layer. Plants, each run once on vitest.config.ts and
+// A test that needs a real resource runs only in main's full run: a next/ test file runs on exactly one layer. Plants, each run once on vitest.config.ts and
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
 it.live(

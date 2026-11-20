@@ -1,4 +1,4 @@
-// Today's lead tooling. The unlisted check's laws (0134): its edge cases on memory, each one a law
+// Today's lead tooling. The unlisted check's laws (every commit is pushed when it is made, with a draft pull request from the first commit): its edge cases on memory, each one a law
 // (pr/Unlisted.ts lists them), then the trial merge on real git in a temp folder. Nothing here asks
 // GitHub or touches the checkout.
 import { spawnSync } from "node:child_process";
@@ -40,7 +40,7 @@ const names = (r: Unlisted.Report) => ({
   landed: r.landed.map((l) => `${l.branch.location} ${l.branch.name}`),
 });
 
-describe("the unlisted check's edge cases, each a law (0134, 0040)", () => {
+describe("the unlisted check's edge cases, each a law (every commit is pushed when it is made, with a draft pull request from the first commit; an existing, widely used tool comes before a hand-written one)", () => {
   // scenario: 2, a branch at main's tip, or behind it, holds nothing to keep.
   it.effect("scenario: 2, a branch with no commit that origin/main lacks is not listed", () =>
     Effect.map(checked({ branches: [branch("old", "a")], ahead: { a: 0 }, empty: [] }, []), (r) =>

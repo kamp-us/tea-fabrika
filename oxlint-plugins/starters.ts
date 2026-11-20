@@ -1,4 +1,4 @@
-// 0584: a test's kind follows what it uses. A plain test reads repository files or runs on
+// A test's kind follows what it uses. A plain test reads repository files or runs on
 // stand-ins; a test that starts or reaches a real thing (an instance, workerd, Electron, a process,
 // a signal, a port, the network, or local disk) is `.integration.`. This decides what in one
 // module's own code starts a real thing, so the per-file rule (integration-test-name.ts) and the
@@ -26,7 +26,7 @@ import type { ESTree, Visitor } from "@oxlint/plugins";
 import { Array as Arr, pipe, Predicate, Record as Rec } from "effect";
 import { dotted } from "./match.ts";
 
-/** The real things 0584 names, by what a call opens. */
+/** The real things the test-kind rule names, by what a call opens. */
 export type Tag = "process" | "port" | "browser" | "instance" | "signal" | "network" | "disk";
 
 /** The Node layers a call may need: one that spawns, one that writes disk. */

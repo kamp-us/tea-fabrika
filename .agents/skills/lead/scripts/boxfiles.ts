@@ -16,7 +16,7 @@
 //   nothing is fresh    no file of the box changed in the last 2 h (gc's IDLE). Age only keeps.
 //
 // Then content moves into MAIN's `runs/boxes/<quest>/` (ignored by git, the owner's private archive,
-// 0027), never deleted: a report or an event stream is the run's own record. A git view (a
+// where experiment results and assets live), never deleted: a report or an event stream is the run's own record. A git view (a
 // hard-linked mirror of MAIN's git data) is removed, and so is the box's Codex home, after its
 // `sessions/` moves too.
 //
@@ -39,7 +39,7 @@
 //  11. the main checkout's Codex home (plan and judgment turns run there) is never removed
 //  12. a dry run moves and removes nothing, and prints the same lines with "would"
 //
-// Looked at first (0040): `tmpreaper`/`tmpwatch` and `find -mtime -delete` remove by age alone,
+// Looked at first (an existing, widely used tool comes before a hand-written one): `tmpreaper`/`tmpwatch` and `find -mtime -delete` remove by age alone,
 // which this must not; `logrotate` rotates files a program keeps writing, not files of a finished
 // job; `git clean` sees only a checkout. None knows when a quest landed, which is the rule here.
 
@@ -57,7 +57,7 @@ const QuestFields = Schema.Struct({
 });
 
 /**
- * What boxfiles reads of a quest's state file (drive writes it). One written before decision 0546
+ * What boxfiles reads of a quest's state file (drive writes it). One written before the rule that a lane is called a quest
  * names the quest `lane`, and reads the same.
  */
 export const QuestState = Schema.Union([QuestFields, QuestFields.pipe(Schema.encodeKeys({ quest: "lane" }))]);

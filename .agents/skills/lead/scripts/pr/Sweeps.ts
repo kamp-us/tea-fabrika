@@ -1,5 +1,5 @@
-// Sweeps: the box cleanup's sweep, as the landing path starts one after a merge (0101). This file
-// is the contract only (0095): `SweepsProcess.layer` runs `gcloop.ts kick`, `SweepsTest.layer`
+// Sweeps: the box cleanup's sweep, as the landing path starts one after a merge (box cleanup runs on a timer and after a merge, never on a step's start path). This file
+// is the contract only (a service file holds only its contract, and each layer is its own file): `SweepsProcess.layer` runs `gcloop.ts kick`, `SweepsTest.layer`
 // counts. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

@@ -1,6 +1,6 @@
-// M3 (0591): `pnpm lint:node-kinds` (`node-kinds.ts`) refuses a name in `node-kinds.json` that no
+// M3 (a test that reads files as text declares its reads, and shape checks are lint rules): `pnpm lint:node-kinds` (`node-kinds.ts`) refuses a name in `node-kinds.json` that no
 // file its glob matches exports, or that no string binds elsewhere in `next/`, and passes the real
-// list. This was the exam's `next/apps/fabrika/src/exam/node-kinds.test.ts` (L6) until 0591 moved
+// list. This was the exam's `next/apps/fabrika/src/exam/node-kinds.test.ts` (L6) until the exam-to-lint rule moved
 // it here as a lint command; its real-list law is the command's run in `pnpm lint`, kept here too.
 // Each planted tree is a temp folder of its own; nothing is written inside the repo.
 // Plant: skip the binding check, and the exported-but-unbound name passes.

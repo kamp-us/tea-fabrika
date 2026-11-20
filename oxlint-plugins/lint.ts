@@ -2,7 +2,7 @@
 // this repo needs a third: printed, and never failing. So oxlint reports everything as JSON here,
 // and this prints all of it and fails on all of it but advice. Advice is a fire of the five old
 // advice rules or the docs rule that a dirty folder's warn override grades a warning (advice.ts,
-// 0523): each of the six blocks in every folder at zero.
+// a lint rule blocks wherever its code is clean): each of the six blocks in every folder at zero.
 //
 // Why one run and not two: an `oxlint-disable` that names a rule turned off counts as unused. A
 // second run for the advice rules would turn their own disable comments into failures of the first.
@@ -11,7 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { Array as Arr, pipe, Result } from "effect";
 import { advises, stale, warnLines } from "./advice.ts";
-import { audit } from "./anti-slop.ts";
+import { audit, baseConfig } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
 import { load, scriptReads } from "./script-reads.mjs";
@@ -197,7 +197,7 @@ for (const d of blocks) {
   console.log(`${where(d)} ${d.code ?? ""} ${text(d)}`);
 }
 
-// Only a whole run sees every fire, so only it says which warn lines have no fire left (0523). The
+// Only a whole run sees every fire, so only it says which warn lines have no fire left (a lint rule blocks wherever its code is clean). The
 // lines come from oxlint's own reading of the config, comments and overrides resolved.
 const printed = whole
   ? spawnSync(
@@ -227,15 +227,16 @@ const stuck =
 for (const { _tag, line } of stuck) {
   console.error(
     _tag === "zero"
-      ? `.oxlintrc.json: ${line.rule} has no fire left in ${line.glob}: delete it from the rule's warn override, so it blocks there (0523)`
-      : `.oxlintrc.json: ${line.rule}'s warn line ${line.glob} names a file; a warn line names a folder (0523)`,
+      ? `.oxlintrc.json: ${line.rule} has no fire left in ${line.glob}: delete it from the rule's warn override, so it blocks there (a lint rule blocks wherever its code is clean)`
+      : `.oxlintrc.json: ${line.rule}'s warn line ${line.glob} names a file; a warn line names a folder (a lint rule blocks wherever its code is clean)`,
   );
 }
 
-// The anti-slop plugin, taken as it ships (0563). Only a whole run says whether vendor/anti-slop/ is
+// The anti-slop plugin, taken as it ships (we use the anti-slop plugin as it ships, never our own copy of its rules). Only a whole run says whether vendor/anti-slop/ is
 // still the pinned commit's code, and only it sees every folder, so only it runs the zero lock: a
-// folder with no hit of a taken rule goes on that rule's list (anti-slop.ts).
-const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout);
+// folder with no hit of a taken rule left comes off that rule's exclude list, and a list never names
+// a folder its list at the merge base with origin/main does not (anti-slop.ts).
+const vendored = printed === undefined ? [] : audit(ROOT, printed.stdout, baseConfig(ROOT));
 
 for (const line of vendored) {
   console.error(line);

@@ -1,5 +1,5 @@
-// A heavy law reads its case count from the test depth (decision 0535): few cases on a pull request
-// and in the merge queue, the full count on the 3-hour schedule. 0535 cuts cases only in a law over
+// A heavy law reads its case count from the test depth (the merge line runs only fast checks, and main's full run the slow ones): few cases on a pull request
+// and in the merge queue, the full count on the 3-hour schedule. The fast-merge-line rule cuts cases only in a law over
 // real IO, so in a `next/` test file a law may not write its case count as a number when it reaches
 // real IO. A law in memory keeps its own count, whatever it is, on every pull request:
 //
@@ -7,7 +7,7 @@
 //   fc.assert(pure, { seed, numRuns: 3000 })                                   // passes in memory
 //   fc.assert(property, { seed, numRuns: runsFor({ fast: 10, full: 100 }) })   // passes
 //
-// Real-IO laws leave the merge line for the schedule's integration files (0536); this holds the ones
+// Real-IO laws leave the merge line for the schedule's integration files (a test that needs a real resource runs only in main's full run); this holds the ones
 // still written with a bare count, and the depth setting stays for them.
 //
 // A case count is the value of a `numRuns` key (fast-check's and `@demlik/tea/pbt`'s option), or of
@@ -60,7 +60,7 @@ const EFFECT_WRITES =
 /** A file a law may sit in: a test, a test kit or a shared suite. */
 const TEST_FILE = /(?:\.test\.tsx?|\.test-support\.tsx?|Test\.tsx?)$/;
 
-const MESSAGE = `A law over real IO reads its case count from the test depth (decision 0535): write \`runsFor({ fast, full })\` from \`@kampus/vitest\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
+const MESSAGE = `A law over real IO reads its case count from the test depth (the merge line runs only fast checks, and main's full run the slow ones): write \`runsFor({ fast, full })\` from \`@kampus/vitest\`, with \`fast\` the fewest cases that still prove the law on a pull request and \`full\` the count it had.`;
 
 type Parented = Node & { readonly parent?: Node | null };
 

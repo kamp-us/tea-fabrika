@@ -1,4 +1,4 @@
-// The Effect checker's settings for one tsconfig, read the way the checker reads them (0577). Plain
+// The Effect checker's settings for one tsconfig, read the way the checker reads them (libraries import Effect by namespace, programs and apps by the barrel). Plain
 // TypeScript replaces a child's whole `plugins` list, but the checker merges its own plugin block
 // through `extends`, key by key: the base's keys, then the project's, each key replacing the one
 // before, except `diagnosticSeverity`, whose maps merge, and `overrides`, whose lists join. Each
@@ -148,7 +148,7 @@ export const levelAt = (options: Options, check: string): unknown => {
     return "off";
   }
 
-  // Named in both lists, a package takes the namespace form (0577).
+  // Named in both lists, a package takes the namespace form (libraries import Effect by namespace, programs and apps by the barrel).
   if (check === "preferBarrelImport" && (!named("barrelImportPackages") || named("namespaceImportPackages"))) {
     return "off";
   }

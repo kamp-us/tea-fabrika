@@ -1,26 +1,31 @@
-// The anti-slop lint plugin, taken as it ships (decision 0563): the fork's `src/` sits unchanged in
+// The anti-slop lint plugin, taken as it ships (we use the anti-slop plugin as it ships, never our own copy of its rules): the fork's `src/` sits unchanged in
 // vendor/anti-slop/ (vendored.ts holds that), and `.oxlintrc.json` loads its two plugins. The owner
-// took ten of its rules. Each is on as an error in the folders its own block at the end of the
-// config lists, and nowhere else: a folder goes on a rule's list in the pull request that brings it
-// to zero hits of that rule.
+// took ten of its rules. Each is on as an error across the whole scope, from its own block at the
+// end of the config, and that block's `excludeFiles` names the folders that still have hits. A new
+// folder is on from its first file, and a pull request that brings a folder to zero takes it off
+// the exclude list: the list only shrinks, as advice.ts's warn lines do. No other block may set a
+// taken rule to warn or off.
 //
 // A whole `pnpm lint` run calls `audit` here, which holds three things. The config loads each of the
 // fork's two plugins from vendor/anti-slop/ and from nowhere else (`strays`), so an edited copy in
 // another folder cannot stand in for it. The folder is the pinned commit's code (vendored.ts). And
-// the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on a folder
-// with no hit of a rule that the rule's list does not name, and on a listed glob that is not a folder
-// of the scope. It keeps no list of its own: the folders still waiting are the scope's folders minus
-// the rule's list. The typecheck port is today's lead tooling and joins as four exact globs.
+// the zero lock: one more oxlint run, with the taken rules over the whole scope, fails on an
+// excluded folder with no hit of its rule left outside the excluded folders inside it, on a folder
+// with hits that no excluded folder covers, on an excluded glob that is not a folder of the scope,
+// on an excluded glob that the list at the merge base with origin/main does not name, on a block
+// whose `files` leave out part of the scope, and on a block that sets a taken rule below error.
+// The typecheck port is today's lead tooling and joins as four exact globs.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
 import { Array as Arr, Exit, pipe, Option, Predicate, Record as Rec, Schema } from "effect";
+import { parseSync } from "oxc-parser";
 import { verify } from "./vendored.ts";
 
 /**
- * The ten rules the owner took, as the config names them: eight by 0558, 0561, 0562 and 0563, and the
- * two Match rules by 0567.
+ * The ten rules the owner took, as the config names them: eight by the ternary-depth rule, the cast-comment rule, the no-wrong-shape rule and the anti-slop rule, and the
+ * two Match rules by the match rule.
  */
 export const TAKEN: ReadonlyArray<string> = [
   "anti-slop/max-ternary-depth",
@@ -41,7 +46,7 @@ const PLUGINS = [
   { name: "anti-slop-effect", specifier: "vendor/anti-slop/src/effect/index.ts" },
 ];
 
-/** The globs of the whole scope. A rule's list becomes these once every folder is on it. */
+/** The globs of the whole scope but the typecheck port, each a tree every taken rule is on in. */
 export const WHOLE: ReadonlyArray<string> = ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"];
 
 /** The typecheck port's four globs, as its lint blocks name them. */
@@ -93,29 +98,54 @@ export const folders = (root: string): ReadonlyArray<string> => [
   ]),
 ];
 
-/** What the zero lock asks of one rule's list. */
+/** Every glob a taken rule's block names in `files`: the whole scope, so a new folder is on from its first file. */
+export const SCOPE: ReadonlyArray<string> = [...WHOLE, ...TYPECHECK];
+
+/** What the zero lock asks of one rule's exclude list. */
 interface Lock {
-  /** The folders of the scope with no hit of the rule that its list does not name yet. */
-  readonly add: ReadonlyArray<string>;
-  /** The globs on its list that are neither a folder of the scope nor one of the whole-scope globs. */
+  /** The excluded folders with no hit of the rule left: each comes off the list. */
+  readonly remove: ReadonlyArray<string>;
+  /** The folders with a hit that no excluded folder covers. */
+  readonly missing: ReadonlyArray<string>;
+  /** The excluded globs that are not a folder of the scope. */
   readonly refused: ReadonlyArray<string>;
+  /** The excluded globs the base branch's list does not name: a list only shrinks. */
+  readonly added: ReadonlyArray<string>;
 }
 
-/** A listed glob covers its own folder and every folder below it. */
+/** A glob covers its own folder and every folder below it. */
 const covers = (glob: string, folder: string): boolean =>
   glob === folder || (glob.endsWith("/**") && folder.startsWith(glob.slice(0, -"**".length)));
 
-/** The zero lock for one rule: its list, and the rule's hits in each folder of the scope. */
+/**
+ * The hits of `folder` that no excluded folder covers: its own count, less the counts of the
+ * outermost excluded folders inside it, which never overlap.
+ */
+const loose = (folder: string, excluded: ReadonlyArray<string>, hits: ReadonlyMap<string, number>): number => {
+  const inside = Arr.filter(excluded, (glob) => glob !== folder && covers(folder, glob));
+  const outermost = Arr.filter(inside, (glob) => !Arr.some(inside, (other) => other !== glob && covers(other, glob)));
+
+  return (hits.get(folder) ?? 0) - Arr.reduce(outermost, 0, (sum, glob) => sum + (hits.get(glob) ?? 0));
+};
+
+/**
+ * The zero lock for one rule: its exclude list, the rule's hits in each folder of the scope, and the
+ * rule's list at the merge base with origin/main. That list is `null` when the base branch has no
+ * whole-scope block for the rule, the config's shape before this lock, so there is no list to grow past.
+ */
 export const lock = (
   scope: ReadonlyArray<string>,
-  listed: ReadonlyArray<string>,
+  excluded: ReadonlyArray<string>,
   hits: ReadonlyMap<string, number>,
+  base: ReadonlyArray<string> | null,
 ): Lock => ({
-  add: Arr.filter(
+  remove: Arr.filter(excluded, (glob) => scope.includes(glob) && loose(glob, excluded, hits) === 0),
+  missing: Arr.filter(
     scope,
-    (folder) => (hits.get(folder) ?? 0) === 0 && !Arr.some(listed, (glob) => covers(glob, folder)),
+    (folder) => !Arr.some(excluded, (glob) => covers(glob, folder)) && loose(folder, excluded, hits) > 0,
   ),
-  refused: Arr.filter(listed, (glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
+  refused: Arr.filter(excluded, (glob) => !scope.includes(glob)),
+  added: base === null ? [] : Arr.filter(excluded, (glob) => !base.includes(glob)),
 });
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
@@ -131,10 +161,105 @@ const Printed = Schema.fromJsonString(
     ),
     ignorePatterns: Schema.Array(Schema.String),
     overrides: Schema.Array(
-      Schema.Struct({ files: Schema.Array(Schema.String), rules: Schema.Record(Schema.String, Setting) }),
+      Schema.Struct({
+        files: Schema.Array(Schema.String),
+        excludeFiles: Schema.optionalKey(Schema.Array(Schema.String)),
+        rules: Schema.Record(Schema.String, Setting),
+      }),
     ),
   }),
 );
+
+// `Predicate.isString` is the guard: `Array.isArray` does not narrow a readonly tuple out of the union.
+const levelOf = (setting: Setting): string => (Predicate.isString(setting) ? setting : setting[0]);
+
+/** The part of the config's own text the base branch's lists are read from: its blocks. */
+const Written = Schema.fromJsonString(
+  Schema.Struct({
+    overrides: Schema.Array(
+      Schema.Struct({
+        files: Schema.Array(Schema.String),
+        excludeFiles: Schema.optionalKey(Schema.Array(Schema.String)),
+        rules: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+      }),
+    ),
+  }),
+);
+
+/** The config's text with its comments cut out, as oxc-parser finds them, so it is JSON. */
+const uncommented = (text: string): string => {
+  const prefix = "export default ";
+  const { comments } = parseSync("oxlintrc.ts", `${prefix}${text}`);
+
+  const kept = Arr.reduce(comments, { text: "", at: 0 }, (cut, comment) => ({
+    text: cut.text + text.slice(cut.at, comment.start - prefix.length),
+    at: comment.end - prefix.length,
+  }));
+
+  return kept.text + text.slice(kept.at);
+};
+
+/**
+ * Each taken rule's exclude list in a config's text, as the base branch holds it. A rule whose
+ * blocks there leave part of the scope out of `files` has no entry: that is the shape before this
+ * lock. None when the text is no config.
+ */
+export const baseLists = (text: string): Option.Option<ReadonlyMap<string, ReadonlyArray<string>>> => {
+  const config = Schema.decodeUnknownExit(Written)(uncommented(text));
+
+  if (Exit.isFailure(config)) {
+    return Option.none();
+  }
+
+  const lists = Arr.flatMap(TAKEN, (rule) => {
+    const named = Arr.filter(config.value.overrides, (block) => block.rules?.[rule] !== undefined);
+    const whole = Arr.every(SCOPE, (glob) => Arr.some(named, (block) => block.files.includes(glob)));
+
+    return whole ? [[rule, Arr.flatMap(named, (block) => block.excludeFiles ?? [])] as const] : [];
+  });
+
+  return Option.some(new Map(lists));
+};
+
+/** The config's text at the merge base with origin/main; `null` when git could not give it. */
+export const baseConfig = (root: string): string | null => {
+  const base = spawnSync("git", ["merge-base", "origin/main", "HEAD"], { cwd: root, encoding: "utf8" });
+  const sha = base.stdout.trim();
+
+  if (base.status !== 0 || !/^[0-9a-f]{40}$/.test(sha)) {
+    return null;
+  }
+
+  const shown = spawnSync("git", ["show", `${sha}:.oxlintrc.json`], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 2 ** 28,
+  });
+
+  return shown.status === 0 ? shown.stdout : null;
+};
+
+/**
+ * One line for each block that sets a taken rule to anything but error, as `--print-config` prints
+ * the blocks: a later block set to warn or off would turn the rule down in its folders.
+ */
+export const lowered = (
+  overrides: ReadonlyArray<{
+    readonly files: ReadonlyArray<string>;
+    readonly rules: Readonly<Record<string, Setting>>;
+  }>,
+): ReadonlyArray<string> =>
+  Arr.flatMap(overrides, (block) =>
+    Arr.flatMap(TAKEN, (rule) => {
+      const setting = block.rules[rule];
+
+      return setting === undefined || levelOf(setting) === "deny"
+        ? []
+        : [
+            `.oxlintrc.json: a block sets ${rule} to ${levelOf(setting)} in ${block.files.join(", ")}; a taken rule is an error everywhere, and a folder with hits goes in its block's excludeFiles`,
+          ];
+    }),
+  );
 
 /** What the lock's oxlint run reports, as `--format=json` prints it. */
 const Report = Schema.fromJsonString(
@@ -145,9 +270,6 @@ const Report = Schema.fromJsonString(
     ),
   }),
 );
-
-// `Predicate.isString` is the guard: `Array.isArray` does not narrow a readonly tuple out of the union.
-const levelOf = (setting: Setting): string => (Predicate.isString(setting) ? setting : setting[0]);
 
 /** A printed setting as a config writes it: `["deny", [options]]` becomes `["deny", options]`. */
 const written = (setting: Setting): string | ReadonlyArray<unknown> =>
@@ -234,7 +356,7 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
     return Option.isNone(pinned) || from === pinned.value.specifier
       ? []
       : [
-          `.oxlintrc.json: ${pinned.value.name} is loaded from ${from}, and only ${pinned.value.specifier} is the pinned copy (0563)`,
+          `.oxlintrc.json: ${pinned.value.name} is loaded from ${from}, and only ${pinned.value.specifier} is the pinned copy (we use the anti-slop plugin as it ships, never our own copy of its rules)`,
         ];
   });
 };
@@ -243,10 +365,11 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
  * Every line a whole run prints for the anti-slop plugin, none when all holds: the config loads its
  * two plugins from vendor/anti-slop/ (`strays`), that folder is the pinned commit's code
  * (vendored.ts), and each taken rule's list is as the zero lock asks. `printed` is the text of
- * `oxlint --print-config` for the config the run lints with. A config that loads neither of the
+ * `oxlint --print-config` for the config the run lints with, and `base` the config's own text at the
+ * merge base with origin/main (`baseConfig`). A config that loads neither of the
  * fork's plugins, as a test's small repo has, runs none of their code, so there is nothing to hold.
  */
-export const audit = (root: string, printed: string): ReadonlyArray<string> => {
+export const audit = (root: string, printed: string, base: string | null): ReadonlyArray<string> => {
   const config = Schema.decodeUnknownExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
@@ -267,7 +390,9 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     Arr.flatMap(overrides, (block) => {
       const setting = block.rules[rule];
 
-      return setting !== undefined && levelOf(setting) === "deny" ? [{ files: block.files, setting }] : [];
+      return setting !== undefined && levelOf(setting) === "deny"
+        ? [{ files: block.files, excluded: block.excludeFiles ?? [], setting }]
+        : [];
     });
 
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
@@ -278,26 +403,55 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     return [...pinned, "anti-slop.ts: the zero lock's oxlint run did not finish, so it read nothing"];
   }
 
+  const lists = base === null ? Option.none() : baseLists(base);
+
+  if (Option.isNone(lists)) {
+    return [
+      ...pinned,
+      "anti-slop.ts: could not read .oxlintrc.json at the merge base with origin/main, so nothing says an exclude list only shrinks",
+    ];
+  }
+
   const scope = folders(root);
 
   const unlocked = Arr.flatMap(TAKEN, (rule) => {
-    const { add, refused } = lock(
+    const on = blocks(rule);
+
+    const { remove, missing, refused, added } = lock(
       scope,
-      Arr.flatMap(blocks(rule), (block) => block.files),
+      Arr.flatMap(on, (block) => block.excluded),
       hits.get(rule) ?? new Map(),
+      lists.value.get(rule) ?? null,
     );
+
+    const narrow = Arr.filter(SCOPE, (glob) => !Arr.some(on, (block) => block.files.includes(glob)));
 
     return [
       ...Arr.map(
-        add,
-        (folder) => `.oxlintrc.json: ${rule} has no hit left in ${folder}: add the folder to its block (0563)`,
+        remove,
+        (folder) =>
+          `.oxlintrc.json: ${rule} has no hit left in ${folder}: remove the folder from its block's excludeFiles (a taken rule goes on in each folder the moment the folder reaches zero)`,
+      ),
+      ...Arr.map(
+        missing,
+        (folder) =>
+          `.oxlintrc.json: ${rule} has hits in ${folder}, which its block's excludeFiles does not name: fix them, since the list only shrinks`,
       ),
       ...Arr.map(
         refused,
-        (glob) => `.oxlintrc.json: ${rule}'s block names ${glob}, which is not a folder of its scope`,
+        (glob) => `.oxlintrc.json: ${rule}'s excludeFiles names ${glob}, which is not a folder of its scope`,
+      ),
+      ...Arr.map(
+        added,
+        (glob) =>
+          `.oxlintrc.json: ${rule}'s excludeFiles names ${glob}, which its list at the merge base with origin/main does not: fix its hits, since the list only shrinks`,
+      ),
+      ...Arr.map(
+        narrow,
+        (glob) => `.oxlintrc.json: ${rule}'s block leaves ${glob} out of its files, which name the whole scope`,
       ),
     ];
   });
 
-  return [...pinned, ...unlocked];
+  return [...pinned, ...unlocked, ...lowered(overrides)];
 };

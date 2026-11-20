@@ -3,7 +3,7 @@
 // small real repository in a temp folder from a generated history, gives the same history to the
 // model, and and sees both layers answer alike.
 //
-// A history is built step by step (0093): a first base, work and main commit, then a walk whose
+// A history is built step by step (each law is a property that walks the machine, and each plant is run once, never kept): a first base, work and main commit, then a walk whose
 // next move is read against the history built so far: a commit on work, on main or on a side
 // branch, a side branch made, a `--no-ff` merge of main into work, of work into main or of the side
 // into work (each offered only when git would make a merge commit, so a merge of an ancestor is
@@ -11,12 +11,12 @@
 // newline, adds or deletes a file. After every move the model either answers what git answers or
 // refuses with GitError: an answer that differs from git's is the one thing it may not give.
 //
-// It starts git and node and writes a temp folder, so it is an `.integration.` file (0584): no
+// It starts git and node and writes a temp folder, so it is an `.integration.` file (a test's kind follows what it uses, never its name): no
 // stand-in can show that real git writes the diff the model writes. The model's diff carries no hunk positions, so "alike" is read where
 // the ports read it: the file header lines, and the changed lines as a sorted list.
 //
 // The repository's own config pins what a person's global git config could change (a diff prefix,
-// color), so the law does not lean on the machine (0052). Rename detection stays git's default, as
+// color), so the law does not lean on the machine (a test never depends on the person's machine). Rename detection stays git's default, as
 // the lead tooling ran it; every line of a file carries the file's own name, so no two files are alike
 // enough for git to call one a rename of the other. Each branch edits only the files it made, so no
 // merge conflicts, and a merge's files are read back from git, so the model holds git's merge.

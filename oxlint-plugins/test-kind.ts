@@ -1,4 +1,4 @@
-// 0584, in `pnpm lint`: a test's kind follows what it uses, held from the side the per-file rule
+// The test-kind rule, in `pnpm lint`: a test's kind follows what it uses, held from the side the per-file rule
 // cannot see. `fabrika/integration-test-name` fails a plain test whose own code starts a real thing;
 // this fails an `*.integration.test.ts` file that reaches no starter at all, through its own code or
 // any chain of imports, so a file named `.integration.` that runs on stand-ins moves back to the
@@ -7,7 +7,7 @@
 //   node oxlint-plugins/test-kind.ts            # this repo
 //   node oxlint-plugins/test-kind.ts <folder>   # another tree, as the test does
 //
-// The imports come from `code-graph <scope> --graph --edges` (0040), which resolves relative paths
+// The imports come from `code-graph <scope> --graph --edges` (an existing, widely used tool comes before a hand-written one), which resolves relative paths
 // and our workspace packages' `exports` maps, `*` patterns included; a type-only import is no use.
 // An import is not a use, so this errs toward passing: any starter reached counts, and a call that
 // needs Node's platform layer counts wherever the layer comes from.
@@ -272,8 +272,8 @@ const tree = (
 
 const line = (finding: Finding): string =>
   finding._tag === "integration_opens_nothing"
-    ? `${finding.file}: named .integration. but reaches no real thing through its code or its imports (0584). It runs on stand-ins, so name it \`.test.ts\` and it runs on every pull request; or, if it does start a real thing this check cannot see, say what in oxlint-plugins/README.md's integration-test-name section.`
-    : `advice: ${finding.file} reaches ${DRIVES[finding.opens._tag]} through ${Arr.join(finding.via.slice(1), " -> ")} (\`${finding.opens.call}\`). If the law calls it, name the file \`.integration.test.ts\` (0584).`;
+    ? `${finding.file}: named .integration. but reaches no real thing through its code or its imports (a test's kind follows what it uses, never its name). It runs on stand-ins, so name it \`.test.ts\` and it runs on every pull request; or, if it does start a real thing this check cannot see, say what in oxlint-plugins/README.md's integration-test-name section.`
+    : `advice: ${finding.file} reaches ${DRIVES[finding.opens._tag]} through ${Arr.join(finding.via.slice(1), " -> ")} (\`${finding.opens.call}\`). If the law calls it, name the file \`.integration.test.ts\` (a test's kind follows what it uses, never its name).`;
 
 if (import.meta.main) {
   const root = process.argv[2] ?? join(import.meta.dirname, "..");

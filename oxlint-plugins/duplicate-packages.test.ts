@@ -1,6 +1,6 @@
 // E3 of .kalfa/quests/tea-msg-tag-PLAN.md, slice 1: Effect's checker may let `@demlik/tea` appear
 // twice in one program (`duplicatePackage`, TS377051) only in the lead tooling, where tea 0.27.0 and
-// today's agent runner on tea 0.25.0 meet (0217, ticket 1065). The allowance sits in one override of
+// today's agent runner on tea 0.25.0 meet (ADR 0002, the new version grows beside today's, ticket 1065). The allowance sits in one override of
 // `tsconfig.base.json` whose `include` is `.agents/**` globs alone, names only `@demlik/tea`, and no
 // other tsconfig of the repo holds one. Read the way `namespace-imports.test.ts` reads the same file:
 // `tsconfig.base.json` has comments, so it is parsed as a JS expression.

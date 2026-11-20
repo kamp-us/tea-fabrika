@@ -1,7 +1,10 @@
 // PullRequests: what the lead tooling asks GitHub about pull requests, and the few writes it makes
-// (0134: a draft at a branch's first commit, marked ready when its steps passed; 0162: one pinned
-// squash that adds it to GitHub's merge queue; 0530: merge when ready, which pr/Arm.ts turns on;
-// 0183 and 0532: an admin merge, which pr/Merge.ts alone asks). This file is the contract only (0095): `PullRequestsGh.layer` asks GitHub through `gh`, `PullRequestsTest.layer`
+// (the push-every-commit rule: a draft at a branch's first commit, marked ready when its steps passed;
+// the no-friction-before-merge rule: one pinned squash that adds it to GitHub's merge queue; the
+// merge-when-ready rule: merge when ready, which pr/Arm.ts turns on; the docs-only admin-merge rule and
+// the sev0 rule: an admin merge, which pr/Merge.ts alone asks). This file is the contract only (a
+// service file holds only its contract, and each layer is its own file): `PullRequestsGh.layer` asks
+// GitHub through `gh`, `PullRequestsTest.layer`
 // answers from a list in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
@@ -72,17 +75,17 @@ export class PullRequests extends Context.Service<
     readonly enqueue: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
     /** The path of every file pull request `number` changes. */
     readonly files: (number: number) => Effect.Effect<ReadonlyArray<string>, PullRequestsError>;
-    /** Each file pull request `number` changes, with its diff hunks (pr/Names.ts reads them, 0587). */
+    /** Each file pull request `number` changes, with its diff hunks (pr/Names.ts reads them, a new helper names the tools it searched, and a new name cites the industry's word). */
     readonly patches: (number: number) => Effect.Effect<ReadonlyArray<Patch>, PullRequestsError>;
     /**
      * Turns on GitHub's merge when ready for pull request `number`, as a squash, pinned to the head
-     * `oid` (0530): GitHub queues it once `ci-required` is green there, and never on another head.
+     * `oid` (the lead turns on merge when ready once the steps passed, and GitHub queues it on green): GitHub queues it once `ci-required` is green there, and never on another head.
      */
     readonly arm: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
     /**
      * Squash-merges pull request `number` past the merge queue, pinned to the head `oid`: an admin
-     * merge, which only pr/Merge.ts asks, for a docs-only pull request (0183), a sev fix at either
-     * level (0611), or a ready pull request in a sev0 (0603).
+     * merge, which only pr/Merge.ts asks, for a docs-only pull request (the lead admin-merges a docs-only pull request after checking it is not broken), a sev fix at either
+     * level (a sev fix is admin-merged one at a time on current main), or a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order).
      */
     readonly admin: (number: number, oid: string) => Effect.Effect<void, PullRequestsError>;
   }

@@ -13,7 +13,7 @@ const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
- * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
+ * before the rule that a lane is called a quest says `lane`, since saved data keeps the word it was written with: it reads
  * as `quest`, and the old key goes, so the next write of the file says `quest`. Anything that is not
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
@@ -133,7 +133,7 @@ const stuckIn = (out: string) =>
 
 /**
  * The commits check's stuck answers that hold the step back. A missing signature never does: a
- * hand-run commit is plain (0161). A stale link counts only for a step the quest itself has signed:
+ * hand-run commit is plain (today's tooling signs no commit with a step key). A stale link counts only for a step the quest itself has signed:
  * a step it has not reached yet (lead, before catch-up) may hold a newer link from an older pull
  * request on the same ticket, and CI judges that on the pull request (themes tests, 2026-11-09:
  * PR 565's lead link on ticket 343). Lines that are not answers are left to the caller, which

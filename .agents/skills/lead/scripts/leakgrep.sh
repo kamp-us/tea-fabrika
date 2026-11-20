@@ -1,13 +1,13 @@
 #!/bin/sh
 # Today's tooling. Check a unified diff on stdin, a whole draft with --text <file>, or each commit
-# `git rev-list <rev>...` names with --commits <rev>... (decision 0048: a push reads each commit it
+# `git rev-list <rev>...` names with --commits <rev>... (the leak check reads each pushed commit on its own: a push reads each commit it
 # sends on its own). A commit is read as its diff from its parent, a first commit as all it holds,
 # and a merge as the lines that are new against every parent.
 # Private words are literal, case-insensitive strings, one per line, outside the Git tree.
 # Diagnostics name only the kind, the added-line number and the commit, never matched text or
 # private words.
 # In a diff, an added line that only respaces a line the same diff removes, from any file, is old text:
-# a line moved between files was already in the tree the diff starts from (0047, amended 2026-11-14).
+# a line moved between files was already in the tree the diff starts from (an added line that only respaces a removed line is old text to the leak check, amended 2026-11-14).
 # In a pnpm patch under patches/, the removed, context and added lines inside its hunks skip only the
 # style shapes.
 # A line is read the way git writes it: up to the newline, and nothing else ends one.
@@ -68,7 +68,7 @@ own_url = re.compile('(?:' + '|'.join(map(re.escape, repo_urls)) + ')' + r'(?:\.
 # Keep the provider alphabets and minimum lengths, without relying on embedded brand markers.
 # OpenSSH's short sk- type names contain punctuation outside these key payloads.
 patterns = [
-    # Decision 0011: a plain path under /tmp passes; a first part ending in -<number> may hold a user id.
+    # A plain path under /tmp passes the leak check, one whose first part ends in a dash and a number never does: a plain path under /tmp passes; a first part ending in -<number> may hold a user id.
     # Home folders match in their real case (/Users on a Mac, /home on Linux), so a lowercase API
     # path such as GitHub's /users/<name>/keys passes. The temp folders and C:\Users match in any case.
     ('machine_path', re.compile(r'/(?:Users|home)/|(?i:/(?:private/tmp|private/var/folders|var/folders)/|/tmp/[^/\s]*-[0-9]+(?![^/\s"\'`)\]>,;:])|[A-Za-z]:[\\/]Users[\\/])')),
@@ -199,7 +199,7 @@ def git(*args):
 # The hits of one commit, as (line number in its diff from its first parent, kind).
 def commit_hits(commit, parents):
     # The diff flags are the ones the bot's push reads its net diff with.
-    # Decision 0047: a merge clears nothing, so a respaced line in a merge is new text.
+    # An added line that only respaces a removed line is old text to the leak check: a merge clears nothing, so a respaced line in a merge is new text.
     read = [scan(git('diff', '--no-ext-diff', '--no-textconv', '--no-color', '--unified=0', parent, commit, '--'), 'diff', len(parents) < 2, commit=commit)
             for parent in parents or [git('hash-object', '-t', 'tree', '--stdin').strip()]]
     hits, respaced = read[0]

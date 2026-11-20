@@ -1,6 +1,6 @@
 // `pnpm lint:dead` runs code-graph's `--unreachable` pass with the root `node-kinds.json`. These laws
 // run the real tool, version 0.15.0, on planted trees with that real file, so what the file makes
-// code-graph see as test support is seen before it is trusted on the repo (0524, 0538).
+// code-graph see as test support is seen before it is trusted on the repo (no check reads a list that lets broken code pass; the shared test primitives live in one workspace package).
 //
 // How code-graph 0.15.0 reads the setting (node_modules/@demlik/code-graph/dist/index.js):
 //   - `testSupportFilePatterns` is a record of named groups, each a list of regular expressions
@@ -8,13 +8,13 @@
 //     `matchingRules`). A file that matches is test support: as published, its exports are withheld
 //     with reason `test-support-surface` and are never `dead` or `only-called-from-tests` (`judge`),
 //     and are never unused-export candidates (`isCandidate`), used or not. Law 4 holds the repo's
-//     local patch to that: only an export something uses is withheld (0006).
+//     local patch to that: only an export something uses is withheld (an export no other file imports fails lint).
 //   - A key set in `--node-kinds` replaces that key's default whole (`loadOverrides` spreads the
 //     file over the defaults), so the default groups stay only if the file writes them again.
 //
 // Each case plants a fresh tree from Schema-generated names and folders, so a generated name meets
 // the tool, never a fixed list. Each tree holds every case its law must meet, and the law checks
-// that it did, so no case rests on what a seed happens to draw (0579: no seed in the law).
+// that it did, so no case rests on what a seed happens to draw (a property law is it.prop with Schemas, and test hooks are not exported: no seed in the law).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +27,7 @@ const ROOT = resolve(import.meta.dirname, "../../../../..");
 
 const bin = resolve(ROOT, "node_modules", ".bin", "code-graph");
 
-// A planter owns every tree its case plants. The case's scope removes them when the case ends (0061).
+// A planter owns every tree its case plants. The case's scope removes them when the case ends (anything that holds a resource is acquired in a scope, so the scope releases it).
 const planter = Effect.acquireRelease(
   Effect.sync(() => {
     const roots: Array<string> = [];
@@ -172,7 +172,7 @@ const spellings = (base: string, suffix: string, ext: string): ReadonlyArray<str
 ];
 
 describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
-  // Law 1. An export of a `*.test-support.ts` file (0538) that only tests use is test support, not
+  // Law 1. An export of a `*.test-support.ts` file (the shared test primitives live in one workspace package) that only tests use is test support, not
   // dead code. Red on main: code-graph's defaults hold no `.test-support.` pattern, so each one is
   // `only-called-from-tests`. Green once node-kinds.json names the pattern.
   // Plant: the real node-kinds.json as on main (no testSupportFilePatterns). Each helper is flagged.
@@ -297,7 +297,7 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
     runs,
   );
 
-  // Law 4. The pattern withholds a test-support export only while a test uses it (0006 stays whole):
+  // Law 4. The pattern withholds a test-support export only while a test uses it (the no-unused-exports rule stays whole):
   // an export of a `*.test-support.ts` file that nothing uses, no test and no product file, is
   // reported. A function is `dead` on the unreachable path, and a constant is an unused export on
   // the unused-export path. A helper its test uses, in the same file, stays unflagged, as law 1 says.

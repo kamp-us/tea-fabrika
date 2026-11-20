@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Our testing, linting and formatting tooling, one subpath per tool (decision 0600). So far /stryker: the plant runner, a Stryker-made mutant named by its code shape, with the law that must kill it.",
+  "description": "Our testing, linting and formatting tooling, one subpath per tool. So far /stryker: the plant runner, a Stryker-made mutant named by its code shape, with the law that must kill it.",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },

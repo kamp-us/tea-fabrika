@@ -1,6 +1,6 @@
 // The clock in a view (C1, owner 2026-11-05): React's `react/purity` refuses a clock or random read
 // in render and allows one in a handler; our `no-clock-in-view` refuses both. These laws were the
-// exam's (next/apps/fabrika/src/exam/clock.integration.test.ts) until 0591 moved them here. The
+// exam's (next/apps/fabrika/src/exam/clock.integration.test.ts) until the exam-to-lint rule moved them here. The
 // planted view is `CLOCK_VIEW` in builtin-plants.ts, which plants.test.ts also runs for
 // `react/purity`. Plant: drop `performance.now` and `crypto.randomUUID` from the rule's reads, and the
 // handler lines 5 and 15 pass. (The rule has no handler visitor to drop: it refuses a read anywhere.)
