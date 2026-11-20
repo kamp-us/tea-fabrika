@@ -76,9 +76,9 @@ moves the line here if it does.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
   briefs, transcripts and usage.
 
-GitHub is not a context. It sits behind an anticorruption layer, in a provider package
-(`@kalfa/provider-github`), so none of
-its words are ours.
+GitHub is not a context. `@kalfa/github` is an Effect client for GitHub's API in GitHub's own words, and it
+implements no context's interface. Each context that reaches GitHub translates in its own entry point
+(`@kalfa/codehost/github`, `@kalfa/chat/github`, `@kalfa/ci/github`), so none of GitHub's words are ours.
 
 ## Relationships
 
@@ -88,9 +88,14 @@ its words are ours.
   and read them back.
 - **Pipeline and Tracker are partners.** The pipeline asks; the tracker shows the ask to a person.
 - **Delivery uses Code hosting,** and **Code hosting uses Source control.**
-- **A git provider implements Source control.** `@kalfa/provider-github` implements Code hosting
-  and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
-  words (pull request, check run, ruleset) into Code hosting's.
+- **Each context's `/github` entry point is its anticorruption layer.** `@kalfa/codehost/github` translates
+  GitHub's words (pull request, check run, ruleset) into Code hosting's. Each such entry point uses `@kalfa/github`
+  for the calls.
+- **Source control has no GitHub entry point.** A GitHub remote is a plain git remote; Code hosting hands it the
+  credential, an access grant.
+- **`@kalfa/github` uses Secrets:** a GitHub App logs in with a token signed by Secrets' signing key, so the private
+  key never leaves Secrets. The installation token it gets back is GitHub's word; `@kalfa/codehost/github` turns it
+  into an access grant, and no other context sees one.
 - **Pipeline hands a change request to Delivery at Ready.** Pipeline is Delivery's customer and uses Delivery's
   words as they are; Delivery never says ticket, step, plan, law or fix round. Pipeline's steps (plan, tests, build,
   review) end when it marks the change request ready; Pipeline has no land step and only hears how it ended. Its
@@ -157,7 +162,7 @@ its words are ours.
   what they may do, or read a setting, and none owns the question's words.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
-  words into ours. `@kalfa/provider-github` implements it too, for a pull request's comment threads.
+  words into ours. `@kalfa/chat/github` implements it for a pull request's comment threads.
 - **A review is Code hosting's; the talk under it is Conversation's.** Approving or asking for changes is Code
   hosting's. A comment thread under a line of code is a Conversation thread whose anchor Code hosting's words fill in
   (file, line, commit).
@@ -172,7 +177,7 @@ its words are ours.
 - **Records talk about every context** and translate nothing.
 - **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
-  translated into a build inside `@kalfa/provider-github`.
+  translated into a build inside `@kalfa/ci/github`.
 - A word that means two things in two contexts gets an entry in each glossary and a line here.
 - **Capability vs permission:** a capability (Identity) is what a client can do; a permission is what
   someone may do. Permissions never says capability.
