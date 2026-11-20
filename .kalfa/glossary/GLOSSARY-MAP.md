@@ -5,7 +5,7 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Six exist so
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Seven exist so
 far: Shared names, Ledger, Program, Identity, Transport, Permissions and Delivery. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
@@ -55,17 +55,25 @@ moves the line here if it does.
   move between two places: socket, connection, gateway and frame.
 - **Permissions** ([`kalfa/permissions/GLOSSARY.md`](../../kalfa/permissions/GLOSSARY.md)): what a
   human or agent may do: relations, permissions, checks and roles.
-- **Configuration** (`kalfa/config/GLOSSARY.md`): settings that should match a file, and drift.
-- **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in chat apps.
+- **Configuration** (`kalfa/config/GLOSSARY.md`): the values a program runs with, and where each
+  one came from.
+- **Reconciliation** (`kalfa/reconciliation/GLOSSARY.md`): a file says what should be true (desired
+  state), it is compared with what is live, and drift is reported and reconciled.
+- **Incidents** (`kalfa/incidents/GLOSSARY.md`): a sev and its level, the hold, the fix mark, and main
+  going red.
+- **Secrets** (`kalfa/secrets/GLOSSARY.md`): a value few may read, known to others only by its name;
+  fetched, or used to sign without leaving.
+- **Leak guard** (`kalfa/leak-guard/GLOSSARY.md`): checking text before it goes public against a list
+  of private words, with a refusal that really stops the write.
+- **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in a thread, in a chat app or in a
+  pull request's comments.
 - **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
   GitHub.
 - **Code hosting** (`kalfa/codehost/GLOSSARY.md`): what a remote host adds on top of git: a proposal
-  to merge one ref into another, reviews, the host's checks and its rules. Built from Source
-  control's words.
+  to merge one ref into another, reviews, the host's checks, its rules, and access grants
+  (short-lived credentials the host gives out). Built from Source control's words.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
   briefs, transcripts and usage.
-- **Scheduling** (candidate, no path yet): when work starts on its own. It may fold into another
-  context.
 
 GitHub is not a context. It sits behind an anticorruption layer, in a provider package
 (`@kalfa/provider-github`), so none of
@@ -87,11 +95,20 @@ its words are ours.
 - **Priority vs landing order:** landing order is Delivery's (its queue); CI's priority only orders which builds start
   first. CI may read Delivery's fix mark to start a fix's build first.
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
+- **Delivery obeys Incidents.** Incidents owns the hold and the fix mark; Delivery stops landing on a
+  hold and puts the fix first. Hearing that main went red is reading a stream, so there is no watch
+  context.
+- **Reconciliation uses Code hosting** for a host's live settings, such as its rules. Who may push
+  where is one of those rules.
+- **Code hosting uses Secrets** to sign an access grant's request; the key never leaves Secrets.
+- **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
+  The private words are a secret.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
   what they may do, or read a setting, and none owns the question's words.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
-  words into ours.
+  words into ours. `@kalfa/provider-github` implements it too, for a pull request's comment threads.
+- **When work starts on a timer is Program's.** There is no Scheduling context.
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
   Pipeline say.
 - **Records talk about every context** and translate nothing.
@@ -115,5 +132,7 @@ Borders that are still fuzzy, one line each.
   ledger enforces it.
 - **Frame:** in Transport, one piece of text on a socket; Clients and Frame uses it for the window around
   a program, which gets its own word (a lean: chrome) when that glossary is written.
-- **Conversation vs Tracker:** an ask in chat and an ask in the inbox may be one thing.
-- **Configuration's drift:** a context of its own, or a pattern other contexts use.
+- **Conversation vs Tracker:** Conversation carries a message and the app decides it is an ask; an
+  ask in chat and an ask in the inbox may still be one thing.
+- **Conversation vs Code hosting:** a review comment pinned to a line of code may stay Code
+  hosting's; a plain thread comment is Conversation's.
