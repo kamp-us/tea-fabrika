@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Fifteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation and Code hosting. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Sixteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation, Code hosting and Configuration. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -55,8 +55,8 @@ moves the line here if it does.
   move between two places: socket, connection, gateway and frame.
 - **Permissions** ([`kalfa/permissions/GLOSSARY.md`](../../kalfa/permissions/GLOSSARY.md)): what a
   human or agent may do: relations, permissions, checks and roles.
-- **Configuration** (`kalfa/config/GLOSSARY.md`): the values a program runs with, and where each
-  one came from.
+- **Configuration** ([`kalfa/config/GLOSSARY.md`](../../kalfa/config/GLOSSARY.md)): the values an app's programs run
+  with, read from flags, environment variables and two files, and where each one came from. It never reads a host.
 - **Reconciliation** ([`kalfa/reconciliation/GLOSSARY.md`](../../kalfa/reconciliation/GLOSSARY.md)): the
   project's kalfa config says what should be true (desired state), it is compared with what is live,
   and drift is reported or reconciled.
@@ -93,6 +93,7 @@ its words are ours.
   words (pull request, check run, ruleset) into Code hosting's.
 - **Delivery uses CI.** A change candidate lands only on a passing verdict: the verdict of the candidate's build.
   Delivery reads the verdict and never says build, job or check. A canceled build gives no verdict.
+- **Priority vs precedence:** CI's priority orders builds; Configuration's precedence orders which source wins.
 - **Priority vs landing order:** landing order is Delivery's (its queue); CI's priority only orders which builds start
   first. CI never reads Delivery or Incidents: whoever asks for a build gives its priority class, such as fix, and CI's
   setting ranks the classes.
@@ -111,8 +112,19 @@ its words are ours.
   rule may escalate to, are Permissions' answers.
 - **Reconciliation uses Code hosting** for a host's live settings, such as its rules. Who may push
   where is one of those rules.
-- **Reconciliation reads its desired state through Configuration,** from the project's kalfa config.
-  Drift is Reconciliation's word, and Configuration does not use it.
+- **Reconciliation reads its desired state through Configuration,** from the project's kalfa config: the repo
+  configuration of the app named kalfa. Drift is Reconciliation's word, and Configuration does not use it.
+- **Configuration never reads a host.** A host's live value is a host setting or a ref rule (Code hosting), read by
+  Reconciliation's live state source. A setting (Configuration) is never a host setting.
+- **Source** is never bare across contexts: Configuration's source is a place values are read from; Reconciliation
+  says live state source.
+- **Flag vs args:** a flag (Configuration) is one value on the command line; args (Program) are all the values a
+  process starts with. Configuration's load makes a process's args from every source.
+- **Live setting vs hot reload:** a live setting's new value reaches a running process as an input (Program); hot
+  reload swaps a program's code. A restart setting is one of a process's args. Neither says a bare "reload".
+- **User** in Configuration means the person whose config home holds the user configuration. Identity says human or
+  agent, and Code hosting says host account.
+- **A setting holds a secret's name, never its value.** The value is fetched from Secrets.
 - **Check** means three things: in Permissions, running a permission; in Reconciliation, comparing the
   desired state with the live state; in Code hosting, a named mark the host keeps on one commit. CI's builds show on
   the host as checks.

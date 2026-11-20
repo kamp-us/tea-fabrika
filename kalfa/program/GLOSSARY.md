@@ -9,13 +9,13 @@ A named piece of work, written `Program.make(name)(fn)`.
 _Avoid_: Machine, actor
 
 **Process**:
-One running copy of a program, started with its flags, with its own state. One program can have
+One running copy of a program, started with its args, with its own state. One program can have
 many processes.
 _Avoid_: Instance, run
 
-**Flags**:
+**Args**:
 The values a process is started with. They stay fixed for the process's whole life.
-_Avoid_: Config, options, params
+_Avoid_: Flags, config, options, params
 
 **Init**:
 What runs once when a process starts, and makes its first state. If it fails, the process does not
