@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Twelve exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard and CI. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Thirteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI and Source control. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -68,8 +68,8 @@ moves the line here if it does.
   against its rules, such as a list of private words, with a refusal that really stops the write.
 - **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in a thread, in a chat app or in a
   pull request's comments.
-- **Source control** (`kalfa/git/GLOSSARY.md`): git itself: repository, ref, commit, push. Not
-  GitHub.
+- **Source control** ([`kalfa/git/GLOSSARY.md`](../../kalfa/git/GLOSSARY.md)): git itself, in git's own words:
+  repository, ref, commit, push, rebase. Not GitHub.
 - **Code hosting** (`kalfa/codehost/GLOSSARY.md`): what a remote host adds on top of git: a proposal
   to merge one ref into another, reviews, the host's checks, its rules, and access grants
   (short-lived credentials the host gives out). Built from Source control's words.
@@ -97,6 +97,10 @@ its words are ours.
   first. CI never reads Delivery or Incidents: whoever asks for a build gives its priority class, such as fix, and CI's
   setting ranks the classes.
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
+- **HEAD** (Source control) is what a working copy has checked out; **head** (Ledger) is a stream's newest revision.
+- **A changeset is a commit** seen from Delivery, and a build runs on a commit. Delivery builds a change candidate
+  with Source control's rebase or a merge commit; which one is Delivery's setting.
+- **Land vs merge commit:** landing is Delivery's word; a merge commit is only a commit with two parents.
 - **Delivery obeys Incidents.** An open incident's severity has a response, such as a hold; Delivery
   lands only fixes during a hold and puts each fix first. Delivery hears incidents by reading a
   stream, so there is no watch context. A hold cancels the builds of anything that is not a fix through CI's cancel
