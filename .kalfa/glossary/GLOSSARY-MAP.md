@@ -92,7 +92,8 @@ implements no context's interface. Each context that reaches GitHub translates i
   GitHub's words (pull request, check run, ruleset) into Code hosting's. Each such entry point uses `@kalfa/github`
   for the calls.
 - **Source control has no GitHub entry point.** A GitHub remote is a plain git remote; Code hosting hands it the
-  credential, an access grant.
+  credential, made from an access grant.
+- **Leak guard uses Source control:** it fills git's pre-push hook, so git never names Leak guard.
 - **`@kalfa/github` uses Secrets:** a GitHub App logs in with a token signed by Secrets' signing key, so the private
   key never leaves Secrets. The installation token it gets back is GitHub's word; `@kalfa/codehost/github` turns it
   into an access grant, and no other context sees one.

@@ -9,7 +9,7 @@ A write that someone outside the project can read: a push, with its code and com
 _Avoid_: publish, post, egress, upload
 
 **Outgoing text**:
-What one public write makes public for the first time. Text that is already public, such as a line only respaced or moved, is old text and is not outgoing. The guard reads the exact text that will be written, never an earlier draft of it.
+What one public write makes public for the first time. Text that is already public, such as a line only respaced or moved, is old text and is not outgoing. The guard reads the exact text that will be written, never an earlier draft of it. A push that sends only commits the remote already has makes no outgoing text, and it passes.
 _Avoid_: diff, payload, content, input
 
 **Rule**:
@@ -29,5 +29,5 @@ The guard's answer for one public write: pass or refusal, and nothing else. Each
 _Avoid_: status, result, warning, green, red
 
 **Refusal**:
-The verdict that stops the write. It names what kind of thing was found and where, never the matched text or the private word. Any check that could not finish is a refusal: empty outgoing text, a missing word list, unreadable text, a timeout, or history too short to tell old text from new. Nothing skips a refusal; the text changes, or a rule or an exception changes as a setting.
+The verdict that stops the write. It names what kind of thing was found and where, never the matched text or the private word. Any check that could not finish is a refusal: outgoing text that could not be worked out, a missing word list, unreadable text, a timeout, or history too short to tell old text from new. Nothing skips a refusal; the text changes, or a rule or an exception changes as a setting.
 _Avoid_: block, failure, error, hit, override

@@ -65,3 +65,17 @@ _Avoid_: land, merge (Delivery's word is land)
 **Conflict**:
 When a rebase or a merge cannot combine the files by itself. It stops and names the files.
 _Avoid_: clash, failure
+
+**Patch id**:
+A name git gives a commit's or a range's changes, from the lines added and removed and not from where they sit. Two
+changes with the same patch id make the same edit, even on different bases.
+_Avoid_: diff hash, change id, fingerprint
+
+**Credential**:
+What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call.
+_Avoid_: token, access grant, login, key
+
+**Pre-push hook**:
+A check that reads what a push would send and can stop it before anything leaves. Every push runs one; a repository
+with no public remote picks the one that checks nothing, by name.
+_Avoid_: gate, guard, filter, pre-push check
