@@ -116,7 +116,7 @@ implements no context's interface. Each context that reaches GitHub translates i
   first. CI never reads Delivery or Incidents: whoever asks for a build gives its priority class, such as fix, and CI's
   setting ranks the classes.
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
-- **HEAD** (Source control) is what a working copy has checked out; **head** (Ledger) is a stream's newest revision.
+- **HEAD** (Source control) is what a working copy has checked out; **head** (Ledger) is a stream's newest entry.
 - **A changeset is a commit** seen from Delivery, and a build runs on a commit. Delivery builds a change candidate
   with Source control's rebase or a merge commit; which one is Delivery's setting.
 - **Land vs merge commit:** landing is Delivery's word; a merge commit is only a commit with two parents.
@@ -205,8 +205,8 @@ implements no context's interface. Each context that reaches GitHub translates i
 
 Borders that are still fuzzy, one line each.
 
-- **Permissions vs the Ledger's `WritePolicy`:** who may write is Permissions' question, but the
-  ledger enforces it.
+- **Permissions vs the Ledger's admission:** who may write is Permissions' question. The ledger only
+  asks its admission, which the app fills, inside the append.
 - **Frame:** in Transport, one piece of text on a socket; Clients and Frame uses it for the window around
   a program, which gets its own word (a lean: chrome) when that glossary is written.
 - **Conversation vs Tracker:** Conversation carries a message and the app decides it is an ask; an

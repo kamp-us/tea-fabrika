@@ -15,3 +15,8 @@ _Avoid_: environment, place, host, target
 **Replica**:
 One copy of a ledger, kept where it is used: on a device, in a browser tab or in the cloud.
 _Avoid_: place, copy, mirror, node
+
+**Tag**:
+What kind of value something is: one name out of a fixed set, carried on the value itself, so a
+reader can match on it or pick values by it.
+_Avoid_: type, kind (as the field), discriminator
