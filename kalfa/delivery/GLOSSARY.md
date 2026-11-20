@@ -21,6 +21,20 @@ _Avoid_: LGTM, sign-off, vote
 The setting that says which later changesets an approval still covers: always, by kept, glance or stale, or never.
 _Avoid_: sticky approval, dismiss stale reviews
 
+**Kept**:
+A carry answer: the approval still covers the new changeset. Either it is the same changeset, the approved changes
+apply to the base unchanged, or only the project's formatter moved them.
+_Avoid_: still valid, carried over
+
+**Glance**:
+A carry answer: the change request's own lines are the same, and only the lines around them moved. Someone looks at
+those few lines before the approval counts.
+_Avoid_: partial, soft stale
+
+**Stale**:
+A carry answer: the approval no longer covers the new changeset, so it is asked for again.
+_Avoid_: dismissed, outdated, invalid
+
 **Change candidate**:
 The commit main would become if the change requests in it land: the newest main plus one or more changesets. How many
 it holds is a setting. Delivery builds candidates and never changes the author's own changesets.
