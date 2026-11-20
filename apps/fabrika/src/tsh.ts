@@ -77,8 +77,8 @@ import { type TileJobs, watchJobs } from "./tile-jobs.ts";
 // the host's job table, which tsh writes before the run starts, and again when `attach` moves it.
 //
 // Jobs: it is handed the host's job table (`openJobs`), the one every tile's tsh shows, so a job
-// is the same `%n` in each tile, as WezTerm's panes are the mux's and not a window's
-// (docs/direction/the-host-keeps-terminals-and-jobs.md). It is handed the history every tile
+// is the same `%n` in each tile, as WezTerm's panes are the mux's and not a window's.
+// It is handed the history every tile
 // shares too. tiles.ts hands it the host process's table; a test opens one on memory. Each job
 // in the table names its tile (its `owner`): the one whose tsh began it, or last attached it.
 // When a tsh's scope closes, its tile's jobs still running are detached in the host's table, and

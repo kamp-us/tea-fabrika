@@ -31,7 +31,7 @@ import { type Attached, Found, type LinkNow } from "./messages.ts";
 // and keeps the clock and the random number out of this machine: the clock comes in on each
 // Msg's `at`, and the random wait comes back from the `jitter` Cmd, as Elm's `Random.generate`.
 //
-// A host that runs older code (docs/direction/an-old-host-is-named-then-restarted.md):
+// A host that runs older code:
 //
 //   update(s, attach_ok {kind: "version", theirs: 1, ours: 2})   {at: "refused", ...}: never tried again
 //   update(s, attach_ok {kind: "build", theirs: null, ours})     {at: "up", found: {kind: "build", ...}}:

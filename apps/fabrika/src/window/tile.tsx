@@ -6,8 +6,7 @@ import type { FromPage } from "../messages.ts";
 import { PIPES, type Pipe } from "../pipes.ts";
 import { INFO, infoFor, type TicketsShown, tileWord } from "./frame.ts";
 
-// A tile and a strip, as the desk's page draws them (docs/direction/tile-guidelines.md, decided
-// 2026-11-01). They take the desk's messages as `toHost`, so a test draws them with no page around
+// A tile and a strip, as the desk's page draws them. They take the desk's messages as `toHost`, so a test draws them with no page around
 // them (tile.test.ts); desk.tsx gives them the page's.
 //
 //   <section class="tile focused" data-pipe="sky">

@@ -1,4 +1,4 @@
-// Ticket 908, next/. Decision 0095 and docs/direction/effect-code-guidelines.md (E3) ask a service's
+// Ticket 908, next/. Decision 0095 asks a service's
 // type to be written out, so a reader sees the contract without running the implementation in their
 // head. This rule refuses a service type that is taken from the implementation instead.
 //

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "fabrika's design: the two built-in themes and one stylesheet of tokens, with Manti's set from them. Today's app and next/ both import it (docs/direction/fabrika-design-package.md).",
+  "description": "fabrika's design: the two built-in themes and one stylesheet of tokens, with Manti's set from them. Today's app and next/ both import it.",
   "exports": {
     ".": "./src/index.ts",
     "./tokens.css": "./src/tokens.css",

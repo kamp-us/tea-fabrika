@@ -22,7 +22,7 @@ import type { TestWriterOutcome } from "./outcome.ts";
 import type { Written } from "./written.ts";
 import { File, HeldWritten, problemsOf, testsWrite } from "./written.ts";
 
-// The test writer's first job (docs/direction/the-test-writer.md): after the
+// The test writer's first job: after the
 // owner approves the plan and before build, one test per Property, run on the
 // plan's base. One agent sits inside it, the writer; code does the rest:
 //

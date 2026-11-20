@@ -1,6 +1,6 @@
 import { Redacted } from "effect";
 
-// A kept state never holds a secret (docs/direction/secrets-are-redacted.md). Storage asks this
+// A kept state never holds a secret. Storage asks this
 // before every save, on every storage, and refuses a state that holds one.
 //
 //   holdsSecret({total: 3})                                 false

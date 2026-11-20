@@ -19,8 +19,7 @@ import { AskId } from "../ids.ts";
 import { type Ask, Refused } from "./ask.ts";
 
 // Add-on packs, wired to a core program by the host, from names in the
-// repository's .fabrika/fabrika.toml (docs/direction/packs-are-programs.md,
-// ../settings.ts). The core program never sees this: it sends on its outputs
+// repository's .fabrika/fabrika.toml. The core program never sees this: it sends on its outputs
 // and is told on its inputs, as always.
 //
 //   packs = ["@acme/owner-desk", "@acme/ask-log"]    # .fabrika/fabrika.toml: the one line

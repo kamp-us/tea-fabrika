@@ -276,8 +276,8 @@ export class LaneWork extends Context.Service<
     /** An empty folder: for an agent with no reason to see code. */
     readonly empty: Effect.Effect<string, Failed>;
     /**
-     * `head` on the remote's branch `branch`. Never main. The branch's head is read fresh just before
-     * (docs/direction/read-fresh-run-alone.md). When `head` does not hold it, it is kept first, and
+     * `head` on the remote's branch `branch`. Never main. The branch's head is read fresh just before.
+     * When `head` does not hold it, it is kept first, and
      * answered: a commit a person pushed there is never lost. The push leases what was read, so a
      * push that lands in between fails it, and it reads again. `null`: nothing was replaced.
      */
@@ -1176,7 +1176,7 @@ export const laneWork: Layer.Layer<LaneWork, never, LaneHome> = Layer.effect(
 /**
  * `head` pushed to ticket `number`'s branch `branch`: how the lane pushes one. What the push replaces
  * is kept on the remote first (`LaneWork.pushTo`), and one line on the ticket names it, as a stage
- * that replaces a branch must (docs/direction/read-fresh-run-alone.md).
+ * that replaces a branch must.
  */
 export const pushBranch = (
   { work, tickets }: { readonly work: LaneWork["Service"]; readonly tickets: Tickets["Service"] },

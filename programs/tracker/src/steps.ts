@@ -3,8 +3,7 @@ import { type Entry, picksOf, questionOf, readAnswer } from "@kampus/pipeline/ti
 import { Schema } from "effect";
 
 // The plan's nine steps for one ticket, each with where it stands, read off the ticket's facts
-// alone (docs/direction/a-ticket-runs-from-the-app.md: the parent's children, with the owner's
-// approval between plan and test writer). The ticket, map and runs programs draw from it.
+// alone. The ticket, map and runs programs draw from it.
 //
 //   stepsOf(timeline)
 //   // [{step: "triage", state: "done", runs: 1, usd: 0.11, last: "sent to plan: yes"},

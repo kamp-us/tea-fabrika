@@ -1,4 +1,4 @@
-// Outcome.ts: how one step of a flow answers, in the five verbs (docs/direction/outcome-names.md).
+// Outcome.ts: how one step of a flow answers, in the five verbs.
 // Today's lead tooling (0064), read through its module: `Outcome.done("pushed")`.
 //
 //   done   the step did its job; the flow goes on to the next step

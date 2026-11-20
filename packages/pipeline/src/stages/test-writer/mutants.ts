@@ -9,7 +9,7 @@ import { outcomesOf } from "../outcome.ts";
 import { type MutantsBrief, mutantsWriter } from "./brief.ts";
 import { File, fileProblems } from "./written.ts";
 
-// The test writer's second job (docs/direction/the-test-writer.md): after
+// The test writer's second job: after
 // the mutation step, it answers each mutant that lived in one of three ways.
 // The writer drafts its answers in the refine combo, as in the first job;
 // code checks each `test` answer with both controls.

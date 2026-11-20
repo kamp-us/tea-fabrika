@@ -2,7 +2,7 @@ import { markOf } from "../../criteria/mark.ts";
 import { type Plan, type PlanCriterion, type PlanDraft, sizeOf, storyText, textOf } from "./plan.ts";
 
 // The markdown view of a plan, for people. Made from the data and never read
-// back (docs/direction/data-first-markdown-is-a-view.md). A person marks what
+// back. A person marks what
 // they would change on the view; a change they want is made to the data.
 //
 // Each criterion is a box that opens with its id and version, `c3 v2`, and

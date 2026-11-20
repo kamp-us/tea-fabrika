@@ -104,7 +104,7 @@ plant(
 );
 
 // The keybindings file, read: ~/.fabrika/keybindings.toml, laid over the defaults that ship with
-// the app (docs/direction/keybindings-are-configurable.md, K5, K6, K9). Today's version, ticket
+// the app. Today's version, ticket
 // 174, PR 1. The laws over any text are in keymap.laws.test.ts.
 //
 //   decodeKeys('prefix = "ctrl+a"', true)              the defaults, with the prefix <c-a>

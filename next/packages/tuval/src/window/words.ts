@@ -1,8 +1,7 @@
 // next/: the words a tile shows in place of color (0502), in its title bar's state slot and in its
 // body. The body follows the tile guideline's empty state: one word where the content will start, no
 // spinner, no skeleton. A tile whose process ended follows that rule too, so it never keeps drawing
-// the ended process's last view (docs/direction/tile-guidelines.md, "Empty and loading", and its
-// "Tuval" line on a tile kept after a crash).
+// the ended process's last view.
 import type { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 
 type Link = WindowModel["link"];

@@ -516,7 +516,7 @@ export const askDesk = async (tools: Tools) => {
     await page.keyboard.press("Escape");
 
     // Round 7, fix 7: the remap above proves the keys are configurable; that case ends here. The
-    // shots show the decided keys (docs/direction/ask-desk.md, A3: `y` takes the rec), so the file
+    // shots show the decided keys, so the file
     // goes back to empty, the defaults, and the host's watch hands the window the default table.
     await writeFile(join(home, "keybindings.toml"), "");
     await until(

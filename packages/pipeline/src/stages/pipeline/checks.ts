@@ -114,7 +114,7 @@ const checksAt = (setup: CheckSetup, head: string) =>
         ChildProcessSpawner.ChildProcessSpawner,
         spawner,
       ).pipe(Effect.timeoutOption(setup.within));
-    /** One command, and once more if it could not start (`once`, a guess: docs/direction/jidoka-and-andon.md#bounds). */
+    /** One command, and once more if it could not start (`once`, a guess). */
     const one = (command: Command) =>
       Effect.gen(function* () {
         const said = command.join(" ");

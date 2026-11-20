@@ -40,8 +40,8 @@ import { DEFAULT_BUDGET, DEFAULT_EFFORT, DEFAULT_MODEL, EFFORTS } from "../stage
 // repository's default branch (`settingsWhere`, ../settings-source.ts).
 //
 // There is no `rounds` key: a ticket has no cap on build rounds, and only the
-// stall rule (../asks/rules.ts) stops its loop
-// (docs/direction/done-is-per-criterion.md). A `rounds` line is refused with a
+// stall rule (../asks/rules.ts) stops its loop.
+// A `rounds` line is refused with a
 // message that says so, not dropped.
 
 /** The file's name, in the folder tsh is started in. */

@@ -16,7 +16,7 @@ import { writerOf } from "./writer.ts";
 //   opened  one row per span a run's work hangs under, written as it opens: a span reaches
 //           `spans` only once it ends, and a child run started meanwhile must nest under it
 //   content one row per span that carried an agent's content (its Langfuse input and output),
-//           taken off the span as it is kept (docs/direction/an-agent-run-keeps-its-content.md)
+//           taken off the span as it is kept
 //
 //   keepSpans(db, [{span: "7f2c…", name: "execute_tool Read", tags: {"langfuse.observation.output": "…"}}], by)
 //   // spans    {span: "7f2c…", name: "execute_tool Read", tags: {}}

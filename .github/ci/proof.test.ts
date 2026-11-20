@@ -82,7 +82,7 @@ const PLAIN = [
   ".github/workflows/scheduled.yaml",
   "vitest.shards.json",
   "vitest.shards.ts",
-  "docs/direction/README.md",
+  "docs/guide/README.md",
   ".kalfa/decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md",
 ];
 
@@ -133,8 +133,8 @@ it("property: the full set's triggers are exactly the changed files that match, 
 
 it("pinned: a changed set of zero files is a green run with no leg, and its record and summary say so", () => {
   // Plant, run once on proof.ts and restored: `outputs` gives one empty leg (red: `legs=["1"]`).
-  const proof = choose(seen(["docs/direction/README.md"]), [], [], real);
-  expect(proof).toEqual({ ...seen(["docs/direction/README.md"]), _tag: "changed", legs: {}, seconds: {} });
+  const proof = choose(seen(["docs/guide/README.md"]), [], [], real);
+  expect(proof).toEqual({ ...seen(["docs/guide/README.md"]), _tag: "changed", legs: {}, seconds: {} });
   expect(outputs(proof, 8, real.most)).toEqual(["scope=changed", "legs=[]", "files={}", identitySlots]);
   expect(summary(proof)).toContain("no leg starts and the run is green");
 });

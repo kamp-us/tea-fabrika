@@ -27,8 +27,7 @@ export const noLedgerSql: CreateRule = {
       if (touchesLedger(query)) {
         context.report({
           node,
-          message:
-            "Read and write ledger tables through Ledger or Referee (docs/direction/ledger-behind-a-service.md).",
+          message: "Read and write ledger tables through Ledger or Referee.",
         });
       }
     };

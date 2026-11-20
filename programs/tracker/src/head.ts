@@ -13,7 +13,7 @@ import {
 } from "@kampus/pipeline/tickets/ticket";
 import { Schema } from "effect";
 
-// A ticket's top line, folded from its facts (docs/direction/what-a-ticket-shows.md, section 1).
+// A ticket's top line, folded from its facts.
 // One of seven things, the first that fits, in this order:
 //
 //   done      its pull request merged after the last reopen       "done: PR #12 merged"
@@ -37,7 +37,7 @@ export const HOUR = 60 * 60 * 1000;
 
 /**
  * Which facts move work, so they wake an idle ticket and restart its hour. The rest is advice,
- * shown on the ticket and never read to decide (docs/direction/label-guidelines.md, L1): a Jev
+ * shown on the ticket and never read to decide: a Jev
  * duplicate hint, a person's word on it, a person's rating of a review finding. A comment is work.
  * A new kind of fact must take a row here, or this does not compile.
  */

@@ -3,14 +3,13 @@ import { type BriefOf, defineBrief } from "../../brief.ts";
 import { Id } from "../../entity.ts";
 import { Survived } from "../mutation/mutant.ts";
 
-// What the test writer is handed (docs/direction/the-test-writer.md): the
+// What the test writer is handed: the
 // plan's Properties, the commit they are tested on, pointers to code, and the
-// files it may add. A writer gets a full brief (docs/direction/new-combos.md,
-// "Brief"), so it has the plan's words and an earlier agent's finds, but no
+// files it may add. A writer gets a full brief, so it has the plan's words and an earlier agent's finds, but no
 // field for the builder or the chat.
 
 /**
- * A Property's id, `p<n>` (docs/direction/the-plan-stage.md, decision 5).
+ * A Property's id, `p<n>`.
  * Kept here until the criteria book counts Properties; then it moves to
  * `src/ids.ts` beside `c<n>`.
  */
@@ -105,7 +104,7 @@ export type WriterBrief = BriefOf<typeof writer>;
 
 /**
  * The writer's second job: the mutants that survived the mutation step, each to
- * answer with a test, `cannot` or `noise` (docs/direction/the-test-writer.md).
+ * answer with a test, `cannot` or `noise`.
  */
 export const mutantsWriter = defineBrief({
   role: "test_writer",

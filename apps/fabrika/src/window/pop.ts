@@ -1,6 +1,6 @@
 // What opens over the desk, as data: a popover's rows and sections, a key as the Mac draws it, and
 // what each key does in a menu. Plain data and plain functions, no React, so each rule is tested
-// (pop.test.ts); pop.tsx draws them. The rule is docs/direction/popovers.md.
+// (pop.test.ts); pop.tsx draws them.
 //
 //   capsOf("<c-b>", "a")                       ["⌃B", "A"]
 //   capsOf("<c-b>", "N")                       ["⌃B", "⇧N"]

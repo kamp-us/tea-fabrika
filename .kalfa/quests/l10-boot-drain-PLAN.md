@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, docs/direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 62704719379b
+Approved by the lead agent, builds 0036, 0052, 0291, 0292, 0555, 0567, 0587, 0594, direction/hot-reload.md and the owner's rulings Q1 and Q2 of 2026-11-18; body 62704719379b
 Plancheck-Version: 3
 
 # L10 accounts for every install, and waits on counts, never on quiet
@@ -79,7 +79,7 @@ tests step stops and the plan is amended before any product change.
 
 Read for this plan: `AGENTS.md`, `next/AGENTS.md`, `docs/plan/README.md` (its 2026-11-18 entry
 names this flake), an earlier decision, 0052, 0178, 0291, 0292, 0555, 0567, 0587 and 0594,
-`docs/direction/hot-reload.md`, the 1122 plan `docs/plan/quests/dev-watch-rebuild-fix-PLAN.md`, its
+`direction/hot-reload.md`, the 1122 plan `docs/plan/quests/dev-watch-rebuild-fix-PLAN.md`, its
 proof row `field/runs/2026-11-18-dev-watch-rebuild-fix-cloud-proof.json`, and the watcher findings
 under `field/findings/` dated 2026-11-13 to 2026-11-18.
 
@@ -105,7 +105,7 @@ under `field/findings/` dated 2026-11-13 to 2026-11-18.
 Settled search: `records.ts find --read-only` for "watcher boot install repeat same hash", "drain
 quiet window flaky deadline", "only the programs that reach it install" and "rolldown repeated
 notification rebuild unchanged". Every hit was read. None decides how a law may treat a repeated
-install by an unreached program. `rg` over `docs/plan`, `docs/direction` and `field/findings` for
+install by an unreached program. `rg` over `docs/plan`, `direction/` and `field/findings` for
 `p77`, `L10`, `repeat` and `same` found only the texts above.
 
 ## How others do it

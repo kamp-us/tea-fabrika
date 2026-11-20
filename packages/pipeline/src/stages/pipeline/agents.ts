@@ -353,7 +353,7 @@ const misfitPrompt = (said: string): string =>
 
 /**
  * One turn on the agents, as the lane runs every one: drawn as the agent's spans under the step's,
- * with its content kept for the job's record (docs/direction/an-agent-run-keeps-its-content.md), and
+ * with its content kept for the job's record, and
  * the step's `session` fact written when its session opens, with the harness's own id for it.
  */
 const opened = <A>(

@@ -8,8 +8,8 @@ import { type Loaded, loadSettings, type Source, sourceLine, type Target } from 
 import { DEFAULT_SETTINGS, JSONC_MOVED, SETTINGS_FILE, SETTINGS_MOVED } from "./settings.ts";
 import { HOLDS_NOTHING } from "./setup.ts";
 
-// Where .fabrika/fabrika.toml is read from
-// (docs/direction/one-fabrika-toml-per-repo.md): a target repository's default
+// Where .fabrika/fabrika.toml is read from:
+// a target repository's default
 // branch, as committed, or the folder tsh starts in when there is no target.
 // The target is a local bare repository: no network.
 

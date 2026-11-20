@@ -3,7 +3,7 @@ import type { Cmd, TimerDeps } from "@demlik/tea";
 // Poll: a clock wakes the child, code reads something, and the child reports
 // a change only when the read differs from the last one it reported. For
 // things that send no event, which a Listen alone cannot hear: a pull
-// request's checks, a scheduled job (docs/direction/new-combos.md).
+// request's checks, a scheduled job.
 //
 // The Elm answer: `Time.every` sends a tick, `update` answers the tick with a
 // read Cmd, and `update` answers the read by comparing it with what the model

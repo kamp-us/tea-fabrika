@@ -206,7 +206,7 @@ it.effect.prop(
 );
 
 // T502 S1, next/. A request into the Connection object goes through Alchemy's typed stub too, as
-// docs/direction/no-promises.md says of every call to `Connection`: the stub's own `fetch` is Alchemy's
+// every call to `Connection` does: the stub's own `fetch` is Alchemy's
 // fetcher (@alchemy.run/cloudflare, Workers/Rpc.ts `makeRpcStub`, Fetcher.ts `fromCloudflareFetcher`).
 // It hands the object the caller's request with an abort signal that the caller's interruption fires,
 // and gives the object's answer back as the platform's Response; a socket upgrade (status 101) comes

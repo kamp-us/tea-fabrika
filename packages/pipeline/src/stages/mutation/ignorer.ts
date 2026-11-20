@@ -1,4 +1,4 @@
-// The mutation step's ignorer (docs/direction/promises-in-the-pipeline.md):
+// The mutation step's ignorer:
 // kinds of mutant that make no useful test. Google calls them arid nodes
 // (https://arxiv.org/abs/2102.11378). It is one rule, experiment 124's, fixed
 // before any agent ran: ignore every mutant inside the text of an error or a

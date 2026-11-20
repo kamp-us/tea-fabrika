@@ -943,7 +943,7 @@ const nothingChanged = (at: At, kept: StepEnd["carry"], says: string, moved: boo
 
 /**
  * A build that ended well, by what code's checks say at its head: the builder's own form decides
- * nothing (docs/direction/nobody-grades-their-own-work.md).
+ * nothing.
  *
  *   green         done, and the head's checks go with it to every step after
  *   red           back to the builder, a round up, with each failing test open

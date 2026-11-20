@@ -16,8 +16,7 @@ import {
 } from "./settings.ts";
 import { ASKED, type Holds, RUBRIC_FILES } from "./setup.ts";
 
-// Where .fabrika/fabrika.toml is read from: one place, never two
-// (docs/direction/one-fabrika-toml-per-repo.md).
+// Where .fabrika/fabrika.toml is read from: one place, never two.
 //
 //   a target repo   tsh.toml names one (`repo`, or `clone`): the file as it is
 //                   committed on that repository's default branch, read in its

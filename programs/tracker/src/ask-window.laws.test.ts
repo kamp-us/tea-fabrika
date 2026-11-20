@@ -294,8 +294,7 @@ const focusedTime = every("time counts only while focused, and openings keep the
 
 /**
  * Property 17: the mark has three values. Pressing a mark sets it, pressing the selected one
- * clears it. Owner, 2026-11-08 (option d): "Did this need you?" is offered before any pick, as
- * docs/direction/ask-desk.md has it, so a press takes in every state but saving, the first look
+ * clears it. Owner, 2026-11-08 (option d): "Did this need you?" is offered before any pick, so a press takes in every state but saving, the first look
  * included.
  */
 const threeMarks = every(

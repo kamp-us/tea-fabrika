@@ -47,12 +47,12 @@ Slice 2 makes a tile follow its process across restarts, the OTP way.
   its exact client session, and its DOWN lands in `client:<id>/inbox`.
 - **Decided notes:** (a tile shows one
   process, monitored as OTP monitors, then follows its `keep`); the desktop layer's W3
-  (`docs/direction/the-desktop-layer.md`); [a browser is always a
+  (`direction/the-desktop-layer.md`); [a browser is always a
   client](../../direction/a-browser-is-always-a-client.md); the five layers' C5
-  (`docs/direction/a-local-first-sync-engine.md`, lines 539 to 577: "a browser reads its `DOWN`s
+  (`direction/a-local-first-sync-engine.md`, lines 539 to 577: "a browser reads its `DOWN`s
   from `client:<id>/inbox` like any letter"); `docs/plan/tier-1-detail.md`, "Processes, as P33
   built it" ("P18 binds a window's monitor to its exact client session");
-  `docs/direction/follows/otp.md`; the glossary's DOWN, monitor reference, recipient life,
+  `direction/follows/otp.md`; the glossary's DOWN, monitor reference, recipient life,
   ProcessManager and processes rows. The settled search found nothing that decides the window side
   in any other way.
 - **The window as built (slice 1, PR 1208):** `client/WindowMachine.ts` is one tea machine
@@ -302,7 +302,7 @@ down: { name: Schema.String, pid: Schema.String, reason: Word, rev: Count }, // 
 
 Amended 2026-11-15: an ended tile follows the tile guideline's empty state, by the owner's ruling
 of 2026-11-15 that `next/` follows the approved guidelines written for today's app as written
-(`docs/direction/tile-guidelines.md`, its Tuval line on a tile kept after a crash, and "Empty and
+(`direction/tile-guidelines.md`, its Tuval line on a tile kept after a crash, and "Empty and
 loading").
 
 - The state slot says `Ended (crashed)` for `ended`, with the reason's `_tag` as the word.
@@ -315,7 +315,7 @@ loading").
   Amended 2026-11-15 (fix round): the guideline's words replace this plan's, by 0543, which says
   `next/` follows an approved guideline as written and a lean in a plan is no license to differ.
   The guideline's row is "Program ends, unfocused tile | Polite | `tracker in t2 ended`"
-  (`docs/direction/tile-guidelines.md`, "What a screen reader is told"). So the polite region says
+  (`direction/tile-guidelines.md`, "What a screen reader is told"). So the polite region says
   `checklist in t1 ended`, once: the program's own name and the tile's short handle, both from
   `tileWords` in `next/packages/tuval/src/window/Layout.tsx`, the source `tileName` reads, and no
   exit reason, which stays in the title bar. It is said only when the ended tile is not the drawn
@@ -445,8 +445,8 @@ Slice 1's laws keep their own walk and every assertion, except L8's one amended 
 | `next/packages/tuval/src/window/main.tsx` | `Ended (reason)` in the state slot and the live region; the body word `Ended` in place of an ended tile's view, from `bodyWord` | 20 | build |
 | `next/packages/tuval/src/window/words.ts` | New (amended 2026-11-15): `stateWord` and `bodyWord`, the words a tile shows in its slot and its body | 45 | build |
 | `next/packages/tuval/src/window/style.css` | `.tile-empty`: the body word in `--tile-text` at `--manti-text-base` | 8 | build |
-| `docs/direction/the-desktop-layer.md` | W3's sketch to the built DOWN (`reason`, the tab as client, `client:tab_…/inbox`); the open bullet becomes the answer | docs | build |
-| `docs/direction/follows/otp.md` | New row "Monitor a registered name"; "A watcher ends" covers client sessions; "Signals" cites the window's inbox reader; the count line | docs | build |
+| `direction/the-desktop-layer.md` | W3's sketch to the built DOWN (`reason`, the tab as client, `client:tab_…/inbox`); the open bullet becomes the answer | docs | build |
+| `direction/follows/otp.md` | New row "Monitor a registered name"; "A watcher ends" covers client sessions; "Signals" cites the window's inbox reader; the count line | docs | build |
 | `.glossary/TERMS.md` | ProcessManager gains `leave`; recipient life: a window's `client` is its tab, and a session's close ends its watches | docs | build |
 | `docs/plan/tier-1.md` | P18's row: slice 2 built, with its PR | docs | build |
 | `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts` | The walk's new moves; S1 to S6; L8's amended clause; L3 and L10's new cases | tests | tests |

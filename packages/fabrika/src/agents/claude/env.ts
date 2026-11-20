@@ -42,7 +42,7 @@ const VOLTA_ON_PATH = /(?:^|:)(\/[^:]*\/\.volta)\/bin\/?(?::|$)/;
  * chain that grows to the user's process limit. With a Volta pin it says "Could not download"
  * instead. So its folder on the PATH brings its home, set in the parent or not. The chain still
  * happens for `VOLTA_HOME=""`, another `VOLTA_HOME`, or a shim's folder not named `.volta`, and no
- * box caps its processes: docs/direction/codex-box-home-listing.md.
+ * box caps its processes.
  */
 export const toolHome = (parent: Env = process.env): Record<string, string> => {
   const home = parent.VOLTA_HOME ?? VOLTA_ON_PATH.exec(parent.PATH ?? "")?.[1];

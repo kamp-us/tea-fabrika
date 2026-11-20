@@ -121,8 +121,7 @@ Rules:
 - **A resource lives in a Layer.** `Effect.acquireRelease` inside `Layer.effect`, so teardown runs
   when the runtime is disposed (`ai-docs/src/01_effect/05_resources/10_acquire-release.ts`).
 - **The object class stays thin.** Every method is one `this.runtime.runPromise(...)` under an edge
-  comment (`next/apps/fabrika/src/brain.ts:30-33`,
-  [an object class stays thin](../../docs/direction/object-classes-stay-thin.md)). A bare
+  comment (`next/apps/fabrika/src/brain.ts:30-33`). A bare
   `Effect.runPromise` there gets none of the runtime's Layers, tracer included. An object already
   on Alchemy's Effect form has no method of its own: its class is one bridge line, as
   `export class Connection extends Bridge("Connection") {}` and `export class Process extends
@@ -136,8 +135,8 @@ Rules:
 
 ## Where it applies
 
-Every service and every runtime in `next/`. Stops at tea: a program's state lives in its tea machine
-([Elm first](../../docs/direction/elm-first.md)); a service is what the host gives that machine.
+Every service and every runtime in `next/`. Stops at tea: a program's state lives in its tea machine;
+a service is what the host gives that machine.
 
 ## Services awaiting their slice
 
@@ -229,8 +228,8 @@ Referee, RefereeSql, LedgerTransactionSql and ledgerStore.
 
 0095: a service file holds only its
 contract, which departs from
-`node_modules/effect/AGENTS.md`'s static layer; [an object class stays
-thin](../../docs/direction/object-classes-stay-thin.md). Credit: kamp-us/phoenix's
+`node_modules/effect/AGENTS.md`'s static layer; an object class stays
+thin. Credit: kamp-us/phoenix's
 [effect-context-service.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-context-service.md)
 (class form, wrap a Promise client at the service boundary) and
 [effect-layer-composition.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-layer-composition.md)

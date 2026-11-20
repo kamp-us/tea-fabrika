@@ -1,7 +1,6 @@
 // The format settings (0029, 0039): 2 spaces, 120 columns and spaces inside braces, as Effect has
 // them, with semicolons and trailing commas. Oxfmt also formats Markdown, YAML, TOML, HTML and more
 // on its own. This repo formats only code, JSON and CSS, so those stay out by name.
-// docs/direction/oxlint-and-oxfmt.md.
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "useTabs": false,

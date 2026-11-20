@@ -392,7 +392,7 @@ Product lines count additions and deletions.
 | `next/packages/libfabrika/src/gateway/JobsTest.ts` | Extend: G1's list half, G2 | tests | tests |
 | `next/apps/fabrika/src/hands-client.test.ts` | New: E1, S1 | tests | tests |
 | `.glossary/TERMS.md` | Rows: hands client, `jobs.list`, `jobs.wait`, `target:` stream, journal (client), `Commands` | docs | lead |
-| `docs/direction/follows/kubernetes.md` | Row: list then watch, as the kubelet does; differs: no lease, no reassignment | docs | lead |
+| `direction/follows/kubernetes.md` | Row: list then watch, as the kubelet does; differs: no lease, no reassignment | docs | lead |
 | `docs/plan/tier-1.md` | P39: slice 4a landed, 4b waits on the owner; row stays open | docs | lead |
 | `docs/plan/README.md` | Where we are now | docs | lead |
 
@@ -505,7 +505,7 @@ Estimate: 6 steps, $20
    host-only run after the lead's read and his yes.
 
 Searched first: `.decisions/` (0102, 0105, 0171, 0178, 0045, 0061, 0280, 0322, 0333, 0424, 0526,
-0536), `docs/direction/brain-hands-window-agent.md`, `.glossary/TERMS.md` (hands, hands key,
+0536), `direction/brain-hands-window-agent.md`, `.glossary/TERMS.md` (hands, hands key,
 hands Cmd, `hands.target`, client, job, dispatched), `docs/plan/tier-1.md` rows P38 to P40, and
 slice 3's plan. P38's settings are on main and 4a needs none of them; P40 is slice 5's. Who may ask
 the hands is slice 3's call on 0171, unchanged here.

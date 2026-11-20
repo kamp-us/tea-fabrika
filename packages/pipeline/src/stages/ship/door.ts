@@ -3,8 +3,8 @@ import type { Main, ShipFacts } from "./facts.ts";
 import { shipGate } from "./gate.ts";
 import { type OnMain, ReadyToMerge } from "./ready.ts";
 
-// The door of a write: what ship checks between its Cmd and the code host
-// (docs/direction/read-fresh-run-alone.md). The machine's read and its write
+// The door of a write: what ship checks between its Cmd and the code host.
+// The machine's read and its write
 // are two steps, and anything can land between them: another review's fail
 // on the same head, red checks, a new comment, a merge onto main. So the
 // handler of each write reads the facts again, puts them through the same

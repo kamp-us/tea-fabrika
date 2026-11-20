@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import type { Keys } from "./desk/keymap.ts";
 
 // The app's projects: which folder each window shows, and how a person got there. Today's app,
-// ticket 276, PR 1 (docs/direction/project-window.md). One parent in the app's main process holds
+// ticket 276, PR 1. One parent in the app's main process holds
 // every project window, as Elm's parent holds its children: a window is one project, a project is
 // at most one window, and two presses on one folder make one window.
 //

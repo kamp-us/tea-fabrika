@@ -1,8 +1,8 @@
 import { Effect, FileSystem, Option, Path, Schema, SchemaIssue } from "effect";
 import { parse, TomlError } from "smol-toml";
 
-// .fabrika/fabrika.toml: one per repository fabrika works on
-// (docs/direction/one-fabrika-toml-per-repo.md). It holds what differs from
+// .fabrika/fabrika.toml: one per repository fabrika works on.
+// It holds what differs from
 // one repository to the next. The order of the steps stays in code.
 //
 //   packs = ["@acme/owner-desk"]      # add-on packs, by package name, found where fabrika is installed

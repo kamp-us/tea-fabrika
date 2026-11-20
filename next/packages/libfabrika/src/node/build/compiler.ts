@@ -1,6 +1,5 @@
 /**
- * The React Compiler's one compile step, and the check on what it skipped
- * (docs/direction/react-compiler.md).
+ * The React Compiler's one compile step, and the check on what it skipped.
  *
  * `compile` is what the build calls on every `.tsx` file (`build.ts`). `check` is what
  * `pnpm lint:compiler` runs over `next/**\/*.tsx`, with no bundle, through the app's exam command

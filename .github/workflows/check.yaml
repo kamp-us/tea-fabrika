@@ -483,8 +483,8 @@ jobs:
       - name: shard times
         if: ${{ !cancelled() }}
         run: node .github/ci/shard-times.ts "$RUNNER_TEMP/next.json"
-      # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner
-      # (docs/direction/no-promises.md). In the step summary and as a note on that line of the diff.
+      # Tier 1, P35: each edge comment this pull request adds, one line with its reason, for the owner.
+      # In the step summary and as a note on that line of the diff.
       # It never blocks on an edge: it exits 0, or 2 only when it could not read a file.
       - name: edges
         if: matrix.shard == '1' && github.event_name == 'pull_request'

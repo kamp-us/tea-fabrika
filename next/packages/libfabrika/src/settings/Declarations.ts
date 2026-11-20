@@ -6,7 +6,7 @@
  *
  * **Details**
  *
- * A schema's title and description are the words a refused value is explained with. Every setting here is `since` release 0.0.0 and reloads on restart. See docs/direction/settings.md, "Is this a setting?", for how a choice becomes one.
+ * A schema's title and description are the words a refused value is explained with. Every setting here is `since` release 0.0.0 and reloads on restart.
  */
 import { ByteSize, Schema } from "effect";
 import * as Setting from "./Fabrika.ts";

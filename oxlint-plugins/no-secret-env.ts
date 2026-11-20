@@ -1,7 +1,6 @@
 // A secret is never read from `process.env` as a plain string.
 //
-// Why: fabrika builds public repositories too (the owner's ruling of 2026-10-26,
-// docs/direction/secrets-are-redacted.md). A plain string prints, logs, saves and
+// Why: fabrika builds public repositories too (the owner's ruling of 2026-10-26). A plain string prints, logs, saves and
 // serializes as itself, so one `console.log`, one error message or one span
 // attribute puts the secret in a public log. Read it with Effect's
 // `Config.Redacted("NAME")` instead: the value is an Effect `Redacted`, which
@@ -49,7 +48,7 @@ const NOT_SECRET = /^.*_(?:HASH|SOCK)$/;
 const isSecret = (name: string): boolean => SECRET.test(name) && !NOT_SECRET.test(name);
 
 const READ =
-  "A secret read from `process.env` is a plain string: it prints, logs and saves as itself. Read it with `Config.Redacted('NAME')` (effect), so it stays `<redacted>` until the one line that sends it (docs/direction/secrets-are-redacted.md).";
+  "A secret read from `process.env` is a plain string: it prints, logs and saves as itself. Read it with `Config.Redacted('NAME')` (effect), so it stays `<redacted>` until the one line that sends it.";
 
 export const noSecretEnv: CreateRule = {
   create(context) {
@@ -130,7 +129,7 @@ export const noSecretEnv: CreateRule = {
         context.report({
           node: node.id,
           message:
-            "A secret taken out of `process.env` by name is a plain string: it prints, logs and saves as itself. Read it with `Config.Redacted('NAME')` (effect) (docs/direction/secrets-are-redacted.md).",
+            "A secret taken out of `process.env` by name is a plain string: it prints, logs and saves as itself. Read it with `Config.Redacted('NAME')` (effect).",
         });
       },
     };

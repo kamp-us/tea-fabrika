@@ -1,7 +1,6 @@
 # Working in this repo
 
-The map for any agent picking up work here. [`README.md`](./README.md) says what the repo holds, and
-[`docs/direction/README.md`](./docs/direction/README.md) says why it is built this way. What is next lives on the
+The map for any agent picking up work here. [`README.md`](./README.md) says what the repo holds. What is next lives on the
 tracker: the app's own, through its `tracker_file`, `tracker_comment` and `tracker_close` tools. A ticket for this repo
 goes there ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)). The one exception is a
 wayfinder map and its tickets, which live in GitHub issues, as [`.kalfa/issue-tracker.md`](./.kalfa/issue-tracker.md) says.
@@ -10,8 +9,7 @@ wayfinder map and its tickets, which live in GitHub issues, as [`.kalfa/issue-tr
 
 `next/` is what we are building. Read [`next/AGENTS.md`](./next/AGENTS.md) before you touch a file there. Everything
 else (`packages/`, `programs/`, `apps/`) is today's version: what we use every day, and a map of which jobs exist.
-`next/` grows beside it ([0002](./.kalfa/decisions/0002-next-grows-beside-today.md),
-[clean slate](./docs/direction/clean-slate.md)).
+`next/` grows beside it ([0002](./.kalfa/decisions/0002-next-grows-beside-today.md)).
 
 - **Know which version your work is in** before you read or change code. Your brief or ticket says so. If it does not,
   new work is `next/`, and if you still cannot tell, ask.
@@ -29,10 +27,8 @@ else (`packages/`, `programs/`, `apps/`) is today's version: what we use every d
 
 - **Records:** where each kind of record lives and what goes in it is in [`.kalfa/kalfa.toml`](./.kalfa/kalfa.toml), so
   read it before you read or write any record.
-- **Direction:** [`docs/direction/`](./docs/direction/README.md) holds the long design notes, and
-  [`docs/direction/follows/`](./docs/direction/follows/README.md) where `next/` follows a model (OTP, Elm, Kubernetes)
-  and where it leaves it. It takes no new note: a settled choice becomes a decision, and a design still in draft is a
-  file in `docs/`. No folder keeps an index table.
+- **Design notes:** a settled choice becomes a decision, and a design still in draft is a file in `docs/`. No folder
+  keeps an index table.
 - **A live run's state and logs:** `runs/`, local to your machine. Read it; never edit or commit it.
 - **Knowledge that lives only in a chat or in an agent's private memory** is in the wrong place: write it here.
 

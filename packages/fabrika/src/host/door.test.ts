@@ -218,7 +218,7 @@ describe("what a request may say", () => {
     });
   });
 
-  // Areas PR 1 (docs/direction/areas.md, the plan's a3): the project's areas are a person's data.
+  // Areas PR 1: the project's areas are a person's data.
   // An agent's session never makes, renames or merges one. The stream is the tracker's
   // `tracker/areas`, spelled out here: fabrika does not import the pipeline.
   describe("an area fact", () => {

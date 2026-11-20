@@ -1,4 +1,4 @@
-// One store hook, and its value is what a view draws (docs/direction/react-compiler.md, C4). Tier
+// One store hook, and its value is what a view draws. Tier
 // 1's exam, item 13 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // Two halves:
@@ -21,7 +21,7 @@ import type { Node } from "./match.ts";
 const STORE_HOOKS = new Set(["useModel", "useSyncExternalStore", "useRuntime", "useMachine"]);
 
 const ONLY =
-  "`useSyncExternalStore` is not allowed in `next/`. Read the model through `useRuntime` from `@demlik/tea/react` (docs/direction/react-compiler.md, C4).";
+  "`useSyncExternalStore` is not allowed in `next/`. Read the model through `useRuntime` from `@demlik/tea/react`.";
 
 /** The hook a call names, plainly or as a member: `useModel(...)`, `React.useSyncExternalStore(...)`. */
 const hookName = (node: Node): string | null => {
@@ -53,7 +53,7 @@ export const oneStoreHook: CreateRule = {
 
       context.report({
         node,
-        message: `\`${name}\`'s value is dropped. A view draws from what the store hook returns; compiled, a view that reads anything else keeps its first output forever (docs/direction/react-compiler.md, C4).`,
+        message: `\`${name}\`'s value is dropped. A view draws from what the store hook returns; compiled, a view that reads anything else keeps its first output forever.`,
       });
     };
 

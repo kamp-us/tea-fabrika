@@ -7,7 +7,7 @@ import { Jobs, type JobsMsg, jobsMachine, type Owner } from "./jobs.ts";
 // Where a host keeps its jobs. A job is what one start on a host made: a root run and every run
 // it started, like a Unix process group. A tsh line is a job; so is a lane. The host keeps them,
 // as a kernel keeps process groups and as WezTerm's mux keeps every pane for the clients that
-// show it (docs/direction/the-host-keeps-terminals-and-jobs.md). A shell only shows them and
+// show it. A shell only shows them and
 // asks for changes: tsh's `jobs`, `&`, `attach %n`, `fg` and its detach are Msgs to the host's
 // table (../shell/builtins.ts).
 //

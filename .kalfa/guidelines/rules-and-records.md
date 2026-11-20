@@ -1,4 +1,4 @@
-**Approved 2026-11-18.** By, from experiment 298 (in the notes).
+**Approved 2026-11-18.** By the owner.
 This area has no screen, so it has no Design canvas.
 
 Where a rule lives, for code and for agents: decisions, skills, `AGENTS.md`, pattern docs, the
@@ -136,7 +136,7 @@ a reader   -> reads the home; git log is its history; the comment or the record 
   `plan-sha256` the lead approved; the product does the same for a ticket.
 - **Held by:** the review.
 - **Breaks today:** `.agents/skills/lead/scripts/skillscheck.sh:18-19` require exact sentences in
-  several skills, which keeps copies alive (experiment 283 (in the notes)).
+  several skills, which keeps copies alive.
 
 ## R8: a finding seen twice becomes a check, measured before it blocks
 

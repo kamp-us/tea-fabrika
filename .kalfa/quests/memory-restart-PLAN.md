@@ -31,7 +31,7 @@ The owner is away, so each call below is taken at its lean. Two are under 80%:
   settle it: the scheduled run of L7 with many callers, and a week of `replacing` facts.
 - **This fix will not make L8 green on `fabrikalfa/tezgah-new` by itself (70% that it stays red).**
   After the fix, the memory replace there ends in about 5 s and the runtime comes back, but every
-  WebSocket drops on a restart (experiment 93; `docs/direction/a-local-first-sync-engine.md`, line
+  WebSocket drops on a restart (experiment 93; `direction/a-local-first-sync-engine.md`, line
   354). L8's suite holds one door WebSocket for the whole walk, so it will likely see that socket
   close in place of ECONNREFUSED. Whether 512 MB for about ten shells is a real need or a leak is
   the measuring ticket below. A higher limit is not this fix.
@@ -248,7 +248,7 @@ as it comes (`cloudflare/runtime.ts:1743`), so a new case needs no change there.
 
 ### The settings (`next/packages/libfabrika/src/settings/Declarations.ts`)
 
-Is this a setting? (0069, `docs/direction/settings.md`, "Is this a setting?"):
+Is this a setting? (0069, `direction/settings.md`, "Is this a setting?"):
 
 - **The memory limit: yes (85%).** A person with more memory, or a test, would choose differently,
   and it is no wall, secret or state. `desktop.brain-memory`, `Schema.ByteSize` per the settings

@@ -6,8 +6,7 @@ import { alive } from "./host/lock.ts";
 import { type HostPaths, MAX_SOCKET_PATH, pathsOf, reach } from "./host/socket.ts";
 import { ProjectSchema } from "./projects.ts";
 
-// A project: one git working tree, checked. Today's app, ticket 276 (a window is one project,
-// docs/direction/project-window.md). The root is the real top folder git names for the folder a
+// A project: one git working tree, checked. Today's app, ticket 276 (a window is one project). The root is the real top folder git names for the folder a
 // person picked, after every link is resolved; the key is the full SHA-256 of that root.
 //
 //   yield* Project.check("~/code/demlik/src")       {root: "~/code/demlik", key: "3f9a…"}

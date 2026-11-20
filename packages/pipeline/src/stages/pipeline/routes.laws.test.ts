@@ -43,8 +43,8 @@ import * as routes from "./routes.ts";
 //   a needed row                        still reaches its person, or its stop
 //
 // The hole keys and the needed keys are copied in by hand, as two plain lists: the test's own exam,
-// which the route table cannot write for itself (P12). Each carries its row in the jidoka table
-// (docs/direction/jidoka-and-andon.md#every-place-todays-lane-stops-or-asks), or where else it was
+// which the route table cannot write for itself (P12). Each carries its row in the jidoka table,
+// or where else it was
 // named. Rows 28 and 45 follow the jidoka table, as the plan says: fixable, where 193 called them
 // needed. Nothing imports from `experiments/`.
 //

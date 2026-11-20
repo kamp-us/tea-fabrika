@@ -1,7 +1,6 @@
 // A secret held as an Effect `Redacted` shows `<redacted>` on every way out our code has: a log
 // line, `JSON.stringify`, `String()`, Node's inspect (what `console.log` prints), an Effect error
 // and its cause, a span attribute, and a schema's encoding. Never its text.
-// docs/direction/secrets-are-redacted.md.
 import { inspect } from "node:util";
 import { Cause, Config, ConfigProvider, Effect, Exit, Layer, Logger, Option, Redacted, Schema } from "effect";
 import { describe, expect, it } from "vitest";

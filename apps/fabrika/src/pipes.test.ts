@@ -5,8 +5,7 @@ import { describe, expect, it } from "vitest";
 import { TINTS } from "./desk/layout/index.ts";
 import { PIPES } from "./pipes.ts";
 
-// A tile's colors, as the window draws them (docs/direction/tile-guidelines.md and pipe-colors.md,
-// decided 2026-11-01). A plain tile is slate; a tile in a pipe takes one of six colors on its title
+// A tile's colors, as the window draws them. A plain tile is slate; a tile in a pipe takes one of six colors on its title
 // bar's wash and on its focus edge, and keeps slate for its resting edge and its text. Every value
 // is a Radix 3.0.0 alpha step, read from the scales the themes study saved
 // (experiments/177-themes/schemes/radix-colors-3.0.0.json), in both looks.

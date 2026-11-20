@@ -1,7 +1,6 @@
 // A secret leaves its `Redacted` only at the line that sends it out.
 //
-// Why: fabrika builds public repositories too (the owner's ruling of 2026-10-26,
-// docs/direction/secrets-are-redacted.md). A secret travels as an Effect
+// Why: fabrika builds public repositories too (the owner's ruling of 2026-10-26). A secret travels as an Effect
 // `Redacted.Redacted<string>`, which prints, logs, saves and serializes as
 // `<redacted>`. `Redacted.value` gives the plain text back, and from then on
 // nothing guards it. So it is called only in a short list of edge files, each
@@ -26,6 +25,6 @@ import { banNames } from "./match.ts";
 export const noRedactedValue: CreateRule = {
   create: banNames({
     "Redacted.value":
-      "`Redacted.value` turns a secret back into a plain string that prints, logs and saves as itself. Keep the `Redacted` until the line that sends it, in one of the edge files `.oxlintrc.json` lists for fabrika/no-redacted-value, with its reason (docs/direction/secrets-are-redacted.md).",
+      "`Redacted.value` turns a secret back into a plain string that prints, logs and saves as itself. Keep the `Redacted` until the line that sends it, in one of the edge files `.oxlintrc.json` lists for fabrika/no-redacted-value, with its reason.",
   }),
 };

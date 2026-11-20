@@ -39,7 +39,7 @@ const printed = (yield* TestConsole.warnLines).map(String).join("\n");
   as `{ method, parameters }`, but the service exposes only `logLines` and `errorLines`. So the law
   cannot read a warning without help. The lean is a small `pnpm patch` that adds `warnLines`, the
   same shape as `errorLines`, with its upstream issue filed the same day
-  ([patch upstream locally](../../../docs/direction/patch-upstream-locally.md),: the read proved the gap). The
+  (patch upstream locally,: the read proved the gap). The
   other ways and why not are under "How others do it". What would settle it: whether upstream
   already has a reader on its main branch, which this plan did not fetch; the tests step checks before
   it writes the patch, and if a release has it, the patch is that release's code, word for word.

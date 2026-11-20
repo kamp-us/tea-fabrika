@@ -1,6 +1,6 @@
 /*
  * The app's own tokens. The colors, type scale, spacing and Manti's tokens are the design package's
- * (@kampus/fabrika-design/tokens.css, docs/direction/fabrika-design-package.md), loaded before this
+ * (@kampus/fabrika-design/tokens.css), loaded before this
  * file. What stays here is the app's: the names its rules were written with, each pointing at a
  * package token, and the few values only its own views use.
  *
@@ -30,7 +30,7 @@
   --svc-4: oklch(0.72 0.075 120);
   --svc-5: oklch(0.72 0.075 60);
 
-  /* What opens over the desk (docs/direction/popovers.md): made of the package's tokens. The only
+  /* What opens over the desk: made of the package's tokens. The only
 	   new value is the shadow. */
   --pop-bg: var(--surface-raised);
   --pop-edge: var(--border);
@@ -459,7 +459,7 @@ main.program > [role="alert"] {
 }
 
 /*
- * More contrast (docs/direction/tile-guidelines.md): the resting edge goes to slate a8, the text to
+ * More contrast: the resting edge goes to slate a8, the text to
  * slate 12, and focus to its color's a11 at 2px. Only the tile's own names are set here: repairing
  * a theme is the themes plan's.
  */
@@ -859,7 +859,7 @@ main.program > [role="alert"] {
  * palette, a tooltip. The product's own UI, so the program windows' own font, sizes and colors;
  * the bars around the desk stay monospace, as a terminal's status line. Monospace inside only for
  * typed things: a program's name, a command, a job's `%n`, a build, an error as the system wrote
- * it (docs/direction/popovers.md).
+ * it.
  */
 .pop,
 .tip {

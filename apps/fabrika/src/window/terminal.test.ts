@@ -7,8 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // ghostty-web is faked here as 0.4.0 behaves: a terminal draws in the theme it was made with, and
 // a theme set on its options after open() is not drawn ("theme changes after open() are not yet
 // fully supported", its handleOptionChange). So, until a palette call lands upstream, a look change
-// means a terminal made again in the new theme, with what it showed written to it again, as
-// docs/direction/themes.md (live switching) says. If a pnpm patch to ghostty-web makes a live change
+// means a terminal made again in the new theme, with what it showed written to it again. If a pnpm patch to ghostty-web makes a live change
 // real, this fake changes with it.
 
 class FakeTerminal {

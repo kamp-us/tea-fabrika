@@ -1,5 +1,4 @@
-// No hand-written `_tag` in `next/`: Effect Schema writes it (docs/direction/schema-classes-not-of-helpers.md,
-// and Tier 1's "Tags"). Tier 1's exam, item 5 (docs/plan/tier-1-detail.md, "The exam PR").
+// No hand-written `_tag` in `next/`: Effect Schema writes it. Tier 1's exam, item 5 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // It fires on an object key, a class field or a type member named `_tag`, so `{_tag: "x"}`,
 // `type X = {readonly _tag: "x"}` and `Schema.Struct({_tag: Schema.Literal("x")})` fire. A read

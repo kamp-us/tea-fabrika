@@ -9,8 +9,7 @@ import { issueOf } from "../task/view.ts";
 import type { LaneOutcome } from "./outcome.ts";
 import { type LaneAt, LaneView, next, START } from "./view.ts";
 
-// A plan's lane: the parent that takes an approved plan to one pull request
-// (docs/direction/a-project-is-a-parent-plan.md; done-is-per-criterion.md, "One PR per plan").
+// A plan's lane: the parent that takes an approved plan to one pull request.
 // It runs no agent. Every piece of work is a child under a name made from the lane's counts, so a
 // lane taken over starts no child twice: one already there is the one.
 //

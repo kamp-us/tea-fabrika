@@ -4,7 +4,7 @@ import { parse, TomlError } from "smol-toml";
 import { type Does as Action, BINDINGS, type Binding, keyName, THE_MACS, wordOf } from "./keys.ts";
 
 // The keys file: ~/.fabrika/keybindings.toml, read and laid over the defaults that ship with the
-// app (docs/direction/keybindings-are-configurable.md, decided; ticket 174, PR 1). The file holds
+// app. The file holds
 // only what the person changed. The host reads it (host/settings.ts) and gives the table to the
 // desk and to every page; a page never reads a file.
 //

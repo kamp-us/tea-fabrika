@@ -22,8 +22,8 @@ import { sdkEvents } from "./sdk-events.ts";
 //
 // What `agentSpans` would export of the agent's words (the prompt, each turn,
 // each tool's input and result) is replaced before export: spans carry names
-// and ids, not what an agent read or wrote. A lane's runs are the exception
-// (docs/direction/an-agent-run-keeps-its-content.md): they keep their content,
+// and ids, not what an agent read or wrote. A lane's runs are the exception:
+// they keep their content,
 // with any text shaped like a key cut first, and a job's record keeps it apart
 // from the spans, where a person can delete it.
 //

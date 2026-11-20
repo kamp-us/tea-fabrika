@@ -54,7 +54,7 @@ Remove only obsolete stability tags where current lint requires it.
 Elm keeps state changes in update. This recovery adds pure schema helpers and changes the runner's
 decoder; it adds no coordinator or new control state. See the
 [Elm guide](https://guide.elm-lang.org/architecture/) and
-[Elm first](https://github.com/kamp-us/tea-fabrika/blob/main/docs/direction/elm-first.md).
+Elm first.
 
 MCP defines named tools and their input schemas. This code supplies descriptions and decodes
 arguments; it is not an MCP server. See the

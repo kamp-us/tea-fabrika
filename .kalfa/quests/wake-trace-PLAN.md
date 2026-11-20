@@ -247,8 +247,8 @@ Estimate: 4 steps, $10
 
 None.
 
-Searched first: `.decisions/`, `docs/direction/effect-fn-for-traced-functions.md`,
-`docs/direction/a-job-record-holds-its-trace.md`, and the settled-search tool for "wake trace",
+Searched first: `.decisions/`, `direction/effect-fn-for-traced-functions.md`,
+`direction/a-job-record-holds-its-trace.md`, and the settled-search tool for "wake trace",
 "span per request" and "trace id job finish", which found nothing more. The span's name and place
 follow what `route`'s other branches do and 0252; the wake's signature stays as pull request 1318
 left it, and its law R2 stands.

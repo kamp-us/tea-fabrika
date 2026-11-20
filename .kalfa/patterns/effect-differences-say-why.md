@@ -63,7 +63,7 @@ Each of these differs from Effect's habit, and each reason is recorded.
 | A stateless HMAC nonce | a challenge kept in memory | a sleeping object loses memory (`GatewayNonce.ts:6`) |
 | The supervisor's backoff as a saved tea machine | a `Schedule` | a `Schedule` cannot be saved across a sleep ([durable-objects-sleep.md](./durable-objects-sleep.md)) |
 | Contract-only service files, no static layer | a static `layer` on the service class | bundles stay platform-clean |
-| A named `Effect.fn` span on every exported function | `fnUntraced` in library code | record wide ([the `Effect.fn` note](../../docs/direction/effect-fn-for-traced-functions.md)) |
+| A named `Effect.fn` span on every exported function | `fnUntraced` in library code | record wide |
 
 ## Where it applies
 

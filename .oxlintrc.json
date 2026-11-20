@@ -1,6 +1,6 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
 // diagnostic but advice: a fire of the five old advice rules in a folder a warn override at the end
-// still names (0523). docs/direction/oxlint-and-oxfmt.md says what each choice costs.
+// still names (0523).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest", "import", "promise"],
@@ -67,8 +67,8 @@
     // out below (experiment 155). So are tests: they write the options' shape to check it, and
     // none starts a live run.
     "fabrika/no-project-settings": "error",
-    // A secret is read as a `Redacted`, never as a plain string from `process.env`
-    // (docs/direction/secrets-are-redacted.md). Experiments are left out below: they are outside
+    // A secret is read as a `Redacted`, never as a plain string from `process.env`.
+    // Experiments are left out below: they are outside
     // this rule's first change, and README counts what it would find there.
     "fabrika/no-secret-env": "error",
     // `Redacted.value` only where a secret goes out. Each file left out below says why.
@@ -81,8 +81,7 @@
     // silence it.
     "fabrika/no-bare-disable": "error",
 
-    // A blank line between top-level statements and between class members (owner, 2026-11-09;
-    // docs/direction/oxlint-and-oxfmt.md). `pnpm format` adds them.
+    // A blank line between top-level statements and between class members (owner, 2026-11-09). `pnpm format` adds them.
     "fabrika/padding-line-between-statements": "error",
 
     // Braces on every if, else, for, while and do, even on one line (owner, 2026-11-09).
@@ -1448,7 +1447,7 @@
       }
     },
     {
-      // React's own rules, blocking as the owner set them (docs/direction/react-compiler.md). The
+      // React's own rules, blocking as the owner set them. The
       // skip check, `pnpm lint:compiler`, holds the rest of the Compiler's rules.
       "files": ["next/**/*.tsx", "kalfa/**/*.tsx"],
       "rules": {

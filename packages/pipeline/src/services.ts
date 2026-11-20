@@ -19,8 +19,7 @@ export interface PullRequest {
 
 /**
  * Where the code lives: pull requests, checks, whether a branch can merge,
- * the merge queue. GitHub is the first Layer behind it, not the thing itself
- * (docs/direction/ledger-behind-a-service.md).
+ * the merge queue. GitHub is the first Layer behind it, not the thing itself.
  *
  * This is the read side: nothing in it changes a pull request. The writes are
  * a service of their own, `CodeHostWrites`, so a run that is only given this

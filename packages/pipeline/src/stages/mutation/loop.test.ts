@@ -8,8 +8,7 @@ import { DEFAULT_INCLUDES } from "../test-writer/written.ts";
 import type { Survived } from "./mutant.ts";
 import { ASK, drive, HEAD, ONE_SURVIVED, SCOPE, SURVIVED } from "./scripted.ts";
 
-// The loop the plan names (docs/direction/a-ticket-runs-from-the-app.md,
-// slice 5), on fakes: a planted weak test lets a mutant survive, the mutant
+// The loop the plan names, on fakes: a planted weak test lets a mutant survive, the mutant
 // goes back to the test writer's mutants job (its Draft, on a scripted
 // writer), and a disable comment asks the owner.
 

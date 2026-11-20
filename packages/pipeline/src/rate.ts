@@ -3,8 +3,8 @@ import { Schema } from "effect";
 import { type Gate, park, pass } from "./combos.ts";
 
 // Rate: count the "fix" and "noise" ratings on a rule's findings, and say
-// whether the rule may block or only advise
-// (docs/direction/new-combos.md, "Rate"). Plain data and pure functions, like
+// whether the rule may block or only advise.
+// Plain data and pure functions, like
 // the combos in src/combos.ts: a parent gathers the findings and the ratings,
 // and calls these from its own update.
 //
@@ -12,7 +12,7 @@ import { type Gate, park, pass } from "./combos.ts";
 //   modeOf(tally.scope, enough)                   "advise": one noise is too many to block
 //   gateRate(found, (rule) => mode)               parks on the findings of a rule that blocks
 //
-// How one finding counts is decided (docs/direction/every-finding-is-rated.md):
+// How one finding counts is decided:
 //
 //   rated "fix"                  fix
 //   rated "noise"                noise
@@ -77,7 +77,7 @@ export const userRatings = (facts: Facts): readonly UserRating[] =>
  *
  *   "noise"  a check's finding: the owner saw it and did not act
  *   "open"   a call the owner must make, such as the test writer's `noise`
- *            answer (docs/direction/the-test-writer.md): silence is not the
+ *            answer: silence is not the
  *            owner agreeing, so it stays not counted, shipped or not
  */
 export const Silence = Schema.Literals(["noise", "open"]);
@@ -140,8 +140,8 @@ export function tallyOf(
 }
 
 /**
- * How many counted ratings a rule needs before it may block. Still open
- * (docs/direction/every-finding-is-rated.md, "Still open"), so no number is
+ * How many counted ratings a rule needs before it may block. Still open,
+ * so no number is
  * set here: it comes from the settings, and the type asks for a whole number
  * of at least 1, since a rule nobody rated has shown nothing.
  */

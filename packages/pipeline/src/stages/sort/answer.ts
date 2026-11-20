@@ -1,14 +1,14 @@
 import { Schema } from "effect";
 import { NO_RULE_IDS } from "./bar.ts";
 
-// Sort's answer, as the sorter writes it (docs/direction/sort-answers-yes-or-no.md). One of:
+// Sort's answer, as the sorter writes it. One of:
 //
 //   duplicate of N   the same change, or the same problem, as an earlier ticket, open or closed
 //   no               one of the bar's seven rules, by id, with a one-line reason
 //   yes              what the ticket needs next: a plan, the owner's ruling, or research
 //
 // A yes that needs a plan may name an open plan it is part of (`partOf`): the report becomes one
-// more ticket of that plan (docs/direction/a-project-is-a-parent-plan.md). A yes that needs a ruling
+// more ticket of that plan. A yes that needs a ruling
 // says what is asked and the options, so the owner's desk can show it. Each shape holds only what it
 // needs: a no with no rule, a duplicate of nothing, or a ruling with no question cannot be written.
 

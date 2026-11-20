@@ -23,7 +23,7 @@ interface EarlyRefusal {
 
 ## Settled behavior and evidence
 
-- `docs/direction/settings.md`, S5 and "The oldest fabrika a repo's file works with", requires
+- `direction/settings.md`, S5 and "The oldest fabrika a repo's file works with", requires
   invalid-value errors to show the scalar and requires the repo minimum to be checked first.
   an earlier decision carries both rules into `next/`. This amendment applies those existing rules.
 - an earlier decision requires `it.prop` or `it.effect.prop`, Schema inputs and a seed in setup.

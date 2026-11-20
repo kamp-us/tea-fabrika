@@ -105,7 +105,7 @@ tool's sessions. What kept the work moving on 2026-11-17, and what slowed it:
 
 ## The write-up
 
-When a sev0 or a sev1 ends, write one note in the notes the same day. It holds: what broke;
+When a sev0 or a sev1 ends, write one short write-up the same day. It holds: what broke;
 each level and when it started and ended; each fix with its pull request; what it cost (runner
 minutes, hours of stopped work, agent dollars); and what we learned, including any doubt about the
 level. For a sev0, paste the summary `close` prints.

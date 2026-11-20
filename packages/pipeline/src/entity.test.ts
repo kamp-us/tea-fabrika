@@ -5,7 +5,7 @@ import { Fact } from "./asks/ledger.ts";
 import { Book } from "./criteria/book.ts";
 import { entity, Id, kindOf, madeAs, make, read, value } from "./entity.ts";
 
-// Every ledger entity has an id (docs/direction/smallest-ledger-proof-to-grow.md).
+// Every ledger entity has an id.
 //
 // The ledger's schemas are walked from their roots, so nothing it keeps can
 // be missed: a struct gets into the ledger only inside one of them. Each

@@ -43,7 +43,7 @@ export type Checks = typeof Checks.Type;
 /**
  * A head the rows were judged at, and a later one code found the diff they judged still stands
  * at (a `carried` fact, from `carry`). A row judged at `from` counts at `to`, as if judged there.
- * The checks never carry. See docs/direction/a-yes-binds-to-the-diff.md.
+ * The checks never carry.
  */
 export const Hop = Schema.Struct({ from: Schema.String, to: Schema.String });
 export type Hop = typeof Hop.Type;

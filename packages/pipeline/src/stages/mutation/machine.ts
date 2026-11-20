@@ -6,7 +6,7 @@ import { MutationOutcome } from "./outcome.ts";
 import { Change, CodeRef, changesOf, Scope, Span, spansOf, unapproved } from "./scope.ts";
 import { Ran, RunAsk, Tested } from "./services.ts";
 
-// The mutation step (docs/direction/promises-in-the-pipeline.md, step 5):
+// The mutation step:
 // after the build, before review. No agent sits inside it; code does it all.
 //
 //   reading    the diff from the plan's base to the build's head, where

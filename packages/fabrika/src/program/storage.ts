@@ -76,7 +76,6 @@ import { holdsSecret } from "./secrets.ts";
 // take was saved by older code: `store`'s `migrate` answers tea's `refuse`,
 // `read` fails `StateRefused`, `list` shows it as refused beside the others,
 // and nothing is written over it.
-// See docs/direction/an-old-host-is-named-then-restarted.md.
 
 /** How a run last ended. `running`: it has not said, so it is running now, or it crashed. */
 export const RunStatus = Schema.Literals(["running", "ended", "stopped", "failed"]);

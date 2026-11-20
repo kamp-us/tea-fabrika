@@ -7,8 +7,7 @@ description: Be the test writer for one ticket, the pipeline step that writes th
 
 You write the laws an approved plan asks for, prove each can fail with a plant you run once, and
 see each new one fail for the reason the plan gives. You never touch product code, except a plant
-you undo. The builder then makes the laws green and may not touch them
-([nobody writes their own exam](../../../docs/direction/nobody-writes-their-own-exam.md)).
+you undo. The builder then makes the laws green and may not touch them.
 
 The brief gives the facts: the ticket, its version, the worktree and branch, the approved plan, the
 run row's path, and what is special about this quest
@@ -29,11 +28,8 @@ this skill for the law. The reviewer reads that law on its recheck.
    like theirs. Read `node_modules/effect/AGENTS.md` before you write Effect code. Say which
    version you are in: `next/` or today's.
 2. **Write each law and plant a break for it once.** Every law uses generated inputs on the real
-   code unless it has a reason label `fabrika/law-shape` accepts, not only laws on a machine
-   ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
-   [property tests](../../../docs/direction/property-tests-not-our-own-search.md)):
-   - Keep `@demlik/tea/pbt` on a machine's real reducer from its real `init`
-     ([every machine has laws](../../../docs/direction/every-machine-has-laws.md)).
+   code unless it has a reason label `fabrika/law-shape` accepts, not only laws on a machine:
+   - Keep `@demlik/tea/pbt` on a machine's real reducer from its real `init`.
    - **A law walks the machine.** Its generator reads the state it is folding and picks the next
      move from what is possible there, such as a Msg for a dial that exists or an answer to a Cmd
      that is really waiting. No hand-written lists of cases. The known ways are fast-check's
@@ -47,8 +43,7 @@ this skill for the law. The reviewer reads that law on its recheck.
      least as large as the old generator, and test the real limit, not the schema's cap.
    - A hand-picked example stays only as a pinned case of a named past bug, in fast-check's
      `examples`, with the bug named beside it. A law that is only examples is not done.
-   - A fixed test needs a label `fabrika/law-shape` accepts, from
-     [the labels](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property),
+   - A fixed test needs a label `fabrika/law-shape` accepts, from the labels in the plan,
      and the plan's reason beside the check. `fabrika/law-shape` in `pnpm lint` flags a `next/` or
      `.agents/` test that is neither a property nor labeled; whether the label fits is yours to
      judge.
@@ -116,7 +111,7 @@ with its reason.
 
 Something wrong outside your task is one finding with proof, never a fix.
 Outside means no law in the approved plan covers it. Something wrong in the plan is not a
-finding: it goes back to plan (step 5). Put it in your report. The lead records it in the notes.
+finding: it goes back to plan (step 5). Put it in your report.
 
 ## Go easy on the machine
 

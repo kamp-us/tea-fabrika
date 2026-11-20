@@ -8,8 +8,7 @@ import { type Given, type Now, carry } from "./carry.ts";
 import { makeLaneHome } from "./lane-fixture.ts";
 import { LaneHome, LaneWork, laneWork } from "./work.ts";
 
-// Today's version. A yes binds to the diff, not the commit (self-fix PR 10, Part 4;
-// docs/direction/a-yes-binds-to-the-diff.md). One pure function answers, for any yes the lane keeps:
+// Today's version. A yes binds to the diff, not the commit (self-fix PR 10, Part 4). One pure function answers, for any yes the lane keeps:
 //
 //   kept     the same head; or the reviewed diff replays cleanly onto the base now to exactly the
 //            new tree; or the base's formatter, run on the replayed tree, gives exactly the new tree

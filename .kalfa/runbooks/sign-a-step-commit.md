@@ -5,8 +5,7 @@ summary: Sign what a step committed in next/, push it, and read the check the me
 # Sign a step's commit
 
 How a step signs what it committed in `next/`, how the lead pushes it, and how the merge reads the
-check. Tier 1's P32 built it, from [a unit of work is a commit](../../docs/direction/a-unit-of-work-is-a-commit.md).
-The laws are p83 to p87 and p89 in the tier 1 detail, in the notes.
+check. Tier 1's P32 built it.
 
 ```sh
 pnpm commits sign --step build --ticket 229 --key ~/.fabrika/step-keys/build   # a step, after each commit
@@ -56,8 +55,7 @@ git config --global commit.gpgsign true
 Your commits need no step note. The check verifies their Git signature against the base's person
 keys. Exam changes still ask the owner to read them. A signed merge of `main` counts too.
 A person's signed commit is itself a link, from its parent's tree to its own. After the squash, the
-lead writes it as a row with `step: "person"`, as for every other link
-(a step's links (in the notes)).
+lead writes it as a row with `step: "person"`, as for every other link.
 Squash drops the person's signature, so this verification runs on the pull request's commits.
 
 ## A step signs
@@ -71,7 +69,7 @@ pnpm commits sign --step tests --ticket 229 --key ~/.fabrika/step-keys/tests
 - It signs the link from the commit's first parent's tree to its tree, with the step, the ticket and
   a `version`: the step's highest for that ticket, plus one. Only the newest counts.
 - It adds the note on `refs/notes/fabrika` and prints the link as one JSON line. Keep that line: it
-  goes into the step's `field/` row (see A step's links (in the notes)).
+  goes into the step's report.
 - It refuses a key that does not verify as the step in `HEAD`'s `allowed_signers`, and adds nothing.
 - After the mutation step, a test writer that commits again signs again. Its new link gets the next
   `version`, and must come after the old one on the branch.
@@ -105,7 +103,7 @@ pnpm commits sign --step lead --ticket 229 --key ~/.fabrika/step-keys/lead
 | Answer | What to do |
 |---|---|
 | `done` | nothing: every commit has a valid step note or person signature, and no exam path changed |
-| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read gets a field note (tier 1, in the notes) |
+| `ask exam_read` | send the owner one line with the paths; merge after the yes. A merge before the owner's read is a finding in your report |
 | `stuck unsigned_commit` | sign the commit with your listed person key, or add a fitting note with its step's key |
 | `stuck build_touched_exam` | a builder changed the exam: the change goes back to the test writer |
 | `stuck no_exam_list` | the build commit's parent has no `exam-paths.json` that reads. A commit on top does not clear it, and history is never rewritten: tell the lead, who starts the quest again on a new branch from the last head whose list reads |
@@ -118,8 +116,7 @@ A pull request that touches no `next/**` and no exam path is "not in scope" and 
 
 Not today. The `commits` workflow is gone and the merge reads no such run, since no step signs a
 commit by hand. `pnpm commits check`
-still runs by hand. A row per merge is proposed
-([autonomy is measured trust](../../docs/direction/autonomy-is-measured-trust.md), M1).
+still runs by hand. A row per merge is proposed.
 
 ## After the merge
 

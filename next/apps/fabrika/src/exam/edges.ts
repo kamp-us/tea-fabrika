@@ -1,4 +1,4 @@
-// The CI ask for edges (Tier 1, P35; docs/direction/no-promises.md). An edge is one line under an
+// The CI ask for edges (Tier 1, P35). An edge is one line under an
 // edge comment, `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>` or the same for
 // `fabrika/no-effect-run-outside-edge`, and the owner reads each new one. A pull request that adds
 // one asks, one line each with its reason. It never blocks.

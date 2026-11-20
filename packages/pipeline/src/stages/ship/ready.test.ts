@@ -205,7 +205,7 @@ describe("readyToMerge", () => {
   });
 });
 
-// Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md). A proof may name hops: a head
+// Self-fix PR 10, Part 4. A proof may name hops: a head
 // the rows were judged at, and a later head code found the diff they judged still stands at (a
 // `carried` fact, from `carry`). A row counts at the head when it was judged there, or carried there.
 // It keeps the head it was judged at, so the proof says what a review saw. The checks never carry.

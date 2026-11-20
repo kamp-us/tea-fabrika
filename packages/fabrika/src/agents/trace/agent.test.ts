@@ -6,8 +6,7 @@ import { z } from "zod";
 import { memoryTracing } from "../../shell/trace/otel.ts";
 import { agentTrace, cutKeys, KEPT_OUT } from "./agent.ts";
 
-// Record wide (docs/plan/pipeline-self-fix.md, PR 7, and
-// docs/direction/an-agent-run-keeps-its-content.md): a lane's agent runs keep their content, the
+// Record wide (docs/plan/pipeline-self-fix.md, PR 7): a lane's agent runs keep their content, the
 // prompt, each reply and each tool's input and result, on their spans. Text shaped like a key is
 // cut before it leaves the host. Every other run still keeps it all out (`KEPT_OUT`).
 //

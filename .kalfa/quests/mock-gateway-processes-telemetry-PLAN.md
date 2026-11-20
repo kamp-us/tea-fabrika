@@ -49,7 +49,7 @@ tests for this one row change.
   `Effect<Uint8Array>` (`node_modules/effect/src/crypto/Digest.ts:139`) and `SecureRandom` says
   "Every operation has a `never` error channel" (`crypto/SecureRandom.ts:11`). A rejected WebCrypto
   hash is a defect: `Effect.promise` inside `crypto/internal/digest.ts`. The approved
-  [no Promises note](../../../docs/direction/no-promises.md) and the glossary row `crypto (reason)`
+  no Promises note and the glossary row `crypto (reason)`
   say a crypto failure is a typed error with its own reason. The first version kept the typed error
   by catching that one defect at the one call (`Effect.catchDefect`).
 

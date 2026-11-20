@@ -1,4 +1,4 @@
-These lint rules are the `fabrika` plugin for oxlint, written in TypeScript. `index.ts` lists them, `match.ts` holds what they share, and `.oxlintrc.json` at the top of the repo turns each one on, with the reason for every path it leaves out. Why oxlint: [`docs/direction/oxlint-and-oxfmt.md`](../docs/direction/oxlint-and-oxfmt.md).
+These lint rules are the `fabrika` plugin for oxlint, written in TypeScript. `index.ts` lists them, `match.ts` holds what they share, and `.oxlintrc.json` at the top of the repo turns each one on, with the reason for every path it leaves out.
 
 ```sh
 pnpm lint                                   # parallel.ts runs lint.ts, format.ts --check, the code-graph checks and the rest at once
@@ -7,7 +7,7 @@ node oxlint-plugins/lint.ts packages/x      # the same oxlint step on one folder
 
 `parallel.ts` is not an oxlint rule: `pnpm lint` gives it each of its parts as one shell command, and it runs them all at once, prints each part's output whole in the order given, and exits 1 naming each failed part with its last line. Two parts that write the same file go in one argument joined by `&&`; its top comment says which parts write.
 
-`exact-versions.ts` is not an oxlint rule: `pnpm lint` runs it to refuse any ranged npm version in a tracked `package.json` or `pnpm-workspace.yaml` ([`docs/direction/pin-exact-versions.md`](../docs/direction/pin-exact-versions.md)).
+`exact-versions.ts` is not an oxlint rule: `pnpm lint` runs it to refuse any ranged npm version in a tracked `package.json` or `pnpm-workspace.yaml`.
 
 `workspace-reach.ts` is not an oxlint rule either: `pnpm lint` runs it to refuse a workspace package of today's version that no app, tutorial, tool or the root `package.json` reaches through its dependencies, so a part nothing uses cannot stay. `next/` is left out while Tier 1 builds pieces before their app names them.
 
@@ -227,7 +227,7 @@ On the same day (ticket 439) the rule took a second job: a blank line before and
 
 Four rules were this repo's own before the move too.
 
-`no-secret-env.grit` and `no-redacted-value.grit` keep a secret in Effect's `Redacted` from the read to the one line that sends it (`docs/direction/secrets-are-redacted.md`). The first refuses a `process.env` read whose name looks like a secret; read it with `Config.Redacted("NAME")`. The second refuses `Redacted.value` anywhere but seven edge files, which `.oxlintrc.json` lists with their reasons. Both leave `experiments/` out, and the second leaves tests out (they hold made-up secrets and read them back). Both block. `packages/fabrika/src/redacted-lint.test.ts` plants each form and checks which ones fire.
+`no-secret-env.grit` and `no-redacted-value.grit` keep a secret in Effect's `Redacted` from the read to the one line that sends it. The first refuses a `process.env` read whose name looks like a secret; read it with `Config.Redacted("NAME")`. The second refuses `Redacted.value` anywhere but seven edge files, which `.oxlintrc.json` lists with their reasons. Both leave `experiments/` out, and the second leaves tests out (they hold made-up secrets and read them back). Both block. `packages/fabrika/src/redacted-lint.test.ts` plants each form and checks which ones fire.
 
 Their count when they were added, on 2026-10-26:
 
@@ -238,7 +238,7 @@ Their count when they were added, on 2026-10-26:
 - The shared ledger (PR 130) landed beside this change and added 2 value fires. In `packages/ledger-server/src/stack.ts`, an empty-token check was not needed, because Effect's env provider already reads an empty value as none (`redacted.test.ts` checks this), so it was dropped. In `signer.ts`, an SSH key file's text goes to its parser, so that file joined the list. After that: 0 again.
 - The sandbox (PR 156) and this rule (PR 132) landed on the same night and met only on main, with 4 value fires in `packages/fabrika/src/sandbox/sandbox.ts`. That file hands the box its logins, so it is not on the list: a new unwrap there must still be seen. Each of the 4 lines has its own `oxlint-disable-next-line fabrika/no-redacted-value` with its reason. Two send a lent login into the box (its env, its auth.json). Two read text that stays in the host, so a launch carrying a GitHub key can be refused.
 
-`no-project-settings.grit` keeps a Claude run from loading a repository's own settings. Its hooks ran outside the sandbox in experiment 155, and the owner kept them out even where only trusted people work (`docs/direction/agents-read-rules-the-normal-way.md`). It refuses `settingSources` with a source in it, any `projectConfigRoot`, and the same CLI flags, anywhere but `packages/fabrika/src/agents/claude/rules.ts`, whose `ownRules` is the one place that says where a run's settings come from. `.oxlintrc.json` turns it off for that file and for tests. It blocks: of its 17 fires on the tree when it was added, 12 were on purpose and now say why in an `oxlint-disable-next-line fabrika/no-project-settings -- <why>`, 4 were tests (so tests are left out), and 1 was a real slip, in experiment 127. `rules.test.ts` plants each form it refuses and checks it fires.
+`no-project-settings.grit` keeps a Claude run from loading a repository's own settings. Its hooks ran outside the sandbox in experiment 155, and the owner kept them out even where only trusted people work. It refuses `settingSources` with a source in it, any `projectConfigRoot`, and the same CLI flags, anywhere but `packages/fabrika/src/agents/claude/rules.ts`, whose `ownRules` is the one place that says where a run's settings come from. `.oxlintrc.json` turns it off for that file and for tests. It blocks: of its 17 fires on the tree when it was added, 12 were on purpose and now say why in an `oxlint-disable-next-line fabrika/no-project-settings -- <why>`, 4 were tests (so tests are left out), and 1 was a real slip, in experiment 127. `rules.test.ts` plants each form it refuses and checks it fires.
 
 The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an Effect, and written as a bare statement, or answered from a callback whose caller wants nothing back (`xs.forEach((x) => run.tell("n", x))`), it is made and dropped, so nothing is told.
 
@@ -406,7 +406,7 @@ Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`
 | `no-wall-clock` | `Date.now()`, `new Date()` and `Date()` in a `next/` `.ts` file; `new Date(at)` passes | none | left out, test helpers too |
 | `no-clock-in-view` | `Date.now()`, `new Date()`, `Date()`, `performance.now()`, `Math.random()`, `crypto.randomUUID()` in a `.tsx` file, handlers included | none | left out |
 
-React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
+React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out. `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
 
 **`.agents/` is held to the same rules** (owner, 2026-11-09). A second override names `.agents/**/*.ts` and `.agents/**/*.mjs` and repeats the `next/**` rule block, and `edge-comment.test.ts` checks the two blocks are equal. `.agents/` tests keep the edge rules on, since only `next/`'s tests may turn one off; their own override leaves out `effect-functions`, `no-hand-tag` and `one-store-hook`. `no-node-imports` and `no-ledger-sql` check their path with `heldToNext` in `match.ts`. On the day it joined, 154 findings fired in 9 files: `no-promises` 51 (42 of them in two tests that drive real processes, `box.test.ts` 15 and `run.test.ts` 27), `no-hand-tag` 48, `no-node-imports` 23, `no-of` 21, `no-node-filesystem` 9, `no-effect-run-outside-edge` 2. Each is named in `agents-ledger.json` by file, rule and its line of code with spaces collapsed (`ledger.ts`), never a line number. `lint.ts` waives a finding only an entry names, refuses an entry outside `.agents/`, and on a whole-repo run writes back only the entries a finding still matched; CI fails until that pruned file is committed. Nothing adds an entry; that is the owner's call. `ledger.test.ts` holds the laws and plants a `.agents/` script.
 
@@ -568,7 +568,7 @@ found 103 lines. It recorded false alarms inside wrapped statements whose first 
 had an edge marker. A statement-wide exception left 60 real findings in P12's files
 and 27 in unchanged files from main. P12's new files then reached zero. See
 `field/notes.jsonl`, note `2026-11-08-275`. The statement-wide exception was dropped
-because it walked back [no-promises.md](../docs/direction/no-promises.md). The build
+because it walked back the no-Promises rule. The build
 restructured the code to keep each Promise on its marked line. `pnpm lint:promise-types`
 reports 0 findings on the P12 tree at `97245dc7` with the narrowed rule below, with 0
 false alarms. The check runs in `pnpm lint`. Unknown types still need the regular typecheck.
@@ -642,7 +642,7 @@ curried wrappers, and aliased Effect imports. It leaves inner spans and
 
 Round 1 measured base `600c6449`, 2026-11-08, with
 `node oxlint-plugins/lint.ts next`. Each finding was read against
-[`the tracing decision`](../docs/direction/effect-fn-for-traced-functions.md).
+the tracing decision.
 Paths below start at `next/packages/libfabrika/src/`.
 
 | Finding | Verdict |
@@ -814,8 +814,8 @@ The box refused `nice`'s priority change, so subsequent test commands ran withou
 ## A service's type is written out, ticket 908
 
 `fabrika/written-service-type` blocks in `next/` product code. A service's type is the contract a
-reader looks up, so it is written out and never taken from the implementation
-([the Effect code guidelines](../docs/direction/effect-code-guidelines.md)). Slice A2 of
+reader looks up, so it is written out and never taken from the implementation.
+Slice A2 of
 the plan fixes every site and turns the rule on in one pull
 request, so it starts at zero with no list file.
 
@@ -854,9 +854,8 @@ of forms nobody has written yet.
 ## No static member on a service class, an earlier decision
 
 `fabrika/no-static-layer` blocks in the `next/` folders where its count is zero. A service file
-holds only its contract, and each layer is a sibling file that exports `layer`
-(E5 in
-[`docs/direction/effect-code-guidelines.md`](../docs/direction/effect-code-guidelines.md)). The
+holds only its contract, and each layer is a sibling file that exports `layer`.
+The
 rule refuses every static member of a class that extends `Context.Service`, not only one that
 returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, and a guess from
 names would miss.
@@ -924,8 +923,7 @@ landed, which only grows.
 ## No `Cause.squash`, ticket 907
 
 `no-cause-squash` refuses every use of Effect's `Cause.squash` in `next/` product code and in
-`.agents/` (E2 of [the Effect code guidelines](../docs/direction/effect-code-guidelines.md),
-an earlier decision). A squashed cause is one unknown value, and the next line then has to ask what it
+`.agents/`. A squashed cause is one unknown value, and the next line then has to ask what it
 is. Read the typed failure with `Cause.findErrorOption` or `Exit.findErrorOption`, and a thrown
 value with `Cause.findDefect`.
 

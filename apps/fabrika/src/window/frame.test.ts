@@ -941,7 +941,7 @@ describe("the frame's own state", () => {
   });
 });
 
-// Today's info mode (C-b i) by the modes guidelines (docs/direction/modes.md, M2 to M4): one value
+// Today's info mode (C-b i) by the modes guidelines: one value
 // for its state, seen with the bars hidden, told to a screen reader, explained from the keyboard,
 // and left with Escape.
 describe("info mode", () => {

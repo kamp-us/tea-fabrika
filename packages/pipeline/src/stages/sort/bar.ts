@@ -1,4 +1,4 @@
-// The bar for what is worth doing (docs/direction/sort-answers-yes-or-no.md, "The bar for a no"),
+// The bar for what is worth doing,
 // as experiment 92 drafted it and the direction note keeps it: seven ways a ticket is a no, and four
 // that look like a no but are a yes. Sort's brief states it; sort's answer names the rule it used by
 // id, so a no that is not one of these seven does not read.

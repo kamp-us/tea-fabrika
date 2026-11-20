@@ -124,7 +124,7 @@ type Bare =
 
 /**
  * A said line: the words after `@name` are the agent's, as typed, so `#`, quotes, `|`, `&` and
- * `;` are text in them (docs/direction/summon-guidelines.md, S2). It is the whole line, one
+ * `;` are text in them. It is the whole line, one
  * statement, and one job in the foreground: a trailing `&` is the agent's too.
  *
  *   @scout why does post print #7 twice?   mentions [scout at [1,6)], prose at [7,38)

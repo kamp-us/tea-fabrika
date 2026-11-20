@@ -132,8 +132,7 @@ export const shown = (text: string): string =>
 
 /**
  * A table's tones, named by the terminal's 16-color palette, never as 24-bit color: these bytes
- * reach every viewer's terminal, and each draws them in its own look (docs/direction/themes.md,
- * what a third-party program gets, point 6). Strong is the terminal's own ink, bold; muted and
+ * reach every viewer's terminal, and each draws them in its own look. Strong is the terminal's own ink, bold; muted and
  * faint bright black (slate 11 in both built-ins); accent blue; warning yellow (amber). Plain text
  * keeps the terminal's own ink. Each reads 4.5:1 on the terminal's background in fabrika and
  * fabrika-light (screen.test.ts). This is Shell.ANSI with faint as muted: its `2;90` is drawn at

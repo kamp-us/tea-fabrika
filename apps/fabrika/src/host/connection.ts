@@ -20,8 +20,7 @@
 // a laptop slept past it. A person the door no longer lets in is a failure of every call, with
 // the door's why, and no more logins.
 //
-// One project, one server: the file picks either the home's own file or a server, never both
-// (docs/direction/the-ledger-goes-to-cloudflare.md).
+// One project, one server: the file picks either the home's own file or a server, never both.
 
 import { type Ledger, layerSignerFile } from "@kampus/fabrika-old";
 import { DoorRefused, doorOf, layerHttp, renewing } from "@kampus/fabrika-old/http";

@@ -1,6 +1,6 @@
 // `pnpm lint` refuses a secret read from `process.env` as plain text (no-secret-env.ts), and a
 // `Redacted.value` outside the edge files .oxlintrc.json lists (no-redacted-value.ts). Each planted
-// line says whether the rule must refuse it. docs/direction/secrets-are-redacted.md.
+// line says whether the rule must refuse it.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";

@@ -320,7 +320,7 @@ describe("a restart", () => {
     });
   });
 
-  it("in gathering asks the same read again, and in judging files again the notes not yet answered", () => {
+  it("in gathering asks the same read again, and in judging files the notes not yet answered again", () => {
     const [gathering, [read]] = step({ phase: "idle" }, { type: "start", ask: ASK, settings: SETTINGS });
     expect(step(gathering, { type: "resume" })).toEqual([gathering, [read]]);
     const [one, [asked]] = step(reviewing(), { type: "review_note", ...from(), note: NOTE });

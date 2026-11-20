@@ -121,7 +121,7 @@ reasoning.
   `remainingWait`). From memory; not fetched. The rule is the same: a trailing call is never
   dropped because its timer ran early.
 - **This repo:** a bug proven in a package we use is patched with `pnpm patch` and dropped at the
-  release that has the fix ([patch upstream locally](../../../docs/direction/patch-upstream-locally.md)). Upstream has already
+  release that has the fix (patch upstream locally). Upstream has already
   shipped this fix, so there is nothing to report and no issue to file; the patch comment names the
   release, as the `@alchemy.run/*` and `effect` entries in `pnpm-workspace.yaml` do.
 - Elm and OTP have no answer here: this is a dependency's timer bug, not a design choice.

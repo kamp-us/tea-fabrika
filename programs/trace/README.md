@@ -12,8 +12,7 @@ One job's trace, or one ticket's lanes, in a tile of its own.
   axis. Its rows are the lane's steps and its waits on a person. A step opens to its spans, from
   that lane's job record. A fact stepper replays the ticket one fact at a time.
 
-The design is
-[A JobRecord holds each host job](../../docs/direction/a-job-record-holds-its-trace.md).
+A JobRecord holds each host job.
 
 ```ts
 // tsh> seq --to 3 | tally | trace    no flag: its own line's job, followed live as it goes
@@ -153,7 +152,7 @@ line's job until an id or a ticket comes in.
 tsh feeds `any` only when no typed input fits, and then with the source's first output, as a Unix
 pipe carries stdout and not stderr. So `tracker | trace` goes to `ticket`, and `seq --to 3 | tally
 | trace` sends tally's `total` to `any`. The Elm answer is `Json.Decode.value`: a value nobody
-decodes. See [An input can take anything](../../docs/direction/an-input-can-take-anything.md).
+decodes.
 
 In the job view, a row is named by a key from `treeOf(trace)` (`src/tree.ts`): `job`, `span:<id>`,
 `run:<run>`, `turns:<span>`, `machine:[run, machine, id]`, `step:[run, machine, id, n]`. In the

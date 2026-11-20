@@ -114,7 +114,7 @@ const closedNow = (t: readonly Entry[]) => since(t).some((e) => e.fact.type === 
 /**
  * Every kind of fact a ticket's stream can hold, and whether it is work: a fact that moves the
  * ticket on, so it wakes an idle one. The rest is advice, shown on the ticket and never read to
- * decide (docs/direction/label-guidelines.md, L1): a Jev duplicate hint, a person's word on it, a
+ * decide: a Jev duplicate hint, a person's word on it, a
  * person's rating of a review finding. A new kind must take a row here, or this does not compile.
  */
 const WORK = {

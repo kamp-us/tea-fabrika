@@ -52,7 +52,7 @@ The cost is more explicit test bookkeeping. Product behavior stays governed by t
 Read for this plan:
 
 - Decisions `0036`, `0052`, `0045`, `0178`, `0536`, `0581` and `0590`.
-- Hot reload decisions `0291` and `0292`, and `docs/direction/hot-reload.md`.
+- Hot reload decisions `0291` and `0292`, and `direction/hot-reload.md`.
 - `docs/plan/README.md`, Tier 1's P15 row and its detail.
 - The existing approved P15 slice 1 plan saved as `p15b-plan.md` beside the checkout. Its contents are evidence, not text to copy into this repository.
 - `.patterns/effect-tests-run-in-it-effect.md`, `.patterns/effect-state-and-time.md`, `.patterns/effect-platform-wrapped-once.md` and `.patterns/a-law-watches-calls-with-a-recorder.md`.
@@ -68,7 +68,7 @@ The record-search CLI failed because it first fetches into the checkout. Its exp
 
 **Elm first.** Commands produce messages, and `update` handles those messages explicitly. The test should examine every answer it receives. It should not infer which request an answer belongs to from elapsed quiet time. The message-handling model is documented in the [Elm guide](https://guide.elm-lang.org/effects/http.html).
 
-**Erlang/OTP.** `receive` selects messages by matching their contents. Request/reply protocols use identity to distinguish replies. Here, successful watcher replies already carry the program and content hash. No new product request identifier is needed. See [Erlang expressions, receive](https://www.erlang.org/doc/system/expressions.html#receive) and the repository's `docs/direction/follows/otp.md`.
+**Erlang/OTP.** `receive` selects messages by matching their contents. Request/reply protocols use identity to distinguish replies. Here, successful watcher replies already carry the program and content hash. No new product request identifier is needed. See [Erlang expressions, receive](https://www.erlang.org/doc/system/expressions.html#receive) and the repository's `direction/follows/otp.md`.
 
 **Rolldown.** The installed 1.2.13 declarations describe rebuild cycles and require closing `BUNDLE_END` and `ERROR` results. They offer no guarantee of exactly one cycle per save. Their `buildDelay` documentation also describes file-event coalescing. Keep the real watcher and result objects.
 

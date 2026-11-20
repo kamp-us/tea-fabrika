@@ -13,7 +13,7 @@ import { Jev, type JevCallFailed } from "./services.ts";
 //   yield* (yield* JevReceipts).spent
 //   // {calls: 3, input: 5210, output: 9, usd: 0.000219, ms: 812}
 //
-// Spend limits live in code, in this one helper (docs/direction/jev-same-answer-cheaper.md). The
+// Spend limits live in code, in this one helper. The
 // cap is checked before each call, so a run of N calls at once may pass it by at most N - 1 calls:
 // a fraction of a cent. A test never builds this Layer: it gives `Jev` a scripted reply instead.
 

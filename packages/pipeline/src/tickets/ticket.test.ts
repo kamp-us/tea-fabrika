@@ -638,7 +638,7 @@ describe("what a yes was given on", () => {
   });
 });
 
-// Ticket 196: a filing records where it came from (docs/direction/a-ticket-says-where-it-came-from.md).
+// Ticket 196: a filing records where it came from.
 // Each case is the shape one of tickets 186 to 195 needed. The run ids and PR numbers are the real
 // ones; the comment anchors and the exam_review run's id are made up.
 describe("a filing that says where it came from", () => {

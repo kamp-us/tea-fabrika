@@ -80,7 +80,7 @@ transaction per span, or a lifecycle read per check, and found none. 0122 says "
 call ends". 0038, 0124, 0143 and 0202 govern names, metrics, refusals and retention, not when a row
 commits. Searches: `records.ts find` with "span sink commit transaction per span", "span durable
 before end returns", "sink batch flush before call ends", "runner lifecycle status read every check"
-and "normal exit process status isLive runner", then `rg` over `.patterns/`, `docs/direction/` and
+and "normal exit process status isLive runner", then `rg` over `.patterns/`, `direction/` and
 `docs/plan/` for "before `end` returns" and "no second copy". The only places that say per span are
 descriptive text:
 
@@ -295,7 +295,7 @@ The Runner.ts comment "Read the lifecycle from its machine; the runner keeps no 
 becomes: "Read the lifecycle from its machine once per serial step. This runner's own lifecycle
 writes drop that read, and nothing else writes this process's normal exit."
 
-In `docs/direction/follows/otp.md`, row 17 ("Find a name's process") gets "`status(name)` reads its
+In `direction/follows/otp.md`, row 17 ("Find a name's process") gets "`status(name)` reads its
 current process (`processes/Process.ts:274-296`); a runner reads it at most once per serial step,
 as a gen_server reads `whereis` once per message (`runtime/Runner.ts`)". It stays "same".
 
@@ -370,7 +370,7 @@ table, because they are exam files this plan names, and none of them changes.
 | `next/packages/libfabrika/src/telemetry/Sink.ts` | batch collects through the open-batch reference, keeps the tracer chain; flush commits the open batch first; doc lines 3 and 337 say "before the call ends" for batched spans | build | 60 |
 | `next/packages/libfabrika/src/cloudflare/runtime.ts` | `batched`; `wrapped` and `attributed` batch; `publish` batched | build | 15 |
 | `next/packages/libfabrika/src/runtime/Runner.ts` | `serial`, the per-step read, the `manager` wrapper, the amended comment | build | 70 |
-| `docs/direction/follows/otp.md` | row 17's wording | build | docs |
+| `direction/follows/otp.md` | row 17's wording | build | docs |
 | `.glossary/TERMS.md` | the `SpanSink` row: a batched span lands before its call ends | build | docs |
 | `docs/plan/tier-1.md` | one dated "Changed" sentence on P37's row | build | docs |
 | `field/findings/2026-11-18-t753-l16-times-out-at-full-depth.json` | the owed `flaky_test` row, from `## Findings` | lead | docs |

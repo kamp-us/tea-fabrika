@@ -24,8 +24,8 @@ import {
   type WriteUp,
 } from "./experiment.ts";
 
-// The service every experiment program reads and writes through
-// (docs/direction/experiments-behind-a-service.md). Our ledger is the first implementation; a
+// The service every experiment program reads and writes through.
+// Our ledger is the first implementation; a
 // hosted platform (MLflow, Langfuse) would be a second, behind the same methods.
 //
 //   const experiments = yield* Experiments;
