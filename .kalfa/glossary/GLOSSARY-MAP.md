@@ -6,7 +6,7 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
 Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Nine exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents and Reconciliation. Its shape is in the `domain-modeling` skill's
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation and Secrets. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -62,7 +62,7 @@ moves the line here if it does.
   and drift is reported or reconciled.
 - **Incidents** ([`kalfa/incidents/GLOSSARY.md`](../../kalfa/incidents/GLOSSARY.md)): an incident and its
   severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
-- **Secrets** (`kalfa/secrets/GLOSSARY.md`): a value few may read, known to others only by its name;
+- **Secrets** ([`kalfa/secrets/GLOSSARY.md`](../../kalfa/secrets/GLOSSARY.md)): a value few may read, known to others only by its name;
   fetched, or used to sign without leaving.
 - **Leak guard** (`kalfa/leak-guard/GLOSSARY.md`): checking text before it goes public against a list
   of private words, with a refusal that really stops the write.
@@ -109,7 +109,7 @@ its words are ours.
   Drift is Reconciliation's word, and Configuration does not use it.
 - **Check** means two things: in Permissions, running a permission; in Reconciliation, comparing the
   desired state with the live state.
-- **Code hosting uses Secrets** to sign an access grant's request; the key never leaves Secrets.
+- **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
