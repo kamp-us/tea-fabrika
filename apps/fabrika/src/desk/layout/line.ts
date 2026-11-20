@@ -20,8 +20,7 @@ import {
 import { findTile, fold, remove, setShows, spread, tiles, unzoom } from "./tree.ts";
 
 // A tsh line with several windows, `tracker | ticket | trace`, opens in place: in the tile it was
-// typed in, by the tree's own split rule (docs/direction/fold-not-tabs.md, "A line opens in
-// place"). The tile keeps its tsh, covered by the first window, where the data starts; the other
+// typed in, by the tree's own split rule. The tile keeps its tsh, covered by the first window, where the data starts; the other
 // windows are tiles of their own beside it, with no tsh. When they would be too small to read,
 // they open folded, and only the first is open.
 //

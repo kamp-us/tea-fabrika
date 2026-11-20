@@ -439,7 +439,7 @@ Notes:
 | `.agents/skills/lead/scripts/drive.ts:2258` | the comment names it |
 | `.agents/skills/build/SKILL.md:57, 62`, `tests/SKILL.md:130`, `mutation/SKILL.md:192` | `typecheck.ts`; line 62 says it takes the one lock |
 | `.agents/skills/lead/scripts/skillscheck.sh:19`, `skillscheck.test.ts:415` | the pinned caps sentence names `typecheck.ts` |
-| `docs/direction/skills-hold-only-judgment.md:30` | names `typecheck.ts` and "one fixed lock" instead of "one fixed OS lock" |
+| `direction/skills-hold-only-judgment.md:30` | names `typecheck.ts` and "one fixed lock" instead of "one fixed OS lock" |
 | `the machine caps live in code:24` | not edited: its 2026-11-15 amendment (pull request 1509) already allows the pid lock at the same single path |
 | `no shell or python scripts:28, 80` | not edited: a count on a date |
 | `experiments/272`, `282`, `283`, `296` | not edited: records of what was true then |
@@ -485,7 +485,7 @@ already includes `scripts/*.test.ts`, so both new test files run with no config 
 | `.agents/skills/build/SKILL.md` | build | docs | lines 57 and 62 |
 | `.agents/skills/tests/SKILL.md` | build | docs | line 130 |
 | `.agents/skills/mutation/SKILL.md` | build | docs | line 192 |
-| `docs/direction/skills-hold-only-judgment.md` | build | docs | line 30 |
+| `direction/skills-hold-only-judgment.md` | build | docs | line 30 |
 | `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/ci`, `.github/ci/changes.mjs`, `.github/ci/workflow-lint/caches.test.ts`, `scripts/*.test.ts` | tests | none | not changed: no dependency is added, no package, no path rule; the cache laws read the new file through `cacheFiles` |
 
 Where the type check comes from: `scripts/` is in no workspace package, and no tsconfig covers it

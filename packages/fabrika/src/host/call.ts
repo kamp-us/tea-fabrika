@@ -1,6 +1,6 @@
 // gen_server:call between programs on the ledger: send, reply-to, deadline, and the retry OTP
 // leaves to the caller. An Elm module, not a machine: a parent program keeps `Calls` in its own
-// state and hands its Msgs to `update`, as Elm parents do (docs/direction/elm-first.md).
+// state and hands its Msgs to `update`, as Elm parents do.
 //
 //   call(s, "q-17", req)       pending q-17, try 1: send {id: "q-17", tries: 1}
 //   sent q-17 1 at t           its deadline is t + timeoutMs

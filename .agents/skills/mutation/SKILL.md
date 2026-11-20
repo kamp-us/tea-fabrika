@@ -18,8 +18,7 @@ beside the changed files. No new merge, no run. A merge never waits on it.
   ticket's test writer, test files only; then the quest goes on to review.
 
 A brief names the ticket or the merged range, and the build commit or files to mutate. This skill
-holds the rest. The fast check's settings are
-[fast and daily mutation](../../../docs/direction/fast-and-daily-mutation.md)'s: changed lines
+holds the rest. The fast check's settings: changed lines
 first, five minutes, survivors as advice.
 [`AGENTS.md`, "Finish your task"](../../../AGENTS.md#finish-your-task) says when to keep going, what needs
 no approval and how to write the report.
@@ -58,7 +57,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 
 ## The command
 
-The settings are [the decided fast check](../../../docs/direction/fast-and-daily-mutation.md#the-fast-check-decided-2026-11-01)
+The settings are the decided fast check
 on StrykerJS 10.1.1 (read `pnpm-lock.yaml` first; a newer Stryker may rename an option).
 `--ticket` is the ticket, `--build` the build commit, `--base` the commit whose tests are arm a.
 With a base, the sample is the pull request's own lines, `base..build`, so a tip that merged main
@@ -180,7 +179,7 @@ Something wrong outside your task is one finding with proof, never a fix.
 
 A survivor is this step's own answer and stays in its report, never a finding. Outside
 means anything else you meet that is wrong.
-Put it in your report. The lead records it in the notes.
+Put it in your report.
 
 ## Go easy on the machine
 

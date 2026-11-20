@@ -30,10 +30,10 @@ const node = (script: string, env: Env): Pick<Spawnable, "command" | "args" | "e
 
 - **The brief asks that no helper is left after the app quits. The settled design says the
   opposite, on purpose (95%).** The host outlives the app, as a tmux server outlives its client:
-  "Cmd-Q: the window goes, the host goes on" (`docs/direction/the-gui-is-electron-first.md`, line
+  "Cmd-Q: the window goes, the host goes on" (`direction/the-gui-is-electron-first.md`, line
   513; `apps/fabrika/src/host/main.ts`, lines 12 to 15; `apps/fabrika/src/start-host.ts`, lines 8
   to 10). And a summoned agent "keeps running between turns" until `dismiss` (T1, decided:
-  `docs/direction/summon-guidelines.md`, lines 394 to 400). So this plan ends a helper when its
+  `direction/summon-guidelines.md`, lines 394 to 400). So this plan ends a helper when its
   host stops, never when the app quits or a turn ends. The law is "none left after the host
   stops", and "one is left after a turn ends" is a law too.
 - **Most of what the owner saw 40 minutes later was T1 working (80%).** Two agents summoned and
@@ -133,7 +133,7 @@ does get it, and its Bash commands inherit the CLI's environment.
   `Electron.app` would hide the app's own Dock icon too. The helper bundle already has one.
 - **This repo already said it.** "Inside Electron's main process, `process.execPath` is Electron,
   not Node. ... that child needs `ELECTRON_RUN_AS_NODE=1`, or Electron's `utilityProcess`"
-  (`docs/direction/the-gui-is-electron-first.md`, lines 123 to 126). The host's start follows it;
+  (`direction/the-gui-is-electron-first.md`, lines 123 to 126). The host's start follows it;
   the adapters' start does not.
 - **The commands a person or agent runs get no `ELECTRON_*`.** VS Code strips `/^ELECTRON_.+$/`
   from a terminal's environment (`sanitizeProcessEnvironment` in

@@ -33,7 +33,7 @@ const Manifest = Schema.Struct({
 
 const readManifest = Schema.decodeUnknownSync(Schema.fromJsonString(Manifest));
 
-/** p65's one outside package (docs/direction/fabrika-design-package.md): the design package, shared by
+/** p65's one outside package: the design package, shared by
  *  both versions, which the window (`@kampus/tuval`) and the app import. No other `next/` package may. */
 const DESIGN = "@kampus/fabrika-design";
 

@@ -67,7 +67,7 @@ export const readTaskId = read(TaskId);
 /**
  * Whose a criterion is: one task's, or the whole plan's (`plan`). A plan's own criteria (its goal)
  * belong to no task: only the final review, over the whole book at the plan's one pull request,
- * judges them (docs/direction/done-is-per-criterion.md, "One PR per plan").
+ * judges them.
  */
 export const PLAN = "plan" as const;
 export const Owner = Schema.Union([TaskId, Schema.Literal(PLAN)]);

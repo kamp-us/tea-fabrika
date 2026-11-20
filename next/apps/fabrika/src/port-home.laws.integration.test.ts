@@ -479,7 +479,7 @@ const written = Effect.gen(function* () {
   yield* fs.copy(staging, FIXTURE, { overwrite: true });
 }).pipe(Effect.scoped);
 
-// T833, P15 slice 1's fix round, next/. H6 of docs/direction/hot-reload.md (0293): a step, a Cmd
+// T833, P15 slice 1's fix round, next/. (0293): a step, a Cmd
 // or a job record always says which code made it. The saved home predates the code store, so its
 // descriptors name builds whose code it never kept. This build opens it on its own code for each
 // program, so every record a process writes from then on names that code. The move is one

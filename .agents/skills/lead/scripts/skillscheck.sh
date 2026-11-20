@@ -111,7 +111,7 @@ review = (
     "A law written as examples over a class the plan names is a defect when a found case escapes those examples.",
     "On a re-review, read every line the last fixes changed and what calls them first. Then finish the remaining checks.",
     "Read every decided note the PR builds, following the plan's references and the change itself.",
-    "Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law. Each blocker cites that source and shows the missed case.",
+    "Block only on a broken decision or AGENTS.md, lost data, or a broken law. Each blocker cites that source and shows the missed case.",
 )
 answer = (
     "Start with merge-ready; findings: <m> or changes: <n>; findings: <m>.",
@@ -119,7 +119,7 @@ answer = (
     "Give every finding in that answer, grouped by class, most serious first.",
     "Name each checked decided note and say where the change follows or breaks it.",
     "Any other actionable finding is one finding with proof: never a ticket, a fix or only a mention, and never a security hole.",
-    "Give each one in the answer. The lead records it in the notes. Do not start another review round for it.",
+    "Give each one in the answer. Do not start another review round for it.",
     "End with exactly one answer: line, as the last line.",
 )
 cleanup = (

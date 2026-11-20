@@ -34,7 +34,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - Read every decided note the PR builds, following the plan's references and the change itself.
      `node .agents/skills/lead/scripts/governance.ts` lists the decision files the diff's words
      touch; say for each whether the diff walks it back.
-   - Block only on a broken decision in docs/direction or AGENTS.md, lost data, or a broken law.
+   - Block only on a broken decision or AGENTS.md, lost data, or a broken law.
      Each blocker cites that source and shows the missed case.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided. Each
      call the builder or test writer took that the plan did not spell out is judged against the
@@ -50,7 +50,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - Each new name (type, service, function, file, setting, record field) has its line under the
      description's `## New names`: the industry's word, with a source that says it. Check each line
      against its context's `GLOSSARY.md` (the contexts are in `.kalfa/glossary/GLOSSARY-MAP.md`) and
-     [the names rule](../../../docs/direction/use-the-industrys-names.md): one word per idea, the
+     the names rule: one word per idea, the
      glossary's word where it has one, and a plain gloss for an obscure one. A line whose source
      does not name the thing is a finding.
    - Domain words are in the glossary ([domain-modeling skill](https://github.com/kamp-us/tea-fabrika/pull/1668)). A domain word names a thing the
@@ -65,8 +65,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      Readability and module shape count: say where the code is hard to read and why.
    - Every new law is a property test over generated inputs (fast-check, `@demlik/tea/pbt` or
      Effect's `Arbitrary`). A new law that is an example test with no generator is a defect. A
-     pinned example is fine only inside a property's `examples`, naming the past bug it pins
-     ([every law is a property](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property)).
+     pinned example is fine only inside a property's `examples`, naming the past bug it pins.
      A fixed test is fine only when its name starts with one of five labels and it is that kind:
      `vector:`, `format:`, `pinned:`, `scenario:` or `type:`. A hand-picked example checking a general rule,
      labeled or not, is a defect. `fabrika/law-shape` in `pnpm lint` flags a test with neither;
@@ -102,7 +101,7 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
 
    Any other actionable finding is one finding with proof: never a ticket, a fix or only a
    mention, and never a security hole.
-   Give each one in the answer. The lead records it in the notes. Do not start another review round for it.
+   Give each one in the answer. Do not start another review round for it.
    When the brief says the pull request waits for the owner, end the findings with a short plain
    list, "For the owner": the two or three things only the owner can decide, each with your lean
    and percentage.

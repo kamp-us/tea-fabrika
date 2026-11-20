@@ -1,5 +1,5 @@
 // Moving a project: a laptop ledger's shared work, copied into a new shared ledger, every row
-// keeping who wrote it and when (docs/direction/the-ledger-goes-to-cloudflare.md, section 6).
+// keeping who wrote it and when.
 // Stop, copy in `pos` order, check by hash, switch.
 //
 //   planOf(rows, "github:7")        on the laptop: each row's writer mapped, or the move stops

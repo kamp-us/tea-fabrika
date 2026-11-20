@@ -1,6 +1,5 @@
 // An edge is one line, marked where it stands: `// oxlint-disable-next-line fabrika/no-promises --
-// edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge` (docs/direction/no-promises.md;
-// Tier 1, P35). This rule holds every ignore comment that names either of those two rules to that
+// edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`. This rule holds every ignore comment that names either of those two rules to that
 // shape:
 //
 // - the `-next-line` form, so it covers one line. A file-wide `oxlint-disable` would let a whole

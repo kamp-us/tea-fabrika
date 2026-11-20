@@ -64,7 +64,7 @@ describe("the list", () => {
   });
 });
 
-// Ticket 196: a filing records where it came from (docs/direction/a-ticket-says-where-it-came-from.md).
+// Ticket 196: a filing records where it came from.
 // An agent files through `tracker_file`, a tool made from `File`'s own schema; what it puts on the
 // ledger is the `filed` fact `factOf` makes. PR 352 and its mutation step are ticket 188's.
 

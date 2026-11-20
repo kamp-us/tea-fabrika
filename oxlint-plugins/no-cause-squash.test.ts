@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 // Ticket 907, slice A1. `fabrika/no-cause-squash` refuses every use of Effect's `Cause.squash` in
-// next/'s product code (docs/direction/effect-code-guidelines.md, E2). Law 2 runs generated files in
+// next/'s product code. Law 2 runs generated files in
 // process through oxlint's RuleTester: an import spelling, some uses and some neighbors that must
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.

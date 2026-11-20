@@ -43,7 +43,7 @@ const COLOR = join(PACKAGE, "tokens", "color");
 
 /**
  * Every color token tokens.css defines today, one file each, by group. Nothing is renamed. The
- * ask desk adds surface-card, slate 3 (docs/direction/ask-desk.md).
+ * ask desk adds surface-card, slate 3.
  */
 const TOKENS = [
   ...["surface-sunken", "surface", "surface-raised", "surface-card", "surface-hover"],

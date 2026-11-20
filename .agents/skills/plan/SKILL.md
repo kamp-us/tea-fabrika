@@ -17,7 +17,7 @@ when to keep going and how to write for a reader who saw none of the work.
 ## Steps
 
 1. **Look around first.** Read `AGENTS.md` whole, then `next/AGENTS.md` for `next/` work, then
-   the ticket on the tracker, every direction note it cites, and any note `rg -n "<row or word>" docs` finds. Open the code
+   the ticket on the tracker, and any note `rg -n "<row or word>" docs` finds. Open the code
    the plan will change and its neighbors before you design anything. Read
    [the design reference](references/design.md) too: the rules a plan or a design follows, moved
    there from `AGENTS.md`.
@@ -25,9 +25,9 @@ when to keep going and how to write for a reader who saw none of the work.
    `@demlik/tea`, vitest, any patch in `patches/`) and check every API against that version.
    Before you propose a patch or change to a package (tea, demlik, Manti, Effect, Alchemy), read
    its decisions, patterns and source, and name its answer or say you found none.
-3. **Check what is settled** before you call anything open: `.kalfa/decisions/`, `docs/direction/`,
+3. **Check what is settled** before you call anything open: `.kalfa/decisions/`,
    `experiments/`, and the settled-search tool the brief names, if any. Run
-   `rg -il "<words>" .kalfa/decisions .kalfa/glossary docs/direction .kalfa/patterns .kalfa/runbooks` for each open
+   `rg -il "<words>" .kalfa/decisions .kalfa/glossary .kalfa/patterns .kalfa/runbooks` for each open
    question, in two or three wordings, and read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
@@ -43,7 +43,7 @@ when to keep going and how to write for a reader who saw none of the work.
 - The shape: types in code blocks, Effect Schema, `_tag` unions, names from settled notes. Mark a
   sketch as a sketch.
 - One value traced through, step by step.
-- Laws use [generated inputs or a reason label](../../../docs/direction/five-steps-for-every-check.md#every-law-is-a-property).
+- Laws use generated inputs or a reason label.
   Ask of each law: lint, type or test? A shape check's cell says `lint` or `type`. Give each law
   the plant that should turn it red.
 - When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
@@ -101,7 +101,7 @@ a new schedule or a paid account still waits for the owner: split it into a late
 
 Something wrong outside your task is one finding with proof, never a fix.
 Outside means the ticket does not ask for it and the plan does not need it. What the plan needs
-goes in the plan. Put it in a last section of the plan, `## Findings`. The lead records it in the notes.
+goes in the plan. Put it in a last section of the plan, `## Findings`.
 
 ## Standing rules
 

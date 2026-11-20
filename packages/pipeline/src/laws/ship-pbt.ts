@@ -105,7 +105,7 @@ type VerdictRow = ShipFacts["verdicts"][number];
  * The verdict rows a read may find at `head`, by what they say: all met, the second failed,
  * judged only at another head and not carried here, judged at another head and carried here, or
  * judged on its old words. Self-fix PR 10: `other_head` is "moved, not carried", and `carried` is
- * "moved, carried" (docs/direction/a-yes-binds-to-the-diff.md).
+ * "moved, carried".
  */
 export const PROOFS = ["met", "failed", "other_head", "carried", "old_version"] as const;
 type ProofKind = (typeof PROOFS)[number];

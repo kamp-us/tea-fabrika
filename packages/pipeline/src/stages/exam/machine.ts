@@ -7,7 +7,7 @@ import { createRefineLoop, type Refining, refiningOf } from "../../combos.ts";
 import { act, type Check, intentOf, keptAct } from "../../primitives.ts";
 import { outcomesOf } from "../outcome.ts";
 
-// The exam step (docs/direction/nobody-writes-their-own-exam.md): before any test or code, the
+// The exam step: before any test or code, the
 // rule changes a plan lists land in a pull request of their own, written by an agent that builds
 // nothing, and a person says yes to them. `checkChange` decides it:
 //

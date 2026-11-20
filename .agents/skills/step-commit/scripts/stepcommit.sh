@@ -207,7 +207,7 @@ def owner_of(p):
     under = [k for k in owners if k.endswith("/") and p.startswith(k)]
     return owners[max(under, key=len)] if under else None
 def unlisted_exam(paths):
-    # The exam is the test writer's (docs/direction/nobody-writes-their-own-exam.md), so a tests
+    # The exam is the test writer's, so a tests
     # commit may hold an exam path the plan gives to no step. The list is the box base's, never the
     # checkout's, so a step cannot widen the exam to take a path. exam.py prints "path<TAB>glob" per
     # hit and exits 1; any other answer allows nothing.

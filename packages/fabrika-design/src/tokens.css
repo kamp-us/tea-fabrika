@@ -1,7 +1,7 @@
 /*
- * fabrika's tokens (docs/direction/fabrika-design-package.md): the built-in themes' colors
- * (docs/direction/themes.md), the type scale, spacing, shape and motion, then Manti's --manti-*
- * tokens set from them (docs/direction/ui-on-manti.md), so a Manti part looks like the rest of a
+ * fabrika's tokens: the built-in themes' colors,
+ * the type scale, spacing, shape and motion, then Manti's --manti-*
+ * tokens set from them, so a Manti part looks like the rest of a
  * window and nothing of Manti's own palette shows.
  *
  * The colors and Manti's tokens are generated: each color is one file in tokens/color, what it is

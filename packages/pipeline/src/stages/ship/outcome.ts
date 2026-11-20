@@ -5,8 +5,7 @@ import { type Name, outcomesOf } from "../outcome.ts";
 // machine that started it reads the answer and decides what happens next. The
 // design is in `docs/ship-machine.md`.
 //
-// The shape is the one every stage uses: five verbs (`../outcome.ts`,
-// docs/direction/outcome-names.md). Only the words below are the ship
+// The shape is the one every stage uses: five verbs (`../outcome.ts`). Only the words below are the ship
 // machine's own.
 
 /**

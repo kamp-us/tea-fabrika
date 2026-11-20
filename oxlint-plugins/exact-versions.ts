@@ -1,5 +1,5 @@
-// `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks
-// (docs/direction/pin-exact-versions.md). It lists what passes (an exact version, `workspace:*`, and
+// `pnpm lint:versions`: no ranged npm version, in any package.json or pnpm-workspace.yaml git tracks.
+// It lists what passes (an exact version, `workspace:*`, and
 // `catalog:` or `catalog:<name>`, whose catalog entry is checked exact), so a range, a tag, a `git:`
 // or a `file:` all fail without being named here. A `patchedDependencies` row is keyed on one exact
 // version.
@@ -152,7 +152,7 @@ if (Arr.some(results, (result) => result.broken)) {
 
 if (lines.length > 0) {
   console.error(
-    `exact-versions: ${lines.length} not exact. Write the version itself, or \`catalog:\` with the exact version in the catalog. See docs/direction/pin-exact-versions.md.`,
+    `exact-versions: ${lines.length} not exact. Write the version itself, or \`catalog:\` with the exact version in the catalog.`,
   );
   process.exit(1);
 }

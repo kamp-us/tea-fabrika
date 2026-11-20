@@ -87,7 +87,7 @@ POST /<ledger>/job/<trace>    one JobCall as JSON: the runs' Storage, a step, be
 POST /<ledger>/v1/traces      OTLP/HTTP JSON, as any OpenTelemetry exporter sends it (protobuf: 415)
 ```
 
-The direction note is `docs/direction/a-job-record-holds-its-trace.md`. Its `beats`, `summary`
+The `beats`, `summary`
 and `logs` tables are not built yet: each comes with its writer (the host's heartbeats, the
 job's end, a run's output lines), so no table is made before something writes it.
 
@@ -116,8 +116,7 @@ The rules, in short:
 
 A job is what one start on a host made: a root run and every run it started, like a Unix process
 group. The host keeps them, as WezTerm's mux keeps every pane; a shell only shows them
-(`jobs.ts`, `host-jobs.ts`, and
-[the decision](../../../../docs/direction/the-host-keeps-terminals-and-jobs.md)).
+(`jobs.ts`, `host-jobs.ts`).
 
 ```ts
 const jobs = yield* openJobs(fileStorage(home)); // a host in one process: one table, kept

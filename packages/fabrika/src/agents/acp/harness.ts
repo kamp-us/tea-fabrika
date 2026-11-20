@@ -372,8 +372,7 @@ const closingAllBut = (
  * names in home and in each folder on the way down to an opened one. An
  * entry made after this table that shares its first characters with a way down
  * is open. We accept both: the names are not secrets, and the entries that hold
- * logins exist before a run starts. `ALWAYS_CLOSED` covers one that does not. See
- * docs/direction/codex-box-home-listing.md.
+ * logins exist before a run starts. `ALWAYS_CLOSED` covers one that does not.
  */
 export const homeFence = (
   home: string,

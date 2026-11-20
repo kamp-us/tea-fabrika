@@ -6,7 +6,7 @@ import { Predicate } from "effect";
 //
 // A container lays its children out in a row (`"horizontal"`) or a column (`"vertical"`), as an
 // AeroSpace or i3 container does. There are no tabs. Any tile can be folded into a thin strip
-// instead (docs/direction/fold-not-tabs.md). Ids are plain strings, minted by the desk
+// instead. Ids are plain strings, minted by the desk
 // (desk.ts); this module never makes one. The one `effect` import is `Predicate.isObject`, a
 // pure guard.
 //
@@ -54,7 +54,7 @@ export const TINTS: readonly Tint[] = [0, 1, 2, 3, 4, 5];
  * A tsh line whose windows opened together, as `tracker | ticket | trace`: its id (its first
  * window's run), the tile it was typed in, its tint and its letter. Only a line of two windows or
  * more has one: a run alone gets no tint. The letter (`A`, `B`...) is the pipe's second cue, so
- * color is never the only one (docs/direction/pipe-colors.md). It is kept, not worked out from
+ * color is never the only one. It is kept, not worked out from
  * reading order, so closing pipe A never renames B while a person looks at it.
  */
 export interface Line {

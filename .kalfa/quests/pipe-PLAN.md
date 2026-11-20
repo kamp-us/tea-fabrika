@@ -75,7 +75,7 @@ keep the keys they read then, `mail.chunk` and `mail.unread`. Source paths and t
 
 ## Searched first
 
-Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`, `experiments/`,
+Searched on 2026-11-15 in `.decisions/`, `direction/`, `.glossary/TERMS.md`, `experiments/`,
 `docs/plan/`, the open pull requests and the branches named above, for "pipe", "fit", "chunk",
 "monitor", "output", "DOWN", "wrap", "too_big" and "letter" (the old word).
 
@@ -859,7 +859,7 @@ Each new choice was asked:
 | next/packages/libfabrika/src/runtime/ProgramMailTest.ts | tests | tests | no change: ticket 1041's L12 stays as it is |
 | layer-rules.json | tests | tests | no change expected: every new file sits in a module that has a row |
 | .glossary/TERMS.md | build | docs | rows `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules for when a pipe fits |
-| docs/direction/follows/otp.md | build | docs | a row for a watch per life under a name, where we leave OTP's monitor |
+| direction/follows/otp.md | build | docs | a row for a watch per life under a name, where we leave OTP's monitor |
 
 ## Calls taken
 
@@ -1027,7 +1027,7 @@ Estimate: 7 steps, $80
 - Glossary rows in this pull request: `pipe (Cmd)` and `piped`; `pipe` gains the name of the rules
   for when a pipe fits. an earlier decision's own pull request already wrote that every value travels one
   way underneath, so this one adds no word for the wrapping.
-- `docs/direction/follows/otp.md`: a watch per life under a name, where we leave OTP's monitor.
+- `direction/follows/otp.md`: a watch per life under a name, where we leave OTP's monitor.
 - No `.decisions/` file: every call here applies a decided note or decision. The note stays
   proposed; its reader sketch with a chunk input is older than 0553, and 0553 says so.
 

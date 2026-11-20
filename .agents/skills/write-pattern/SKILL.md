@@ -36,7 +36,7 @@ Four places sit next to each other, and material often arrives in the wrong one'
 | Place | Holds |
 |---|---|
 | `.kalfa/patterns/` | how the code is shaped now |
-| `.kalfa/decisions/` and `docs/direction/` | why, and its history |
+| `.kalfa/decisions/` | why, and its history |
 | `.kalfa/glossary/GLOSSARY-MAP.md` and each context's `GLOSSARY.md` | what a word means |
 | `experiments/` and `field/` | what was measured, on a date |
 

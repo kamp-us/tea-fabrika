@@ -63,7 +63,7 @@ import { Unattached, type Wire } from "./wire.ts";
 // a host's socket and its window's ports. Electron and Node are named here and in preload.ts,
 // and nowhere else in the app's own process.
 //
-// A window is one project (ticket 276, docs/direction/project-window.md). The projects machine
+// A window is one project (ticket 276). The projects machine
 // (projects.ts) is the parent of them all: which project each window shows, the recent list, the
 // restore list saved at quit, and the Dock badge. This file runs its Cmds:
 //

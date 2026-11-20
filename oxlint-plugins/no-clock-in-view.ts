@@ -1,6 +1,5 @@
 // A view never reads the clock or randomness, in render or in a handler it makes; the time comes
-// through a Cmd, as Elm's `Time.now` does (docs/direction/react-compiler.md, C1, and
-// docs/direction/elm-first.md). React's own `react/purity` refuses these in render only, and allows
+// through a Cmd, as Elm's `Time.now` does. React's own `react/purity` refuses these in render only, and allows
 // them in an event handler on purpose. This rule holds the rest (owner, 2026-11-05).
 //
 // It refuses `Date.now()`, `new Date()` with no arguments, `Date()`, `performance.now()`,
@@ -41,5 +40,5 @@ export const clockReads = (reads: ReadonlySet<string>, message: string): CreateR
 
 export const noClockInView: CreateRule = clockReads(
   new Set(["Date.now", "performance.now", "Math.random", "crypto.randomUUID"]),
-  "A view reads no clock and no randomness, handlers included: send a Msg with no time, and let `update` ask for it with a Cmd (docs/direction/react-compiler.md, C1).",
+  "A view reads no clock and no randomness, handlers included: send a Msg with no time, and let `update` ask for it with a Cmd.",
 );

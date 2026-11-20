@@ -2,8 +2,8 @@ import { type Row, TraceId, Writer, type Writes, writerOf } from "@kampus/fabrik
 import { Option, Schema } from "effect";
 import { Asked, Answered, answerOf } from "./ask.ts";
 
-// A ticket: one stream of facts on the ledger, and nothing else
-// (docs/direction/tickets-start-in-our-tracker.md). Ticket 3 is the registered name
+// A ticket: one stream of facts on the ledger, and nothing else.
+// Ticket 3 is the registered name
 // `tracker/ticket/3`, and its facts are the messages in that name's inbox, oldest first. The row
 // says who wrote a fact (a user or an agent) and when; the fact says only what happened:
 //
@@ -14,8 +14,8 @@ import { Asked, Answered, answerOf } from "./ask.ts";
 //   fold([], entries).tickets   [{number: 3, title: "Login fails", state: "closed", timeline: [3 entries]}]
 //
 // A state change is a fact of its own (`closed`, `reopened`), never a comment. The facts live in
-// the pipeline, so a lane reads and writes the same ones the tracker shows
-// (docs/direction/a-ticket-runs-from-the-app.md, section 3); the tracker imports them. This file
+// the pipeline, so a lane reads and writes the same ones the tracker shows;
+// the tracker imports them. This file
 // is pure: ./tickets.ts reads and writes the ledger, and so does the tracker's own ledger.ts.
 
 /** A ticket's number: 1, 2, 3, in the order the tickets were filed. */
@@ -62,8 +62,8 @@ export const saidOf = (text: string): string =>
 
 // ---------------------------------------------------------------- what a lane writes
 //
-// More kinds, the facts a lane works with
-// (docs/direction/what-a-ticket-shows.md, section 2). Each is a tagged struct under `type`, the
+// More kinds, the facts a lane works with.
+// Each is a tagged struct under `type`, the
 // key the tracker's first four already use on the ledger, so the rows written before still read.
 // The fields added since (`asks` and `during` on a comment, `text` on an answer, `trace` on a
 // start) are optional for that reason.
@@ -123,7 +123,7 @@ export type Checked = typeof Checked.Type;
 /** Checks a step trusted in place of a run of its own: only green ones, at a sha. */
 const Trusted = Schema.Struct({ ...Checked.fields, head: Sha, result: Schema.Literal("green") });
 
-/** A stage's answer, in the five verbs (docs/direction/outcome-names.md): the `AnyOutcome` shape. */
+/** A stage's answer, in the five verbs: the `AnyOutcome` shape. */
 export const Outcome = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("done"), part: Schema.Boolean }),
   Schema.Struct({ kind: Schema.Literal("send"), to: Stage, why: Schema.String }),
@@ -159,8 +159,8 @@ export type Hash = typeof Hash.Type;
 export const Asks = Schema.Literal("changes");
 
 /**
- * What a yes on a pull request was given on, so code can tell later whether it still stands
- * (docs/direction/a-yes-binds-to-the-diff.md): `onto`, the branch it goes onto; `base`, where it left
+ * What a yes on a pull request was given on, so code can tell later whether it still stands:
+ * `onto`, the branch it goes onto; `base`, where it left
  * that branch; `diff`, the id of its diff (`git patch-id --verbatim` over `git diff -U0`). Only known
  * when the yes is given. Each is left out on a fact written before them.
  */
@@ -176,7 +176,7 @@ const PullUrl = Schema.String.check(
 );
 
 /**
- * Where a filing came from (docs/direction/a-ticket-says-where-it-came-from.md). Each key keeps the
+ * Where a filing came from. Each key keeps the
  * one meaning it has elsewhere here: `url` as on {@link PrFact}, `run` as on `started`, `head` a
  * {@link Sha}. `pr`: a step of a pull request, or a comment on it. `run`: a lane run on this ledger;
  * its `started` fact names the step, so it carries none. `walk`: a person's walk of a pull request,
@@ -219,7 +219,7 @@ export const TicketFact = Schema.Union([
 
 /**
  * The facts a lane writes, through `Tickets.write`: every lane fact but the watcher's `pr` and a
- * person's `answered` and `rated` (docs/direction/a-ticket-runs-from-the-app.md, section 3). A
+ * person's `answered` and `rated`. A
  * lane cannot even spell an answer to its own ask, or a merge, and `Tickets.write` checks it again
  * at run time, so a cast one is refused too.
  */
@@ -229,8 +229,8 @@ export const CodeFact = Schema.Union([
   Schema.Struct({ type: Schema.Literal("stopped"), why: Schema.String, resume: Stage }),
   /**
    * Code started an agent run. `log`: where its own log is, once there is one. `trace`: the trace
-   * id of the job the run is in, the key of its `JobRecord`
-   * (docs/direction/a-job-record-holds-its-trace.md). Left out by a run that has no record.
+   * id of the job the run is in, the key of its `JobRecord`.
+   * Left out by a run that has no record.
    */
   Schema.Struct({
     type: Schema.Literal("started"),
@@ -366,7 +366,7 @@ export const CodeFact = Schema.Union([
   }),
   /**
    * The review stage judged the criteria at `head`: `met` of `of`, and what it found, in its own
-   * words. What it read, only known then (docs/direction/a-yes-binds-to-the-diff.md): `pr`, the pull
+   * words. What it read, only known then: `pr`, the pull
    * request; `onto`, the branch it goes onto; `base`, where it left that branch; `diff`, the id of its
    * diff. Left out on a review written before them.
    */

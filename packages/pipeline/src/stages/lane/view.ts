@@ -4,8 +4,7 @@ import { type Current, currentOf, type Verdict } from "../../criteria/book.ts";
 import { PLAN, type PlanId, TaskId, TicketId } from "../../ids.ts";
 import { Item } from "../build/ticket.ts";
 
-// What a plan's lane reads before each step, and the one pure choice of the next step
-// (docs/direction/done-is-per-criterion.md, "One PR per plan"; a-project-is-a-parent-plan.md).
+// What a plan's lane reads before each step, and the one pure choice of the next step.
 // Everything here comes from the ledger's facts and the code host as they are now: a lane taken
 // over reads the same and chooses the same.
 //

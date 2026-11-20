@@ -14,8 +14,8 @@ import { TrackerWindow } from "@tea-fabrika/tracker/window";
 import type { ReactNode } from "react";
 import { reader } from "../messages.ts";
 
-// The windows the app knows, by program name: built into its bundle, for now
-// (docs/direction/the-gui-is-electron-first.md). Each is drawn from its front's data only once
+// The windows the app knows, by program name: built into its bundle, for now.
+// Each is drawn from its front's data only once
 // that data reads by the program's own view schema; data that does not read is shown as refused,
 // never handed to the window.
 

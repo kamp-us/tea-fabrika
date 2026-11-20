@@ -760,7 +760,7 @@ describe("the GitHub host, over a stand-in gh", () => {
 //
 // Self-fix PR 10, Part 4, the holes the other way. Today the local host's `open` moves a pull's head and
 // keeps its verdicts, and a person's `merge` binds to no head. Both now go through `carry`: a row or a
-// yes said at `A` counts at `B` only when the diff it judged replays there (docs/direction/a-yes-binds-to-the-diff.md).
+// yes said at `A` counts at `B` only when the diff it judged replays there.
 
 describe("the local host, when a pull's head moves", () => {
   const dirs: string[] = [];

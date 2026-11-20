@@ -4696,8 +4696,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
 });
 
 // P18 slice 2's fix round, next/: the tile guideline's live-region row is "Program ends, unfocused
-// tile | Polite | `tracker in t2 ended`" (docs/direction/tile-guidelines.md, followed as written by
-// 0543). Focus at the moment of the end is known only in the window's step, on its drawn workspace,
+// tile | Polite | `tracker in t2 ended`". Focus at the moment of the end is known only in the window's step, on its drawn workspace,
 // so the machine holds the rule: an end is a status message only for a tile that is not the drawn
 // focus then. The guideline has no row for the focused tile's own end, so nothing extra is said; the
 // tile shows it in its state slot and body. The walk is L26's focus world, where a tile's name read

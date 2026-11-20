@@ -9,19 +9,16 @@ root map applies from then on.
 (`next/packages/libfabrika`) is the library. Anyone can take libfabrika alone and build a client
 that works exactly like fabrika; fabrika is one libfabrika client. So for any file in
 `next/apps/fabrika`, ask: would a from-scratch client have to write it again? If yes, it belongs in
-libfabrika
-([why libfabrika exists](../docs/direction/where-each-piece-lives.md#why-libfabrika-exists-decided-2026-11-08)).
+libfabrika.
 
 ## Rethink, do not port
 
-- Follow the decisions and `docs/direction`, not today's code. Read today's code and its tests to
+- Follow the decisions, not today's code. Read today's code and its tests to
   learn which jobs exist and what was learned, then rethink. Never import it and never copy it
   across. The pull request that switches a job to `next/` deletes the old part
-  ([0002](../.kalfa/decisions/0002-next-grows-beside-today.md),
-  [rethink, do not port](../docs/direction/rethink-do-not-port.md)).
+  ([0002](../.kalfa/decisions/0002-next-grows-beside-today.md)).
 - The shell is `fabsh`. `tsh` stays in today's version.
-- Hands, a window and an agent dial the brain, and `client` means any of them at the door
-  ([brain, hands, window, agent](../docs/direction/brain-hands-window-agent.md)).
+- Hands, a window and an agent dial the brain, and `client` means any of them at the door.
 - In the planner step here, the lead's check of a plan's open questions becomes code.
 
 ## What lint holds
@@ -39,7 +36,7 @@ a disable line with its reason.
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at
-merge ([no Promises](../docs/direction/no-promises.md)). A `node:` import stays only where Effect
+merge. A `node:` import stays only where Effect
 has nothing, marked as an edge with its reason.
 
 ## What lint does not hold yet
@@ -49,12 +46,11 @@ has nothing, marked as an edge with its reason.
 - **A resource is acquired in a scope,** never with `try/finally` or an `afterEach`.
 - **A service file holds only its contract**.
 - **An object class stays thin.** It holds what the platform gives it and a one-line handoff. The
-  logic is plain code that also runs on Node in tests
-  ([an object class stays thin](../docs/direction/object-classes-stay-thin.md)).
+  logic is plain code that also runs on Node in tests.
 - **A folder of libfabrika is a module, and its rank is a layer**.
 - **Test files keep the layers too,** with no exemption.
 - **A window reads state through tea's own React hook,** `useRuntime`, and state lives in a tea
-  machine, never `useState` ([Elm first](../docs/direction/elm-first.md)).
+  machine, never `useState`.
 - **Every state machine is explicit**.
 - **Every state machine is a tea machine**.
 - **A tagged value is matched, never compared by hand,** in an `update` handler too
@@ -65,7 +61,7 @@ has nothing, marked as an edge with its reason.
 - A word means one thing. "Run" means an agent
   run only; one start of a program is a process, and a restart is a new process, as in OTP. A place,
   a path, a ref, a state, a reason or a total gets its own word (`location`, `path`, `ref`, `state`,
-  `reason`, `total`). `rg` the word under `docs/direction/` and `next/` before you use it.
+  `reason`, `total`). `rg` the word under `next/` before you use it.
 - An entry's two clocks are `arrivedAt`, the referee's, and `sentAt`, the writer's own. A ledger
   entry keeps `sentAt` from day one, but leases and limits use only `arrivedAt`.
 - `kind` on ledger entries is `_tag` here too. Today's code keeps `kind` and `why`

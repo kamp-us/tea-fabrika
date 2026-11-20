@@ -1,5 +1,4 @@
-// The commit check for `next/` (Tier 1, P32; docs/direction/a-unit-of-work-is-a-commit.md, experiment
-// 221). Each step that commits signs a link, its step, ticket, version and the trees before and after,
+// The commit check for `next/` (Tier 1, P32). Each step that commits signs a link, its step, ticket, version and the trees before and after,
 // with its own role's key, into a git note on `refs/notes/fabrika`. CI decides from the signature, never
 // from the author, the message or a trailer. The laws are p83 to p87 and p89 in
 // docs/plan/tier-1-detail.md.

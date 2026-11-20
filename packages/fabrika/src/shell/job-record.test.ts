@@ -13,7 +13,7 @@ import { lineSpan } from "./execute.ts";
 import { seq, tally } from "./small.ts";
 import { tracing } from "./trace/otel.ts";
 
-// The JobRecord's "done when" (docs/direction/a-job-record-holds-its-trace.md): `seq --to 3 |
+// The JobRecord's "done when": `seq --to 3 |
 // tally`, run against the ledger's Miniflare twin, leaves one record that holds both runs' state,
 // every span, and tally's three `add` steps. Everything reaches the record over HTTP through the
 // ledger's door, as a host on the laptop reaches it: the runs' storage, the host's two job writes,

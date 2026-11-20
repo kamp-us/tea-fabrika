@@ -85,7 +85,7 @@ services in place.
 `it("...", async () => { await Effect.runPromise(...) })` is how every non-Effect codebase writes
 a test, and it passes. The difference only shows the day a law depends on time: it then sleeps for
 real, or passes on a fast laptop and fails on a slow CI runner (host law 30 in today's code did
-exactly that, [build on Effect](../../docs/direction/build-on-effect.md), "The clock").
+exactly that).
 
 ## Holds it
 
@@ -100,7 +100,7 @@ exactly that, [build on Effect](../../docs/direction/build-on-effect.md), "The c
 
 ## Decision
 
-[Build on Effect](../../docs/direction/build-on-effect.md); [no Promises](../../docs/direction/no-promises.md).
+Build on Effect; no Promises.
 The same shape at scale: [clanka](https://github.com/Effectful-Tech/clanka/tree/44eb97a4eff8ae00bcf18750b387fe5a98cd191c)
 (Effect 4.1.1) has 197 `it.effect`, 18 `TestClock` and 1 `Effect.runPromise` in all its tests, and
 makes its temp folders with `fs.makeTempDirectoryScoped()` inside the test

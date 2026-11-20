@@ -42,7 +42,7 @@ import {
 // of another child may come at any time. Each write may be answered or refused, and the owner may
 // move. A restart may come at any time.
 //
-// There is no cap (docs/direction/done-is-per-criterion.md): only the stall rule stops a loop, and
+// There is no cap: only the stall rule stops a loop, and
 // the desk runs it on what the lane counts. So the lane's laws here are that it counts every review
 // and every ship run that did not merge, and that no count of its own ever ends it. The stall rule
 // itself is the asks core's, walked in ../asks/rules.test.ts. Whether the two, wired together, ask

@@ -31,8 +31,7 @@ A live run changes a real repository. Each rule was learned from a run.
   say exactly what.
 - In every report and write-up, say which parts were this repo's machine and which were today's
   fabrika (its agents and its ledger behind the wrapper).
-- Log the run in the field log (in the notes) the same day, with dollars and both token
-  measures.
+- Report the run the same day, with dollars and both token measures.
 
 ## The ticket
 
@@ -208,24 +207,20 @@ before the push (nothing is pushed before review) is not built. A
 person or an agent reads the pull request's added lines and greps them for keys, machine paths, personal
 names and account names. Do not give the merge yes until that is clean.
 
-## What to log
+## What to report
 
-The same day, in the field log (in the notes), each row its own file named
-`<date>-<slug>.json` (how to write a row (in the notes)):
+The same day, in your report:
 
-- **`runs/`, one `pipeline` row:** the quest as a whole, with `ticket` as `<owner>/<repo>#117`,
-  `pr` as the PR it opened (or `null`), and `started` and `ended`. New rows write `ticket` and `pr`,
-  not `lane`.
-- **`runs/`, one `step` row per agent run.** Its `parent` is the `pipeline` row's `run`, and its
-  `why` starts `pipeline, tracker ticket 117, <step>:`, so it cannot be taken for an older row with
-  the same number.
-- **The numbers:** the quest prints them for each step and keeps them on the ticket. `field/README.md`
-  says which goes where.
-- **Dollars:** `gpt-6-astra` has no known price, so the app's cost reads zero for it. Write `costUsd`
-  for Claude only, and say the Codex dollars are unknown.
-- **`notes/`, one note per thing** that broke, cost too much, needed a person or worked well.
-- **Say which parts were which:** in the `pipeline` row's `why`, the quest and step machines were this
-  repo's machine; the agents were Codex and Claude; today's fabrika, the older pipeline, ran none of it.
+- **The quest as a whole:** `ticket` as `<owner>/<repo>#117`, `pr` as the PR it opened (or `null`), and when
+  it started and ended.
+- **One line per agent run.** Its `why` starts `pipeline, tracker ticket 117, <step>:`, so it cannot be
+  taken for an older run with the same number.
+- **The numbers:** the quest prints them for each step and keeps them on the ticket.
+- **Dollars:** `gpt-6-astra` has no known price, so the app's cost reads zero for it. Give the cost for
+  Claude only, and say the Codex dollars are unknown.
+- **One line per thing** that broke, cost too much, needed a person or worked well.
+- **Say which parts were which:** the quest and step machines were this repo's machine; the agents were
+  Codex and Claude; today's fabrika, the older pipeline, ran none of it.
 
 ## What this cannot tell us
 

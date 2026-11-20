@@ -1,4 +1,4 @@
-// Ticket 908, next/. The rule that a service file holds only its contract, and each layer is its own file and docs/direction/effect-code-guidelines.md (E3) ask a service's
+// Ticket 908, next/. The rule that a service file holds only its contract, and each layer is its own file, asks a service's
 // type to be written out, so a reader sees the contract without running the implementation in their
 // head. This rule refuses a service type that is taken from the implementation instead.
 //

@@ -342,7 +342,7 @@ const gone = (page: Page, id: string) =>
   );
 
 /**
- * What opens over the desk (docs/direction/popovers.md), from t3 at an empty prompt, with t1's
+ * What opens over the desk, from t3 at an empty prompt, with t1's
  * line in the shared history: focus moves in; no key it takes reaches t3 under it, even with
  * focus knocked out of it; Escape and a press outside close it, focus back in t3; one at a time.
  */
@@ -447,7 +447,7 @@ const backInT3 = async (page: Page) => {
 };
 
 /**
- * Info mode, from t3 at an empty prompt (docs/direction/modes.md, M3 and M4): Ctrl-B i says it is
+ * Info mode, from t3 at an empty prompt: Ctrl-B i says it is
  * on in the window's status region, and its item says it is pressed, under the same name; keyboard
  * focus moving, with no pointer, is explained on the bottom line; while something is explained, the
  * bottom line's right side keeps its items; Escape leaves it and says so. Turned on while
@@ -2114,7 +2114,7 @@ const lookFocus = async () => {
 const pickIn = (tracker: Locator) => tracker.getByRole("button", { name: /Tiles, the look/ }).click();
 
 /**
- * The tile guidelines' look (docs/direction/tile-guidelines.md), on a home of its own: one tile,
+ * The tile guidelines' look, on a home of its own: one tile,
  * a pipe side by side, a pipe stacked with a strip lying under it, a 2x2 in every state, and a
  * 2x2 in a 1024 by 700 window with a pipe folded. Each picture is `<state>-<layout>-<look>.png`,
  * in `tiles/` under the screenshots' folder; the look is the system's, as nativeTheme sets it.

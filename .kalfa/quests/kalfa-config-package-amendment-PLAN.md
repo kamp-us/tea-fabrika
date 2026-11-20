@@ -281,7 +281,7 @@ or clarify import followers. Old tests change module specifiers only; preserve t
 | .github/ci/workflow-lint/record.ts | tests | tests | Deferred: Q1 permits only the exact successful selected config consumer archive and receipt upload; preserve every existing upload tuple, token/env restriction and tested-source contract. |
 | .github/ci/workflow-lint/related.test.ts | tests | tests | Deferred: prove successful consumer proof, same archive digest/head and Q1 refusal of wrong jobs, names, paths, events, legs, extra files and missing-file softening. |
 | .glossary/TERMS.md | build | docs | Existing setting/scope rows name the extracted package. |
-| docs/direction/settings.md | build | docs | Engine location line only. |
+| direction/settings.md | build | docs | Engine location line only. |
 | docs/plan/README.md | lead | docs | After active CI owner is done, record this slice's actual state. |
 | docs/plan/quests/kalfa-config-package-amendment-PLAN.md | lead | docs | Save the approved amendment. |
 

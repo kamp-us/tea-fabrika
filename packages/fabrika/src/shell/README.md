@@ -240,14 +240,3 @@ word read as a value) and `launch.test.ts` (Ctrl-R and the command line).
 - The standard laws for the job table (`../host/jobs.ts`) and the small programs' machine in
   `small.ts`. `packages/pipeline/src/laws/standard.test.ts` holds every machine in the pipeline
   and in fabrika's `agents/` to its laws, and leaves these out.
-
-## See also
-
-- Experiment 67 (in the notes): tsh as a tea program.
-- Experiment 68 (in the notes) and 70 (in the notes): tracing.
-- Experiment 73 (in the notes): status lines under `jobs`.
-- Experiment 82 in the experiments index (in the notes): tsh split from fabrika's wiring.
-- Experiment 103 (in the notes): moved into `@kampus/fabrika`.
-- Experiment 114 (in the notes): the pipeline moved out;
-  the public names an app hands tsh its programs with.
-- [`docs/direction/tea-program.md`](../../../../docs/direction/tea-program.md): what a host does with a program.

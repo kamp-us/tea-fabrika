@@ -88,7 +88,7 @@ const Pixels = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessT
 
 /**
  * What the app found of the host on its home, once a try to attach answered: the window's
- * branches (docs/direction/an-old-host-is-named-then-restarted.md).
+ * branches.
  *
  *   {kind: "up"}                                               attached, to a host of this build
  *   {kind: "version", theirs: 1, ours: 2}                       refused: both named, and the restart offered
@@ -304,7 +304,7 @@ export type ToPage = typeof ToPage.Type;
  *   {type: "again"}
  *   {type: "restart"}
  */
-/** Where a page's opening came from (docs/direction/project-window.md, "What the ledger records"). */
+/** Where a page's opening came from. */
 const PageSource = Schema.Literals(["welcome", "box", "button", "menu"]);
 
 export const ToApp = Schema.Union([

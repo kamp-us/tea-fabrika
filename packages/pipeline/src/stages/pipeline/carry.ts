@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 
-// Whether a yes given at one head still stands at another (self-fix PR 10, Part 4;
-// docs/direction/a-yes-binds-to-the-diff.md). Today's version.
+// Whether a yes given at one head still stands at another (self-fix PR 10, Part 4). Today's version.
 //
 //   A yes on a pull request is a review's verdict row, a person's `merge`, or the exam's row. It was
 //   given on a diff, not on a commit. When the head moves, this one pure function says whether that

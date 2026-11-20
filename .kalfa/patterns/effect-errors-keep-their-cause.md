@@ -131,8 +131,7 @@ else. `instanceof` on a Schema class is correct JavaScript too, so nothing flags
 working once the error type has been widened, which is why the two slips travel together. And
 `Schema.optionalKey` on a cause reads like the default for any optional key, which it is for other
 fields, but the library never writes it there, and it makes every call that may have no cause
-spread the field in by hand. The repo wants errors as data with their facts
-([errors are diagnostics](../../docs/direction/errors-are-diagnostics.md), proposed), and a dropped
+spread the field in by hand. The repo wants errors as data with their facts, and a dropped
 cause is a dropped fact.
 
 ## Holds it
@@ -154,7 +153,7 @@ cause is a dropped fact.
 
  for the cause's form,
  for tagged reasons, and
-[Build on Effect](../../docs/direction/build-on-effect.md): Effect's own modules and shapes first.
+Effect's own modules and shapes first.
 Credit: kamp-us/phoenix's [effect-errors.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-errors.md)
 and [effect-error-operators.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-error-operators.md)
 (`catchTag` over `catch`, `cause: Schema.Defect()` on infra errors, no `instanceof` chains), rethought

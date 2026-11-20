@@ -2,8 +2,7 @@ import { Schema } from "effect";
 import { type Name, outcomesOf } from "../outcome.ts";
 
 // What the review stage hands back: one typed answer. The shape is the one
-// every stage uses: five verbs (`../outcome.ts`,
-// docs/direction/outcome-names.md). Only the words below are the review
+// every stage uses: five verbs (`../outcome.ts`). Only the words below are the review
 // stage's own, and only the ones this piece can reach are listed.
 
 const review = outcomesOf({

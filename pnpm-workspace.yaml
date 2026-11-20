@@ -45,19 +45,18 @@ catalog:
   '@modelcontextprotocol/client': 2.4.0
   '@modelcontextprotocol/server': 2.4.0
   # The app's UI (apps/fabrika, programs/*/window): Manti UI, Zag.js state machines and a token
-  # contract of CSS custom properties, set from our own values (docs/direction/ui-on-manti.md).
+  # contract of CSS custom properties, set from our own values.
   # MIT. Held exact: 0.x, a minor can break.
   '@manti-ui/react': 0.13.0
   '@manti-ui/styles': 0.13.0
-  # Lint and format (docs/direction/oxlint-and-oxfmt.md). Held exact: oxlint's JS plugins are alpha,
+  # Lint and format. Held exact: oxlint's JS plugins are alpha,
   # oxfmt is 0.x, and a new version can change what fires or how a file prints.
   oxfmt: 0.75.0
   oxlint: 1.90.0
   stylelint: 18.0.0
   postcss-value-parser: 4.2.0
   '@oxlint/plugins': 1.90.0
-  # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts,
-  # docs/direction/react-compiler.md). oxc's Rust port and its parser, from oxlint's own repository.
+  # The React Compiler without Babel, for next/'s compile step (next/apps/fabrika/src/exam/compiler.ts). oxc's Rust port and its parser, from oxlint's own repository.
   # Held exact: 0.x and weekly, and the port is "experimental".
   oxc-parser: 0.157.0
   oxc-transform-react: 0.157.0
@@ -85,7 +84,7 @@ catalog:
   '@stryker-mutator/instrumenter': 10.1.1
   '@stryker-mutator/vitest-runner': 10.1.1
   # Follows the major of the Node we run (`volta` in package.json, 26), not npm's latest. Electron's main
-  # process runs its own Node, older than that (docs/direction/the-gui-is-electron-first.md).
+  # process runs its own Node, older than that.
   '@types/node': 26.6.6
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
@@ -134,7 +133,7 @@ catalogs:
   old:
     '@demlik/tea': 0.25.0
 
-# `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
+# `pnpm add` writes the exact version, not a range.
 savePrefix: ''
 
 # `pnpm exec` and `pnpm run` warn when node_modules is behind the lockfile, and never install.

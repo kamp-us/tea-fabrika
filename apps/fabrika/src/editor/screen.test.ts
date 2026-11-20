@@ -10,8 +10,7 @@ it("cuts a long status to one row and keeps the text before the ellipsis", () =>
 // The colors a table is printed in (tracker ticket 144). The line editor runs in the host, and its
 // bytes go to every terminal on the desk, while a look is each viewer's own. So a table names its
 // colors by the terminal's palette, 0 to 15, or not at all, and each viewer's terminal draws them
-// in its own theme (docs/direction/themes.md, what a third-party program gets, point 6: tones or
-// palette indexes, never 24-bit colors). A color the bytes fix for one look is near white on white
+// in its own theme. A color the bytes fix for one look is near white on white
 // in the other.
 //
 // The law: every tone printed reads 4.5:1 (WCAG 2.2, 1.4.3) on the terminal's background, in both

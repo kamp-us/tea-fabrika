@@ -5,7 +5,7 @@ import type { SpanRow } from "./otlp.ts";
 import { connect } from "./sqlite-driver.ts";
 import { RecordRead } from "./traces.ts";
 
-// Who may delete an agent run's content (docs/direction/an-agent-run-keeps-its-content.md): a
+// Who may delete an agent run's content: a
 // person, never an agent. The door stamps every call with who sent it; a `deleteContent` stamped
 // with anyone but a user is refused, and the content stays as it was. Run on node:sqlite, with the
 // SQL the Durable Object runs. Today's version.

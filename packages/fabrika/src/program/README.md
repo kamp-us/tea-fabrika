@@ -111,13 +111,3 @@ const Window = ({view, send}: WindowProps<typeof counter>) => ...;   // view: {n
 | Lint (whole repo, with the layer check) | `pnpm lint` |
 
 Tests sit beside the code as `*.test.ts`. None needs a key or the network.
-
-## See also
-
-- [`docs/direction/tea-program.md`](../../../../docs/direction/tea-program.md): why a program sits between tea and a host.
-- Experiment 62 (in the notes): the first shape, dropped.
-- Experiment 63 (in the notes) and 64 (in the notes): ship as a program, and outputs as events.
-- Experiment 75d (in the notes): the manual ack on pipes.
-- Experiment 81 (in the notes): `listed` moved here.
-- Experiment 82 in the experiments index (in the notes): the workspace split.
-- Experiment 103 (in the notes): moved into `@kampus/fabrika`.

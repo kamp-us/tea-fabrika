@@ -93,7 +93,7 @@ describe("plan lane", () => {
 });
 
 // The lane wired to the desk (`withTheDesk`): the stall rule, the asks core's one copy, is what
-// stops every loop, and nothing else does (docs/direction/done-is-per-criterion.md).
+// stops every loop, and nothing else does.
 describe("plan lane, with the desk", () => {
   const down = (from: number) => Array.from({ length: from }, (_, i) => from - i);
   const laws = (run: lane.DeskRun) => run.broken.map((b) => b.law);

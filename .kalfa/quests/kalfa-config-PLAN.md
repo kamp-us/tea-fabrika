@@ -44,7 +44,7 @@ get|set`, and the `Kalfa` app other kalfa packages declare their settings with.
   (choices are settings), the settings note, 0556, 0557 and the new 0585 are the records that
   govern this. No record names an app-scoped engine; 0585 is the first.
 - and
-  [the settings note](../../../docs/direction/settings.md): S1 to S7, the order flag, env, repo,
+  the settings note: S1 to S7, the order flag, env, repo,
   person, default, the `scope` list and the `Toml` service. All hold unchanged; only who the names
   belong to changes.
 - [0585](https://github.com/kamp-us/tea-fabrika/pull/1423) (in review as this is written): the
@@ -326,7 +326,7 @@ amendment overrides the F1 row and the Files table's "import lines only" for tha
 | kalfa/config/src/Cli.test.ts | tests | tests | slice 3: C1 to C4 |
 | kalfa/config/src/Cli.types.test.ts | tests | tests | slice 3: C5 |
 | .glossary/TERMS.md | build | docs | slice 1: a row `app (settings)`: the one name a settings engine derives its folder, file, env prefix and home variable from; slice 2: the `setting` and `scope (setting)` rows name `@kalfa/config` |
-| docs/direction/settings.md | build | docs | slice 2: one line saying the engine lives in `@kalfa/config` and is named by its app |
+| direction/settings.md | build | docs | slice 2: one line saying the engine lives in `@kalfa/config` and is named by its app |
 
 ## Calls taken
 

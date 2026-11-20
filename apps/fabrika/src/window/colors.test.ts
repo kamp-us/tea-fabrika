@@ -6,8 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Palette } from "./pop.tsx";
 
-// Today's app's colors, read against the design package (docs/direction/fabrika-design-package.md,
-// decided 2026-11-02; P31). The package holds the built-in themes, the tokens and the Manti mapping,
+// Today's app's colors, read against the design package. The package holds the built-in themes, the tokens and the Manti mapping,
 // and holds its own laws (packages/fabrika-design/src/themes.test.ts). These are the app's: its old
 // copies are gone, it reads the package by name, and its own rules (window.css, and the reset kept
 // to Manti's parts, manti-reset.css) still read on the package's tokens. Laws A1 to A3 of the P31

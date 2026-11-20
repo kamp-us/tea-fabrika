@@ -16,8 +16,8 @@ import type { Change, Criterion } from "./stages/review/pack.ts";
 import { repoRulesOf } from "./stages/rules.ts";
 
 // `CodeHost` over a git working copy on this machine: what a review reads
-// about one task of a plan at one commit, with no pull request
-// (docs/direction/done-is-per-criterion.md, "One PR per plan"). The review
+// about one task of a plan at one commit, with no pull request.
+// The review
 // machine runs on it unchanged. Its `pr` is a task, `<plan>/tasks/<task>`
 // (`taskTarget`), or the whole plan, `<plan>/book` (`bookTarget`): the last
 // review over every live criterion before the plan's pull request opens. Its

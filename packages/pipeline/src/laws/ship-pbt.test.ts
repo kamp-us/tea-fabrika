@@ -142,7 +142,7 @@ describe("ship, as property tests", () => {
   });
 
   // Self-fix PR 10, Part 4: the `other_head` proof is now "moved, not carried", and "moved, carried"
-  // joins it (docs/direction/a-yes-binds-to-the-diff.md). Each plant changes only what the real
+  // joins it. Each plant changes only what the real
   // machine is told, so the laws still read what the code host said.
   describe("rows carried to the head", () => {
     /** The real machine, told `change(facts)` in place of every read it gets. */

@@ -11,7 +11,7 @@ import type { Answer, TestAnswer } from "./written.ts";
 //   existing   mustPass(onBase)   red there is `fails_on_base`
 //
 // and the facts the ledger keeps from it: one `checked` per Property tested,
-// and one `tests_written` with the commit (docs/direction/the-test-writer.md).
+// and one `tests_written` with the commit.
 
 /** What the run on the base said, one result per test it ran. */
 export const Results = Schema.Array(Schema.Struct({ property: PropertyId, result: Result }));

@@ -17,7 +17,7 @@ both tools.
 | [guidelines](./guidelines/SKILL.md) | study one design area, show the choices and plan the build |
 | [adr](./adr/SKILL.md) | write one hard-to-reverse owner decision to `.kalfa/decisions/` |
 | [write-pattern](./write-pattern/SKILL.md) | write or re-ground one `.kalfa/patterns/` doc on how the code is shaped now |
-| [pr](./pr/SKILL.md) | write a pull request's title and description, what it does first and the steps last |
+| [pr](./pr/SKILL.md) | write a pull request body: a summary, the evidence and the merge danger |
 | [sev](./sev/SKILL.md) | CI as the emergency: the level table and the judgment; each sev situation has its runbook in `.kalfa/runbooks/` |
 | [domain-modeling](./domain-modeling/SKILL.md) | sharpen a context's words and write its glossary as you design |
 | [codebase-design](./codebase-design/SKILL.md) | deep modules, seams and adapters, in Effect and kalfa terms |
@@ -35,8 +35,7 @@ how to report. What every step shares is in
 that need no approval, and a report a reader with no context can follow.
 
 An agent that meets something wrong outside its task writes one finding, with proof, and
-keeps going: never a fix, a ticket or only a mention. The step hands it over in its report, and the
-lead records it in the notes, which live outside this repo.
+keeps going: never a fix, a ticket or only a mention. The step hands it over in its report.
 
 ## Changing a skill
 

@@ -18,7 +18,7 @@ import {
 } from "./area.ts";
 import type { Ticket } from "./ticket.ts";
 
-// Areas PR 1, today's version (docs/direction/areas.md, the plan's a1, a2 and a5): the project's
+// Areas PR 1, today's version: the project's
 // areas on their own stream, folded into the live ones and where each merged one went, and the
 // suggestions a person picks the first ones from. Pure: no ledger here.
 //

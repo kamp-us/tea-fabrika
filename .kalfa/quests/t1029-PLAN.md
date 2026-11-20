@@ -64,7 +64,7 @@ const db = yield* TestDatabase.make(file); // journal in memory, no disk sync, c
   `DatabaseSync` and says it backs tests and that span queue only. Experiment 258 says the product
   ledger runs in a Durable Object, where workerd owns the journal (WAL).
 - **Settled search:** `settled.sh` with "sqlite test store pragma", "journal mode WAL MEMORY test"
-  and "disk sync per commit test" found nothing. `rg` over `.decisions`, `docs/direction`,
+  and "disk sync per commit test" found nothing. `rg` over `.decisions`, `direction/`,
   `.glossary`, `docs/plan`, `experiments` and `field/findings` for `synchronous=OFF`,
   `journal_mode`, `test store` and `scoped temp` found only 0538's list, experiment 258's note that
   ProgramMail's tests used WAL with `synchronous=OFF`, experiment 93's note that workerd runs WAL,
@@ -437,7 +437,7 @@ Estimate: 4 steps, $24
 None.
 
 Searched first: `settled.sh` with three wordings, and `rg` over `.decisions/`, `.glossary/`,
-`docs/direction/`, `docs/plan/`, `experiments/` and `field/findings/` for the journal mode, the
+`direction/`, `docs/plan/`, `experiments/` and `field/findings/` for the journal mode, the
 disk sync, test stores and a temp folder helper. 0538 already places the primitive; the rest is
 the code's to decide.
 

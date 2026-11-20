@@ -4,7 +4,7 @@ import type { Entry } from "@kampus/pipeline/tickets/ticket";
 import { load, type Tracker, tracker } from "./machine.ts";
 
 // A stand-in: ticket #7 as a lane would leave it, for tests and the app's screenshots. No lane
-// writes tracker tickets yet (docs/direction/a-ticket-runs-from-the-app.md), so no real ticket
+// writes tracker tickets yet, so no real ticket
 // has these facts. Every fact type, stage name and outcome here is the pipeline's own; the times,
 // costs, token counts, the run, task and trace ids and the writer `agent:lane` are made up.
 //
@@ -29,7 +29,7 @@ export const LANE: Writer = { kind: "agent", id: "lane", for: "owner" };
 
 /**
  * The trace id of the lane's job: the key of its record. Both runs carry it on their `started`,
- * since a lane's stages are one job (docs/direction/a-job-record-holds-its-trace.md). Made up too.
+ * since a lane's stages are one job. Made up too.
  */
 export const SEVEN_TRACE = "7e1a0c3b9d2f4e5a8b6c7d0e1f2a3b4c";
 

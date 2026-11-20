@@ -1,6 +1,6 @@
 # Ledger
 
-Where every program's facts are kept, in order, and never changed. Only words a caller of the ledger sees are here; how a provider stores, copies or orders it is the provider's.
+Where facts are kept, in order, and never changed. Only words a caller of the ledger sees are here; how a provider stores, copies or orders it is the provider's.
 
 ## Language
 
@@ -51,8 +51,3 @@ _Avoid_: Subscription, watch, poll, listen
 Reads and appends that happen as one: nothing else is kept between them, and the appends land
 together or not at all.
 _Avoid_: Turn, atomic (as a name), batch
-
-**Journal driver**:
-The ledger's way of holding a program's journal for tea: one stream per process, with one writer.
-The journal itself is Program's word.
-_Avoid_: Journal (as a ledger word), journal store

@@ -2,9 +2,8 @@
 
 fabrika's design: the two built-in themes and one stylesheet of tokens, with Manti UI's tokens set
 from them. It is the one package both versions import: today's app (`apps/fabrika`) and `next/`'s
-windows ([one design package](../../docs/direction/fabrika-design-package.md), and AGENTS.md's
-"Two versions, side by side"). What it holds comes from settled notes, [themes](../../docs/direction/themes.md)
-and [color principles](../../docs/direction/color-principles.md), not from how today's app is built.
+windows. What it holds comes from the settled themes
+and color principles, not from how today's app is built.
 
 Changed 2026-11-08: design foundations PR 1 builds one `--focus`, slate a9 in both looks, for
 today's version. `--tile-edge-on` reads it, and the two focus bends become one, leaving four.

@@ -104,7 +104,7 @@ describe("a stopped lane, typed again", () => {
     expect(under, `${head} is not under main`).toBe(true);
   });
 
-  // Self-fix PR 10, Part 4 (docs/direction/a-yes-binds-to-the-diff.md): main moved in another file, so
+  // Self-fix PR 10, Part 4: main moved in another file, so
   // the merge of main into the pushed branch replays the reviewed diff cleanly. The review carries to
   // the merged head, with a `carried` fact, and runs no second time. The push shows the merged head,
   // then the merge is asked again, at that head.

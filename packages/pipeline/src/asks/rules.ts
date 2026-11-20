@@ -46,7 +46,7 @@ import type { Entry, Fact } from "./ledger.ts";
 //   ruling:o/r#9           the ticket o/r#9, to rule on
 //   check:o/r#7/t1/2:ui    build 2 of task t1, raised by "ui"
 //
-// The stall rule for a task (docs/direction/done-is-per-criterion.md):
+// The stall rule for a task:
 //
 //   a round that leaves the list no shorter than the round before is a stall;
 //   one stall earns one more round; a second stall in a row asks the owner;

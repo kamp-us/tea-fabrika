@@ -12,8 +12,7 @@ import {
 import { Schema } from "effect";
 import { openAsksOf, prRefOf, words } from "./head.ts";
 
-// One short row per fact on a ticket's timeline (docs/direction/what-a-ticket-shows.md,
-// section 2). A row is a view of its fact, and nothing reads it back:
+// One short row per fact on a ticket's timeline. A row is a view of its fact, and nothing reads it back:
 //
 //   {type: "ended", stage: "build", outcome: {kind: "send", to: "review", why: "built"}, usd: 0.41, turns: 14, ...}
 //   // {text: "build: sent to review: built", more: "$0.41, 14 turns"}

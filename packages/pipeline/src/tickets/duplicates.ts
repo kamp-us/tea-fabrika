@@ -4,8 +4,7 @@ import { createYesNoJudge } from "../primitives.ts";
 import { Body, type Ticket, TicketNumber, Title, Yes } from "./ticket.ts";
 
 // A duplicate hint when a ticket is filed: "maybe the same as #4", with accept and dismiss, the
-// way Linear and GitHub say it. Advice only: it never closes, merges or hides a ticket
-// (docs/direction/jev-same-answer-cheaper.md; experiments 37 and 167).
+// way Linear and GitHub say it. Advice only: it never closes, merges or hides a ticket.
 //
 //   candidatesOf(filed, open)          code: the open tickets that share a rare word with it
 //   scoresOf(filed, candidates)        Jev: one yes-or-no per candidate, "could the new one be

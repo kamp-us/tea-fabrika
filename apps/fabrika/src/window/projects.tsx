@@ -5,7 +5,7 @@ import { Caps, Foot, Marked, useOverlay } from "./pop.tsx";
 
 // Where a person picks a project: the welcome page, when a window shows no project yet, and the
 // projects box over a project's desk (Cmd-O, File > Open Project…, the top bar's project button).
-// Today's app, ticket 276, PR 1 (docs/direction/project-window.md). Both list the same rows
+// Today's app, ticket 276, PR 1. Both list the same rows
 // (projects.ts, `rows`): recent projects by name, their place in faint text and when each was last
 // opened, and Open Folder… last, always, which shows the system's folder sheet.
 //

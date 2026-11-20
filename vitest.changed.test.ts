@@ -452,8 +452,8 @@ it("scenario: L7 pull request 1275's file list selects only the readers of the f
   const lockText = (doc: unknown) => `---\n${stringify(env)}\n---\n${stringify(doc)}`;
   const changed = [
     "README.md",
-    "docs/direction/a-job-record-holds-its-trace.md",
-    "docs/direction/five-steps-for-every-check.md",
+    "docs/guide/a-job-record-holds-its-trace.md",
+    "docs/guide/five-steps-for-every-check.md",
     "jaeger/config.yaml",
     "jaeger/ui.json",
     "package.json",

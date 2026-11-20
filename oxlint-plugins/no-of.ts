@@ -1,4 +1,4 @@
-// No bare `of` and no `xOf` name in `next/` (docs/direction/schema-classes-not-of-helpers.md). Tier
+// No bare `of` and no `xOf` name in `next/`. Tier
 // 1's exam, item 4 (docs/plan/tier-1-detail.md, "The exam PR").
 //
 // It fires on a name this file declares: a variable, a function, a type or interface, a class, an

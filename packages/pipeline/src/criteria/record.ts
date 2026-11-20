@@ -17,8 +17,8 @@ import {
 } from "./book.ts";
 
 // Where a ticket's criteria and their verdicts are kept for the stages that
-// read them: the record, as against the code host
-// (docs/direction/ledger-behind-a-service.md). The review writes what it
+// read them: the record, as against the code host.
+// The review writes what it
 // judged; ship reads it back and will not merge without a passing verdict for
 // every criterion, at its current version, at the head (../stages/ship/ready.ts).
 //

@@ -346,7 +346,7 @@ tests step writes and deletes them. The build writes the prose that names the ru
 | oxlint-plugins/modules.ts oxlint-plugins/no-node-imports.ts oxlint-plugins/advice.ts oxlint-plugins/anti-slop.ts oxlint-plugins/lint.ts oxlint-plugins/no-hand-tag.ts oxlint-plugins/no-context-tag.ts tsconfig.base.json | tests | tests | read for this plan, not changed; `no-context-tag.ts` waits for ticket 486 and `no-hand-tag.ts` for 0562's cleanup |
 | oxlint-plugins/ oxlint-plugins/** oxlint-plugins/match.ts .github/ .github/** .github/ci .github/ci/ apps/fabrika/e2e.ts next/apps/fabrika/src/exam/ next/apps/fabrika/src/exam/commits-git.test-support.ts scripts/caps.test.ts scripts/effect-arbitrary.test.ts scripts/testhome.test.ts | tests | tests | named in this plan as folders of the scope or as counted files; pull request 1 changes no file in them beyond the rows above |
 
-`docs/direction/effect-code-guidelines.md:499` names `fabrika/no-data-taggederror` in a lean that is
+`direction/effect-code-guidelines.md:499` names `fabrika/no-data-taggederror` in a lean that is
 history, and stays as written. `.patterns/effect-services-and-layers.md` names `no-context-tag` at
 lines 86 and 219, and stays: that rule stays.
 

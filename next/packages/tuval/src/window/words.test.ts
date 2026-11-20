@@ -1,5 +1,4 @@
-// next/: the words a tile shows. The tile guideline's empty state (docs/direction/tile-guidelines.md,
-// "Empty and loading") is one word where the content will start, and a tile whose process ended
+// next/: the words a tile shows. The tile guideline's empty state is one word where the content will start, and a tile whose process ended
 // follows it, so its body never keeps drawing the ended process's last view; the title bar's state
 // slot keeps the reason (0502). The page draws `bodyWord` in place of the view whenever it is not null.
 import { describe, expect, it } from "@effect/vitest";

@@ -76,7 +76,7 @@ doubt is the size of the `Runner.ts` change, which the tests step will feel firs
   (`mail: true`), runs it once at a time, retries it by stable id, and the Project saves the letter
   and wakes the target (`runtime/Runner.ts:224`, `:1582-1615`, `:1870-1879`;
   `runtime/MailDeliveryLive.ts:24-41`; `cloudflare/mail.ts:24-58`; the OTP table's "Send to another
-  process" row, `docs/direction/follows/otp.md:20`).
+  process" row, `direction/follows/otp.md:20`).
 
 The external links above were not fetched in this session; they are cited from the two earlier P39
 plans' reads. Installed versions read in the lockfile: Effect 4.1.2, tea 0.25.0, fast-check
@@ -484,7 +484,7 @@ Product lines count additions and deletions.
 | `fixtures/next/port-home`, `fixtures/next/port-home/` | Only if a law decodes its saved `INSTANCE` with the new declarations: regenerate it (see below) | tests | tests |
 | `layer-rules.json` | Read-only import check; no change | 0 | tests |
 | `next/apps/fabrika/src/exam/layers.test.ts` | Read-only boundary check; no change | 0 | tests |
-| `docs/direction/follows/otp.md` | New row: "A call that waits on the hands", same as `gen_server:call`'s ref, differs on blocking and timeout | docs | lead |
+| `direction/follows/otp.md` | New row: "A call that waits on the hands", same as `gen_server:call`'s ref, differs on blocking and timeout | docs | lead |
 | `.glossary/TERMS.md` | Rows: `hands (Cmd)`, `collected (job)`, `hands.target` | docs | lead |
 | `docs/plan/tier-1.md` | P39: slice 3 landed; row stays open | docs | lead |
 | `docs/plan/README.md` | Where we are now | docs | lead |
@@ -615,8 +615,8 @@ Estimate: 5 steps, $15
 None.
 
 Searched first: `.decisions/` (0102, 0103, 0105, 0069, 0086, 0171, 0230, 0526, 0531, 0536, 0045,
-0099), `docs/direction/brain-hands-window-agent.md`, `docs/direction/settings.md`,
-`docs/direction/follows/otp.md`, `.glossary/TERMS.md` (job, hands, hands key, Cmd, dispatched,
+0099), `direction/brain-hands-window-agent.md`, `direction/settings.md`,
+`direction/follows/otp.md`, `.glossary/TERMS.md` (job, hands, hands key, Cmd, dispatched,
 letter, mailed, process), and `docs/plan/tier-1.md`'s P39 row. Each place this plan had to choose,
 a decided note or the lead's call answered it, as the sections above cite. Who may ask the hands
 is answered by 0171 for this tier, so it is listed above for the lead, not here.

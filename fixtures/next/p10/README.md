@@ -151,8 +151,7 @@ env -u TYPESAFE_API_KEY nice -n 19 pnpm exec vitest run \
   next/apps/fabrika/src/door.test.ts
 ```
 
-The captured spike is already proved in
-experiment 230 (in the notes). Its WebCrypto
+The captured spike is already proved. Its WebCrypto
 checker and OpenSSH both passed; all 29 spike controls matched expectations.
 The test suite needs the saved public bytes, never the capture's private key
 or a browser gesture.

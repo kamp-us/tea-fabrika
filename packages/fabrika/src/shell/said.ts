@@ -8,7 +8,7 @@ import { refusalLines, type SaidStatement } from "./grammar.ts";
 
 // A said line, run: the agent named is checked against the ones summoned, and the line becomes
 // one job of the `turn` program, made in code and never as text, so nothing in what is said is
-// read as a shell word (docs/direction/summon-guidelines.md, S2).
+// read as a shell word.
 //
 //   @scout why does post print #7 twice? a | b &
 //   // the job: turn --to scout, told prompt "why does post print #7 twice? a | b &", in the foreground

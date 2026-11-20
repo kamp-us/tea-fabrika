@@ -33,8 +33,7 @@ export class TurnTimeout extends Context.Reference<Duration.Duration>("clanka/Ag
 const now = yield* Clock.currentTimeMillis;
 ```
 
-Rules for the host around a tea machine (program state itself stays in the tea model,
-[Elm first](../../docs/direction/elm-first.md)):
+Rules for the host around a tea machine (program state itself stays in the tea model):
 
 - **State one fiber owns may be a `let`.** A loop that runs in one fiber and keeps its own
   counters, flags and buffers can hold them in `let` locals or a `MutableRef`, with a comment on why
@@ -86,7 +85,7 @@ Ticket 443 sweeps it. On main `d48cb774`, in `next/` product code:
 Each of these works. `Date.now()` returns the right time, the `forever` loop ticks, the shared `let`
 is safe under the permit. What they cost shows later: a time law that sleeps for real or flakes on CI, a
 retry policy nobody can see, and a reader who must check every call for the permit before trusting a
-variable. [Build on Effect](../../docs/direction/build-on-effect.md) ("The clock") already decided that
+variable. The repo already decided that
 time comes only from `Clock`; the lint rule it promised was never carried to `next/`.
 
 ## Holds it
@@ -101,7 +100,7 @@ time comes only from `Clock`; the lint rule it promised was never carried to `ne
 
 ## Decision
 
-[Build on Effect](../../docs/direction/build-on-effect.md), "The clock". Effect's own guide says to use
+Effect's own guide says to use
 `DateTime` and `Clock` over `Date` (`node_modules/effect/AGENTS.md`, "Working with DateTime").
 [clanka](https://github.com/Effectful-Tech/clanka/tree/44eb97a4eff8ae00bcf18750b387fe5a98cd191c), an agent by an Effect core maintainer, is the worked example for the one-fiber `let`, the named retry
 `Schedule` and the `Context.Reference` limits. phoenix has no state pattern; its [effect-testing.md](https://github.com/kamp-us/phoenix/blob/4802776ad4911ac025ecfbf7bc49f6c17e13e2bb/.kalfa/patterns/effect-testing.md)

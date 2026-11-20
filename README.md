@@ -36,17 +36,13 @@ Five parts, from the bottom up:
 
 - **Code holds the loop.** Which step is next, what to wait for, when to stop and when to ask a
   person: code decides all of that. An agent does one bounded job inside it, such as writing code
-  or review findings. See [Control lives in code](./docs/direction/control-in-code.md).
+  or review findings.
 - **Code is cheap, fast, testable and the same every time.** An agent is none of those. So every
   fixed step moves out of agent prose and into a state machine.
 - **Every outside thing sits behind a typed service.** The ledger, GitHub and the agent harness
   are each a service, so a test swaps in a fake and no step calls a command-line tool directly.
-  See [The backend is a library](./docs/direction/backend-as-a-library.md).
 - **Nobody grades their own work.** The reviewer is a different agent from the builder, and no
-  agent approves a pull request. See
-  [Nobody grades their own work](./docs/direction/nobody-grades-their-own-work.md).
-
-Every decision has a short note in [`docs/direction/`](./docs/direction/README.md).
+  agent approves a pull request.
 
 ## Try it in two minutes
 
@@ -121,8 +117,7 @@ and its local ledger in `~/.tsh` (set `TSH_HOME` to move it).
 [Run a ticket through the pipeline](./.kalfa/runbooks/run-a-pipeline-ticket.md). This section stays until
 `deliver` is deleted.
 
-**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same quest against a fake GitHub. Read
-experiment 105 (in the notes) before you try it.
+**It is wired, but it has not yet taken a real ticket to a merged pull request.** Experiment 105 ran the same quest against a fake GitHub.
 
 - **It writes to the repository you name.** It pushes a branch and commits, and opens one pull
   request per plan.
@@ -154,7 +149,6 @@ Steps:
 
 4. In the target repository, commit a `.fabrika/fabrika.toml` on its default branch. Its keys (agent models, install, checks, approval) are listed at the top of
    [`packages/pipeline/src/settings.ts`](./packages/pipeline/src/settings.ts).
-   See also [One fabrika.toml per repo](./docs/direction/one-fabrika-toml-per-repo.md).
 
 5. Start tsh from that folder, and read its first lines:
 
@@ -208,9 +202,7 @@ These still run, but they are not the way forward:
 | Write code with `@kampus/fabrika-old` | [`packages/fabrika/README.md`](./packages/fabrika/README.md) |
 | Change the work pipeline | [`packages/pipeline/README.md`](./packages/pipeline/README.md) |
 | Write a program for `next/` | [`.kalfa/runbooks/write-a-next-program.md`](./.kalfa/runbooks/write-a-next-program.md) |
-| Know why a choice was made | [`docs/direction/`](./docs/direction/README.md) |
-| See what was tried, and what came back | the experiments log (in the notes) |
-| See what happened on real tickets | the field log (in the notes) |
+| Know why a choice was made | [`.kalfa/decisions/`](./.kalfa/decisions/) |
 
 ## What is in this repository
 
@@ -245,7 +237,6 @@ A pnpm workspace. A package may import the ones listed before it, never the ones
   - [`apps/fabrika`](./apps/fabrika/README.md), `@kampus/fabrika-app-old`: the fabrika app, a
     walking skeleton. One window, tiled like tmux; every tile runs its own tsh, with a line
     editor, and a program with a view runs inside a tile.
-- `docs/`: the design notes in `direction/`.
 - `fixtures/`: toy projects the tests use.
 
 ## Working on this repository

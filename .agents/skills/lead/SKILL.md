@@ -6,8 +6,8 @@ description: Lead one ticket through the hand-run pipeline steps and land it. Us
 # The lead
 
 Today's pipeline programs are paused, so the lead session runs each pull request's steps by hand:
-plan, tests, build, one review, each by its own agent
-([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)). Mutation is no step of a pull
+plan, tests, build, one review, each by its own agent.
+Mutation is no step of a pull
 request: it runs hourly against main and files tickets. The lead writes no step's
 work. It starts each step, reads what comes back, and lands the result.
 
@@ -204,7 +204,7 @@ flowchart TD
    faults. Never ask the owner for this yes. Take it to the owner only when the fix needs a new
    design call, the fix loosens a law, or the same fault has come back a third time.
 5. **A fault is not named and located, or not inside the plan:** stop the quest. Land what works,
-   file the rest as a tracker ticket (`tracker_file`), and write the quest's note in the notes.
+   file the rest as a tracker ticket (`tracker_file`).
    Take it to the owner only if what is left breaks the slice's main job.
 
 The same test holds for any approval you would ask the owner for:
@@ -281,8 +281,7 @@ command without the two PR files. Then stop and say "ready to land" with the sta
 
 ## Who runs which step
 
-Decided in [stage agents run on Codex](../../../docs/direction/agents-run-on-codex.md) (owner,
-2026-11-08), which this section follows.
+Decided by the owner on 2026-11-08; this section follows it.
 
 - **Codex in a box runs each step:** plan, tests, build and review, each its own agent.
 - **Except Electron or socket work** (owner, 2026-11-08): a step whose laws or shots need the app
@@ -400,7 +399,7 @@ section, the retries and limits, the budget, the record and the pinned scripts. 
   (the review one keeps the template above, minus the two head lines, which the chain fills in),
   and `## pr`: the pull request's description, its first line the title, with the
   `fabrika close ticket <N>` line when the PR finishes the ticket, written as
-  [the pr skill](../pr/SKILL.md#a-quests-description-is-written-twice) says. Every section is
+  [the pr skill](../pr/SKILL.md#in-this-repo) says. Every section is
   required. A quest has no `## mutation` section.
 - **Which steps need Claude:** `--claude` names the steps with Electron or socket work, and
   `--electron` the ones that run the app.
@@ -488,7 +487,7 @@ visible, and never weaken the rules to hide this message.
    never on the owner's laptop.
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff. Anything that
-   broke, cost too much, needed a person or worked well goes in the notes. Send a fix to the step that owns the file;
+   broke, cost too much, needed a person or worked well goes in your report. Send a fix to the step that owns the file;
    when a review sent the quest back, follow [When a review sends back](#when-a-review-sends-back).
    A test that breaks on one machine or in a box leans on that machine: send it to tests to remove
    the dependency, never to catch the error.
@@ -504,16 +503,14 @@ visible, and never weaken the rules to hide this message.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds
    it to the merge queue: the permission check refuses a subagent the lead key, and the quest stops
    (ticket 652). Its last act
-   is `land.ts ready` ([the template](#quest-brief-template)). The PR body file says which parts were
-   this repo's steps, what ran each one, and the dollars, in the order
-   [the pr skill](../pr/SKILL.md) gives.
+   is `land.ts ready` ([the template](#quest-brief-template)). The PR body file is written with
+   [the pr skill](../pr/SKILL.md).
 9. **Land it:** the review says
    `merge-ready`, CI is green (e2e included), and you read the diff and run the leak grep.
    [The tests skill](../tests/SKILL.md#new-and-changed-laws) says what a new or changed law must be.
    Zero hits from loosening.sh mean no owner read is needed.
    The lead records its output in the PR. A hit goes to the lead's hand check, with the hit list
    in the PR. Only real loosening waits on the owner.
-   Did this PR change a row in docs/direction/follows/? It updates that row in the same PR.
    Then the lead merges, product code included; a new design call is the only other wait.
    Apply the labels rule and the zero-hit check together. These are proper property tests.
    Run `sh .agents/skills/lead/scripts/loosening.sh <base> <head> <mapping.md>` on the PR's exam
@@ -574,8 +571,8 @@ visible, and never weaken the rules to hide this message.
     ticket the description names on a line of its own, `fabrika close ticket <N>`, so put that line
     in when the PR finishes the ticket. Each close gets a comment
     naming the PR and its merge commit (`scripts/pr/Queue.ts`). When it has not merged yet, it says
-    so and does nothing; run it again later. No row per merge is written: that measure is proposed
-    ([M1](../../../docs/direction/autonomy-is-measured-trust.md#proposed-measures)). Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
+    so and does nothing; run it again later. No row per merge is written: that measure is proposed.
+Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in the main checkout, plus any build the app needs to start. The owner runs the app from there and
     never pulls or installs first. If the pull refuses, because of local edits or another branch,
     leave them and tell the owner in one line.
 
@@ -584,7 +581,7 @@ visible, and never weaken the rules to hide this message.
 - **Product work, `next/` or today's, goes through the pipeline's steps:** plan, test writer,
   build, one review, each by its own agent, with laws. A ticket with a fix command takes
   [the mechanical branch](#the-mechanical-branch) instead. No builder starts before an approved plan and
-  tests that exist ([the steps](../../../docs/direction/next-is-a-pipeline-pre-run.md)), and `next/` does
+  tests that exist, and `next/` does
   not wait on the pipeline. Today's pipeline programs are paused, so the lead session's agents run
   the steps by hand, and the lead reads every diff, CI and the leak grep
   before a merge. [The lead skill](SKILL.md) says how.
@@ -679,14 +676,13 @@ owner decides -> write .kalfa/decisions/NNNN-slug.md (only if hard to reverse, s
 ```
 
 - **Write it the turn it is decided,** with a docs agent using [the adr skill](../adr/SKILL.md),
-  in the shape the adr skill gives. Link its `docs/direction/` note when
-  one exists.
+  in the shape the adr skill gives.
 - **One decision, one PR.** Never batch decisions, and never wait for a code PR or for the end of
   the day.
 - **Merge on green.** A docs-only PR that writes down a decision is merged when CI is green and the
   leak grep is clean, with no plan, tests, review or review rows. Code PRs keep their steps.
 - **Search before you ask.** Before the lead or any step asks the owner or writes a plan, it
-  searches `.kalfa/decisions/`, each context's `GLOSSARY.md` and `docs/direction/` for the topic.
+  searches `.kalfa/decisions/` and each context's `GLOSSARY.md` for the topic.
 - **Ask in plain words, from the code.** Before a question to the owner, read the code it is about
   and that package's decisions, as
   asks of upstream. Then say what the code does, what breaks, each option with its cost, and your

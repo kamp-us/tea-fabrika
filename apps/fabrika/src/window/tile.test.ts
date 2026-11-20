@@ -9,8 +9,7 @@ import type { FromPage } from "../messages.ts";
 import { tileWord } from "./frame.ts";
 import { Strip, Tile } from "./tile.tsx";
 
-// A tile and a strip, drawn as the desk draws them (docs/direction/tile-guidelines.md, decided
-// 2026-11-01). The title bar is a mono `header`: the slot (a pipe's letter, or a dot), the program
+// A tile and a strip, drawn as the desk draws them. The title bar is a mono `header`: the slot (a pipe's letter, or a dot), the program
 // name, the state word, then the id at the far right. A pipe is marked by `data-pipe`, its color's
 // name, and by the letter; color is never the only cue. Tile and Strip take the desk's messages
 // as `toHost`, so a test draws them with no page around them.

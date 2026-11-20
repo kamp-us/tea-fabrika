@@ -5,8 +5,7 @@ repositories beside them. A ticket is one stream of facts: who wrote each one (a
 agent), when, and what happened. Nothing else holds a ticket: no copy in the program, none on
 GitHub. The tracker works like Linear, tied to no repository: GitHub comes in through an
 integration of its own. The fabrika app ([`apps/fabrika`](../../apps/fabrika/README.md))
-lists it, so `tracker` typed in the app's tsh opens its window. The design is
-[Tickets start in our tracker](../../docs/direction/tickets-start-in-our-tracker.md).
+lists it, so `tracker` typed in the app's tsh opens its window. Tickets start in our tracker.
 
 ```ts
 import {start, tell} from "@kampus/fabrika-old";
@@ -75,8 +74,8 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   as an agent's.
 - **A bad row is shown, not hidden.** A row that does not read, or a fact that does not fit (a
   comment before `filed`), is kept out of every ticket and listed under "rows did not read".
-- **A ticket shows one top line,** folded from its facts
-  ([What a ticket shows](../../docs/direction/what-a-ticket-shows.md)): "done: PR #12 merged",
+- **A ticket shows one top line,** folded from its facts:
+"done: PR #12 merged",
   "closed by owner", "waits on you: approve plan v2", "build running, task t-2", "stuck: read
   failed", "idle since 14:02", "next: review". An open ask always wins on an open ticket. Nobody
   writes "done": it is a merged pull request, or a person's close once the asks are answered.
@@ -145,12 +144,11 @@ yield* tell(run, "query", {ticket: 7});       // sends nothing: the same pick
   false alarms can be counted; the newest word counts. With no `Jev` service there is no hint
   and no call: in the app, Jev is on only when the home holds `jev.key`
   (`apps/fabrika/src/host/jev.ts`). A Jev that fails leaves no hint and says so under the
-  problems; the filing stands. Measured in
-  experiment 167 (in the notes).
+  problems; the filing stands.
 
 - **Areas are the project's parts, and a person makes them.** They live on their own stream,
-  `tracker/areas`, as `area_made`, `area_renamed` and `area_merged`
-  ([areas](../../docs/direction/areas.md)). A new area takes the next number, read and written
+  `tracker/areas`, as `area_made`, `area_renamed` and `area_merged`.
+A new area takes the next number, read and written
   in one step: if another write landed in between, the ledger says `Stale` and the tracker reads
   and tries again, so two people who make an area at once get two numbers. A name a live area has
   already, in any case, is refused in words. All three are `{personOnly: true}`, refused from an
@@ -195,15 +193,14 @@ The common path needs no mouse. The focus goes where the next step is.
 
 ## Left out, on purpose
 
-- Linking a pull request to a ticket. It is next: a link is a fact on the ticket's stream, as
-  [What a ticket shows](../../docs/direction/what-a-ticket-shows.md) section 5 says.
+- Linking a pull request to a ticket. It is next: a link is a fact on the ticket's stream, as the ticket's design says.
 - More than the first 100 open pull requests of a repository, and pull requests that are not
   open.
 - Editing a title, a body or a comment. A fact is never changed; an edit would be a new fact.
 - Labels, assignees, milestones, and a ticket key per project. Not needed to file and follow
   tickets yet.
 - A ticket's area, filtering by area and grouping by area: the next three pull requests of
-  [areas](../../docs/direction/areas.md). Renaming and merging an area from the window, too:
+  the areas work. Renaming and merging an area from the window, too:
   for now they are tsh's `rename_area` and `merge_area`.
 - Going back to the page you were on after a restart. The list is one key away.
 - Retrying a failed write. Its text is shown in full, to copy back.

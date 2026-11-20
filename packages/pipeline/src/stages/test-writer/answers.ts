@@ -19,7 +19,7 @@ import {
 } from "./mutants.ts";
 import { File } from "./written.ts";
 
-// The test writer's second job as a machine (docs/direction/the-test-writer.md): the pieces in
+// The test writer's second job as a machine: the pieces in
 // ./mutants.ts, in order. It answers each mutant that lived, code commits its new tests, and each
 // new test is run with its mutant in and without.
 //

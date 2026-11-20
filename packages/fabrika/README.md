@@ -45,7 +45,7 @@ import {layerHttp} from "@kampus/fabrika-old/http"; // a Ledger over HTTP
 
 - An `import` loads every file it points to. A top level that pulled in Miniflare or the Agent
   SDK would break in a browser and make every user install them. Hono and Effect split their
-  packages the same way. See [Where each piece lives](../../docs/direction/where-each-piece-lives.md).
+  packages the same way.
 - `pnpm lint` holds the rule. It bundles the top level for a browser and fails on any Node,
   Miniflare, Agent SDK, ACP or OpenTelemetry module it reaches.
 
@@ -83,9 +83,6 @@ runs TypeScript as it is.
 - **Hand tsh your own programs:** [the shell's README](./src/shell/README.md).
 - **Use tsh and the pipeline on a repository:** the [repository README](../../README.md).
 - **Look up one part:** the part's own README, listed under [The parts](#the-parts).
-- **Know why a part is shaped as it is:** [`docs/direction/`](../../docs/direction/README.md),
-  for example [tea-program](../../docs/direction/tea-program.md) and
-  tea-host.
 
 ## Reference
 
@@ -188,14 +185,3 @@ root; `pnpm lint` checks it).
 - Publishing. It stays `"private": true` and has no license yet. Experiment 108 packed it, with
   `private` lifted in a copy, and installed it outside the repository. Experiment 114 did the
   same with `@kampus/pipeline` on top of it.
-
-### See also
-
-- Experiment 103 (in the notes): the move into this package, and
-  what it checked.
-- Experiment 108 (in the notes): the build, and the package
-  installed from a tarball with npm and pnpm.
-- Experiment 114 (in the notes): the pipeline moved out into
-  its own package, and what it checked.
-- Experiment 82 in the experiments index (in the notes): the workspace split it
-  replaces.

@@ -48,7 +48,7 @@ export type Opened = typeof Opened.Type;
 /**
  * How a ticket's plan stands on the ledger, as the build gate reads it. The
  * one thing that lets a ticket be built is an approved plan, kept on the
- * ledger (docs/direction/sort-answers-yes-or-no.md); a label is never read.
+ * ledger; a label is never read.
  * `approved`: the owner approved a version of the plan that names the ticket,
  * and did not say no to it since. `not_approved`: a plan names it, and no
  * version is approved, or the owner said no. `none`: no plan names it.

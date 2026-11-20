@@ -4,7 +4,7 @@ import type { folders } from "./machine.ts";
 // The folders of the connected repositories, for the onboarding step's suggestions only: the
 // `RepoTree` door, as `PullRequests` is the door for the open pull requests. GitHub is one
 // integration behind it (./github.ts). A folder is never an area: a person ticks one, and the
-// area it makes is theirs (docs/direction/areas.md, call 5).
+// area it makes is theirs.
 //
 //   RepoTree.folders
 //   // ["programs/tracker", "packages/pipeline", "apps/fabrika", ...]

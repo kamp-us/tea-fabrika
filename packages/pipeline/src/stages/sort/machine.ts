@@ -10,7 +10,7 @@ import type { SortOutcome } from "./outcome.ts";
 import { type Settings, SortContext, type SortMsg, SortTicket, SortWrite } from "./services.ts";
 import { outcomeOf, writesFor } from "./writes.ts";
 
-// The sort machine: one raw report in, one answer out (docs/direction/sort-answers-yes-or-no.md),
+// The sort machine: one raw report in, one answer out,
 // and the writes that answer makes. One agent sits inside it, the sorter; the machine decides
 // everything around it. Elm's answer for each part, and nothing new:
 //

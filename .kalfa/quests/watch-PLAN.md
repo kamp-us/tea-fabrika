@@ -38,16 +38,16 @@ monitors again, as a window tile does today.
 
 ## Searched first
 
-Searched on 2026-11-15 in `.decisions/`, `docs/direction/`, `.glossary/TERMS.md`, `experiments/`,
+Searched on 2026-11-15 in `.decisions/`, `direction/`, `.glossary/TERMS.md`, `experiments/`,
 `docs/plan/`, and the tracker, for "monitor", "DOWN", "demonitor", "watch", "noproc" and "pipe end".
 
-- **The pipe note, proposed:** `docs/direction/how-a-pipe-carries-output.md` on branch
+- **The pipe note, proposed:** `direction/how-a-pipe-carries-output.md` on branch
   `fabrikalfa/pipe-carry`. Its text is the lean. Decided on 2026-11-15, in talk: the right side gets
   the whole current value, newest wins; a pipe fits when the output has the fields the input needs;
   the brain checks the member and records the pipe. The monitor as the end of output is a lean the
   owner asked to have built while the screen is decided, since the plumbing is the same whatever it
   shows. This plan builds only the monitor, never the `pipe` Cmd.
-- **Monitors are built in the brain, links are Tier 4:** `docs/direction/follows/otp.md`, rows
+- **Monitors are built in the brain, links are Tier 4:** `direction/follows/otp.md`, rows
   "Monitor", "Monitor a gone process", "Monitor a registered name", "A watcher ends" and
   "demonitor". The "registered name" row already gives the Erlang answer for a restart: resolve the
   name once, never follow it, monitor again after the `DOWN`.
@@ -374,7 +374,7 @@ owner's Mac.
 | next/packages/libfabrika/src/cloudflare/monitor.laws.integration.test.ts | tests | tests | M13, CI's full run only |
 | next/packages/libfabrika/src/processes/ProcessMonitors.integration.test.ts | tests | tests | M14: stays green; the fixture's new optional argument only |
 | .glossary/TERMS.md | build | docs | new rows `monitor (Cmd)` and `demonitor (Cmd)`; `DOWN`, `monitor reference` and `ProcessManager` updated |
-| docs/direction/follows/otp.md | build | docs | the "Monitor a registered name" row adds the program Cmd; a new row for who picks the ref |
+| direction/follows/otp.md | build | docs | the "Monitor a registered name" row adds the program Cmd; a new row for who picks the ref |
 | next/packages/libfabrika/src/node/StartChild.integration.test.ts | tests | tests | no change: must stay green after the member pick moves |
 | layer-rules.json | tests | tests | a row for `processes/Monitors` only if the layer check asks for one; it is an exam path, so the tests step owns it |
 
@@ -386,7 +386,7 @@ Each is mine to decide by the open questions test: it picks how the code does wh
 says.
 
 - **The words are `monitor` and `demonitor`,** Erlang's, already in the glossary and the OTP table
-  ([use the industry's names](../../../docs/direction/use-the-industrys-names.md)). Not "watch",
+  (use the industry's names). Not "watch",
   which in `next/` already means a client watching a view (`runtime/Watchers.ts`).
 - **The ref is the Cmd's own id.** OTP makes the ref, and the glossary says the caller picks one so a
   retry finds the same watch. The Cmd id is both: the runner makes it, it is stable across retries

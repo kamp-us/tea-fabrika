@@ -3,7 +3,7 @@ import type { CheckingSchema } from "@demlik/tea/effect";
 import { Option, Schema, SchemaGetter } from "effect";
 import type { z } from "zod";
 
-// Schemas here are Effect Schema (docs/direction/data-first-markdown-is-a-view.md).
+// Schemas here are Effect Schema.
 // A Cmd from Effect schemas is tea's own `Cmd.make` from `@demlik/tea/effect`,
 // which wraps them for tea itself, so no caller writes `Schema.toStandardSchemaV1`.
 // The six moves (src/primitives.ts) call it.

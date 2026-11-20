@@ -456,9 +456,9 @@ Estimate: 6 steps, $16
    piece 6's plan.
 
 Searched first: `.decisions/` (0026, 0061, 0078, 0095, 0102, 0157, 0159, 0171, 0178, 0185, 0280,
-0325, 0326, 0419, 0536), `docs/direction/talk-where-you-work.md`,
-`docs/direction/summon-guidelines.md` (S5), `docs/direction/brain-hands-window-agent.md`,
-`docs/direction/tea-is-the-engine.md`, `docs/plan/tiers.md` (the Tier 5 laws, Tier 4 and Tier 5),
+0325, 0326, 0419, 0536), `direction/talk-where-you-work.md`,
+`direction/summon-guidelines.md` (S5), `direction/brain-hands-window-agent.md`,
+`direction/tea-is-the-engine.md`, `docs/plan/tiers.md` (the Tier 5 laws, Tier 4 and Tier 5),
 `docs/plan/tier-1.md` (piece 5, the build order, the walks table, row P39), `.glossary/TERMS.md`
 (hands, hands key, client), and the plans of slices 3 and 4a. No note cuts slices past 4b; the five
 slices end at slice 5.

@@ -57,7 +57,7 @@ Counted on `origin/main` at `98bcdfa22` with a syntax-tree scan of every `.ts` a
 - **The news chain is 10 parameters, not 8 functions.** `news: unknown` is written 10 times: 8
   passed along, 1 hand decode, 1 avoidable. Three more hops take it with no annotation
   (`cloudflare/platform.ts:316`, `cloudflare/ConnectionObject.ts:90`, `cloudflare/runtime.ts:1168`).
-- **Guideline E1 is in `docs/direction/effect-code-guidelines.md`.** There is no `docs/guidelines/`
+- **Guideline E1 is in `direction/effect-code-guidelines.md`.** There is no `docs/guidelines/`
   folder on main.
 - **The hands pull request does not change the gateway today.** Its product files are
   `client/HandsStart.ts`, `transport/PublicKey.ts`, the new files under `node/client/` and the app's

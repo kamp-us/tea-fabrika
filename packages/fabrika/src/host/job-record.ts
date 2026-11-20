@@ -1,5 +1,5 @@
 // A job's record as a Cloudflare Durable Object: one per host job, in the ledger's own Worker,
-// beside the ledger's objects (docs/direction/a-job-record-holds-its-trace.md). It runs in
+// beside the ledger's objects. It runs in
 // workerd, on Cloudflare or in Miniflare on a laptop (`worker-options.ts` binds it as
 // `JOB_RECORD`), and is bundled into the same Worker as `durable-object.ts`.
 //

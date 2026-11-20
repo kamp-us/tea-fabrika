@@ -66,7 +66,7 @@ export function ownersOf(rows: readonly OwnerRow[], path: string): readonly stri
 
 // ---------------------------------------------------------------- guarded files
 //
-// The same rows say which files are the exam (docs/direction/nobody-writes-their-own-exam.md):
+// The same rows say which files are the exam:
 // a change that touches one is the owner's to decide, never a builder's. The
 // rows may come from `.github/CODEOWNERS` or from any other list of the same shape.
 

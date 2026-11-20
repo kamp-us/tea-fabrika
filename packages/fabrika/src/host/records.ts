@@ -6,8 +6,8 @@ import { type Job, type JobsMsg, traceIdOf } from "./jobs.ts";
 import type { SpanRow } from "./otlp.ts";
 import { type Changes, type JobEnd, jobWrites, layerTraces, type RecordCalls } from "./traces.ts";
 
-// Where a host keeps its jobs' records, and how it fills them as its jobs go
-// (docs/direction/a-job-record-holds-its-trace.md). One record per job, keyed by the job's trace
+// Where a host keeps its jobs' records, and how it fills them as its jobs go.
+// One record per job, keyed by the job's trace
 // id. Three writers fill it, each by the same key:
 //
 //   the job      `keepJobs`: the host's table, as tsh tells it, writes when a job began and how it ended

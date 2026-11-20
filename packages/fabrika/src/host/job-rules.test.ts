@@ -5,8 +5,7 @@ import { connect } from "./sqlite-driver.ts";
 import type { JobCall } from "./traces.ts";
 
 // Record wide (docs/plan/pipeline-self-fix.md, PR 7): a job's record keeps an agent run's content
-// in a `content` table beside its spans, keyed by span id, in the shape
-// docs/direction/an-agent-run-keeps-its-content.md gives. The span keeps its names and ids; its
+// in a `content` table beside its spans, keyed by span id. The span keeps its names and ids; its
 // input and output, Langfuse's two tags that tea writes, go to `content`. That table is the one
 // part of the record a person can delete, one span at a time: the span stays, and the row says who
 // deleted it, when and why. Run on node:sqlite, with the SQL the Durable Object runs.

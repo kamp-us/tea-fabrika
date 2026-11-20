@@ -335,7 +335,7 @@ const indexSpans = (spans: readonly Span[]): SpanIndex => {
 
 /**
  * Each record's index, by its spans array (ticket 182). A memo outside the tea Model, which stays
- * plain data (docs/direction/saved-state.md, S2), the way a Redux selector or Elm's `Html.Lazy`
+ * plain data, the way a Redux selector or Elm's `Html.Lazy`
  * skips work when its input is the same by reference. A newer read of a record brings a new spans
  * array, so it is indexed again, and an old one is dropped with its record.
  */

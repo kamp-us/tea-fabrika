@@ -4,7 +4,7 @@ import { RunRecord, type Storage, StorageBroken, storageOf } from "../program/st
 
 // A job's record, read: what `Traces.read(traceId)` answers. One host job (a tsh line, a lane,
 // `hello world`) leaves one record, a Durable Object keyed by the job's trace id, the
-// `runTraceId` of its first run (docs/direction/a-job-record-holds-its-trace.md).
+// `runTraceId` of its first run.
 //
 //   const trace = yield* Traces.read(runTraceId("seq-3f9a1c02"));
 //   trace.job      {n: 1, text: "seq --to 3 | tally", by: "user:owner", host: "laptop", started, ended: {how: "done", at}}
@@ -124,7 +124,7 @@ export type Opened = typeof Opened.Type;
 
 /**
  * One span's content: what an agent was given and what came back, as tea's `agentSpans` writes
- * them, each its JSON text (docs/direction/an-agent-run-keeps-its-content.md). `null`: the span
+ * them, each its JSON text. `null`: the span
  * has none of that side, as a tool still running has no result. Kept apart from the span, so it is
  * the one part of a record a person can delete.
  */
