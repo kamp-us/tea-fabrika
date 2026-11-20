@@ -83,3 +83,9 @@ A tool whose answer comes later, as a message to the program, such as a build's 
 answer arrives, the hand-off is sent again on each wake. A hand-off failure the tool lists as an
 error is the answer; any other failure is tried again.
 _Avoid_: Ask, owed tool, callback
+
+**Taken over**:
+How a process ends when the same process is opened again somewhere else. The newest open owns the
+journal, counted by opens and never by clock; the older copy's next save is refused as stale, and it
+stops without a restart.
+_Avoid_: Kicked, evicted
