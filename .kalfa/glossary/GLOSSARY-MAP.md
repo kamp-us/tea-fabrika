@@ -91,6 +91,13 @@ its words are ours.
 - **A git provider implements Source control.** `@kalfa/provider-github` implements Code hosting
   and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
   words (pull request, check run, ruleset) into Code hosting's.
+- **Pipeline hands a change request to Delivery at Ready.** Pipeline is Delivery's customer and uses Delivery's
+  words as they are; Delivery never says ticket, step, plan, law or fix round. Pipeline's steps (plan, tests, build,
+  review) end when it marks the change request ready; Pipeline has no land step and only hears how it ended. Its
+  review step's pass goes to Delivery as an approval, counted only if Delivery's approver setting lets an agent
+  approve. When Delivery takes a change request out (failed, replaced, withdrawn) it only says so, with the carry
+  answer for a replaced one; Pipeline decides what is next: a kept one goes back to ready at once, a stale one back to
+  review, a failed one to a fix round.
 - **Delivery uses CI.** A change candidate lands only on a passing verdict: the verdict of the candidate's build.
   Delivery reads the verdict and never says build, job or check. A canceled build gives no verdict.
 - **Priority vs precedence:** CI's priority orders builds; Configuration's precedence orders which source wins.
@@ -134,8 +141,9 @@ its words are ours.
   branches and its state; Delivery adds changesets, approvals and the queue.
 - **Merge** means three things, and none is bare: Delivery lands; Source control makes a merge commit; Code hosting
   marks a change request merged, which Delivery's landing causes.
-- **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one, and Delivery's
-  carry rule alone says how long it covers.
+- **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one or handed in by a
+  caller such as Pipeline. Delivery's approver setting says whose yes counts, and its carry rule alone says how long
+  it covers.
 - **Rule** means two things: in Leak guard, a check on outgoing text; in Code hosting, a ref rule (a limit on matching
   refs) is never called a bare rule.
 - **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it, as
@@ -177,7 +185,6 @@ its words are ours.
 
 Borders that are still fuzzy, one line each.
 
-- **Delivery vs Pipeline:** both own "a change on its way to main"; unclear where one stops.
 - **Permissions vs the Ledger's `WritePolicy`:** who may write is Permissions' question, but the
   ledger enforces it.
 - **Frame:** in Transport, one piece of text on a socket; Clients and Frame uses it for the window around

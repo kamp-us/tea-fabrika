@@ -14,11 +14,16 @@ One fixed state of a change request. A new one comes each time the author pushes
 _Avoid_: revision, version, patch set, head, commit
 
 **Approval**:
-A person's or agent's yes, given on one changeset. Which later changesets it still covers is a setting.
+A yes given on one changeset. Whose yes counts, a person's or an agent's, is the approver setting. Which later
+changesets it still covers is the carry rule.
 _Avoid_: LGTM, sign-off, vote
 
+**Approver setting**:
+The setting that says whose yes counts as an approval: which people, and whether an agent's yes counts at all.
+_Avoid_: reviewer list, code owners
+
 **Carry rule**:
-The setting that says which later changesets an approval still covers: always, by kept, glance or stale, or never.
+The setting that says which later changesets an approval still covers: always, by kept or stale, or never.
 _Avoid_: sticky approval, dismiss stale reviews
 
 **Kept**:
@@ -26,14 +31,10 @@ A carry answer: the approval still covers the new changeset. Either it is the sa
 apply to the base unchanged, or only the project's formatter moved them.
 _Avoid_: still valid, carried over
 
-**Glance**:
-A carry answer: the change request's own lines are the same, and only the lines around them moved. Someone looks at
-those few lines before the approval counts.
-_Avoid_: partial, soft stale
-
 **Stale**:
-A carry answer: the approval no longer covers the new changeset, so it is asked for again.
-_Avoid_: dismissed, outdated, invalid
+A carry answer: the approval no longer covers the new changeset, so it is asked for again. Any new changeset that is
+not kept is stale; there is no answer in between.
+_Avoid_: dismissed, outdated, invalid, glance, partial
 
 **Change candidate**:
 The commit main would become if the change requests in it land: the newest main plus one or more changesets. How many
@@ -67,7 +68,8 @@ _Avoid_: freeze, pause, lock
 ### A change request's steps
 
 **Ready**:
-The author says the change request is done.
+The author, or a program acting for the author, says the change request is done. It is the only way in: Delivery
+takes a change request from Ready, and what happened before Ready is not Delivery's.
 _Avoid_: open, submitted
 
 **Queued**:
@@ -83,7 +85,8 @@ Taken out of the queue because its change candidate failed.
 _Avoid_: rejected, kicked, ejected, dropped
 
 **Replaced**:
-Taken out of the queue because a new changeset came.
+Taken out of the queue because a new changeset came. Delivery says whether its approval is kept or stale, and does
+not put it back by itself: it comes back through Ready.
 _Avoid_: superseded, outdated, stale, dropped
 
 **Withdrawn**:
