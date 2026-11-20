@@ -14,7 +14,8 @@ many processes.
 _Avoid_: Instance, run
 
 **Args**:
-The values a process is started with. They stay fixed for the process's whole life.
+The values a process is started with, declared with a schema. They stay fixed for the process's
+whole life.
 _Avoid_: Flags, config, options, params
 
 **Init**:
@@ -50,8 +51,14 @@ _Avoid_: Crash, panic
 Handling one message, from the message to the new state. A confirmed step never runs twice.
 _Avoid_: Tick, update, reduce, turn
 
+**Restart policy**:
+How often and how soon a stopped process starts again, given where the program is supervised.
+When it runs out, the process stops and waits for a person.
+_Avoid_: Retry policy, backoff
+
 **Supervisor**:
-The service a stopped process asks: restart, or stop.
+The service that records each restart and each stop of a supervised process. It does not decide
+them; the restart policy does.
 _Avoid_: Watchdog, manager
 
 **Recovery**:
@@ -63,3 +70,22 @@ _Avoid_: Replay, rebuild, restore
 Where a process's steps are saved, so a confirmed step never runs twice. A program asks for one,
 and the app gives it a backend, such as a ledger.
 _Avoid_: Journal driver, journal store, log
+
+**Tool**:
+One named piece of outside work a step can use, such as posting a comment or starting a build,
+declared once with what it takes, what it answers and how it can fail. Its answer is saved, so a
+step that runs again gets the saved answer instead of doing the work again, and it hands the work a
+key, so the outside side can tell a repeat.
+_Avoid_: Activity, work, side effect, call
+
+**Deferred tool**:
+A tool whose answer comes later, as a message to the program, such as a build's verdict. Until the
+answer arrives, the hand-off is sent again on each wake. A hand-off failure the tool lists as an
+error is the answer; any other failure is tried again.
+_Avoid_: Ask, owed tool, callback
+
+**Taken over**:
+How a process ends when the same process is opened again somewhere else. The newest open owns the
+journal, counted by opens and never by clock; the older copy's next save is refused as stale, and it
+stops without a restart.
+_Avoid_: Kicked, evicted
