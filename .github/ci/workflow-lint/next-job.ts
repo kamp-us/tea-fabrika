@@ -50,7 +50,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
     Rec.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
-  // E10 (0536, the owner's ruling of 2026-11-18). A visual test needs a browser or Electron, so it
+  // E10 (a test that needs a real resource runs only in main's full run, the owner's ruling of 2026-11-18). A visual test needs a browser or Electron, so it
   // never starts unasked on a pull request or in the merge queue: the full fallback runs on a push
   // to main and on a pull request with the `visual` label, and every other unsized run, the merge
   // queue among them, gets the vitest legs alone. Main's full run runs every visual file. Plants in
@@ -66,14 +66,14 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   require(strategy["fail-fast"] === false, "next lets every shard finish");
 
   // The vitest step's paths, unquoted so each path is its own argument. On a sized run (a pull
-  // request, a merge queue group or a push to main, 0534) changes' `files`: what `--changed` picked
+  // request, a merge queue group or a push to main, the changed-tests rule) changes' `files`: what `--changed` picked
   // and every reader test, each once (legs.ts), so the step takes no `--changed` of its own, which
   // would drop the readers again. Else the plan for CI paths, slice 2: `filter` from changes, the
   // reader tests or `next/`, and a missing filter runs all of next/.
   const nextCommand =
     'pnpm exec vitest run --project next $FILTER --shard "$SHARD" --reporter=verbose --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/next.json"';
 
-  // E11 (0536). The vitest step tests the `next` project alone, on every event: the merge line runs
+  // E11 (a test that needs a real resource runs only in main's full run). The vitest step tests the `next` project alone, on every event: the merge line runs
   // the in-memory layer, and the schedule runs the real-resource one. A path filter alone finds a
   // file in any project, so the flag is what keeps `next-integration` out. Plants, each run once on
   // check.yaml and restored: `--project next` dropped (red); `--project next-integration` beside it

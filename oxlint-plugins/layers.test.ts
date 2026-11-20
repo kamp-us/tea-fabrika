@@ -9,7 +9,7 @@
 // These laws run the real tool on planted trees, with the real rule file where the rule data is the
 // subject, so each wall is seen to fire before it is trusted on `next/` (ticket 987). Written by the
 // exam (Tier 1, P1).
-// They were the exam's (next/apps/fabrika/src/exam/layers.integration.test.ts) until 0591 moved them here,
+// They were the exam's (next/apps/fabrika/src/exam/layers.integration.test.ts) until the exam-to-lint rule moved them here,
 // beside the other lint rules' tests. Plants: drop `roots` from the patched tool's reading, and the
 // unclaimed-file laws fail; move `next-node` to layer 11 in `layer-rules.json`, and the pinned layer
 // table fails.
@@ -24,7 +24,7 @@ const NEXT = resolve(import.meta.dirname, "../next");
 
 const bin = resolve(NEXT, "..", "node_modules", ".bin", "code-graph");
 
-// A planter owns every tree its test plants. The test's scope removes them when the test ends (0061).
+// A planter owns every tree its test plants. The test's scope removes them when the test ends (anything that holds a resource is acquired in a scope, so the scope releases it).
 const planter = Effect.acquireRelease(
   Effect.sync(() => {
     const roots: Array<string> = [];
@@ -675,7 +675,7 @@ describe("the real rule file on planted trees", () => {
     }),
   );
 
-  // pinned: the plan's layer table (ticket 477, 0043), since the rows are written by hand and the
+  // pinned: the plan's layer table (ticket 477, libfabrika has one folder per subject, and the rule file says who may import whom), since the rows are written by hand and the
   // rank laws above read their expected edges from this same file: a changed `layer` that makes no
   // break passes them, and only this says which module is on which layer.
   // Plant: put `next-node` on layer 11. `pnpm lint:layers` and every other law here stay green, and
@@ -709,7 +709,7 @@ describe("the real rule file on planted trees", () => {
       "next-telemetry": 1,
       "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
       "next-shared": 0,
-      "next-vitest": 0, // 0538: the test primitives, a package of their own below everything else of ours
+      "next-vitest": 0, // the shared test package rule: the test primitives, a package of their own below everything else of ours
     });
   });
 

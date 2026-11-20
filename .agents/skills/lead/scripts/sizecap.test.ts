@@ -19,7 +19,7 @@ import {
 } from "./sizecap.ts";
 
 // Lead tooling for ticket 686, changed for ticket 849: a pull request's size, printed as advice
-// only, since 0099 removed 0087's cap. The pure laws read
+// only, since the no-size-cap rule removed the slices rule's cap. The pure laws read
 // paths, numstat text and plan text; one scenario runs the command on a disposable git repository.
 const options = { seed: 119120, numRuns: 200 };
 
@@ -67,7 +67,7 @@ describe("classify", () => {
     );
   });
 
-  it("property: under next/ a shared suite named XTest.ts or XTest.tsx is a test at any depth (0029, 0062)", () => {
+  it("property: under next/ a shared suite named XTest.ts or XTest.tsx is a test at any depth (the repo formats and names code as Effect does; test files keep to the layers too)", () => {
     fc.assert(
       fc.property(
         folders,
@@ -171,7 +171,7 @@ describe("classify", () => {
     );
   });
 
-  it("vector: lock files by name, at any depth (0087 names lock files)", () => {
+  it("vector: lock files by name, at any depth (the slices rule names lock files)", () => {
     for (const path of ["pnpm-lock.yaml", "next/apps/fabrika/package-lock.json", "packages/x/yarn.lock", "a.lock"]) {
       expect(classify(path, false)).toBe("lock");
     }
@@ -314,7 +314,7 @@ describe("readPlan and advise", () => {
     );
   });
 
-  it("property: advice names exactly the slices with no estimate, whatever the others expect (0099)", () => {
+  it("property: advice names exactly the slices with no estimate, whatever the others expect (no number caps the size of a pull request)", () => {
     fc.assert(
       fc.property(fc.array(fc.option(fc.nat(100_000), { nil: null }), { minLength: 1, maxLength: 7 }), (slices) => {
         const named = Arr.map(advise(readPlan(sizeSection(slices))), (a) => (a._tag === "unsized" ? a.order : 0));
@@ -324,7 +324,7 @@ describe("readPlan and advise", () => {
     );
   });
 
-  it("property: a plan with a product lines column and no slices gets no advice, however large its table (0099)", () => {
+  it("property: a plan with a product lines column and no slices gets no advice, however large its table (no number caps the size of a pull request)", () => {
     fc.assert(
       fc.property(fc.array(cell, { minLength: 1, maxLength: 12 }), (cells) => {
         expect(advise(readPlan(table(Arr.map(cells, (c) => c.text))))).toEqual([]);
@@ -365,7 +365,7 @@ describe("readPlan and advise", () => {
 });
 
 describe("ADVICE_LINES", () => {
-  it("pinned: 0087's starting number, as advice only, until a count from our merged pull requests replaces it (0099)", () => {
+  it("pinned: the slices rule's starting number, as advice only, until a count from our merged pull requests replaces it (no number caps the size of a pull request)", () => {
     expect(ADVICE_LINES).toBe(600);
   });
 });

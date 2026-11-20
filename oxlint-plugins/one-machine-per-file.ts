@@ -1,4 +1,4 @@
-// Decision 0046, next/ and .agents/: one exported tea machine or factory per file, with local
+// The rule that every state machine is a tea machine, and a file exports at most one, next/ and .agents/: one exported tea machine or factory per file, with local
 // model, msg and update, and no imports from the closed I/O list below. Private top-level helpers
 // used inside a parent's Machine.make arguments do not count. An exported program wrapping a
 // private machine does count. A factory's two calls count twice, even if one is a helper.
@@ -209,7 +209,7 @@ export const oneMachinePerFile: CreateRule = {
           context.report({
             node: call,
             message:
-              "A file exports at most one tea machine or one factory (0046). Move the second machine to its own file, or a helper to a private top-level binding.",
+              "A file exports at most one tea machine or one factory. Move the second machine to its own file, or a helper to a private top-level binding.",
           });
         }
 
@@ -239,7 +239,7 @@ export const oneMachinePerFile: CreateRule = {
             ) {
               context.report({
                 node: prop,
-                message: `The machine's ${name} must be defined in this file, not imported (0046).`,
+                message: `The machine's ${name} must be defined in this file, not imported (every state machine is a tea machine, and a file exports at most one).`,
               });
             }
           }
@@ -274,7 +274,8 @@ export const oneMachinePerFile: CreateRule = {
           if (io) {
             context.report({
               node: statement,
-              message: "A tea machine file has no input or output imports (0046). Put the driver in another file.",
+              message:
+                "A tea machine file has no input or output imports (every state machine is a tea machine, and a file exports at most one). Put the driver in another file.",
             });
           }
         }

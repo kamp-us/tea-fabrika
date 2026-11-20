@@ -1,5 +1,5 @@
-// Branches: the git questions the unlisted check (0134) and the sev script ask of a checkout. This
-// file is the contract only (0095): `BranchesGit.layer` asks real git, `BranchesTest.layer` answers
+// Branches: the git questions the unlisted check (every commit is pushed when it is made, with a draft pull request from the first commit) and the sev script ask of a checkout. This
+// file is the contract only (a service file holds only its contract, and each layer is its own file): `BranchesGit.layer` asks real git, `BranchesTest.layer` answers
 // from a model in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

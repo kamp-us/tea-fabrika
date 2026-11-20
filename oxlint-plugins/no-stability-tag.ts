@@ -1,4 +1,4 @@
-// E1 of the Effect-check sweep (0574): no doc block of ours carries `@stability` until libfabrika's
+// E1 of the Effect-check sweep (no @stability tag until the first release, and each unstable Effect part is named once): no doc block of ours carries `@stability` until libfabrika's
 // first release, since the tag said `unstable` on every export and the checker's `unstableApiUsage`
 // counted each use of our own code as a hit. The rule reads every `/** */` block and reports each
 // `@stability` line, with a safe fix that deletes the line, and the ` *` line just above ` */` when
@@ -14,7 +14,8 @@
 // middle of a sentence is prose and passes.
 import type { CreateRule } from "@oxlint/plugins";
 
-const MESSAGE = "No @stability tag until libfabrika's first release (0574, E1). Fix: `pnpm format` deletes the line.";
+const MESSAGE =
+  "No @stability tag until libfabrika's first release (no @stability tag until the first release, and each unstable Effect part is named once, E1). Fix: `pnpm format` deletes the line.";
 
 // A line that holds only the tag: ` * @stability unstable`.
 const TAG_LINE = /^[ \t]*\*[ \t]*@stability\b.*$/;
@@ -69,7 +70,8 @@ export const noStabilityTag: CreateRule = {
 
               context.report({
                 loc: { start: { line: lineNumber, column: 0 }, end: { line: lineNumber, column: line.length } },
-                message: "No @stability tag until libfabrika's first release (0574, E1). Delete it by hand.",
+                message:
+                  "No @stability tag until libfabrika's first release (no @stability tag until the first release, and each unstable Effect part is named once, E1). Delete it by hand.",
               });
             }
           });

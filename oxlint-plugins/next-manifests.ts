@@ -2,7 +2,7 @@
 // Each package's `package.json` is private at 0.0.0, has no side effects and a typecheck script, and
 // depends on nothing of today's: no `-old` package, and no workspace package outside `next/` but the
 // design package, which only the window and the app may take. This was the manifest half of the
-// exam's `deps.integration.test.ts` until 0591 made it a lint command; the import half is the rule
+// exam's `deps.integration.test.ts` until the exam-to-lint rule made it a lint command; the import half is the rule
 // `fabrika/package-deps`, and the bundle laws stay in that test. Its laws are in
 // `next-manifests.test.ts`.
 //
@@ -39,7 +39,7 @@ const DESIGN = "@kampus/fabrika-design";
 
 const DESIGN_TAKERS: ReadonlySet<string> = new Set(["@kampus/tuval", "@kampus/fabrika"]);
 
-/** The config engine moved out of `next/` to `kalfa/config` (0585). The approved plan names its two
+/** The config engine moved out of `next/` to `kalfa/config` (our tooling is a few @kalfa packages grouped by domain). The approved plan names its two
  *  consumers: the library (kalfa-config-PLAN.md:310) and the app (kalfa-config-package-amendment-PLAN.md:224).
  *  No other `next/` package may name it. */
 const CONFIG = "@kalfa/config";

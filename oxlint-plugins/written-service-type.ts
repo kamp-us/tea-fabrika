@@ -1,4 +1,4 @@
-// Ticket 908, next/. Decision 0095 asks a service's
+// Ticket 908, next/. The rule that a service file holds only its contract, and each layer is its own file, asks a service's
 // type to be written out, so a reader sees the contract without running the implementation in their
 // head. This rule refuses a service type that is taken from the implementation instead.
 //
@@ -256,7 +256,7 @@ export const writtenServiceType: CreateRule = {
         if (found !== null) {
           context.report({
             node: type,
-            message: `This service's type holds ${found}, so it is inferred from the implementation. Write it out: each member and its Effect type by name, so a reader sees the contract without the code that makes it (decision 0095, oxlint-plugins/written-service-type.ts).`,
+            message: `This service's type holds ${found}, so it is inferred from the implementation. Write it out: each member and its Effect type by name, so a reader sees the contract without the code that makes it (a service file holds only its contract, and each layer is its own file, oxlint-plugins/written-service-type.ts).`,
           });
         }
       },

@@ -1,4 +1,4 @@
-// RunsFs.layer: the Runs service on the file system, the one mover every cleanup shares (0113: it
+// RunsFs.layer: the Runs service on the file system, the one mover every cleanup shares (no shell or Python script enters the repo: it
 // was keepruns.sh). Before a box or worktree folder goes, its runs/ moves into MAIN's
 // runs/<folder name>/, so raw samples kept there survive the removal (field note 2026-11-09: a
 // landed worktree's removal deleted experiment 244's raw answers). Today's lead tooling.

@@ -26,9 +26,10 @@ type Workflow = Record<string, unknown> & {
   jobs: Record<string, Job>;
 };
 
-// 0534's and 0541's binding constraint: automation opens issues here from two jobs alone,
+// The changed-tests rule's and the CI speed goal's binding constraint: automation opens issues here from two jobs alone,
 // scheduled.yaml's report and ci-speed.yaml's measure.
-const RULE = "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (0534, 0541)";
+const RULE =
+  "only scheduled.yaml's report job and ci-speed.yaml's measure job may touch issues (the merge line runs only the tests a change reaches, and a schedule runs every test; CI speed has a goal, and a daily job measures it)";
 
 const SCHEDULED = ".github/workflows/scheduled.yaml";
 

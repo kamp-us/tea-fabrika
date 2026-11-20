@@ -1,7 +1,7 @@
 // Today's CI, next/. How many of the next job's machines a run starts: the size step of check.yaml's
 // changes job prints them, and next's matrix reads them. A small pull request started all seven
 // machines, each spending about a minute on setup to run 0 or 1 files, and held runners a big one
-// could use. The merge queue and main ran the whole suite; since 0534 they run what their change
+// could use. The merge queue and main ran the whole suite; since the changed-tests rule they run what their change
 // reaches too, and only the schedule (scheduled.yaml) runs all of next/.
 //
 //   event and path                               legs
@@ -11,7 +11,7 @@
 //   anything else                                the full matrix: all of next/ with no base
 //
 // End-to-end legs run the `next-visual` project. A pull request starts them only when it carries the
-// `visual` label, and a merge queue group never does (0536, the owner's ruling of 2026-11-18). A push
+// `visual` label, and a merge queue group never does (a test that needs a real resource runs only in main's full run, the owner's ruling of 2026-11-18). A push
 // to main runs the visual files its change reaches. Main's full run (scheduled.yaml) runs them all.
 // Global triggers select every file.
 //
@@ -45,7 +45,7 @@ export type Legs = { readonly vitest: number; readonly e2e: number };
  * What the run tests: every next/ file a change reaches, or only the reader tests (changes' filter),
  * `base`, the commit its change starts from, which Vitest's `--changed` diffs with: a pull request's
  * base, a merge queue group's base, or what main held before a push, empty when there is none, as on
- * a first push; and whether a pull request asked for its visual tests with the `visual` label (0536).
+ * a first push; and whether a pull request asked for its visual tests with the `visual` label (a test that needs a real resource runs only in main's full run).
  */
 export type Run = {
   readonly event: string;
@@ -136,7 +136,7 @@ export const fewest = (files: readonly string[], most: number, limit: number, ta
   return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
 };
 
-/** The events on the merge line, each of which runs only what its change reaches (0534). */
+/** The events on the merge line, each of which runs only what its change reaches. */
 const LINE = new Set(["pull_request", "merge_group", "push"]);
 
 const match = createRequire(import.meta.resolve("vitest/package.json"))("picomatch");
@@ -153,7 +153,7 @@ export const isTrigger = (path: string): boolean =>
 const sizes = (run: Run) => LINE.has(run.event) && (run.scope === "readers" || validSha(run.base));
 
 /**
- * Whether a run's end-to-end legs, which run the visual tests, may start (0536): on a pull request
+ * Whether a run's end-to-end legs, which run the visual tests, may start (a test that needs a real resource runs only in main's full run): on a pull request
  * only when it asked with the `visual` label, never in the merge queue, and on a push to main. A
  * visual law needs a browser or Electron, a real resource, so it stays off the pull request and the
  * merge queue unless asked. check.yaml's fallback says the same (workflow-lint.ts, E10).

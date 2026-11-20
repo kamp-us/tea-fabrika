@@ -68,7 +68,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     if (!runner) {
       copyFileSync(config, join(dir, ".oxlintrc.json"));
       symlinkSync(join(root, "oxlint-plugins"), join(dir, "oxlint-plugins"));
-      // The config loads the vendored anti-slop plugins from here (0563).
+      // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
       symlinkSync(join(root, "vendor"), join(dir, "vendor"));
     }
 
@@ -334,7 +334,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
   });
 
   // T930 L8. Plant: leave the next/ tests override at "warn". Exercise lint.ts's real exit, including
-  // a different warn: a fire in a folder at zero blocks (0523).
+  // a different warn: a fire in a folder at zero blocks (a lint rule blocks wherever its code is clean).
   it("T930 L8 applies only to next tests and blocks in a clean folder, beside another warning too", () => {
     fc.assert(
       fc.property(fc.record({ alias: name, ext: fc.constantFrom("ts", "tsx") }), ({ alias, ext }) => {

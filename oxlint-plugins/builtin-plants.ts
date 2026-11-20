@@ -27,7 +27,7 @@ const TEST = 'import {describe, expect, it, vi} from "vitest";';
 const REACT = 'import {Component, createContext, forwardRef, useEffect, useMemo, useState} from "react";';
 
 /**
- * L1 of the Reflect ban (decision 0554): `Reflect.get`, `Reflect.set`, `Reflect.has` and
+ * L1 of the Reflect ban (a field is read through its type or a decode, never past it with Reflect): `Reflect.get`, `Reflect.set`, `Reflect.has` and
  * `globalThis.Reflect` are refused, in each form oxlint's `no-restricted-properties` resolves, and
  * the rest of `Reflect` passes. plants.test.ts runs these lines beside this file, a tooling path,
  * and again in every folder a block of the config lists.
@@ -46,7 +46,7 @@ export const REFLECT: Plant = {
     ['export const g: unknown = Reflect?.get(x, "a");', true],
     ["export const { has } = Reflect;", true],
     ["export const { set: renamed } = Reflect;", true],
-    // 0554 does not decide the rest of Reflect.
+    // The Reflect ban does not decide the rest of Reflect.
     ["export const h: unknown = Reflect.apply(Math.max, null, [1, 2]);", false],
     ["export const i = Reflect.ownKeys(x);", false],
     // Not a call: a comment, a string, a type, another object's member.
@@ -61,7 +61,7 @@ export const REFLECT: Plant = {
 };
 
 /**
- * L10 of the Reflect ban (decision 0554, after the fold): the base blocks of `.oxlintrc.json` hold the
+ * L10 of the Reflect ban (a field is read through its type or a decode, never past it with Reflect, after the fold): the base blocks of `.oxlintrc.json` hold the
  * ban for all of `next/`, so a folder no block names is refused too, a new package or program and a
  * new folder beside the named ones included. Each entry is a folder's path with `NAME` where
  * plants.test.ts puts a generated name; it plants REFLECT's lines in a file of that folder.
@@ -80,7 +80,7 @@ export const REFLECT_NEW_FOLDERS: readonly string[] = [
 ];
 
 /**
- * L1 of the trusted-rules swap (decision 0573): `Data.TaggedError` is refused in each value form
+ * L1 of the trusted-rules swap (a trusted lint rule replaces ours where it catches as much): `Data.TaggedError` is refused in each value form
  * oxlint's `no-restricted-properties` resolves. It stands beside `fabrika/no-data-taggederror`,
  * which stays because only it refuses the name in a type position (`DATA_TAGGEDERROR` in
  * plants.test.ts), and the Effect checker's `preferSchemaTaggedError`, which holds every
@@ -112,7 +112,7 @@ export const TAGGED_ERROR: Plant = {
 };
 
 /**
- * The lines of the `vi` lock (decisions 0555, 0579), each with whether oxlint's `vitest` rule alone
+ * The lines of the `vi` lock (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported), each with whether oxlint's `vitest` rule alone
  * refuses it and whether `eslint/no-restricted-properties` alone does. The vitest rule misses a call
  * chained onto the `vi` call (oxc#29656), and the properties rule never sees `v` after
  * `import { vi as v }`; the lock holds a line when either refuses it.
@@ -156,7 +156,7 @@ const viPlant = (code: string, pick: (line: (typeof VI_LOCK)[number]) => boolean
 });
 
 /**
- * M2 of the mock sweep's lock (decisions 0555, 0579): what oxlint's `vitest/no-restricted-vi-methods`
+ * M2 of the mock sweep's lock (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported): what oxlint's `vitest/no-restricted-vi-methods`
  * refuses alone, in a test file under `oxlint-plugins/`, and in one of every folder a block of the
  * lock lists (M1 in plants.test.ts, `next/apps/fabrika/e2e` first). A chained call stays `false`
  * here: the rule does not see it, and `VI_PROPERTIES` refuses it.
@@ -507,7 +507,7 @@ const oxc: readonly Plant[] = [
       ["export const b = x | 1;", false],
     ],
   },
-  // 0559: on for next/ and our tooling by an override, so plants.test.ts also plants it by path.
+  // No reduce callback or loop copies its running result on every pass: on for next/ and our tooling by an override, so plants.test.ts also plants it by path.
   {
     code: "oxc(no-accumulating-spread)",
     prelude: [XS],
@@ -1269,7 +1269,7 @@ const VIEW = "next/packages/tuval/src/window/view.tsx";
 export const CLOCK_VIEW_TEST = "next/packages/tuval/src/window/view.test.tsx";
 
 /**
- * The clock in a view (C1, owner 2026-11-05), the exam's `clock.integration.test.ts` until 0591:
+ * The clock in a view (C1, owner 2026-11-05), the exam's `clock.integration.test.ts` until the exam-to-lint rule:
  * React's `react/purity` refuses a clock or random read in render and lets an inline handler pass.
  * It also fires on line 11, a helper made in render that only a handler calls: the false alarm
  * experiment 194 saw at the slice's `main.tsx:146`; `no-clock-in-view` refuses that line anyway.
@@ -1328,7 +1328,7 @@ const REACT_FIRES = [
 
 /**
  * React's own rules (exam item 13, C2, C3 and C6), the exam's `react-rules.integration.test.ts` until
- * 0591: a ref read in render, a change after render and an unnamed memo fire; the same views written
+ * A test that reads files as text declares its reads, and shape checks are lint rules: a ref read in render, a change after render and an unnamed memo fire; the same views written
  * the Compiler's way pass, and so does a test copy. Plant: turn `react/immutability` off in the
  * config's `.tsx` block for `next/`, and line 8 passes.
  */
@@ -1386,7 +1386,7 @@ export const GRANT_NO_CONSOLE = {
 } as const;
 
 /**
- * M12 (decision 0592): libfabrika's product code writes output through Effect's `Console`, so a raw
+ * M12 (libfabrika writes output only through Effect's Console, so a test can see it): libfabrika's product code writes output through Effect's `Console`, so a raw
  * `console` call is refused in a libfabrika path that is not a `*.test.ts` file, by oxlint's own
  * `no-console`, and Effect's `Console` passes. plants.test.ts runs these lines in every folder of
  * `next/packages/libfabrika/src`, in a product path, a `*.test-support.ts` path and a `*.test.ts`
@@ -1411,7 +1411,7 @@ export const LIBFABRIKA_NO_CONSOLE: Plant = {
 };
 
 /**
- * M13 (decision 0592, owner ruling 2026-11-15): a raw `process.stdout` or `process.stderr` access is
+ * M13 (libfabrika writes output only through Effect's Console, so a test can see it, owner ruling 2026-11-15): a raw `process.stdout` or `process.stderr` access is
  * refused in libfabrika's files but its `*.test.ts`, in each form oxlint's `no-restricted-properties`
  * resolves, and the rest of `process` passes. plants.test.ts runs these lines in every folder of
  * `next/packages/libfabrika/src`, in a product path and a `*.test-support.ts` path, which must refuse

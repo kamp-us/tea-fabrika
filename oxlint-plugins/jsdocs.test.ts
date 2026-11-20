@@ -1,4 +1,4 @@
-// `fabrika/jsdocs`, the docs rule of E6 (0023, 0120): ticket 913, slice B2.1 of
+// `fabrika/jsdocs`, the docs rule of E6 (next/ follows Effect's code style and doc comments; Effect code in next/ follows the eight Effect guidelines): ticket 913, slice B2.1 of
 // `docs/plan/effect-rules-big.md`, with laws 3 to 9 of the draft that plan cites (laws 1 and 2 are the
 // rule itself, in `pnpm lint`). Laws 3 to 7 run in process through oxlint's RuleTester on generated
 // files, seed 119120; law 8 runs the real oxlint over Effect 4.1.3's own source; law 9 lints planted
@@ -42,7 +42,7 @@ const expectFires = (code: string, lines: ReadonlyArray<number>, since: Since = 
               options,
               errors: Arr.map(
                 [...lines].sort((a, b) => a - b),
-                (line) => ({ line, message: /\(E6, 0023\)/ }),
+                (line) => ({ line, message: /\(E6, next\/ follows Effect's code style and doc comments\)/ }),
               ),
             },
           ],
@@ -52,7 +52,7 @@ const expectFires = (code: string, lines: ReadonlyArray<number>, since: Since = 
 const doc = (...lines: ReadonlyArray<string>): string =>
   Arr.join(["/**", ...Arr.map(lines, (line) => (line === "" ? " *" : ` * ${line}`)), " */"], "\n");
 
-// 0574: no block asks for `@stability`, and a block that holds one still passes, since `jsdocs` does not refuse it.
+// No @stability tag until the first release, and each unstable Effect part is named once: no block asks for `@stability`, and a block that holds one still passes, since `jsdocs` does not refuse it.
 const MODULE = doc("A planted module.");
 
 /** The module block of a file the sweep has not reached: it still holds the tag. */

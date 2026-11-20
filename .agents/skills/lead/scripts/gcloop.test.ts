@@ -1,4 +1,4 @@
-// gcloop.ts: the box garbage collection loop (decision 0101). Today's lead tooling. The pure laws
+// gcloop.ts: the box garbage collection loop (box cleanup runs on a timer and after a merge, never on a step's start path). Today's lead tooling. The pure laws
 // read gc's printed lines, the status line and the unit file; the sweep laws run real sweeps in a
 // temp state folder with a stand-in for `box.sh gc`: no box, git, gh or Docker is touched.
 import { NodeServices } from "@effect/platform-node";

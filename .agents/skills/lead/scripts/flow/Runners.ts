@@ -1,5 +1,5 @@
 // Runners.ts: the service that does one step's work, picked by the step's name. Today's lead
-// tooling (0064). The flow machine never runs anything itself: its one Cmd, `step_run`, goes here.
+// tooling (the lead drives work by writing a flow that one program runs, and no agent holds a loop). The flow machine never runs anything itself: its one Cmd, `step_run`, goes here.
 // A real flow gets its runners from a table (the landing runners); a test gives fakes through the same
 // `Runners.layer`, so no test needs git, the network or an agent.
 

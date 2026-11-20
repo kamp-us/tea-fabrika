@@ -143,7 +143,7 @@ describe("box files, today's tooling", () => {
 
     // Quest `done` landed: tests1's tree is gone, build1's tree is still there (gc keeps it),
     // review1 wrote a file a minute ago. Quest `live` has an open PR. `done`'s state file is one
-    // drive wrote before decision 0546, which names the quest `lane`: it is read all the same.
+    // drive wrote before the rule that a lane is called a quest, which names the quest `lane`: it is read all the same.
     quest("done", "fabrikalfa/done", ["done-tests1", "done-build1", "done-review1"], "lane");
     quest("live", "fabrikalfa/live", ["live-tests1"]);
 

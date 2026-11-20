@@ -1,4 +1,4 @@
-// oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
+// oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (our own source uses named exports only): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
 import { it } from "@effect/vitest";
@@ -39,7 +39,7 @@ const SOURCE = [
   "apps/fabrika/src",
 ];
 
-/** Tooling and config under our source folders, which 0058 leaves out. */
+/** Tooling and config under our source folders, which the named-exports rule leaves out. */
 const TOOLING = [
   "next/apps/fabrika/alchemy.run.ts",
   "packages/pipeline/rslib.config.ts",
@@ -88,7 +88,7 @@ it("an inline edge comment lets the default on the next line through, and no lin
 
 it.live("scenario: tooling and config files, and files outside our source, keep their default export", () =>
   Effect.gen(function* () {
-    // A tool loads these by their default, so 0058 leaves them out by glob.
+    // A tool loads these by their default, so the named-exports rule leaves them out by glob.
     const files = Rec.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
     const result = yield* promised(() => plant(files));
 

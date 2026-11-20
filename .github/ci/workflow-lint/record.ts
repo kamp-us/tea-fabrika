@@ -6,7 +6,7 @@ import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 
 // Q1. The record a ready pull request run leaves for the merge queue: its pass of changes.mjs, on a
 // ready pull request alone, the merge commit the run checks out, and the upload of what it wrote
-// under the name it printed. `retention-days` is a setting (0069), so only its being there is held.
+// under the name it printed. `retention-days` is a setting (a choice that makes sense as a setting is a setting, declared once), so only its being there is held.
 
 const RECORD = "node .github/ci/changes.mjs --record";
 
@@ -84,7 +84,7 @@ export const record: Rule = ({ jobs }, require) => {
   // names another, and a group of the named tree would skip tests nobody ran. `matched` trusts any
   // artifact of the record's name from a green run, so the record's upload is the one step in the
   // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
-  // in a job of TIMED_LEGS (next alone since 0539), with exactly TT2's `with:`, so its name is
+  // in a job of TIMED_LEGS (next alone since the merge line runs no tooling tests, and the schedule runs them all), with exactly TT2's `with:`, so its name is
   // `timings-...` and never a record's.
 
   for (const [name, job] of Rec.toEntries(jobs)) {

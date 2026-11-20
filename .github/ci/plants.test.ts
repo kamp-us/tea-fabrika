@@ -7,7 +7,7 @@
 // scenario: the repo's own catalog at head. It is data about the repo, so no generated input stands in
 // for it; the five plants are the five cases, one test each.
 //
-// The last law is the edge's host guard (decision 0594), which nothing else runs under Stryker: a
+// The last law is the edge's host guard (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI), which nothing else runs under Stryker: a
 // property over command lines, in every order and spelling effect/cli accepts, that no run starts a
 // law the host may not start.
 import { readFileSync } from "node:fs";
@@ -100,7 +100,7 @@ const mutantsOf = (file: string, text: string) =>
     ),
   );
 
-describe("the plant catalog at head (decision 0600)", () => {
+describe("the plant catalog at head (testing, linting and formatting live in @kalfa/quality)", () => {
   it("scenario: the catalog decodes, and its names are unique", () => {
     expect(Schema.decodeUnknownSync(Catalog)(catalog)).toHaveLength(catalog.length);
     expect(new Set(catalog.map(({ name }) => name)).size).toBe(catalog.length);
@@ -127,7 +127,7 @@ describe("the plant catalog at head (decision 0600)", () => {
 
 // The guard law's world. Nothing here starts a real process: the spawner is a stand-in that counts.
 // The first two are laws the guard refuses off a CI or a box: one by its `.integration.` name, one because its
-// own code signals a process (0594). The third is a plain law: the guard lets it run anywhere, and no plant names it.
+// own code signals a process (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI). The third is a plain law: the guard lets it run anywhere, and no plant names it.
 const LAWS: ReadonlyArray<{ readonly plant: string | undefined; readonly law: string }> = [
   { plant: "checklist-pid", law: "next/apps/fabrika/src/checklist-instance.laws.integration.test.ts" },
   { plant: "host-pin", law: ".agents/skills/lead/scripts/flow/host.test.ts" },

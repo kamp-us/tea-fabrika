@@ -1,4 +1,4 @@
-// Where the five old advice rules and the docs rule still advise (0523, 0168). Each is "error" in its
+// Where the five old advice rules and the docs rule still advise (a lint rule blocks wherever its code is clean; an old lint break is fixed, never kept in a list). Each is "error" in its
 // base scope, so it blocks in every folder at zero. A dirty folder's override in `.oxlintrc.json`
 // sets it to "warn", and only a fire oxlint grades a warning there is advice. A warn line goes the
 // moment its folder reaches zero: `stale` names it, and a whole `pnpm lint` run fails until it is
@@ -21,8 +21,8 @@ const always = (): boolean => true;
  * Each says which of its fires may advise.
  */
 const ADVICE: ReadonlyMap<string, (fire: Fire) => boolean> = new Map([
-  // Only the JSON.parse guard advises (0523). Any other entry of this rule, such as the Reflect ban
-  // (0554), blocks at every level. Oxlint writes the fire's message itself, as
+  // Only the JSON.parse guard advises (a lint rule blocks wherever its code is clean). Any other entry of this rule, such as the Reflect ban
+  // (a field is read through its type or a decode, never past it with Reflect), blocks at every level. Oxlint writes the fire's message itself, as
   // `'JSON.parse' is restricted from being used.`, and keeps the entry's own text apart as a hint.
   ["eslint(no-restricted-properties)", (fire: Fire) => (fire.message ?? "").startsWith("'JSON.parse' ")],
   ["fabrika(jsdocs)", always],
@@ -47,7 +47,7 @@ const CODES: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
- * The frozen version's paths (0525), where the config's one frozen override keeps the two top-level
+ * The frozen version's paths (today's version is frozen and takes no new work), where the config's one frozen override keeps the two top-level
  * rules at "warn". That override is not a dirty-folder line: no fill brings it to zero, so these
  * globs are never read as warn lines. It and this set go when the freeze quest takes the paths out
  * of lint.

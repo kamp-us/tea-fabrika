@@ -6,7 +6,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 // Ticket 500, today's tooling (owner, 2026-11-09): an added line is old text when the same diff
-// removes, from any of its files (0047, amended 2026-11-14), a line equal to it once each run of
+// removes, from any of its files (an added line that only respaces a removed line is old text to the leak check, amended 2026-11-14), a line equal to it once each run of
 // spaces and tabs is one space,
 // the ends are trimmed and one last ; or , is dropped. Every diff here is one git itself wrote,
 // with the flags the bot's push reads its diff with, unless a law says it is written by hand.
@@ -185,7 +185,7 @@ describe("T500 leakgrep reads a respaced line as old text, today's tooling", () 
   const now = `  keep  ${word}`;
 
   // pinned: the same text removed from one file and added to another is old text: it was already in
-  // the tree the diff starts from (0047, amended 2026-11-14). A move between files, as a split of one
+  // the tree the diff starts from (an added line that only respaces a removed line is old text to the leak check, amended 2026-11-14). A move between files, as a split of one
   // test file into two, adds nothing new. Plant: key removed lines by file and text again.
   it("pinned: a line moved from another file of the same diff is old text", () => {
     lab(({ diff, hits }) => {

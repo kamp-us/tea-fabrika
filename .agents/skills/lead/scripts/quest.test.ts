@@ -103,7 +103,7 @@ describe("quest rules, today's tooling", () => {
   // Plants: waive every stale link; waive a stale link of a step the quest signed; waive other stuck;
   // hold a missing signature.
   // themes tests4, 2026-11-09: PR 565's lead link on ticket 343 made the quest's tests step stale_link lead.
-  // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the quest after 0161.
+  // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the quest after the no-step-signing rule.
   it("holds every stuck answer except a missing signature and a stale link of a step the quest has not signed", () => {
     const answer = fc.oneof(
       fc.record({ _tag: fc.constant("stuck"), reason: fc.constant("stale_link"), step }),
@@ -234,7 +234,7 @@ describe("the lockfile follows the manifests, today's tooling", () => {
 
 describe("a saved quest's key, today's tooling", () => {
   // Plants: keep `lane` beside `quest`; let `lane` win over a `quest` already there; touch a record
-  // with no `lane`. Decision 0546: saved data keeps its word, and a reader reads both.
+  // with no `lane`. The rule that a lane is called a quest: saved data keeps its word, and a reader reads both.
   it("property: a record's `lane` reads as `quest` and goes, and every other key stays as it was", () => {
     const key = fc.stringMatching(/^[a-z]{1,8}$/).filter((k) => k !== "lane" && k !== "quest");
     fc.assert(

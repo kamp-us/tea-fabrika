@@ -1,5 +1,5 @@
-// The ratchet on the list files (0524, ticket 933), as CI runs it: the script on a planted git
-// repository. It drives git and a temp folder, so it runs on the schedule (0536); the core's laws
+// The ratchet on the list files (no check reads a list that lets broken code pass, ticket 933), as CI runs it: the script on a planted git
+// repository. It drives git and a temp folder, so it runs on the schedule (a test that needs a real resource runs only in main's full run); the core's laws
 // on generated rows are in ratchet.test.ts.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
@@ -20,7 +20,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
   const script = join(import.meta.dirname, "ratchet.ts");
   const extra = { file: "next/b.ts", rule: "fabrika(no-of)", code: "const b = 2;" };
 
-  // Each test builds its own repository in its own scope, which removes it when the test ends (0061).
+  // Each test builds its own repository in its own scope, which removes it when the test ends (anything that holds a resource is acquired in a scope, so the scope releases it).
   const scenario = Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "ratchet-"))),
     (repo) => Effect.sync(() => rmSync(repo, { recursive: true, force: true })),

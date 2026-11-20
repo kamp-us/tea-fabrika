@@ -1,5 +1,5 @@
 // walk.ts: walk one flow to its end with the `Runners` service, saving its Model to a state file
-// (0064). Today's lead tooling. The command line around it is the flow runner beside this file; a
+// (the lead drives work by writing a flow that one program runs, and no agent holds a loop). Today's lead tooling. The command line around it is the flow runner beside this file; a
 // test calls `runFlow` here with fake runners and a temp state file.
 //
 // The walk is the flow machine on tea's Effect engine. tea's own file store saves its Model before

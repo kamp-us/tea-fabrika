@@ -1,10 +1,10 @@
 /**
- * The host's say on a run (decisions 0594 and 0178), as a service: before Stryker starts a test file,
+ * The host's say on a run (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI; a law that needs the real machine runs on disposable CI, and on the owner's Mac only with his yes), as a service: before Stryker starts a test file,
  * the host that runs this package is asked whether this machine may start it. The package holds no
  * rule of its own and no repo path, so which files a machine refuses is the host's; that a host must
  * answer is the package's. `node/MutantsStryker.ts` asks with the test files it is about to run, right
  * before it runs them, so no command line, in any order or spelling, reaches Stryker unasked. This file
- * is the contract only (0095).
+ * is the contract only (a service file holds only its contract, and each layer is its own file).
  */
 import { Context } from "effect";
 import type { Effect } from "effect";

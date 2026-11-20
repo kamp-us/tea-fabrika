@@ -9,7 +9,7 @@
 // chooses (`export { a as colorsOf }`, `export * as colorsOf from`).
 //
 // A module's own top-level `of` passes, as Effect has `Chunk.of`, read as `Lease.of(...)` under a
-// namespace import (0029): `export const of`, `export function of`, `export declare function of`, a
+// namespace import (the repo formats and names code as Effect does): `export const of`, `export function of`, `export declare function of`, a
 // top-level pattern under `export`, and a top-level local exported by `export { of }`. The
 // allowance covers that one binding only: its keys, parameters and nested names are still checked.
 // A bare `of` read by name stays banned, so `import { of }` fires, renamed or type-only.
@@ -87,7 +87,7 @@ export const noOf: CreateRule = {
 
       context.report({
         node,
-        message: `\`${name}\`: no bare \`of\` and no \`xOf\` names in next/. Put the helper on its type as a static (\`make\`, \`fromX\`, \`toX\`), give it a plain name, or export a top-level \`of\` that readers call as \`Lease.of(...)\` (0029).`,
+        message: `\`${name}\`: no bare \`of\` and no \`xOf\` names in next/. Put the helper on its type as a static (\`make\`, \`fromX\`, \`toX\`), give it a plain name, or export a top-level \`of\` that readers call as \`Lease.of(...)\` (the repo formats and names code as Effect does).`,
       });
     };
 
@@ -211,7 +211,8 @@ export const noOf: CreateRule = {
         if (spelled(node.imported) === "of") {
           context.report({
             node,
-            message: "`of` imported by name: import the module as a namespace and call `Lease.of(...)` (0029).",
+            message:
+              "`of` imported by name: import the module as a namespace and call `Lease.of(...)` (the repo formats and names code as Effect does).",
           });
         } else if (spelled(node.imported) !== spelled(node.local)) {
           check(node.local);

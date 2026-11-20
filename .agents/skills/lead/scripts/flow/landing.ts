@@ -1,5 +1,5 @@
 // landing.ts: the runners that land a branch, each a thin wrapper over the repo's own script.
-// Today's lead tooling (0064). Ticket 652 turns these landing parts into exported Effects; when it
+// Today's lead tooling (the lead drives work by writing a flow that one program runs, and no agent holds a loop). Ticket 652 turns these landing parts into exported Effects; when it
 // lands, each runner here calls its Effect in place of the script, and the step names stay.
 //
 //   format      act     pnpm format in the worktree

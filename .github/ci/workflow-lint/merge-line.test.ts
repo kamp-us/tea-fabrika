@@ -25,7 +25,7 @@ import {
 // every generated valid workflow alone (wiring.test-support.ts), so an unrelated error cannot mask
 // it.
 
-// The test job's one test step before 0539, the tooling tests on two machines: the `tooling`
+// The test job's one test step before the no-tooling-tests-on-the-merge-line rule, the tooling tests on two machines: the `tooling`
 // project, since next/ and today's trees are projects of their own and a project ignores `--exclude`.
 const tooling = [
   'if [ -n "$BASE" ]; then',
@@ -36,11 +36,11 @@ const tooling = [
   "",
 ].join("\n");
 
-// What changes exposed before 0533 and 0539: the flags that started today's tests, its app end to
+// What changes exposed before the rule that CI runs none of today's tests and the no-tooling-tests-on-the-merge-line rule: the flags that started today's tests, its app end to
 // end, and the tooling tests.
 const goneFlags = ["today", "e2e", "test"] as const;
 
-// The e2e job as it was before 0533, with its own place in ci-required's needs and its stop step
+// The e2e job as it was before the rule that CI runs none of today's tests, with its own place in ci-required's needs and its stop step
 // last (F1), so T2 alone names it.
 const todaysE2e = (run: Record<string, string>) => (w: Workflow) => {
   Object.assign(w.jobs, {
@@ -50,7 +50,7 @@ const todaysE2e = (run: Record<string, string>) => (w: Workflow) => {
 };
 
 const plants: Plant[] = [
-  // 0533: the promises gate tests today's pipeline code, so no step runs it, under any spelling or
+  // The promises gate tests today's pipeline code, so no step runs it, under any spelling or
   // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
   // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
   // next job's are also held by the build-flag law and next's own command law.
@@ -74,7 +74,7 @@ const plants: Plant[] = [
       w.jobs.next.steps.splice(place(w, "next", "shard times"), 0, { name: "promises", run: "pnpm promises" });
     },
   ],
-  // 0533: no event runs the tests of today's version or its app end to end, and 0539: none runs a
+  // No event runs the tests of today's version or its app end to end, and the no-tooling-tests-on-the-merge-line rule: none runs a
   // tooling test. T1: no output of changes can start them, and every vitest call names only next/'s
   // projects. T2: no job runs today's app. Each plant puts back one way those tests ran before, or a
   // new spelling of one. Source plants, each run once on workflow-lint.ts and restored: drop T1's
@@ -88,7 +88,7 @@ const plants: Plant[] = [
     },
   ]),
   [
-    "T1: the test job is back as it was before 0539, the tooling tests on two machines",
+    "T1: the test job is back as it was before the no-tooling-tests-on-the-merge-line rule, the tooling tests on two machines",
     (w) => {
       Object.assign(w.jobs, {
         test: {
@@ -179,7 +179,7 @@ const plants: Plant[] = [
       Object.assign(w.jobs.next, { env: { RUNNER_TEMP: "--project tooling" } });
     },
   ],
-  // 0536: today's tests and the tooling tests are projects of their own, so a second `--project`, or
+  // A test that needs a real resource runs only in main's full run: today's tests and the tooling tests are projects of their own, so a second `--project`, or
   // none at all, runs them in next's vitest step. next's own command law holds these too.
   ...["today", "tooling"].map((project): [string, (w: Workflow) => void] => [
     `T1: next's vitest step runs the ${project} project's tests too`,
@@ -292,7 +292,7 @@ plants.push(
 rejects(plants);
 
 // T1, T2 and T6 on the checked-in check.yaml: each plant puts back one piece of how today's tests
-// ran before 0533, or the tooling tests before 0539, and gives its one error.
+// ran before the rule that CI runs none of today's tests, or the tooling tests before the no-tooling-tests-on-the-merge-line rule, and gives its one error.
 for (const [name, plant, error] of [
   [
     "T1: the today flag back on changes",
@@ -317,7 +317,7 @@ for (const [name, plant, error] of [
         run: 'pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests',
       });
     },
-    "check.yaml: T1: typecheck runs no tooling test (0539)",
+    "check.yaml: T1: typecheck runs no tooling test (the merge line runs no tooling tests, and the schedule runs them all)",
   ],
   [
     "T2: the e2e job back, with its place in ci-required's needs",
@@ -358,7 +358,7 @@ for (const [name, plant, error] of [
 /** A project's test settings by its name, as vitest.config.ts gives them. */
 const projectNamed = (name: string) => projects.find((project) => project.test.name === name)?.test;
 
-it("T1 (0536): the tooling projects, the schedule's tooling legs' projects, hold no glob of today's trees or of next/", () => {
+it("T1 (a test that needs a real resource runs only in main's full run): the tooling projects, the schedule's tooling legs' projects, hold no glob of today's trees or of next/", () => {
   // A project ignores `--exclude`, so the projects' own globs are what keeps today's tests and next/'s
   // out of scheduled.yaml's tooling legs (SC8). Plant, run once on vitest.config.ts and restored: add
   // "apps/*/src/**/*.test.ts" to TOOLING, which both projects are made from (red, on each).
@@ -373,8 +373,8 @@ it("T1 (0536): the tooling projects, the schedule's tooling legs' projects, hold
   }
 });
 
-it("0602: tooling-integration holds the tooling laws that start a process, and tooling none of them", () => {
-  // A tooling law that starts a process is an `.integration.` law (0584), and only main's full run
+it("Integration laws run only in main's full run: tooling-integration holds the tooling laws that start a process, and tooling none of them", () => {
+  // A tooling law that starts a process is an `.integration.` law (a test's kind follows what it uses, never its name), and only main's full run
   // runs it, on the `tooling-integration` project (SC8). Plants, each run once on vitest.config.ts and
   // restored: drop TOOLING_INTEGRATION from tooling's `exclude` (red: tooling holds them); map
   // TOOLING_INTEGRATION's globs to plain names (red: tooling-integration holds plain laws).
@@ -385,7 +385,7 @@ it("0602: tooling-integration holds the tooling laws that start a process, and t
   expect(real?.include.every((glob) => tooling?.exclude.includes(glob) === true)).toBe(true);
 });
 
-// T1 (0539) holds every PR-reachable job, including L13 in host.yaml. The fixed box job is
+// T1 (the merge line runs no tooling tests, and the schedule runs them all) holds every PR-reachable job, including L13 in host.yaml. The fixed box job is
 // dispatch-only; its tooling laws run on no pull request or merge group.
 const hostPath = ".github/workflows/host.yaml";
 
@@ -393,7 +393,7 @@ const hostYaml = () => parse(readFileSync(new URL("../../workflows/host.yaml", i
 
 const l13 = (w: Parsed) => step(w, "launchd", "L13");
 
-const hostError = `${hostPath}: T1: launchd runs no tooling test (0539)`;
+const hostError = `${hostPath}: T1: launchd runs no tooling test (the merge line runs no tooling tests, and the schedule runs them all)`;
 
 it("scenario: the checked-in host.yaml runs no tooling test", () => {
   expect(lintNoTooling(hostPath, JSON.stringify(hostYaml()))).toEqual([]);
@@ -419,7 +419,11 @@ for (const [condition, dispatch] of [
     const workflow: Parsed = hostYaml();
     Object.assign(workflow.jobs["box"]!, { if: condition });
     expect(lintNoTooling(hostPath, JSON.stringify(workflow))).toEqual(
-      dispatch ? [] : [`${hostPath}: T1: box runs no tooling test (0539)`],
+      dispatch
+        ? []
+        : [
+            `${hostPath}: T1: box runs no tooling test (the merge line runs no tooling tests, and the schedule runs them all)`,
+          ],
     );
   });
 }

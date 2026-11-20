@@ -1,4 +1,4 @@
-// `fabrika/prefer-namespace-import`, E2 of the Effect-check sweep (0577). Laws 1 to 4 run in process
+// `fabrika/prefer-namespace-import`, E2 of the Effect-check sweep (libraries import Effect by namespace, programs and apps by the barrel). Laws 1 to 4 run in process
 // through oxlint's RuleTester on generated import lines and read the exact text the fix writes.
 // Law 5 lints planted files at their real paths with the repo's own `.oxlintrc.json`, so the scope is
 // the config's: the 13 libfabrika folders and tuval fire, the folders still to come and every other

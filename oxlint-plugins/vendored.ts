@@ -1,4 +1,4 @@
-// The anti-slop plugin's `src/` comes in whole and unchanged at one commit of the fork (0563,
+// The anti-slop plugin's `src/` comes in whole and unchanged at one commit of the fork (we use the anti-slop plugin as it ships, never our own copy of its rules,
 // Amendments). Its rules are the exam, so an edit there would change the exam without anyone reading
 // it as a change. vendor/anti-slop/pin.json names the fork, the commit and the git tree id of the
 // fork's `src/` at that commit, which anyone can check against the fork with `git rev-parse
@@ -39,7 +39,7 @@ export const verify = (root: string): ReadonlyArray<string> => {
 
   if (found !== tree) {
     lines.push(
-      `${FOLDER}/src at HEAD is git tree ${found}, and pin.json says ${tree}: it must be the src/ of ${repository} at ${commit}, unchanged (0563)`,
+      `${FOLDER}/src at HEAD is git tree ${found}, and pin.json says ${tree}: it must be the src/ of ${repository} at ${commit}, unchanged (we use the anti-slop plugin as it ships, never our own copy of its rules)`,
     );
   }
 
@@ -48,7 +48,9 @@ export const verify = (root: string): ReadonlyArray<string> => {
   }
 
   if (changed.length > 0) {
-    lines.push(`${FOLDER}: changed and not committed, and it is never edited (0563): ${Arr.join(changed, ", ")}`);
+    lines.push(
+      `${FOLDER}: changed and not committed, and it is never edited (we use the anti-slop plugin as it ships, never our own copy of its rules): ${Arr.join(changed, ", ")}`,
+    );
   }
 
   return lines;

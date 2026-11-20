@@ -1,12 +1,12 @@
 // `edge-comment` (Tier 1, P35; small-exam item 6), the config half: no line of `.oxlintrc.json` turns
 // an edge rule off for a `next/` file that is not a test, so the list of edge files cannot come back
-// through the config, and `.agents/` is held to next/'s rules (0033). The planted half, which spawns
+// through the config, and `.agents/` is held to next/'s rules (lead tooling under .agents/ follows next/'s code rules). The planted half, which spawns
 // oxlint in a temp folder, is edge-comment.integration.test.ts.
 //
 // K11 (ticket 1073), pinned: today's break after pull requests 1369 and 1371, when the `.agents/`
 // mirror law sat in an `.integration.` file and so never ran on the pull requests that broke it. This
 // file reads `.oxlintrc.json` only, so it is plain and runs on every pull request and queue group
-// (0584). Plant, run once and restored: these laws back in the `.integration.` file, and
+// (a test's kind follows what it uses, never its name). Plant, run once and restored: these laws back in the `.integration.` file, and
 // `vitest list --project next` no longer lists them.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -77,7 +77,7 @@ describe(".oxlintrc.json", () => {
     expect(Arr.filter(config.ignorePatterns, (p) => pipe(p, Str.startsWith("next")))).toEqual([]);
   });
 
-  // `.agents/` is held to next/'s rules (0033) by the three laws below. One override, the mirror,
+  // `.agents/` is held to next/'s rules (lead tooling under .agents/ follows next/'s code rules) by the three laws below. One override, the mirror,
   // repeats the `next/**` rule block for `.agents/`'s code, since the law above wants that override's
   // files to be exactly `next/**`. Two copies drift, so the copies must stay equal. Every other
   // override that names an `.agents/` path, such as one rule turned on for several folders at once,
@@ -95,7 +95,7 @@ describe(".oxlintrc.json", () => {
   const level = (setting: unknown): string =>
     Arr.isArray(setting) ? level(setting[0]) : (LEVELS[String(setting)] ?? String(setting));
 
-  it("pinned: the .agents/ override repeats the next/** rule block exactly (0033)", () => {
+  it("pinned: the .agents/ override repeats the next/** rule block exactly (lead tooling under .agents/ follows next/'s code rules)", () => {
     const next = Arr.filter(config.overrides, (o) => o.files.length === 1 && o.files[0] === "next/**");
 
     const mirrors = pipe(
@@ -114,7 +114,7 @@ describe(".oxlintrc.json", () => {
   // warn or error; options may differ, as an override replaces them). The `next/` path must be of the
   // same kind: a test path when the override's `.agents/` paths are all test paths, a non-test path
   // otherwise, so a rule turned off for next/'s tests never excuses `.agents/`'s code.
-  it("pinned: every other override naming .agents/ gives next/ the same level for each rule (0033)", () => {
+  it("pinned: every other override naming .agents/ gives next/ the same level for each rule (lead tooling under .agents/ follows next/'s code rules)", () => {
     const unmatched = pipe(
       config.overrides,
       Arr.filter((o) => Arr.some(o.files, agents) && !mirror(o)),
@@ -141,9 +141,9 @@ describe(".oxlintrc.json", () => {
     expect(unmatched).toEqual([]);
   });
 
-  // 0033's binding rule, which the level match above does not hold alone: no override turns a rule
+  // The binding rule that lead tooling under .agents/ follows next/'s code rules, which the level match above does not hold alone: no override turns a rule
   // off for `.agents/`'s code, only for its tests. The mirror is held to `next/**` by its own law.
-  it("pinned: no override turns a rule off for a non-test .agents/ path (0033)", () => {
+  it("pinned: no override turns a rule off for a non-test .agents/ path (lead tooling under .agents/ follows next/'s code rules)", () => {
     const offs = pipe(
       config.overrides,
       Arr.filter((o) => Arr.some(o.files, (f) => agents(f) && !test(f)) && !mirror(o)),

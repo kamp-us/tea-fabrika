@@ -1,4 +1,4 @@
-// The check is the only thing holding decision 0003 for workspace packages, so each case is
+// The check is the only thing holding the rule that the repo is kept clean by code checks, never by discipline for workspace packages, so each case is
 // planted and seen to fail or pass. Each runs the real script on a small git tree of its own.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

@@ -1,4 +1,4 @@
-// S1 of .kalfa/quests/port-scripts-0113-PLAN.md: the lint hold on 0113. The check is the only
+// S1 of .kalfa/quests/port-scripts-0113-PLAN.md: the lint hold on the no-shell-scripts rule. The check is the only
 // thing holding the rule, so each law runs `check` on generated tracked paths and file heads in
 // memory: no git, no process, no temp folder. `pnpm lint` runs the same function over this repo's
 // real `git ls-files`, so the repo's own state is held there.
@@ -131,7 +131,7 @@ describe("a tracked shell or Python file", () => {
 
   // The lead's ruling on the review's finding
   // (field/findings/2026-11-16-extensionless-shell-scripts-escape-hold.json): a file with no
-  // extension is a script under 0113 when its `#!` line names a shell or Python. Red first on the
+  // extension is a script under the no-shell-scripts rule when its `#!` line names a shell or Python. Red first on the
   // hold at 8e5c817, which read extensions only: the planted `#!/bin/sh` file gave no finding.
   // Plant, run once on the new hold: `env` read as the interpreter, so `#!/usr/bin/env bash`
   // passed. Red: the env form gave no finding.
@@ -177,7 +177,7 @@ describe("a tracked shell or Python file", () => {
           }
 
           // A marked edge passes, as a `.sh` file does.
-          const marked = `${bang}\n# edge: runs before Node exists (0113)\n${body}`;
+          const marked = `${bang}\n# edge: runs before Node exists (no shell or Python script enters the repo)\n${body}`;
           expect(check([...LISTED, path], reader({ [path]: marked }))).toEqual([]);
         }
       }),
@@ -211,9 +211,9 @@ describe("the NOT_YET_PORTED list", () => {
   });
 
   // The 16 scripts the plan names (its "What is there today" table and scripts/typecheck.sh), and
-  // the three tsh launchers of today's version, which is frozen and deletes them with it (0525), listed
+  // the three tsh launchers of today's version, which is frozen and deletes them with it (today's version is frozen and takes no new work), listed
   // by the lead's ruling that the plan's S1 row records: the list may lose lines as ports land,
-  // never gain one (0113's binding constraint).
+  // never gain one (the no-shell-scripts rule's binding constraint).
   const PLANNED = [
     ".agents/skills/lead/scripts/box.sh",
     ".agents/skills/lead/scripts/env.sh",
@@ -248,7 +248,7 @@ describe("an edge line", () => {
   const APT = ".github/ci/apt.sh";
   const apt = readFileSync(join(ROOT, APT), "utf8");
 
-  // .github/ci/apt.sh is 0113's one lasting edge: it is on no list, so its edge line alone passes it,
+  // .github/ci/apt.sh is the no-shell-scripts rule's one lasting edge: it is on no list, so its edge line alone passes it,
   // and the same file without that line fails.
   it("scenario: apt.sh passes by its edge line alone", () => {
     expect(LISTED).not.toContain(APT);
@@ -264,7 +264,7 @@ describe("an edge line", () => {
 
   // Plant, run once: `check` read a line as an edge on `# edge:` alone, with no reason. Red: an empty
   // or blank reason passed.
-  it("passes with a reason and `(0113)` in the first five lines, and fails without either", () => {
+  it("passes with a reason and `(no shell or Python script enters the repo)` in the first five lines, and fails without either", () => {
     let blank = 0;
     let said = 0;
     const reason = fc.oneof(fc.constantFrom("", " ", "\t", "  "), fc.string({ maxLength: 40 }));
@@ -282,15 +282,22 @@ describe("an edge line", () => {
           const gives = /\S/.test(why);
           blank += gives ? 0 : 1;
           said += gives ? 1 : 0;
-          expect(result(`# edge: ${why} (0113)`)).toEqual(gives ? [] : [script]);
+          expect(result(`# edge: ${why} (no shell or Python script enters the repo)`)).toEqual(gives ? [] : [script]);
 
-          if (!why.trimEnd().endsWith("(0113)")) {
+          if (!why.trimEnd().endsWith("(no shell or Python script enters the repo)")) {
             expect(result(`# edge: ${why}`)).toEqual([script]);
           }
 
           // Past the first five lines it is not seen.
           const late = reader({
-            [script]: ["#!/bin/sh", "#", "#", "#", "#", `# edge: reason${why} (0113)`].join("\n"),
+            [script]: [
+              "#!/bin/sh",
+              "#",
+              "#",
+              "#",
+              "#",
+              `# edge: reason${why} (no shell or Python script enters the repo)`,
+            ].join("\n"),
           });
 
           expect(check([...LISTED, script], late).map((found) => found.path)).toEqual([script]);

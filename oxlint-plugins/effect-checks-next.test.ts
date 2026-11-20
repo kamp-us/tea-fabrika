@@ -2,8 +2,8 @@
 // Effect plugin's `overrides` (ticket 910, law 13 of `docs/plan/effect-rules-small.md`). The type
 // check is what refuses the code. This file holds only that the lines are there: a line lost in a
 // merge of that shared file turns its check off, and nothing else says so.
-// It was the exam's (next/apps/fabrika/src/exam/effect-checks.test.ts) until 0591 moved it here. Its name
-// keeps clear of `effect-checks.test.ts`, which pull request 1417 adds; 0573's `effect-checks-held.test.ts`
+// It was the exam's (next/apps/fabrika/src/exam/effect-checks.test.ts) until the exam-to-lint rule moved it here. Its name
+// keeps clear of `effect-checks.test.ts`, which pull request 1417 adds; the trusted-rules rule's `effect-checks-held.test.ts`
 // takes these two checks once it is on main. Plant: delete `globalDateInEffect` from the `next/` override
 // of `tsconfig.base.json`, and the law fails.
 import { readFileSync } from "node:fs";

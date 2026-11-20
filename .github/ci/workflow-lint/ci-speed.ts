@@ -19,7 +19,7 @@ export const CI_SPEED_RUN =
  * and the job's grants CI_SPEED_TOKEN, so the issue write lives on that job only. K4: its checkout
  * keeps no token. K5: the measure step runs CI_SPEED_RUN with the job's token, under pipefail. K6:
  * no step cancels the run: check.yaml's stop step frees the other jobs' runners, and one job has
- * none to free, so its token keeps actions: read. K7 (0541): its steps are the checkout, the pnpm
+ * none to free, so its token keeps actions: read. K7 (CI speed has a goal, and a daily job measures it): its steps are the checkout, the pnpm
  * setup, its install and the measure alone, so it runs no test. lintIssues holds that this job and
  * scheduled.yaml's report are the two that may touch issues.
  */
@@ -79,7 +79,7 @@ export const lintCiSpeed = (text: string): string[] => {
   const cancels = list.filter((s) => Predicate.isString(s["run"]) && s["run"].includes("run cancel"));
   require(cancels.length === 0, "K6: no step cancels the run: one job has nothing to cancel");
 
-  // K7 (0541): it reads runs and writes its summary and its one issue, so its steps are the
+  // K7 (CI speed has a goal, and a daily job measures it): it reads runs and writes its summary and its one issue, so its steps are the
   // checkout, the pnpm setup, the install and the measure, and no other: no test, no other action.
   // A cancel step is K6's alone, and the measure step's command K5's, so here it is only its name.
   const work = list

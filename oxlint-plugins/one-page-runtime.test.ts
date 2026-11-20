@@ -1,5 +1,5 @@
 // `fabrika/one-page-runtime`, the lint rule that took over `next/apps/fabrika/src/build.test.ts`'s
-// format law (0591). Generated entries run in process through oxlint's RuleTester at the entry's path;
+// format law (a test that reads files as text declares its reads, and shape checks are lint rules). Generated entries run in process through oxlint's RuleTester at the entry's path;
 // one oxlint run per kind then proves the repo's own .oxlintrc.json turns the rule on for the page
 // entry and nowhere else. The real entry itself is held by `pnpm lint`, which lints it.
 //

@@ -1,6 +1,6 @@
-// Today's lead tooling. Queue's laws (0162) on the test layers: nothing here asks GitHub, the
+// Today's lead tooling. Queue's laws (a pull request whose steps passed lands on green CI and a clean leak check alone) on the test layers: nothing here asks GitHub, the
 // tracker or the leak grep, and nothing sweeps. The laws of the retired catchup.sh that still have
-// a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
+// a job moved here: the state gate, the one pinned squash, and the ticket close of the ticket-close rule (T410).
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
 import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
@@ -95,7 +95,7 @@ const added = (m: ReturnType<typeof memory>) =>
 
 const settle = (m: ReturnType<typeof memory>) => Queue.settle({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
 
-describe("add: a finished pull request enters GitHub's merge queue by one pinned squash (0162)", () => {
+describe("add: a finished pull request enters GitHub's merge queue by one pinned squash (a pull request whose steps passed lands on green CI and a clean leak check alone)", () => {
   // Plants: ask the merge before a leak check; ask it on a red or unfinished head (which arms
   // auto-merge); ask it for a draft or a closed one; pin a head other than the one that was read.
   it.effect.prop(
@@ -229,7 +229,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
   );
   // Plants: skip the names check, read it after the merge is asked, or read the title for the section.
   it.effect.prop(
-    "property: a diff that exports a new name is queued only when its description names it under ## New names; else it is refused with the name and the merge is never asked (0587)",
+    "property: a diff that exports a new name is queued only when its description names it under ## New names; else it is refused with the name and the merge is never asked (a new helper names the tools it searched, and a new name cites the industry's word)",
     { named: Schema.Boolean, name: Schema.Literals(["Names", "refusal", "PatchRow"]) },
     ({ named, name }) =>
       Effect.gen(function* () {
@@ -248,7 +248,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
   );
 });
 
-describe("settle: a merged pull request closes the tickets it names (0015, T410)", () => {
+describe("settle: a merged pull request closes the tickets it names (a merge closes only the tickets its pull request names with our own phrase, T410)", () => {
   const phrase = /^[ \t]*fabrika close ticket [0-9]+[ \t]*$/;
   const note = `Closed by the merge of https://github.com/${repo}/pull/900, merge commit ${merged}.\n`;
 
@@ -442,7 +442,7 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
   );
 });
 
-describe("closeOnly: closes the named tickets and starts no sweep (0015)", () => {
+describe("closeOnly: closes the named tickets and starts no sweep (a merge closes only the tickets its pull request names with our own phrase)", () => {
   const body = "Done.\nfabrika close ticket 5\n";
   const run = (m: ReturnType<typeof memory>) => Queue.closeOnly({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
 

@@ -18,7 +18,7 @@ const code = (file: string) => /\.[cm]?[jt]sx?$/.test(file) || !basename(file).i
 // A file oxlint lints, so a finding reported on it is seen.
 const lintable = (file: string) => /\.[cm]?[jt]sx?$/.test(file) && !declaration(file);
 
-// Module resolution is oxc-resolver's (0040). Relative links get TypeScript's bundler lookup: the
+// Module resolution is oxc-resolver's (an existing, widely used tool comes before a hand-written one). Relative links get TypeScript's bundler lookup: the
 // extension added, a `.js` name standing for its `.ts` source, a folder's index. An export target
 // is a file path as written. A pattern's subpath goes through the package's own `exports`, by
 // its name, so null targets and more specific keys apply as Node applies them.
@@ -82,10 +82,8 @@ const targetStrings = (x: unknown): string[] =>
         ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
-// The platform's own import names, as decision 0042 lists them
-// (.kalfa/decisions/0018-cloudflare-only-through-alchemy.md, "New `next/` code never imports the
-// platform directly"): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A
-// change to that list changes this one. A name ending in `:` or `/` is a prefix; the rest are
+// The platform's own import names (new `next/` code never imports the platform directly, only
+// through Alchemy): `cloudflare:*`, `miniflare`, `workerd`, `wrangler` and `@cloudflare/*`. A name ending in `:` or `/` is a prefix; the rest are
 // package names, with their subpaths.
 const platform = ["cloudflare:", "miniflare", "workerd", "wrangler", "@cloudflare/"] as const;
 

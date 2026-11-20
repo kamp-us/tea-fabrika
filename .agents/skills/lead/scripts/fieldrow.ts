@@ -1,7 +1,7 @@
 // fieldrow.ts [--parent RUN] [--model M] [--effort E] [--step S --started T --ended T --start SHA
 //             --end SHA --status N] <events.jsonl> <run> <ticket> <outcome> <reason...>
 //   prints one `field/runs.jsonl` row for a Codex run, from its events file. Today's lead tooling,
-//   the port of fieldrow.py (decision 0113); box.sh's `run` calls it after each step.
+//   the port of fieldrow.py (no shell or Python script enters the repo); box.sh's `run` calls it after each step.
 //
 //   node fieldrow.ts --model gpt-6.1-sol out/events.jsonl t766-build 766 done built it
 //

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.ts";
 
 // Lead tooling for ticket 477: the laws of the move checker. libfabrika's files move into modules
-// over 16 pull requests (decision 0043), and a move must change no line of logic. `movecheck` reads
+// over 16 pull requests (libfabrika has one folder per subject, and the rule file says who may import whom), and a move must change no line of logic. `movecheck` reads
 // a pull request's diff and says where it did more than move. These laws run on its pure functions
 // over diff data, so none needs a git repository.
 //
@@ -475,8 +475,8 @@ describe("movecheck --split: every old line lands once, in order, and new lines 
 });
 
 describe("movecheck --renamed: only the listed names change", () => {
-  // 0038's rename and the access rename (the plan's PRs 14 and 15). `piece`, `row`, `count` and
-  // `healthRow` are in no table: 0038 says `piece` stays, and `healthRow` only starts like a listed name.
+  // The measurement and metric rename and the access rename (the plan's PRs 14 and 15). `piece`, `row`, `count` and
+  // `healthRow` are in no table: the measurement and metric rename says `piece` stays, and `healthRow` only starts like a listed name.
   const LISTED = [
     { from: "health", to: "measurements" },
     { from: "Health", to: "Measurements" },
@@ -502,7 +502,7 @@ describe("movecheck --renamed: only the listed names change", () => {
 
   const PATH = `${SRC}/telemetry/internal/measurements.ts`;
 
-  // Plant (the plan's): rename a field 0038 says stays, such as `piece`. Also: take any changed
+  // Plant (the plan's): rename a field the measurement and metric rename says stays, such as `piece`. Also: take any changed
   // word on a line that also holds a listed rename; rename a listed name to a word not in its row.
   it("a listed name may change, on any of its lines; any other edit is a fault", () => {
     fc.assert(
@@ -544,7 +544,7 @@ describe("movecheck --renamed: only the listed names change", () => {
       ),
       {
         ...options,
-        // pinned: the plan's plant (ticket 477, PR 14). `piece` is a field 0038 keeps.
+        // pinned: the plan's plant (ticket 477, PR 14). `piece` is a field the measurement and metric rename keeps.
         examples: [[[LISTED[0] ?? { from: "", to: "" }], [["const health = row.piece;", true]], 0, "kept"]],
       },
     );
@@ -683,7 +683,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
     );
   });
 
-  // scenario: the one named exception, since 0043 moves the door's waiting room out of transport
+  // scenario: the one named exception, since the module-and-layer rule moves the door's waiting room out of transport
   // on purpose (PR 5), and no other file may change its part.
   it("scenario: waiting.ts goes from transport to door, and only when it is named", () => {
     const waiting = [

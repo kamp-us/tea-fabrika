@@ -151,7 +151,7 @@ it("real skill Markdown subsets select no test", () =>
 // numbered legs only, as the workflow lint does. Plant, run once on check.yaml and restored: drop
 // leg "5" from the next matrix, so file indices 5 of 5 land on no leg (red, the sorted legs are not
 // 1 to 5). The end-to-end step has a SHARD too, so the vitest step is found by its run command, which
-// runs the `next` project (0536) and takes its path from `$FILTER` (the plan for CI paths, slice 2):
+// runs the `next` project (a test that needs a real resource runs only in main's full run) and takes its path from `$FILTER` (the plan for CI paths, slice 2):
 // all of next/ unless only the reader tests need to run.
 describe("next workflow coverage", () => {
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");

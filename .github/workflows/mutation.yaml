@@ -1,15 +1,15 @@
 name: mutation
 
-# The hourly mutation run on what merged to main (0066), here on a CI runner instead of the laptop.
+# The hourly mutation run on what merged to main (mutation testing runs on a schedule against main, not in a pull request), here on a CI runner instead of the laptop.
 # Only a person or a scheduler session starts it, by hand, each hour:
 #
 #   gh workflow run mutation.yaml -f base=<the commit the last run ended at>
 #
 # No push, pull request or cron starts it, and a merge never waits on it. It runs the same command
-# the laptop runs (mutbox.ts, decision 0045): Stryker in a container with `--network none`, the
+# the laptop runs (mutbox.ts, a step that needs ports or its own processes and network isolation runs in a container): Stryker in a container with `--network none`, the
 # fixed seed 119120 and a sample of at most 150, both set in run.sh. Survivors are its answer, not a
 # failure: the job fails only when the run itself broke (mutbox's `stuck`). It reads, runs the
-# container and uploads its result; it changes nothing in the repo. A one-week trial, like 0066.
+# container and uploads its result; it changes nothing in the repo. A one-week trial, like the scheduled-mutation rule.
 on:
   workflow_dispatch:
     inputs:
@@ -55,10 +55,10 @@ jobs:
       # For mutbox.ts itself (Effect and oxc-parser); the container installs its own copy offline.
       - run: pnpm install --frozen-lockfile
 
-      # The tests beside the changed files (0066): for each changed product file, its own
-      # `name.test.ts` or `name.test.tsx` at head and each `name.<kind>.test.ts` sibling (decision
-      # 0600's slice 2), and each changed test file. Of the lead tooling,
-      # only quest code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
+      # The tests beside the changed files (mutation testing runs on a schedule against main, not in a pull request): for each changed product file, its own
+      # `name.test.ts` or `name.test.tsx` at head and each `name.<kind>.test.ts` sibling (testing,
+      # linting and formatting live in @kalfa/quality, slice 2), and each changed test file. Of the lead tooling,
+      # only quest code is in (the hourly mutation run also tests the lead tooling's quest code). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
       # out.
       - id: range

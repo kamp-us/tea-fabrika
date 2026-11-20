@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
-// Today's manual lead tooling: the repo's plant catalog (decision 0600) and the edge that runs it.
+// Today's manual lead tooling: the repo's plant catalog (testing, linting and formatting live in @kalfa/quality) and the edge that runs it.
 //
-// A plant is a break put once into product code to show a law can fail (decision 0093). Here each one
+// A plant is a break put once into product code to show a law can fail (each law is a property that walks the machine, and each plant is run once, never kept). Here each one
 // names a Stryker-made mutant by its code shape (file, mutator, the node's text, Stryker's
 // replacement) and the law that must kill it, and `@kalfa/quality/stryker` finds that one place,
 // runs Stryker against the law's file alone, and answers `killed` only when the law is among the
@@ -13,11 +13,11 @@ import { readFileSync } from "node:fs";
 //
 // The catalog holds the five cases of the old runner (plant-cases.ts, ticket 1133) that put a break
 // into product code and have a Stryker mutator. The ten that edited a test file's own fake are
-// dropped: a plant breaks the product, never the exam (0093, 0600). `host-discovery-timeout` moves
+// dropped: a plant breaks the product, never the exam (each law is a property that walks the machine, and each plant is run once, never kept; testing, linting and formatting live in @kalfa/quality). `host-discovery-timeout` moves
 // code, which no Stryker mutator does, so it keeps its recorded one-time plant and is left out.
 //
 // This file is the repo's edge. The package holds no repo path and no host guard; this file hands it
-// the repo's settings and its own guard (0594), which the package asks about the test files Stryker
+// the repo's settings and its own guard (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI), which the package asks about the test files Stryker
 // is about to run, whatever command line named them: a law that starts a real resource never runs on a
 // person's laptop, here or anywhere else.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -104,7 +104,7 @@ const repo = { quality: { stryker: { catalog: import.meta.filename, nice: 15, ig
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
- * The repo's host guard (0594), as the package asks for it: the test files Stryker is about to run,
+ * The repo's host guard (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI), as the package asks for it: the test files Stryker is about to run,
  * whatever command line named them. A file this machine may not start is refused with the same message
  * the test runner prints.
  */
@@ -120,8 +120,8 @@ const guard = (env: Env, platform: NodeJS.Platform) =>
             ? Effect.void
             : Console.error(
                 [
-                  `Local host-only plant run refused (decision 0178). This plant's law reaches a real resource: ${refused.join(", ")}`,
-                  "Use eligible disposable CI for the selected laws (0594): gh workflow run plants.yaml -f plant=<name>.",
+                  `Local host-only plant run refused (a law that needs the real machine runs on disposable CI, and on the owner's Mac only with his yes). This plant's law reaches a real resource: ${refused.join(", ")}`,
+                  "Use eligible disposable CI for the selected laws (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI): gh workflow run plants.yaml -f plant=<name>.",
                 ].join("\n"),
               ).pipe(Effect.andThen(Effect.fail(Refused.make({ reason: "not_allowed", at: [] })))),
         ),

@@ -1,5 +1,5 @@
 /**
- * The runner's settings (decisions 0069 and 0585): each one Effect `Config` with its Schema and its one
+ * The runner's settings (a choice that makes sense as a setting is a setting, declared once; our tooling is a few @kalfa packages grouped by domain): each one Effect `Config` with its Schema and its one
  * default, under `quality.stryker`, so its environment name is `KALFA_QUALITY_STRYKER_<KEY>`. No
  * `FABRIKA_` name is read and no file: the edge hands the repo's own values in as a provider.
  *
@@ -53,7 +53,7 @@ export const all = Config.all({
 export type Settings = Config.Success<typeof all>;
 
 /**
- * Where the values come from, in the order of decision 0086: the environment under `KALFA`, then the
+ * Where the values come from, in the order of the rule that a setting is declared once and read through Effect's ConfigProvider, flag, env, repo, then person: the environment under `KALFA`, then the
  * repo's own values (`{ quality: { stryker: { ... } } }`). The edge reads the process's environment
  * and passes it in, so this reads nothing itself.
  *

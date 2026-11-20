@@ -15,7 +15,7 @@ class TestFailure extends Schema.TaggedError<TestFailure, { readonly brand: uniq
 const promised = <A>(run: () => PromiseLike<A>) =>
   Effect.tryPromise({ try: run, catch: (cause) => TestFailure.make({ cause }) });
 
-// Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (0581): a push
+// Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (main's full run starts on a push to main and an hourly catch-up): a push
 // to main or the hourly catch-up starts the full run only when no full run on main started within
 // the gap (`GAP_MINUTES`), the catch-up only on a head that has had none, and a hand start always.
 // GitHub is a fake that answers the run list and the jobs list from a list of runs, filtered by the

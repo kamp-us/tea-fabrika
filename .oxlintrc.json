@@ -1,11 +1,11 @@
 // The lint settings. `pnpm lint` runs them through oxlint-plugins/lint.ts, which fails on any
 // diagnostic but advice: a fire of the five old advice rules in a folder a warn override at the end
-// still names (0523).
+// still names (a lint rule blocks wherever its code is clean).
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "jsx-a11y", "vitest", "import", "promise"],
   // Custom rules, copied from the pipeline this repo rebuilds, and this repo's own. See
-  // oxlint-plugins/README.md. After them, the anti-slop plugin's two plugins, as they ship (0563):
+  // oxlint-plugins/README.md. After them, the anti-slop plugin's two plugins, as they ship (we use the anti-slop plugin as it ships, never our own copy of its rules):
   // their code sits unchanged in vendor/anti-slop/, and only the rules the owner took are on, each in
   // its own block at the end.
   "jsPlugins": [
@@ -18,7 +18,7 @@
   "options": { "reportUnusedDisableDirectives": "error" },
   // `.claude/skills/*` are symlinks into `.agents/skills/`: walked there too, a file of `.agents/` is
   // read a second time outside its override, where an edge comment looks unused and fails.
-  // `vendor/**` is code we take as it ships and never edit (0563), so none of our rules read it.
+  // `vendor/**` is code we take as it ships and never edit (we use the anti-slop plugin as it ships, never our own copy of its rules), so none of our rules read it.
   "ignorePatterns": [
     "**/fixtures/**",
     "**/experiments/results/**",
@@ -28,7 +28,7 @@
     "vendor/**"
   ],
   "rules": {
-    // These two block in every folder at zero (0523), a new folder included. An override near the
+    // These two block in every folder at zero (a lint rule blocks wherever its code is clean), a new folder included. An override near the
     // end sets them "warn" for today's frozen version only, and the dirty-folder lines come last.
     "fabrika/no-effect-promise": "error",
     "fabrika/no-raw-try-catch": "error",
@@ -38,7 +38,7 @@
     "fabrika/no-data-taggederror": "error",
     "fabrika/no-implicit-effect-concurrency": "error",
     "fabrika/no-numeric-duration": "error",
-    // In next/'s test files, a law over real IO reads the test depth (0535); a law in memory keeps its
+    // In next/'s test files, a law over real IO reads the test depth (the merge line runs only fast checks, and main's full run the slow ones); a law in memory keeps its
     // own count. The rule scopes itself to next/; oxlint-plugins/README.md has its false-alarm count.
     "fabrika/runs-from-depth": "error",
     "fabrika/no-throw-in-effect-gen": "error",
@@ -48,7 +48,7 @@
     // P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
     // All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
     "fabrika/door-is-library": "error",
-    // 0573: this entry stands beside `fabrika/no-data-taggederror` and the Effect checker's
+    // A trusted lint rule replaces ours where it catches as much: this entry stands beside `fabrika/no-data-taggederror` and the Effect checker's
     // preferSchemaTaggedError, as extra cover for the value forms in every file oxlint lints. Ours
     // stays, since only it refuses `Data.TaggedError` in a type position. An override replaces a
     // rule's options, so every block that sets this rule writes the entry out again
@@ -58,7 +58,7 @@
       {
         "object": "Data",
         "property": "TaggedError",
-        "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+        "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
       }
     ],
     "fabrika/outside-input-constructor": "error",
@@ -439,7 +439,7 @@
   },
   "overrides": [
     {
-      // 0559: no reduce callback or loop spreads its running result back into itself. An error, with
+      // No reduce callback or loop spreads its running result back into itself. An error, with
       // no warn line and no inline ignore: a hit is rewritten, or it goes to the owner. Today's app
       // keeps its hits and is not in `files`.
       "files": ["next/**", "kalfa/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
@@ -530,7 +530,7 @@
     {
       // Test files only: an `expect` that sits only inside an `if` may never run.
       // `!` is allowed here: a test that hits a missing value fails on its own. Shared law suites
-      // (0062) hold the laws their runner registers, so they are test files here too.
+      // (test files keep to the layers too) hold the laws their runner registers, so they are test files here too.
       "files": [
         "**/*.test.ts",
         "next/packages/libfabrika/src/telemetry/RecordPartTest.ts",
@@ -618,13 +618,13 @@
       "rules": { "fabrika/no-redacted-value": "off" }
     },
     {
-      // Our own source exports by name, never by default (0058). A default the platform loads, a
+      // Our own source exports by name, never by default. A default the platform loads, a
       // Cloudflare Worker's, is an inline edge on its one line, never an override here.
       "files": ["next/**", "kalfa/**", "packages/**", "programs/**", "apps/**"],
       "rules": { "import/no-default-export": "error" }
     },
     {
-      // Tooling and config a tool loads by its default stay out of 0058. Only these: a platform
+      // Tooling and config a tool loads by its default stay out of the named-exports rule. Only these: a platform
       // edge in our source is never listed here. `fixtures/` is in `ignorePatterns`, and
       // `oxlint-plugins/` and the top level's configs sit outside the globs above.
       "files": [
@@ -659,7 +659,7 @@
         "fabrika/written-service-type": "error",
         "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // A question word is never a name. oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
@@ -667,7 +667,7 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
-        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        // p65: each import of a next/ file stays inside what its package lists and exports (a test that reads files as text declares its reads, and shape checks are lint rules).
         "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -735,7 +735,7 @@
       }
     },
     {
-      // The config engine moved to kalfa/config (0585) keeps the next/** rule block below, as its own
+      // The config engine moved to kalfa/config (our tooling is a few @kalfa packages grouped by domain) keeps the next/** rule block below, as its own
       // override, so the next/** block stays exactly next/** (edge-config.test.ts reads it by that).
       "files": ["kalfa/config/src/**", "kalfa/config/*.ts"],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
@@ -749,7 +749,7 @@
         "fabrika/written-service-type": "error",
         "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // A question word is never a name. oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
@@ -823,7 +823,7 @@
       }
     },
     {
-      // kalfa/config's tests (0556): the kalfa block's rules less the twelve next/'s tests set off, here so
+      // kalfa/config's tests (@kalfa is our namespace for tooling packages, which live in kalfa/): the kalfa block's rules less the twelve next/'s tests set off, here so
       // every later override reaches them as it reaches next/'s tests. The edge rules are left unset.
       "files": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
       "rules": {
@@ -916,7 +916,7 @@
             "scope": "@kampus/",
             "parts": [
               {
-                // The test primitives (0538) sit below everything else of ours: none of our names,
+                // The test primitives (the shared test primitives live in one workspace package) sit below everything else of ours: none of our names,
                 // and its tests name only the package itself.
                 "name": "test primitives",
                 "files": ["next/packages/vitest/**"],
@@ -925,7 +925,7 @@
               },
               {
                 // The library's shared suites and test kits: of our names, only the test primitives
-                // (0538), which they read their case counts from, and their SQLite module, which opens
+                // (the shared test primitives live in one workspace package), which they read their case counts from, and their SQLite module, which opens
                 // a test's file (ticket 1029). Its own tests stay as the library's part has them: macOS
                 // matches these globs without case, so a `.test.ts` lands here.
                 "name": "library suites",
@@ -966,9 +966,9 @@
                   "@kampus/libfabrika/client/WindowMachine",
                   "@kampus/libfabrika/client/WindowStart",
                   "@kampus/libfabrika/client/Headless",
-                  // Desk S2b: the window's key table and prefix router (0278) and its side of tezgah
-                  // (0167, 0274). Desk S2a and S4: tezgah's wire shapes and the one drawn geometry a
-                  // window folds its layout with (0277).
+                  // Desk S2b: the window's key table and prefix router (each window runs the prefix key itself, with no network wait) and its side of tezgah
+                  // (the desk is one platform-free core, and its own state is a process in the brain). Desk S2a and S4: tezgah's wire shapes and the one drawn geometry a
+                  // window folds its layout with (a process never knows its screen size, and each window folds the layout to its own).
                   "@kampus/libfabrika/client/Keys",
                   "@kampus/libfabrika/client/Tezgah",
                   "@kampus/libfabrika/tezgah/Layout",
@@ -1022,7 +1022,7 @@
               },
               {
                 // A program's shared suites and test kits: what the box may import, and the test
-                // primitives (0538), which they read their case counts from, with their SQLite module
+                // primitives (the shared test primitives live in one workspace package), which they read their case counts from, with their SQLite module
                 // (ticket 1029).
                 "name": "program suites",
                 "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
@@ -1137,9 +1137,9 @@
     },
     {
       // Lead tooling under `.agents/` is held to `next/`'s rules, since agents read it and copy its
-      // habits (0033). What it broke on the day it joined is in `agents-ledger.json`, which only
+      // habits (lead tooling under .agents/ follows next/'s code rules). What it broke on the day it joined is in `agents-ledger.json`, which only
       // shrinks. This rule block is the `next/**` block above, repeated: change both together.
-      // `fabrika/no-stage-word` reads only `next/` paths (0080), so lead tooling keeps the word
+      // `fabrika/no-stage-word` reads only `next/` paths (a running copy of fabrika is an instance, never a stage), so lead tooling keeps the word
       // for today's pipeline steps.
       "files": [".agents/**/*.ts", ".agents/**/*.mjs"],
       "rules": {
@@ -1152,7 +1152,7 @@
         "fabrika/written-service-type": "error",
         "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // A question word is never a name. oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
@@ -1160,7 +1160,7 @@
         "fabrika/one-store-hook": "error",
         "fabrika/one-machine-per-file": "error",
         "fabrika/no-stage-word": "error",
-        // p65: each import of a next/ file stays inside what its package lists and exports (0591).
+        // p65: each import of a next/ file stays inside what its package lists and exports (a test that reads files as text declares its reads, and shape checks are lint rules).
         "fabrika/package-deps": "error",
         "eslint/no-restricted-imports": [
           "error",
@@ -1228,7 +1228,7 @@
       }
     },
     {
-      // The typecheck's port (0113, ticket 766) is lead tooling in scripts/, held to the same rules:
+      // The typecheck's port (no shell or Python script enters the repo, ticket 766) is lead tooling in scripts/, held to the same rules:
       // this rule block is the `.agents/` block above, repeated word for word, so change all three
       // together. It is a block of its own because edge-config.test.ts holds the `.agents/` block to
       // exactly its two globs. The T766 L2 block below then narrows its imports.
@@ -1248,7 +1248,7 @@
         "fabrika/written-service-type": "error",
         "fabrika/no-cause-squash": "error",
         "fabrika/no-of": "error",
-        // A question word is never a name (0081). oxlint's own rule holds every name written as an
+        // A question word is never a name. oxlint's own rule holds every name written as an
         // identifier; ours holds a quoted, computed or template key, which it does not decode.
         "eslint/id-denylist": ["error", "where", "why", "what", "who", "how"],
         "fabrika/no-question-word-key": "error",
@@ -1408,14 +1408,14 @@
       }
     },
     {
-      // A folder of libfabrika is a module and its rank is a layer (0091), so the old words do not
-      // come back as names in next/, tests included. oxlint's own rule (0040) reads declarations and
+      // A folder of libfabrika is a module and its rank is a layer, so the old words do not
+      // come back as names in next/, tests included. oxlint's own rule (an existing, widely used tool comes before a hand-written one) reads declarations and
       // object keys only: a call such as `Math.floor(n)`, a property read, a comment and a string pass,
-      // and those stay review work. A conversation room, which 0091 keeps, takes a local
+      // and those stay review work. A conversation room, which the module and layer rename keeps, takes a local
       // `oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. Its glob is
       // `next/**/*`, the same files as `next/**`: that exact key names the exam block above, which
-      // `.agents/` repeats (0033), and this rule holds next/ alone (`terminology.test.ts`). A later
-      // override replaces a rule's whole list, so this one repeats the five question words (0081).
+      // `.agents/` repeats (lead tooling under .agents/ follows next/'s code rules), and this rule holds next/ alone (`terminology.test.ts`). A later
+      // override replaces a rule's whole list, so this one repeats the five question words (a question word is never a name).
       "files": ["next/**/*", "kalfa/**/*"],
       "rules": {
         "fabrika/isolate-boundary": "error",
@@ -1461,7 +1461,7 @@
       }
     },
     {
-      // P12, L11 (0591): the page entry starts its one Effect program through `runMain` from
+      // P12, L11 (a test that reads files as text declares its reads, and shape checks are lint rules): the page entry starts its one Effect program through `runMain` from
       // `@kampus/tuval/browser`, once, at module scope, and calls no other run function.
       // `one-page-runtime.test.ts` plants each break at this path.
       "files": ["next/apps/fabrika/src/entry/browser.tsx"],
@@ -1473,7 +1473,7 @@
       "rules": { "eslint/no-console": "error" }
     },
     {
-      // M12 (0592): libfabrika writes output only through Effect's Console, so a raw `console` call is refused
+      // M12 (libfabrika writes output only through Effect's Console, so a test can see it): libfabrika writes output only through Effect's Console, so a raw `console` call is refused
       // in its files but its `*.test.ts`, whose laws may read what a spied console is given. oxlint's own rule.
       "files": ["next/packages/libfabrika/src/**"],
       "excludeFiles": ["next/packages/libfabrika/src/**/*.test.ts"],
@@ -1497,7 +1497,7 @@
     },
     {
       // A test's stand-in service is not a contract file, so its type may be inferred from a local
-      // value. Product code writes a service's type out (0095).
+      // value. Product code writes a service's type out (a service file holds only its contract, and each layer is its own file).
       "files": [
         "next/**/*.test.ts",
         "kalfa/**/*.test.ts",
@@ -1511,7 +1511,7 @@
       "rules": { "fabrika/written-service-type": "off" }
     },
     {
-      // A test reads a failed `Exit` whole to assert on it, so tests, shared suites (0062) and test
+      // A test reads a failed `Exit` whole to assert on it, so tests, shared suites (test files keep to the layers too) and test
       // support may squash a cause. Product code may not: the `next/**` block above holds it.
       "files": [
         "next/**/*.test.ts",
@@ -1529,14 +1529,14 @@
       "rules": { "fabrika/no-cause-squash": "off" }
     },
     {
-      // 0536: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
+      // A test that needs a real resource runs only in main's full run: a test file whose own code drives a real resource is named `*.integration.test.ts`, or
       // `*.visual.test.ts` for a browser or Electron, so Vitest keeps it off pull requests. Measured
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
       "files": ["next/**/*.test.ts", "kalfa/**/*.test.ts", "next/**/*.test.tsx", "kalfa/**/*.test.tsx"],
       "rules": { "fabrika/integration-test-name": "error" }
     },
     {
-      // Ticket 1029, decision 0538: a test, shared suite or test kit opens a SQLite file through
+      // Ticket 1029, the rule that the shared test primitives live in one workspace package: a test, shared suite or test kit opens a SQLite file through
       // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
       // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
       // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
@@ -1554,7 +1554,7 @@
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
-      // error or a killed test can skip (0061). Setup hooks stay.
+      // error or a killed test can skip (anything that holds a resource is acquired in a scope, so the scope releases it). Setup hooks stay.
       "files": ["next/**/*.ts", "kalfa/**/*.ts", "next/**/*.tsx", "kalfa/**/*.tsx"],
       "rules": { "vitest/no-hooks": ["error", { "allow": ["beforeAll", "beforeEach"] }] }
     },
@@ -1598,7 +1598,7 @@
       }
     },
     {
-      // Shared law suites (0062) hold the laws their runner registers. They are tests, as above, except
+      // Shared law suites (test files keep to the layers too) hold the laws their runner registers. They are tests, as above, except
       // that it keeps the edge rules on and marks its Promise edges: only `next/`'s `.test.ts` files
       // may turn one off (`edge-comment.test.ts`).
       "files": ["next/packages/libfabrika/src/telemetry/RecordPartTest.ts", "next/programs/inbox/src/RunnerTest.ts"],
@@ -1687,7 +1687,7 @@
       }
     },
     {
-      // E5 (0095): a service class holds no static member, so each layer is a sibling file. On
+      // E5 (a service file holds only its contract, and each layer is its own file): a service class holds no static member, so each layer is a sibling file. On
       // where the count is zero (oxlint-plugins/README.md): a slice adds its folder when it moves
       // that folder's layers, and the last one makes the list `next/**`. Tests, shared suites and
       // test support are left out: a test may build a stand-in service any way it likes.
@@ -1721,10 +1721,10 @@
       "rules": { "fabrika/no-static-layer": "error" }
     },
     {
-      // Each law is a property or a labeled example (0093). It blocks in every folder at zero, and
-      // advises where the warn override at the end still names the folder (0523). A shared suite
-      // (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
-      // next/, and .agents/ follows next/'s rules (0033).
+      // Each law is a property or a labeled example (each law is a property that walks the machine, and each plant is run once, never kept). It blocks in every folder at zero, and
+      // advises where the warn override at the end still names the folder (a lint rule blocks wherever its code is clean). A shared suite
+      // (`SinkTest.ts`, test files keep to the layers too) holds laws too. Today's version's tests are left out: the laws-and-plants rule covers
+      // next/, and .agents/ follows next/'s rules (lead tooling under .agents/ follows next/'s code rules).
       "files": [
         "next/**/*.test.ts",
         "kalfa/**/*.test.ts",
@@ -1741,13 +1741,13 @@
       }
     },
     {
-      // libfabrika's modules (0043, ticket 477). `fabrika/modules` holds four laws: no module re-exports
+      // libfabrika's modules (libfabrika has one folder per subject, and the rule file says who may import whom, ticket 477). `fabrika/modules` holds four laws: no module re-exports
       // another module's names, `src/` holds only what is listed here, every export in an `internal/`
       // file is `@internal`, and the `values` files hold no service and no error. `folders` also
       // names what the product files still hold (`coordination`, until its `index.ts` goes) and the
       // platform folders. `data` left with `data/index.ts`. `Id` is not in `values`: it holds `IdError` and the `Generator` service.
       //
-      // Nobody outside a module imports its `internal/`: oxlint's own rule says it (0040). A module's own
+      // Nobody outside a module imports its `internal/`: oxlint's own rule says it (an existing, widely used tool comes before a hand-written one). A module's own
       // `./internal/x.ts` has no folder between, so it passes. An override replaces a rule's options,
       // so the Radix entry of the base rule is repeated here.
       //
@@ -1845,7 +1845,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -1929,7 +1929,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               }
             ]
           }
@@ -1976,7 +1976,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               }
             ]
           }
@@ -1985,8 +1985,8 @@
     },
     {
       // The module above never sees what is two layers down: `runtime/`, `access/` and `gateway/`
-      // never import `ledger/`, types included, and tests keep the layers too (0043, rule 11 and
-      // its amendments; 0062). What they import today is in `next-ledger.json`. An override replaces
+      // never import `ledger/`, types included, and tests keep the layers too (libfabrika has one folder per subject, and the rule file says who may import whom, rule 11 and
+      // its amendments; the rule that test files keep to the layers). What they import today is in `next-ledger.json`. An override replaces
       // a rule's options, so the modules override's Radix, TOML (L15) and `internal/` entries are
       // repeated here.
       "files": [
@@ -2022,7 +2022,7 @@
                 // `internal/` entry's, so one import is reported once: oxlint reads a `!` in any group
                 // as a pass for every group.
                 "group": ["../ledger/[A-Z]*", "./../ledger/[A-Z]*", "../../ledger/[A-Z]*", "./../../ledger/[A-Z]*"],
-                "message": "runtime/, access/ and gateway/ never import ledger/, two layers down (0043, rule 11): use the service of the module below, in its own words and errors."
+                "message": "runtime/, access/ and gateway/ never import ledger/, two layers down (libfabrika has one folder per subject, and the rule file says who may import whom, rule 11): use the service of the module below, in its own words and errors."
               },
               {
                 "group": ["@radix-ui/colors/*"],
@@ -2044,7 +2044,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -2063,8 +2063,8 @@
       }
     },
     {
-      // A module's front file is PascalCase, tests and `.test-support` files too (0032, 0043), by
-      // oxlint's own rule (0040). Every module is named, `transport` and `gateway` too, now that their
+      // A module's front file is PascalCase, tests and `.test-support` files too (libraries take Effect's file layout: PascalCase files, internal/ for private parts; libfabrika has one folder per subject, and the rule file says who may import whom), by
+      // oxlint's own rule (an existing, widely used tool comes before a hand-written one). Every module is named, `transport` and `gateway` too, now that their
       // files are renamed and their barrels are gone.
       "files": [
         "next/packages/libfabrika/src/telemetry/**",
@@ -2089,7 +2089,7 @@
       "rules": { "unicorn/filename-case": ["error", { "case": "pascalCase" }] }
     },
     {
-      // A module's `internal/` file is camelCase (0032). It comes after the override above, so it wins there.
+      // A module's `internal/` file is camelCase (libraries take Effect's file layout: PascalCase files, internal/ for private parts). It comes after the override above, so it wins there.
       "files": [
         "next/packages/libfabrika/src/telemetry/internal/**",
         "next/packages/libfabrika/src/codehost/internal/**",
@@ -2176,7 +2176,7 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           { "property": "setBounds", "message": "Size a test window with TestWindow.size." },
           { "property": "setPosition", "message": "Size a test window with TestWindow.size." }
@@ -2207,14 +2207,14 @@
       }
     },
     {
-      // Ticket 737 (decision 0023): next/ decodes input with Effect Schema, so a bare JSON.parse is
+      // Ticket 737 (next/ follows Effect's code style and doc comments): next/ decodes input with Effect Schema, so a bare JSON.parse is
       // reported, and a service ID carries the package and its file's path. The parse rule blocks in
       // every folder at zero, and advises where the warn override at the end still names the folder
-      // (0523). A test oracle may keep a parse with a line exception and a reason. The ID rule
-      // blocks since ticket 909 (decision 0168). It reads only libfabrika's source folder, so its glob
+      // (a lint rule blocks wherever its code is clean). A test oracle may keep a parse with a line exception and a reason. The ID rule
+      // blocks since ticket 909 (an old lint break is fixed, never kept in a list). It reads only libfabrika's source folder, so its glob
       // can stay wide. Its glob is `next/**/*`, the same files as `next/**`: that exact key names the
-      // exam block above, which `.agents/` repeats (0033), and this block holds next/ alone.
-      // It also holds the Reflect ban (0554) for every folder of next/, a new one included. The warn
+      // exam block above, which `.agents/` repeats (lead tooling under .agents/ follows next/'s code rules), and this block holds next/ alone.
+      // It also holds the Reflect ban (a field is read through its type or a decode, never past it with Reflect) for every folder of next/, a new one included. The warn
       // block and the client/ block near the end write its entries out again, since an override
       // replaces a rule's options and a file takes the last override that matches it.
       "files": ["next/**/*"],
@@ -2224,28 +2224,40 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           }
         ],
         "fabrika/service-id": ["error", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
       }
     },
     {
-      // kalfa/ (0556) takes the block above as its own copy, so that block names next/ folders only
-      // (advice.test.ts, Reflect ban L4): the parse rule, the Reflect ban (0554) and the service ID rule.
+      // kalfa/ (@kalfa is our namespace for tooling packages, which live in kalfa/) takes the block above as its own copy, so that block names next/ folders only
+      // (advice.test.ts, Reflect ban L4): the parse rule, the Reflect ban (a field is read through its type or a decode, never past it with Reflect) and the service ID rule.
       "files": ["kalfa/**/*"],
       "rules": {
         "eslint/no-restricted-properties": [
@@ -2253,27 +2265,39 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           }
         ],
         "fabrika/service-id": ["error", { "package": "@kampus/libfabrika", "src": "next/packages/libfabrika/src" }]
       }
     },
     {
-      // M13 (0592, owner ruling 2026-11-15): libfabrika writes output through Effect's Console, so a raw
+      // M13 (libfabrika writes output only through Effect's Console, so a test can see it, owner ruling 2026-11-15): libfabrika writes output through Effect's Console, so a raw
       // `process.stdout` or `process.stderr` access is refused in its files but its `*.test.ts`, which may read
       // a child's output. Each of the three blocks that set this rule for libfabrika (next/**/*, the warn list and
       // client/**) has one copy of itself for those files, placed after it, with the two `process` entries added.
@@ -2287,20 +2311,32 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "process",
@@ -2427,7 +2463,7 @@
               {
                 "name": "effect",
                 "importNames": ["Layer", "ManagedRuntime", "ScopedCache"],
-                "message": "A service file holds only its contract (0095)."
+                "message": "A service file holds only its contract."
               }
             ],
             "patterns": [
@@ -2480,7 +2516,7 @@
       // Ticket 649, L6: trace's speed laws count work through the built-ins
       // (programs/trace/src/work.test-support.ts), which cannot see a hand index loop. This catches
       // the plain one that only reads `a[i]`. A `while` loop, or an index loop that does arithmetic
-      // on `i`, slips past both, and that gap is accepted (0065).
+      // on `i`, slips past both, and that gap is accepted (a speed law gates on a count of work, never on a clock).
       "files": ["programs/trace/src/**/*.ts"],
       "rules": { "typescript/prefer-for-of": "error" }
     },
@@ -2540,7 +2576,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -2664,7 +2700,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -2772,7 +2808,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -2792,7 +2828,7 @@
       }
     },
     {
-      // Today's frozen version (0525): the two top-level rules print as advice there, and a fire
+      // Today's frozen version (today's version is frozen and takes no new work): the two top-level rules print as advice there, and a fire
       // there needs no fix. This override goes when the freeze quest takes these paths out of lint;
       // oxlint-plugins/advice.ts names the same globs so the stale check does not read them.
       "files": ["apps/**", "programs/**", "packages/**", "bin/**"],
@@ -2802,7 +2838,7 @@
       }
     },
     {
-      // The design package is shared by both versions and stays live (0456), so it blocks. A
+      // The design package is shared by both versions and stays live (fabrika's design lives in one package both versions import), so it blocks. A
       // `files` list has no "except", so this later override takes it back out of the one above.
       "files": ["packages/fabrika-design/**"],
       "rules": {
@@ -2811,7 +2847,7 @@
       }
     },
     // The folders where each of the five old advice rules still advises, until a fill brings the
-    // folder to zero (0523, 0168). The rule blocks everywhere else. One glob per folder: a package's
+    // folder to zero (a lint rule blocks wherever its code is clean; an old lint break is fixed, never kept in a list). The rule blocks everywhere else. One glob per folder: a package's
     // `src/<name>/**`, the files right in `src/` as `src/*`, or one folder's own files as `<folder>/*`.
     // Delete a line when its folder reaches zero: a whole `pnpm lint` run fails until you do. Never
     // add a line for a folder that blocks, and never a file. Today's frozen version is not listed.
@@ -2848,7 +2884,7 @@
       "rules": { "fabrika/no-raw-try-catch": "warn" }
     },
     {
-      // An override replaces a rule's options, so the JSON.parse entry and the Reflect ban (0554) are
+      // An override replaces a rule's options, so the JSON.parse entry and the Reflect ban (a field is read through its type or a decode, never past it with Reflect) are
       // written out again. Only the JSON.parse fire advises here: lint.ts blocks every other fire of
       // this rule at any level (advice.ts), so a Reflect call in these folders fails `pnpm lint`,
       // though a plain oxlint run in an editor shows it as a warning.
@@ -2874,20 +2910,32 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           }
         ]
       }
@@ -2916,20 +2964,32 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "process",
@@ -2945,7 +3005,7 @@
       }
     },
     {
-      // 0555, 0579: the `vi` lock (see the `oxlint-plugins/**` block at the end) for libfabrika's folders that
+      // A stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported: the `vi` lock (see the `oxlint-plugins/**` block at the end) for libfabrika's folders that
       // reach zero, as a pair of blocks, since these folders took two different lists of this rule before and an
       // override replaces a rule's options. A folder joins `files` of both blocks in the slice that takes it to
       // zero, and leaves the JSON.parse warn blocks above for these two, so its JSON.parse is a blocking line from
@@ -2957,11 +3017,11 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-            "mock": "Give the code a service and provide a test layer (0555).",
-            "doMock": "Give the code a service and provide a test layer (0555).",
-            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
+            "mock": "Give the code a service and provide a test layer.",
+            "doMock": "Give the code a service and provide a test layer.",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
         "eslint/no-restricted-properties": [
@@ -2969,41 +3029,53 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
@@ -3020,20 +3092,32 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "process",
@@ -3048,36 +3132,36 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
     },
     {
-      // 0555, 0579: the `vi` lock for libfabrika's top files and its `gateway/`, `processes/` and `telemetry/`
+      // A stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported: the `vi` lock for libfabrika's top files and its `gateway/`, `processes/` and `telemetry/`
       // folders, as a pair of blocks, the shape of the `node/repositories/**` pair above. These four sets take one
       // list of this rule today, the JSON.parse warn blocks' (the same six entries for a `*.test.ts` file, the
       // eight with the two `process` ones for the rest), and all four still hold a JSON.parse oracle that
       // advises, so they stay at warn and in those blocks: joining the pair above would turn that advice into a
       // blocking line. A `vi` fire blocks at warn too, since only a JSON.parse fire advises (advice.ts). The
       // `src/*` glob is the top files alone, as in the warn blocks (a `*` does not cross a folder). A folder joins
-      // `files` of both blocks in the slice that takes its `vi` calls to zero, and none is taken off (0524). When a
+      // `files` of both blocks in the slice that takes its `vi` calls to zero, and none is taken off (no check reads a list that lets broken code pass). When a
       // folder's JSON.parse fires reach zero, it moves to the pair above and leaves the warn blocks.
       // This block is for every file of the four: the six entries the test files take, then the `vi` ones. The
       // vitest rule is set here only.
@@ -3091,11 +3175,11 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-            "mock": "Give the code a service and provide a test layer (0555).",
-            "doMock": "Give the code a service and provide a test layer (0555).",
-            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
+            "mock": "Give the code a service and provide a test layer.",
+            "doMock": "Give the code a service and provide a test layer.",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
         "eslint/no-restricted-properties": [
@@ -3103,41 +3187,53 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
@@ -3158,20 +3254,32 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "process",
@@ -3186,23 +3294,23 @@
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
@@ -3222,12 +3330,12 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
           {
             "object": "Effect",
@@ -3239,13 +3347,25 @@
             "property": "retry",
             "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           }
         ]
       }
@@ -3261,12 +3381,12 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
           {
             "object": "Effect",
@@ -3278,13 +3398,25 @@
             "property": "retry",
             "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "process",
@@ -3300,7 +3432,7 @@
       }
     },
     {
-      // L5 of the Reflect ban (0554): no ignore comment lets a Reflect call through
+      // L5 of the Reflect ban (a field is read through its type or a decode, never past it with Reflect): no ignore comment lets a Reflect call through
       // no-restricted-properties outside the plan's 6 named lines, a has and a get in each of the
       // three hostile Proxies: runtime's, transport's (slice 4) and the app's (slice 14). Every other folder, cloudflare/ and e2e/ included, may
       // hold none. The JSON.parse oracles' ignore comments cover no Reflect line, so they are not
@@ -3320,10 +3452,10 @@
       }
     },
     {
-      // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
+      // A field is read through its type or a decode, never past it with Reflect: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
       // would hide the call from this rule. All of next/ holds the ban through the base blocks of
       // this rule above (next/**/*, client/** and the JSON.parse warn block), so a new folder is
-      // covered the day it appears, and no block turns the ban off or down (0168, 0524). This block
+      // covered the day it appears, and no block turns the ban off or down (an old lint break is fixed, never kept in a list; no check reads a list that lets broken code pass). This block
       // is the tooling, which no base block covers and which has no other entry for the rule.
       "files": [".agents/**", ".github/**", "oxlint-plugins/**"],
       "rules": {
@@ -3332,21 +3464,33 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           }
         ]
       }
     },
     {
-      // 0555, 0579: no test makes a stand-in or watches a call with vi. A folder joins `files` in the
+      // A stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported: no test makes a stand-in or watches a call with vi. A folder joins `files` in the
       // slice that takes it to zero; the last one makes the list next/ and the three tooling folders.
       // The lock is a pair: oxlint's `vitest/no-restricted-vi-methods` does not refuse a call chained
       // onto the `vi` call (`vi.fn().mockReturnValue(1)`), so `eslint/no-restricted-properties` holds
@@ -3359,11 +3503,11 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-            "mock": "Give the code a service and provide a test layer (0555).",
-            "doMock": "Give the code a service and provide a test layer (0555).",
-            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
+            "mock": "Give the code a service and provide a test layer.",
+            "doMock": "Give the code a service and provide a test layer.",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
         "eslint/no-restricted-properties": [
@@ -3371,44 +3515,56 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
     },
     {
-      // Decisions 0555 and 0579: no vi mock, spy, env stub or vi.fn in a law. A folder is listed whole
+      // A stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported: no vi mock, spy, env stub or vi.fn in a law. A folder is listed whole
       // and joins the day its own slice of the mock sweep brings it to zero; none is ever taken off,
-      // and no block turns the rule off or down for a folder with fires (0168, 0524). oxlint takes
+      // and no block turns the rule off or down for a folder with fires (an old lint break is fixed, never kept in a list; no check reads a list that lets broken code pass). oxlint takes
       // the last matching block's options for a rule, so a later block lists all five again. The
       // last slice folds the list into the next/**/* block.
       // The lock is a pair of oxlint's own rules over the same files. `vitest/no-restricted-vi-methods`
@@ -3425,11 +3581,11 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-            "mock": "Give the code a service and provide a test layer (0555).",
-            "doMock": "Give the code a service and provide a test layer (0555).",
-            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
+            "mock": "Give the code a service and provide a test layer.",
+            "doMock": "Give the code a service and provide a test layer.",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
         "eslint/no-restricted-properties": [
@@ -3437,41 +3593,53 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
@@ -3484,11 +3652,11 @@
         "vitest/no-restricted-vi-methods": [
           "error",
           {
-            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
-            "mock": "Give the code a service and provide a test layer (0555).",
-            "doMock": "Give the code a service and provide a test layer (0555).",
-            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
-            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder).",
+            "mock": "Give the code a service and provide a test layer.",
+            "doMock": "Give the code a service and provide a test layer.",
+            "spyOn": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ],
         "eslint/no-restricted-properties": [
@@ -3496,41 +3664,53 @@
           {
             "object": "Data",
             "property": "TaggedError",
-            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+            "message": "Use Schema.TaggedErrorClass (a trusted lint rule replaces ours where it catches as much, the Effect checker's preferSchemaTaggedError)."
           },
           {
             "object": "JSON",
             "property": "parse",
-            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (next/ follows Effect's code style and doc comments)."
           },
-          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
-          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
-          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "Reflect",
+            "property": "get",
+            "message": "Decode with Schema, or narrow first (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "set",
+            "message": "Assign through the type (a field is read through its type or a decode, never past it with Reflect)."
+          },
+          {
+            "object": "Reflect",
+            "property": "has",
+            "message": "Narrow with Predicate.hasProperty (a field is read through its type or a decode, never past it with Reflect)."
+          },
           {
             "object": "globalThis",
             "property": "Reflect",
-            "message": "Name Reflect directly, so lint can read the call (0554)."
+            "message": "Name Reflect directly, so lint can read the call (a field is read through its type or a decode, never past it with Reflect)."
           },
           {
             "object": "vi",
             "property": "fn",
-            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (@kalfa/quality/vitest is the whole list of test tooling, and calls are watched with a Recorder)."
           },
-          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer." },
           {
             "object": "vi",
             "property": "doMock",
-            "message": "Give the code a service and provide a test layer (0555)."
+            "message": "Give the code a service and provide a test layer."
           },
           {
             "object": "vi",
             "property": "spyOn",
-            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+            "message": "Put the call behind a service and record it with a Recorder (a stand-in comes from a service's test layer, never from vi, and calls are watched with a Recorder)."
           },
           {
             "object": "vi",
             "property": "stubEnv",
-            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+            "message": "Read through Config and provide a ConfigProvider layer (a stand-in comes from a service's test layer, never from vi)."
           }
         ]
       }
@@ -3569,13 +3749,13 @@
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
     },
     {
-      // E1 of the Effect-check sweep (0574): no doc block carries `@stability` until libfabrika's
+      // E1 of the Effect-check sweep (no @stability tag until the first release, and each unstable Effect part is named once): no doc block carries `@stability` until libfabrika's
       // first release, and `pnpm format` deletes the line (`oxlint-plugins/no-stability-tag.ts`).
       "files": ["next/**", "kalfa/**", ".agents/**", ".github/ci/**", "oxlint-plugins/**"],
       "rules": { "fabrika/no-stability-tag": "error" }
     },
     {
-      // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
+      // E2 of the Effect-check sweep (libraries import Effect by namespace, programs and apps by the barrel): a library imports each Effect module by its path, and
       // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
       // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
       // import slice adds its folders to both.
@@ -3599,15 +3779,15 @@
       "rules": { "fabrika/prefer-namespace-import": "error" }
     },
     {
-      // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
+      // E6 (next/ follows Effect's code style and doc comments; Effect code in next/ follows the eight Effect guidelines): every public export of a next/ library has an Effect-shaped doc block, and
       // its file a module block (`oxlint-plugins/jsdocs.ts`). It blocks in every folder at zero, so a
-      // new folder blocks from its first file (0523, ticket 948). `since` stays `absent` until
-      // libfabrika's first release (0118).
+      // new folder blocks from its first file (a lint rule blocks wherever its code is clean, ticket 948). `since` stays `absent` until
+      // libfabrika's first release (doc comments carry no @since tag until libfabrika has a released version).
       "files": ["next/packages/*/src/**", "kalfa/*/src/**"],
       "rules": { "fabrika/jsdocs": ["error", { "since": "absent" }] }
     },
     {
-      // Still advising here until a fill brings the folder to zero (0523, 0168). Delete a line when
+      // Still advising here until a fill brings the folder to zero (a lint rule blocks wherever its code is clean; an old lint break is fixed, never kept in a list). Delete a line when
       // its folder reaches zero: a whole `pnpm lint` fails until you do. It sits after the block
       // above and before the "off" block below, so a warn line never turns the rule on for a file
       // that is not public.
@@ -3645,7 +3825,7 @@
       "rules": { "fabrika/jsdocs": "off" }
     },
     {
-      // Q8 (decision 0600, .kalfa/quests/kalfa-quality-stryker-PLAN.md): @kalfa/quality reaches no product. An override replaces a rule's options, so this repeats the base entries and adds its own.
+      // Q8 (testing, linting and formatting live in @kalfa/quality, .kalfa/quests/kalfa-quality-stryker-PLAN.md): @kalfa/quality reaches no product. An override replaces a rule's options, so this repeats the base entries and adds its own.
       "files": ["kalfa/quality/**"],
       "rules": {
         "eslint/no-restricted-imports": [
@@ -3674,11 +3854,11 @@
               },
               {
                 "group": ["@kampus/*", "@tea-fabrika/*"],
-                "message": "Q8 (decision 0600): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
               },
               {
                 "group": ["**/next/**", "**/packages/**", "**/.github/**"],
-                "message": "Q8 (decision 0600): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
               }
             ]
           }
@@ -3715,15 +3895,15 @@
               },
               {
                 "group": ["@stryker-mutator/*"],
-                "message": "Q15 (decision 0600): importing @kalfa/quality/stryker loads no Stryker. Plant.ts and index.ts hold only schemas; the instrumenter and the runner load in node/MutantsStryker.ts."
+                "message": "Q15 (testing, linting and formatting live in @kalfa/quality): importing @kalfa/quality/stryker loads no Stryker. Plant.ts and index.ts hold only schemas; the instrumenter and the runner load in node/MutantsStryker.ts."
               },
               {
                 "group": ["@kampus/*", "@tea-fabrika/*"],
-                "message": "Q8 (decision 0600): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality reaches no product. It imports no @kampus or @tea-fabrika package; the repo's own values come in through its Settings, handed in at the edge."
               },
               {
                 "group": ["**/next/**", "**/packages/**", "**/.github/**"],
-                "message": "Q8 (decision 0600): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
+                "message": "Q8 (testing, linting and formatting live in @kalfa/quality): @kalfa/quality imports no path into next/, packages/ or .github/. The repo's catalog and settings reach it as data, at the edge in .github/ci/plants.ts."
               }
             ]
           }
@@ -3861,7 +4041,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -3880,298 +4060,289 @@
       }
     },
 
-    // The anti-slop rules the owner took, last, so nothing after them turns one down (0563). Each
-    // block lists the folders where its rule has no hit, and is on as an error there and nowhere
-    // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
-    // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
-    // is on a list, the list becomes the four globs of the scope.
+    // The anti-slop rules the owner took, last, so nothing after them turns one down (we use the anti-slop plugin as it ships, never our own copy of its rules). Each
+    // block is on as an error across the whole scope, and its `excludeFiles` names only the folders
+    // where its rule still has hits. A new folder is on from its first file. A pull request that
+    // brings a folder to zero removes it here, and a whole `pnpm lint` fails until it does
+    // (oxlint-plugins/anti-slop.ts), so a list only shrinks. A rule is never "off" or "warn".
     {
-      // 0558: no ternary nests more than 2 deep.
+      // A ternary deeper than two is hard to read, so it becomes a lookup, a named function or a machine: no ternary nests more than 2 deep.
       "files": [
-        "kalfa/ci/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/records/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/desktop/**",
-        "next/packages/libfabrika/src/email/**",
-        "next/packages/libfabrika/src/ledger/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/telemetry/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/checklist/**",
-        "next/programs/counter/**",
-        "next/programs/inbox/**",
-        "next/programs/tezgah/**",
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
+        "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".agents/**",
+        ".github/ci/**",
+        "kalfa/config/src/**",
+        "kalfa/quality/src/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/programs/pipeline/**",
+        "oxlint-plugins/**",
+        "scripts/typecheck/**"
       ],
       "rules": { "anti-slop/max-ternary-depth": ["error", { "maxDepth": 2 }] }
     },
     {
-      // 0561: every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
+      // Every type cast carries a `SAFETY:` comment that says the fact the compiler cannot see.
       "files": [
-        "kalfa/ci/**",
-        "kalfa/config/**",
+        "next/**",
+        "kalfa/**",
         ".agents/**",
-        "next/apps/fabrika/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/client/**",
-        "next/packages/libfabrika/src/cloudflare/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/email/**",
-        "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/node/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/runtime/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/quality/**",
-        "kalfa/records/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/checklist/**",
-        "next/programs/inbox/**",
-        "next/programs/tezgah/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".github/ci/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/programs/counter/**",
+        "next/programs/pipeline/**",
+        "oxlint-plugins/**",
+        "scripts/typecheck.test.ts"
       ],
       "rules": { "anti-slop/require-safety-comment-for-type-assertion": ["error", { "markers": ["SAFETY"] }] }
     },
     {
-      // 0563: no `unknown` parameter but a `cause` or a type guard's subject.
+      // We use the anti-slop plugin as it ships, never our own copy of its rules: no `unknown` parameter but a `cause` or a type guard's subject.
       "files": [
-        "kalfa/ci/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/records/**",
-        "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/desktop/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/vitest/**",
-        "next/programs/checklist/**",
-        "next/programs/inbox/**",
-        "next/programs/pipeline/**",
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".agents/**",
+        ".github/ci/**",
+        "kalfa/config/src/**",
+        "kalfa/quality/src/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/email/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/programs/chaos/**",
+        "next/programs/counter/**",
+        "next/programs/tezgah/**",
+        "oxlint-plugins/**"
       ],
       "rules": { "anti-slop/no-unknown-parameters": "error" }
     },
     {
-      // 0563: no function returns `unknown`.
+      // We use the anti-slop plugin as it ships, never our own copy of its rules: no function returns `unknown`.
       "files": [
-        "kalfa/ci/**",
+        "next/**",
+        "kalfa/**",
         ".agents/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/client/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/desktop/**",
-        "next/packages/libfabrika/src/email/**",
-        "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/tezgah/**",
-        "next/packages/tuval/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/checklist/**",
-        "next/programs/inbox/**",
-        "next/programs/pipeline/**",
-        "next/programs/tezgah/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/records/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".github/ci/**",
+        "kalfa/config/src/**",
+        "kalfa/quality/src/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/settings/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/programs/counter/**",
+        "oxlint-plugins/**"
       ],
       "rules": { "anti-slop/no-unknown-returns": "error" }
     },
     {
-      // 0563: no runtime `typeof` check but a probe for a binding that may not exist.
+      // We use the anti-slop plugin as it ships, never our own copy of its rules: no runtime `typeof` check but a probe for a binding that may not exist.
       "files": [
-        "kalfa/ci/**",
-        "kalfa/config/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
+        "next/**",
+        "kalfa/**",
         ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".github/ci/**",
+        "kalfa/quality/src/**",
+        "kalfa/records/src/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/email/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
+        "oxlint-plugins/**"
+      ],
+      "rules": { "anti-slop/no-runtime-typeof": "error" }
+    },
+    {
+      // Nothing shows an agent a banned shape, so shape rules cover tests and tooling too: no tagged value written by hand.
+      "files": [
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".agents/**",
+        ".github/ci/**",
+        "kalfa/config/**",
+        "kalfa/quality/src/**",
+        "kalfa/records/src/**",
+        "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
-        "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/client/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/email/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/mcp/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/settings/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
         "next/programs/checklist/**",
         "next/programs/counter/**",
         "next/programs/inbox/**",
         "next/programs/pipeline/**",
         "next/programs/tezgah/**",
-        "scripts/typecheck.ts",
-        "scripts/typecheck/**",
-        "scripts/typecheck.test.ts",
-        "scripts/typecheck-lock.test.ts"
-      ],
-      "rules": { "anti-slop/no-runtime-typeof": "error" }
-    },
-    {
-      // 0562: no tagged value written by hand.
-      "files": [
-        "kalfa/ci/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/tezgah/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "scripts/typecheck.ts",
-        "scripts/typecheck/**"
+        "oxlint-plugins/**",
+        "scripts/typecheck-lock.test.ts",
+        "scripts/typecheck.test.ts"
       ],
       "rules": { "anti-slop-effect/no-manual-tagged-construction": "error" }
     },
     {
-      // 0562: no tagged type written by hand.
+      // Nothing shows an agent a banned shape, so shape rules cover tests and tooling too: no tagged type written by hand.
       "files": [
-        "kalfa/ci/**",
-        "kalfa/records/**",
-        "kalfa/config/**",
-        "next/packages/libfabrika/src/*",
-        "next/packages/libfabrika/src/ci/**",
-        "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/packs/**",
-        "next/packages/libfabrika/src/permissions/**",
-        "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "next/packages/libfabrika/src/schedules/**",
-        "next/packages/libfabrika/src/settings/**",
-        "kalfa/config/src/**",
-        "next/packages/libfabrika/src/tasks/**",
-        "next/packages/libfabrika/src/tezgah/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/quality/**",
-        "next/packages/vitest/**",
-        "next/programs/chaos/**",
-        "next/programs/inbox/**",
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".agents/**",
+        ".github/ci/**",
+        "next/apps/fabrika/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/cloudflare/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/email/**",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/runtime/**",
+        "next/packages/libfabrika/src/telemetry/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**",
+        "oxlint-plugins/**"
       ],
       "rules": { "anti-slop-effect/no-manual-tagged-type": "error" }
     },
     {
-      // 0567: a tagged value is matched by its union's matcher or Effect's Match, never by comparing `_tag`.
+      // A tagged value is matched by its union's matcher or Effect's Match, never by comparing `_tag`.
       "files": [
-        "kalfa/ci/**",
-        "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/mcp/**",
-        "next/packages/libfabrika/src/repositories/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/quality/**",
-        "next/packages/vitest/**",
-        "next/programs/counter/**",
-        "next/programs/inbox/**",
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
         "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
       ],
-      "rules": { "anti-slop-effect/no-manual-tag-comparison": "error" }
-    },
-    {
-      // 0567: a ternary chain over one value's literals is a Match.
-      "files": [
-        "kalfa/ci/**",
-        "kalfa/ledger/**",
-        "kalfa/identity/**",
-        "kalfa/transport/**",
-        "kalfa/permissions/**",
-        "kalfa/program/**",
-        "kalfa/records/**",
-        "kalfa/config/**",
+      "excludeFiles": [
+        ".agents/**",
         ".github/ci/**",
+        "kalfa/config/src/**",
+        "kalfa/records/src/**",
         "next/apps/fabrika/**",
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/access/**",
@@ -4179,8 +4350,8 @@
         "next/packages/libfabrika/src/client/**",
         "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/codehost/**",
-        "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/email/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/node/**",
@@ -4188,7 +4359,6 @@
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
         "next/packages/libfabrika/src/processes/**",
-        "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/settings/**",
@@ -4197,23 +4367,52 @@
         "next/packages/libfabrika/src/tezgah/**",
         "next/packages/libfabrika/src/transport/**",
         "next/packages/tuval/**",
-        "next/packages/vitest/**",
         "next/programs/chaos/**",
         "next/programs/checklist/**",
-        "next/programs/counter/**",
-        "next/programs/inbox/**",
         "next/programs/pipeline/**",
         "next/programs/tezgah/**",
+        "oxlint-plugins/**"
+      ],
+      "rules": { "anti-slop-effect/no-manual-tag-comparison": "error" }
+    },
+    {
+      // A tagged value is matched, never compared by its _tag by hand: a ternary chain over one value's literals is a Match.
+      "files": [
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
         "scripts/typecheck.ts",
+        "scripts/typecheck/**",
         "scripts/typecheck.test.ts",
         "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": [
+        ".agents/**",
+        "kalfa/quality/src/**",
+        "next/packages/libfabrika/src/email/**",
+        "next/packages/libfabrika/src/mcp/**",
+        "oxlint-plugins/**",
+        "scripts/typecheck/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
     },
     {
-      // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
+      // We use the anti-slop plugin as it ships, never our own copy of its rules; a blank line sets statements apart, and every body has braces: a blank line before a `return` and every control statement, around a multi-line
       // binding, and between top-level statements, as the rule ships.
-      "files": [".agents/**", ".github/ci/**", "oxlint-plugins/**", "next/**", "kalfa/**", "scripts/typecheck.ts"],
+      "files": [
+        "next/**",
+        "kalfa/**",
+        ".agents/**",
+        "oxlint-plugins/**",
+        ".github/ci/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
+      ],
+      "excludeFiles": ["scripts/typecheck-lock.test.ts", "scripts/typecheck.test.ts", "scripts/typecheck/**"],
       "rules": { "anti-slop/require-readable-spacing": "error" }
     },
     {
@@ -4276,7 +4475,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -4356,7 +4555,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [
@@ -4416,7 +4615,7 @@
                   "../../*/internal/**",
                   "./../../*/internal/**"
                 ],
-                "message": "Nobody outside a module imports its internal/ (0043, rule 8). Import the module's front file."
+                "message": "Nobody outside a module imports its internal/ (libfabrika has one folder per subject, and the rule file says who may import whom, rule 8). Import the module's front file."
               },
               {
                 "group": [

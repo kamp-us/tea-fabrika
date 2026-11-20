@@ -1,5 +1,5 @@
 // Outcome.ts: how one step of a flow answers, in the five verbs.
-// Today's lead tooling (0064), read through its module: `Outcome.done("pushed")`.
+// Today's lead tooling (the lead drives work by writing a flow that one program runs, and no agent holds a loop), read through its module: `Outcome.done("pushed")`.
 //
 //   done   the step did its job; the flow goes on to the next step
 //   skip   nothing to do here; the flow goes on, with the reason on record
@@ -47,7 +47,7 @@ export type Spent = typeof Spent.Type;
 
 /**
  * What a step's runner hands back: its outcome, and what an agent turn spent, `null` for a step
- * that ran no agent. 0064 asks every flow to record dollars and tokens per step.
+ * that ran no agent. The flows rule asks every flow to record dollars and tokens per step.
  */
 export const Answer = Schema.Struct({ outcome: Outcome, spent: Schema.NullOr(Spent) });
 

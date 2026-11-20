@@ -67,7 +67,7 @@ export const Answer = Schema.Struct({
   reason: Schema.String,
   /** A build that needed no commit names the laws it ran green; `null` otherwise. */
   laws: Schema.NullOr(Schema.String),
-  /** Each plant the step ran once, for its field row (0093): the tests step names one per new law. */
+  /** Each plant the step ran once, for its field row (each law is a property that walks the machine, and each plant is run once, never kept): the tests step names one per new law. */
   plants: Schema.optionalKey(Schema.Array(Plant)),
 });
 
@@ -534,7 +534,7 @@ export interface RowAsk {
   readonly spent: Spent;
   /** Lines `redact.sh` scrubbed from the saved files, when it ran. */
   readonly redacted: number | null;
-  /** The plants the step's answer named (0093); left off the row when it named none. */
+  /** The plants the step's answer named (each law is a property that walks the machine, and each plant is run once, never kept); left off the row when it named none. */
   readonly plants?: ReadonlyArray<Plant> | undefined;
 }
 

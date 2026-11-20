@@ -8,7 +8,7 @@
 // What it refuses: any comment that oxlint reads as a disable, in all three forms (the file from
 // here on, the next line, this line), with no rule named, with no ` -- <why>`, or spelled `eslint-`.
 //
-// The Effect checker (`@effect/tsgo`) has its own ignore comment, held the same way (0565, law L3
+// The Effect checker (`@effect/tsgo`) has its own ignore comment, held the same way (every check of the Effect checker is on as an error at zero hits, law L3
 // of .kalfa/quests/effect-sweep-PLAN.md): a line comment of its own that starts with the
 // next-line form, names each check with its level, then gives ` -- <why>`, as in
 // `// <directive>-next-line preferEffectArray:off -- the platform hands back a plain array`, where

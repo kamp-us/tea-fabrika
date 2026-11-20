@@ -11,7 +11,7 @@ import { changedFiles } from "./vitest.changed.ts";
 import { hostFiles } from "./vitest.hostrun.ts";
 import { Shards } from "./vitest.shards.ts";
 
-// Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
+// Today's version's tests. It is frozen (today's version takes no new work), and no CI job runs them; they run on the laptop.
 const TODAY = ["apps/*/src/**/*.test.ts", "packages/*/src/**/*.test.ts", "programs/*/src/**/*.test.ts"];
 
 // The tooling tests: those of neither version's product code.
@@ -24,19 +24,21 @@ const TOOLING = [
   // workflow-lint's families of laws, each test file beside its module.
   ".github/ci/workflow-lint/*.test.ts",
   "scripts/*.test.ts",
-  // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as 0089's hourly
-  // mutation run reads them (`flow/**/*.test.ts`).
+  // Any depth, so the flow runner's tests under `lead/scripts/flow/` run, as the hourly
+  // mutation run reads them, since it tests the lead tooling's quest code too (`flow/**/*.test.ts`).
   // A skill's `fixtures/` is excluded below.
   ".agents/skills/*/scripts/**/*.test.ts",
 ];
 
 // The tooling tests that reach a real thing, a process, a server or a file, named
-// `*.integration.test.ts` as in next/ (0584; oxlint-plugins/test-names.ts). They are a project of
+// `*.integration.test.ts` as in next/ (a test's kind follows what it uses, never its name;
+// oxlint-plugins/test-names.ts). They are a project of
 // their own, `tooling-integration`, since a project ignores `--exclude`, and only main's full run
-// runs them (0602): `tooling` leaves them out, as `next` leaves out `next-integration`'s.
+// runs them, as it runs every integration law: `tooling` leaves them out, as `next` leaves out `next-integration`'s.
 const TOOLING_INTEGRATION = TOOLING.map((glob) => glob.replace(/\.test\.ts$/, ".integration.test.ts"));
 
-// next/'s tests, by the layer they test against (0536). A file's name says which: a test that drives
+// next/'s tests, by the layer they test against (a test that needs a real resource runs only in
+// main's full run). A file's name says which: a test that drives
 // a real resource (a SQLite file, git, workerd, a spawned process, a socket, a bundler, temp files)
 // is `*.integration.test.ts`, and one that drives a browser or Electron is `*.visual.test.ts`, each
 // beside the module it tests. Every other `next/` test runs on our interfaces' in-memory layers.
@@ -69,7 +71,7 @@ const shared = {
   // A changed trigger selects every test in CI. Tests read these files without importing them.
   // `--changed` swaps a lockfile, `tsconfig*.json` or `package.json` it can tie to packages for
   // those packages' tests, and leaves the rest to select all (vitest.changed.ts).
-  // `.github/` is not one (0534): no next/ test reads it, so a CI change no longer runs all of
+  // `.github/` is not one (the merge line runs only the tests a change reaches): no next/ test reads it, so a CI change no longer runs all of
   // next/, and the tooling tests that read it reach it through `githubReads` below.
   forceRerunTriggers: [
     ...configDefaults.forceRerunTriggers,
@@ -177,7 +179,8 @@ const localLimits = () => {
 };
 
 // A test that drives a real resource or a real window runs on CI, never on the laptop by accident
-// (0178, 0536): twice on 2026-11-15 an agent started a real-Worker `.integration.` law here, once
+// (a law that needs the real machine runs on disposable CI, and on the owner's Mac only with his
+// yes): twice on 2026-11-15 an agent started a real-Worker `.integration.` law here, once
 // through `--changed`. The include globs cannot say which files a run reaches, since `--changed`,
 // `--related`, `--project` and path filters narrow them later, so this asks Vitest itself. Vitest
 // 5.0.5 awaits every project's `configureVitest` hook once its projects and its git provider are
@@ -188,7 +191,7 @@ const localLimits = () => {
 //
 // Plain tooling names can hide real signals too. hostFiles also parses the selected source using
 // the existing test-kind reader, without running it. Signals, real windows and real instances
-// stay off the laptop (0594); an owner marker cannot clear those source checks. This catches the
+// stay off the laptop (launchd, Electron and process-signal laws use disposable CI); an owner marker cannot clear those source checks. This catches the
 // selected file's own calls, not arbitrary calls hidden inside its helpers or shell scripts.
 const checked = new WeakSet<object>();
 
@@ -210,10 +213,10 @@ const hostOnly: Plugin = {
     if (reached.length > 0) {
       throw new Error(
         [
-          `Local host-only test run refused (decision 0178). This run reaches ${reached.length} real-resource file(s):`,
+          `Local host-only test run refused (a law that needs the real machine runs on disposable CI). This run reaches ${reached.length} real-resource file(s):`,
           ...reached.slice(0, 5).map((path) => `  ${path}`),
           ...(reached.length > 5 ? [`  and ${reached.length - 5} more`] : []),
-          "Use eligible disposable CI for the selected laws (0594). Portable signal laws may use Linux; Mac-specific laws need macOS.",
+          "Use eligible disposable CI for the selected laws (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI). Portable signal laws may use Linux; Mac-specific laws need macOS.",
         ].join("\n"),
       );
     }
@@ -246,10 +249,10 @@ const scriptReads: Plugin = {
 /** A visual test's limit: Vitest's own 5 s times 24, the one the end-to-end runner gave each file. */
 const VISUAL_LIMIT = 120_000;
 
-// One Vitest project per layer, picked by `--project` (0536). Pull requests and the merge queue run
+// One Vitest project per layer, picked by `--project`. Pull requests and the merge queue run
 // the `next` and `tooling` tests their change reaches, and a pull request with the `visual` label
 // its `next-visual` tests too (check.yaml); main's full run runs every project but `today`, and
-// only it runs `next-integration` and `tooling-integration` (0602). The tooling tests are their own
+// only it runs `next-integration` and `tooling-integration`, as integration laws run only there. The tooling tests are their own
 // projects and today's version's theirs (`today`), so `--project tooling` leaves today's out. The
 // visual project starts one file at a time, since each starts a brain, Chromium or Electron, and
 // keeps no setup file, as the end-to-end runner did. A file is in exactly one project: `next`
@@ -284,7 +287,7 @@ export const projects = [
 // A tooling test that reads CI's files as text (check.yaml, the pnpm action, the CI scripts) names
 // them in its source: `.github/...` from the top, or `../workflows/...` beside it. Each such test
 // outside next/ gets every file under `.github/` as a watched file, so `--changed` picks it when one
-// changes, now that `.github/` is no rerun trigger (0534). A name in a comment or a fixture counts,
+// changes, now that `.github/` is no rerun trigger (the merge line runs only the tests a change reaches). A name in a comment or a fixture counts,
 // as in `scriptReads`: that over-matches, which reruns a test and never misses one. next/ is left
 // out: none of its tests reads `.github/`, and the merge line runs none of next/ for a CI change.
 const GITHUB_NAME = /\.github\/|\bworkflows\//;

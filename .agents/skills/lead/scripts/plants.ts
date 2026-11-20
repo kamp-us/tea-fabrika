@@ -1,5 +1,5 @@
 // plants.ts: the plant records a review's brief carries (ticket 850). A tests step's answer names
-// each plant it ran (0093), and drive keeps them on the step's entry in state/<quest>.json. The
+// each plant it ran (each law is a property that walks the machine, and each plant is run once, never kept), and drive keeps them on the step's entry in state/<quest>.json. The
 // report beside the quest (`../boxes/<box>.md`) holds the table of what each failure looked like,
 // and a box cannot read it, so a review once asked the tests step for records that already
 // existed, and the quest looped (acpcancel and sjob1, 2026-11-11). The chain writes this section

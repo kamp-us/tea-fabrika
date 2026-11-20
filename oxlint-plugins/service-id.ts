@@ -1,4 +1,4 @@
-// Ticket 737, next/. Decision 0023 has next/ follow Effect's own style, and Effect's guide asks a
+// Ticket 737, next/. The rule that next/ follows Effect's code style and doc comments has next/ follow Effect's own style, and Effect's guide asks a
 // service's string ID to carry "the package name and the subdirectory path to the service file". So
 // an ID is the package, the source file's path without its extension, then `.Name` when the service
 // is named otherwise than its file: `@kampus/libfabrika/ledger/Ledger`,
@@ -195,7 +195,7 @@ export const serviceId: CreateRule = {
       if (text === null) {
         context.report({
           node: at,
-          message: `This service ID is not a string the rule can read, so it cannot show the ID is ${base} or ${base}.Name (decision 0023, oxlint-plugins/service-id.ts).`,
+          message: `This service ID is not a string the rule can read, so it cannot show the ID is ${base} or ${base}.Name (next/ follows Effect's code style and doc comments, oxlint-plugins/service-id.ts).`,
         });
 
         return;
@@ -211,7 +211,7 @@ export const serviceId: CreateRule = {
       if (!fits) {
         context.report({
           node: at,
-          message: `The service ID ${JSON.stringify(text)} should be ${JSON.stringify(expected ?? `${base}.Name`)}: the package, the source file's path, then .Name when the service is named otherwise than its file (decision 0023, oxlint-plugins/service-id.ts).`,
+          message: `The service ID ${JSON.stringify(text)} should be ${JSON.stringify(expected ?? `${base}.Name`)}: the package, the source file's path, then .Name when the service is named otherwise than its file (next/ follows Effect's code style and doc comments, oxlint-plugins/service-id.ts).`,
         });
       }
     };

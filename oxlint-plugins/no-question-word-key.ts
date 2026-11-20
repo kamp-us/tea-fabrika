@@ -1,11 +1,11 @@
-// A question word is never a name (0081). oxlint's own `eslint/id-denylist` holds every name written
+// A question word is never a name. oxlint's own `eslint/id-denylist` holds every name written
 // as an identifier; it does not decode a quoted, computed or template key, so this rule holds those.
 // Reads and dynamic keys keep their own meaning.
 import type { CreateRule } from "@oxlint/plugins";
 import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
-// The five words 0081 retires, also listed for `eslint/id-denylist` in `.oxlintrc.json`.
+// The five words the no-question-word rule retires, also listed for `eslint/id-denylist` in `.oxlintrc.json`.
 const QUESTION_WORDS: ReadonlySet<string> = new Set(["where", "why", "what", "who", "how"]);
 
 export const noQuestionWordKey: CreateRule = {
@@ -22,7 +22,7 @@ export const noQuestionWordKey: CreateRule = {
         context.report({
           node: key,
           message:
-            "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names (0081).",
+            "Name this key with the noun for the value it holds: where, why, what, who and how are question words, never names.",
         });
       }
     };

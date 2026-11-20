@@ -1,8 +1,8 @@
-// Today's CI: the clones a pull request adds, as advice (0587). jscpd, the copy-paste detector
-// (0040), scans the tree with .jscpd.json's settings and builds a baseline from the pull request's
+// Today's CI: the clones a pull request adds, as advice (a new helper names the tools it searched, and a new name cites the industry's word). jscpd, the copy-paste detector
+// (an existing, widely used tool comes before a hand-written one), scans the tree with .jscpd.json's settings and builds a baseline from the pull request's
 // base commit (`--baseline-from-ref`), so a clone it marks `isNew` is one this change made. Each new
 // clone is printed as a GitHub warning on the lines of one side. Nothing here fails the run:
-// a red check waits until jscpd's false alarms are measured at the blocking bar (0523), and a jscpd
+// a red check waits until jscpd's false alarms are measured at the blocking bar (a lint rule blocks wherever its code is clean), and a jscpd
 // that cannot run says so in one line and exits 0.
 //
 //   node .github/ci/copies.ts --base <sha>
@@ -55,7 +55,7 @@ export const advice = (clones: ReadonlyArray<Clone>): ReadonlyArray<string> =>
       const at = `${firstFile.name}:${firstFile.startLoc.line}-${firstFile.endLoc.line}`;
       const where = `file=${property(secondFile.name)},line=${secondFile.startLoc.line},endLine=${secondFile.endLoc.line}`;
 
-      return `::warning ${where},title=${property("copied code (advice)")}::${lines} lines, ${tokens} tokens, the same as ${at}. Reuse it or say why not in ## Existing tools (0587).`;
+      return `::warning ${where},title=${property("copied code (advice)")}::${lines} lines, ${tokens} tokens, the same as ${at}. Reuse it or say why not in ## Existing tools (a new helper names the tools it searched, and a new name cites the industry's word).`;
     });
 
 const main = (argv: ReadonlyArray<string>): number => {

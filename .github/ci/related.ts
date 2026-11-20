@@ -1,8 +1,8 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
 // remain on the existing next matrix. A pull request and a queue group pick tooling's plain laws
 // alone: every `.integration.` law, `next-integration`'s and `tooling-integration`'s alike, runs only
-// on main's full run (scheduled.yaml, on a push to main and hourly, 0581), never on a pull request, a
-// queue group or a branch's proof run (0602, 0584; `onMergeLine`). A selector error fails the
+// on main's full run (scheduled.yaml, on a push to main and hourly, main's full run starts on a push to main and an hourly catch-up), never on a pull request, a
+// queue group or a branch's proof run (integration laws run only in main's full run; a test's kind follows what it uses, never its name; `onMergeLine`). A selector error fails the
 // required check, never means zero.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -19,7 +19,7 @@ import { E2E_SETUP, list, room, withReaders } from "./legs.ts";
 import { isTrigger, legsOf, whole } from "./proof.ts";
 
 // T1076. The package's tested archive and its root consumer. P2 (`PACKAGE`) builds, packs and installs
-// the archive; main's full run keeps it (0602), so the merge line never selects it, and the receipt
+// the archive; main's full run keeps it, so the merge line never selects it, and the receipt
 // below judges what each numbered leg of that run left. P1 (`CONSUMER`) imports the package by name,
 // and Vitest's `--changed` follows imports, which no change to the package or to the fault's route
 // reaches, so `wantsConsumerLaw` adds it by path, as `wantsChecklistLaw` adds the checklist fixture.
@@ -354,8 +354,8 @@ export const wantsChecklistLaw = (paths: readonly string[] | null): boolean =>
 /**
  * Whether the GitHub event that started a related run is the merge line: a pull request or a merge
  * queue group. The owner moved every `.integration.` law back to main's full run on 2026-11-18
- * (0602), after real-resource laws failed about a dozen of that night's pull request and queue runs
- * on code those changes never touched (0536's rule). Any other event, which in check.yaml is a push
+ * (integration laws run only in main's full run), after real-resource laws failed about a dozen of that night's pull request and queue runs
+ * on code those changes never touched (the real-resource rule). Any other event, which in check.yaml is a push
  * to main whose changes job failed, picks both lists, as before; tooling's laws that start a process
  * are in neither, since they are `tooling-integration`'s.
  */
@@ -379,7 +379,7 @@ export const select = (event: string | undefined, lists: Lists, sizing: Sizing) 
     throw new Error("related: selected files must be distinct paths without whitespace");
   }
 
-  // A tooling law that starts a process is an `.integration.` law too (0584). Its own project,
+  // A tooling law that starts a process is an `.integration.` law too (a test's kind follows what it uses, never its name). Its own project,
   // `tooling-integration`, already keeps it out of tooling's list; the name holds it off the merge
   // line whatever a list gives.
   const picked = listed.map(
@@ -405,7 +405,7 @@ export const select = (event: string | undefined, lists: Lists, sizing: Sizing) 
   }
 
   // P1 has one owning leg, in tooling: any other placement is a selector error. P2 is never added by
-  // path (0602), so no leg owns it.
+  // path (integration laws run only in main's full run), so no leg owns it.
   const owners = Object.keys(legs).filter((leg) => projects[leg] === "tooling" && legs[leg]?.includes(CONSUMER));
 
   if (all.includes(CONSUMER) && owners.length !== 1) {
@@ -612,7 +612,7 @@ export const run = (step: Step) => {
   const event = env["GITHUB_EVENT_NAME"];
 
   // P1 by path, on a full run or a change to the package or the fault's route, and only once Vitest lists
-  // it in tooling. P2 is never added by path: main's full run runs it (0602). Each list stays lazy, so a
+  // it in tooling. P2 is never added by path: main's full run runs it. Each list stays lazy, so a
   // project the event does not pick is never listed.
   const need = full || wantsConsumerLaw(changed);
 

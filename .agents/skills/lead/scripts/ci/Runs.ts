@@ -1,5 +1,5 @@
 // Runs: what the lead tooling asks GitHub about one workflow's runs on one branch, and the jobs and
-// steps of one run. It reads; it never writes. This file is the contract only (0095): `RunsGh.layer`
+// steps of one run. It reads; it never writes. This file is the contract only (a service file holds only its contract, and each layer is its own file): `RunsGh.layer`
 // asks GitHub through `gh api`, `RunsTest.layer` answers from lists in memory. Today's lead
 // tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";

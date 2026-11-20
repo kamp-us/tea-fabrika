@@ -1,5 +1,5 @@
 // `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass. Its plants
-// were the exam's (next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts) until 0591 moved them here.
+// were the exam's (next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts) until the exam-to-lint rule moved them here.
 // Plant: skip a class field named `_tag` (the rule's `PropertyDefinition` visitor), and line 6 stops firing.
 
 import { Array as Arr } from "effect";

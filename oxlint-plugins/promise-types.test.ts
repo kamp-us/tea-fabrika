@@ -8,9 +8,9 @@ import { API, type Snapshot } from "typescript/unstable/sync";
 // `pnpm lint:promise-types` (`promise-types.ts`), the typed half of `no-promises` (exam item 1): a call,
 // return or parameter that carries a Promise outside one marked edge line is refused, through Effect's
 // bridges, aliases and inferred types. An edge comment covers only the next physical line. These laws
-// were the exam's (next/apps/fabrika/src/exam/no-promises.integration.test.ts) until 0591 moved them here
+// were the exam's (next/apps/fabrika/src/exam/no-promises.integration.test.ts) until the exam-to-lint rule moved them here
 // with the command; the oxlint half's plants are in no-promises.test.ts. Each law keeps its generator,
-// seed 119120, at the count the full run gave it: this folder's tests run only in the full run (0590).
+// seed 119120, at the count the full run gave it: this folder's tests run only in the full run (a branch's proof run runs only the tests its change reaches).
 // Plant: let a marker cover the whole statement under it, not only the next line, and the wrapped-edge
 // laws fail.
 import { describe, expect, it } from "vitest";
@@ -393,7 +393,7 @@ describe("promise-types", () => {
 });
 
 // P12, the command's `fabrika(secret-types)` check. This was the exam's
-// next/apps/fabrika/src/exam/secret-types.integration.test.ts until 0591 made it part of this command;
+// next/apps/fabrika/src/exam/secret-types.integration.test.ts until the exam-to-lint rule made it part of this command;
 // its real-tree law is the command's run in `pnpm lint`. Generated plants prove the checker sees the
 // secret read through a renamed import and a renamed wrapper. Plant: drop the `~effect/Redacted` test,
 // and the three wrapped reads fire too.
@@ -444,7 +444,7 @@ describe("secret reads enter Redacted at their source", () => {
           rmSync(folder, { recursive: true, force: true });
         }
       }),
-      // The exam's full-run count: this folder's tests run only in the full run (0590).
+      // The exam's full-run count: this folder's tests run only in the full run (a branch's proof run runs only the tests its change reaches).
       { seed: 119120, numRuns: 5 },
     );
   });
@@ -453,8 +453,8 @@ describe("secret reads enter Redacted at their source", () => {
 // e2e typecheck, the command's `fabrika(tsconfig-scope)` check: every TypeScript file of a next/
 // package is in the program its `typecheck` script checks. The app's tsconfig once named its files
 // by hand, and `e2e/` and `e2e.ts` were never on the list, so 19 type errors stood there unseen from
-// 2026-11-06 (0524: no list lets broken code pass). This was the exam's
-// next/apps/fabrika/src/exam/tsconfig-scope.integration.test.ts until 0591 made it part of this
+// 2026-11-06 (no list lets broken code pass). This was the exam's
+// next/apps/fabrika/src/exam/tsconfig-scope.integration.test.ts until the exam-to-lint rule made it part of this
 // command; its real-tree law is the command's run in `pnpm lint`. Each law plants a tree in a temp
 // folder and opens the projects the command opens there. Plant: open one package fewer, and every
 // planted file is reported.
@@ -514,7 +514,7 @@ describe("every TypeScript file of a next/ package is in its program", () => {
       word.map((w) => `e2e/${w}`),
     ),
     name: word,
-    // 0536's names too: the e2e files are `*.integration.test.ts` and `*.visual.test.ts` now.
+    // The real-resource rule's names too: the e2e files are `*.integration.test.ts` and `*.visual.test.ts` now.
     suffix: fc.constantFrom(
       ".test.ts",
       ".test-support.ts",

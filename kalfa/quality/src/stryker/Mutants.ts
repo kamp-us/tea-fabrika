@@ -1,6 +1,6 @@
 /**
- * Stryker as a service (decision 0600): the mutants it makes on a file, and a run of it. This file
- * is the contract only (0095); `node/MutantsStryker.ts` is the real layer and `MutantsMemory.ts` the
+ * Stryker as a service (testing, linting and formatting live in @kalfa/quality): the mutants it makes on a file, and a run of it. This file
+ * is the contract only (a service file holds only its contract, and each layer is its own file); `node/MutantsStryker.ts` is the real layer and `MutantsMemory.ts` the
  * stand-in the laws run on.
  */
 import { Context } from "effect";

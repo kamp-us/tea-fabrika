@@ -42,7 +42,7 @@ syncBuiltinESMExports();
 `;
 
 describe("T325 K6 botpush, today's tooling", () => {
-  // Each case runs in a tree with step notes and in one without (decisions 0161 and 0164: plain
+  // Each case runs in a tree with step notes and in one without (today's tooling signs no commit with a step key; the bot pushes agent branches with no step signature: plain
   // commits). Plants: omit the leakgrep call (the "held" range, a leak in a commit an origin ref
   // already holds, is the one only it catches); omit its --commits call; skip both leak greps when
   // the tree has no step notes. Removed private text and the repo URL must still push.
@@ -107,7 +107,7 @@ describe("T325 K6 botpush, today's tooling", () => {
               git("update-ref", "refs/remotes/origin/held", "HEAD");
             }
 
-            // Decision 0048: each commit is read on its own, so a later commit changes no answer.
+            // The leak check reads each pushed commit on its own: each commit is read on its own, so a later commit changes no answer.
             if (range === "undone") {
               writeFileSync(join(dir, "subject.md"), "safe again\n");
               git("add", "subject.md");
@@ -481,7 +481,7 @@ const pushes = (ran: Ran) => ran.calls.flatMap((c) => (c.push ? [c.push] : []));
 const named = (ran: Ran, key: keyof Call) => ran.calls.filter((c) => key in c);
 
 describe("T1610 botpush pushes the notes a tree has, and a plain branch when it has none", () => {
-  // B1 and B2. Every commit is plain (decisions 0161 and 0164), so a tree with no step notes is the
+  // B1 and B2. Every commit is plain (today's tooling signs no commit with a step key; the bot pushes agent branches with no step signature), so a tree with no step notes is the
   // usual case. Plants: restore the notes refusal (no notes then exits 1 and pushes nothing); always
   // include the notes refspec (the no-notes push then names refs/notes/fabrika); fetch or merge the
   // remote's notes with no notes of our own; drop --atomic or the notes refspec from the with-notes

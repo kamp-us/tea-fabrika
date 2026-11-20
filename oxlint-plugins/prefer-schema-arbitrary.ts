@@ -1,5 +1,5 @@
 // Today's tooling for next/ tests: it blocks in every folder at zero, and advises where the config's
-// warn override still names the folder (0523). Match written schema evidence, never record keys or
+// warn override still names the folder (a lint rule blocks wherever its code is clean). Match written schema evidence, never record keys or
 // capitalized names. Scope variables identify imports, aliases and callback inputs without types.
 import type { CreateRule } from "@oxlint/plugins";
 import { Array as Arr, pipe } from "effect";

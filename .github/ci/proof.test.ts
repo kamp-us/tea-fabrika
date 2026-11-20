@@ -26,7 +26,7 @@ import {
 } from "./proof.ts";
 
 // Today's CI, serving both versions. Covers proof.ts, which picks what a branch's proof run tests
-// (0590): the full set when the change touches a rerun trigger or the hand start took `scope: full`
+// (a branch's proof run runs only the tests its change reaches): the full set when the change touches a rerun trigger or the hand start took `scope: full`
 // for a named law (ticket 1161), else the tests Vitest's `--changed` lists, split into as many legs as
 // they need. The triggers and their match are vitest.config.ts's
 // own; seconds come from scratch tables, so a law holds for any table, not only today's. Each plant
@@ -60,7 +60,7 @@ const real: Sizing = {
   table: rowsAt("full"),
 };
 
-// The files 0590 names, and others under each trigger glob: a config, the lint config, a tsconfig,
+// The files the proof-run rule names, and others under each trigger glob: a config, the lint config, a tsconfig,
 // the lockfile and any package.json, at the top or in a package.
 const TRIGGERS = [
   "vitest.config.ts",
@@ -86,7 +86,7 @@ const PLAIN = [
   ".kalfa/decisions/0590-a-branch-proof-run-runs-only-what-its-change-reaches.md",
 ];
 
-it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever Vitest would list", () => {
+it("pinned: a change to any rerun trigger the proof-run rule names runs the full set, whatever Vitest would list", () => {
   // Plants, each run once on proof.ts and restored: `choose` ignores its triggers (red: every case
   // splits a list); `isTrigger` drops `dot: true` (red: .oxlintrc.json reads as plain).
   for (const path of TRIGGERS) {
@@ -179,10 +179,10 @@ const reachesAll = (reached: ReadonlySet<string>, cases: readonly string[]) =>
 
 const propertyOptions = { arbitrary: { seed: 119120, runs: runsFor({ fast: 100, full: 100 }), size: 100 } };
 
-// At run 8 the real four proof groups (0598) turn by 8 mod 4, which is none: the identity.
+// At run 8 the real four proof groups (the merge line leaves the scheduled job groups) turn by 8 mod 4, which is none: the identity.
 const identitySlots = `slots=${JSON.stringify(Object.fromEntries(upTo(real.most).map((slot) => [slot, slot])))}`;
 
-// P5, pinned: the real select's MOST is 0598's four proof groups, whatever else the workflow sets.
+// P5, pinned: the real select's MOST is the scheduled-groups rule's four proof groups, whatever else the workflow sets.
 it("pinned: the real select's MOST is PROOF_SLOTS, four proof groups, and so is the changed matrix's max-parallel", () => {
   // Plant, run once on scheduled.yaml and restored: `MOST: &most 9` back (red: 9 is not 4).
   expect(setStep.env["MOST"]).toBe(4);
@@ -398,7 +398,7 @@ it("pinned: the changed legs run every project proof.ts lists, and no other, and
 // Three real test files stand for a full start's law.
 const LAWS = [".github/ci/proof.test.ts", ".github/ci/gate.test.ts", ".github/ci/workflow-lint/scheduled.test.ts"];
 
-// The property laws below draw their values from Schemas (0579): no seed in a law, the setup holds it.
+// The property laws below draw their values from Schemas (a property law is it.prop with Schemas, and test hooks are not exported): no seed in a law, the setup holds it.
 const lawOptions = { arbitrary: { runs: runsFor({ fast: 100, full: 100 }) } };
 
 const HandInputs = Schema.Union([
@@ -686,7 +686,7 @@ const Touched = Schema.Array(
   ),
 ).check(Schema.isMaxLength(12));
 
-// scenario: the owner's call of 2026-11-18 (0602): a branch's proof run lists no integration
+// scenario: the owner's call of 2026-11-18 (integration laws run only in main's full run): a branch's proof run lists no integration
 // project, even for a change that reaches one of its laws, and main's full run carries them. Plants,
 // each run once on proof.ts and restored: `PROJECTS` keeps next-integration (red: the reached call
 // names it, and the pinned test above with it); the readers call names next-integration again, as
@@ -713,7 +713,7 @@ it.prop(
   propertyOptions,
 );
 
-// The tooling laws that start a process, by their real names (0584): the four tooling
+// The tooling laws that start a process, by their real names (a test's kind follows what it uses, never its name): the four tooling
 // `.integration.` files today.
 const TOOLING_REAL = [
   ".agents/skills/lead/scripts/records-readonly.integration.test.ts",
@@ -733,7 +733,7 @@ const Listed = Schema.Array(
 ).check(Schema.isMaxLength(30), Schema.isUnique());
 
 // scenario: the review of this build: a branch's proof run ran tooling's three `.integration.` laws,
-// which its changed set reached through the `tooling` project. 0602 keeps every `.integration.` law,
+// which its changed set reached through the `tooling` project. The integration-laws rule keeps every `.integration.` law,
 // of next/ or of tooling, off a proof run; the `tooling-integration` project keeps them out of
 // tooling's list, and `choose` holds them out by name whatever a list gives. Plant, run once on
 // proof.ts and restored: `choose` keeps every listed file (red: the real-resource names land on legs).

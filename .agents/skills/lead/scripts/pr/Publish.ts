@@ -1,5 +1,5 @@
 // Publish: a commit leaves the laptop the moment it is made, and its branch has a pull request from
-// its first commit (0134). Today's lead tooling, run on our own laptop; it is not product.
+// its first commit (every commit is pushed when it is made, with a draft pull request from the first commit). Today's lead tooling, run on our own laptop; it is not product.
 //
 //   publish   leak grep on origin/main..head, fail closed -> push, never forced -> the branch's open
 //             pull request, or a new draft when it has none
@@ -15,8 +15,8 @@ import { Pushes } from "./Pushes.ts";
 
 /** What a draft says when a commit opens it; the quest's ready step gives it the brief's words. */
 export const DRAFT_BODY =
-  "Opened as a draft at this branch's first commit, so no code stays only on a branch (decision " +
-  "0134). It is marked ready when its steps have passed.";
+  "Opened as a draft at this branch's first commit, so no code stays only on a branch (every commit " +
+  "is pushed when it is made). It is marked ready when its steps have passed.";
 
 /** A branch no commit step pushes to: main, or none (a detached head). */
 export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {

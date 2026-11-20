@@ -207,7 +207,7 @@ const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect"
 
 /**
  * `fabrika/no-data-taggederror`'s lines. It stays beside oxlint's `no-restricted-properties` entry
- * (0573, the plan's amendment of 2026-11-15), since only ours refuses `Data.TaggedError` in a type
+ * (a trusted lint rule replaces ours where it catches as much, the plan's amendment of 2026-11-15), since only ours refuses `Data.TaggedError` in a type
  * position: its `banNames` visits `TSQualifiedName`. L1 below runs these lines in every folder too.
  * Plant: drop `"fabrika/no-data-taggederror"` from `.oxlintrc.json`, and the type lines are not refused.
  */
@@ -374,7 +374,7 @@ const PLANTS: readonly Plant[] = [
     ],
   },
   {
-    // Braces on every body, even on one line (owner, 2026-11-09; 0021).
+    // Braces on every body, even on one line (owner, 2026-11-09; a blank line sets statements apart, and every body has braces).
     code: "eslint(curly)",
     prelude: ["declare let x: number;", "declare const ys: number[];"],
     lines: [
@@ -530,7 +530,7 @@ describe("each rule refuses what it is there to refuse", () => {
     expect([...new Set(firesInPlanted(poll, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
   });
 
-  // The React rules on only in next/'s .tsx files, linted whole at their next/ paths (0591).
+  // The React rules on only in next/'s .tsx files, linted whole at their next/ paths (a test that reads files as text declares its reads, and shape checks are lint rules).
   it.each(Arr.map(NEXT_TSX_PLANTS, (p) => [Arr.join(Rec.keys(p.fires), ", "), p] as const))(
     "built in, on in next/'s .tsx files: %s",
     async (_codes, p) => {
@@ -601,7 +601,7 @@ describe("each rule refuses what it is there to refuse", () => {
         // Generated files and their fix in padding-line-between-statements.test.ts.
         "padding-line-between-statements",
         // next/'s exam rules, planted at next/ paths through plant.ts, each in its own <rule>.test.ts here
-        // (0591 moved them from next/apps/fabrika/src/exam/; no-of's path laws are in no-of.test.ts).
+        // (the exam-to-lint rule moved them from next/apps/fabrika/src/exam/; no-of's path laws are in no-of.test.ts).
         "no-promises",
         "no-effect-run-outside-edge",
         "edge-comment",
@@ -610,7 +610,7 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-hand-tag",
         "one-store-hook",
         "no-clock-in-view",
-        // p65's import half, planted as the exam's deps trees at next/ paths in package-deps.test.ts (0591).
+        // p65's import half, planted as the exam's deps trees at next/ paths in package-deps.test.ts (a test that reads files as text declares its reads, and shape checks are lint rules).
         "package-deps",
         // Generated ledger-sql.test.ts plants run at next/ paths with the real lint config.
         "no-ledger-sql",
@@ -635,21 +635,21 @@ describe("each rule refuses what it is there to refuse", () => {
         "no-wall-clock",
         "one-machine-per-file", // scoped plant and blocking check below
         "isolate-boundary", // scoped platform-name plant below
-        // E1 (0574): no-stability-tag.test.ts plants a tag at in-scope and waiting paths with the real lint config.
+        // E1 (no @stability tag until the first release, and each unstable Effect part is named once): no-stability-tag.test.ts plants a tag at in-scope and waiting paths with the real lint config.
         "no-stability-tag",
-        // E2 (0577): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
+        // E2 (libraries import Effect by namespace, programs and apps by the barrel): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
         "prefer-namespace-import",
         // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
         "no-stage-word",
         // package-imports.test.ts plants one file per part at its next/ path with the real lint config.
         "package-imports",
-        // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
+        // The real-resource rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
         // and a named file under next/ and runs oxlint over them with the real lint config.
         "integration-test-name",
         // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
         // plants generated lines at those paths, and at product and outside paths it must pass.
         "test-database",
-        // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
+        // The fast-merge-line rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
         "runs-from-depth",
         // P12's rule is on for the page entry alone: one-page-runtime.test.ts plants each break there.
         "one-page-runtime",
@@ -710,7 +710,7 @@ it.live("scenario: T877 L10 only the TOML adapter imports the parser and seriali
 );
 
 // T502 PR 2, next/: the exam's object-imports law (next/apps/fabrika/src/exam/object-imports.integration.test.ts),
-// moved here by 0591. The installed no-restricted-imports rule, in the `cloudflare/objects.ts` block of the
+// moved here by the exam-to-lint rule. The installed no-restricted-imports rule, in the `cloudflare/objects.ts` block of the
 // real config, refuses a value import and a side-effect import of anything but Alchemy, for each drawn
 // module, and passes erased types. Plant: drop the block's pattern group, and lines 1 and 6 pass.
 const OBJECT_MODULES = ["./runtime.ts", "./record.ts", "effect", "node:fs"] as const;
@@ -756,7 +756,7 @@ it.live("scenario: the isolate-boundary rule refuses a platform type outside clo
   }),
 );
 
-// scenario: 0535's rule reads only next/'s test files, so its planted lines run there with the real config.
+// scenario: the fast-merge-line rule reads only next/'s test files, so its planted lines run there with the real config.
 it.live(
   "scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, and a law in memory keeps it",
   () =>
@@ -818,7 +818,7 @@ const isEntry =
 /** The ban's own entry, `{ object: "Reflect", property: "get" }`. */
 const isReflectGet = isEntry("Reflect", "get");
 
-/** The swap's entry, `{ object: "Data", property: "TaggedError" }` (0573). */
+/** The swap's entry, `{ object: "Data", property: "TaggedError" }` (a trusted lint rule replaces ours where it catches as much). */
 const isTaggedError = isEntry("Data", "TaggedError");
 
 /** A setting's options, as `--print-config` prints it, `[level, options]`, or none. */
@@ -876,7 +876,7 @@ const inConfigCopy = (
 
     symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
     symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-    // The config loads the vendored anti-slop plugins from here (0563).
+    // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
     symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
 
     const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
@@ -996,7 +996,7 @@ const testPlantPath = (glob: string, file: string): string => `${folderOf(glob)}
 describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the vi mocks", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
   // `vitest/no-restricted-vi-methods` block lists today gets VI_METHODS' lines in a test file of its
-  // own, a later slice's folder included (decisions 0555, 0579; the app-e2e plan's L4).
+  // own, a later slice's folder included (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported; the app-e2e plan's L4).
   // Plant: delete `next/apps/fabrika/e2e/*` from its block's `files`, and that folder's lines are not refused.
   it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
     inConfigCopy(({ printed, lint }) => {
@@ -1171,7 +1171,7 @@ const libfabrikaKinds = [
   { kind: "test", name: "planted.test.ts", left: true },
 ] as const;
 
-describe("M12 and M13 (decision 0592): libfabrika writes output through Effect's Console", () => {
+describe("M12 and M13 (libfabrika writes output only through Effect's Console, so a test can see it): libfabrika writes output through Effect's Console", () => {
   // M12. scenario: the repo's own config, with the lines of LIBFABRIKA_NO_CONSOLE planted in each
   // libfabrika folder as a product file, a test-support file and a test file, and in a folder outside it.
   // Plant: drop the libfabrika glob from the `no-console` block of `.oxlintrc.json`, and a product
@@ -1280,7 +1280,7 @@ const ADVISING_FOLDERS: ReadonlyArray<string> = [
   `${LIBFABRIKA_SRC}/telemetry`,
 ];
 
-describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block that sets the vitest rule holds it, and loses no entry", () => {
+describe("V1 of the vi lock (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported): every folder of every block that sets the vitest rule holds it, and loses no entry", () => {
   // V1. scenario: the repo's own config, read by oxlint's own --print-config. Each glob of each block that
   // sets `vitest/no-restricted-vi-methods` gets a product file, a test-support file and a test file, each with
   // the `vi` lines of VI_METHODS and VI_PROPERTIES. A line is held when either plant's rule refuses it, which
@@ -1395,7 +1395,7 @@ describe("V1 of the vi lock (decisions 0555, 0579): every folder of every block 
   }, 180_000);
 });
 
-describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
+describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (a trusted lint rule replaces ours where it catches as much)", () => {
   // L1. scenario: the repo's own config, read by oxlint's own --print-config, so every folder that
   // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines and ours'
   // (DATA_TAGGEDERROR), a block that lands later included, and so do a file at the top and one under
@@ -1461,7 +1461,7 @@ describe("lint.ts, the first step of pnpm lint", () => {
   const tried = join(plant, "tried.ts");
   const blocking = join(plant, "blocking.ts");
 
-  // scenario: T930 L6, the plant folder has no warn line, so it is at zero and the old advice rule blocks (0523).
+  // scenario: T930 L6, the plant folder has no warn line, so it is at zero and the old advice rule blocks (a lint rule blocks wherever its code is clean).
   it("scenario: T930 L6 a no-raw-try-catch fire in a folder at zero blocks", () => {
     writeFileSync(
       tried,
@@ -1730,7 +1730,7 @@ describe("rules that apply by path", () => {
     "declare const xs: number[];\nexport const f = () => { let out: number[] = []; for (const x of xs) { out = [...out, x]; } return out; };\n";
 
   // scenario: the override's own globs are the thing checked, so each row is one real folder, read
-  // by the real oxlint through the repository's own config (0559).
+  // by the real oxlint through the repository's own config (no reduce callback or loop copies its running result on every pass).
   // Plants, run once: with the rule moved to the root `rules`, the three rows for today's app are
   // red; with one folder dropped from the override's `files`, that folder's row is red.
   it.each(["next", ".agents", "oxlint-plugins", ".github/ci"])(
@@ -1744,7 +1744,7 @@ describe("rules that apply by path", () => {
 
   const VI_FN = 'import { vi } from "vitest";\nexport const f = vi.fn();\n';
 
-  // M3, scenario: the `vi` lock (0555, 0579) is on only where a folder is at zero, so each row is one
+  // M3, scenario: the `vi` lock (a stand-in comes from a service's test layer, never from vi; a property law is it.prop with Schemas, and test hooks are not exported) is on only where a folder is at zero, so each row is one
   // real folder, read by the real oxlint through the repository's own config; both halves of the pair.
   // Plants, run once: with the pair moved to the root `rules`, the `next/` and `packages/` rows are
   // red; with `oxlint-plugins/**` dropped from the block's `files`, its row is red.
@@ -1772,7 +1772,7 @@ describe("rules that apply by path", () => {
   );
 });
 
-// pinned: 0046 is blocking from its first commit and the real config must enable it.
+// pinned: the one-tea-machine-per-file rule is blocking from its first commit and the real config must enable it.
 it.live("pinned: L6 a second machine is planted and lint.ts exits 1", () =>
   Effect.gen(function* () {
     const text =
@@ -1793,7 +1793,7 @@ it.live("pinned: L6 a second machine is planted and lint.ts exits 1", () =>
 
     copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
     symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-    // The config loads the vendored anti-slop plugins from here (0563).
+    // The config loads the vendored anti-slop plugins from here (we use the anti-slop plugin as it ships, never our own copy of its rules).
     symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
     mkdirSync(join(at, ".agents/skills"), { recursive: true });
     mkdirSync(join(at, "next"));

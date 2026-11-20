@@ -1,7 +1,7 @@
-// M4 (0591): `fabrika/package-deps` fires on each import break of the exam's planted trees and on
+// M4 (a test that reads files as text declares its reads, and shape checks are lint rules): `fabrika/package-deps` fires on each import break of the exam's planted trees and on
 // nothing else, through the repo's own `.oxlintrc.json`, and reads an `exports` map by Node's
 // longest-pattern rule. These laws were the import half of the exam's
-// next/apps/fabrika/src/exam/deps.integration.test.ts until 0591 made it this rule; its real-tree law
+// next/apps/fabrika/src/exam/deps.integration.test.ts until the exam-to-lint rule made it this rule; its real-tree law
 // is the rule's run in `pnpm lint`. Each planted tree keeps the exam's files, at `next/` paths.
 // Plant: pick the first exports key that fits, not the longest, and the internal files go through.
 import { readFileSync } from "node:fs";
@@ -262,7 +262,7 @@ describe("a module's front files and its internal/ in the exports map", () => {
         );
         expect(exportAt(new Map(entries), `./other/${stem}`)).toEqual({ _tag: "missing" });
       }),
-      // The exam's full-run count: this folder's tests run only in the full run (0590).
+      // The exam's full-run count: this folder's tests run only in the full run (a branch's proof run runs only the tests its change reaches).
       { seed: 119120, numRuns: 200 },
     );
   });

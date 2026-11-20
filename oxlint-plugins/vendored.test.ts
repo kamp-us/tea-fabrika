@@ -1,4 +1,4 @@
-// L1 of the anti-slop install (0563): the vendored folder is the pinned commit's code. Each case
+// L1 of the anti-slop install (we use the anti-slop plugin as it ships, never our own copy of its rules): the vendored folder is the pinned commit's code. Each case
 // builds a small git tree of its own, as exact-versions.test.ts does: a made-up `src/` under
 // vendor/anti-slop/, and a pin.json that names the tree git gives it, all committed. Then one
 // generated edit, committed or not, must be refused, and an untouched copy passes. The check on this
@@ -9,7 +9,7 @@
 //
 // L6: nothing of this repo's runs their files. Their `src/` holds their own tests, one of which
 // starts oxlint as a child process and writes temp files (rules/require-readable-spacing-cli.test.ts),
-// and it comes in whole (0563). So no vitest project and no tsconfig of the repo includes a path under
+// and it comes in whole (we use the anti-slop plugin as it ships, never our own copy of its rules). So no vitest project and no tsconfig of the repo includes a path under
 // vendor/. Plants, each run once: `vendor/**` added to the tooling project's include, and
 // `../vendor/**/*.ts` added to oxlint-plugins/tsconfig.json's include. Each turns L6 red.
 import { spawnSync } from "node:child_process";

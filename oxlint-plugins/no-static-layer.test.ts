@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 // Ticket 911, B1.0. `fabrika/no-static-layer` refuses every static member of a class that extends
-// `Context.Service` (0095; owner, 2026-11-13). Law 2 runs generated classes in process through
+// `Context.Service` (a service file holds only its contract, and each layer is its own file; owner, 2026-11-13). Law 2 runs generated classes in process through
 // oxlint's RuleTester. Laws 3 and 6 read the repo's own `.oxlintrc.json`: one real lint run over a
 // planted file per listed folder and per left-out kind, and the saved list of the folders listed on
 // the day the rule landed, which may only grow.

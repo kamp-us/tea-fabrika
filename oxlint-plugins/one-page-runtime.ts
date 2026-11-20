@@ -1,4 +1,4 @@
-// The page has one Effect runtime (P12, L11; 0591). `.oxlintrc.json` turns this rule on for the page
+// The page has one Effect runtime (P12, L11; a test that reads files as text declares its reads, and shape checks are lint rules). `.oxlintrc.json` turns this rule on for the page
 // entry alone, `next/apps/fabrika/src/entry/browser.tsx`. Production React does not repeat mounts, so
 // the entry's own module-level boot is what is held: it imports `runMain` from `@kampus/tuval/browser`
 // once, under its own name, and starts its one program with it once, as a statement of the module.

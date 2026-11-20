@@ -1,4 +1,4 @@
-// Decisions 0535 and 0536: a law over real IO reads the test depth, and a law in memory keeps its own
+// The merge line runs only fast checks, and main's full run the slow ones; a test that needs a real resource runs only in main's full run: a law over real IO reads the test depth, and a law in memory keeps its own
 // count, whatever it is. Each generated count goes through every form at every path in process through
 // oxlint's RuleTester; one oxlint run over the same files then proves the repo's own .oxlintrc.json
 // turns the rule on.

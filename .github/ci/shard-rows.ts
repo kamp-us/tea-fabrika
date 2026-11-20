@@ -53,7 +53,7 @@ const selected = Effect.fnUntraced(function* (root: string, name: string) {
 
 /**
  * next/'s vitest-leg files: the `next` project, which pull requests and the merge queue run, and
- * `next-integration`, which the schedule runs beside it (0536). A Promise, since the tests and this
+ * `next-integration`, which the schedule runs beside it (a test that needs a real resource runs only in main's full run). A Promise, since the tests and this
  * file's own check await it.
  */
 export const nextFiles = (root: string) =>

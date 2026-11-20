@@ -1,5 +1,5 @@
-// Pushes: how a commit leaves the laptop (0134). The leak grep reads it first and fails closed, then
-// the push sends it, never forced. This file is the contract only (0095): `PushesProcess.layer`
+// Pushes: how a commit leaves the laptop (every commit is pushed when it is made, with a draft pull request from the first commit). The leak grep reads it first and fails closed, then
+// the push sends it, never forced. This file is the contract only (a service file holds only its contract, and each layer is its own file): `PushesProcess.layer`
 // runs leakgrep.sh and botpush.mjs, `PushesTest.layer` answers from memory. Today's lead tooling.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

@@ -1,6 +1,6 @@
 /**
  * What a plant run knows after Stryker ran: the JSON report as much as is read, the answer it gives,
- * and the one record line a run leaves (decision 0600). Pure.
+ * and the one record line a run leaves (testing, linting and formatting live in @kalfa/quality). Pure.
  *
  * Three position bases meet here, and each is said where it is read. Stryker's JSON report counts
  * lines and columns from 1. A found target counts lines from 1 and columns from 0, as Stryker's

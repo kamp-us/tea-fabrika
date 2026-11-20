@@ -81,7 +81,7 @@ const plants: Plant[] = [
         "changes' next ignores the size step",
         (w) => (w.jobs.changes.outputs["next"] = `\${{ steps.same.outputs.next || steps.diff.outputs.next }}`),
       ],
-      // 0534: the merge queue and main size their legs too, from their own base, so none of the three
+      // The merge line runs only the tests a change reaches, and a schedule runs every test: the merge queue and main size their legs too, from their own base, so none of the three
       // runs the whole suite. Each plant puts back a piece of the pull-request-only shape.
       [
         "the size step sizes pull requests alone, so the queue and main run the whole suite",

@@ -1,5 +1,5 @@
 // `pnpm lint:reach`: every workspace package is reached, so a part nothing uses cannot stay in the
-// repo (decision 0003). A package is reached when the root package.json or a reached package names
+// repo (the repo is kept clean by code checks, never by discipline). A package is reached when the root package.json or a reached package names
 // it as a dependency. A start is a package nothing may depend on by its role: an app,
 // this lint package, CI's own package. Today's version only: next/ is left out while it grows.
 //
@@ -138,7 +138,7 @@ if (result.unreached.length > 0) {
   }
 
   console.error(
-    `workspace-reach: ${result.unreached.length} unreached. Delete the package, or name it as a dependency where it is used (decision 0003).`,
+    `workspace-reach: ${result.unreached.length} unreached. Delete the package, or name it as a dependency where it is used (the repo is kept clean by code checks, never by discipline).`,
   );
   process.exit(1);
 }

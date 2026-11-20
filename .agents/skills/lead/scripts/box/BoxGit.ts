@@ -1,5 +1,5 @@
 // BoxGit: the Git questions the box rm command asks of MAIN and of one box's copied metadata. This file is
-// the contract only (0095): `BoxGitProcess.layer` asks real git, `BoxGitTest.layer` answers from a
+// the contract only (a service file holds only its contract, and each layer is its own file): `BoxGitProcess.layer` asks real git, `BoxGitTest.layer` answers from a
 // model in memory. Today's lead tooling, run on our own laptop; it is not product.
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";

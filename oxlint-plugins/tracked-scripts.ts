@@ -1,4 +1,4 @@
-// `pnpm lint`'s hold on 0113: no tracked shell or Python file, except one 0113 ordered ported that
+// `pnpm lint`'s hold on the no-shell-scripts rule: no tracked shell or Python file, except one the no-shell-scripts rule ordered ported that
 // has not been yet, or a marked edge. A file is one by its `.sh` or `.py` name, or, with no
 // extension, by a `#!` line naming a shell or Python (the lead's ruling on S1's review, recorded in
 // the plan's S1 row). It is a lint step, not an oxlint rule, since oxlint reads only
@@ -15,9 +15,9 @@ import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * The scripts 0113 orders ported that are still here. It only shrinks: a port deletes its line in
+ * The scripts the no-shell-scripts rule orders ported that are still here. It only shrinks: a port deletes its line in
  * the commit that deletes its file, and a line whose file is gone fails lint. No line is added
- * (0113, 0524). When it is empty, this list and the code that reads it go.
+ * (no shell or Python script enters the repo; no check reads a list that lets broken code pass). When it is empty, this list and the code that reads it go.
  */
 export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/lead/scripts/box.sh",
@@ -32,7 +32,7 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/plan/scripts/plancheck.sh",
   ".agents/skills/step-commit/scripts/exam.py",
   ".agents/skills/step-commit/scripts/stepcommit.sh",
-  // today's version, deleted with it (0525)
+  // today's version, deleted with it (today's version is frozen and takes no new work)
   "bin/tsh",
   "packages/fabrika/bin/tsh-small",
   "packages/pipeline/bin/tsh",
@@ -193,8 +193,8 @@ const HEAD = 5;
 /** Any line that means to be an edge line, well formed or not. */
 const EDGE_WORD = /^#\s*edge:/;
 
-/** An edge line: `# edge: <reason> (0113)`, with a reason that says something. */
-const EDGE = /^#\s*edge:(.*)\(0113\)\s*$/s;
+/** An edge line: `# edge: <reason> (no shell or Python script enters the repo)`, with a reason that says something. */
+const EDGE = /^#\s*edge:(.*)\(no shell or Python script enters the repo\)\s*$/s;
 
 /** What one tracked or listed path does wrong. */
 type Finding =
@@ -202,7 +202,7 @@ type Finding =
   | { readonly _tag: "new_script"; readonly path: string }
   /** On the list, and git does not track it: the port landed, so its line goes. */
   | { readonly _tag: "stale_entry"; readonly path: string }
-  /** Tracked, with an `# edge:` line that gives no reason or no `(0113)`. */
+  /** Tracked, with an `# edge:` line that gives no reason or no `(no shell or Python script enters the repo)`. */
   | { readonly _tag: "edge_unmarked"; readonly path: string };
 
 /** The edge lines in a file's first lines: whether one is well formed, and whether one is not. */
@@ -250,7 +250,7 @@ export const check = (tracked: ReadonlyArray<string>, head: (path: string) => st
   return [...stale, ...found];
 };
 
-const FIX = `Write it in TypeScript and Effect (0113); a script that must run before Node exists carries one "# edge: <why> (0113)" line in its first ${HEAD} lines, decided in its pull request.`;
+const FIX = `Write it in TypeScript and Effect (no shell or Python script enters the repo); a script that must run before Node exists carries one "# edge: <why> (no shell or Python script enters the repo)" line in its first ${HEAD} lines, decided in its pull request.`;
 
 /** The line lint prints for one finding, naming its path. */
 export const line = (finding: Finding): string => {
@@ -260,7 +260,7 @@ export const line = (finding: Finding): string => {
     case "stale_entry":
       return `tracked-scripts: ${finding.path} is on NOT_YET_PORTED, and git does not track it: delete its line in oxlint-plugins/tracked-scripts.ts, since the list only shrinks.`;
     case "edge_unmarked":
-      return `tracked-scripts: ${finding.path} has an "# edge:" line with no reason or no "(0113)". ${FIX}`;
+      return `tracked-scripts: ${finding.path} has an "# edge:" line with no reason or no "(no shell or Python script enters the repo)". ${FIX}`;
   }
 };
 

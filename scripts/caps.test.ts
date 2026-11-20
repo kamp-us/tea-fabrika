@@ -1101,9 +1101,13 @@ describe("host-only laws stay off the laptop", () => {
     });
   const refused = (ran: ReturnType<typeof list>, path: string) => {
     expect(ran.status, ran.stdout).not.toBe(0);
-    expect(ran.stderr).toContain("Local host-only test run refused (decision 0178)");
+    expect(ran.stderr).toContain(
+      "Local host-only test run refused (a law that needs the real machine runs on disposable CI)",
+    );
     expect(ran.stderr).toContain(`  ${path}\n`);
-    expect(ran.stderr).toContain("Use eligible disposable CI for the selected laws (0594).");
+    expect(ran.stderr).toContain(
+      "Use eligible disposable CI for the selected laws (safe checks run directly, and launchd, Electron and process-signal laws use disposable CI).",
+    );
     expect(ran.stderr).toContain("Portable signal laws may use Linux; Mac-specific laws need macOS.");
     expect(ran.stderr).not.toContain("FABRIKA_HOST_RUN_OWNER_APPROVED=1");
     expect(ran.stdout).not.toContain(path);

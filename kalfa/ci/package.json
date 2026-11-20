@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The docs-only classifier (decisions 0183, 0180 and 0090): which changed path is code, instruction text or docs, shared by CI's changes job and the lead's tools, with no dependencies so CI can run it before any install.",
+  "description": "The docs-only classifier (the lead admin-merges a docs-only pull request after checking it is not broken; an instruction file takes a quick edit with no test first): which changed path is code, instruction text or docs, shared by CI's changes job and the lead's tools, with no dependencies so CI can run it before any install.",
   "scripts": {
     "typecheck": "tsc --noEmit"
   },

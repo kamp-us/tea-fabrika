@@ -4,7 +4,7 @@
     "plugins": [
       {
         "name": "@effect/language-service",
-        // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
+        // Tooling scripts are programs, so they import Effect from the barrel, as the import-style rule has programs do
         // (call 2 of .kalfa/quests/effect-sweep-PLAN.md).
         "barrelImportPackages": ["effect"],
         "diagnosticSeverity": { "preferBarrelImport": "error" },

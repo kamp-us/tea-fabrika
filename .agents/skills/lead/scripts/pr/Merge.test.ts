@@ -3,17 +3,17 @@
 // layers and ask GitHub nothing. The gate's process laws run the real leakgrep.sh, on a word list in
 // a temp folder, and a scripts folder with no leakgrep.sh in it.
 //
-// R6 of .kalfa/quests/sev-runbooks-PLAN.md (0611): a sev fix is admin-merged in both levels. Assumed
+// R6 of .kalfa/quests/sev-runbooks-PLAN.md (a sev fix is admin-merged one at a time on current main): a sev fix is admin-merged in both levels. Assumed
 // exports of Merge.ts, which the build writes:
 // - `Route.cases.admin.make({ sev0, sev0Fixes, sev1 })`: `sev0` every branch an open sev0 allows (as land.ts
 //   passes it today), `sev0Fixes` the ones of those that `open --allow` and `next` named, and `sev1` the one branch
 //   the sev log names as the fix of a sev1, or `null`. The log can tell them apart: `open --allow` and `next`
 //   write an `opened` or a `next` line, `allow` an `allowed` line. Level.ts's folded `allow` list cannot yet, which
 //   is the build's to add. The plan's AdminFor reads `next` and `open --allow` as a fix, `allow` as a ready pull
-//   request (0603), and this file pins that reading.
+//   request (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), and this file pins that reading.
 // - A fix is admitted only when its head holds origin/main's head, which Merge reads through the `Branches`
 //   service (`behind(oid)` is 0 when the head holds main), beside `ci-required` and the leak gate. A ready pull
-//   request in a sev0 lands with no catch-up (0603), and still needs `ci-required` green, as a sev0 branch does today.
+//   request in a sev0 lands with no catch-up (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), and still needs `ci-required` green, as a sev0 branch does today.
 // - `Done`'s admin case says why: `for` is `fix`, `ready` or `asked`, and `level` is `sev0` or `sev1` for a fix or a
 //   ready one, and `null` when the owner asked (any other pull request). Every admin merge needs `ci-required` green
 //   at the head, docs included.
@@ -61,7 +61,7 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
 const Files = Schema.Literals(["docs", "code"]);
 
 const FILES = {
-  docs: [".kalfa/decisions/0583-a-room.md", "field/notes/2026-11-15-x.json", "docs/plan/README.md"],
+  docs: [".kalfa/decisions/0583-a-room.md", "docs/plan/README.md"],
   code: [".kalfa/decisions/0583-a-room.md", "docs/tutorials/one/package.json"],
 } as const;
 
@@ -274,9 +274,9 @@ const routeFor = (level: "sev1" | "sev0", listing: Listing, alsoY: boolean) => {
 const roleFor = (level: "sev1" | "sev0", listing: Listing) =>
   listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "asked";
 
-describe("merge: a sev fix is admin-merged in both levels, on current main (0611)", () => {
+describe("merge: a sev fix is admin-merged in both levels, on current main", () => {
   // R6 of .kalfa/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
-  // requests alike (0603), and the ancestor check holds for a fix only (0611): a ready pull request there lands
+  // requests alike (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), and the ancestor check holds for a fix only (a sev fix is admin-merged one at a time on current main): a ready pull request there lands
   // with no catch-up. Plants: drop the ancestor check (a fix whose head lacks main is admitted: red); ask the
   // ancestor check of a ready pull request too (a sev0 ready one behind main is refused: red); read the sev1 fix
   // as any branch (a sev1 that names fix y admits x); skip ci-required; ask the catch-up of a branch the level does not name as a fix.
@@ -367,7 +367,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 25, full: 100 }) } },
   );
 
-  // scenario: the cases the plan and 0611 name, so the property's chance draw is never the only proof of them.
+  // scenario: the cases the plan and the sev-fix rule name, so the property's chance draw is never the only proof of them.
   // Plants: refuse a sev1 fix whose head holds main (red); ask a sev0 ready pull request for the catch-up (red);
   // skip the catch-up of a sev0 fix (red).
   it.effect(
@@ -382,7 +382,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main (0611
   );
 
   it.effect(
-    "scenario: in a sev0, a ready pull request that `allow` added lands with no catch-up, and a fix of `open --allow` or `next` behind main does not (0603, 0611)",
+    "scenario: in a sev0, a ready pull request that `allow` added lands with no catch-up, and a fix of `open --allow` or `next` behind main does not (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order; a sev fix is admin-merged one at a time on current main)",
     () =>
       Effect.gen(function* () {
         const ready = memory({ head: X, behind: 4 });

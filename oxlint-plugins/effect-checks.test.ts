@@ -5,7 +5,7 @@
 //
 // It walks the real files each project checks: what its tsconfig names, and every file those reach by
 // a relative import, which the checker checks too. test-helpers/effect-config.ts merges the checker's plugin block
-// the way the checker does (0577): the base's keys, then the project's, each key replacing the one
+// the way the checker does (libraries import Effect by namespace, programs and apps by the barrel): the base's keys, then the project's, each key replacing the one
 // before, except `diagnosticSeverity`, whose maps merge, and `overrides`, whose lists join. Each
 // override a file matches then applies in order, its globs read from its own tsconfig's folder. So an
 // `exclude`, a later override or a package block that turns a level down is seen as the checker sees
@@ -135,10 +135,10 @@ const ZERO = [
 ];
 
 // The folders each slice locked, on the day it landed. A slice adds its check's row or its globs;
-// none is taken out, since narrowing a lock waits on the owner (0014).
+// none is taken out, since narrowing a lock waits on the owner (the lead merges once every step passed, and waits on the owner only for real loosening or a new design call).
 const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
   ...Object.fromEntries(ZERO.map((check) => [check, SCOPE])),
-  // B3.0 (ticket 912), then E0: vitest is a library at zero (0577). E2 (0577): libfabrika's folders at
+  // B3.0 (ticket 912), then E0: vitest is a library at zero (libraries import Effect by namespace, programs and apps by the barrel). E2 (libraries import Effect by namespace, programs and apps by the barrel): libfabrika's folders at
   // zero, and all of tuval.
   preferNamespaceImport: [
     "next/packages/libfabrika/src/*.ts",
@@ -160,7 +160,7 @@ const LOCKED: Readonly<Record<string, ReadonlyArray<string>>> = {
     "next/packages/tuval/**/*.tsx",
     "next/packages/vitest/**/*.ts",
   ],
-  // E1 (0574): the folders where only the named unstable parts of Effect are used.
+  // E1 (no @stability tag until the first release, and each unstable Effect part is named once): the folders where only the named unstable parts of Effect are used.
   unstableApiUsage: [
     ".agents/**/*.ts",
     ".github/ci/**/*.ts",

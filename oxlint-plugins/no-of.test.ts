@@ -1,5 +1,5 @@
 import { Array as Arr, Match, pipe } from "effect";
-// `fabrika/no-of` against generated modules, in process through oxlint's RuleTester (0029). Each
+// `fabrika/no-of` against generated modules, in process through oxlint's RuleTester (the repo formats and names code as Effect does). Each
 // module is 1 to 6 pieces, one per line; the oracle is the plan's case table: the lines that fire,
 // each with its message. The valid case is the same module with every firing line taken out.
 import * as fc from "fast-check";
@@ -392,7 +392,7 @@ it("L6: near names (`offer`, `thereof`, `Of`, `OF`, `ofs`) pass in every shape",
   );
 });
 
-// The exam's path laws (next/apps/fabrika/src/exam/no-of.integration.test.ts, item 4), moved here by 0591:
+// The exam's path laws (next/apps/fabrika/src/exam/no-of.integration.test.ts, item 4), moved here by the exam-to-lint rule:
 // the same rule through the real `.oxlintrc.json`, so tests are held too, a module's own `of` passes and a
 // named import fires. Plant: pass a named import of `of` in the rule, and line 13 of `fires` stops firing.
 const CODE = "fabrika(no-of)";

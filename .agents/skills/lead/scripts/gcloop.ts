@@ -1,4 +1,4 @@
-// gcloop.ts: the box garbage collection loop (decision 0101). Today's lead tooling, run on our own
+// gcloop.ts: the box garbage collection loop (box cleanup runs on a timer and after a merge, never on a step's start path). Today's lead tooling, run on our own
 // laptop; it is not product.
 //
 //   node gcloop.ts sweep [--trigger timer|merge|hand]   one sweep: `box.sh gc` under nice, then one record
@@ -32,7 +32,7 @@
 // into the unit, so a new `GC_MINUTES` or a new Node needs both install lines again. The timer's own
 // output goes to BOXES/state/gc-timer.log.
 //
-// Existing tools looked at for the timer (decision 0040):
+// Existing tools looked at for the timer (an existing, widely used tool comes before a hand-written one):
 //   - launchd, a user LaunchAgent with StartInterval
 //     (https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/ScheduledJobs.html):
 //     used. It is macOS's own scheduler, runs a missed interval once on wake, never starts a job
@@ -77,7 +77,7 @@ import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
 
-/** Minutes between two timer sweeps (0069: a choice is a setting). From the environment, so
+/** Minutes between two timer sweeps (a choice that makes sense as a setting is a setting, declared once: a choice is a setting). From the environment, so
  * env.sh's way of setting a lead value from outside works here too; launchd's unit carries it. */
 export const MINUTES = Config.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)), "GC_MINUTES").pipe(
   Config.withDefault(30),
@@ -369,7 +369,7 @@ const sameHolder = (a: Option.Option<Holder>, b: Option.Option<Holder>): boolean
  * Take the lock: `null` when this sweep has it, else who holds it (`none` when the file does not
  * say). The lock is written whole beside its place and linked in, so no reader sees half of it,
  * and a link fails while one is there. A lock whose holder is dead (a sweep killed with SIGKILL
- * runs no finalizer, 0061) or that does not read is moved aside and taken, once. When what moved
+ * runs no finalizer, the scoped-resources rule) or that does not read is moved aside and taken, once. When what moved
  * is not what was read, another sweep took it first: it goes back, and this sweep skips.
  */
 const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale: Duration.Duration) {
