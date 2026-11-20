@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eleven exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets and Leak guard. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Twelve exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard and CI. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -47,8 +47,8 @@ moves the line here if it does.
   brain, and the window a person sees.
 - **Delivery** ([`kalfa/delivery/GLOSSARY.md`](../../kalfa/delivery/GLOSSARY.md)): getting a change request onto
   main safely, in an order we choose.
-- **CI** (`kalfa/ci/GLOSSARY.md`): one CI execution for one revision (a build), its pieces (jobs),
-  and choosing which builds start first (priority, admission).
+- **CI** ([`kalfa/ci/GLOSSARY.md`](../../kalfa/ci/GLOSSARY.md)): one CI execution for one commit (a build), its
+  pieces (jobs), and choosing which builds start first (priority class, slot, admission).
 - **Identity** ([`kalfa/identity/GLOSSARY.md`](../../kalfa/identity/GLOSSARY.md)): who is acting:
   keys, clients, and the humans and agents they act for.
 - **Transport** ([`kalfa/transport/GLOSSARY.md`](../../kalfa/transport/GLOSSARY.md)): how values
@@ -91,15 +91,17 @@ its words are ours.
 - **A git provider implements Source control.** `@kalfa/provider-github` implements Code hosting
   and the remote side of Source control. It is the anticorruption layer: it translates GitHub's
   words (pull request, check run, ruleset) into Code hosting's.
-- **Delivery uses CI.** A change candidate lands only on a passing verdict. Delivery reads the verdict and never says
-  build, job or check.
+- **Delivery uses CI.** A change candidate lands only on a passing verdict: the verdict of the candidate's build.
+  Delivery reads the verdict and never says build, job or check. A canceled build gives no verdict.
 - **Priority vs landing order:** landing order is Delivery's (its queue); CI's priority only orders which builds start
-  first. CI may read Delivery's fix mark to start a fix's build first.
+  first. CI never reads Delivery or Incidents: whoever asks for a build gives its priority class, such as fix, and CI's
+  setting ranks the classes.
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
 - **Delivery obeys Incidents.** An open incident's severity has a response, such as a hold; Delivery
-  lands only fixes during a hold and puts each fix first. CI cancels the builds of anything that is not
-  a fix during a hold. Both hear incidents by reading a stream, so there is no watch context.
-- **CI raises alerts for Incidents,** such as a broken main or a test failing again and again. Which
+  lands only fixes during a hold and puts each fix first. Delivery hears incidents by reading a
+  stream, so there is no watch context. A hold cancels the builds of anything that is not a fix through CI's cancel
+  below a class; the app connects the two, and CI never reads a hold.
+- **Incidents raises alerts from CI's builds,** such as a broken main or a test failing again and again. Which
   alerts exist and what each opens is a setting.
 - **Incidents pages people through Conversation.** Who may declare a severity, and which severities a
   rule may escalate to, are Permissions' answers.
@@ -112,8 +114,8 @@ its words are ours.
 - **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.
-- **Verdict** means two things: in Delivery, whether a change candidate passed its checks; in Leak
-  guard, pass or refusal for one public write.
+- **Verdict** means three things: in Delivery, whether a change candidate passed its checks; in CI, a build's passed
+  or failed, which Delivery's is read from; in Leak guard, pass or refusal for one public write.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
   what they may do, or read a setting, and none owns the question's words.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
