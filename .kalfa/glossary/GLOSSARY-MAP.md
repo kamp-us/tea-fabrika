@@ -160,7 +160,8 @@ implements no context's interface. Each context that reaches GitHub translates i
   or failed, which Delivery's is read from; in Leak guard, pass or refusal for one public write.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
   what they may do, or read a setting, and none owns the question's words.
-- **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
+- **Permissions checks a subject, never a sender.** It imports nothing from Identity: the app turns a sender into a
+  subject, and Permissions answers what that subject may do, never who it is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
   words into ours. `@kalfa/chat/github` implements it for a pull request's comment threads.
 - **A review is Code hosting's; the talk under it is Conversation's.** Approving or asking for changes is Code

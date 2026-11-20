@@ -22,6 +22,11 @@ The writer's own id for an entry. Sending an entry with the same id again keeps 
 the same answer as the first time, so a writer may always send again.
 _Avoid_: Duplicate, dedupe key
 
+**Metadata**:
+What a writer keeps on an entry beside its body, such as who wrote it. The app says what it holds,
+and the ledger keeps it without reading it.
+_Avoid_: From, header, envelope
+
 **Revision**:
 An entry's place in its own stream, counting up from 1 with no gaps.
 _Avoid_: Pos, offset, version, seq
