@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Sixteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation, Code hosting and Configuration. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Seventeen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation, Code hosting, Configuration and CLI. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -73,6 +73,8 @@ moves the line here if it does.
 - **Code hosting** ([`kalfa/codehost/GLOSSARY.md`](../../kalfa/codehost/GLOSSARY.md)): what a remote host adds on top of git: a proposal
   to merge one ref into another, reviews, the host's checks, its rules, and access grants
   (short-lived credentials the host gives out). Built from Source control's words.
+- **CLI** ([`kalfa/cli/GLOSSARY.md`](../../kalfa/cli/GLOSSARY.md)): the `kalfa` command, which finds each
+  package's subcommand, and the contract every subcommand keeps: root name, diagnostics, severity and exit code.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
   briefs, transcripts and usage.
 
@@ -176,6 +178,9 @@ implements no context's interface. Each context that reaches GitHub translates i
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
   Pipeline say.
 - **Records talk about every context** and translate nothing.
+- **CLI is the edge of every kalfa package that has a subcommand.** Each package's subcommand speaks its own
+  context's words; CLI owns only how it is found, named, and how it ends. A flag (Configuration) is still
+  Configuration's word.
 - **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/ci/github`.
