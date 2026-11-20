@@ -9,6 +9,9 @@ with a reason.
   never its Layers.
 - **Join Layers at the top.** The `kalfa` command and libfabrika provide the Layers. A package that
   builds another's Layer inside itself hides the choice from them.
-- **No import cycles.** If two packages need each other, the shared part is a third package.
+- **An adapter is an entry point of the package whose interface it implements,** named for what it
+  adapts to, such as `@kalfa/ledger/cloudflare` ([0048](../.kalfa/decisions/0048-each-adapter-is-an-entry-point.md)).
+- **No import cycles.** If two packages need each other, the shared part is a third package. Packages import each other in one
+  ranked order: the ledger sits below Program.
 - **Keep the import graph small.** Each new edge needs a reason. Fewer edges keep each package
   usable alone.
