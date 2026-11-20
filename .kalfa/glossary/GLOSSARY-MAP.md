@@ -41,8 +41,8 @@ moves the line here if it does.
 - **Pipeline** (`next/programs/pipeline/GLOSSARY.md`): the steps a ticket goes through from filed to
   merged.
 - **Tracker** (`next/programs/inbox/GLOSSARY.md`): tickets, plans and asks as a person sees them.
-- **Records** (`docs/GLOSSARY.md`): the project as a lab notebook: what was decided, measured and
-  seen.
+- **Records** ([`kalfa/records/GLOSSARY.md`](../../kalfa/records/GLOSSARY.md)): the docs a repo's
+  agents read: each record kind, where it lives and what goes in it.
 - **Clients and Frame** (`next/packages/tuval/GLOSSARY.md`): the app side: how clients reach the
   brain, and the window a person sees.
 - **Delivery** ([`kalfa/delivery/GLOSSARY.md`](../../kalfa/delivery/GLOSSARY.md)): getting a change request onto
