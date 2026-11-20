@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Thirteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI and Source control. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Fourteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control and Conversation. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -66,8 +66,8 @@ moves the line here if it does.
   fetched, or used to sign without leaving.
 - **Leak guard** ([`kalfa/leak-guard/GLOSSARY.md`](../../kalfa/leak-guard/GLOSSARY.md)): checking text before it goes public
   against its rules, such as a list of private words, with a refusal that really stops the write.
-- **Conversation** (`kalfa/chat/GLOSSARY.md`): talking with people in a thread, in a chat app or in a
-  pull request's comments.
+- **Conversation** ([`kalfa/chat/GLOSSARY.md`](../../kalfa/chat/GLOSSARY.md)): talking with people in a thread, in a
+  chat app or in a pull request's comments, the comments under a line of code included.
 - **Source control** ([`kalfa/git/GLOSSARY.md`](../../kalfa/git/GLOSSARY.md)): git itself, in git's own words:
   repository, ref, commit, push, rebase. Not GitHub.
 - **Code hosting** (`kalfa/codehost/GLOSSARY.md`): what a remote host adds on top of git: a proposal
@@ -125,6 +125,14 @@ its words are ours.
 - **Permissions uses Identity:** it answers what a sender may do, never who the sender is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
   words into ours. `@kalfa/provider-github` implements it too, for a pull request's comment threads.
+- **A review is Code hosting's; the talk under it is Conversation's.** Approving or asking for changes is Code
+  hosting's. A comment thread under a line of code is a Conversation thread whose anchor Code hosting's words fill in
+  (file, line, commit).
+- **Speaker vs sender:** a sender (Identity) is the client the gateway stamped; a speaker (Conversation) is the human
+  or agent a provider found behind a chat app's account. An unknown speaker may ask for nothing, which Permissions
+  enforces.
+- **Feature vs capability:** a feature is what a Conversation provider offers, such as reactions; a capability
+  (Identity) is what a client can do.
 - **When work starts on a timer is Program's.** There is no Scheduling context.
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
   Pipeline say.
@@ -151,5 +159,3 @@ Borders that are still fuzzy, one line each.
   a program, which gets its own word (a lean: chrome) when that glossary is written.
 - **Conversation vs Tracker:** Conversation carries a message and the app decides it is an ask; an
   ask in chat and an ask in the inbox may still be one thing.
-- **Conversation vs Code hosting:** a review comment pinned to a line of code may stay Code
-  hosting's; a plain thread comment is Conversation's.
