@@ -14,7 +14,7 @@ A browser tab, app window, agent bridge or a machine that runs tasks, signed in 
 _Avoid_: who, session, connection, user
 
 **Client key**:
-The key pair one client signs in with; only its public half ever leaves where it is kept.
+The key pair one client signs in with; Secrets keeps its private half, and only its public half ever leaves.
 _Avoid_: identity, credential
 
 **Kind**:

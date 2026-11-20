@@ -1,6 +1,6 @@
 # next/
 
-The new version of fabrika, built on [the four bottom layers](../.kalfa/decisions/0003-four-bottom-layers.md).
+The new version of fabrika, built on [kalfa's small libraries](../.kalfa/decisions/0047-kalfa-is-small-libraries-usable-alone.md).
 The [root map](../AGENTS.md) holds for all of it; this page adds the rules that hold only here. It is
 the lab until a person opens it for real work, so it may be rough. "No rough first versions" in the
 root map applies from then on.
