@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Seven exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions and Delivery. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eight exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery and Incidents. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -59,8 +59,8 @@ moves the line here if it does.
   one came from.
 - **Reconciliation** (`kalfa/reconciliation/GLOSSARY.md`): a file says what should be true (desired
   state), it is compared with what is live, and drift is reported and reconciled.
-- **Incidents** (`kalfa/incidents/GLOSSARY.md`): a sev and its level, the hold, the fix mark, and main
-  going red.
+- **Incidents** ([`kalfa/incidents/GLOSSARY.md`](../../kalfa/incidents/GLOSSARY.md)): an incident and its
+  severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
 - **Secrets** (`kalfa/secrets/GLOSSARY.md`): a value few may read, known to others only by its name;
   fetched, or used to sign without leaving.
 - **Leak guard** (`kalfa/leak-guard/GLOSSARY.md`): checking text before it goes public against a list
@@ -95,9 +95,13 @@ its words are ours.
 - **Priority vs landing order:** landing order is Delivery's (its queue); CI's priority only orders which builds start
   first. CI may read Delivery's fix mark to start a fix's build first.
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
-- **Delivery obeys Incidents.** Incidents owns the hold and the fix mark; Delivery stops landing on a
-  hold and puts the fix first. Hearing that main went red is reading a stream, so there is no watch
-  context.
+- **Delivery obeys Incidents.** An open incident's severity has a response, such as a hold; Delivery
+  lands only fixes during a hold and puts each fix first. CI cancels the builds of anything that is not
+  a fix during a hold. Both hear incidents by reading a stream, so there is no watch context.
+- **CI raises alerts for Incidents,** such as a broken main or a test failing again and again. Which
+  alerts exist and what each opens is a setting.
+- **Incidents pages people through Conversation.** Who may declare a severity, and which severities a
+  rule may escalate to, are Permissions' answers.
 - **Reconciliation uses Code hosting** for a host's live settings, such as its rules. Who may push
   where is one of those rules.
 - **Code hosting uses Secrets** to sign an access grant's request; the key never leaves Secrets.
