@@ -43,17 +43,24 @@ _Avoid_: dismissed, outdated, invalid, glance, partial
 
 **Change candidate**:
 The commit main would become if the change requests in it land: the newest main plus one or more changesets. How many
-it holds is a setting. Delivery builds candidates and never changes the author's own changesets. Candidates are made
+it holds is a setting. Delivery builds candidates and never changes what a changeset holds. Candidates are made
 in one of two styles, also a setting: a batch, where one candidate holds several change requests and a failed one is
 split and built again; or stacked, where each change request gets its own candidate built on the ones ahead.
 _Avoid_: train, speculative merge, merge commit
+
+**Landing style**:
+How a change request's changesets become commits on main, a setting: a merge commit joins them to main as they are;
+a rebase puts each on main as a new commit; a squash puts them on main as one new commit.
+_Avoid_: merge method, merge strategy
 
 **Land**:
 Main moves to a change candidate that passed, so it now holds those changesets.
 _Avoid_: merge, ship, submit
 
 **Landing**:
-One time main moved to a change candidate, kept as a record: which candidate, and which change requests it held.
+One time main moved to a change candidate, kept as a record: which candidate, and which change requests it held. With
+the rebase and squash styles Delivery first moves each change request's branch to the commit that lands, so the host
+shows it merged; that move is Delivery's own and is not a new changeset.
 _Avoid_: merge, deploy, release
 
 **Queue**:

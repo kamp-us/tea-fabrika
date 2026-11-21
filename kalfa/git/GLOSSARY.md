@@ -58,6 +58,10 @@ _Avoid_: overwrite, rewrite push
 Putting a branch's own commits on a new base. It makes new commits; the old ones stay as they were.
 _Avoid_: replay, update branch, catch up, sync
 
+**Squash**:
+Putting all of a branch's own commits on a base as one new commit. The old ones stay as they were.
+_Avoid_: squash merge, flatten, fold
+
 **Merge commit**:
 A commit with two parents, joining two lines of commits.
 _Avoid_: land, merge (Delivery's word is land)
