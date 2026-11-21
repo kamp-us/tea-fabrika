@@ -54,7 +54,7 @@ moves the line here if it does.
 - **Transport** ([`kalfa/transport/GLOSSARY.md`](../../kalfa/transport/GLOSSARY.md)): how values
   move between two places: socket, connection, gateway and frame.
 - **Permissions** ([`kalfa/permissions/GLOSSARY.md`](../../kalfa/permissions/GLOSSARY.md)): what a
-  human or agent may do: relations, permissions, checks and roles.
+  subject may do: relations, relationships, permissions built by union, intersection and arrow, checks and roles.
 - **Configuration** ([`kalfa/config/GLOSSARY.md`](../../kalfa/config/GLOSSARY.md)): the values an app's programs run
   with, read from flags, environment variables and two files, and where each one came from. It never reads a host.
 - **Reconciliation** ([`kalfa/reconciliation/GLOSSARY.md`](../../kalfa/reconciliation/GLOSSARY.md)): the
