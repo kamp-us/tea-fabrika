@@ -62,6 +62,8 @@ The
 - **Names.** Use the industry's word for a thing,
 checked on every pull
   request, prose included.
+- **A name is a verb or a plain word.** Never `<thing>Of`, such as `classOf`: say `classify`. A name a library
+  gives us stays as it is, and today's code keeps its names until that code goes.
 - **Data keys are short everyday words.** `for`, not `forWhat`. `reason`, not `reasonCode`. A key
   does not say again what its parent already says: inside an outcome, the reason is `reason`, not
   `outcomeReason`. If a short word could mean two things, pick a clearer short word before you reach
