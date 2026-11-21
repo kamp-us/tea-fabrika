@@ -83,7 +83,8 @@ moves the line here if it does.
 
 GitHub is not a context. `@kalfa/github` is an Effect client for GitHub's API in GitHub's own words, and it
 implements no context's interface. Each context that reaches GitHub translates in its own entry point
-(`@kalfa/codehost/github`, `@kalfa/chat/github`, `@kalfa/ci/github`), so none of GitHub's words are ours.
+(`@kalfa/codehost/github`, `@kalfa/chat/github`, `@kalfa/ci/github`, `@kalfa/identity/github`), so none of GitHub's
+words are ours. The client names no operation: each entry point declares the GitHub operations it uses.
 
 ## Relationships
 
