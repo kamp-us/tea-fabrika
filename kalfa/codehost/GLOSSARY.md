@@ -147,7 +147,7 @@ for one is signed with a signing key from Secrets.
 _Avoid_: token, installation token, access token, credential, key
 
 **Action**:
-One thing an access grant lets its holder do: read, push, open a change request, close one, post a check, put a ref
+One thing an access grant lets its holder do: read, push, open a change request, close one, post a check, comment, put a ref
 rule, put host settings. A grant says which actions it really opens.
 _Avoid_: permission, scope
 
