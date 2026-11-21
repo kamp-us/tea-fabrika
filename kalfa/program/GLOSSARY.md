@@ -134,3 +134,13 @@ _Avoid_: Directory, process table, lookup
 Where a process runs, such as one browser tab or one server. The app names its places; a program
 never reads one.
 _Avoid_: Host, node, location
+
+**Timer**:
+A process's ask to get one message at a set time. It is saved with the process's state and lives as
+long as that state. A process sets only its own.
+_Avoid_: Alarm, wake-up, deadline, schedule
+
+**Timeout**:
+The message a timer sends when its time comes, with the timer's ref and the time it was set for. It
+never comes early. After the process was down it comes late, once.
+_Avoid_: Tick, alarm
