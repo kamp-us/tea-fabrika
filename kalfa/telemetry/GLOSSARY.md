@@ -13,7 +13,7 @@ _Avoid_: request, session, flow
 **Span**:
 One step inside a trace: a name, a start and an end, attributes, and the span it belongs to. A span's name is
 `<package>.<call>`.
-_Avoid_: step, event, operation, segment
+_Avoid_: event, operation, segment
 
 **Attribute**:
 One named value on a span. Its name is OpenTelemetry's standard name when one exists, and `kalfa.<package>.*` when none
