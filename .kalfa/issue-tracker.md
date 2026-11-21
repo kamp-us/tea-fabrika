@@ -58,4 +58,5 @@ Used by `/to-tickets`, for the kalfa package suite only. GitHub issues show on e
 - **Label**: `ready-for-agent`, and no `wayfinder:` label. It is the only triage label this repo has.
 - **Frontier query**: open issues labelled `ready-for-agent` with no open blocker and no assignee.
 - **In the pipeline**: where a step, a brief or a script asks for a ticket, give the GitHub issue's number.
-- **Close**: the pull request that builds a ticket closes it with `Closes #<n>` in its body.
+- **Close**: the pull request that builds a ticket closes it with `Closes #<n>` in its body. Never write the `fabrika close ticket <n>` line for a build ticket: that line closes the ticket with that number on the app's own tracker, which is another ticket.
+- **Numbers**: GitHub and the app's own tracker count apart, so one number can mean two tickets. On 2026-11-21 the tracker's numbers were below 1300 and new GitHub issues above 1836, so none clash yet. The step scripts compare bare numbers; if the tracker's numbers come near GitHub's, the scripts need a way to tell the two apart first.
