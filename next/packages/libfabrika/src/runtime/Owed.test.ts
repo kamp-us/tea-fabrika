@@ -1,6 +1,6 @@
-// Slice 1 of the kalfa program plan, next/. Laws P1 and P2: the local patch on tea 0.29.0
-// (`patches/@demlik__tea@0.29.0.patch`) carries demlik pulls 982 and 983 as demlik main has them
-// (kamp-us/demlik 48b1058, packages/tea/src). The law walks a real Effect engine on a logged store
+// Slice 1 of the kalfa program plan, next/. Laws P1 and P2: tea 0.30.0 ships demlik pulls 982 and
+// 983, which a local patch on 0.29.0 carried before (line numbers below are kamp-us/demlik 48b1058,
+// packages/tea/src). The law walks a real Effect engine on a logged store
 // over one memory journal, restarted between moves. Its moves come from a Schema (0579), and each
 // one is played only when what is owed then allows it, as fast-check's `fc.commands` plays a command
 // only when its `check` holds.
