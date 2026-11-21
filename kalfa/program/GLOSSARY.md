@@ -67,8 +67,9 @@ not finished. Nothing is replayed from the start.
 _Avoid_: Replay, rebuild, restore
 
 **Journal**:
-Where a process's steps are saved, so a confirmed step never runs twice. A program asks for one,
-and the app gives it a backend, such as a ledger.
+Where a process's steps are saved, so a confirmed step never runs twice. Every process has one,
+and the app always picks its backend: memory, which is lost at a restart, or a ledger, which is
+kept. Nothing is picked by default.
 _Avoid_: Journal driver, journal store, log
 
 **Tool**:
