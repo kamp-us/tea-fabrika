@@ -19,8 +19,13 @@ changesets it still covers is the carry rule.
 _Avoid_: LGTM, sign-off, vote
 
 **Approver setting**:
-The setting that says whose yes counts as an approval: which people, and whether an agent's yes counts at all.
+The setting that says whose yes counts as an approval: which people, and whether an agent's yes counts at all. It also
+says how many approvals are needed, whether a self-approval counts, and whether a review that asks for changes blocks.
 _Avoid_: reviewer list, code owners
+
+**Self-approval**:
+An approval given by the change request's own author. Whether it counts is part of the approver setting.
+_Avoid_: own approval, self-review
 
 **Carry rule**:
 The setting that says which later changesets an approval still covers: always, by kept or stale, or never.
@@ -38,8 +43,10 @@ _Avoid_: dismissed, outdated, invalid, glance, partial
 
 **Change candidate**:
 The commit main would become if the change requests in it land: the newest main plus one or more changesets. How many
-it holds is a setting. Delivery builds candidates and never changes the author's own changesets.
-_Avoid_: train, batch, speculative merge, merge commit
+it holds is a setting. Delivery builds candidates and never changes the author's own changesets. Candidates are made
+in one of two styles, also a setting: a batch, where one candidate holds several change requests and a failed one is
+split and built again; or stacked, where each change request gets its own candidate built on the ones ahead.
+_Avoid_: train, speculative merge, merge commit
 
 **Land**:
 Main moves to a change candidate that passed, so it now holds those changesets.
@@ -54,11 +61,13 @@ The change requests waiting to land, in landing order. The rules that set the or
 _Avoid_: merge queue, train, line, priority
 
 **Fix**:
-A change request marked to go to the front of the queue. The mark comes from outside Delivery; Delivery only obeys it.
+A change request marked to go to the front of the queue. The mark comes from outside Delivery; Delivery only obeys it. A fix still needs its approval; the mark
+changes the order and nothing else.
 _Avoid_: hotfix, revert, urgent
 
 **Verdict**:
-Whether a change candidate passed or failed, read from its build's verdict. Until it has one, it has no verdict.
+Whether a change candidate passed or failed, read from its build's verdict. Until it has one, it has no verdict. A build that was canceled, or gave no verdict in
+time, gives none; what Delivery does then is a setting.
 _Avoid_: status, result, build, check, green, red
 
 **Hold**:
@@ -69,8 +78,14 @@ _Avoid_: freeze, pause, lock
 
 **Ready**:
 The author, or a program acting for the author, says the change request is done. It is the only way in: Delivery
-takes a change request from Ready, and what happened before Ready is not Delivery's.
+takes a change request from Ready, and what happened before Ready is not Delivery's. A change request that is ready but
+has no approval that counts waits outside the queue until one covers it.
 _Avoid_: open, submitted
+
+**Ready id**:
+The id a caller makes when it marks a change request ready. The same id is the same try; a new id after an ending is a
+new try.
+_Avoid_: request id (CI's word), token
 
 **Queued**:
 Delivery has taken the change request into the queue.
@@ -81,14 +96,15 @@ Main holds the change request's changeset.
 _Avoid_: merged, shipped, done
 
 **Failed**:
-Taken out of the queue because its change candidate failed.
+Taken out of the queue because its change candidate failed, or could not be built.
 _Avoid_: rejected, kicked, ejected, dropped
 
 **Replaced**:
-Taken out of the queue because a new changeset came. Delivery says whether its approval is kept or stale, and does
+Taken out of the queue, or out of the wait for an approval, because a new changeset came. Delivery says whether its
+approval is kept or stale when it had one, and does
 not put it back by itself: it comes back through Ready.
 _Avoid_: superseded, outdated, stale, dropped
 
 **Withdrawn**:
-Taken out of the queue because its author closed the change request.
+Taken out because its author took it back, closed the change request, or aimed it at another branch.
 _Avoid_: closed, canceled, abandoned, dropped
