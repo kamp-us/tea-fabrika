@@ -5,7 +5,7 @@ Values few may read, known to everyone else only by their names: fetched by thos
 ## Language
 
 **Secret**:
-A value that someone allowed may fetch, such as an API key or the leak guard's private word list. It is a secret from the moment it is made, and it never becomes a signing key. A person puts its value straight into its secret store; kalfa never takes a value in.
+A value that someone allowed may fetch, such as an API key. It is a secret from the moment it is made, and it never becomes a signing key. A person puts its value straight into its secret store; kalfa never takes a value in.
 _Avoid_: credential, password, token, a bare key
 
 **Signing key**:

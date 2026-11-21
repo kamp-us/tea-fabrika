@@ -24,7 +24,7 @@ on.
 _Avoid_: finding, issue, problem, result
 
 **Code**:
-A diagnostic's stable name, such as `leak-guard/key-shape`, that starts with its subcommand's root name and stays the
+A diagnostic's stable name, such as `config/unknown-setting`, that starts with its subcommand's root name and stays the
 same when the message's words change. `kalfa explain` gives its long text.
 _Avoid_: rule id, error number, kind
 
