@@ -5,11 +5,11 @@ What a program is, how it runs as processes, and what happens when one fails. On
 ## Language
 
 **Program**:
-A named piece of work, written `Program.make(name)(fn)`.
+A named piece of work, written `Program.make(name)`.
 _Avoid_: Machine, actor
 
 **Process**:
-One running copy of a program, started with its args, with its own state. One program can have
+One running copy of a program, started with its args, with its own states. One program can have
 many processes.
 _Avoid_: Instance, run
 
@@ -19,12 +19,13 @@ whole life.
 _Avoid_: Flags, config, options, params
 
 **Init**:
-What runs once when a process starts, and makes its first state. If it fails, the process does not
-start.
+What runs once when a process starts, before its first message. It can set states. If it fails, the
+process does not start. A program can have none.
 _Avoid_: Setup, constructor
 
 **State**:
-What a process remembers between messages. It is private to that process.
+One named thing a process remembers between messages, declared once with its schema and its first
+value. Each process has its own value, private to that process.
 _Avoid_: Model, store
 
 **Input**:
@@ -36,7 +37,7 @@ One value that comes from the input stream.
 _Avoid_: Msg, event, command, letter
 
 **Output**:
-What a process shows from its state, declared with `Program.outputs`.
+What a process shows from its states, declared with `Program.outputs`.
 _Avoid_: View, render, result
 
 **Error**:
@@ -48,7 +49,8 @@ A failure no type expects. It stops the process.
 _Avoid_: Crash, panic
 
 **Step**:
-Handling one message, from the message to the new state. A confirmed step never runs twice.
+Handling one message. What it writes to states is kept together when it ends well, and dropped when
+it fails. A confirmed step never runs twice.
 _Avoid_: Tick, update, reduce, turn
 
 **Restart policy**:
@@ -62,7 +64,7 @@ them; the restart policy does.
 _Avoid_: Watchdog, manager
 
 **Recovery**:
-After a crash, a process getting back its saved state and running again only the steps that had
+After a crash, a process getting back its saved states and running again only the steps that had
 not finished. Nothing is replayed from the start.
 _Avoid_: Replay, rebuild, restore
 
