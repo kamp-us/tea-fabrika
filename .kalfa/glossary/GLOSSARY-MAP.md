@@ -64,8 +64,8 @@ moves the line here if it does.
   severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
 - **Secrets** ([`kalfa/secrets/GLOSSARY.md`](../../kalfa/secrets/GLOSSARY.md)): a value few may read, known to others only by its name;
   fetched, or used to sign without leaving.
-- **Conversation** ([`kalfa/chat/GLOSSARY.md`](../../kalfa/chat/GLOSSARY.md)): talking with people in a thread, in a
-  chat app or in a pull request's comments, the comments under a line of code included.
+- **Conversation** ([`kalfa/chat/GLOSSARY.md`](../../kalfa/chat/GLOSSARY.md)): hearing and answering people in a room of
+  a chat app someone else runs, or in a pull request's comments, the comments under a line of code included.
 - **Source control** ([`kalfa/git/GLOSSARY.md`](../../kalfa/git/GLOSSARY.md)): git itself, in git's own words:
   repository, ref, commit, push, rebase. Not GitHub.
 - **Code hosting** ([`kalfa/codehost/GLOSSARY.md`](../../kalfa/codehost/GLOSSARY.md)): what a remote host adds on top of git: a proposal
@@ -173,14 +173,18 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Permissions checks a subject, never a sender.** It imports nothing from Identity: the app turns a sender into a
   subject, and Permissions answers what that subject may do, never who it is.
 - **Conversation reaches people.** Pipeline and Tracker speak to it, and it translates chat-app
-  words into ours. `@kalfa/chat/github` implements it for a pull request's comment threads.
+  words into ours. `@kalfa/chat/github` implements it: a pull request's comment list is a room, and the comments
+  under one line of code are a thread in it.
+- **Conversation keeps what it hears and says on the Ledger.** A reply is recorded before it is sent.
+- **An app's own rooms are not Conversation's.** Rooms with members who join, leave and fork belong to the app that
+  has them. Conversation is only the way to chat apps someone else runs.
 - **A review is Code hosting's; the talk under it is Conversation's.** Approving or asking for changes is Code
-  hosting's. A comment thread under a line of code is a Conversation thread whose anchor Code hosting's words fill in
+  hosting's. A comment thread under a line of code is a Conversation thread, in the pull request's room, whose anchor Code hosting's words fill in
   (file, line, commit).
 - **Speaker vs sender:** a sender (Identity) is the client or summoned agent the gateway or the brain stamped; a speaker (Conversation) is the human
-  or agent a provider found behind a chat app's account. An unknown speaker may ask for nothing, which Permissions
+  or agent Identity knows behind a chat app's account (Conversation's word for the name a chat app knows someone by). An unknown speaker may ask for nothing, which Permissions
   enforces.
-- **Feature vs capability:** a feature is what a Conversation provider offers, such as reactions; a capability
+- **Feature vs capability:** a feature is what a Conversation provider may offer, such as starting a thread; a capability
   (Identity) is what a client can do.
 - **When work starts on a timer is Program's.** There is no Scheduling context.
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
