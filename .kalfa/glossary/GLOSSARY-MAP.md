@@ -50,7 +50,7 @@ moves the line here if it does.
 - **CI** ([`kalfa/ci/GLOSSARY.md`](../../kalfa/ci/GLOSSARY.md)): one CI execution for one commit (a build), its
   pieces (jobs), and choosing which builds start first (priority class, slot, admission).
 - **Identity** ([`kalfa/identity/GLOSSARY.md`](../../kalfa/identity/GLOSSARY.md)): who is acting:
-  keys, clients, and the humans and agents they act for.
+  keys, clients, and the humans and agents they act for, in one project, and who is behind an outside account.
 - **Transport** ([`kalfa/transport/GLOSSARY.md`](../../kalfa/transport/GLOSSARY.md)): how values
   move between two places: socket, connection, gateway and frame.
 - **Permissions** ([`kalfa/permissions/GLOSSARY.md`](../../kalfa/permissions/GLOSSARY.md)): what a
@@ -162,8 +162,8 @@ implements no context's interface. Each context that reaches GitHub translates i
   inside Leak guard is Leak guard's protocol's question.
 - **Host gate vs leak guard:** Code quality's host gate says whether this machine may run test files; it is not a
   guard and checks no text.
-- **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it, as
-  it does for Conversation's speaker. A sender is still only the client the gateway stamped.
+- **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it through
+  a link, as it does for Conversation's speaker. A sender is only the client or summoned agent the gateway or the brain stamped.
 - **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
 - **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
   The private words are a secret.
@@ -178,7 +178,7 @@ implements no context's interface. Each context that reaches GitHub translates i
 - **A review is Code hosting's; the talk under it is Conversation's.** Approving or asking for changes is Code
   hosting's. A comment thread under a line of code is a Conversation thread whose anchor Code hosting's words fill in
   (file, line, commit).
-- **Speaker vs sender:** a sender (Identity) is the client the gateway stamped; a speaker (Conversation) is the human
+- **Speaker vs sender:** a sender (Identity) is the client or summoned agent the gateway or the brain stamped; a speaker (Conversation) is the human
   or agent a provider found behind a chat app's account. An unknown speaker may ask for nothing, which Permissions
   enforces.
 - **Feature vs capability:** a feature is what a Conversation provider offers, such as reactions; a capability
