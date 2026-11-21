@@ -30,8 +30,12 @@ One machine a human owns, holding a key of kind `human`; every device is an equa
 _Avoid_: machine, computer, host
 
 **Agent**:
-Something that acts for a human, with a name unique among that human's agents, and can do no more than its human may. Its writes are its own, never its human's. A summoned agent holds no key, and the brain stamps its writes; an agent that dials in on its own signs in with a key of kind `agent`. No agent holds a key of kind `human`. An agent's id is the id of the entry that joined it and is never used again; its name can be.
+Something that acts for a human, with a name unique among that human's agents, and can do no more than its human may. An agent that another agent summoned has a parent, acts for its parent's human, and has a name unique among its parent's agents. Its writes are its own, never its human's. A summoned agent holds no key, and the brain stamps its writes; an agent that dials in on its own signs in with a key of kind `agent`. No agent holds a key of kind `human`. An agent's id is the id of the entry that joined it and is never used again; its name can be.
 _Avoid_: bot, assistant, delegate, a bare `for` (name the field for what it means: `actsFor`)
+
+**Parent**:
+The agent that summoned another agent. When a parent leaves, every agent it summoned leaves with it.
+_Avoid_: owner, summoner, supervisor (Program's)
 
 **Created**:
 The first entry of a project, naming its first human and that human's first device key. Every later entry is checked against what it set up.
@@ -46,11 +50,11 @@ The invited human's new device answering an invite with its own new key. It lets
 _Avoid_: knock, claim, redeem
 
 **Join**:
-A human or agent coming into a project. A human joins when the key from their accepted invite is granted; an agent joins when a human summons it, in one step. Joining a talk is Conversation's, not this.
+A human or agent coming into a project. A human joins when the key from their accepted invite is granted; an agent joins when a human summons it, in one step. When an agent summons one, the join carries the brain's stamp and no signature, since a summoned agent holds no key. Joining a talk is Conversation's, not this.
 _Avoid_: enroll, onboard, sign up
 
 **Leave**:
-A summoned agent going out of a project when its human dismisses it. Its name is free again, and its id is never used again. An agent whose harness ended has not left.
+A summoned agent going out of a project: its human dismisses it, or its parent dismisses it or leaves. No other human can make it leave. Its name is free again, and its id is never used again. An agent whose harness ended has not left.
 _Avoid_: remove, revoke (a key's), drop, dismiss (Agents')
 
 **Grant**:
