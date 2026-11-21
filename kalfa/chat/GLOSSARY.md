@@ -43,6 +43,11 @@ _Avoid_: anonymous, guest, stranger
 A message we post into a place. It answers the room or the thread, not one message inside it.
 _Avoid_: respond, answer, send, post
 
+**Reply id**:
+The name the asker gives a reply before it is posted. The same reply id is the same reply, so asking again posts
+nothing new. A reply id is public: a provider may write it into the message where the chat app's people can read it.
+_Avoid_: idempotency key, nonce, request id, message id (a message's own id comes from the chat app)
+
 **Mention**:
 A part of a body that names an account, such as the bot's, so that they hear it.
 _Avoid_: ping, tag, at, highlight
