@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eighteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI, Code quality and Telemetry. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Nineteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI, Code quality, Telemetry and Agents. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -78,8 +78,9 @@ moves the line here if it does.
   plants, lint rules and size limits.
 - **Telemetry** ([`kalfa/telemetry/GLOSSARY.md`](../../kalfa/telemetry/GLOSSARY.md)): what every step of every kalfa
   package did: traces made of spans, the trace stamp and build stamp on ledger entries, and where spans are kept.
-- **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
-  briefs, transcripts and usage.
+- **Agents** ([`kalfa/agents/GLOSSARY.md`](../../kalfa/agents/GLOSSARY.md)): starting a coding harness and talking to
+  it, in the Agent Client Protocol's words: session, prompt, turn, update, stop reason. Also the words of a summoned
+  agent: summon, dismiss, down, tell, ask and subagent.
 
 GitHub is not a context. `@kalfa/github` is an Effect client for GitHub's API in GitHub's own words, and it
 implements no context's interface. Each context that reaches GitHub translates in its own entry point
@@ -202,6 +203,29 @@ words are ours. The client names no operation: each entry point declares the Git
   The span log keeps each finished span as an entry.
 - **Link vs parent:** Telemetry's parent runs a span inside another; a link only points. The reader of an entry links
   to the writer's span by default.
+- **Harness vs agent:** a harness (Agents) is the maker's program we start; an agent (Identity) is who acts for a
+  human. The Agent Client Protocol calls the harness an "agent" and us a "client", and we use neither word that way.
+- **No context owns a summoned agent** (decision 0066). It is Identity's join, a process Program starts under the
+  name `<human>/<agent>`, and a session Agents opens, joined in `@kalfa/agents/program`. Program's registry is the
+  only list of live agents, and Identity answers which agents a human has.
+- **Turn vs step:** a turn (Agents) is what a harness does with one prompt; a step (Program) is a process handling one
+  message. A turn is a deferred tool of the agent's program, so its end arrives as a message and starts a step.
+- **Prompt vs message:** a prompt is text sent to a session; a message (Program) is a value on a process's input. A
+  message to an agent's process becomes a prompt.
+- **Stop reason vs exit reason:** a stop reason (Agents) says why a turn ended; an exit reason (Program) says why a
+  process ended.
+- **Session** means a harness session only. Telemetry and Identity avoid the word for a trace and for a client.
+- **Tool vs lent tool:** a tool (Program) is outside work a step uses; a lent tool (Agents) is one a harness may call.
+  Showing a program's inputs as tools is Program's, and which inputs a session may call is the program's own list of
+  opened inputs.
+- **Permission request vs permission:** a permission request (Agents) is a harness asking before one tool call, a
+  courtesy; a permission (Permissions) is what a subject may do. Whether an agent may summon is a permission.
+- **Ask** in Agents is one agent sending a prompt to another and waiting. An ask in Tracker is a question put to a
+  person.
+- **Subagent vs child:** a subagent (Agents) is an agent another agent summoned, and its process is a child (Program)
+  linked to its parent.
+- **Agents' updates are not spans.** The core makes a span per turn and per tool call with no text in it; the text is
+  in the session's updates, which `@kalfa/agents/ledger` keeps on the session's own stream.
 - **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/ci/github`.
