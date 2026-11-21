@@ -87,6 +87,11 @@ answer arrives, the hand-off is sent again on each wake. A hand-off failure the 
 error is the answer; any other failure is tried again.
 _Avoid_: Ask, owed tool, callback
 
+**Opened input**:
+A kind of message a program lets an agent send as a tool, named when that agent's tools are made.
+Nothing is opened by default, and a message that is not opened is one the agent cannot send.
+_Avoid_: Exposed input, allowed tool, person-only input
+
 **Taken over**:
 How a process ends when the same process is opened again somewhere else. The newest open owns the
 journal, counted by opens and never by clock; the older copy's next save is refused as stale, and it
