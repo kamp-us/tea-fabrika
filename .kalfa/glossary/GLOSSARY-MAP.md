@@ -123,8 +123,8 @@ words are ours. The client names no operation: each entry point declares the Git
   with Source control's rebase or a merge commit; which one is Delivery's setting.
 - **Land vs merge commit:** landing is Delivery's word; a merge commit is only a commit with two parents.
 - **Delivery obeys Incidents.** An open incident's severity has a response, such as a hold; Delivery
-  lands only fixes during a hold and puts each fix first. Delivery hears incidents by reading a
-  stream, so there is no watch context. A hold sets CI's floor, which cancels the builds of anything that is not a
+  lands only fixes during a hold and puts each fix first. Delivery never reads Incidents: an entry point in
+  Incidents (`@kalfa/incidents/delivery`) tells it about the hold and each fix mark, so there is no watch context. A hold sets CI's floor, which cancels the builds of anything that is not a
   fix, and a fix mark answers CI's triage. An entry point in Incidents (`@kalfa/incidents/ci`) connects the two, the
   app picks it, and CI never reads a hold.
 - **Incidents raises alerts from CI's builds,** such as a broken main or a test failing again and again. Which
