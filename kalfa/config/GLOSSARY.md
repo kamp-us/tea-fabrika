@@ -43,9 +43,13 @@ The app's settings file in a person's config home. User means the person whose c
 _Avoid_: person file, global config, home file, dotfile
 
 **File scope**:
-Which of the repo configuration and the user configuration may set a setting. A flag and an environment variable may
-set any setting.
+Which of the repo configuration and the user configuration may set a setting.
 _Avoid_: scope, level, layer
+
+**File-only setting**:
+A setting only a configuration file may set. No flag is made for it, and an environment variable that names it stops
+the start.
+_Avoid_: protected setting, locked setting, repo-only setting
 
 **Precedence**:
 The order in which sources win: a flag, then an environment variable, then the repo configuration, then the user
