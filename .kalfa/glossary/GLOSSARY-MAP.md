@@ -121,7 +121,7 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Revision and head** are the Ledger's. Delivery says changeset and latest changeset.
 - **HEAD** (Source control) is what a working copy has checked out; **head** (Ledger) is a stream's newest entry.
 - **A changeset is a commit** seen from Delivery, and a build runs on a commit. Delivery builds a change candidate
-  with Source control's rebase or a merge commit; which one is Delivery's setting.
+  with Source control's rebase, squash or a merge commit; which one is Delivery's landing style, a setting.
 - **Land vs merge commit:** landing is Delivery's word; a merge commit is only a commit with two parents.
 - **Delivery obeys Incidents.** An open incident's severity has a response, such as a hold; Delivery
   lands only fixes during a hold and puts each fix first. Delivery never reads Incidents: an entry point in
@@ -160,7 +160,8 @@ words are ours. The client names no operation: each entry point declares the Git
   branches and its state; Delivery adds changesets, approvals and the queue.
 - **Merge** means three things, and none is bare: Delivery lands; Source control makes a merge commit; Code hosting
   reports a change request merged when the host shows it so. Delivery lands with git and never asks the host to
-  merge (decision 0060), so a landing by rebase leaves the change request closed, not merged.
+  merge (decision 0060). For a landing by rebase or squash it moves the change request's branch first, so the host
+  still shows merged (decision 0071).
 - **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one or handed in by a
   caller such as Pipeline. Delivery's approver setting says whose yes counts, and its carry rule alone says how long
   it covers.
