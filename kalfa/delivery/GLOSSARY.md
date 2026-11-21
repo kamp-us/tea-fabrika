@@ -46,7 +46,7 @@ The commit main would become if the change requests in it land: the newest main 
 it holds is a setting. Delivery builds candidates and never changes the author's own changesets. Candidates are made
 in one of two styles, also a setting: a batch, where one candidate holds several change requests and a failed one is
 split and built again; or stacked, where each change request gets its own candidate built on the ones ahead.
-_Avoid_: train, batch, speculative merge, merge commit
+_Avoid_: train, speculative merge, merge commit
 
 **Land**:
 Main moves to a change candidate that passed, so it now holds those changesets.
