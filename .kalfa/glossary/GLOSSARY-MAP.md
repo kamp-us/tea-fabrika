@@ -155,7 +155,8 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Change request** is one word for one thing in Delivery and Code hosting. Code hosting knows its source and target
   branches and its state; Delivery adds changesets, approvals and the queue.
 - **Merge** means three things, and none is bare: Delivery lands; Source control makes a merge commit; Code hosting
-  marks a change request merged, which Delivery's landing causes.
+  reports a change request merged when the host shows it so. Delivery lands with git and never asks the host to
+  merge (decision 0060), so a landing by rebase leaves the change request closed, not merged.
 - **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one or handed in by a
   caller such as Pipeline. Delivery's approver setting says whose yes counts, and its carry rule alone says how long
   it covers.
