@@ -89,3 +89,47 @@ How a process ends when the same process is opened again somewhere else. The new
 journal, counted by opens and never by clock; the older copy's next save is refused as stale, and it
 stops without a restart.
 _Avoid_: Kicked, evicted
+
+**Process name**:
+The name a process is started under. It says who, not where, and it stays the same across restarts
+and a takeover.
+_Avoid_: Address, handle, key
+
+**Pid**:
+The id of one life of a process, from its start to its exit. A restart under the same process name
+is a new pid.
+_Avoid_: Process id, instance id, run id
+
+**Exit reason**:
+Why a process ended: `normal`, `shutdown`, `killed`, `defect` or `taken_over`. A defect's reason
+names the error's class, never its message. A monitor or a link on a name with no live process is
+answered with the reason `noproc`.
+_Avoid_: Exit code, status, cause
+
+**Exit signal**:
+What one process sends to end another: `shutdown` asks it to stop, `kill` stops it at once.
+_Avoid_: Stop request, cancel
+
+**Monitor**:
+One process's watch on another's pid. When that pid ends, the watcher gets one message with the
+exit reason. The watched process is not told.
+_Avoid_: Watch, subscription, listener
+
+**Link**:
+A tie between two processes: when one ends for a reason other than `normal`, the other ends too,
+unless it traps exits. A program traps exits by listing the exit message among its inputs; `kill`
+cannot be trapped.
+_Avoid_: Bind, pair
+
+**Child**:
+A process another process started. The one that started it is its parent.
+_Avoid_: Subprocess, worker
+
+**Registry**:
+The list of live processes: each process name with its pid and its place.
+_Avoid_: Directory, process table, lookup
+
+**Place**:
+Where a process runs, such as one browser tab or one server. The app names its places; a program
+never reads one.
+_Avoid_: Host, node, location
