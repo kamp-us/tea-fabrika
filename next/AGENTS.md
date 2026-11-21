@@ -53,6 +53,9 @@ has nothing, marked as an edge with its reason.
   machine, never `useState`.
 - **Every state machine is explicit**.
 - **Every state machine is a tea machine**.
+- **Before writing `@demlik/tea` code, read `node_modules/@demlik/tea/AGENTS.md`.** Its table maps
+  a job to the tea piece that already does it, such as a late answer, a job that may arrive twice,
+  or an append-only log.
 - **A tagged value is matched, never compared by hand,** in an `update` handler too
   ([the pattern](../.kalfa/patterns/effect-tagged-value-is-matched.md)).
 
