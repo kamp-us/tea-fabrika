@@ -143,6 +143,10 @@ implements no context's interface. Each context that reaches GitHub translates i
 - **User** in Configuration means the person whose config home holds the user configuration. Identity says human or
   agent, and Code hosting says host account.
 - **A setting holds a secret's name, never its value.** The value is fetched from Secrets.
+- **Sender** is Identity's word in Secrets too: a fetch or a signing is recorded with its sender. Permissions' subject
+  is the one whose allowance is checked.
+- **Version** in Secrets is one signing key a secret name has held. A protocol's version (Transport) and a package's
+  version are other things, and none is bare across contexts.
 - **Check** means three things: in Permissions, running a permission; in Reconciliation, comparing the
   desired state with the live state; in Code hosting, a named mark the host keeps on one commit. CI's builds show on
   the host as checks.
