@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eighteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, Leak guard, CI, Source control, Conversation, Code hosting, Configuration, CLI and Code quality. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Seventeen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI and Code quality. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -64,8 +64,6 @@ moves the line here if it does.
   severity, the alerts that open and resolve it, its fixes, and paging the people who run it.
 - **Secrets** ([`kalfa/secrets/GLOSSARY.md`](../../kalfa/secrets/GLOSSARY.md)): a value few may read, known to others only by its name;
   fetched, or used to sign without leaving.
-- **Leak guard** ([`kalfa/leak-guard/GLOSSARY.md`](../../kalfa/leak-guard/GLOSSARY.md)): checking text before it goes public
-  against its rules, such as a list of private words, with a refusal that really stops the write.
 - **Conversation** ([`kalfa/chat/GLOSSARY.md`](../../kalfa/chat/GLOSSARY.md)): talking with people in a thread, in a
   chat app or in a pull request's comments, the comments under a line of code included.
 - **Source control** ([`kalfa/git/GLOSSARY.md`](../../kalfa/git/GLOSSARY.md)): git itself, in git's own words:
@@ -99,7 +97,8 @@ words are ours. The client names no operation: each entry point declares the Git
   for the calls.
 - **Source control has no GitHub entry point.** A GitHub remote is a plain git remote; Code hosting hands it the
   credential, made from an access grant.
-- **Leak guard uses Source control:** it fills git's pre-push hook, so git never names Leak guard.
+- **Checking what goes public is no context** (decision 0059). A repo does it with its own tooling, which can fill
+  git's pre-push hook; no kalfa package names it.
 - **`@kalfa/github` uses Secrets:** a GitHub App logs in with a token signed by Secrets' signing key, so the private
   key never leaves Secrets. The installation token it gets back is GitHub's word; `@kalfa/codehost/github` turns it
   into an access grant, and no other context sees one.
@@ -160,20 +159,13 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one or handed in by a
   caller such as Pipeline. Delivery's approver setting says whose yes counts, and its carry rule alone says how long
   it covers.
-- **Rule** means two things: in Leak guard, a check on outgoing text; in Code quality, one thing a lint looks for in a
-  repo's files. In Code hosting, a ref rule (a limit on matching refs) is never called a bare rule.
-- **Code quality vs Leak guard:** Code quality judges what is in the repo, and a failure is a red check; Leak guard
-  stops text at the door before it goes public, and a refusal stops the write. Whether a Code quality rule can run
-  inside Leak guard is Leak guard's protocol's question.
-- **Host gate vs leak guard:** Code quality's host gate says whether this machine may run test files; it is not a
-  guard and checks no text.
+- **Rule** in Code quality is one thing a lint looks for in a repo's files. In Code hosting, a ref rule (a limit on matching refs) is never called a bare rule.
+- **Host gate:** Code quality's host gate says whether this machine may run test files; it checks no text.
 - **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it through
   a link, as it does for Conversation's speaker. A sender is only the client or summoned agent the gateway or the brain stamped.
 - **Code hosting uses Secrets** to sign an access grant's request with a signing key, which never leaves Secrets.
-- **Every public write goes through Leak guard:** a push, a post on the host, a reply in a thread.
-  The private words are a secret.
-- **Verdict** means three things: in Delivery, whether a change candidate passed its checks; in CI, a build's passed
-  or failed, which Delivery's is read from; in Leak guard, pass or refusal for one public write.
+- **Verdict** means two things: in Delivery, whether a change candidate passed its checks; in CI, a build's passed
+  or failed, which Delivery's is read from.
 - **Identity, Permissions and Configuration are asked by many.** Any context may ask who is acting,
   what they may do, or read a setting, and none owns the question's words.
 - **Permissions checks a subject, never a sender.** It imports nothing from Identity: the app turns a sender into a

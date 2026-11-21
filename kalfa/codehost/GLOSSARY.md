@@ -93,7 +93,7 @@ failed.
 _Avoid_: neutral, skipped, canceled, stale
 
 **Post a check**:
-Putting a check, or a new state of one, on a commit. It is a public write, so it goes through Leak guard.
+Putting a check, or a new state of one, on a commit.
 _Avoid_: report, set status, publish
 
 ### Rules and settings
