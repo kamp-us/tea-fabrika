@@ -2,8 +2,9 @@
 
 The map for any agent picking up work here. [`README.md`](./README.md) says what the repo holds. What is next lives on the
 tracker: the app's own, through its `tracker_file`, `tracker_comment` and `tracker_close` tools. A ticket for this repo
-goes there ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)). The one exception is a
-wayfinder map and its tickets, which live in GitHub issues, as [`.kalfa/issue-tracker.md`](./.kalfa/issue-tracker.md) says.
+goes there ([the lead skill](./.agents/skills/lead/SKILL.md#tickets-and-tracker-posts)). The two exceptions live in
+GitHub issues, as [`.kalfa/issue-tracker.md`](./.kalfa/issue-tracker.md) says: a wayfinder map with its tickets, and the
+kalfa package suite's build tickets.
 
 ## Two versions, side by side
 
