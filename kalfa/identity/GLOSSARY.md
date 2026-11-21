@@ -54,7 +54,7 @@ A human or agent coming into a project. A human joins when the key from their ac
 _Avoid_: enroll, onboard, sign up
 
 **Leave**:
-A summoned agent going out of a project: its human dismisses it, or its parent dismisses it or leaves. No other human can make it leave. Its name is free again, and its id is never used again. An agent whose harness ended has not left.
+A summoned agent going out of a project: its human dismisses it, its parent dismisses it or leaves, or the key that summoned it is revoked. No other human can make it leave. Its name is free again, and its id is never used again. An agent whose harness ended has not left.
 _Avoid_: remove, revoke (a key's), drop, dismiss (Agents')
 
 **Grant**:
@@ -62,7 +62,7 @@ A signed entry, made by a key of kind `human`, that lets one new key in.
 _Avoid_: approval, admission, invite
 
 **Revoke**:
-A signed entry that takes a key out, together with every key it let in.
+A signed entry that takes a key out, together with every key it let in and every agent it summoned.
 _Avoid_: drop, remove, delete, ban
 
 **Sender**:
