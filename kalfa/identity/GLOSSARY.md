@@ -30,7 +30,7 @@ One machine a human owns, holding a key of kind `human`; every device is an equa
 _Avoid_: machine, computer, host
 
 **Agent**:
-Something that acts for a human, with a name unique among that human's agents, and can do no more than its human may. Its writes are its own, never its human's. A summoned agent holds no key, and the brain stamps its writes; an agent that dials in on its own signs in with a key of kind `agent`. No agent holds a key of kind `human`.
+Something that acts for a human, with a name unique among that human's agents, and can do no more than its human may. Its writes are its own, never its human's. A summoned agent holds no key, and the brain stamps its writes; an agent that dials in on its own signs in with a key of kind `agent`. No agent holds a key of kind `human`. An agent's id is the id of the entry that joined it and is never used again; its name can be.
 _Avoid_: bot, assistant, delegate, a bare `for` (name the field for what it means: `actsFor`)
 
 **Created**:
@@ -48,6 +48,10 @@ _Avoid_: knock, claim, redeem
 **Join**:
 A human or agent coming into a project. A human joins when the key from their accepted invite is granted; an agent joins when a human summons it, in one step. Joining a talk is Conversation's, not this.
 _Avoid_: enroll, onboard, sign up
+
+**Leave**:
+A summoned agent going out of a project when its human dismisses it. Its name is free again, and its id is never used again. An agent whose harness ended has not left.
+_Avoid_: remove, revoke (a key's), drop, dismiss (Agents')
 
 **Grant**:
 A signed entry, made by a key of kind `human`, that lets one new key in.
