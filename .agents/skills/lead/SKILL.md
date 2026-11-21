@@ -636,8 +636,8 @@ command: builder, then one review, no plan per slice.
 ## Tickets and tracker posts
 
 Every ticket for this repo goes in the app's own tracker, through its `tracker_file`,
-`tracker_comment` and `tracker_close` tools. Never open a GitHub issue on this repo. GitHub issues
-are for other people's repos only.
+`tracker_comment` and `tracker_close` tools. Never open a GitHub issue on this repo, except the two
+kinds `.kalfa/issue-tracker.md` names. Otherwise GitHub issues are for other people's repos only.
 
 - Every quest gets a ticket before its agent starts. File one if it is missing.
 - A ticket mailed by a session without the tracker is filed the same turn by a lead session that has one.

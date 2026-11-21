@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Wayfinder maps and their tickets for this repo live as GitHub issues. Every other ticket lives on the app's own tracker (see `AGENTS.md`). Use the `gh` CLI for all operations.
+Wayfinder maps and their tickets for this repo live as GitHub issues, and so do the kalfa package suite's build tickets (see **Build tickets** below). Every other ticket lives on the app's own tracker (see `AGENTS.md`). Use the `gh` CLI for all operations.
 
 ## Conventions
 
@@ -48,3 +48,14 @@ Used by `/wayfinder`. The **map** is a single issue with **child** issues as tic
 - **Frontier query**: list the map's open children (`gh issue list --state open`, scoped to the map's sub-issues / task list), drop any with an open blocker (see **Count open blockers**, or an open issue in the `Blocked by` line) or an assignee; first in map order wins.
 - **Claim**: `gh issue edit <n> --add-assignee @me`, the session's first write.
 - **Resolve**: `gh issue comment <n> --body "<answer>"`, then `gh issue close <n>`, then append a context pointer (gist + link) to the map's Decisions-so-far.
+
+## Build tickets
+
+Used by `/to-tickets`, for the kalfa package suite only. GitHub issues show on every machine and render blocking; the app's own tracker does neither yet.
+
+- **Source**: the closed wayfinder ticket that holds a package's protocol. Each build ticket is its sub-issue (see **Make an issue a sub-issue of a parent**). The source stays closed and unedited.
+- **Blocking**: see **Blocking** under Conventions.
+- **Label**: `ready-for-agent`, and no `wayfinder:` label. It is the only triage label this repo has.
+- **Frontier query**: open issues labelled `ready-for-agent` with no open blocker and no assignee.
+- **In the pipeline**: where a step, a brief or a script asks for a ticket, give the GitHub issue's number.
+- **Close**: the pull request that builds a ticket closes it with `Closes #<n>` in its body.
