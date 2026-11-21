@@ -9,7 +9,7 @@ A named kind of link between a subject and an object, such as owner or member.
 _Avoid_: role (a role is one kind of relation), edge type
 
 **Relationship**:
-One fact linking a subject to an object by a relation, such as a human being a member of a fabrika.
+One fact linking a subject to an object by a relation, such as a human being a member of a project.
 _Avoid_: tuple, row, edge, ACL entry
 
 **Subject**:
@@ -37,7 +37,7 @@ What a failed check gives back in place of a proof.
 _Avoid_: forbidden, unauthorized, rejected
 
 **Role**:
-A relation a human holds on a fabrika: owner, admin or member.
+A relation a human holds on a project: owner, admin or member.
 _Avoid_: group, tier, rank
 
 **Check**:

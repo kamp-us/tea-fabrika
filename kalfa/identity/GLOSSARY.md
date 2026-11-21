@@ -1,12 +1,16 @@
 # Identity
 
-Who is acting: the keys, the clients that sign in with them, and the humans and agents they act for.
+Who is acting: the keys, the clients that sign in with them, and the humans and agents they act for, in one project.
 What someone may do is not here; that belongs to Permissions.
 
 ## Language
 
+**Project**:
+What a created entry starts: the humans who belong together, their agents and every key. Its roles (one owner, admins and members) are Permissions'; who invited and who granted each human is recorded from the start.
+_Avoid_: fabrika, team, workspace, organization
+
 **Human**:
-One person who belongs to a fabrika, acting through keys of kind `human`.
+One person who belongs to a project, acting through keys of kind `human`.
 _Avoid_: person, user, account, member
 
 **Client**:
@@ -26,12 +30,24 @@ One machine a human owns, holding a key of kind `human`; every device is an equa
 _Avoid_: machine, computer, host
 
 **Agent**:
-Something that acts for a human, signs its own writes, never holds a key of kind `human`, and can do no more than its human may.
+Something that acts for a human, with a name unique among that human's agents, and can do no more than its human may. Its writes are its own, never its human's. A summoned agent holds no key, and the brain stamps its writes; an agent that dials in on its own signs in with a key of kind `agent`. No agent holds a key of kind `human`.
 _Avoid_: bot, assistant, delegate, a bare `for` (name the field for what it means: `actsFor`)
 
-**Recovery**:
-A human getting back in after losing every device, by the printed sheet or by email.
-_Avoid_: reset, restore, re-founding
+**Created**:
+The first entry of a project, naming its first human and that human's first device key. Every later entry is checked against what it set up.
+_Avoid_: founding, founded, init, setup, bootstrap
+
+**Invite**:
+A one-time link, also shown as a QR code, that a human makes so another human can join. It is good for one day.
+_Avoid_: invitation, referral, join link
+
+**Accept**:
+The invited human's new device answering an invite with its own new key. It lets nothing in alone: a human already in still grants that key.
+_Avoid_: knock, claim, redeem
+
+**Join**:
+A human or agent coming into a project. A human joins when the key from their accepted invite is granted; an agent joins when a human summons it, in one step. Joining a talk is Conversation's, not this.
+_Avoid_: enroll, onboard, sign up
 
 **Grant**:
 A signed entry, made by a key of kind `human`, that lets one new key in.
@@ -42,25 +58,29 @@ A signed entry that takes a key out, together with every key it let in.
 _Avoid_: drop, remove, delete, ban
 
 **Sender**:
-The client an input came from, stamped by the gateway and never claimed by the input itself.
+The client or summoned agent an input came from, stamped by the gateway or the brain and never claimed by the input itself.
 _Avoid_: writer, signer, author, who, a bare `by` (a field names what was done: `sentBy`, `createdBy`)
-
-**Founding**:
-The entry that starts a fabrika with its first human.
-_Avoid_: create, init, setup, bootstrap
 
 **Sign-in**:
 A client proving its key to the gateway, which admits it or refuses it.
 _Avoid_: hello, initialize, knock, handshake, login
 
-**Invite**:
-A one-time link a human makes so another human can join.
-_Avoid_: invitation, referral, join link
+**Recovery**:
+A human getting back in after losing every device: by the printed sheet, by email, or by an admin's invite as the same human.
+_Avoid_: reset, restore, a new project
 
 **Passkey**:
-A browser's own key of kind `human`, unlocked by the human each time it is used.
+A browser's own key of kind `human`, unlocked by the human each time it is used. A synced passkey counts, and its grant records whether it is backed up.
 _Avoid_: WebAuthn key, security key
 
 **Recovery sheet**:
 The printed words that are a key of kind `recovery`, used once.
 _Avoid_: seed phrase, backup codes, mnemonic
+
+**Outside account**:
+An account on another site, such as GitHub, known by its numeric id and never by its login name. A host account (Code hosting) and a chat app's account (Conversation) are each one.
+_Avoid_: alias, identity, login, user
+
+**Link**:
+The fact that an outside account belongs to a human, made when the human authorizes our app on that site and the site tells us the account's id. A link never lets a key in.
+_Avoid_: connect, bind, proof
