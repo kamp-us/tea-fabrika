@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Seventeen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI and Code quality. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Eighteen exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI, Code quality and Telemetry. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -76,6 +76,8 @@ moves the line here if it does.
 - **Code quality** ([`kalfa/quality/GLOSSARY.md`](../../kalfa/quality/GLOSSARY.md)): what a repo's tests are
   built from (laws, depth, recorder, stub, test database), and the checks that show its code and tests are good:
   plants, lint rules and size limits.
+- **Telemetry** ([`kalfa/telemetry/GLOSSARY.md`](../../kalfa/telemetry/GLOSSARY.md)): what every step of every kalfa
+  package did: traces made of spans, the trace stamp and build stamp on ledger entries, and where spans are kept.
 - **Agent runs** (`next/packages/libfabrika/src/tasks/GLOSSARY.md`): sessions, models, effort,
   briefs, transcripts and usage.
 
@@ -193,6 +195,13 @@ words are ours. The client names no operation: each entry point declares the Git
 - **CLI is the edge of every kalfa package that has a subcommand.** Each package's subcommand speaks its own
   context's words; CLI owns only how it is found, named, and how it ends. A flag (Configuration) is still
   Configuration's word.
+- **Every package traces; Telemetry keeps.** Every kalfa package traces every step with Effect's own spans and imports
+  no Telemetry. Telemetry's trace stamp and build stamp fill slots on Ledger entries, and its span log is a separate
+  Ledger log.
+- **Span vs entry:** a span is Telemetry's, one step with a start and an end; an entry is the Ledger's, one kept fact.
+  The span log keeps each finished span as an entry.
+- **Link vs parent:** Telemetry's parent runs a span inside another; a link only points. The reader of an entry links
+  to the writer's span by default.
 - **Broad words never appear bare.** "Run" means nothing alone. A context uses its own precise word:
   CI says build and job, Code hosting says check, Program says process. A GitHub "workflow run" is
   translated into a build inside `@kalfa/ci/github`.
