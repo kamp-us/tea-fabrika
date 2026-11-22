@@ -170,6 +170,9 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Approve vs approval:** approving is a Code hosting review; Delivery's approval is read from one or handed in by a
   caller such as Pipeline. Delivery's approver setting says whose yes counts, and its carry rule alone says how long
   it covers.
+- **Approval vs presence:** an approval is Delivery's word, a yes on one changeset. A passkey signing one message
+  gives Identity's presence. Decisions 0073 and 0085 say a passkey approves a message in the everyday sense; that
+  is presence, never an approval, and Identity's grant is not one either.
 - **Rule** in Code quality is one thing a lint looks for in a repo's files. In Code hosting, a ref rule (a limit on matching refs) is never called a bare rule.
 - **Host gate:** Code quality's host gate says whether this machine may run test files; it checks no text.
 - **Host account vs speaker vs sender:** a host account is a name the host knows; Identity says who is behind it through
