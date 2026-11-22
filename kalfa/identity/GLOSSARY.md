@@ -80,7 +80,7 @@ A client proving its key to the gateway, which admits it or refuses it.
 _Avoid_: hello, initialize, knock, handshake, login
 
 **Recovery**:
-A human getting back in after losing every device: by the printed sheet, by email, or by an admin's invite as the same human.
+A human getting back in after losing every device: by the printed sheet, by email, or by an invite as the same human from someone above them. That invite starts the human over: their old keys, passkeys and sheets are out. Nobody can invite the owner as the same human.
 _Avoid_: reset, restore, a new project
 
 **Passkey**:
@@ -88,7 +88,7 @@ A browser's own key of kind `passkey`, unlocked by the human each time it is use
 _Avoid_: WebAuthn key, security key
 
 **Recovery sheet**:
-The printed words that are a key of kind `recovery`, used once.
+The printed words that are a key of kind `recovery`, used once. Each human always has one live sheet of their own: using it makes the next. It is the last way back, and the owner's only one.
 _Avoid_: seed phrase, backup codes, mnemonic
 
 **Outside account**:
