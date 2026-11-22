@@ -972,8 +972,8 @@ test that writes a SQLite file or a temp folder is medium in Google's test sizes
 `.integration.`. Two checks hold the name, one each way, and both read one definition,
 `starters.ts`:
 
-- `fabrika/integration-test-name`, the per-file oxlint rule, fails a plain `next/` test file whose
-  own code calls a starter.
+- `fabrika/integration-test-name`, the per-file oxlint rule, fails a plain `next/` or `kalfa/` test
+  file whose own code calls a starter.
 - `pnpm lint:kind` (`test-kind.ts`) fails an `.integration.` file that reaches no starter at all,
   through its own code or any chain of value imports. It reads the imports from
   `code-graph next --graph --edges`, which resolves relative paths and our packages' `exports` maps,
@@ -1044,10 +1044,11 @@ never count: reading the repository's own files in the process is plain.
   missed name, never a false block.
 
 `integration-test-name.test.ts` holds the rule's laws: K1, a property over every starter, each
-import spelling, three folders and both extensions, that fires on a plain name at the call's line and
+import spelling, five folders (three in `next/`, two in `kalfa/`) and both extensions, that fires on a plain name at the call's line and
 never under either named one; each starter runs on its own and the error must name what it drives and the `.integration.test.ts`
 name; K2, that every stand-in above never fires, each on its own; one real oxlint run over a
-planted folder with the repo's config; and one over the real `next/` tree, which must be at zero.
+planted folder in each of `next/` and `kalfa/` with the repo's config; and one over the real `next/`
+and `kalfa/` trees, which must be at zero.
 `test-kind.test.ts` holds K3, on `judge` in memory and through the real command and code-graph on
 planted trees, and K4, that advice never changes the exit. Their plants are named in their headers.
 
