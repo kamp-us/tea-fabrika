@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0088, 0084, 0063; body b07ba3440352
+Approved by the lead agent, builds 0088, 0084, 0063; body 7c85d7c6fb1c
 Plancheck-Version: 3
 
 # Plan: a diagnostic's place says what kind of place it is (ticket 1929)
@@ -475,4 +475,23 @@ which decision 0088 refuses. This amendment wins over the sections above where t
 - **D23** refuses the drive root with forward slashes as a repo place too, in every run, not only as a home place.
 - **D6** draws the drive break among the bad places.
 - The plan's call stays at 80%: a repo folder named `C:` at the root is refused. No real repo needs one.
+
+## Amendment 2 (2026-11-22): no colon in a repo path's first part; a stricter flag
+
+The review found two more ways a login rides into a repo place, a `file:` start and a drive with no slash after it
+(`C:` joined to `Users`), and a flag pattern looser than its own words. This amendment wins over the sections above.
+
+- **Repo path:** its first part holds no `:` at all. That refuses Amendment 1's drive, `file:` and any other scheme,
+  and `C:` joined to the next word. A `:` deeper in the path stays good (`docs/a:b`). **D2** gains the breaks
+  `file:` plus a root, `C:` joined to `Users`, and `a:b` as a first part; **D23** adds both new forms as repo places
+  in every run, built from pieces; plants: "refuse only a first part that is a letter and `:`" (the `file:` and
+  joined-drive forms are accepted, red).
+- **Flag:** a short flag is `-` and exactly one character; a long flag is `--` and a name. Neither holds whitespace,
+  `=`, a control character (Unicode Cc), a format character (Cf, such as a zero-width space or U+202E) or a lone
+  surrogate (Cs). **D20** gains the breaks `-fo`, `-instance.port`, `--` plus U+200B, `--a` plus U+202E, and a lone
+  surrogate; plants: "allow a short flag of any length" (`-fo` accepted, red) and "refuse Cc only" (U+200B accepted,
+  red).
+- **README:** every place in an example is typed as `Diagnostic.Place`, so the examples compile. **D24** also
+  type-checks the README's code block (extract it to a scratch file the types law compiles, or the closest the
+  package's laws already do); plant: drop the type on one example, red.
 
