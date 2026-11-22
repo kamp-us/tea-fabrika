@@ -121,13 +121,15 @@ The test config and typecheck.ts hold worker, home and typecheck limits.
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
   one, and its refusal prints the command to use instead.
 - **No `pnpm typecheck` in this step,** unless the brief asks for one. A type law is red only in a
-  typecheck: say so, and the build runs it.
+  typecheck: say so, and the build runs it. To compile your own type laws, run
+  `nice -n 19 pnpm exec tsc --noEmit` in that one package's folder, once before you commit. An error
+  that only says the product module is missing is the expected red; any other error is yours.
 - **Never run a test here that sends a real signal** (`kill`, `process.kill`, SIGTERM or SIGKILL),
   calls `launchctl`, starts Electron or needs the real machine. Write it, mark it as the plan says
   (host-only, or `*.integration.test.ts` on CI's schedule), and name it in the report as not run
   here. A law that reaches a signal uses a stand-in or a spy, as the neighbors do. An integration
-  file that sends no signal and starts nothing outside its own temp home may run here, one at a
-  time.
+  file is refused on the laptop by its name alone (`vitest.hostrun.ts`), so it runs only in CI or
+  in a cloud box.
 - A law never reads the person's home folder or app data, not even to guard against it. A law that
   breaks on one machine is fixed by removing what it leaned on, never by catching the error.
 - A sandbox may refuse sockets (`EPERM`), file watches (`EMFILE`), `ps` or Electron. Say which law
@@ -142,6 +144,9 @@ These hold in every tests round, so the brief does not repeat them.
 - **Git in a worktree:** start every git command with `cd <worktree> || exit 1`, and bring the
   branch up first (`git pull --ff-only`, or the merge of `origin/main` the brief names). Ignore
   git's `gc.log` warnings. Run `pnpm install --frozen-lockfile` only when a module is missing.
+  A ticket that adds a workspace package runs one `pnpm install --offline` without
+  `--frozen-lockfile` once its `package.json` is in, then checks the lockfile diff holds only the
+  new importer.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
 - **Fix it properly.** No skip, no `.only`, no raised timeout, no sleep-and-hope, no placeholder or
   weaker assertion, no `as` cast to quiet a type. No allow-list or ledger row added, no lint rule
