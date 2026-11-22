@@ -1409,19 +1409,18 @@ const holdsRef = (value: unknown, depth = 0): boolean => {
   return found.some((next) => holdsRef(next, depth + 1));
 };
 
-/** Every write a caller can try on `target` at `key`: set it, define it, delete it. A write that throws changed nothing, as one that answers `false` did not. */
-const tamper = (target: unknown, key: PropertyKey, junk: unknown) =>
+/** The writes a caller can try on a property: set it, define it, delete it. */
+const WRITES: ReadonlyArray<(target: object, key: PropertyKey, junk: unknown) => unknown> = [
+  (target, key, junk) => Object.assign(target, { [key]: junk }),
+  (target, key, junk) =>
+    Object.defineProperty(target, key, { value: junk, writable: true, configurable: true, enumerable: true }),
+  (target, key) => Reflect.deleteProperty(target, key),
+];
+
+/** One write on `target` at `key`. A write that throws changed nothing, as one that answers `false` did not. */
+const tamper = (write: (typeof WRITES)[number], target: unknown, key: PropertyKey, junk: unknown) =>
   Predicate.isObject(target)
-    ? Effect.forEach(
-        Array.of<() => unknown>(
-          () => Object.assign(target, { [key]: junk }),
-          () =>
-            Object.defineProperty(target, key, { value: junk, writable: true, configurable: true, enumerable: true }),
-          () => Reflect.deleteProperty(target, key),
-        ),
-        (attempt) => Effect.ignore(Effect.try({ try: attempt, catch: () => "refused" as const })),
-        { discard: true, concurrency: 1 },
-      )
+    ? Effect.ignore(Effect.try({ try: () => write(target, key, junk), catch: () => "refused" as const }))
     : Effect.void;
 
 const Tampering = Schema.Struct({ app: Word, pair: Pair, junk: Seed });
@@ -1459,23 +1458,25 @@ it.effect.prop(
         expect(holdsRef(reading)).toBe(false);
         expect(holdsRef(first)).toBe(false);
 
-        // A write to the reading, to the group's values or to its origins, whatever it does, changes nothing later.
-        for (const key of [...(Predicate.isObject(reading) ? Reflect.ownKeys(reading) : []), "asEffect", "ref"]) {
-          yield* tamper(reading, key, () => Effect.succeed(junk));
+        // Each write, to the reading, to the group's values and to its origins, whatever it does, changes nothing later.
+        for (const write of WRITES) {
+          for (const key of [...(Predicate.isObject(reading) ? Reflect.ownKeys(reading) : []), "asEffect", "ref"]) {
+            yield* tamper(write, reading, key, () => Effect.succeed(junk));
+          }
+
+          for (const key of [field(live), field(restart), "extra"]) {
+            yield* tamper(write, first, key, junk);
+          }
+
+          for (const key of [named(live), named(restart), "extra"]) {
+            yield* tamper(write, origins, key, { _tag: "default" });
+          }
+
+          const second: Readonly<Record<string, unknown>> = yield* group;
+          const later: Readonly<Record<string, unknown>> = yield* SettingGroup.origins(group);
+
+          expect({ live: yield* now(second), restart: second[field(restart)], origins: { ...later } }).toEqual(before);
         }
-
-        for (const key of [field(live), field(restart), "extra"]) {
-          yield* tamper(first, key, junk);
-        }
-
-        for (const key of [named(live), named(restart), "extra"]) {
-          yield* tamper(origins, key, { _tag: "default" });
-        }
-
-        const second: Readonly<Record<string, unknown>> = yield* group;
-        const later: Readonly<Record<string, unknown>> = yield* SettingGroup.origins(group);
-
-        expect({ live: yield* now(second), restart: second[field(restart)], origins: { ...later } }).toEqual(before);
       });
 
       yield* readers.pipe(
