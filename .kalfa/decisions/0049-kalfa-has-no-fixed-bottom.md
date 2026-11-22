@@ -8,6 +8,6 @@ Kalfa names no tier of packages that everything else sits on. The one structure 
 
 ## Consequences
 
-This replaces the four-bottom-layers decision, and keeps its other rules. Program holds long work: an answer still owed, timed by the place's own alarm. Each place's runner (a Durable Object, Node, a browser tab, a test) is an adapter. Deletable content and blobs get no package of their own: Effect's `KeyValueStore` covers them. Traces stay in their own record objects, not in the ledger.
+This replaces the four-bottom-layers decision, and keeps its other rules. Program holds long work: an answer still owed, timed by the place's own alarm. Each place's runner (a Durable Object, Node, a browser tab, a test) is an adapter. Deletable content and blobs get no package of their own: Effect's `KeyValueStore` covers them. Each finished span is an entry on its own ledger log (decision 0063).
 
 A client key's private half is kept by Secrets, which signs with it; Identity names the key and who it belongs to.
