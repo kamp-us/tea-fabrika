@@ -51,12 +51,13 @@ A ref moving to a commit that keeps every commit the ref had before.
 _Avoid_: forward push, clean update
 
 **Force push**:
-A push that moves a ref so it drops commits it had before. Whether a ref allows one is a setting.
+A push that moves a ref so it drops commits it had before. A ref set to keep its commits refuses one; which refs keep
+their commits is a setting.
 _Avoid_: overwrite, rewrite push
 
 **Delete push**:
-A push that removes a ref from a remote and sends no commits. It names the commit it expects to remove. A ref allows
-one only where it allows a force push.
+A push that removes a ref from a remote and sends no commits. It names the commit it expects to remove. A ref set to
+keep its commits refuses one, as it refuses a force push.
 _Avoid_: remove, prune, drop
 
 **Rebase**:
