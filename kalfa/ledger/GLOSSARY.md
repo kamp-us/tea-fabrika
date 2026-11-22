@@ -70,6 +70,11 @@ Reads and appends that happen as one: nothing else is kept between them, and the
 together or not at all.
 _Avoid_: Turn, transact, atomic (as a name), batch
 
+**Admission**:
+A rule a package or the app adds that lets an entry in or refuses it, inside the append. Every admission
+must let the entry in.
+_Avoid_: Write policy, guard (a program's), validator, hook
+
 **Remote ledger**:
 The ledger as a client reaches it over a connection: append, read, wait and listing streams, and
 no transaction.

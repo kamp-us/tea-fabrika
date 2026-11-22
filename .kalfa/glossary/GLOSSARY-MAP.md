@@ -237,13 +237,13 @@ words are ours. The client names no operation: each entry point declares the Git
   Permissions.
 - **Recovery** means two things: in Program, a process getting back its saved state; in Identity, a
   human getting back in after losing every device.
+- **Admission** means two things: in CI, a waiting build getting a free slot; in the Ledger, a rule
+  that lets an entry in or refuses it, inside the append.
 
 ## Open clashes
 
 Borders that are still fuzzy, one line each.
 
-- **Permissions vs the Ledger's admission:** who may write is Permissions' question. The ledger only
-  asks its admission, which the app fills, inside the append.
 - **Frame:** in Transport, one piece of text on a socket; Clients and Frame uses it for the window around
   a program, which gets its own word (a lean: chrome) when that glossary is written.
 - **Conversation vs Tracker:** Conversation carries a message and the app decides it is an ask; an
