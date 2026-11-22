@@ -33,11 +33,11 @@ The name a chat app knows someone by. Every message has one; the provider reads 
 _Avoid_: user, handle, login, author, a speaker
 
 **Speaker**:
-Who said a message: the human or agent Identity knows behind an account.
+Who said a message: the human Identity knows behind an account. An agent has no account of its own in a chat app, so an agent is never a speaker.
 _Avoid_: sender, author, user, a bare `by` (the field is `speaker`)
 
 **Unknown speaker**:
-An account that matches no human or agent. An unknown speaker may ask for nothing.
+An account that matches no human. An unknown speaker may ask for nothing.
 _Avoid_: anonymous, guest, stranger
 
 **Reply**:
