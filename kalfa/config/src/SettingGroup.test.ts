@@ -31,6 +31,7 @@ import {
   Predicate,
   References,
   Schema,
+  SubscriptionRef,
   Tracer,
 } from "effect";
 import { Setting, SettingGroup } from "./index.ts";
@@ -387,6 +388,114 @@ it.effect.prop(
       }
 
       expect([...reached].sort()).toEqual([...PLACES].sort());
+    }),
+  check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// B1, a table-valued setting comes whole from the one source that holds it
+// ---------------------------------------------------------------------------------------------
+
+const Pairing = Schema.Struct({ a: Schema.optional(Schema.Int), b: Schema.optional(Schema.Int) });
+
+const Nesting = Schema.Struct({ inner: Schema.optional(Pairing) });
+
+const Shape = Schema.Literals(["flat", "nested"]);
+
+/** What one file holds of the setting's table: nothing, the table with no key, or the table with these keys. */
+const Contents = Schema.Literals(["none", "empty", "a", "b", "ab"]);
+
+type Content = typeof Contents.Type;
+
+const CONTENTS: Readonly<Record<Content, ReadonlyArray<"a" | "b">>> = {
+  none: [],
+  empty: [],
+  a: ["a"],
+  b: ["b"],
+  ab: ["a", "b"],
+};
+
+/** One file: `pad` comment lines, then the table of the setting, with the line its header sits on. A key's value is `base` for `a` and `base + 2` for `b`. */
+const tabled = (pad: number, shape: typeof Shape.Type, entry: Named, content: Content, base: number) => {
+  const lines = Array.from({ length: pad }, (_, n) => `# note ${n}`);
+
+  if (content === "none") {
+    return { text: `${lines.join("\n")}\n`, line: undefined, value: undefined };
+  }
+
+  lines.push(`[${named(entry)}]`);
+  const line = lines.length;
+  const keys = CONTENTS[content];
+
+  if (shape === "nested" && content !== "empty") {
+    lines.push(`[${named(entry)}.inner]`);
+  }
+
+  const fields = {
+    ...(keys.some((key) => key === "a") ? { a: base } : {}),
+    ...(keys.some((key) => key === "b") ? { b: base + 2 } : {}),
+  };
+
+  for (const [key, value] of Object.entries(fields)) {
+    lines.push(`${key} = ${value}`);
+  }
+
+  return {
+    text: `${lines.join("\n")}\n`,
+    line,
+    value: shape === "flat" || content === "empty" ? fields : { inner: fields },
+  };
+};
+
+// Plants: (a) decode the value through the chain of every source, as the reviewed head did, so a key the stronger file
+// leaves out is filled from the weaker one; (b) fill each key the holder lacks from the other file.
+it.effect.prop(
+  "B1 a table-valued setting, placed partly in each file, comes whole from the stronger file that holds the table, with its origin, else whole from its default",
+  { app: Word, entry: Entry, shape: Shape, pad: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })) },
+  ({ app, entry, shape, pad }) =>
+    Effect.gen(function* () {
+      const fallback = shape === "flat" ? { a: DEFAULT } : { inner: { a: DEFAULT } };
+
+      const setting =
+        shape === "flat"
+          ? Setting.make(named(entry), Pairing).pipe(Setting.withDescription("A pair."), Setting.withDefault(fallback))
+          : Setting.make(named(entry), Nesting).pipe(Setting.withDescription("A pair."), Setting.withDefault(fallback));
+
+      const group = makeGroup(app, [setting]);
+      const reached = new Set<string>();
+
+      // Every pair of contents is reached in each run, in this shape.
+      for (const repo of Contents.literals) {
+        for (const user of Contents.literals) {
+          reached.add(`${repo}+${user}`);
+
+          const files = {
+            repo: tabled(pad + 1, shape, entry, repo, entry.seed + 1),
+            user: tabled(pad + 2, shape, entry, user, entry.seed + 2),
+          };
+
+          const { exit } = yield* start(group, {
+            disk: { files: { [repoFile(app).path]: files.repo.text, [userFile(app).path]: files.user.text } },
+            env: environment(),
+          });
+
+          const loaded = mustStart(exit);
+
+          const want =
+            files.repo.line !== undefined
+              ? { value: files.repo.value, origin: inFile(repoFile(app).name, files.repo.line) }
+              : files.user.line !== undefined
+                ? { value: files.user.value, origin: inFile(userFile(app).name, files.user.line) }
+                : { value: fallback, origin: { _tag: "default" } };
+
+          expect(
+            { value: loaded.values[field(entry)], origin: loaded.origins[named(entry)] },
+            `${repo}+${user}`,
+          ).toEqual(want);
+        }
+      }
+
+      expect(reached.size).toBe(Contents.literals.length ** 2);
     }),
   check,
 );
@@ -978,6 +1087,9 @@ const HIDDEN = [
   "user-mistyped",
   "repo-table",
   "user-table",
+  "repo-refused",
+  "user-refused",
+  "env-refused",
   "other-app",
 ] as const;
 
@@ -987,7 +1099,8 @@ const HiddenCase = Schema.Struct({ app: Word, other: Word, secret: Hidden }).che
 
 describe("B8 [secrets], values stay out", () => {
   for (const place of HIDDEN) {
-    // Plant: print the unknown key's value in the message.
+    // Plants: print the unknown key's value in the message; print the value a known setting refuses in its `invalid`
+    // message, once for a file's value and once for the environment's.
     it.effect.prop(
       `a secret under ${place} reaches no error message, cause, span attribute or log line, raw, escaped or encoded`,
       { input: HiddenCase },
@@ -1001,6 +1114,7 @@ describe("B8 [secrets], values stay out", () => {
             Match.when("unknown", () => `[zzzzz]\nkeykey = ${quoted}\n`),
             Match.when("mistyped", () => `[net]\npotr = ${quoted}\n`),
             Match.when("table", () => `[net.port]\nnested = ${quoted}\n`),
+            Match.when("refused", () => (side === "env" ? "" : `[net]\nport = ${quoted}\n`)),
             Match.orElse(() => ""),
           );
 
@@ -1010,7 +1124,12 @@ describe("B8 [secrets], values stay out", () => {
             [`${ROOT}/.${other}/${other}.toml`]: `[net]\nport = ${quoted}\n`,
           };
 
-          const env = place === "other-app" ? { [`${other.toUpperCase()}_NET_PORT`]: secret } : {};
+          const env = Match.value(place).pipe(
+            Match.when("other-app", () => ({ [`${other.toUpperCase()}_NET_PORT`]: secret })),
+            Match.when("env-refused", () => ({ [variable(app, NET)]: secret })),
+            Match.orElse(() => ({})),
+          );
+
           const { exit, spans, logs } = yield* start(group, { disk: { files }, env: environment(env) });
 
           const span = spans.find((s) => s.name === "config.layer");
@@ -1028,8 +1147,11 @@ describe("B8 [secrets], values stay out", () => {
             outputs.push(JSON.stringify(exit.value.values), JSON.stringify(exit.value.origins));
           } else {
             const error = seen(exit);
-            // A table where a value belongs is refused as one or the other; every other secret sits under an unknown key.
-            expect(place.endsWith("table") ? ["invalid", "unknown"] : ["unknown"]).toContain(error.reason);
+            // A table where a value belongs is refused as one or the other, and a value the schema refuses is `invalid`;
+            // every other secret sits under an unknown key.
+            expect(
+              place.endsWith("table") ? ["invalid", "unknown"] : place.endsWith("refused") ? ["invalid"] : ["unknown"],
+            ).toContain(error.reason);
             outputs.push(error.printed);
           }
 
@@ -1260,6 +1382,109 @@ it.effect(
         );
       }
     }),
+);
+
+// ---------------------------------------------------------------------------------------------
+// B16 [protocol], nothing a caller holds changes the start
+// ---------------------------------------------------------------------------------------------
+
+/** Whether a value is, or holds in a property of its own or of its prototypes, a `SubscriptionRef`. */
+const holdsRef = (value: unknown, depth = 0): boolean => {
+  if (SubscriptionRef.isSubscriptionRef(value)) {
+    return true;
+  }
+
+  if (depth > 2 || !Predicate.isObject(value)) {
+    return false;
+  }
+
+  const found: Array<unknown> = [];
+
+  for (let at: object | null = value; at !== null && at !== Object.prototype; at = Reflect.getPrototypeOf(at)) {
+    for (const key of Reflect.ownKeys(at)) {
+      found.push(Reflect.getOwnPropertyDescriptor(at, key)?.value);
+    }
+  }
+
+  return found.some((next) => holdsRef(next, depth + 1));
+};
+
+/** Every write a caller can try on `target` at `key`: set it, define it, delete it. A write that throws changed nothing, as one that answers `false` did not. */
+const tamper = (target: unknown, key: PropertyKey, junk: unknown) =>
+  Predicate.isObject(target)
+    ? Effect.forEach(
+        Array.of<() => unknown>(
+          () => Object.assign(target, { [key]: junk }),
+          () =>
+            Object.defineProperty(target, key, { value: junk, writable: true, configurable: true, enumerable: true }),
+          () => Reflect.deleteProperty(target, key),
+        ),
+        (attempt) => Effect.ignore(Effect.try({ try: attempt, catch: () => "refused" as const })),
+        { discard: true, concurrency: 1 },
+      )
+    : Effect.void;
+
+const Tampering = Schema.Struct({ app: Word, pair: Pair, junk: Seed });
+
+// Plants: (a) keep the reference of a `Live` in a plain `private` property, as the reviewed head did; (b) leave the
+// values object of a group writable; (c) leave the origins object writable; (d) leave the `Live` itself writable.
+it.effect.prop(
+  "B16 a started group gives a caller no reference to a live value, and no write to its values, its origins or a live value changes what a later reader gets",
+  { input: Tampering },
+  ({ input: { app, pair, junk } }) =>
+    Effect.gen(function* () {
+      const [live, restart] = pair;
+      const group = makeGroup(app, [declare(named(live), { live: true }), declare(named(restart))]);
+
+      const files = { [repoFile(app).path]: toml(1, [{ entry: live, raw: "4101" }]).text };
+
+      const readers = Effect.gen(function* () {
+        const first: Readonly<Record<string, unknown>> = yield* group;
+        const reading = first[field(live)];
+        const origins: Readonly<Record<string, unknown>> = yield* SettingGroup.origins(group);
+
+        // A live field is an Effect to yield, and the law needs the one it is given.
+        expect(isReading(reading)).toBe(true);
+
+        const now = (values: Readonly<Record<string, unknown>>) => {
+          const field_ = values[field(live)];
+
+          return isReading(field_) ? field_ : Effect.void;
+        };
+
+        const before = { live: yield* now(first), restart: first[field(restart)], origins: { ...origins } };
+
+        // The live value shows no reference: not as a key, not in any property of it or of what it inherits.
+        expect(Predicate.isObject(reading) ? Object.keys(reading) : []).not.toContain("ref");
+        expect(holdsRef(reading)).toBe(false);
+        expect(holdsRef(first)).toBe(false);
+
+        // A write to the reading, to the group's values or to its origins, whatever it does, changes nothing later.
+        for (const key of [...(Predicate.isObject(reading) ? Reflect.ownKeys(reading) : []), "asEffect", "ref"]) {
+          yield* tamper(reading, key, () => Effect.succeed(junk));
+        }
+
+        for (const key of [field(live), field(restart), "extra"]) {
+          yield* tamper(first, key, junk);
+        }
+
+        for (const key of [named(live), named(restart), "extra"]) {
+          yield* tamper(origins, key, { _tag: "default" });
+        }
+
+        const second: Readonly<Record<string, unknown>> = yield* group;
+        const later: Readonly<Record<string, unknown>> = yield* SettingGroup.origins(group);
+
+        expect({ live: yield* now(second), restart: second[field(restart)], origins: { ...later } }).toEqual(before);
+      });
+
+      yield* readers.pipe(
+        Effect.provide(SettingGroup.layer(group, { version: VERSION, repo: ROOT })),
+        Effect.provide(MemoryFiles.layer({ files })),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...environment() } }))),
+      );
+    }),
+  check,
 );
 
 // ---------------------------------------------------------------------------------------------
