@@ -38,7 +38,7 @@ const outcome = (exit: Exit.Exit<{ values: Record<string, unknown>; origins: Rec
 
   const error = exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []))[0];
 
-  return error instanceof SettingGroup.SettingsError
+  return Schema.is(SettingGroup.SettingsError)(error)
     ? { failed: { reason: error.reason, file: error.file, line: error.line, message: error.message } }
     : { failed: { reason: "not a SettingsError" } };
 };

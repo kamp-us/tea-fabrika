@@ -253,7 +253,7 @@ const seen = (exit: Exit.Exit<unknown, unknown>): Seen => {
   expect(errors).toHaveLength(1);
   expect(error).toBeInstanceOf(SettingGroup.SettingsError);
 
-  return error instanceof SettingGroup.SettingsError
+  return Schema.is(SettingGroup.SettingsError)(error)
     ? {
         reason: error.reason,
         file: error.file,

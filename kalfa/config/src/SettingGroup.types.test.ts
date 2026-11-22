@@ -127,7 +127,9 @@ const refusals = () => [
 
   Effect.gen(function* () {
     // @ts-expect-error T4: a setting is not an Effect, it is read only through its group
-    yield* port;
+    const value = yield* port;
+
+    return value;
   }),
 ];
 
