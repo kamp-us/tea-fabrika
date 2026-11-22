@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0047, 0048, 0049, 0063, 0076, 0079; body a15e1aa1f6ff
+Approved by the lead agent, builds 0047, 0048, 0049, 0063, 0076, 0079; body f555157145d2
 Plancheck-Version: 3
 
 # Plan: @kalfa/git, read commits and refs from a repository, in memory and with the git binary (ticket 1932)
@@ -856,3 +856,22 @@ The owner is away, so the three calls under 80% are taken and listed at the top 
    `.integration.` law to main's full run, so a new adapter's real-binary laws first run after it merges
    unless the lead runs them in a cloud box. This plan asks for that box run; whether the related job
    should take a new package's integration files is the lead's call.
+
+## Amendment 1 (2026-11-22): a setting's value is plain data
+
+The owner decided on 2026-11-22 that a setting's value is plain data only: text, numbers, true or false, and lists
+and records of those (https://github.com/kamp-us/tea-fabrika/issues/1839#issuecomment-7087310445). `Schema.Duration`
+decodes to a class, so the time limit changes. This amendment wins over the sections above where they differ.
+
+- **`Limits.time`** is duration text, a string checked when decoded: it must decode with Effect's `Duration.fromInput`
+  to more than zero, such as `"10 seconds"`. `Repository.make` decodes it once into a `Duration`; `TimedOut { after }`
+  stays a `Duration`, since an error's field is not a setting. The traced value's `time 10 seconds` is written
+  `"10 seconds"`.
+- **Law G5** reads: `Settings` accepts generated duration text that decodes to more than zero, across units (ms,
+  seconds, minutes, hours) and amounts; it refuses `"0 seconds"`, `"ten"`, a bare number and a negative amount. New
+  plant: drop the text check, so `"ten"` is accepted, red. **Law P3** sets `limits.time` as text and keeps its clock
+  check.
+- **README** and the doubt "Is any of this a setting?" say the time limit is text, decoded by the package.
+- `committer` (ticket 1934) is not part of this pull request; its record of `name` and `email` in place of
+  `Signature` is noted on issue 1934.
+
