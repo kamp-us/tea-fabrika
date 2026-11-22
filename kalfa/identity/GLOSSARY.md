@@ -19,7 +19,7 @@ with its own key.
 _Avoid_: who, session, connection, user
 
 **Client key**:
-The key pair one client signs in with; Secrets keeps its private half, and only its public half ever leaves.
+The key pair one client signs in with; Secrets keeps its private key, and only its public key ever leaves.
 _Avoid_: identity, credential
 
 **Kind**:
