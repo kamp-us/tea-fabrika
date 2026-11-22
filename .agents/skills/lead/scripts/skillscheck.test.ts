@@ -664,3 +664,93 @@ describe("T325 slice 1b required clauses, today's tooling", () => {
     );
   });
 });
+
+describe("ticket 1248, a skill may not name a script that is not there", () => {
+  const extension = fc.constantFrom("sh", "ts", "mjs", "py");
+
+  const doc = fc.constantFrom(
+    ".agents/skills/review/SKILL.md",
+    ".agents/skills/lead/SKILL.md",
+    ".agents/skills/plan/references/design.md",
+  );
+
+  // The fixture's lead skill names land.ts, so a tree with a scripts folder holds it.
+  const scripts = (dir: string) => {
+    mkdirSync(join(dir, ".agents/skills/lead/scripts"), { recursive: true });
+    writeFileSync(join(dir, ".agents/skills/lead/scripts/land.ts"), "");
+  };
+
+  const lines = (before: number, text: string, fenced: boolean) => [
+    ...Array.from({ length: before }, () => "Plain prose."),
+    ...(fenced ? ["```sh", text, "```"] : [text]),
+  ];
+
+  // Plant: drop the existence test, and a deleted script passes.
+  it("a missing script path fails with its file, line and path; a present one passes", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          file: doc,
+          base: name,
+          ext: extension,
+          before: fc.nat(3),
+          fenced: fc.boolean(),
+          exists: fc.boolean(),
+        }),
+        ({ file, base, ext, before, fenced, exists }) => {
+          const dir = mkdtempSync(join(tmpdir(), "script-path-"));
+
+          try {
+            tree(dir);
+            const path = `.agents/skills/lead/scripts/${base}.${ext}`;
+            scripts(dir);
+
+            if (exists) {
+              writeFileSync(join(dir, path), "");
+            }
+
+            mkdirSync(join(dir, file, ".."), { recursive: true });
+            const own = file.endsWith("SKILL.md") ? readFileSync(join(dir, file), "utf8") : "";
+            const text = lines(before, `Run \`node ${path} --flag\`, then stop.`, fenced);
+            writeFileSync(join(dir, file), `${own}\n${text.join("\n")}\n`);
+
+            const got = run(dir);
+            const line = own.split("\n").length + before + (fenced ? 2 : 1);
+
+            expect(got.status, got.stderr).toBe(exists ? 0 : 1);
+            expect(got.stderr.includes(`${file}:${line}: names a script that is not there: ${path}`)).toBe(!exists);
+          } finally {
+            rmSync(dir, { recursive: true, force: true });
+          }
+        },
+      ),
+      { seed: 1248, numRuns: 25 },
+    );
+  });
+
+  // scenario: the rule for placeholders and for sentence punctuation, and the links-only tree.
+  it("scenario: a placeholder path is skipped, a path ending a sentence is read, a tree with no scripts folder is not checked", () => {
+    const dir = mkdtempSync(join(tmpdir(), "script-path-"));
+
+    try {
+      tree(dir);
+      const file = join(dir, ".agents/skills/review/SKILL.md");
+      const own = readFileSync(file, "utf8");
+      writeFileSync(file, `${own}\nSee .agents/skills/lead/scripts/gone.ts.\n`);
+      expect(run(dir).status, "no scripts folder").toBe(0);
+
+      scripts(dir);
+      const got = run(dir);
+      expect(got.status).toBe(1);
+      expect(got.stderr).toContain("names a script that is not there: .agents/skills/lead/scripts/gone.ts\n");
+
+      writeFileSync(
+        file,
+        `${own}\nRun .agents/skills/<skill>/scripts/x.sh or .agents/skills/lead/scripts/*.ts or .agents/skills/lead/scripts/$NAME.ts.\n`,
+      );
+      expect(run(dir).status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
