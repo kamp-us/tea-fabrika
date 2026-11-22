@@ -49,12 +49,15 @@ when to keep going and how to write for a reader who saw none of the work.
 - When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
   Inspect every named output, including encoded URLs, and plant a leak into each.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
+- A plan that adds a workspace package lists `pnpm-lock.yaml` in its files table, owned by `tests`,
+  which writes it with one `pnpm install --offline`.
 - When the plan changes a skill, a rule code checks or could check becomes a check and leaves the
   prose. Only judgment stays in prose.
 - Name each host-only law: one that can only run on the real machine (launchd, the real Electron
   app, a real OS process or socket, a real signal). Say it runs before the first review, and that on
   the owner's Mac it waits for the lead's read of its signal and launchd lines and the owner's yes. A test on a real resource is a
-  `*.integration.test.ts` file.
+  `*.integration.test.ts` file, and the laptop refuses every one by name (`vitest.hostrun.ts`), so
+  the plan never says one runs narrowly there: it runs in CI.
   A law that can run on a stand-in (an in-memory layer) runs on every pull request, so a new
   `.integration.` law says in the plan why no stand-in will do.
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
