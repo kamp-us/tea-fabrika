@@ -1,13 +1,14 @@
 # Delivery moves a change request's branch so the host shows it merged
 
-Delivery lands with git and never asks the host to merge (0060). With the rebase and squash landing styles the commits that land are new, so the host would show the change request closed, and people and the host's own tools read "merged". So Delivery moves the change request's branch to the commit that will land, waits until the host shows the change request at that commit, and only then moves main. We chose this because the merged mark matters to the people who read a repository, and because a trial showed the order decides it: branch first and main second gave merged, while one push of both refs gave closed three times out of three (https://github.com/kamp-us/tea-fabrika/issues/1803). The design ticket is https://github.com/kamp-us/tea-fabrika/issues/1820.
+Delivery lands with git and never asks the host to merge (0060). With the rebase and squash landing styles the commits that land are new, so the host would show the change request closed, and people and the host's own tools read "merged". So Delivery moves the change request's branch to the commit that will land, waits a short time for the host to show the change request at that commit, and then moves main (decision 0082 made the wait one that never blocks). We chose this because the merged mark matters to the people who read a repository, and because a trial showed the order decides it: branch first and main second gave merged, while one push of both refs gave closed three times out of three (https://github.com/kamp-us/tea-fabrika/issues/1803). The design ticket is https://github.com/kamp-us/tea-fabrika/issues/1820.
 
 The steps of a landing by rebase or squash:
 
 1. Delivery writes on the Ledger which branch it will move, from which commit to which commit, for which landing.
 2. It pushes the branch with a lease on the changeset it read. A push refused by the lease means the author pushed first, and that is a plain new changeset: Replaced.
 3. It waits until the host's snapshot shows the change request at the new commit. The wait has a time limit, a setting.
-4. It pushes main, as before. If main is refused or the wait runs out, it puts the branch back to the commit it wrote down, also with a lease.
+4. It pushes main, as before, whether the wait got its answer or ran out (decision 0082). If main is refused, it puts the branch back to the commit it wrote down, also with a lease.
+5. After main moves it reads what the host shows. Where the host shows closed, it adds the note and the landing says so (decision 0082).
 
 A commit Delivery wrote down in step 1 is never a new changeset when the snapshot shows it. After a crash, the Ledger entry and git's ancestor check say which steps are done.
 
