@@ -181,6 +181,7 @@ const SIGIL_KINDS: ReadonlyArray<Break<string, string>> = [
   { name: "a part that is $", apply: () => "$" },
   { name: "a part that is $HOME", apply: () => "$HOME" },
   { name: "a part that starts with $", apply: (part) => `$${part}` },
+  { name: "a part that is a drive letter and a colon", apply: () => "C:" },
 ];
 
 /** A name a shell can expand, in each class: what it makes of a plain name. */
@@ -371,6 +372,9 @@ const COUNT_BREAKS: ReadonlyArray<Break<Counted, object>> = [
 
 const repo = (path: string): object => write("repo", { path });
 
+// A path that starts with a drive letter and a colon, built from pieces joined at run time.
+const drive = (letter: string, segments: ReadonlyArray<string>): string => [`${letter}:`, ...segments].join("/");
+
 const REPO_BREAKS: ReadonlyArray<Break<PlaceParts, object>> = [
   { name: "an empty path", apply: () => repo("") },
   { name: "a leading slash", apply: ({ segments }) => repo(`/${join(segments)}`) },
@@ -386,6 +390,12 @@ const REPO_BREAKS: ReadonlyArray<Break<PlaceParts, object>> = [
   { name: "a first part that is $", apply: ({ segments }) => repo(`$/${join(segments)}`) },
   { name: "a first part that is $ and a name", apply: ({ segments, name }) => repo(`$${name}/${join(segments)}`) },
   { name: "a first part that is $ and a digit", apply: ({ segments }) => repo(`$1/${join(segments)}`) },
+  { name: "a first part that is a drive letter, upper case", apply: ({ segments }) => repo(drive("C", segments)) },
+  { name: "a first part that is a drive letter, lower case", apply: ({ segments }) => repo(drive("z", segments)) },
+  {
+    name: "a first part that is a drive letter, then Users and a login",
+    apply: ({ segments, login }) => repo(drive("C", ["Users", login, ...segments])),
+  },
   ...COUNT_BREAKS.map((count) => ({
     name: count.name,
     apply: ({ segments, line, column }: PlaceParts) => count.apply({ tag: "repo", path: join(segments), line, column }),
@@ -545,25 +555,22 @@ const LOGIN_KINDS: ReadonlyArray<Break<string, string>> = [
 ];
 
 // Each root a machine puts a login in, built from pieces joined at run time: no file holds a whole machine path.
-// `drive` marks the Windows drive with forward slashes: its first part is `C:`, so a repo path may start with it.
 const ROOTS: ReadonlyArray<{
   readonly name: string;
-  readonly drive: boolean;
   readonly at: (login: string) => string;
 }> = [
-  { name: "the macOS root", drive: false, at: (login) => ["", "Users", login].join("/") },
-  { name: "the Linux root", drive: false, at: (login) => ["", "home", login].join("/") },
-  { name: "the Linux root under var", drive: false, at: (login) => ["", "var", "home", login].join("/") },
-  { name: "a Windows drive with forward slashes", drive: true, at: (login) => ["C:", "Users", login].join("/") },
-  { name: "a Windows drive with backslashes", drive: false, at: (login) => ["C:", "Users", login].join("\\") },
-  { name: "a network share", drive: false, at: (login) => ["", "", "server", login].join("\\") },
-  { name: "a ~ and a login", drive: false, at: (login) => `~${login}` },
+  { name: "the macOS root", at: (login) => ["", "Users", login].join("/") },
+  { name: "the Linux root", at: (login) => ["", "home", login].join("/") },
+  { name: "the Linux root under var", at: (login) => ["", "var", "home", login].join("/") },
+  { name: "a Windows drive with forward slashes", at: (login) => ["C:", "Users", login].join("/") },
+  { name: "a Windows drive with backslashes", at: (login) => ["C:", "Users", login].join("\\") },
+  { name: "a network share", at: (login) => ["", "", "server", login].join("\\") },
+  { name: "a ~ and a login", at: (login) => `~${login}` },
 ];
 
 /**
  * Each class of login in each root a machine uses, each followed by a file name, put as a home file and as a repo
- * file. Both must be refused, except that a Windows drive with forward slashes is a legal relative repo path, `C:`
- * being a part (the plan's gap): that one is put as a home file only.
+ * file. Both must be refused in every root, the Windows drive with forward slashes included (plan amendment 1).
  */
 export const rootedAtLogin = ({
   login,
@@ -582,7 +589,7 @@ export const rootedAtLogin = ({
         login: name,
         places: [
           { name: "as a home file", value: home(path) },
-          ...(root.drive ? [] : [{ name: "as a repo file", value: repo(path) }]),
+          { name: "as a repo file", value: repo(path) },
         ],
       };
     }),

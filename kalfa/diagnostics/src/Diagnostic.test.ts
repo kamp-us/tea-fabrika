@@ -73,7 +73,9 @@ const expectRefused = (cases: ReadonlyArray<{ readonly name: string; readonly va
 // D2. Plant: drop the first-part rule from `isRepoPath`, and `~/x` is accepted; refuse only a first part that is
 // exactly `~`, and `~someone/x` is accepted; refuse `~` and `$` anywhere, and a deeper `~` part is refused; refuse
 // more than 64 characters, and the long path is refused; drop the "a column needs a line" check, and the
-// column-with-no-line break is accepted. One plant per kind of odd segment, each a wrong rule for a segment in
+// column-with-no-line break is accepted; drop the drive rule (amendment 1), and a first part `C:` or `z:`, or the
+// drive root then Users and a login, is accepted; refuse a drive letter anywhere, and a deeper `C:` part is
+// refused. One plant per kind of odd segment, each a wrong rule for a segment in
 // Diagnostic.ts: refuse a segment that starts with a dot; refuse a segment that holds a space; accept only
 // [a-zA-Z0-9_~@+().-] in a segment; accept only printable ASCII in a segment.
 describe("D2, a file in the repo", () => {
@@ -184,10 +186,10 @@ const schemaErrorIn = (exit: Exit.Exit<void>): Schema.SchemaError | undefined =>
       })
     : undefined;
 
-// D23 [secrets]. A login holds a digit, so no fixed word of a message can hold it by chance. A Windows drive with
-// forward slashes (`C:` then a login) is refused as a home place only: as a repo place it is a legal relative path
-// by the plan's own rules, which is a gap in the plan, named in the report (the support file marks that one root).
-// Plant: accept an absolute home path; write the path into `HomePath`'s refusal message; decode in `report` with
+// D23 [secrets]. A login holds a digit, so no fixed word of a message can hold it by chance. Every root is
+// refused as a home place and as a repo place in every run, the Windows drive with forward slashes included
+// (plan amendment 1).
+// Plant: drop the drive rule from `isRepoPath`, and the drive root is accepted as a repo place; accept an absolute home path; write the path into `HomePath`'s refusal message; decode in `report` with
 // `reportInput: true`, so the defect's issue holds the path; print a home place with its start cut off.
 describe("D23, no login name in any output", () => {
   it.effect.prop(
