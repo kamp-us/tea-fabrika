@@ -20,6 +20,7 @@ import * as Sources from "../Sources.ts";
 import { Toml, type TomlDocument } from "../Toml.ts";
 import { distance, leaf, lineAt, same } from "./document.ts";
 import { SettingsError } from "./error.ts";
+import { frozen } from "./frozen.ts";
 import { reading } from "./live.ts";
 import { field, segments, variable } from "./names.ts";
 
@@ -332,8 +333,10 @@ export const start = Effect.fnUntraced(function* (
 
   for (const s of group.settings) {
     const resolved = yield* resolve(group, s, files, names, provider);
-    values[field(s.name)] = s.live ? yield* reading(resolved.value) : resolved.value;
-    origins[s.name] = resolved.origin;
+    // What a reader gets is a frozen copy: no write to it reaches another reader, another start or the declaration's default.
+    const settled = frozen(resolved.value);
+    values[field(s.name)] = s.live ? yield* reading(settled) : settled;
+    origins[s.name] = Object.freeze(resolved.origin);
   }
 
   const started: Resolved = { values: Object.freeze(values), origins: Object.freeze(origins) };
