@@ -9,8 +9,8 @@ A value that someone allowed may fetch, such as an API key. It is a secret from 
 _Avoid_: credential, password, token, a bare key
 
 **Signing key**:
-A private key that Secrets signs with. Nobody fetches it, not even the one it belongs to. It is a signing key from the moment it is made, and it never becomes a secret. It is either given or generated, for life.
-_Avoid_: private key, secret key, a bare key
+A key pair whose private key Secrets signs with. Nobody fetches it, not even the one it belongs to. It is a signing key from the moment it is made, and it never becomes a secret. It is either given or generated, for life.
+_Avoid_: secret key, a bare key
 
 **Given signing key**:
 A signing key handed to us from outside, such as a code host's app key. A person puts it into its secret store, like a secret's value, and a person replaces it there.
@@ -29,19 +29,19 @@ Getting a secret's value by its name. The value comes back hidden from logs. A n
 _Avoid_: get, read, load, resolve
 
 **Sign**:
-Secrets uses a signing key to make a signature over some bytes, and the private half never leaves. Only a signing key can sign. A signature says which version made it. Permissions decides whether a sender may, and each signing is recorded as a fetch is. Where no ledger can be reached yet, as when a client signs to connect, the record is kept and sent once one can.
+Secrets uses a signing key to make a signature over some bytes, and the private key never leaves. Only a signing key can sign. A signature says which version made it. Permissions decides whether a sender may, and each signing is recorded as a fetch is. Where no ledger can be reached yet, as when a client signs to connect, the record is kept and sent once one can.
 _Avoid_: encrypt, seal
 
 **Version**:
 One signing key that a secret name has held. A rotation makes a new version, and the newest one signs.
 _Avoid_: generation, key id
 
-**Public half**:
-The part of a signing key that anyone may read, used to check its signatures. Every version's public half stays readable, so signatures made before a rotation still check.
-_Avoid_: public key, verify key
+**Public key**:
+The part of a signing key that anyone may read, used to check its signatures. Every version's public key stays readable, so signatures made before a rotation still check.
+_Avoid_: public half, verify key
 
-**Private half's place**:
-Where a signing key's private half sits while it signs: in the store (the secret store signs inside itself), in the runtime (our runtime holds it and refuses to hand it out), or in memory (it is loaded into our own process). A signing key names the loosest place it accepts.
+**Private key's place**:
+Where a signing key's private key sits while it signs: in the store (the secret store signs inside itself), in the runtime (our runtime holds it and refuses to hand it out), or in memory (it is loaded into our own process). A signing key names the loosest place it accepts.
 _Avoid_: security level, tier
 
 **Secret store**:
@@ -57,7 +57,7 @@ A secret store's own label for the thing a secret name points to, such as an env
 _Avoid_: address, path, ref
 
 **Generate**:
-Making a new signing key, inside its secret store where the store can, and otherwise in our own process, which writes it to the store at once. Only the public half comes out, so no person or agent ever sees the private half. The store's own login always gates it, and code that acts for a sender also needs Permissions' yes.
+Making a new signing key, inside its secret store where the store can, and otherwise in our own process, which writes it to the store at once. Only the public key comes out, so no person or agent ever sees the private key. The store's own login always gates it, and code that acts for a sender also needs Permissions' yes.
 _Avoid_: create, mint, issue
 
 **Rotate**:
