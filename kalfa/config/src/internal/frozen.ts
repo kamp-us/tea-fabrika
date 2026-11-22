@@ -1,3 +1,4 @@
+import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 
 /** Whether a value is plain data: an object made by `{}` or with no prototype. */
@@ -19,7 +20,7 @@ export const frozen = (value: unknown): unknown => {
     return Object.freeze(value.map(frozen));
   }
 
-  if (typeof value === "object" && value !== null && plain(value)) {
+  if (Predicate.isObject(value) && plain(value)) {
     return Object.freeze(Rec.map(value, frozen));
   }
 
