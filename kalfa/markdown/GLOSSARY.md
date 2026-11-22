@@ -10,7 +10,7 @@ The block of data at the top of a Markdown file, between two `---` lines. It hol
 _Avoid_: front matter, header, metadata, properties
 
 **Body**:
-Everything in a Markdown file after its frontmatter. It is free text for people.
+Everything in a Markdown file after its frontmatter, or the whole file when it has none. It is free text for people.
 _Avoid_: content, text, prose
 
 **Document**:
