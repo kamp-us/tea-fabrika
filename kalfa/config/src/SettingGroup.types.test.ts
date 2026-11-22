@@ -201,6 +201,10 @@ it("T5 type: the layer's only error is SettingsError with its seven reasons, and
 // `notPlain`. Neither is called, and each hands every expression back, so none is a dropped Effect.
 const Slug = Schema.String.pipe(Schema.brand("Slug"));
 
+// A struct with a brand has no index signature left, so it is the case that needs the brand line of `NotPlain`; a
+// record with an index signature keeps its own.
+const Marked = Schema.Struct({ a: Schema.String, b: Schema.Array(Schema.Int) }).pipe(Schema.brand("Marked"));
+
 const Weights = Schema.Record(Schema.String, Schema.Finite).pipe(Schema.brand("Weights"));
 
 // A length of time as text, checked when the app starts: the form the README gives.
@@ -225,11 +229,19 @@ const Dated: Schema.Codec<Dated> = Schema.Struct({
   later: Schema.Array(Schema.suspend((): Schema.Codec<Dated> => Dated)),
 });
 
+// The outer record is assignable to the inner one (both may hold `x`), which is the case that tells "the same type"
+// from "assignable one way": the inner record must still be read for its `Date`.
+const Deep = Schema.Struct({
+  x: Schema.optionalKey(Schema.Int),
+  y: Schema.optionalKey(Schema.Struct({ x: Schema.optionalKey(Schema.Int), z: Schema.optionalKey(Schema.Date) })),
+});
+
 class Box extends Schema.Class<Box, { readonly brand: unique symbol }>("Box")({ size: Schema.Finite }) {}
 
 const plain = () => [
   Setting.make("plain.slug", Slug),
   Setting.make("plain.weights", Weights),
+  Setting.make("plain.marked", Marked),
   Setting.make("plain.table", Schema.Record(Schema.String, Schema.Finite)),
   Setting.make("plain.pair", Schema.Struct({ a: Schema.optionalKey(Schema.Int), b: Schema.optionalKey(Schema.Int) })),
   Setting.make("plain.wait", Wait),
@@ -262,10 +274,7 @@ const notPlain = () => [
   Setting.make("plain.maybe", Schema.Struct({ a: Schema.optional(Schema.Int) })),
 
   // @ts-expect-error T6: a Date deep inside nested records is not plain data
-  Setting.make(
-    "plain.deep",
-    Schema.Struct({ a: Schema.optionalKey(Schema.Struct({ b: Schema.optionalKey(Schema.Date) })) }),
-  ),
+  Setting.make("plain.deep", Deep),
 
   // @ts-expect-error T6: a Date inside a recursive type is not plain data
   Setting.make("plain.dated", Dated),
