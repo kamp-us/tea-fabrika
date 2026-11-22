@@ -53,3 +53,13 @@ _Avoid_: crash, error, abort
 What a subcommand ends with: 0 when it reported no error, 1 when it reported one or more errors (already
 printed), 2 when it could not finish.
 _Avoid_: status, return code
+
+**Write command**:
+A subcommand that changes something. It sends one message to a process the app runs, and the app decides and
+writes. A subcommand that only reads stays on the device.
+_Avoid_: mutation, action, remote command
+
+**Direct**:
+How a write command writes when the app is down: it writes the entry itself, no permission is checked, and the
+entry says it was direct.
+_Avoid_: offline, force, bypass, local mode
