@@ -41,7 +41,8 @@ What a process shows from its states, declared with `Program.outputs`.
 _Avoid_: View, render, result
 
 **Error**:
-A typed failure, sent on the `errors` pipe. The process keeps going.
+A typed failure of a step. What the step wrote is dropped, the failure is reported, and the process
+keeps going.
 _Avoid_: Exception
 
 **Defect**:
@@ -99,8 +100,9 @@ stops without a restart.
 _Avoid_: Kicked, evicted
 
 **Process name**:
-The name a process is started under. It says who, not where, and it stays the same across restarts
-and a takeover.
+The name a process is started under, picked by whoever starts it: one or more parts joined by `/`,
+such as `tracker:1` or `ada/scout`. It says who, not where and not which program, and it stays the
+same across restarts and a takeover.
 _Avoid_: Address, handle, key
 
 **Pid**:
