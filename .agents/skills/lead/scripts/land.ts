@@ -59,6 +59,14 @@
 //     its history. Every one runs the leak gate first, on the change, each commit, the title and the
 //     description, and refuses on any hit or on a grep that could not run.
 //
+//   land.ts admin <pr> [--wait-minutes <n>] [--every-seconds <n>]
+//     the lead session, the one way it admin merges (a hand-written `gh pr checks --watch` chain once
+//     merged while ci-required was still pending). As `merge --admin`, and also: a branch starting
+//     `can/` is refused; a draft is marked ready after the leak gate, then ci-required is given
+//     --wait-minutes (default 30, read every --every-seconds, default 30) to appear and end; it must be
+//     completed and success at the head read last, which must not move while waiting; one pinned squash
+//     with --admin; then it prints the pull request's state and merge commit.
+//
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
@@ -89,6 +97,7 @@ import * as RunsGh from "./ci/RunsGh.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as BranchesGit from "./pr/BranchesGit.ts";
 import * as Merge from "./pr/Merge.ts";
+import { PullRequests } from "./pr/PullRequests.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "./pr/Pushes.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
@@ -756,20 +765,44 @@ const adminRoute = Effect.fn("land.adminRoute")(function* (env: Env) {
   return Merge.Route.cases.admin.make(Level.routeFromLog(entries, sev0, issues));
 });
 
+/** One merge by hand (pr/Merge.ts) on this route, with this wait for an admin merge; prints what it did. */
+const mergeBy = Effect.fn("land.mergeBy")(function* (env: Env, pr: number, route: Merge.Route, wait?: Queue.Wait) {
+  const done = yield* Merge.merge({ dir: env.MAIN, pr, route, ...(wait ? { wait } : {}) }).pipe(
+    Effect.provide(Layer.merge(queueServices(env), BranchesGit.layer(env.MAIN))),
+    Effect.mapError(refusedAt("merge")),
+  );
+
+  yield* Console.log(Merge.line(done));
+});
+
 const mergeCommand = Command.make(
   "merge",
   { pr: PrNumber, admin: Flag.Boolean("admin") },
   Effect.fn("land.mergeCommand")(function* ({ pr, admin }) {
     const env = yield* loadEnv;
 
-    const route = admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({});
+    yield* mergeBy(env, pr, admin ? yield* adminRoute(env) : Merge.Route.cases.queue.make({}));
+  }),
+);
 
-    const done = yield* Merge.merge({ dir: env.MAIN, pr, route }).pipe(
-      Effect.provide(Layer.merge(queueServices(env), BranchesGit.layer(env.MAIN))),
-      Effect.mapError(refusedAt("merge")),
-    );
+// The one way the lead admin merges: marks a draft ready, waits for ci-required, merges, then reads the pull request once more.
+const adminCommand = Command.make(
+  "admin",
+  {
+    pr: PrNumber,
+    minutes: Flag.Int("wait-minutes").pipe(Flag.withDefault(Merge.ADMIN_WAIT.minutes)),
+    every: Flag.Int("every-seconds").pipe(Flag.withDefault(Merge.ADMIN_WAIT.every)),
+  },
+  Effect.fn("land.adminCommand")(function* ({ pr, minutes, every }) {
+    const env = yield* loadEnv;
 
-    yield* Console.log(Merge.line(done));
+    yield* mergeBy(env, pr, yield* adminRoute(env), { minutes, every });
+
+    const found = yield* (yield* PullRequests)
+      .view(pr)
+      .pipe(Effect.provide(PullRequestsGh.layer(env.GH_REPO, env.MAIN)), Effect.mapError(refusedAt("merge")));
+
+    yield* Console.log(`pr ${pr}: ${found.state}, merge commit ${found.mergeCommit ?? "none yet"}`);
   }),
 );
 
@@ -808,7 +841,7 @@ const closeNamed = Command.make(
 );
 
 const land = Command.make("land").pipe(
-  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, merged, closeNamed]),
+  Command.withSubcommands([ready, run, queueCommand, armCommand, mergeCommand, adminCommand, merged, closeNamed]),
 );
 
 if (import.meta.main) {
