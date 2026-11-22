@@ -6,7 +6,7 @@ How it works:
 
 1. Presence is a fact the app hands to its permission check, like any other fact about the message. An act needs it only when the app's rule asks for it, as in `intersection(owner, present)`. Permissions gains nothing.
 2. The command prints or opens a link to a page the app serves. The page shows the message and a short code that the command prints too.
-3. The passkey signs a fingerprint made from the message's own id. The Ledger never takes the same id twice, so one approval is good for one message.
+3. The passkey signs a fingerprint made from the name of the stream the message is kept in and the message's own id. A stream never takes the same id twice, so one approval is good for one message.
 4. Identity checks the signature, the page's address, and the two marks in the signed data: a person was present, and the person was verified. Without both, `present` is false.
 
 ## Considered Options
