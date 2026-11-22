@@ -10,7 +10,8 @@ A store of commits and the refs that point at them.
 _Avoid_: project, codebase
 
 **Remote**:
-Another repository this one fetches from and pushes to, known by a name such as origin. A host is one kind of remote.
+Another repository this one fetches from and pushes to, known by a name such as origin or by its URL. A host is one
+kind of remote.
 _Avoid_: server, host, GitHub
 
 **Commit**:
@@ -18,12 +19,16 @@ One fixed snapshot of the files plus its parent commits. It never changes. Deliv
 runs a build on one.
 _Avoid_: revision, version, changeset, snapshot
 
+**Tree**:
+The files of one commit, each at its path, without the commit's parents or message.
+_Avoid_: snapshot, folder, working copy
+
 **Commit id**:
 The name git gives a commit from its content, also called its sha.
 _Avoid_: revision, version number
 
 **Ref**:
-A name that points at one commit.
+A name that points at one commit, written in full, such as `refs/heads/main`. It may sit outside the branches.
 _Avoid_: pointer, label
 
 **Branch**:
