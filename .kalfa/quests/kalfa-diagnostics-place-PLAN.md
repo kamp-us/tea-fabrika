@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0088, 0084, 0063; body f7e4cdbb4666
+Approved by the lead agent, builds 0088, 0084, 0063; body b07ba3440352
 Plancheck-Version: 3
 
 # Plan: a diagnostic's place says what kind of place it is (ticket 1929)
@@ -461,3 +461,18 @@ The two calls under 80% are at the top, each with what would settle it.
    `kalfa/config/src/Snapshot.ts:84-95` accepts `file === "~"` and `file === home`. A home place needs a
    part after the start, so if Configuration ever names an origin that way, its error ticket must name the
    file, not the folder. No action here.
+
+## Amendment 1 (2026-11-22): a drive letter is not a repo path's first part
+
+The tests step found that `isRepoPath` above accepts a Windows drive path written with forward slashes: `C:`, then
+`Users`, then a login, then `.demo/demo.toml`, since `C:` is a good part. That path is absolute and names a login,
+which decision 0088 refuses. This amendment wins over the sections above where they differ.
+
+- `isRepoPath` also refuses a first part that is one ASCII letter followed by `:` (`C:`, `c:`). A deeper part such as
+  `docs/C:/x` stays good, as `~` and `$` do. `isHomePath` already refuses it, since its start is neither `~` nor `$NAME`.
+- **D2** gains the break: a first part `C:` and `z:`. Plant: drop the drive rule, so the drive root, then `Users`, then a
+  generated login is accepted as a repo place, red. The support file builds it from pieces, as for D23.
+- **D23** refuses the drive root with forward slashes as a repo place too, in every run, not only as a home place.
+- **D6** draws the drive break among the bad places.
+- The plan's call stays at 80%: a repo folder named `C:` at the root is refused. No real repo needs one.
+
