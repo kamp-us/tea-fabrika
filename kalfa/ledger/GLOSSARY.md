@@ -19,7 +19,8 @@ of entry it is.
 _Avoid_: Line, record, row, fact, letter
 
 **Entry id**:
-The writer's own id for an entry. Sending an entry with the same id and the same body again keeps
+The writer's own id for an entry, unique in its stream: the same id in another stream is another
+entry. Sending an entry with the same id and the same body again keeps
 nothing new and gets the same answer as the first time, so a writer may always send again. The same
 id with a different body is refused.
 _Avoid_: Duplicate, dedupe key
