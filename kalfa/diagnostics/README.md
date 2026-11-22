@@ -39,19 +39,59 @@ import * as Diagnostics from "@kalfa/diagnostics/Diagnostics";
 const found = Diagnostics.report(UnknownSetting, {
   severity: "error",
   message: "The setting `service.prot` is not declared.",
-  place: { path: ".config/settings.toml", line: 4 },
+  place: { _tag: "repo", path: ".config/settings.toml", line: 4 },
   hint: "Did you mean `service.port`?",
 });
 ```
 
 - **Severity** is `error` or `warning`. `error` fails the subcommand and `warning` is only advice. The caller gives it,
   so it may come from a setting.
-- **Place** is a path from the repo root, with a line and a column when known. The whole repo is `.`. Lines and
-  columns count from 1. A column needs a line, and `.` takes no line.
+- **Place** says what kind of place it is. See the next section.
 - A blank message or hint, or a bad place, is a bug in the reporting code. The effect dies with a schema error that
   names the field, and nothing is reported.
 - The service's own method takes only what `report` hands it, so a provider reads every field but no caller can skip
   `report`.
+
+## Say where
+
+A place is one of four kinds, told apart by `_tag`. An agent reads the tag and the fields. A person reads the text
+form, which `Diagnostic.formatPlace` gives.
+
+```ts
+import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
+
+// A file in the repo: a path from the repo root, with a line and a column when known. The whole repo is ".".
+const repo = { _tag: "repo", path: "docs/setup.md", line: 12 };
+
+// A file under the home folder: starts with "~/" or "$NAME/". A login name is never printed.
+const home = { _tag: "home", path: "~/.demo/demo.toml", line: 3, column: 1 };
+const variableHome = { _tag: "home", path: "$DEMO_HOME/demo.toml", line: 2 };
+
+// An environment variable, by name. No line and no column.
+const environment = { _tag: "environment", name: "DEMO_INSTANCE_PORT" };
+
+// A command-line flag, by name as typed, with its hyphens. No line and no column.
+const flag = { _tag: "flag", name: "--instance.port" };
+
+Diagnostic.formatPlace(repo); // "docs/setup.md:12"
+Diagnostic.formatPlace(home); // "~/.demo/demo.toml:3:1"
+Diagnostic.formatPlace(variableHome); // "$DEMO_HOME/demo.toml:2"
+Diagnostic.formatPlace(environment); // "environment variable DEMO_INSTANCE_PORT"
+Diagnostic.formatPlace(flag); // "flag --instance.port"
+```
+
+- Lines and columns count from 1. A column needs a line. `.` takes no line.
+- A repo path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash.
+  Its first part does not start with `~` or `$`, and is not a drive such as `C:`, so it never reads as a file outside
+  the repo.
+- A home path is `~/` or `$NAME/` and then good parts. `~` alone, `~login/...`, `${NAME}/...` and an absolute path are
+  refused. `$NAME` is a name a shell can expand.
+- An environment variable's name is a name a shell can expand. A flag's name holds no `=`, no space and no control
+  character, so no value rides along in it.
+- An environment variable and a flag take no line and no column. A line on one is refused, not dropped.
+- A refusal says which rule failed and never repeats the path, since a path may hold a login name.
+- The package reads no home folder and no environment. A place only names where: a reader's own shell expands `~` and
+  `$NAME`.
 
 ## Test what was reported
 
