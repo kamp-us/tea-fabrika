@@ -51,6 +51,8 @@ when to keep going and how to write for a reader who saw none of the work.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
 - A plan that adds a workspace package lists `pnpm-lock.yaml` in its files table, owned by `tests`,
   which writes it with one `pnpm install --offline`.
+- A plan that adds a row to `layer-rules.json` lists `oxlint-plugins/layers.test.ts` in its files table,
+  owned by `tests`, because that test pins every row with its layer.
 - When the plan changes a skill, a rule code checks or could check becomes a check and leaves the
   prose. Only judgment stays in prose.
 - Name each host-only law: one that can only run on the real machine (launchd, the real Electron
