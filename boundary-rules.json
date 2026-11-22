@@ -48,6 +48,10 @@
       "imports": ["next-vitest"],
       "pure": false
     },
+    "kalfa-diagnostics": {
+      "imports": [],
+      "pure": false
+    },
     "kalfa-git": {
       "imports": [],
       "pure": false
@@ -71,6 +75,7 @@
     "kalfa/quality": "kalfa-quality",
     "kalfa/records": "kalfa-records",
     "kalfa/ci": "kalfa-ci",
+    "kalfa/diagnostics": "kalfa-diagnostics",
     "kalfa/git": "kalfa-git"
   },
   "libraryRoots": ["next", "kalfa"],

@@ -72,6 +72,26 @@ describe("Names: each new exported name has a line under ## New names (a new hel
     },
   );
 
+  // Plants: count a test-support file's export, or leave out a product file or a public test entry
+  // (`FooTest.ts`) along with it. The list of test-support files is `node-kinds.json`'s, the one
+  // `pnpm lint:dead` reads.
+  it.prop(
+    "property: an export in a *.test-support.ts file asks for no line, and one in a product file or a FooTest.ts entry still does",
+    { kind: Kind, name: Ident, dir: Schema.Literals(["src", "next/packages/x/src", "kalfa/y/src"]) },
+    ({ kind, name, dir }) => {
+      const patch = hunk([`+${line(kind, name)}`]);
+      const at = (path: string): ReadonlyArray<Patch> => [{ path, patch }];
+
+      expect(Names.added(at(`${dir}/Thing.test-support.ts`))).toEqual([]);
+      expect(Names.refusal("", at(`${dir}/Thing.test-support.ts`))).toBeNull();
+      expect(Names.refusal("", [{ path: `${dir}/Thing.test-support.ts`, patch: null }])).toBeNull();
+      expect(Names.added(at(`${dir}/Thing.ts`))).toEqual([name]);
+      expect(Names.added(at(`${dir}/ThingTest.ts`))).toEqual([name]);
+      expect(Names.refusal("", at(`${dir}/ThingTest.ts`))).toContain(name);
+      expect(Names.added(at(`${dir}/test-support.ts`))).toEqual([name]);
+    },
+  );
+
   // vector: export lines as this repo writes them, from Queue.ts, Arm.ts and PullRequests.ts.
   it("vector: a declaration gives its name, an export list gives each name or alias, and the rest give none", () => {
     expect(Names.exported('export const REQUIRED = "ci-required";')).toEqual(["REQUIRED"]);

@@ -5,11 +5,12 @@
 // through its module: `Names.refusal(...)`.
 import { Array as Arr, Option, String as Str, pipe } from "effect";
 
+import kinds from "../../../../../node-kinds.json" with { type: "json" };
 import type { Patch } from "./PullRequests.ts";
 
 /**
- * A file whose exports are names: code, no test and no fixture. A test's exports are its own, and a
- * fixture is a toy project's code, data to the tests that read it (AGENTS.md).
+ * A file whose exports are names: code, no test, no test support and no fixture. A test's exports are
+ * its own, and a fixture is a toy project's code, data to the tests that read it (AGENTS.md).
  */
 const CODE = /\.(?:[cm]?ts|tsx|[cm]?js)$/;
 
@@ -17,7 +18,19 @@ const TEST = /\.test\.[cm]?[jt]sx?$/;
 
 const FIXTURE = /(?:^|\/)fixtures\//;
 
-export const isCode = (path: string): boolean => CODE.test(path) && !TEST.test(path) && !FIXTURE.test(path);
+/**
+ * A test-support file's exports are the tests' own, so no caller of the code meets them. What counts
+ * as one is `node-kinds.json`'s `test-support-module` group, the list the dead-code check
+ * (`pnpm lint:dead`) reads, so both checks agree. Only that group: a public test entry such as
+ * `RepositoryTest.ts` is a name callers meet and stays counted.
+ */
+const TEST_SUPPORT = Arr.map(kinds.testSupportFilePatterns["test-support-module"], (pattern) => new RegExp(pattern));
+
+export const isCode = (path: string): boolean =>
+  CODE.test(path) &&
+  !TEST.test(path) &&
+  !FIXTURE.test(path) &&
+  !Arr.some(TEST_SUPPORT, (support) => support.test(path));
 
 const DECLARED =
   /^export\s+(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:(?:const|let|var|class|interface|type|enum|namespace)\s+|function\s*\*?\s*)([A-Za-z_$][\w$]*)/;

@@ -46,11 +46,18 @@ when to keep going and how to write for a reader who saw none of the work.
 - Laws use generated inputs or a reason label.
   Ask of each law: lint, type or test? A shape check's cell says `lint` or `type`. Give each law
   the plant that should turn it red.
+- Where a generator must reach several classes of input, list them under `## Generators`, each
+  with a letter id such as `(k)`. A class is an id, never a plain sentence: nothing checks a
+  sentence was reached. Each id gets a plant in a laws row's Plant cell, a wrong rule in product
+  code that a generator missing that class would let pass: "trim the body, (a) red".
+  `plancheck.sh --draft` refuses an id that no Plant cell names.
 - When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
   Inspect every named output, including encoded URLs, and plant a leak into each.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
 - A plan that adds a workspace package lists `pnpm-lock.yaml` in its files table, owned by `tests`,
   which writes it with one `pnpm install --offline`.
+- A plan that adds a row to `layer-rules.json` lists `oxlint-plugins/layers.test.ts` in its files table,
+  owned by `tests`, because that test pins every row with its layer.
 - When the plan changes a skill, a rule code checks or could check becomes a check and leaves the
   prose. Only judgment stays in prose.
 - Name each host-only law: one that can only run on the real machine (launchd, the real Electron
