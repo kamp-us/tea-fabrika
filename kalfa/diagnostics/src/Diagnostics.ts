@@ -8,14 +8,25 @@
 import { Context, Effect, Schema } from "effect";
 import * as Diagnostic from "./Diagnostic.ts";
 
+// A reported diagnostic that came through `report`: its code was declared with `make`, and its fields passed
+// `Reported`. The brand is declared, never made: no value outside this file can carry it, and it adds nothing at
+// run time, so the value is a plain `Reported`. Neither name is exported.
+declare const checked: unique symbol;
+
+type Checked = Diagnostic.Reported & { readonly [checked]: true };
+
 /**
  * Service that takes each diagnostic a package reports.
+ *
+ * **Details**
+ *
+ * The method takes only what `report` hands it, so no caller can skip `report`. A provider reads every field of a `Diagnostic.Reported`, and its function may be written over that type.
  *
  * @category services
  */
 export class Diagnostics extends Context.Service<
   Diagnostics,
-  { readonly report: (diagnostic: Diagnostic.Reported) => Effect.Effect<void> }
+  { readonly report: (diagnostic: Checked) => Effect.Effect<void> }
 >()("@kalfa/diagnostics/Diagnostics") {}
 
 /**
@@ -34,7 +45,7 @@ export type Fields = Omit<typeof Diagnostic.Reported.Encoded, "code">;
  *
  * **Details**
  *
- * The report is checked as a whole before the service sees it. A blank message or hint, or a bad place, is a bug in the reporting code and not a condition a caller can handle, so the effect dies with the SchemaError that names the field, and nothing is reported.
+ * The report is checked as a whole before the service sees it, and the service takes nothing that did not come through here. A blank message or hint, or a bad place, is a bug in the reporting code and not a condition a caller can handle, so the effect dies with the SchemaError that names the field, and nothing is reported.
  *
  * **Example** (Reporting a diagnostic)
  *
@@ -52,7 +63,7 @@ export type Fields = Omit<typeof Diagnostic.Reported.Encoded, "code">;
  *
  * @category reporting
  */
-export const report = Effect.fn("Diagnostics.report")(function* (
+export const report = Effect.fn("diagnostics.report")(function* (
   declared: Diagnostic.Declared,
   fields: Fields,
 ): Effect.fn.Return<void, never, Diagnostics> {
@@ -60,9 +71,13 @@ export const report = Effect.fn("Diagnostics.report")(function* (
     Effect.orDie,
   );
 
-  yield* Effect.annotateCurrentSpan({ code: reported.code, severity: reported.severity });
+  yield* Effect.annotateCurrentSpan({
+    "kalfa.diagnostics.code": reported.code,
+    "kalfa.diagnostics.severity": reported.severity,
+  });
 
   const diagnostics = yield* Diagnostics;
 
-  yield* diagnostics.report(reported);
+  // SAFETY: the one place the brand goes on. The code came from a Declared, and the fields just passed Reported.
+  yield* diagnostics.report(reported as Checked);
 });

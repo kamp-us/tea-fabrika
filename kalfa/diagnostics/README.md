@@ -50,6 +50,8 @@ const found = Diagnostics.report(UnknownSetting, {
   columns count from 1. A column needs a line, and `.` takes no line.
 - A blank message or hint, or a bad place, is a bug in the reporting code. The effect dies with a schema error that
   names the field, and nothing is reported.
+- The service's own method takes only what `report` hands it, so a provider reads every field but no caller can skip
+  `report`.
 
 ## Test what was reported
 
