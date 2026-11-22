@@ -69,3 +69,8 @@ _Avoid_: Subscription, watch, poll, listen
 Reads and appends that happen as one: nothing else is kept between them, and the appends land
 together or not at all.
 _Avoid_: Turn, transact, atomic (as a name), batch
+
+**Remote ledger**:
+The ledger as a client reaches it over a connection: append, read, wait and listing streams, and
+no transaction.
+_Avoid_: Far ledger, client ledger, proxy
