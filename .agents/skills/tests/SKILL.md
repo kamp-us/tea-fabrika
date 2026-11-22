@@ -170,7 +170,9 @@ These hold in every tests round, so the brief does not repeat them.
 - **Report** for a reader who saw none of the work, the answer first: every planned law written,
   yes or no. Then each law's exact title, file and how it is red now (the failure's first line);
   each plant and its result; what the build must export; any gap in the plan; anything that could
-  not run here and why; each check's result; and the new head. End with one line:
+  not run here and why; each check's result; and the new head. When the plan has a
+  `## Generators` section, add a reach table: one row per class id, the law that reaches it, and
+  that id's plant seen red. An id with no red plant leaves its law not done. End with one line:
   `answer: done <why>`, or `answer: send plan <why>`.
 
 ## Never
