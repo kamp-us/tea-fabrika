@@ -12,6 +12,8 @@ with a reason.
 - **An adapter is an entry point of the package whose interface it implements,** named for what it
   adapts to, such as `@kalfa/ledger/cloudflare` ([0048](../.kalfa/decisions/0048-each-adapter-is-an-entry-point.md)).
 - **No import cycles.** If two packages need each other, the shared part is a third package. Packages import each other in one
-  ranked order: the ledger sits below Program. Diagnostics ranks below Configuration, and Configuration below CLI.
+  ranked order: the ledger sits below Program, and Markdown sits below Records, which reads and writes its records' frontmatter
+  through it ([0087](../.kalfa/decisions/0087-a-record-is-data-on-top-and-free-text-below.md)).
+  Diagnostics ranks below Configuration, and Configuration below CLI.
 - **Keep the import graph small.** Each new edge needs a reason. Fewer edges keep each package
   usable alone.
