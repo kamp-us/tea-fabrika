@@ -14,7 +14,8 @@ One person who belongs to a project, acting through keys of kind `human`.
 _Avoid_: person, user, account, member
 
 **Client**:
-A browser tab, app window, agent bridge or a machine that runs tasks, signed in with its own key.
+A browser tab, app window, agent bridge, a machine that runs tasks, or the `kalfa` command on a device, signed in
+with its own key.
 _Avoid_: who, session, connection, user
 
 **Client key**:
