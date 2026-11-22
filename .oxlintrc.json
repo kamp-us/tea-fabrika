@@ -4493,10 +4493,14 @@
           }
         ]
       },
-      "excludeFiles": ["kalfa/config/src/**/*.test.ts", "kalfa/config/src/TomlParser.ts"]
+      "excludeFiles": [
+        "kalfa/config/src/**/*.test.ts",
+        "kalfa/config/src/**/*.test-support.ts",
+        "kalfa/config/src/TomlParser.ts"
+      ]
     },
     {
-      "files": ["kalfa/config/src/**/*.test.ts"],
+      "files": ["kalfa/config/src/**/*.test.ts", "kalfa/config/src/**/*.test-support.ts"],
       "rules": {
         "eslint/no-restricted-imports": [
           "error",
