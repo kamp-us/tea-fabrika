@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Twenty exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, Diagnostics, CLI, Code quality, Telemetry and Agents. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Twenty-one exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, Diagnostics, CLI, Code quality, Telemetry, Agents and Markdown. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -43,6 +43,8 @@ moves the line here if it does.
 - **Tracker** (`next/programs/inbox/GLOSSARY.md`): tickets, plans and asks as a person sees them.
 - **Records** ([`kalfa/records/GLOSSARY.md`](../../kalfa/records/GLOSSARY.md)): the docs a repo's
   agents read: each record kind, where it lives and what goes in it.
+- **Markdown** ([`kalfa/markdown/GLOSSARY.md`](../../kalfa/markdown/GLOSSARY.md)): a Markdown file as a
+  thing code reads and writes: its frontmatter, its body, and the body as a tree.
 - **Clients and Frame** (`next/packages/tuval/GLOSSARY.md`): the app side: how clients reach the
   brain, and the window a person sees.
 - **Delivery** ([`kalfa/delivery/GLOSSARY.md`](../../kalfa/delivery/GLOSSARY.md)): getting a change request onto
@@ -197,6 +199,8 @@ words are ours. The client names no operation: each entry point declares the Git
 - **Clients and Frame speak to Program** over a published protocol, and show what Tracker and
   Pipeline say.
 - **Records talk about every context** and translate nothing.
+- **Records reads and writes a record through Markdown.** Markdown knows the file's parts; what a record's
+  data means is Records'.
 - **CLI is the edge of every kalfa package that has a subcommand.** Each package's subcommand speaks its own
   context's words; CLI owns only how it is found, named, and how it ends. A flag (Configuration) is still
   Configuration's word.
