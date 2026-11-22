@@ -104,5 +104,5 @@ A rule that a file has at most a number of lines. Which files, and the number, a
 _Avoid_: map size, line cap, length check
 
 **Diagnostic**:
-What a rule reports about one place in the code. CLI's word.
+What a rule reports about one place in the code. Diagnostics' word.
 _Avoid_: finding, violation, lint error, warning
