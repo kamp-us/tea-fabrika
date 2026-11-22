@@ -79,7 +79,7 @@ A human getting back in after losing every device: by the printed sheet, by emai
 _Avoid_: reset, restore, a new project
 
 **Passkey**:
-A browser's own key of kind `human`, unlocked by the human each time it is used. A synced passkey counts, and its grant records whether it is backed up.
+A browser's own key of kind `human`, unlocked by the human each time it is used. A synced passkey counts, and its grant records whether it is backed up. It is also what gives presence.
 _Avoid_: WebAuthn key, security key
 
 **Recovery sheet**:
@@ -98,8 +98,3 @@ _Avoid_: connect, bind, proof
 Proof that a human was there and approved one message, given with a passkey. An app asks for it only on the acts
 its own rules name.
 _Avoid_: confirmation, second factor, step-up, sudo
-
-**Passkey**:
-A key a human holds on a device or a hardware key, which signs only after a touch or a check of the human. It
-proves presence; it never signs a client in.
-_Avoid_: security key (one kind of holder), biometric, token
