@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749 and 1806, 0063, 0047; body 251024fe717f
+Approved by the lead agent, builds issues 1749, 1806 and 1839, 0063, 0047; body 43e1842605bd
 Plancheck-Version: 3
 
 # Plan: declare a setting with a pipe, group it, and read it from the files
@@ -11,8 +11,10 @@ This is the kalfa packages, `kalfa/config`, new work. It is the first build tick
 A program declares each setting once with a pipe, puts its settings in a group, and reads them by
 yielding the group. The group's layer starts it: the repo's minimum version, then each file whole,
 then each value by precedence (environment variable, repo configuration, user configuration,
-default), with the value's origin kept. The new API sits beside today's twelve entry points, which
-keep working and keep their callers. One pull request, about 640 product lines.
+default), with the value's origin kept. A setting's value is plain data only: text, numbers,
+booleans, and arrays and records of those, branded or not. Anything else does not compile, and each
+start hands out its own deep-frozen copy. The new API sits beside today's twelve entry points, which
+keep working and keep their callers. One pull request, about 700 product lines.
 
 ```ts
 // The whole idea, a sketch. Nothing here was type-checked.
@@ -87,6 +89,20 @@ Read, unless marked "from memory".
 - **git, cargo (from memory).** A repo file and a user file, with environment variables on top. Both
   only warn on an unknown key. We stop the start instead, as the protocol decided.
 
+On plain data only (Amendment 1):
+
+- **Elm (from memory).** Flags may only be plain values: `Int`, `Float`, `String`, `Bool`, `Maybe`,
+  lists, arrays, tuples, records, or a raw JSON value to decode. A JavaScript `Date` given as a flag
+  fails at `init`. That is our rule, with the same split: the type says what may come in, and a check
+  at the boundary refuses what slipped past it.
+- **Erlang/OTP (from memory).** An application's environment holds terms, and every term is
+  immutable, so a value one reader changes cannot exist. JavaScript has no such guarantee for a
+  `Date` or a `Map`, so we keep the values to the kinds `Object.freeze` can make immutable.
+- **Effect 4.1.3, read.** `Schema.Json` is the same idea as a type (null, numbers, booleans,
+  strings, arrays and objects of those). `Schema.DurationFromString` and `Schema.URLFromString`
+  decode text into a `Duration` or a `URL`, which is how a caller turns a text setting into one where
+  it is read. Effect has no deep freeze.
+
 ## The shape
 
 ### Declaring a setting
@@ -110,7 +126,11 @@ export interface Setting<N extends string, A, L extends boolean = false> extends
 export type Any = Setting<string, any, boolean>
 export type Type<S extends Any> = S extends Setting<string, infer A, boolean> ? A : never
 
-export const make: <const N extends string, C extends Schema.Codec<any, unknown>>(name: N, schema: C) => Setting<N, C["Type"]>
+// The schema must decode to plain data (see "Plain data only" below), or the call does not compile.
+export const make: <const N extends string, C extends Schema.Codec<any, unknown>>(
+  name: N,
+  schema: PlainSchema<C>,
+) => Setting<N, C["Type"]>
 
 // Each combinator gives back the same type it got, so the order in the pipe never matters.
 export const withDefault: <S extends Any>(value: Type<S>) => (self: S) => S   // S comes from the pipe
@@ -123,6 +143,139 @@ export const live: <N extends string, A>(self: Setting<N, A, false>) => Setting<
 
 A `Setting` is not an Effect and cannot be yielded. It is read only through its group, so nothing
 can read it from the environment alone and skip the files.
+
+### Plain data only
+
+The owner's rule (ticket 1839's last comment): a setting's schema must decode to plain data, which
+is text, numbers, booleans, and arrays and records of those, branded or not. Why: the language cannot
+freeze the inside of a `Date` or a `Map`, and a class instance default was one object shared by every
+start, so a write in one start was read by the next. Configuration's protocol says no setter reaches
+a caller; with plain data only, `Object.freeze` can hold that all the way down.
+
+```ts
+// Sketch: added to kalfa/config/src/Declaration.ts. A trial on this branch's head type-checked this
+// shape with effect 4.1.3 and the package's tsconfig. Since then `null` left the first plain line
+// and the message's wording changed, so the build checks it again. `Brand` is `import type * as
+// Brand from "effect/Brand"`.
+
+// Whether two types are the same type, not only assignable one way.
+type Same<A, B> = (<X>() => X extends A ? 1 : 2) extends <X>() => X extends B ? 1 : 2 ? true : false
+
+// Whether `T` was met before on this path, so a recursive type is checked once and not forever.
+type Met<Seen, T> = true extends (Seen extends unknown ? Same<Seen, T> : never) ? true : false
+
+/** The parts of a value's type that are not plain data, or `never` when all of it is. */
+export type NotPlain<T, Seen = never> = 0 extends 1 & T
+  ? T                                                     // `any` says nothing, so it is refused
+  : Met<Seen, T> extends true
+    ? never                                               // a recursive type, already being checked
+    : T extends string | number | boolean
+      ? never
+      : T extends Brand.Brand<any>
+        ? NotPlain<Brand.Brand.Unbranded<T>, Seen>        // a brand is judged by what it brands
+        : T extends ReadonlyArray<infer E>
+          ? NotPlain<E, Seen | T>
+          : T extends { readonly [key: string]: unknown } // a class or an interface has no index signature
+            ? { [K in keyof T]-?: NotPlain<T[K], Seen | T> }[keyof T]
+            : T                                           // Date, Map, Duration, a Schema class, null, undefined: named whole
+
+/** What a caller reads in the compiler's message: the part that is not plain data. */
+export interface NotPlainData<A> {
+  readonly "a setting's value must be plain data: text, numbers, booleans, and arrays and records of those": A
+}
+
+/** The schema as given when its value is plain data; else a type no schema meets, naming the part. */
+export type PlainSchema<C extends Schema.Codec<any, unknown>> = [NotPlain<C["Type"]>] extends [never]
+  ? C
+  : C & NotPlainData<NotPlain<C["Type"]>>
+
+export const make: <const N extends string, C extends Schema.Codec<any, unknown>>(
+  name: N,
+  schema: PlainSchema<C>,   // was: schema: C
+) => Setting<N, C["Type"]>
+```
+
+`withDefault` does not change: its type comes from the setting in the pipe, so a default is plain
+data too unless it is cast. The three types are exported from `Declaration.ts` (so `Setting.NotPlain`
+and so on), because `make`'s public signature names them and the archive's declarations need them.
+
+**What a caller sees.** Two lines at the schema argument, the second naming the part that is not
+plain data, even when it is deep inside. From the trial, with the wording above put in:
+
+```text
+// Setting.make("delivery.since", Schema.Date)
+error TS2345: Argument of type 'Date' is not assignable to parameter of type 'Date & NotPlainData<Date>'.
+  Property '"a setting's value must be plain data: text, numbers, booleans, and arrays and records of those"' is missing in type 'Date' but required in type 'NotPlainData<Date>'.
+
+// Setting.make("git.limits", Schema.Struct({ commits: Count, refs: Count, time: Schema.Duration }))
+error TS2345: Argument of type 'Struct<{ readonly commits: Int; readonly refs: Int; readonly time: Duration; }>' is not assignable to parameter of type 'Struct<{ readonly commits: Int; readonly refs: Int; readonly time: Duration; }> & NotPlainData<Duration>'.
+  Property '"a setting's value must be plain data: text, numbers, booleans, and arrays and records of those"' is missing in type 'Struct<{ ... }>' but required in type 'NotPlainData<Duration>'.
+```
+
+A bare `Schema.Duration` reads the same way with `Duration` on both sides. The other refusals name
+`ReadonlyMap<string, number>`, `ReadonlySet<string>`, the class's name, `Utc` (a `DateTime.Utc`),
+`URL`, `bigint`, `null`, `undefined`, `unknown` and `any`.
+
+**What compiles and what does not.**
+
+| Compiles | Does not compile |
+|---|---|
+| `String`, `Number`, `Boolean`, `Literals`, `NumberFromString` (its value is a number) | `Date`, `DateTimeUtc`, `Duration`, `URL`, `BigInt` |
+| a branded string, a branded number, a branded record | `ReadonlyMap`, `ReadonlySet`, a `Schema.Class` instance |
+| `Array`, `Tuple`, `Record(String, Number)`, a `Union` of `Struct`s | `Null`, `NullOr(String)`, `Option(String)`, `Unknown`, `Any` |
+| a `Struct` with `Schema.optionalKey` | a `Struct` with `Schema.optional`, whose value may be `undefined` |
+| a recursive tree written as a `type`, and two `type`s that refer to each other | a `Date` in an array of arrays, in nested records, in a recursive type |
+
+Two costs, both chosen. A type written as an `interface` (`Schema.Opaque` included) is refused,
+because an interface has no index signature and the type cannot tell it from a class; the caller
+writes it as a `type`. And `Schema.optional` is refused, because `undefined` is not plain data and no
+file or variable can write it; `Schema.optionalKey` is the spelling for a key that may be missing.
+
+**A cast is refused at group make.** A cast can still put a class instance into a default, and
+`Schema.is` does not catch it: `Schema.is(Record(String, Number))` accepts a `Map`, and a `Struct`
+check accepts a `Date` that carries its keys. So `SettingGroup.make` refuses a default that is not
+plain data all the way down, with its other refusals, before the "default its schema refuses" check,
+so the message says what is wrong:
+
+```text
+Settings cannot be declared: delivery.since has a default that is not plain data (text, numbers, booleans, and arrays and records of those).
+```
+
+**What `internal/frozen.ts` may now assume.** The walk stays one function, and its job changes from
+"freeze what you can" to "copy and freeze plain data, or say it is not":
+
+```ts
+// Sketch: kalfa/config/src/internal/frozen.ts after this amendment.
+/** Plain data as it is at run time: what every setting's value is. */
+export type Plain = string | number | boolean | ReadonlyArray<Plain> | { readonly [key: string]: Plain }
+
+/**
+ * A deep-frozen copy of a value, or none when some part of it is not plain data: a string, a number,
+ * a boolean, an array whose prototype is Array.prototype, or an object whose prototype is
+ * Object.prototype or null, each part checked all the way down.
+ */
+export const frozen: (value: unknown) => Option.Option<Plain>
+```
+
+- `SettingGroup.make` refuses a default whose `frozen` is none. That walk at make is the only
+  extra cost, once per module load.
+- The start calls `frozen` on every value it hands out, as the branch does now (start.ts line 337).
+  For a default it is always some, since make checked it. For a value decoded from a file or a
+  variable it is some too: a schema whose type is plain decodes into plain objects and arrays. Only a
+  schema cast to lie about its type can decode something else, and then the start dies (a defect,
+  not a `SettingsError`, since the program's author made it and no user can fix it), with the message
+  `Settings cannot be declared: <name>'s schema gives a value that is not plain data. Only a cast
+  schema can do that.` It never hands the value out.
+- **The pass-through branch goes.** Today, "anything that is not a plain object or an array is kept
+  as it is" (`frozen.ts` line 27). For any setting that compiles without a cast it is unreachable:
+  make checks every default, and a plain schema decodes only plain data. It is not kept as a
+  fallback, because handing a `Date` out as it is would bring back the shared-object fault; it is
+  replaced by the none answer above. Text, numbers and booleans still come back as they are, since
+  they are immutable already.
+
+A length of time or an address is declared as text and decoded where it is read: the README gets
+one short example (see Files). About sixteen drafted settings are of that kind, which the owner
+accepted. A shared decoder for durations is its own ticket, not this one.
 
 ### Grouping and reading
 
@@ -182,8 +335,9 @@ export class SettingsError extends Schema.TaggedError<SettingsError>()("Settings
 - **`SettingGroup.make` throws an `Error` at module load**, as today's `Setting.group` does, for: an
   app name that is not one lowercase word; a setting name segment that is not a lowercase letter or
   digit followed by lowercase letters, digits and hyphens; two settings with one field; two with one
-  environment name; a name and its own table; a default its schema refuses; no description; and a
-  name that is `<app>-version` or whose variable is `<APP>_HOME`.
+  environment name; a name and its own table; a default that is not plain data (checked before the
+  next one); a default its schema refuses; no description; and a name that is `<app>-version` or
+  whose variable is `<APP>_HOME`.
 
 ### The start
 
@@ -212,8 +366,12 @@ export class SettingsError extends Schema.TaggedError<SettingsError>()("Settings
    first source that holds the key. A value present but refused is `invalid` naming its origin,
    and never falls back to the default. No value and no default is `missing`, naming the setting,
    its variable and its files.
-6. Make the values: a restart setting's value as it is, a live setting's value as a `Live` over a
-   `SubscriptionRef` the layer owns. No setter reaches a caller. Keep the origins beside them.
+6. Make the values. Each value is first made into its own deep-frozen copy with `frozen`, the
+   default included, so the declaration's own default is never frozen and never handed out, and no
+   reader's write reaches another reader or a later start. A restart setting's value is that copy, a
+   live setting's value is a `Live` over a `SubscriptionRef` the layer owns, holding that copy. No
+   setter reaches a caller. Keep the origins beside them, each frozen. A value `frozen` answers none
+   for is a defect, as "Plain data only" says.
 
 Every message ends with `<app> did not start.` and says "user configuration", never "person" or
 "instance". Wording sketch, not pinned:
@@ -267,6 +425,23 @@ in a file outside its file scope and the layer fails with one `SettingsError`: `
 `demo-version = "2.0.0"` on line 1 of the repo configuration, the layer fails at step 2 with
 `reason: "version"`, before step 3, whatever else either file holds.
 
+A table default, traced (Amendment 1). `pair = Setting.make("t0dflt.dpair", Pairing)` with
+`withDefault(defaults.pair)`, where `defaults.pair` is `{ a: 1, b: 2 }`, and no source sets it.
+
+1. `SettingGroup.make` walks `defaults.pair`: an object of `Object.prototype` holding two numbers,
+   so `frozen` is some and the group makes. The walk's copy is dropped.
+2. A start resolves the default, `{ a: 1, b: 2 }`, origin `{ _tag: "default" }`. `frozen` makes a
+   new object, freezes it and hands that out. `defaults.pair` is not that object, and
+   `Object.isFrozen(defaults.pair)` stays false.
+3. A reader's `values.dpair.a = 9` throws a `TypeError` (modules are strict) and does not compile
+   either (`readonly`). The next reader in the same start reads `a: 1`.
+4. A second start makes its own copy, again from the unchanged `defaults.pair`.
+
+And a cast: `Setting.make("delivery.since", Schema.String).pipe(Setting.withDefault(new Date(0) as
+unknown as string), …)`. `Schema.is(Schema.String)` would refuse it anyway, but the plain check runs
+first, so `SettingGroup.make` throws `Settings cannot be declared: delivery.since has a default that
+is not plain data (…)` at module load, and no start ever runs.
+
 ## What fact is lost if it is not recorded now
 
 Each value's origin. It exists only at the start, when the layer sees which source held the key.
@@ -284,6 +459,7 @@ disk, so nothing else is lost.
 | T3, the group needs its layer: `yield* group` puts `Identifier<App, R>` in the requirements, an Effect that still needs it does not extend `Effect<_, _, never>`, and after `Effect.provide(SettingGroup.layer(group, { version }))` only `FileSystem` and `Path` remain | type | type | make the group a `Config` that reads the current provider (requirements `never`): tsc red | kalfa/config/src/SettingGroup.types.test.ts |
 | T4, what does not compile: a default of the wrong type, `files([])`, `files(["person"])`, `live` on a live setting, and `yield*` of a bare `Setting`, each under `@ts-expect-error` | type | type | type `files` as `(files: ReadonlyArray<string>)`: the `@ts-expect-error` is unused, tsc red | kalfa/config/src/SettingGroup.types.test.ts |
 | T5, the error and the words: the layer's error type is exactly `SettingsError`, its `reason` is the seven literals, and `Setting.File` is exactly `"repo" or "user"` | type | type | add `"person"` to `File`: tsc red | kalfa/config/src/SettingGroup.types.test.ts |
+| T6, plain data only: `Setting.make` compiles with a branded string, a branded record, a `Record(String, Number)`, a `Struct` with an `optionalKey`, a checked-text length of time (the README's form) and a recursive tree written as a `type`; each of `Date`, `ReadonlyMap`, a `Schema.Class`, `DateTimeUtc`, `Duration`, `Null`, `Any`, a `Struct` with `Schema.optional`, a `Date` in nested `optionalKey` records and a recursive type with a `Date` inside is a line under `@ts-expect-error`; `Setting.NotPlain` of `Date` is exactly `Date`, of a struct holding a `Duration` exactly `Duration`, and of a plain record `never` | type | type | (a) type `make`'s schema as `C` again: every refused line compiles, tsc red; (b) drop the brand line: the branded record is refused, tsc red; (c) drop the "met before" check: the recursive tree fails as circular, tsc red; (d) compare with "assignable one way" in place of `Same`: the `Date` in nested records compiles, tsc red; (e) answer `T` whole at the record line: the `Duration` pin fails, tsc red | kalfa/config/src/SettingGroup.types.test.ts |
 | B1, precedence and origin: for generated groups of one to four settings and a generated place for each value (environment, repo, user, several, or none), each value is the first of environment, repo, user that holds it, else its default, and its origin names that variable, that file and line, or default. 100 runs | test | Effect Arbitrary: Placement | (a) chain user before repo: B1 red; (b) take the origin from the last source that holds the key: B1 red | kalfa/config/src/SettingGroup.test.ts |
 | B2, the minimum version first: for generated running and wanted versions, a newer wanted version fails `version` with the repo file and its line, and the user configuration is never read (recorded file calls), even when it does not parse; an older or equal one starts; a value that is not a version fails `invalid`. 100 runs | test | Effect Arbitrary: VersionCase | read the user configuration before the version check: B2 red | kalfa/config/src/SettingGroup.test.ts |
 | B3, one error, in order: given generated faults in the repo file, the user file and the environment at once, the layer fails with exactly one `SettingsError`, and it is the repo file's when it has one, else the user file's, else the environment's. 100 runs | test | Effect Arbitrary: FaultCase | check the user configuration before the repo configuration: B3 red | kalfa/config/src/SettingGroup.test.ts |
@@ -299,19 +475,32 @@ disk, so nothing else is lost.
 | B13, where the user configuration is: with `<APP>_HOME` set it is `$<APP>_HOME/<app>.toml`; else with `HOME` set it is `$HOME/.<app>/<app>.toml`; with neither no user file is read; another app's `<OTHER>_HOME` is never read. 100 runs | test | Effect Arbitrary: HomeCase | read `HOME` before `<APP>_HOME`: B13 red | kalfa/config/src/SettingGroup.test.ts |
 | B14, a file that is not TOML: a generated broken file, repo or user, fails `syntax` with that file and the parser's line. 100 runs | test | Effect Arbitrary: Broken | report line 0: B14 red | kalfa/config/src/SettingGroup.test.ts |
 | B15, the words: for every generated fault in B3, the message ends with `<app> did not start.` and holds neither `person` nor `instance`. 100 runs | test | Effect Arbitrary: FaultCase | end messages with today's `Files.STOP`: B15 red | kalfa/config/src/SettingGroup.test.ts |
+| B16 [protocol], first property, as on the branch: a started group gives a caller no reference to a live value, and no write to its values, its origins or a `Live` changes what a later reader gets. 100 runs | test | Effect Arbitrary: Tampering | (a) keep the `Live`'s reference in a plain `private` property; (b) leave the values object writable; (c) leave the origins object writable; (d) leave the `Live` itself writable: each B16 red | kalfa/config/src/SettingGroup.test.ts |
+| B16 [protocol], second property, gains one line: no write to a table value, an array value, an origin or the value a `Live` yields changes what a later reader or a later start gets, the declaration's defaults stay equal to what they were, and (new) `Object.isFrozen` is false for each object the declaration holds as a default (`defaults.pair`, `defaults.tags`, `defaults.lpair`) after both starts. 100 runs | test | Effect Arbitrary: Nested | (a) to (e) as on the branch; (f, new) deep-freeze the declaration's own default in place and hand it out: every write still throws and every value still matches, so the law is green today under this plant, and the new `isFrozen` line turns it red | kalfa/config/src/SettingGroup.test.ts |
+| B17, a default that is not plain data is refused at make: for a generated kind (`Date`, `Map`, `Set`, a class instance, `null`, `undefined`, a function) placed at a generated depth of 0 to 2 inside records and arrays, and cast past the type onto a schema whose check accepts it (a `Map` onto `Record(String, Number)`), `SettingGroup.make` throws an `Error` whose message names the setting and says `plain data`; the same group with the plain value in its place makes. 100 runs | test | Effect Arbitrary: NotPlainDefault | (a) drop the plain check: the `Map` passes the schema check and the group makes, B17 red; (b) check only the top level: a `Date` one level down makes a group, B17 red | kalfa/config/src/SettingGroup.test.ts |
+| B17, second property, a cast schema cannot hand out a class instance: a setting whose schema is `Schema.Date` cast to a text schema (any class-valued schema that decodes from TOML will do), with its value in the repo file, makes its group, and the layer dies (a defect, not a `SettingsError`) naming the setting | test | scenario: one cast schema, its value in the repo file | hand the value out as it is when `frozen` answers none: the layer starts, B17 red | kalfa/config/src/SettingGroup.test.ts |
 | R1, the in-memory file system tells the truth: on a real temp folder through `NodeServices`, three cases (no files; a user file with a value on line 2; a repo file with a mistyped key) give the same values, origins and error as the same cases in memory | test | scenario: three cases on a temp folder, then the same three in memory | build the repo path without the `.<app>` folder: R1 red | kalfa/config/src/SettingGroup.integration.test.ts |
 | L1, the new code imports no kalfa package: the existing package rule (`kalfa-config` may import only the test package) holds the new files | lint | lint | import `@kalfa/records/Finding` in `SettingGroup.ts`: `pnpm lint` red | boundary-rules.json |
 | P1, the root entry ships: the installed archive maps `.` to `dist/index.js` and `dist/index.d.ts`, the consumer imports `Setting` and `SettingGroup` from `@kalfa/config` and compiles, and CI keeps a receipt only when its exports hold `.` and the twelve old ones | test | scenario: the packed archive installed outside the workspace, and receipts with and without `.` | drop `.` from the published exports: the package law red; keep a receipt without `.`: the selection law red | kalfa/config/src/Package.integration.test.ts, .github/ci/related-selection.test.ts |
 | O1, today's API is unchanged: today's laws for the old entry points stay green with no edit, after the pure helpers move out of `Files.ts` | test | pinned: today's K1 to K5 laws and the package consumer law, unchanged | (already planted) | kalfa/config/src/App.test.ts, scripts/kalfa-config.test.ts |
 
-**Lint, type or test?** T1 to T5 are shapes the compiler sees: type. L1 is a shape of imports, and
-a rule already holds it: lint. B1 to B15, R1, P1 and O1 are about what a start answers and what an
-archive holds, which no type or lint rule sees: tests. No new lint rule: the "person" word in the
+**Lint, type or test?** T1 to T6 are shapes the compiler sees: type. L1 is a shape of imports, and
+a rule already holds it: lint. B1 to B17, R1, P1 and O1 are about what a start answers and what an
+archive holds, which no type or lint rule sees: tests. Plain data is held twice on purpose: T6 for
+every caller who does not cast, B17 for one who does. B16's new line is a test because only a run
+can see whether the object a caller declared was frozen.
+
+**One existing test changes for T6.** `Pairing` and `Nesting` in
+`kalfa/config/src/SettingGroup.test.ts` (lines 399 and 401) use `Schema.optional`. Their value type
+holds `undefined`, which is not plain data, so `Setting.make` with them stops compiling and B1's
+table-valued law and B16's second property with it. The tests step changes both to
+`Schema.optionalKey`, which says what the laws mean (a key a file may leave out). Decoding is the
+same for every value a file or a default gives them; the trial ran both laws green with the change. No new lint rule: the "person" word in the
 new files' prose is held by T5 for the type and B15 for every message, and the review reads the
 rest. Once 1849 makes the whole package say "user", a word rule over the package becomes worth
 writing; not before, since it would fire on today's files.
 
-**Where they run.** T1 to T5 are judged by the compiler; vitest runs their file too. B1 to B15 run
+**Where they run.** T1 to T6 are judged by the compiler; vitest runs their file too. B1 to B17 run
 on the in-memory file system in `kalfa/config/src/MemoryFiles.test-support.ts`, on every pull
 request. R1 touches a real temp folder, so it is a `.integration.` file: it runs in main's full run,
 and the tests and build steps run it narrowly on the laptop. No stand-in will do for R1, because its
@@ -322,16 +511,18 @@ it does today. No law is host-only: none needs launchd, a signal, a socket or th
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| kalfa/config/src/Declaration.ts | build | 150 | new: `Setting`, `make` and the five combinators, `File`, `Files`, `Any`, `Type` |
-| kalfa/config/src/SettingGroup.ts | build | 170 | new: `make` and its refusals, `layer`, `origins`, `Live`, `Read`, `Values`, `Identifier`, `SettingsError` |
-| kalfa/config/src/internal/start.ts | build | 240 | new: read both files, the minimum version, the whole-file check, the precedence resolve, the values and origins |
+| kalfa/config/src/Declaration.ts | build | 195 | new: `Setting`, `make` and the five combinators, `File`, `Files`, `Any`, `Type`; Amendment 1 adds `NotPlain`, `NotPlainData`, `PlainSchema` and `make`'s `PlainSchema<C>` parameter, about 45 lines |
+| kalfa/config/src/SettingGroup.ts | build | 175 | new: `make` and its refusals, `layer`, `origins`, `Live`, `Read`, `Values`, `Identifier`, `SettingsError`; Amendment 1 adds the plain-data refusal ahead of the schema check, and its line in `make`'s doc comment |
+| kalfa/config/src/internal/start.ts | build | 245 | new: read both files, the minimum version, the whole-file check, the precedence resolve, the values and origins; Amendment 1: a value `frozen` answers none for is a defect |
+| kalfa/config/src/internal/frozen.ts | build | 35 | on the branch: the deep-frozen copy; Amendment 1: `Plain`, and `frozen` answers an `Option`, none for a part that is not plain data, in place of passing it through |
 | kalfa/config/src/internal/document.ts | build | 70 | new: the pure document helpers moved out of `Files.ts` (value at a path, first leaf, located line, shown shape, edit distance) |
 | kalfa/config/src/Files.ts | build | -60 | imports the moved helpers; behavior unchanged |
 | kalfa/config/src/index.ts | build | 12 | new: the root entry, `export * as Setting` and `export * as SettingGroup` |
 | kalfa/config/package.json | build | 8 | `.` in `exports` and in `publishConfig.exports`; the twelve old entries stay |
-| kalfa/config/GLOSSARY.md | build | docs | new terms **Setting group** and **Required setting** |
-| kalfa/config/src/SettingGroup.types.test.ts | tests | tests | T1 to T5, written first |
-| kalfa/config/src/SettingGroup.test.ts | tests | tests | B1 to B15 |
+| kalfa/config/GLOSSARY.md | build | docs | new terms **Setting group** and **Required setting**; Amendment 1: **Setting** says its value is plain data |
+| kalfa/config/README.md | build | docs | Amendment 1: one short section, a length of time or a URL is declared as text and decoded where it is read |
+| kalfa/config/src/SettingGroup.types.test.ts | tests | tests | T1 to T5, written first; Amendment 1: T6 |
+| kalfa/config/src/SettingGroup.test.ts | tests | tests | B1 to B17; Amendment 1: B16's `isFrozen` line, B17, and `Pairing` and `Nesting` on `Schema.optionalKey` |
 | kalfa/config/src/SettingGroup.integration.test.ts | tests | tests | R1 |
 | kalfa/config/src/MemoryFiles.test-support.ts | tests | tests | new: a file system held in memory, with planted read failures; its calls recorded with `Recorder` from `@kampus/vitest` |
 | kalfa/config/src/Package.integration.test.ts | tests | tests | P1: `.` beside the twelve modules, mapped to `dist/index` |
@@ -343,8 +534,43 @@ it does today. No law is host-only: none needs launchd, a signal, a socket or th
 | scripts/kalfa-config.test.ts | tests | tests | O1: no change, stays green |
 | boundary-rules.json | tests | tests | L1: no change, the rule that holds it |
 
-The README stays as it is. It describes today's API, and 1849 rewrites it for the new one. A
-README edit would also run the archive law for no gain.
+The README keeps its description of today's API, which 1849 rewrites for the new one. Amendment 1
+adds one short section after "Declare and load settings", because the plain-data rule is the one
+thing a caller of the new API trips on first. Its text, as the build writes it (the example is
+T6's checked-text case, so the compiler has read it):
+
+````md
+## A setting's value is plain data
+
+A setting made with `Setting.make` from `@kalfa/config` holds plain data only: text, numbers,
+booleans, and arrays and records of those, branded or not. A `Date`, a `Duration`, a `URL`, a `Map`
+or a class does not compile. Declare a length of time or an address as text, and decode it where it
+is read:
+
+```ts
+import { Setting } from "@kalfa/config";
+import { Option, Schema } from "effect";
+
+// Checked when the app starts, so "ten" stops the start with its file and line.
+const Wait = Schema.String.check(
+  Schema.makeFilter(
+    (text: string) =>
+      Option.isSome(Schema.decodeUnknownOption(Schema.DurationFromString)(text)) || "a length of time, as 10 seconds",
+  ),
+);
+
+export const branchWait = Setting.make("delivery.branch-wait", Wait).pipe(
+  Setting.withDefault("10 seconds"),
+  Setting.withDescription("How long a landing waits for its branch."),
+);
+
+// Where it is read: const wait = Schema.decodeSync(Schema.DurationFromString)(values.branchWait)
+```
+
+A URL works the same way, with `Schema.URLFromString` where it is read.
+````
+
+A README edit runs the archive law P1 in main's full run; nothing in P1 reads this text.
 
 ## Existing tools
 
@@ -368,6 +594,16 @@ README edit would also run the archive law for no gain.
 - kalfa/config/src/internal/document.ts: searched for these helpers outside `Files.ts`: none in the
   package, none in Effect (Effect's own "did you mean" is in `effect/cli/internal`, which its
   exports close off). Moved, not copied, so the old and new checks share one copy.
+- `NotPlain`, `NotPlainData` and `PlainSchema` in kalfa/config/src/Declaration.ts (Amendment 1):
+  searched Effect 4.1.3 for a plain-data type. `Schema.Json` is one, and a bound
+  `C extends Schema.Codec<Schema.Json, unknown>` was tried in the trial: it lets `null` in, refuses a
+  branded record, and gives a seven-line message about `annotate` that never names the part. No
+  package in the lockfile has a type that names the part. So a new type, about 45 lines.
+- kalfa/config/src/internal/frozen.ts (Amendment 1 changes it): searched Effect for a deep freeze
+  or a plain-object check. `Predicate.isObject` only says "an object, not an array", and
+  `structuredClone` copies a `Date` and a `Map` without freezing them. None fits, so the branch's
+  own walk stays and answers an `Option`. It is one walk for both jobs, so make and the start can
+  never disagree on what plain data is.
 - kalfa/config/src/index.ts: searched the package for a root barrel: none. Effect's own `index.ts`
   barrels are the shape. It is needed because the dead-exports check counts a module as public only
   when an export target reaches it, and every new function would otherwise be "only called from
@@ -428,7 +664,24 @@ Each picks how the code does what a note already says.
   does not.
 - **The span is `config.layer` with `kalfa.config.app`.** 85% sure, from decision 0063's
   `<package>.<call>` rule. No value goes in a span (B8).
-- **Is this a setting?** No new choice is. The field rule and the order are what the API is. The
+- **`null` and `undefined` are not plain data** (Amendment 1). 85% sure. The owner's list names
+  neither, no file or variable can write either, and `Schema.optionalKey` already says "a key that
+  may be missing". The trial allowed `null`; this plan follows the owner's words and drops it.
+- **The schema parameter is `PlainSchema<C>`, not a bound on `C`.** 85% sure. The trial tried the
+  bound and dropped it: its message never names the part and it refuses a branded record.
+- **One walk, in `frozen.ts`, answers both "is it plain" and "the frozen copy".** 80% sure. Make
+  and the start then share one definition. The walk at make copies and drops the copy; that costs
+  microseconds once per module load.
+- **A decoded value that is not plain data is a defect, not a `SettingsError`.** 75% sure. Only a
+  schema cast to lie about its type gets there, which is the author's bug, as make's throw is. The
+  doubt: a `SettingsError` would show in the same place as the other faults; but no user can fix
+  it, and T3 and T5 keep the layer's error type exactly `SettingsError` with its seven reasons.
+- **An `interface` value type is refused.** 80% sure. The type cannot tell it from a class; a
+  caller writes a `type`. Loosening it later is easy, so it is not a trap.
+- **"Plain data" is said in the Setting entry, not a term of its own.** 75% sure. It is one
+  sentence that defines it where a reader looks first; a separate entry would repeat it.
+- **Is this a setting?** No new choice is. Plain data only is the owner's rule, not a choice a
+  person makes at run time. The field rule and the order are what the API is. The
   two-edit guess is a message detail. The repo folder and the version are given by the app at
   start, and settings are read from those files, so they cannot be settings themselves.
 
@@ -448,6 +701,8 @@ files keep their behavior.
 - The repo file is checked whole before the user file is read.
 - Messages end with `<app> did not start.` and no longer point to a list command.
 - No snapshot is made here (1845), so the start needs no `Digest`.
+- A setting's value is plain data only, and each start hands out its own deep-frozen copy. Today's
+  `Setting.make` takes any schema and hands out the value as decoded.
 
 ## Validation
 
@@ -457,22 +712,28 @@ files keep their behavior.
   run.
 - Build step: the same paths green, `kalfa/config/src/App.test.ts` and
   `.github/ci/related-selection.test.ts` still green, each plant red once.
+- Amendment 1 round: the tests step writes T6, B16's new line and B17, and changes `Pairing` and
+  `Nesting`; it shows B16's new line and B17 red on the branch head. T6 is judged by the compiler
+  run the lead allows in the build brief (`pnpm --filter @kalfa/config typecheck`, one package), as
+  for T1 to T5. The build makes them green and runs each new plant once.
 - The lead runs `--changed origin/main` and one `pnpm typecheck`. P1 runs in main's full run.
 
 ## Size
 
-1. One pull request: about 640 product lines (the start 240, `SettingGroup.ts` 170,
-   `Declaration.ts` 150, the moved helpers 70 less the 60 that leave `Files.ts`, the root and the
-   manifest 20, `related.ts` 3), plus four test files and the consumer edits. It lands whole: the
-   declaration has no reader without the group, and the group has nothing to read without the
-   start.
+1. One pull request: about 700 product lines (the start 245, `SettingGroup.ts` 175,
+   `Declaration.ts` 195, `frozen.ts` 35, the moved helpers 70 less the 60 that leave `Files.ts`,
+   the root and the manifest 20, `related.ts` 3), plus four test files, the consumer edits, and the
+   README and glossary lines. It lands whole: the declaration has no reader without the group, and
+   the group has nothing to read without the start. Amendment 1's part is about 65 of those lines.
 
-About 4 agent hours across the steps, 70% sure. The doubt is the type laws: if `.pipe` drops the
-mark, one send-back to the plan picks a fallback. Budget basis: the monitor plan,
-`.kalfa/quests/watch-PLAN.md`, at about 540 product lines, 6 steps and $40; this one has fewer
-moving parts at run time and more at the type level.
+About 4 agent hours across the first steps, and about 1.5 more for Amendment 1's round, 75% sure.
+The doubt is T6: a schema kind the trial did not try could be refused wrongly, which would send one
+case back. Budget basis: the monitor plan, `.kalfa/quests/watch-PLAN.md`, at about 540 product
+lines, 6 steps and $40. This quest has spent about 11 steps (plan, four test rounds, four build
+rounds, three reviews, give or take one); Amendment 1 adds tests, build and review, and one likely
+send-back.
 
-Estimate: 5 steps, $40
+Estimate: 15 steps, $120
 
 ## Records
 
@@ -482,8 +743,21 @@ Estimate: 5 steps, $40
     namespace.
   - **Required setting**: a setting with no default; the start stops when no source gives it.
     _Avoid_: mandatory setting.
-- No decision record: every call here applies the protocol. None is hard to undo before 1847 moves
-  a caller.
+  - **Setting**, changed by Amendment 1, to read: "One named value an app declares once, with its
+    type, its default and a sentence a person reads. Its value is plain data: text, numbers,
+    booleans, and arrays and records of those. It may hold a secret's name, never a secret's
+    value." Its _Avoid_ line stays.
+- No decision record for the calls above: each applies the protocol, and none is hard to undo
+  before 1847 moves a caller.
+- **Plain data only is owed a decision record, I lean, 70% sure.** The repo's three tests: it is
+  surprising (a reader will ask why `Schema.Duration` cannot be a setting, and may "fix" it by
+  loosening the type, which brings the shared-object fault back); it was a real trade-off (copy and
+  freeze what can be frozen, and write down the rest as a known limit, against plain data only at
+  the cost of about sixteen drafted settings written as text); and it gets harder to undo with each
+  caller, since every length of time is then written as text with a decode at its read. The doubt
+  is "hard to reverse": before 1847 no caller exists, and widening the type later is cheap in code.
+  What settles it: whether the lead counts the drafted settings as callers. The record is the lead's
+  to write, from the owner's comment on 1839; this plan does not write it.
 - No pattern doc yet: `.kalfa/patterns/settings.md` describes today's shape, which stays until
   1849. The new shape gets its doc when its first caller lands.
 
@@ -498,6 +772,14 @@ Estimate: 5 steps, $40
   resolve through `Config`'s string tree) ever disagrees. Today's code does the same and its laws
   pass; B1 and B6 would show a case.
 - Windows, where the home is not `HOME`. Nothing here runs there yet.
+- Whether T6 refuses or lets in a schema kind no one tried: `Schema.declare` with a made-up type, a
+  template literal, `Schema.Enum`, `Schema.TaggedClass` or `ErrorClass`, a very deep recursive type.
+  B17's check at make catches a default that slips in; a decoded value that slips in dies at the
+  start, so a slip is loud, never shared.
+- Whether the trial's plants each turn T6 red on their own. The bugs they stand for were each seen
+  while the trial wrote the type, but no plant was run alone.
+- A TOML date (`since = 1979-05-27`, unquoted) is never a setting's value now; a person writes it
+  quoted. No drafted setting was found that wants one.
 
 ## Open questions
 
@@ -516,5 +798,42 @@ already says.
    repo's own `.kalfa/kalfa.toml` holds `[[records]]` tables on its first lines, so a layer for
    quality's group alone would stop on `records`. 1846 gives `cli` many groups; nothing gives the
    layer many. This needs a ruling before 1847 moves the first caller: a layer over every group of
-   an app, or a check that knows the other groups. Suggested ticket: "Config: one start for every
-   group of an app".
+   an app, or a check that knows the other groups. Filed as
+   [issue 1923](https://github.com/kamp-us/tea-fabrika/issues/1923); out of this ticket.
+
+## Amendment 1
+
+The review of [pull request 1922](https://github.com/kamp-us/tea-fabrika/pull/1922) sent the work
+back a third time on one class of fault, and the owner decided the design question behind it on
+[ticket 1839](https://github.com/kamp-us/tea-fabrika/issues/1839): a setting's value is plain data
+only. The fault, as left at the branch head: a default that is a class instance (`Schema.Date`, a
+`Schema.Class` instance, `Schema.ReadonlyMap`) was handed out as the declaration's own object, so a
+write in one start was read by a later start; and the inside of a `Date` or a `Map` cannot be
+frozen, so readers within one start shared it. `internal/frozen.ts` copied and froze plain objects
+and arrays only.
+
+What changed in this plan, each with its cause:
+
+1. The opening and "Plain data only", a new subsection of "The shape": the type, `make`'s new
+   signature, the compile errors, the refusal at make, and what `frozen.ts` may assume. Cause: the
+   owner's rule.
+2. Grouping's refusals gain "a default that is not plain data", ahead of the schema check. Cause: a
+   cast default slips past the type, and `Schema.is` accepts a `Map` for a record.
+3. The start's step 6 says each value is its own deep-frozen copy and a non-plain decoded value is a
+   defect; `frozen`'s pass-through branch goes. Cause: the branch did this without the plan saying
+   it, and a pass-through would hand a cast `Date` out shared.
+4. Laws: T6 new; B16's two properties written into the table, the second gaining the
+   `Object.isFrozen` line and plant (f); B17 new, two properties; `Pairing` and `Nesting` move to
+   `Schema.optionalKey`. Cause: the reviewer showed no law tells a frozen copy from the
+   declaration's own default frozen in place, and the trial found the one test that the new type
+   stops compiling.
+5. Files: `frozen.ts` and `README.md` get rows, and the glossary row and the line counts change.
+   Cause: the review asked the README to say how a duration or a URL is declared, and the Setting
+   entry to say plain data.
+6. How others do it, Existing tools, Calls taken, departures, Validation, Size, Records and "What
+   this cannot tell us" each gain their lines. The Estimate covers the whole quest now.
+
+Out of scope, each its own ticket or question: a shared decoder for durations in `@kalfa/config`;
+an environment variable that sets a table; the review's two message-wording findings; several groups
+sharing one file ([issue 1923](https://github.com/kamp-us/tea-fabrika/issues/1923)); a settings error
+that carries a diagnostic.
