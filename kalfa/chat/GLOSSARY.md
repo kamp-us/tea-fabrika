@@ -8,7 +8,8 @@ leave, are that app's and not this context's.
 
 **Room**:
 A named place in a chat app where people talk. A chat channel, a direct message and a pull request's comment list are
-each one room. A room's name says which provider it is in.
+each one room. A room's name says which provider it is in: written as text, it is the provider's name, a colon, then
+the provider's own id.
 _Avoid_: channel, chat, conversation, discussion, a thread for the whole talk
 
 **Thread**:

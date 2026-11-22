@@ -91,8 +91,9 @@ permission.
 _Avoid_: ack, accept, claim
 
 **Paging rule**:
-The setting that says, for one severity, who is paged, in what order, how long to wait before paging the next one, and
-how many times to go through the list. Paging stops at the first acknowledgment.
+What a person sets in the app for one severity: the room, who is paged, in what order, how long to wait before paging
+the next one, and how many times to go through the list. It is a fact on the Ledger and not a setting. Paging stops at
+the first acknowledgment.
 _Avoid_: escalation policy, on-call schedule, rota
 
 ### An incident's steps
