@@ -122,21 +122,30 @@ a reader   -> reads the home; git log is its history; the comment or the record 
 - **Breaks today:** `AGENTS.md` is 39,103 bytes; at 32 KiB a reader stops at line 389, before
   "How to write here" (`AGENTS.md:396`). With `next/AGENTS.md` it is 49,516 bytes.
 
-## R7: a byte-for-byte check guards only bytes a person approved
+## R7: a byte check is only for text that must not change
 
 - **Kind:** taste.
-- **Means:** A check that compares exact bytes or a hash stays only where a person approved those
-  exact bytes (a plan the lead approved, a diff a reviewer saw) or where a copy must stay faithful
-  (a patch's quoted upstream lines). Anything else compares parsed values or the formatter's
-  output. Each such check says in its header what it guards.
+- **Means:** A check that compares exact bytes or a hash is only for text that must not change
+  between two moments, and it is there to notice that something happened to it: a signature, a
+  copy checked after it moved between systems, a file code made compared with what its maker makes
+  now. A file a person writes is meant to change, so no check demands an exact sentence in one,
+  and none hashes it to prove a yes. What code must understand in such a file is data with a
+  shape, such as a record's frontmatter, and a yes names a thing that cannot change, such as a
+  changeset.
 - **Why:** a Google compiler check should "produce no effective false positives (the analysis
   should never stop the build for correct code)" ([CACM 2018](https://6826.csail.mit.edu/2020/papers/google-analysis-cacm.pdf)).
-  A hash of bytes nobody approved stops the build for a blank line.
-- **Example:** `.agents/skills/lead/scripts/box.sh:102` refuses a plan whose body hash is not the
-  `plan-sha256` the lead approved; the product does the same for a ticket.
+  A hash of text a person keeps editing stops the build for a blank line. Reading Markdown and
+  writing it back does not give the same bytes either: "complete roundtripping is impossible"
+  ([mdast-util-to-markdown](https://github.com/syntax-tree/mdast-util-to-markdown#security)).
+- **Example:** Delivery's approval is "A yes given on one changeset" (`kalfa/delivery/GLOSSARY.md`),
+  so the yes names a commit and no text is hashed; `oxlint-plugins/format.ts --check` compares a
+  file with what the formatter makes now.
 - **Held by:** the review.
-- **Breaks today:** `.agents/skills/lead/scripts/skillscheck.sh:18-19` require exact sentences in
-  several skills, which keeps copies alive.
+- **Breaks today:** `.agents/skills/lead/scripts/skillscheck.sh:18-40` and `:99-148` require about
+  40 exact sentences in skills, which keeps copies alive; `.agents/skills/lead/scripts/box.sh:102`
+  hashes a plan's typed text. Both are older tooling, and each goes when its tool is rebuilt on
+  the kalfa packages. The full list is `.kalfa/research/byte-for-byte-checks.md` on branch
+  `research/byte-for-byte-checks`.
 
 ## R8: a finding seen twice becomes a check, measured before it blocks
 
