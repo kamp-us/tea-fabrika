@@ -93,3 +93,13 @@ _Avoid_: alias, identity, login, user
 **Link**:
 The fact that an outside account belongs to a human, made when the human authorizes our app on that site and the site tells us the account's id. A link never lets a key in.
 _Avoid_: connect, bind, proof
+
+**Presence**:
+Proof that a human was there and approved one message, given with a passkey. An app asks for it only on the acts
+its own rules name.
+_Avoid_: confirmation, second factor, step-up, sudo
+
+**Passkey**:
+A key a human holds on a device or a hardware key, which signs only after a touch or a check of the human. It
+proves presence; it never signs a client in.
+_Avoid_: security key (one kind of holder), biometric, token
