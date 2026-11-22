@@ -210,6 +210,18 @@ for path, sections in rules.items():
             for pattern in lead_only:
                 if re.search(pattern, body, re.I):
                     bad.append(f"{path}: lead-only step in {title}: {pattern}")
+# Ticket 1248: a skill's prose may not name a script that is not there (a reviewer once hit MODULE_NOT_FOUND on a
+# deleted one). A repo path to a .sh, .ts, .mjs or .py under .agents/skills/ must exist. A path with a placeholder
+# (<name>, {a,b}, *, $VAR) names a family and is skipped. Fences count like prose, so an example of what not to do
+# writes its path with a placeholder. A tree with no skill scripts folder is a links-only tree, as above.
+script_path = re.compile(r"\.agents/skills/[^\s`'\"()\[\],;]*?\.(?:sh|ts|mjs|py)(?![\w/-]|\.\w)")
+if any(sources.glob("*/scripts")):
+    for doc in sorted(sources.rglob("*.md")):
+        for number, line in enumerate(doc.read_text().splitlines(), 1):
+            for named in script_path.finditer(line):
+                path = named[0]
+                if not re.search(r"[<>{}*$]", path) and not (root / path).is_file():
+                    bad.append(f"{doc.relative_to(root)}:{number}: names a script that is not there: {path}")
 for message in bad:
     print(message, file=sys.stderr)
 if not bad:

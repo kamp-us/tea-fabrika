@@ -32,8 +32,8 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
    - On a re-review, read every line the last fixes changed and what calls them first. Then finish
      the remaining checks.
    - Read every decided note the PR builds, following the plan's references and the change itself.
-     `node .agents/skills/lead/scripts/governance.ts` lists the decision files the diff's words
-     touch; say for each whether the diff walks it back.
+     Search `.kalfa/decisions/` by hand for the words the diff touches; say for each hit whether
+     the diff walks it back.
    - Block only on a broken decision or AGENTS.md, lost data, or a broken law.
      Each blocker cites that source and shows the missed case.
    - It does what the plan and the notes' decided parts say, and nothing they leave undecided. Each
