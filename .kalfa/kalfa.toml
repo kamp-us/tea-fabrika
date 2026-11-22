@@ -2,7 +2,7 @@
 [[records]]
 name = "decisions"
 path = ".kalfa/decisions/"
-prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. Never edit an old one to change its meaning; write a new one. A ruling that fails those tests and that a lint rule, a check or a tool setting enforces gets no ADR: its why is a comment beside the enforcement. A ruling not built yet is a spec on the tracker, the ruling as its requirements; once built, the code holds it, and it gets an ADR only if building it proved hard to reverse. A setting is code: its value lives in its config file."
+prompt = "The ADR format in the `domain-modeling` skill. Before you change a choice, read the decisions that govern it. Write one with the adr skill, only when the choice is hard to reverse, surprising without context, and the result of a real trade-off. To change a choice, write a new decision first, then reword the old one's changed lines, each with a pointer to the new one, and touch nothing else in it. An old one replaced whole keeps its text and gets `status: superseded by ADR-NNNN`. A ruling that fails those tests and that a lint rule, a check or a tool setting enforces gets no ADR: its why is a comment beside the enforcement. A ruling not built yet is a spec on the tracker, the ruling as its requirements; once built, the code holds it, and it gets an ADR only if building it proved hard to reverse. A setting is code: its value lives in its config file."
 
 [[records]]
 name = "glossary"

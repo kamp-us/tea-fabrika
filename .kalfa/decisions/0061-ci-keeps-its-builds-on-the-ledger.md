@@ -4,8 +4,8 @@ A build host such as GitHub Actions keeps no priority class, no line of waiting 
 build, so `@kalfa/ci` keeps its own record. Each thing that happens (a build request came, a build was admitted, a
 cancel was sent, the host said a build ended, the floor was set) is one entry on a Ledger stream, and one pure value
 reads those entries and says what to start and what to cancel on the host. We chose this because a restart replays
-the entries, every build stays on record with its ending, and the Ledger's revision check stops two copies of CI from
-both starting builds.
+the entries, every build stays on record with its ending, and CI chooses and records inside one Ledger transaction, so
+two copies of CI cannot both start builds (decision 0083).
 
 ## Considered Options
 
