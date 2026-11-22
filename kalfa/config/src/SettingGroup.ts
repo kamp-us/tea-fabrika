@@ -13,6 +13,7 @@ import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
 import { SettingsError } from "./internal/error.ts";
+import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
 import { type Resolved, start } from "./internal/start.ts";
@@ -122,6 +123,11 @@ const refusal = (app: string, settings: ReadonlyArray<Setting.Any>) => {
       return `${name} has no description`;
     }
 
+    // A default that slipped past the types is named for what it is, before the schema is asked: a record schema accepts a `Map`.
+    if (Option.isSome(setting.default) && Option.isNone(frozen(setting.default.value))) {
+      return `${name} has a default that is not plain data (text, numbers, booleans, and arrays and records of those)`;
+    }
+
     if (Option.isSome(setting.default) && !Schema.is(setting.schema)(setting.default.value)) {
       return `${name} has a default its schema refuses`;
     }
@@ -168,7 +174,7 @@ const typed = <R extends ReadonlyArray<Setting.Any>>(started: Resolved): Started
  *
  * **Gotchas**
  *
- * Throws an `Error` at module load, as today's `Setting.group` does, for a group that cannot be read: an app name that is not one lowercase word, a name word that is not lowercase letters and digits with single hyphens, a setting with no description, a default its schema refuses, two settings with one name, one field or one environment name, a name and its own table, and a name that is `<app>-version` or whose variable is `<APP>_HOME`. The message names the settings.
+ * Throws an `Error` at module load, as today's `Setting.group` does, for a group that cannot be read: an app name that is not one lowercase word, a name word that is not lowercase letters and digits with single hyphens, a setting with no description, a default that is not plain data, a default its schema refuses, two settings with one name, one field or one environment name, a name and its own table, and a name that is `<app>-version` or whose variable is `<APP>_HOME`. The message names the settings.
  *
  * @category constructors
  */

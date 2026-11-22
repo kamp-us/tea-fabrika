@@ -11,8 +11,8 @@ and one app never reads another's.
 _Avoid_: project, tool, namespace
 
 **Setting**:
-One named value an app declares once, with its type, its default and a sentence a person reads. It may hold a
-secret's name, never a secret's value.
+One named value an app declares once, with its type, its default and a sentence a person reads. Its value is plain
+data: text, numbers, booleans, and arrays and records of those. It may hold a secret's name, never a secret's value.
 _Avoid_: option, config key, parameter, variable, host setting
 
 **Setting group**:

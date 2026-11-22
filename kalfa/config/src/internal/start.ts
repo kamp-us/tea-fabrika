@@ -335,7 +335,17 @@ export const start = Effect.fnUntraced(function* (
     const resolved = yield* resolve(group, s, files, names, provider);
     // What a reader gets is a frozen copy: no write to it reaches another reader, another start or the declaration's default.
     const settled = frozen(resolved.value);
-    values[field(s.name)] = s.live ? yield* reading(settled) : settled;
+
+    // Only a schema cast to lie about its type decodes anything but plain data: the program's author made that, and no user can fix it.
+    if (Option.isNone(settled)) {
+      return yield* Effect.die(
+        new Error(
+          `Settings cannot be declared: ${s.name}'s schema gives a value that is not plain data. Only a cast schema can do that.`,
+        ),
+      );
+    }
+
+    values[field(s.name)] = s.live ? yield* reading(settled.value) : settled.value;
     origins[s.name] = Object.freeze(resolved.origin);
   }
 

@@ -5,6 +5,7 @@
  *
  * `make` starts a setting and each combinator hands back the same type it was given, so the order in a pipe never matters. Only `live` changes the type: it turns the live mark on, and the group then reads that setting as a `Live` to yield, where a restart setting reads as its plain value. A `Setting` is not an Effect. It is read only through its group, so nothing reads it from the environment alone and skips the files.
  */
+import type * as Brand from "effect/Brand";
 import * as Option from "effect/Option";
 import type { Pipeable } from "effect/Pipeable";
 import * as PipeableModule from "effect/Pipeable";
@@ -64,20 +65,68 @@ type Fields = Omit<Any, keyof Pipeable>;
 const build = <T extends Any>(...fields: ReadonlyArray<Partial<Fields>>): T =>
   Object.assign(Object.create(PipeableModule.Prototype), ...fields);
 
+// Whether two types are the same type, not only assignable one way.
+type Same<A, B> = (<X>() => X extends A ? 1 : 2) extends <X>() => X extends B ? 1 : 2 ? true : false;
+
+// Whether `T` was met before on this path, so a recursive type is checked once and not forever.
+type Met<Seen, T> = true extends (Seen extends unknown ? Same<Seen, T> : never) ? true : false;
+
+/**
+ * The parts of a value's type that are not plain data, or `never` when all of it is.
+ *
+ * **Details**
+ *
+ * Plain data is text, numbers, booleans, and arrays and records of those, branded or not. A `Date`, a `Duration`, a `Map`, a class instance, `null` and `undefined` are named whole, wherever they sit. A type written as an `interface` is refused too, since the type cannot tell it from a class: write it as a `type`.
+ *
+ * @category models
+ */
+export type NotPlain<T, Seen = never> = 0 extends 1 & T
+  ? T
+  : Met<Seen, T> extends true
+    ? never
+    : T extends string | number | boolean
+      ? never
+      : T extends Brand.Brand<any>
+        ? NotPlain<Brand.Brand.Unbranded<T>, Seen>
+        : T extends ReadonlyArray<infer E>
+          ? NotPlain<E, Seen | T>
+          : T extends { readonly [key: string]: unknown }
+            ? { [K in keyof T]-?: NotPlain<T[K], Seen | T> }[keyof T]
+            : T;
+
+/**
+ * What a caller reads in the compiler's message: the part that is not plain data.
+ *
+ * @category models
+ */
+export interface NotPlainData<A> {
+  readonly "a setting's value must be plain data: text, numbers, booleans, and arrays and records of those": A;
+}
+
+/**
+ * The schema as given when its value is plain data, else a type no schema meets that names the part.
+ *
+ * @category models
+ */
+export type PlainSchema<C extends Schema.Codec<any, unknown>> = [NotPlain<C["Type"]>] extends [never]
+  ? C
+  : C & NotPlainData<NotPlain<C["Type"]>>;
+
 /**
  * Starts a setting from its dotted name and the schema of its value.
  *
  * **Details**
  *
- * The setting has no default, no description, both files for its scope and no marks yet, so it is a required restart setting until a combinator says otherwise.
+ * The setting has no default, no description, both files for its scope and no marks yet, so it is a required restart setting until a combinator says otherwise. Its value is plain data only: a schema that decodes a `Date`, a `Duration`, a `Map` or a class does not compile. Declare a length of time or an address as text, and decode it where it is read.
  *
  * @category constructors
  */
-export const make = <const N extends string, C extends Schema.Codec<any, unknown>>(
+export function make<const N extends string, C extends Schema.Codec<any, unknown>>(
   name: N,
-  schema: C,
-): Setting<N, C["Type"]> =>
-  build({
+  schema: PlainSchema<C>,
+): Setting<N, C["Type"]>;
+export function make(name: string, schema: Schema.Codec<any, unknown>): Setting<string, any> {
+  return build({
     name,
     schema,
     default: Option.none(),
@@ -86,6 +135,7 @@ export const make = <const N extends string, C extends Schema.Codec<any, unknown
     live: false,
     fileOnly: false,
   });
+}
 
 /**
  * Gives a setting the value it has when no source gives one.
