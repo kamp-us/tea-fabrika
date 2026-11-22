@@ -25,5 +25,5 @@ Ci.traceFor({ ref, commit })
 - A test on a throwaway private repository, on 2026-11-21, showed that a job started by a pushed branch gets the token. Its claims name the repository, the ref and the commit, its workflow claim points at the workflow file on the pushed branch, and it ends five minutes after it is made.
 - A pull request from an outside copy of the repository gets no token, so its build joins no trace.
 - Each code host needs its own check. Only GitHub's is designed.
-- A job cannot write through this. If a job must send spans to the app, https://github.com/kamp-us/tea-fabrika/issues/1867 decides how.
+- A job cannot write through this. Its test spans reach the app as a build file the app fetches (decision 0079).
 - Not decided: whether the token rides in the gateway's hello or in a plain web request.

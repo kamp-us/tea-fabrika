@@ -45,4 +45,4 @@ How it runs:
 - No stream can be hidden from one member. Anything with a shell on a person's device can read the whole Ledger through `kalfa`. The line in https://github.com/kamp-us/tea-fabrika/issues/1817 that says who may read is Permissions' call now means Permissions has no read rule.
 - Two direct writes of the same act at the same time can both be kept. The entry id rule covers only a resend of one entry.
 - A fresh machine and a CI job have no client key, so neither gets a `RemoteLedger`. What a CI job may read is its own decision.
-- Not decided: how one connection names the span log apart from the app's log. Nothing here was typed or run.
+- The connection names its log, `app` or `spans`, when it connects (decision 0079). Nothing here was typed or run.
