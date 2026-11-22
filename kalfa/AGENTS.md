@@ -14,5 +14,6 @@ with a reason.
 - **No import cycles.** If two packages need each other, the shared part is a third package. Packages import each other in one
   ranked order: the ledger sits below Program, and Markdown sits below Records, which reads and writes its records' frontmatter
   through it ([0087](../.kalfa/decisions/0087-a-record-is-data-on-top-and-free-text-below.md)).
+  Diagnostics ranks below Configuration, and Configuration below CLI.
 - **Keep the import graph small.** Each new edge needs a reason. Fewer edges keep each package
   usable alone.

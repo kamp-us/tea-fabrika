@@ -455,6 +455,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-diagnostics",
+      "layer": 0,
+      "paths": ["kalfa/diagnostics/src"],
+      "imports": []
+    },
+    {
       "name": "kalfa-markdown",
       "layer": 0,
       "paths": ["kalfa/markdown/src"],
@@ -510,6 +516,7 @@
     "next/packages/tuval/src",
     "next/packages/vitest/src",
     "kalfa/config/src",
+    "kalfa/diagnostics/src",
     "kalfa/markdown/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],

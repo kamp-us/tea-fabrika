@@ -51,6 +51,10 @@
     "kalfa-ci": {
       "imports": ["next-vitest"],
       "pure": false
+    },
+    "kalfa-diagnostics": {
+      "imports": [],
+      "pure": false
     }
   },
   "libraries": {
@@ -71,7 +75,8 @@
     "kalfa/markdown": "kalfa-markdown",
     "kalfa/quality": "kalfa-quality",
     "kalfa/records": "kalfa-records",
-    "kalfa/ci": "kalfa-ci"
+    "kalfa/ci": "kalfa-ci",
+    "kalfa/diagnostics": "kalfa-diagnostics"
   },
   "libraryRoots": ["next", "kalfa"],
   "acrossDeployables": ["relative-import-crosses-workspace"]

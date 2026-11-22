@@ -711,6 +711,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-markdown": 0, // ticket 1926: it imports no other package, so it ranks with the lowest
       "next-shared": 0,
       "next-vitest": 0, // the shared test package rule: the test primitives, a package of their own below everything else of ours
+      "kalfa-diagnostics": 0, // it imports no package of ours, and kalfa-config (1) ranks above it
     });
   });
 
