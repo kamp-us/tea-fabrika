@@ -55,7 +55,8 @@ A push that moves a ref so it drops commits it had before. Whether a ref allows 
 _Avoid_: overwrite, rewrite push
 
 **Delete push**:
-A push that removes a ref from a remote and sends no commits. It names the commit it expects to remove.
+A push that removes a ref from a remote and sends no commits. It names the commit it expects to remove. A ref allows
+one only where it allows a force push.
 _Avoid_: remove, prune, drop
 
 **Rebase**:
