@@ -40,46 +40,164 @@ const Said = Schema.String.check(
   Schema.makeFilter((text: string) => isSaid(text) || "Expected text that is not blank"),
 );
 
+// A name a shell can expand as $NAME: a letter or an underscore, then letters, digits and underscores.
+const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// A flag as written on a command line: one or two hyphens, then a name that does not start with a hyphen and holds
+// no whitespace, no "=" and no control character. So no value rides along in it.
+const FLAG = /^--?[^\s=\p{Cc}-][^\s=\p{Cc}]*$/u;
+
+// A first part that never starts a repo path: "~" (a home folder, or "~login"), "$" (a variable), or a drive such as
+// "C:" (an absolute path on Windows).
+const NOT_A_REPO_START = /^(?:[~$]|[A-Za-z]:$)/;
+
 // A segment of a path is not empty, ".", or "..", and holds no backslash.
 const isSegment = (segment: string): boolean =>
   segment !== "" && segment !== "." && segment !== ".." && !segment.includes("\\");
 
 // A path from the repo root: "." for the whole repo, else segments joined by "/". So no leading "/", no "./",
-// no "//" and no trailing "/".
-const isRepoPath = (path: string): boolean => path === "." || path.split("/").every(isSegment);
+// no "//" and no trailing "/". Its first part does not read as a home folder, a variable or a drive, so it never
+// passes for a file outside the repo.
+const isRepoPath = (path: string): boolean =>
+  path === "." || (!NOT_A_REPO_START.test(path.split("/")[0] ?? "") && path.split("/").every(isSegment));
 
-const Path = Schema.String.check(
+// A path under the home folder: "~" or "$NAME", then one or more good parts. So never absolute, and never "~login",
+// which names a login.
+const isHomePath = (path: string): boolean => {
+  const [start = "", ...parts] = path.split("/");
+  const named = start === "~" || (start.startsWith("$") && NAME.test(start.slice(1)));
+
+  return named && parts.length > 0 && parts.every(isSegment);
+};
+
+// Each refusal's message names the rule and never the input: a refused path may hold a login name.
+const RepoPath = Schema.String.check(
   Schema.makeFilter(
     (path: string) => isRepoPath(path) || "Expected a path from the repo root, or `.` for the whole repo",
   ),
 );
 
+const HomePath = Schema.String.check(
+  Schema.makeFilter((path: string) => isHomePath(path) || "Expected a path that starts with `~/` or `$NAME/`"),
+);
+
+const VariableName = Schema.String.check(
+  Schema.makeFilter((name: string) => NAME.test(name) || "Expected an environment variable's name"),
+);
+
+const FlagName = Schema.String.check(
+  Schema.makeFilter((name: string) => FLAG.test(name) || "Expected a flag as written, such as `--name` or `-n`"),
+);
+
 // Lines and columns count from 1, as a compiler's printed `file:line:column` does.
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
+const columnNeedsLine = Schema.makeFilter((place: { readonly line?: number; readonly column?: number }) =>
+  place.column !== undefined && place.line === undefined ? "Expected a line when there is a column" : undefined,
+);
+
+const wholeRepoHasNoLine = Schema.makeFilter((place: { readonly path: string; readonly line?: number }) =>
+  place.path === "." && place.line !== undefined ? "Expected no line on the whole repo" : undefined,
+);
+
+const Repo = Schema.TaggedStruct("repo", {
+  path: RepoPath,
+  line: Schema.optionalKey(Count),
+  column: Schema.optionalKey(Count),
+}).check(columnNeedsLine, wholeRepoHasNoLine);
+
+const Home = Schema.TaggedStruct("home", {
+  path: HomePath,
+  line: Schema.optionalKey(Count),
+  column: Schema.optionalKey(Count),
+}).check(columnNeedsLine);
+
+// No line and no column: the key may be left out, and a value for it is refused, at run time and in the type. A
+// plain struct would drop the key without a word instead.
+const Environment = Schema.TaggedStruct("environment", {
+  name: VariableName,
+  line: Schema.optionalKey(Schema.Never),
+  column: Schema.optionalKey(Schema.Never),
+});
+
+const Flag = Schema.TaggedStruct("flag", {
+  name: FlagName,
+  line: Schema.optionalKey(Schema.Never),
+  column: Schema.optionalKey(Schema.Never),
+});
+
 /**
- * Schema for where a diagnostic points: a path from the repo root, and a line and a column when known.
+ * Schema for where a diagnostic points, of four kinds told apart by `_tag`: a file in the repo, a file under the home folder, an environment variable or a command-line flag.
  *
  * **Details**
  *
- * The whole repo is the path `.`. A path has no leading `/`, no `./` start, no `.` or `..` segment, no empty segment, no trailing `/` and no backslash. A line and a column count from 1. A column needs a line, and `.` takes no line.
+ * - `repo`: a path from the repo root, and a line and a column when known. The whole repo is the path `.`. A path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash. Its first part does not start with `~` or `$`, and is not a drive such as `C:`.
+ * - `home`: a file under the home folder, written `~/` or `$NAME/` and then good parts, with a line and a column when known. So no absolute path and no login name is ever held. The package reads no home folder: a reader's shell expands the start.
+ * - `environment`: an environment variable, by its `name`, as a shell reads one.
+ * - `flag`: a command-line flag, by its `name` as typed, with its hyphens, such as `--instance.port` or `-f`. It holds no `=`, so no value rides along.
+ *
+ * A line and a column count from 1. A column needs a line, and `.` takes no line. An environment variable and a flag take neither.
+ *
+ * **Example** (The four kinds)
+ *
+ * ```ts
+ * import type * as Diagnostic from "@kalfa/diagnostics/Diagnostic"
+ *
+ * export const places: ReadonlyArray<Diagnostic.Place> = [
+ *   { _tag: "repo", path: "docs/setup.md", line: 12 },
+ *   { _tag: "home", path: "~/.demo/demo.toml", line: 3, column: 1 },
+ *   { _tag: "environment", name: "DEMO_INSTANCE_PORT" },
+ *   { _tag: "flag", name: "--instance.port" }
+ * ]
+ * ```
  *
  * @category models
  */
-export const Place = Schema.Struct({
-  path: Path,
-  line: Schema.optionalKey(Count),
-  column: Schema.optionalKey(Count),
-}).check(
-  Schema.makeFilter((place) =>
-    place.column !== undefined && place.line === undefined ? "Expected a line when there is a column" : undefined,
-  ),
-  Schema.makeFilter((place) =>
-    place.path === "." && place.line !== undefined ? "Expected no line on the whole repo" : undefined,
-  ),
-);
+export const Place = Schema.Union([Repo, Home, Environment, Flag]).pipe(Schema.toTaggedUnion("_tag"));
 
 export type Place = typeof Place.Type;
+
+// A file's text: the path, then the line and the column when there are any, as `file:line:column`.
+const fileText = ({
+  path,
+  line,
+  column,
+}: {
+  readonly path: string;
+  readonly line?: number;
+  readonly column?: number;
+}) => [path, line, column].filter((part) => part !== undefined).join(":");
+
+/**
+ * A place's plain text, for a person to read.
+ *
+ * **When to use**
+ *
+ * Use when a command prints a place. An agent reads `_tag` and the other fields, not this text.
+ *
+ * **Details**
+ *
+ * A file in the repo or under the home folder is its path, then `:line` and `:column` when known, so the whole repo is `.`. An environment variable is `environment variable NAME`, and a flag is `flag --name`. The function reads nothing, prints nothing and runs no Effect. It escapes nothing.
+ *
+ * **Example** (Printing each kind)
+ *
+ * ```ts
+ * import * as Diagnostic from "@kalfa/diagnostics/Diagnostic"
+ *
+ * Diagnostic.formatPlace({ _tag: "home", path: "~/.demo/demo.toml", line: 3, column: 1 }) // "~/.demo/demo.toml:3:1"
+ * Diagnostic.formatPlace({ _tag: "environment", name: "DEMO_INSTANCE_PORT" }) // "environment variable DEMO_INSTANCE_PORT"
+ * Diagnostic.formatPlace({ _tag: "flag", name: "--instance.port" }) // "flag --instance.port"
+ * ```
+ *
+ * @category formatting
+ */
+export const formatPlace = (place: Place): string =>
+  Place.match(place, {
+    repo: fileText,
+    home: fileText,
+    environment: ({ name }) => `environment variable ${name}`,
+    flag: ({ name }) => `flag ${name}`,
+  });
 
 /**
  * Schema for one reported diagnostic: its code, severity, message, place and hint, all five required.
