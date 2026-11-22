@@ -12,7 +12,7 @@ type Sent =
 
 How a direct write runs:
 
-1. The package turns its message into entries with a plain function, the same one its program uses. No guarded service is called, so no permission proof is made or faked.
+1. The package turns the stream's state and its message into entries with a plain function, the same one its program uses (decision 0081). No guarded service is called, so no permission proof is made or faked.
 2. Program's command-line entry point signs the entries with the command's client key and appends them to the app's Ledger. The sending and the direct write are both written there, once.
 3. Identity's admission checks that the signature fits the entry and that the key is still in. This asks "is this really that key", which sign-in asks on the normal path. It is not the guard that 0072 skips.
 4. The app's admission refuses a direct entry for an act whose rule asks for presence. Every other direct entry skips the program's guard only: the Ledger's admissions still run on it (decision 0078).
@@ -30,5 +30,5 @@ How a direct write runs:
 - "The app is down" means the process that guards is not answering. If the store is down too, `--direct` cannot write either.
 - Each app writes the presence line in its own admission. An app that forgets it lets the entry in; readers still never count a direct entry as present, and show it apart.
 - Identity gains an admission, one more for the Ledger to join on one append. Decision 0078 says how they join.
-- A write that needs the app's live state to build its entries cannot be done direct.
+- A write that needs more than the Ledger to build its entries, the code host for one, cannot be done direct (decision 0081).
 - Not checked yet: whether the store can answer on Cloudflare while the app's process cannot, and whether every write command's entries can be built on the device. Each has a research ticket under https://github.com/kamp-us/tea-fabrika/issues/1859.

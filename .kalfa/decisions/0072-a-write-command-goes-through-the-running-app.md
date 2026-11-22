@@ -21,7 +21,7 @@ A command that only reads stays local and sends nothing.
 ## Consequences
 
 - A write command needs the app running and reachable. With no client key (a fresh machine, a CI job) it refuses with a diagnostic and exit code 1.
-- Every write command takes `--direct`, the way to write while the app is down. The entry is signed by the client key and marked as direct, no guard runs, and a write-up and a state page show direct entries apart from the rest. A flag that skips the check can become a habit; the mark is what makes that visible.
+- Every write command whose entries need only the Ledger takes `--direct`, the way to write while the app is down (decision 0081 names which). The entry is signed by the client key and marked as direct, no guard runs, and a write-up and a state page show direct entries apart from the rest. A flag that skips the check can become a habit; the mark is what makes that visible.
 - `kalfa secrets` is the one exception. It talks to the secret store, and the store's own login gates it.
 - The sending is written once, in Program's command-line entry point, beside the dial-in that `kalfa program mcp` already does. Each package with write commands gets one setting that names its process, and `@kalfa/cli` gains nothing.
 - The command's key is its own, so a human can revoke the command on a device and keep the window.
