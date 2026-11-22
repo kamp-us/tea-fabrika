@@ -286,10 +286,10 @@ const resolve = Effect.fnUntraced(function* (
   }
 
   const origin = first.value.origin(segments(s.name));
-  const chain = sources.map((source) => source.provider).reduce((all, next) => ConfigProvider.orElse(all, next));
 
+  // The value is decoded from the source that holds it and no other: a table that source holds comes whole, and a key it leaves out is not filled from a weaker one.
   const value = yield* Config.schema(s.schema, segments(s.name))
-    .parse(chain)
+    .parse(first.value.provider)
     .pipe(
       Effect.mapError((error) =>
         error.cause instanceof Schema.SchemaError
@@ -336,7 +336,7 @@ export const start = Effect.fnUntraced(function* (
     origins[s.name] = resolved.origin;
   }
 
-  const started: Resolved = { values, origins };
+  const started: Resolved = { values: Object.freeze(values), origins: Object.freeze(origins) };
 
   return started;
 });

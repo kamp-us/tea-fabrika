@@ -19,18 +19,18 @@ export interface Live<A> extends Effect.Effect<A> {
 
 class Reading<A> extends Effectable.Class<A> implements Live<A> {
   readonly [TypeId] = TypeId;
-  private readonly ref: SubscriptionRef.SubscriptionRef<A>;
+  readonly #ref: SubscriptionRef.SubscriptionRef<A>;
 
   constructor(ref: SubscriptionRef.SubscriptionRef<A>) {
     super();
-    this.ref = ref;
+    this.#ref = ref;
   }
 
   asEffect() {
-    return SubscriptionRef.get(this.ref);
+    return SubscriptionRef.get(this.#ref);
   }
 }
 
-/** A live value that starts at `value`, over a reference only the layer holds. */
+/** A live value that starts at `value`, over a reference only the layer holds. It is frozen, so no caller swaps how it reads. */
 export const reading = <A>(value: A): Effect.Effect<Live<A>> =>
-  Effect.map(SubscriptionRef.make(value), (ref) => new Reading(ref));
+  Effect.map(SubscriptionRef.make(value), (ref) => Object.freeze(new Reading(ref)));
