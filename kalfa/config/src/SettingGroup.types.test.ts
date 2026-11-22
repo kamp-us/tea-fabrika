@@ -11,8 +11,12 @@
 // - T3: make the group a `Config` that reads the current provider, so its requirements are `never`.
 // - T4: type `Setting.files` as `(files: ReadonlyArray<string>)`.
 // - T5: add `"person"` to `Setting.File`.
+// - T6, one at a time, each on `Declaration.ts`: (a) type `make`'s schema as `C` again; (b) drop the brand line of
+//   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
+//   `T` whole at the record line.
 import { expectTypeOf, it } from "@effect/vitest";
-import { Effect, type FileSystem, type Path, Schema } from "effect";
+import { Effect, type FileSystem, Option, type Path, Schema } from "effect";
+import type * as Duration from "effect/Duration";
 import type * as Layer from "effect/Layer";
 import { Setting, SettingGroup } from "./index.ts";
 
@@ -191,4 +195,88 @@ it("T5 type: the layer's only error is SettingsError with its seven reasons, and
     "version" | "syntax" | "unknown" | "scope" | "invalid" | "missing" | "read"
   >();
   expectTypeOf<Setting.File>().toEqualTypeOf<"repo" | "user">();
+});
+
+// T6: a setting's value is plain data. The lines that must compile are in `plain`, the lines that must not are in
+// `notPlain`. Neither is called, and each hands every expression back, so none is a dropped Effect.
+const Slug = Schema.String.pipe(Schema.brand("Slug"));
+
+const Weights = Schema.Record(Schema.String, Schema.Finite).pipe(Schema.brand("Weights"));
+
+// A length of time as text, checked when the app starts: the form the README gives.
+const Wait = Schema.String.check(
+  Schema.makeFilter(
+    (text: string) =>
+      Option.isSome(Schema.decodeUnknownOption(Schema.DurationFromString)(text)) || "a length of time, as 10 seconds",
+  ),
+);
+
+type Tree = { readonly name: string; readonly children: ReadonlyArray<Tree> };
+
+const Tree: Schema.Codec<Tree> = Schema.Struct({
+  name: Schema.String,
+  children: Schema.Array(Schema.suspend((): Schema.Codec<Tree> => Tree)),
+});
+
+type Dated = { readonly at: Date; readonly later: ReadonlyArray<Dated> };
+
+const Dated: Schema.Codec<Dated> = Schema.Struct({
+  at: Schema.Date,
+  later: Schema.Array(Schema.suspend((): Schema.Codec<Dated> => Dated)),
+});
+
+class Box extends Schema.Class<Box, { readonly brand: unique symbol }>("Box")({ size: Schema.Finite }) {}
+
+const plain = () => [
+  Setting.make("plain.slug", Slug),
+  Setting.make("plain.weights", Weights),
+  Setting.make("plain.table", Schema.Record(Schema.String, Schema.Finite)),
+  Setting.make("plain.pair", Schema.Struct({ a: Schema.optionalKey(Schema.Int), b: Schema.optionalKey(Schema.Int) })),
+  Setting.make("plain.wait", Wait),
+  Setting.make("plain.tree", Tree),
+];
+
+const notPlain = () => [
+  // @ts-expect-error T6: a Date is not plain data
+  Setting.make("plain.since", Schema.Date),
+
+  // @ts-expect-error T6: a Map is not plain data
+  Setting.make("plain.map", Schema.ReadonlyMap(Schema.String, Schema.Finite)),
+
+  // @ts-expect-error T6: a class instance is not plain data
+  Setting.make("plain.box", Box),
+
+  // @ts-expect-error T6: a DateTime is not plain data
+  Setting.make("plain.moment", Schema.DateTimeUtc),
+
+  // @ts-expect-error T6: a Duration is not plain data
+  Setting.make("plain.time", Schema.Duration),
+
+  // @ts-expect-error T6: null is not plain data
+  Setting.make("plain.nothing", Schema.Null),
+
+  // @ts-expect-error T6: any says nothing about its value
+  Setting.make("plain.any", Schema.Any),
+
+  // @ts-expect-error T6: an optional value may be undefined, which is not plain data
+  Setting.make("plain.maybe", Schema.Struct({ a: Schema.optional(Schema.Int) })),
+
+  // @ts-expect-error T6: a Date deep inside nested records is not plain data
+  Setting.make(
+    "plain.deep",
+    Schema.Struct({ a: Schema.optionalKey(Schema.Struct({ b: Schema.optionalKey(Schema.Date) })) }),
+  ),
+
+  // @ts-expect-error T6: a Date inside a recursive type is not plain data
+  Setting.make("plain.dated", Dated),
+];
+
+it("T6 type: a setting's value is plain data, and the part that is not is named", () => {
+  expectTypeOf(plain).toBeFunction();
+  expectTypeOf(notPlain).toBeFunction();
+  expectTypeOf<Setting.NotPlain<Date>>().toEqualTypeOf<Date>();
+  expectTypeOf<
+    Setting.NotPlain<{ readonly commits: number; readonly time: Duration.Duration }>
+  >().toEqualTypeOf<Duration.Duration>();
+  expectTypeOf<Setting.NotPlain<{ readonly a: number; readonly b: ReadonlyArray<string> }>>().toEqualTypeOf<never>();
 });

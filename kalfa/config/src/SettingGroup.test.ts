@@ -31,6 +31,7 @@ import {
   Predicate,
   References,
   Schema,
+  SchemaGetter,
   SubscriptionRef,
   Tracer,
 } from "effect";
@@ -396,9 +397,9 @@ it.effect.prop(
 // B1, a table-valued setting comes whole from the one source that holds it
 // ---------------------------------------------------------------------------------------------
 
-const Pairing = Schema.Struct({ a: Schema.optional(Schema.Int), b: Schema.optional(Schema.Int) });
+const Pairing = Schema.Struct({ a: Schema.optionalKey(Schema.Int), b: Schema.optionalKey(Schema.Int) });
 
-const Nesting = Schema.Struct({ inner: Schema.optional(Pairing) });
+const Nesting = Schema.Struct({ inner: Schema.optionalKey(Pairing) });
 
 const Shape = Schema.Literals(["flat", "nested"]);
 
@@ -1508,7 +1509,8 @@ const Nested = Schema.Struct({ app: Word, junk: Seed });
 
 // Plants, each with the fix undone for that one case: (a) a table value left writable; (b) an array value left
 // writable; (c) each origin object left writable; (d) the value a `Live` yields left writable; (e) the declaration's
-// own default object handed out as the value.
+// own default object handed out as the value; (f) the declaration's own default frozen in place and handed out, which
+// leaves every write refused and every value as it was, so only the `isFrozen` line sees it.
 it.effect.prop(
   "B16 no write to a table value, an array value, an origin or the value a live setting yields changes what a later reader or a later start gets, nor the declaration's default",
   { input: Nested },
@@ -1593,8 +1595,114 @@ it.effect.prop(
       const second = yield* started(Effect.map(seeing, (seen_) => seen_.plain));
       expect(second).toEqual(first);
       expect(defaults).toEqual({ pair: { a: 1, b: 2 }, tags: ["x", "y"], lpair: { a: 3 } });
+
+      // The object a caller declared a default with is still the caller's: a start made its own copy and froze that.
+      expect([defaults.pair, defaults.tags, defaults.lpair].map((object) => Object.isFrozen(object))).toEqual([
+        false,
+        false,
+        false,
+      ]);
     }),
   check,
+);
+
+// ---------------------------------------------------------------------------------------------
+// B17, a value that is not plain data never reaches a reader
+// ---------------------------------------------------------------------------------------------
+
+/** A guard that lies: it says every value is text. It is how these laws tell the compiler a value is plain when it is not. */
+const claimsText = (_value: unknown): _value is string => true;
+
+// A schema typed as text that takes any value, which leaves the plain-data check at make as the only refusal there is.
+const Anything = Schema.declare(claimsText);
+
+const slipped = (name: string, value: unknown): Setting.Any => {
+  const made = Setting.make(name, Anything).pipe(Setting.withDescription("A slipped value."));
+
+  return claimsText(value) ? made.pipe(Setting.withDefault(value)) : made;
+};
+
+class Holder {
+  readonly size = 1;
+}
+
+const KINDS = ["date", "map", "set", "instance", "null", "undefined", "function"] as const;
+
+const NotPlainDefault = Schema.Struct({
+  app: Word,
+  entry: Entry,
+  kind: Schema.Literals(KINDS),
+  // The depth is how many records and arrays the kind sits in, none to two.
+  wraps: Schema.Array(Schema.Literals(["array", "record"])).check(Schema.isMaxLength(2)),
+});
+
+/** A value in `wraps`, the innermost first, a record or an array each. */
+const wrapped = (leaf: unknown, wraps: ReadonlyArray<"array" | "record">) =>
+  wraps.reduce<unknown>((inner, shape) => (shape === "array" ? [inner] : { held: inner }), leaf);
+
+const badLeaf = (kind: (typeof KINDS)[number]): unknown =>
+  Match.value(kind).pipe(
+    Match.when("date", () => new Date(0)),
+    Match.when("map", () => new Map([["a", 1]])),
+    Match.when("set", () => new Set(["a"])),
+    Match.when("instance", () => new Holder()),
+    Match.when("null", () => null),
+    Match.when("undefined", () => undefined),
+    Match.when("function", () => () => 1),
+    Match.exhaustive,
+  );
+
+// Plants: (a) drop the plain-data check, so the schema, which accepts anything, lets a default in; (b) check only the
+// top level of a default, so a `Date` one level down makes a group.
+it.effect.prop(
+  "B17 a default that is not plain data, put in past the types, throws at make naming the setting and saying plain data, and the same group with plain data in its place makes",
+  { input: NotPlainDefault },
+  ({ input: { app, entry, kind, wraps } }) =>
+    Effect.gen(function* () {
+      const name = named(entry);
+      const refused = yield* thrown(() => SettingGroup.make(app, slipped(name, wrapped(badLeaf(kind), wraps))));
+      expect(refused ?? "it made a group").toContain(name);
+      expect(refused ?? "it made a group").toContain("plain data");
+
+      expect(yield* thrown(() => SettingGroup.make(app, slipped(name, wrapped("text", wraps))))).toBeUndefined();
+    }),
+  check,
+);
+
+// Plant: hand the value out as it is when `frozen` answers none, so the layer starts and a `Date` reaches a reader.
+it.effect(
+  "B17 scenario: a cast schema that decodes a class instance makes its group, and its layer dies, as a defect and not a SettingsError, naming the setting",
+  () =>
+    Effect.gen(function* () {
+      const app = "demo";
+      const name = "since.when";
+
+      // The schema decodes a text of a time into a `Date` and says it gave text: the one lie a caller can tell, which
+      // the start must still refuse.
+      const Lying = Schema.String.pipe(
+        Schema.decodeTo(Anything, {
+          decode: SchemaGetter.transform((text: string) => {
+            const date: unknown = new Date(text);
+
+            return claimsText(date) ? date : text;
+          }),
+          encode: SchemaGetter.transform((text: string) => text),
+        }),
+      );
+
+      const lying = Setting.make(name, Lying).pipe(Setting.withDescription("A lying schema."));
+
+      const group = makeGroup(app, [lying]);
+      const files = { [repoFile(app).path]: '[since]\nwhen = "2020-01-01T00:00:00.000Z"\n' };
+      const { exit } = yield* start(group, { disk: { files } });
+
+      expect(Exit.isFailure(exit)).toBe(true);
+
+      if (Exit.isFailure(exit)) {
+        expect(exit.cause.reasons.map((reason) => reason._tag)).toEqual(["Die"]);
+        expect(Cause.pretty(exit.cause)).toContain(name);
+      }
+    }),
 );
 
 // ---------------------------------------------------------------------------------------------
