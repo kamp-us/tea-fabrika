@@ -23,7 +23,7 @@ The key pair one client signs in with; Secrets keeps its private key, and only i
 _Avoid_: identity, credential
 
 **Kind**:
-What a key acts as: `human` (lets keys in and removes them), `window`, `agent` or `hands` (sign in as a client), or `recovery` (the sheet).
+What a key acts as: `human` (lets keys in and removes them), `window`, `agent`, `hands` or `command` (sign in as a client), `passkey` (approves one message and nothing else), or `recovery` (the sheet).
 _Avoid_: rank, role, as, type, person key, device key, root key
 
 **Device**:
@@ -62,6 +62,10 @@ _Avoid_: remove, revoke (a key's), drop, dismiss (Agents')
 A signed entry, made by a key of kind `human`, that lets one new key in.
 _Avoid_: approval, admission, invite
 
+**Rotate**:
+A client replacing its own key with a new one in one signed entry. The new key keeps the old one's kind, its human and who granted it, so a key can replace only itself. Making the new key is Secrets' rotate; this is the entry that tells the project.
+_Avoid_: renew, roll, re-key
+
 **Revoke**:
 A signed entry that takes a key out, together with every key it let in and every agent it summoned.
 _Avoid_: drop, remove, delete, ban
@@ -80,7 +84,7 @@ A human getting back in after losing every device: by the printed sheet, by emai
 _Avoid_: reset, restore, a new project
 
 **Passkey**:
-A browser's own key of kind `human`, unlocked by the human each time it is used. A synced passkey counts, and its grant records whether it is backed up. It is also what gives presence.
+A browser's own key of kind `passkey`, unlocked by the human each time it is used. It gives presence and does nothing else: it never signs a client in, grants or revokes. A synced passkey counts, and its grant records whether it is backed up. A human's first passkey ever is granted by one of their keys of kind `human`; every later one needs an approval from a passkey they hold, or the recovery sheet.
 _Avoid_: WebAuthn key, security key
 
 **Recovery sheet**:
