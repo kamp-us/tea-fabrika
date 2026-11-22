@@ -43,7 +43,7 @@ Frontmatter.split("# No frontmatter\n"); // { frontmatter: Option.none(), body: 
 | `reason` | Meaning |
 |---|---|
 | `syntax` | The frontmatter is not YAML: a tab as indentation, a duplicate key, an unclosed quote, a second document. |
-| `value` | It is YAML, but not a JSON object: a top level that is not a map, a tag that makes a `Set` or a `Date`, `.nan`, a key that is a list or null, two keys that give one text. |
+| `value` | It is YAML, but not a JSON object: a top level that is not a map, a tag that makes a `Set` or a `Date`, `.nan` or `.inf` as a value or a key, a key that is a list or null, two keys that give one text. |
 | `schema` | The caller's schema refused the data. The `cause` is the `SchemaError`, which names the field. No `line`. |
 
 ## The reading
@@ -64,4 +64,4 @@ One reading serves both directions, so what `write` gives, `read` gives back.
 ## What it never does
 
 It never reads or writes a file, never prints or logs, and never puts any text of the file in its span. Reading a body into
-a tree, and changing one value of a frontmatter while keeping every other byte, come in later changes.
+a Document, and changing one value of a frontmatter while keeping every other byte, come in later changes.

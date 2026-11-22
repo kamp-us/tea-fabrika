@@ -5,11 +5,12 @@
 // group's fixed pieces (all of them, every run) and one random piece per seed. A law takes the run's pools, one group at a time, so every
 // group is checked in every run, never left to chance. `variants` lists them, `REQUIRED` names them, and a law fails when one is missing
 // or when a variant's pool does not hold what its group says.
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Result, Schema } from "effect";
 import * as JsonSchema from "effect/JsonSchema";
 import * as SchemaRepresentation from "effect/SchemaRepresentation";
+import * as Frontmatter from "./Frontmatter.ts";
 
-export type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Seeds and texts
@@ -18,10 +19,10 @@ const Pick = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 9999 }));
 
 const Seed = Schema.Struct({ noise: Schema.String.check(Schema.isMaxLength(8)), a: Pick, b: Pick });
 
-export type Seed = typeof Seed.Type;
+type Seed = typeof Seed.Type;
 
 /** Six seeds: one run's whole supply of randomness for texts. */
-export const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrary.schema(Seed), {
+const seeds: Arbitrary.Arbitrary<ReadonlyArray<Seed>> = Arbitrary.array(Arbitrary.schema(Seed), {
   minLength: 6,
   maxLength: 6,
 });
@@ -34,19 +35,23 @@ const halves = (seed: Seed): readonly [string, string] => {
   return [seed.noise.slice(0, cut), seed.noise.slice(cut)];
 };
 
-// A piece alone, at the start of some noise, or inside it.
+// A piece alone, at the start of some noise, inside it, or at its end.
 const around = (piece: string, seed: Seed): string => {
   const [left, right] = halves(seed);
-  const form = seed.b % 3;
 
-  if (form === 0) {
-    return piece;
+  switch (seed.b % 4) {
+    case 0:
+      return piece;
+    case 1:
+      return piece + right;
+    case 2:
+      return left + piece + right;
+    default:
+      return left + right + piece;
   }
-
-  return form === 1 ? piece + right : left + piece + right;
 };
 
-export interface TextGroup {
+interface TextGroup {
   /** The plan's letter for the group. */
   readonly id: string;
   /** Every fixed piece, then one random piece per seed. */
@@ -66,7 +71,8 @@ const group = (
   reached: (pool) => pool.some(reached),
 });
 
-const BLANKS = ["", " ", "   ", "\t", "\n", "\r\n", "\n\n", "\r"];
+// The last four are a line of only blanks, then a break: the class a text with a break in it is quoted for.
+const BLANKS = ["", " ", "   ", "\t", "\n", "\r\n", "\n\n", "\r", " \n", "  \n", " \t\n", "\n \n"];
 
 const code = (point: number): string => String.fromCodePoint(point);
 
@@ -156,7 +162,7 @@ const PAIRS = ["Key", "key", "KEY", "a b", "a  b", "ab", " ab", "ab ", "A B"];
 const FENCE_LINE = /^---\r?$/;
 
 /** The text groups (a) to (j), for values, keys and bodies alike. */
-export const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
+const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
   group(
     "a",
     BLANKS,
@@ -192,7 +198,7 @@ export const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
   group(
     "e",
     // U+FEFF first, then a key that starts with it: yaml drops that mark at the start of a document.
-    [`${BOM}x`, ...CONTROLS.flatMap((control) => [control, `a${control}b`])],
+    [`${BOM}x`, ...CONTROLS.flatMap((control) => [control, `a${control}b`, `a${control}`])],
     (seed) => around(at(CONTROLS, seed.a), seed),
     (text) => CONTROLS.some((control) => text.includes(control)),
   ),
@@ -229,7 +235,7 @@ export const TEXT_GROUPS: ReadonlyArray<TextGroup> = [
 ];
 
 /** The key groups (k) to (m), which a key meets beyond the text groups. */
-export const KEY_GROUPS: ReadonlyArray<TextGroup> = [
+const KEY_GROUPS: ReadonlyArray<TextGroup> = [
   group(
     "k",
     PATHS,
@@ -253,7 +259,7 @@ export const KEY_GROUPS: ReadonlyArray<TextGroup> = [
 // ---------------------------------------------------------------------------------------------------------------------
 // Pools, and the data a skeleton draws from them
 
-export interface Pools {
+interface Pools {
   readonly texts: ReadonlyArray<string>;
   readonly keys: ReadonlyArray<string>;
 }
@@ -442,7 +448,7 @@ export const jsonReached = (data: Record<string, Json>): ReadonlyArray<string> =
 // ---------------------------------------------------------------------------------------------------------------------
 // Variants: one text group at a time, in every run
 
-export interface Variant {
+interface Variant {
   /** The group id, or `drawn` for the random mix and `structure` for plain keys. */
   readonly group: string;
   readonly pools: Pools;
@@ -548,7 +554,7 @@ const CountSkeleton = Schema.Struct({
 const RecordSkeleton = Schema.Array(Schema.Struct({ k: Pick, v: Schema.Array(Schema.Array(Pick)) }));
 
 /** One run: everything a law may draw. A law takes what it needs and ignores the rest. */
-export interface Run {
+interface Run {
   readonly seeds: ReadonlyArray<Seed>;
   readonly json: Entries;
   readonly decision: typeof DecisionSkeleton.Type;
@@ -591,7 +597,7 @@ export const S3Date = Schema.toCodecJson(Schema.Struct({ when: Schema.Date, labe
 /** S4, a record of text keys to lists of lists of text. */
 export const S4 = Schema.Record(Schema.String, Schema.Array(Schema.Array(Schema.String)));
 
-export interface Decision {
+interface Decision {
   readonly number: number;
   readonly status: "proposed" | "accepted" | "superseded";
   readonly decided: string;
@@ -601,7 +607,7 @@ export interface Decision {
 }
 
 /** The decision-shaped JSON Schema (2020-12) that F10 reads a file against. */
-export const decisionJsonSchema = JsonSchema.fromSchemaDraft2020_12({
+const decisionJsonSchema = JsonSchema.fromSchemaDraft2020_12({
   type: "object",
   required: ["number", "status", "decided", "supersedes", "draft", "note"],
   properties: {
@@ -711,7 +717,7 @@ export const bareFiles = (
 /** What a `bare` file's groups are, for the coverage check. */
 export const BARE_REQUIRED: ReadonlyArray<string> = ["w", "x", "y", "z"];
 
-export interface Broken {
+interface Broken {
   readonly name: string;
   /** The lines that break the file, after the good lines. */
   readonly lines: ReadonlyArray<string>;
@@ -738,10 +744,28 @@ export const BROKEN: ReadonlyArray<Broken> = [
   { name: "a second document after a start marker", lines: ["--- ", "b: 2"], at: undefined, minGood: 1 },
 ];
 
-export const goodLines = (count: number): ReadonlyArray<string> =>
-  Array.from({ length: count }, (_, i) => `g${i}: ${i}`);
+// Every key the cases of BROKEN, UNREAD and `nested` write, which a line of data must not repeat: a repeated key is a syntax
+// error, or changes which line is the broken one.
+const CASE_KEYS = new Set(["", "a", "b", "c", "d", "e", "x", "1", "true", "n1", "n2", "n3"]);
 
-export interface Unread {
+/**
+ * `count` entries of `data` starting at `start`, as the YAML lines `write` makes of them: the lines of a file that is good
+ * so far. An entry whose key a case writes is left out.
+ */
+export const dataLines = (data: Record<string, Json>, start: number, count: number): ReadonlyArray<string> => {
+  const entries = Object.entries(data).filter(([name]) => !CASE_KEYS.has(name));
+  const from = entries.length === 0 ? 0 : start % entries.length;
+  const chosen = Object.fromEntries(entries.slice(from, from + count));
+  const written = Frontmatter.write({ data: chosen, body: "" }, Schema.JsonObject);
+
+  if (Result.isFailure(written)) {
+    throw new Error(`write refused data that is JSON: ${written.failure.message}`);
+  }
+
+  return written.success.split("\n").slice(1, -2);
+};
+
+interface Unread {
   readonly name: string;
   readonly lines: ReadonlyArray<string>;
   /** A top level that is not a map has no depth to sit at. */
@@ -762,6 +786,10 @@ export const UNREAD: ReadonlyArray<Unread> = [
   { name: ".nan", lines: ["x: .nan"], top: false },
   { name: ".inf", lines: ["x: .inf"], top: false },
   { name: "-.inf", lines: ["x: -.inf"], top: false },
+  // A key that is not finite would read as the text "NaN" or "Infinity", which the file never says.
+  { name: ".nan as a key", lines: [".nan: 1"], top: false },
+  { name: ".inf as a key", lines: [".inf: 1"], top: false },
+  { name: "-.inf as a key", lines: ["-.inf: 1"], top: false },
   { name: "a key that is a list", lines: ["? [a]", ": 1"], top: false },
   { name: "a key that is a map", lines: ["? {a: 1}", ": 1"], top: false },
   { name: "a null key", lines: ["~: 1"], top: false },
@@ -781,15 +809,21 @@ export const UNREAD: ReadonlyArray<Unread> = [
   },
 ];
 
-/** `lines` sitting `depth` maps down. */
-export const nested = (depth: number, lines: ReadonlyArray<string>): ReadonlyArray<string> =>
-  depth === 0 ? lines : [`n${depth}:`, ...nested(depth - 1, lines).map((line) => `  ${line}`)];
+/** `lines` sitting `depth` maps down, with the `around` lines (data written by `dataLines`) at every level beside them. */
+export const nested = (
+  depth: number,
+  lines: ReadonlyArray<string>,
+  around: ReadonlyArray<string>,
+): ReadonlyArray<string> =>
+  depth === 0
+    ? [...around, ...lines]
+    : [...around, `n${depth}:`, ...nested(depth - 1, lines, around).map((line) => `  ${line}`)];
 
 const REFUSED_FIELDS = ["number", "status", "decided", "supersedes", "tags", "draft", "meta"] as const;
 
 type Field = (typeof REFUSED_FIELDS)[number];
 
-export interface Refused {
+interface Refused {
   readonly name: string;
   readonly field: string;
   readonly lines: ReadonlyArray<string>;

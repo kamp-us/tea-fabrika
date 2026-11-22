@@ -224,18 +224,24 @@ it.effect.prop(
   { run: Support.run },
   ({ run }) =>
     Effect.gen(function* () {
-      const body = Support.dataVariants(run.seeds)
-        .map((variant) => variant.body)
-        .join("");
-
+      const variants = Support.dataVariants(run.seeds);
       const counts = [(run.picks[0] ?? 0) % 6, 0, 5];
+      const checked: Array<string> = [];
 
-      for (const count of counts) {
-        for (const broken of Support.BROKEN) {
-          const good = Math.max(count, broken.minGood);
-          const lines = [...Support.goodLines(good), ...broken.lines];
-          const label = `${broken.name} after ${good} good lines`;
-          const error = yield* Effect.flip(Frontmatter.read(`---\n${lines.join("\n")}\n---\n${body}`, Support.S1));
+      // Each case takes the next variant, so the cases of one run reach every group: there are more of them than groups.
+      for (const [c, count] of counts.entries()) {
+        for (const [b, broken] of Support.BROKEN.entries()) {
+          const variant = at(variants, c * Support.BROKEN.length + b);
+          const data = Support.jsonData(run.json, variant.pools);
+          const good = Support.dataLines(data, run.picks[1] ?? 0, Math.max(count, broken.minGood));
+          const lines = [...good, ...broken.lines];
+          const label = `${broken.name} after ${good.length} good lines of group ${variant.group}`;
+
+          const error = yield* Effect.flip(
+            Frontmatter.read(`---\n${lines.join("\n")}\n---\n${variant.body}`, Support.S1),
+          );
+
+          checked.push(variant.group);
 
           strictEqual(tagOrReason(error), "syntax", label);
 
@@ -248,10 +254,19 @@ it.effect.prop(
           strictEqual(line >= 2 && line <= lines.length + 2, true, `${label}: line ${line} is outside the block`);
 
           if (broken.at !== undefined) {
-            strictEqual(line, good + 2 + broken.at, label);
+            strictEqual(line, good.length + 2 + broken.at, label);
           }
         }
       }
+
+      deepStrictEqual(
+        missing(
+          checked,
+          variants.map((variant) => variant.group),
+        ),
+        [],
+        "groups never checked in this run",
+      );
     }),
   runs(200),
 );
@@ -263,13 +278,21 @@ it.effect.prop(
   { run: Support.run },
   ({ run }) =>
     Effect.gen(function* () {
-      const body = at(Support.dataVariants(run.seeds), run.picks[0] ?? 0).body;
+      const variants = Support.dataVariants(run.seeds);
       const depths = [0, (run.picks[1] ?? 0) % 4, (run.picks[2] ?? 0) % 4];
+      const checked: Array<string> = [];
+      let n = run.picks[0] ?? 0;
 
+      // Each case sits in data of the next variant, so the cases of one run reach every group: there are more of them than groups.
       for (const unread of Support.UNREAD) {
         for (const depth of unread.top ? [0] : depths) {
-          const label = `${unread.name} at depth ${depth}`;
-          const text = `---\n${Support.nested(depth, unread.lines).join("\n")}\n---\n${body}`;
+          const variant = at(variants, n);
+          const beside = unread.top ? [] : Support.dataLines(Support.jsonData(run.json, variant.pools), n, 1 + (n % 3));
+          const label = `${unread.name} at depth ${depth} in group ${variant.group}`;
+          const text = `---\n${Support.nested(depth, unread.lines, beside).join("\n")}\n---\n${variant.body}`;
+
+          n += 1;
+          checked.push(variant.group);
 
           for (const schema of [Support.S1, Schema.Unknown]) {
             const error = yield* Effect.flip(Frontmatter.read(text, schema));
@@ -278,6 +301,15 @@ it.effect.prop(
           }
         }
       }
+
+      deepStrictEqual(
+        missing(
+          checked,
+          variants.map((variant) => variant.group),
+        ),
+        [],
+        "groups never checked in this run",
+      );
     }),
   runs(200),
 );

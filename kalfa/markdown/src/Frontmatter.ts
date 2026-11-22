@@ -98,9 +98,9 @@ export class NoFrontmatter extends Schema.TaggedError<NoFrontmatter, { readonly 
  * **Details**
  *
  * `reason` is `syntax` when the frontmatter is not YAML, `value` when it is YAML but holds what is not a JSON object (a
- * top level that is not a map, a tag that makes a `Set` or a `Date`, `.nan`, a key that is a list, a null key, two keys that
- * give one text; on write, encoded data that is not a JSON object), and `schema` when the caller's Schema refused the data.
- * `line` is the file's line, counted from 1, when one is known. `cause` is the YAML error or the `SchemaError`; ours has none.
+ * top level that is not a map, a tag that makes a `Set` or a `Date`, `.nan` or `.inf` as a value or a key, a key that is a
+ * list, a null key, two keys that give one text; on write, encoded data that is not a JSON object), and `schema` when the
+ * caller's Schema refused the data. `line` is the file's line, counted from 1, when one is known. `cause` is the YAML error or the `SchemaError`; ours has none.
  *
  * @category errors
  */
@@ -136,13 +136,19 @@ const nodeLine = (counter: LineCounter, node: Node | null): number | undefined =
 
 const toJson = Schema.decodeUnknownResult(Schema.JsonObject);
 
-// A key becomes the text its map gives it. Only a text, a number or a boolean scalar has one; the text of a key that is
-// null, a list or a map, or that another key of its map gives too, would lose data in yaml's own reading with no error.
-const keyText = (pair: Pair): Option.Option<string> =>
-  isScalar(pair.key) &&
-  (Predicate.isString(pair.key.value) || Predicate.isNumber(pair.key.value) || Predicate.isBoolean(pair.key.value))
-    ? Option.some(String(pair.key.value))
+// A key becomes the text its map gives it. Only a text, a finite number or a boolean scalar has one; the text of a key that
+// is null, a list or a map, or that another key of its map gives too, would lose data in yaml's own reading with no error,
+// and so would `.nan` and `.inf`, which would read as the texts "NaN" and "Infinity".
+const keyText = (pair: Pair): Option.Option<string> => {
+  const key = pair.key;
+
+  return isScalar(key) &&
+    (Predicate.isString(key.value) ||
+      Predicate.isBoolean(key.value) ||
+      (Predicate.isNumber(key.value) && Number.isFinite(key.value)))
+    ? Option.some(String(key.value))
     : Option.none();
+};
 
 const unreadableKey = (counter: LineCounter, doc: Document.Parsed): Result.Result<void, BadFrontmatter> => {
   let found: BadFrontmatter | undefined;
@@ -156,7 +162,7 @@ const unreadableKey = (counter: LineCounter, doc: Document.Parsed): Result.Resul
         const text = keyText(pair);
 
         if (Option.isNone(text)) {
-          found = bad("value", "A key must be a text, a number or a boolean", { line });
+          found = bad("value", "A key must be a text, a finite number or a boolean", { line });
 
           return visit.BREAK;
         }
