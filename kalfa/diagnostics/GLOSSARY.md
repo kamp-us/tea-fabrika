@@ -21,7 +21,10 @@ What a diagnostic says is so, as a fact, never quoting text that must stay priva
 _Avoid_: description, text, summary
 
 **Place**:
-Where a diagnostic points: a path from the repo root, and a line and column when known. The whole repo is `.`.
+Where a diagnostic points, and what kind of place it is: a file in the repo (a path from the repo root, and a line and
+column when known; the whole repo is `.`), a file under the home folder (written `~/...` or `$NAME/...`, so no login
+name is printed, and a line and column when known), an environment variable (its name) or a command-line flag (its
+name). A place outside the repo is never `.`.
 _Avoid_: location, position, span
 
 **Hint**:
