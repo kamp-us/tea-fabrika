@@ -455,6 +455,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-diagnostics",
+      "layer": 0,
+      "paths": ["kalfa/diagnostics/src"],
+      "imports": []
+    },
+    {
       "name": "apps",
       "paths": ["apps"]
     },
@@ -499,7 +505,13 @@
       "paths": ["packages/fabrika/src/program"]
     }
   ],
-  "roots": ["next/packages/libfabrika/src", "next/packages/tuval/src", "next/packages/vitest/src", "kalfa/config/src"],
+  "roots": [
+    "next/packages/libfabrika/src",
+    "next/packages/tuval/src",
+    "next/packages/vitest/src",
+    "kalfa/config/src",
+    "kalfa/diagnostics/src"
+  ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],
   "allowed": [
     {
