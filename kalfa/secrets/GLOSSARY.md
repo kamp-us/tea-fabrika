@@ -17,7 +17,7 @@ A signing key handed to us from outside, such as a code host's app key. A person
 _Avoid_: imported key, external key
 
 **Generated signing key**:
-A signing key made inside its secret store by generate. It is the only kind that kalfa rotates.
+A signing key made by generate, inside its secret store or on the way into it. It is the only kind that kalfa rotates.
 _Avoid_: created key, minted key
 
 **Secret name**:
@@ -57,7 +57,7 @@ A secret store's own label for the thing a secret name points to, such as an env
 _Avoid_: address, path, ref
 
 **Generate**:
-Making a new signing key inside its secret store. Only the public half comes out, so no person or agent ever sees the private half. The store's own login always gates it, and code that acts for a sender also needs Permissions' yes.
+Making a new signing key, inside its secret store where the store can, and otherwise in our own process, which writes it to the store at once. Only the public half comes out, so no person or agent ever sees the private half. The store's own login always gates it, and code that acts for a sender also needs Permissions' yes.
 _Avoid_: create, mint, issue
 
 **Rotate**:
