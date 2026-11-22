@@ -185,6 +185,9 @@ Put it in your report.
 
 The test config and typecheck.ts hold worker, home and typecheck limits.
 
+- To wait for a process, wait on its pid or use `pgrep -x <name>`: `pgrep -f` matches the waiting
+  shell's own command line, so that wait never ends.
+
 ## Never
 
 - A survivor the product should catch, but a law cannot reach, goes in the report for the lead.

@@ -423,6 +423,15 @@ const slice1bClauses = [
         "The test config and typecheck.ts hold worker, home and typecheck limits.",
       ] as const,
   ),
+  ...["tests", "build", "mutation"].map(
+    (skill) =>
+      [
+        skill,
+        "Go easy on the machine",
+        "K22",
+        "To wait for a process, wait on its pid or use `pgrep -x <name>`: `pgrep -f` matches the waiting shell's own command line, so that wait never ends.",
+      ] as const,
+  ),
   [
     "tests",
     "Steps",

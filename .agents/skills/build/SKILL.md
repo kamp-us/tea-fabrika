@@ -54,6 +54,8 @@ report.
 
 The test config and typecheck.ts hold worker, home and typecheck limits.
 
+- To wait for a process, wait on its pid or use `pgrep -x <name>`: `pgrep -f` matches the waiting
+  shell's own command line, so that wait never ends.
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
   one, and its refusal prints the command to use instead.
