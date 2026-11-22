@@ -68,6 +68,7 @@ _Avoid_: drop, remove, delete, ban
 
 **Sender**:
 The client or summoned agent an input came from, stamped by the gateway or the brain and never claimed by the input itself.
+On a direct entry no gateway ran: the command names itself as the sender and signs the entry with its client key.
 _Avoid_: writer, signer, author, who, a bare `by` (a field names what was done: `sentBy`, `createdBy`)
 
 **Sign-in**:

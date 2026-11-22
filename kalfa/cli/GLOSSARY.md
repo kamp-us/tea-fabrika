@@ -60,6 +60,6 @@ writes. A subcommand that only reads stays on the device.
 _Avoid_: mutation, action, remote command
 
 **Direct**:
-How a write command writes when the app is down: it writes the entry itself, no permission is checked, and the
-entry says it was direct.
+How a write command writes when the app is down: it writes the entry itself, straight into the app's Ledger. No
+permission is checked, and the entry's sender says it was direct.
 _Avoid_: offline, force, bypass, local mode
