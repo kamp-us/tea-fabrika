@@ -648,3 +648,58 @@ describe("0587 an Existing tools line for each new helper, today's tooling", () 
     }
   });
 });
+
+// Public pull requests 1921, 1922 and 1942: a generator missed an input class the plan named,
+// because the class had no id or its id had no plant, so nothing showed the class was reached.
+// Edge cases: an id named only in a Law cell, or only outside `## Generators`, or inside a fence,
+// or in `value(s)` or `` `f(x)` ``, is no planted class; an approved plan is not refused.
+describe("generator class ids each need a plant, today's tooling", () => {
+  const refusals = (text: string) => text.split("\n").filter((l) => l.startsWith("plan classes: "));
+
+  const refusal = (id: string) =>
+    `plan classes: class (${id}) under ## Generators is in no laws row's Plant cell; give (${id}) a plant that a generator missing it would let pass`;
+
+  const plan = (ids: readonly string[], planted: readonly string[], decoys = "") => {
+    const listed = ids.map((id) => `(${id}) case ${id}`).join("; ");
+
+    const rows = [
+      ...planted.map((id) => [`holds for case ${id}`, "fc.record: generated inputs", `drop case ${id}: (${id}) red`]),
+      ...ids.filter((id) => !planted.includes(id)).map((id) => [`holds for (${id})`, "fc.string", "break it"]),
+    ];
+
+    return complete(`\n## Generators\n\n- **\`text\`**: ${listed}.\n${decoys}`).replace(
+      laws("fc.record: generated inputs"),
+      table(["Law", "Generator", "Plant"], rows.length ? rows : [["holds", "fc.string", "break it"]]),
+    );
+  };
+
+  // Plants, each red: drop the classes check; read ids from a row's every cell; read ids from every
+  // section; refuse only the first missing id.
+  it("property: the draft refuses each listed id that no Plant cell names, and only those", () => {
+    const letter = fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz");
+    fc.assert(
+      fc.property(fc.uniqueArray(letter, { minLength: 1, maxLength: 6 }), fc.nat(), (ids, at) => {
+        const planted = ids.slice(0, at % (ids.length + 1));
+        const missing = ids.filter((id) => !planted.includes(id));
+        const got = drafted(plan(ids, planted));
+
+        expect(got.code, got.text).toBe(missing.length ? 1 : 0);
+        expect(refusals(got.text)).toEqual(missing.map(refusal));
+      }),
+      { seed: 1926, numRuns: 6, examples: [[["a", "b", "c"], 2]] },
+    );
+  });
+
+  it("vector: words like value(s), fenced ids and ids outside ## Generators are no classes, and approval does not refuse", () => {
+    const decoys = "- value(s), `f(x)`, ((y))\n\n```text\n(z) fenced\n```\n";
+    const quiet = plan(["a"], ["a"], decoys).replace("Approval digests and run IDs.", "Approval digests (w).");
+    const got = drafted(quiet);
+    expect(got.code, got.text).toBe(0);
+    expect(refusals(got.text)).toEqual([]);
+
+    const unplanted = plan(["a", "b"], ["a"]);
+    expect(refusals(drafted(unplanted).text)).toEqual([refusal("b")]);
+    const kept = modeCheck(approved(unplanted, "the decided note", 3), "--approved");
+    expect(kept.code, kept.text).toBe(0);
+  });
+});
