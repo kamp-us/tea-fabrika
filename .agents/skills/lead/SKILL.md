@@ -746,6 +746,9 @@ these caps. Each one came from a laptop that became unusable. This list is their
 ## Tool facts that cost us time
 
 - `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
+- On a draft pull request the required check is named `ci-required (draft)` on purpose
+  (`.github/workflows/check.yaml`), so `gh pr checks <pr> --required` finds nothing. Use
+  `gh pr checks <pr>` without the flag, or mark the pull request ready first.
 - In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
   the agent keeps a shell and can read what you meant to hide, git history included.
 - A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.kalfa/decisions/` and
