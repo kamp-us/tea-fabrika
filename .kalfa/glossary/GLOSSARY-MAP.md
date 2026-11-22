@@ -5,8 +5,8 @@ will live, and says how the contexts relate. It defines no term. The rule for it
 
 **Draft.** This context list is being checked with Event Storming on real flows. Borders may move.
 
-Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Nineteen exist so
-far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, CLI, Code quality, Telemetry and Agents. Its shape is in the `domain-modeling` skill's
+Each context gets its own `GLOSSARY.md` when its words are decided, and not before. Twenty exist so
+far: Shared names, Ledger, Program, Identity, Transport, Permissions, Delivery, Incidents, Reconciliation, Secrets, CI, Source control, Conversation, Code hosting, Configuration, Diagnostics, CLI, Code quality, Telemetry and Agents. Its shape is in the `domain-modeling` skill's
 [`GLOSSARY-FORMAT.md`](../../.agents/skills/domain-modeling/GLOSSARY-FORMAT.md), adapted for this repo in
 [PR 1668](https://github.com/kamp-us/tea-fabrika/pull/1668). In short:
 
@@ -71,8 +71,11 @@ moves the line here if it does.
 - **Code hosting** ([`kalfa/codehost/GLOSSARY.md`](../../kalfa/codehost/GLOSSARY.md)): what a remote host adds on top of git: a proposal
   to merge one ref into another, reviews, the host's checks, its rules, and access grants
   (short-lived credentials the host gives out). Built from Source control's words.
+- **Diagnostics** ([`kalfa/diagnostics/GLOSSARY.md`](../../kalfa/diagnostics/GLOSSARY.md)): what a package reports
+  about a place, for an agent to act on: a diagnostic's code, severity, message, place and hint.
 - **CLI** ([`kalfa/cli/GLOSSARY.md`](../../kalfa/cli/GLOSSARY.md)): the `kalfa` command, which finds each
-  package's subcommand, and the contract every subcommand keeps: root name, diagnostics, severity and exit code.
+  package's subcommand, and the contract every subcommand keeps: root name, failure and exit code. It prints
+  Diagnostics' diagnostics.
 - **Code quality** ([`kalfa/quality/GLOSSARY.md`](../../kalfa/quality/GLOSSARY.md)): what a repo's tests are
   built from (laws, depth, recorder, stub, test database), and the checks that show its code and tests are good:
   plants, lint rules and size limits.

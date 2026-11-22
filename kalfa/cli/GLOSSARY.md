@@ -1,7 +1,8 @@
 # CLI
 
 The `kalfa` command, and the contract every package's subcommand under it keeps: how it is found, how it is named,
-what it reports and what its exit code means.
+what it reports and what its exit code means. What a diagnostic is (its code, severity, message, place and hint) is
+Diagnostics' ([`kalfa/diagnostics/GLOSSARY.md`](../diagnostics/GLOSSARY.md)).
 
 ## Language
 
@@ -15,38 +16,13 @@ _Avoid_: plugin, extension, tool
 
 **Root name**:
 A subcommand's first word, such as `records`. Two installed packages with the same root name stop the command from
-starting.
+starting, and so does a package that takes the name of a built-in, `config` or `explain`.
 _Avoid_: alias, command name
-
-**Diagnostic**:
-One thing a subcommand reports: a code, a severity, a message, a place and a hint. Written first for an agent to act
-on.
-_Avoid_: finding, issue, problem, result
-
-**Code**:
-A diagnostic's stable name, such as `config/unknown-setting`, that starts with its subcommand's root name and stays the
-same when the message's words change. `kalfa explain` gives its long text.
-_Avoid_: rule id, error number, kind
-
-**Message**:
-What a diagnostic says is so, as a fact, never quoting text that must stay private.
-_Avoid_: description, text, summary
-
-**Place**:
-Where a diagnostic points: a path from the repo root, and a line and column when known. The whole repo is `.`.
-_Avoid_: location, position, span
-
-**Hint**:
-What to do next about a diagnostic. Every diagnostic has one; when only a person can decide, the hint says so.
-_Avoid_: suggestion, fix, help, advice
-
-**Severity**:
-How much a diagnostic weighs: `error` fails the subcommand, `warning` is only advice.
-_Avoid_: level, advice, priority
 
 **Failure**:
 A subcommand that could not finish, told apart from one that reported errors. It has a message and no code, place or
-severity.
+severity. A subcommand that stops with an error that carries its own diagnostic is not a failure: the command reports
+that diagnostic.
 _Avoid_: crash, error, abort
 
 **Exit code**:
