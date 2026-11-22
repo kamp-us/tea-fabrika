@@ -18,7 +18,8 @@
 # tells a boxed step to run `--changed` or a typecheck. Draft mode also refuses a files-table path
 # that adds a code file (a `.ts`, `.tsx`, `.js` or `.mjs` file that is no test, is not owned by
 # tests and is not in the repo yet) unless a line under `## Existing tools` names that path and says what was "searched"
-# (0587).
+# (0587). Draft mode also refuses a class id, a letter like `(k)` under a `## Generators` section,
+# that no laws row's Plant cell names.
 set -eu
 draft=0
 case ${1:-} in --draft) draft=1; shift;; --approved) draft=approved; shift;; --owners-json) draft=owners; shift;; esac
@@ -201,9 +202,10 @@ owned, file_paths = {}, set()
 files_table, laws_table = False, False
 col, files, gen, path, law = None, False, None, None, None
 owned, file_paths, laws_table, files_table = {}, set(), False, False
+plant, planted = None, []
 for i, l in enumerate(lines):
     l = l.strip()
-    if not l.startswith("|"): col = gen = None; continue
+    if not l.startswith("|"): col = gen = plant = None; continue
     row = cells(l)
     if col is None:
         heads = [plain(c).lower() for c in row]
@@ -216,7 +218,8 @@ for i, l in enumerate(lines):
         gen = -1
         law = next((k for k, c in enumerate(heads) if c.startswith(("law", "property"))), None)
         kind = None
-        if versioned and any("plant" in c for c in heads):
+        plant = next((k for k, c in enumerate(heads) if "plant" in c), None) if versioned else None
+        if plant is not None:
             laws_table = True
             gen = next((k for k, c in enumerate(heads) if "generator" in c or c.startswith("input")), None)
             kind = next((k for k, c in enumerate(heads) if c.startswith("kind") or "lint, type or test" in c), None)
@@ -226,6 +229,7 @@ for i, l in enumerate(lines):
     if all(re.fullmatch(r":?-+:?", c) for c in row): continue
     if len(row) != len(heads):
         bad.append(f"line {i + 1}: table row has {len(row)} cells, expected {len(heads)}"); continue
+    if plant is not None: planted.append(row[plant])
     if draft != "owners" and gen >= 0 and not generator(row[gen]):
         bad.append(f"line {i + 1}: invalid generator: {row[gen]}")
     if gen >= 0 and law is not None and "[secrets]" in row[law] and not generated(row[gen]):
@@ -287,8 +291,23 @@ def existing_tools():
         if not named:
             out.append(f"plan existing tools: {p} is a new code file; add a line under ## Existing tools that names it and says what was searched (0587)")
     return out
+CLASS = re.compile(r"(?<![\w(])\(([a-z])\)(?![\w)])")
+def classes():
+    # A generator's input classes: each id like `(k)` in a `## Generators` section, outside fences,
+    # needs a laws row whose Plant cell names it, or nothing shows a generator reached that class.
+    # The rule reads ids only: a range such as "(a) to (c)" names (a) and (c), not (b).
+    heads = [j for j, l in enumerate(lines) if re.match(r"^##\s", l)]
+    listed = []
+    for j in heads:
+        if not re.match(r"^##\s+generators\b", lines[j], re.I): continue
+        end = next((k for k in heads if k > j), len(lines))
+        for k in range(j + 1, end):
+            listed.extend(m[1] for m in CLASS.finditer(lines[k]) if m[1] not in listed)
+    seen = {m[1] for cell in planted for m in CLASS.finditer(cell)}
+    return [f"plan classes: class ({c}) under ## Generators is in no laws row's Plant cell; "
+            f"give ({c}) a plant that a generator missing it would let pass" for c in listed if c not in seen]
 if draft in ("1", "approved"):
-    if draft == "1": bad.extend(existing_tools())
+    if draft == "1": bad.extend(existing_tools() + classes())
     if not opening: bad.append("plan_section_missing: opening fenced block")
     if not laws_table: bad.append("plan_section_missing: laws table")
     if not files_table: bad.append("plan_section_missing: files table")

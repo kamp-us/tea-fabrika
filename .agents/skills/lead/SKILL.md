@@ -482,6 +482,8 @@ visible, and never weaken the rules to hide this message.
 5. **Run the steps in order,** in the background: tests, build, review (no mutation step, 0066). Each runs
    through `drive.ts`, except a step with Electron or socket work, which a Claude agent runs
    (above). No builder starts before tests that exist. Each brief names its skill.
+   Before the build brief, read the tests report's reach table against the plan's `## Generators`
+   ids. An id with no plant seen red goes back to tests; it is never a note in the build brief.
    Never start a review while a host-only law the plan names has not passed on a real machine. The build runs it, or you run it right after
    the build (step 7). Launchd, real Electron and process-signal laws run on eligible disposable CI,
    never on the owner's laptop.

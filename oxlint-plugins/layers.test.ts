@@ -950,3 +950,43 @@ describe("the patched code-graph", () => {
     }),
   );
 });
+
+// A kalfa package with a row in `boundary-rules.json` and none in `layer-rules.json` has its imports checked by
+// `lint:boundaries` only: `lint:layers` cannot see an import of it (ticket 1261, from the Markdown frontmatter
+// retro). The two rule files must move in step. Plant: delete the `kalfa-diagnostics` row from `layer-rules.json`,
+// and the law fails.
+const Boundaries = Schema.Struct({ libraries: Schema.Record(Schema.String, Schema.String) });
+
+const BOUNDARIES = Schema.decodeUnknownSync(Boundaries)(
+  JSON.parse(readFileSync(resolve(NEXT, "../boundary-rules.json"), "utf8")),
+);
+
+/** The kalfa packages that have a boundary row and no layer row whose paths start in the package's folder. */
+const withoutLayerRow = (libraries: Readonly<Record<string, string>>, rows: Rules["layers"]): ReadonlyArray<string> =>
+  pipe(
+    Rec.keys(libraries),
+    Arr.filter((folder) => folder.startsWith("kalfa/")),
+    Arr.filter(
+      (folder) => !rows.some((row) => row.paths.some((path) => path === folder || path.startsWith(`${folder}/`))),
+    ),
+  );
+
+/**
+ * Known gaps: packages with a boundary row and no layer row. Their rank is not written in `kalfa/AGENTS.md`'s
+ * import order, which names only the ledger, Program, Diagnostics, Configuration and CLI, so no rank is invented
+ * here. A package leaves this list when it gets its layer row (the law fails while a row and an entry both exist).
+ */
+const KNOWN_GAPS: ReadonlyArray<string> = ["kalfa/ci", "kalfa/quality", "kalfa/records"];
+
+describe("the layer rows and the boundary rows move in step", () => {
+  it("law: every kalfa package with a boundary row has a layer row, or is a known gap", () => {
+    expect(withoutLayerRow(BOUNDARIES.libraries, REAL.layers).toSorted()).toEqual(KNOWN_GAPS);
+  });
+
+  it("vector: a package with a boundary row and no layer row is found, one with a row inside its folder is not", () => {
+    const libraries = { "kalfa/a": "kalfa-a", "kalfa/b": "kalfa-b", "packages/c": "library" };
+    const rows: Rules["layers"] = [{ name: "kalfa-a", layer: 1, paths: ["kalfa/a/src"], imports: [] }];
+    expect(withoutLayerRow(libraries, rows)).toEqual(["kalfa/b"]);
+    expect(withoutLayerRow(libraries, [])).toEqual(["kalfa/a", "kalfa/b"]);
+  });
+});
