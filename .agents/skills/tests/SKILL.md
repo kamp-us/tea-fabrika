@@ -147,6 +147,9 @@ These hold in every tests round, so the brief does not repeat them.
   A ticket that adds a workspace package runs one `pnpm install --offline` without
   `--frozen-lockfile` once its `package.json` is in, then checks the lockfile diff holds only the
   new importer.
+  A ticket that adds a `layer-rules.json` row updates the list `oxlint-plugins/layers.test.ts` pins, in
+  the same commit, and runs `nice -n 15 pnpm exec vitest run --maxWorkers=1 oxlint-plugins/layers.test.ts`
+  once. A draft's CI never runs that test, so a missed row first shows red when the pull request is ready.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
 - **Fix it properly.** No skip, no `.only`, no raised timeout, no sleep-and-hope, no placeholder or
   weaker assertion, no `as` cast to quiet a type. No allow-list or ledger row added, no lint rule
