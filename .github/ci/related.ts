@@ -251,7 +251,7 @@ export const checkDelivery = (input: {
     return refused("stage");
   }
 
-  if (!sameKeys(Object.keys(receipt.exports), [...SUBPATHS.map((name) => `./${name}`), "./package.json"])) {
+  if (!sameKeys(Object.keys(receipt.exports), [".", ...SUBPATHS.map((name) => `./${name}`), "./package.json"])) {
     return refused("exports");
   }
 
