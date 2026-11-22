@@ -35,3 +35,8 @@ _Avoid_: suggestion, fix, help, advice
 How much a diagnostic weighs: `error` fails the subcommand, `warning` is only advice. It is given when the
 diagnostic is reported, so a setting may choose it.
 _Avoid_: level, advice, priority
+
+**Long text**:
+A code's full explanation, written in Markdown where the code is declared. The command prints it on request. A
+diagnostic's message stays short because the long text exists.
+_Avoid_: docs, description, explanation, help

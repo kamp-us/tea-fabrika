@@ -710,6 +710,7 @@ describe("the real rule file on planted trees", () => {
       "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
       "next-shared": 0,
       "next-vitest": 0, // the shared test package rule: the test primitives, a package of their own below everything else of ours
+      "kalfa-diagnostics": 0, // it imports no package of ours, and kalfa-config (1) ranks above it
     });
   });
 

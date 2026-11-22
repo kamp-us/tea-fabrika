@@ -89,6 +89,9 @@ These hold in every build round, so the brief does not repeat them.
 - **Checks, in this order:** every law green, one file at a time; `pnpm format`; `pnpm lint` once;
   the list ratchet CI runs that local lint does not,
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"`, exits 0;
+  `nice -n 15 pnpm exec vitest run --maxWorkers=3 --changed origin/main` once, as `AGENTS.md`,
+  "Checks", asks, and your report names each red in it that is not yours (a lockfile change makes it
+  the full suite: run the narrow paths and leave the full run to CI, as `AGENTS.md` says);
   one `pnpm typecheck`; then `sh .agents/skills/lead/scripts/loosening.sh <the brief's head> HEAD`,
   with your reading of each hit.
 - **Commit and push:** commit your own paths by name with plain `git commit`, in a few commits that

@@ -4,8 +4,10 @@
 //
 //   queue   as Queue.add: open, ready, into main -> the leak gate -> ci-required green -> one
 //           pinned squash, which adds it to the merge queue
-//   admin   open, ready, into main, no `Plan:` title -> the leak gate -> ci-required green at the head,
-//           for every admin merge -> for a sev fix, also origin/main's head in its history -> one
+//   admin   open, ready, into main, no `Plan:` title, not a `can/` branch -> the leak gate -> ci-required
+//           completed and green at the head, for every admin merge; a draft is marked ready first, and
+//           with `wait` the check is given that long to appear and end (`land.ts admin`) -> the head has
+//           not moved since it was read -> for a sev fix, also origin/main's head in its history -> one
 //           pinned squash with --admin, past the queue. "Admin" skips the queue, never a green
 //           ci-required. It says why it was allowed: a sev fix at either level (the sev1's named fix,
 //           or a sev0's `open --allow` or `next` branch, as a sev fix is admin-merged one at a time on
@@ -16,7 +18,6 @@
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
 import { Effect, Schema } from "effect";
-import { Checks } from "../ci/Checks.ts";
 import * as Arm from "./Arm.ts";
 import { Branches } from "./Branches.ts";
 import * as Leaks from "./Leaks.ts";
@@ -48,6 +49,8 @@ export type Ask = {
   readonly dir: string;
   readonly pr: number;
   readonly route: Route;
+  /** For an admin merge: mark a draft ready, and give `ci-required` this long to appear and end. Left out, a draft is refused and the check is read once. */
+  readonly wait?: Queue.Wait;
 };
 
 /** What `merge` did: queued, admin-merged, or found it merged already. */
@@ -83,16 +86,28 @@ const adminFor = (head: string, route: AdminRoute) => {
   return { for: "asked" as const, level: null };
 };
 
-const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route: AdminRoute) {
+/** How long `land.ts admin` gives `ci-required` to appear and end, and the seconds between two reads; its flags change both. */
+export const ADMIN_WAIT: Queue.Wait = { minutes: 30, every: 30 };
+
+/** A `can/` branch is a person's own work and never merged by the lead. */
+const CAN = "can/";
+
+const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route: AdminRoute, wait?: Queue.Wait) {
   const prs = yield* PullRequests;
-  const found = yield* prs.view(pr);
+  let found = yield* prs.view(pr);
   const refuse = (reason: string) => new NotMerged({ reason: `pr ${found.number}: ${reason}` });
 
   if (found.state === "MERGED") {
     return Done.cases.merged.make({ pr: found.number, commit: found.mergeCommit ?? found.oid });
   }
 
-  const refused = Queue.refusal(found) ?? Arm.refusal(found);
+  if (found.head.startsWith(CAN)) {
+    return yield* refuse(`${found.head} is a ${CAN} branch, never merged here; not merged`);
+  }
+
+  // With a wait, a draft is not refused for being a draft: it is marked ready below, after the leak gate.
+  const marking = wait !== undefined && found.state === "OPEN" && found.draft;
+  const refused = Queue.refusal(marking ? { ...found, draft: false } : found) ?? Arm.refusal(found);
 
   if (refused !== null) {
     return yield* refuse(refused);
@@ -102,14 +117,29 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
 
   yield* Leaks.gate(dir, found);
 
+  // Marking a draft ready starts its real `ci-required`, which has not registered yet: the wait below
+  // is what keeps the merge from running ahead of it.
+  if (marking) {
+    yield* prs.ready(found.number);
+    found = yield* prs.view(pr);
+  }
+
   // Every admin merge, docs included, lands once ci-required is green at the head: it skips the queue,
   // never the check.
-  const required = yield* (yield* Checks).job(found.oid, Queue.REQUIRED);
+  const required = yield* Queue.requiredAt(found.oid, wait);
 
-  if (required._tag === "None" || required.value.conclusion !== "success") {
+  if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
     const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
     return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
+  }
+
+  // The check was read for the head that was read first. A push during the wait moves it, and the
+  // pinned squash would refuse anyway; say so here, before asking.
+  const now = yield* prs.view(pr);
+
+  if (now.oid !== found.oid) {
+    return yield* refuse(`its head moved from ${found.oid} to ${now.oid} while waiting; not merged`);
   }
 
   // A fix holds main's head (a sev fix is admin-merged one at a time on current main): the next fix is tested on top of it. A ready pull request in a sev0
@@ -138,7 +168,7 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, route
 
 export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
   if (a.route._tag === "admin") {
-    return yield* admin(a.dir, a.pr, a.route);
+    return yield* admin(a.dir, a.pr, a.route, a.wait);
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });

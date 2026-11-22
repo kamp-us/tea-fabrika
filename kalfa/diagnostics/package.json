@@ -1,0 +1,52 @@
+{
+  "name": "@kalfa/diagnostics",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rslib build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@rslib/core": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  },
+  "files": [
+    "dist",
+    "!dist/.rsbuild"
+  ],
+  "exports": {
+    "./Diagnostic": "./src/Diagnostic.ts",
+    "./Diagnostics": "./src/Diagnostics.ts",
+    "./TestDiagnostics": "./src/TestDiagnostics.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      "./Diagnostic": {
+        "types": "./dist/Diagnostic.d.ts",
+        "default": "./dist/Diagnostic.js"
+      },
+      "./Diagnostics": {
+        "types": "./dist/Diagnostics.d.ts",
+        "default": "./dist/Diagnostics.js"
+      },
+      "./TestDiagnostics": {
+        "types": "./dist/TestDiagnostics.d.ts",
+        "default": "./dist/TestDiagnostics.js"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  }
+}

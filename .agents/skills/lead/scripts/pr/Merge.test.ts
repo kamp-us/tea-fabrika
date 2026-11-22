@@ -25,7 +25,9 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
 import { Recorder, runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Schema, Match } from "effect";
+import { Effect, Fiber, Layer, Option, Schema, Match } from "effect";
+import { TestClock } from "effect/testing";
+import { Checks } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as BranchesTest from "./BranchesTest.ts";
 import * as Merge from "./Merge.ts";
@@ -71,12 +73,17 @@ type World = {
   readonly required?: "success" | "failure" | "pending";
   readonly title?: string;
   readonly head?: string;
+  /** The pull request is a draft, as one is just before the lead marks it ready. */
+  readonly draft?: boolean;
   /** How many commits origin/main holds that the head does not; 0, the default, is a head that holds main. */
   readonly behind?: number;
 };
 
 const memory = (w: World = {}) => {
-  const github = PullRequestsTest.world([{ number: 1415, head: w.head ?? branch, oid, state: "OPEN", draft: false }]);
+  const github = PullRequestsTest.world([
+    { number: 1415, head: w.head ?? branch, oid, state: "OPEN", draft: w.draft ?? false },
+  ]);
+
   github.more.set(1415, { title: w.title ?? title, body });
   github.files.set(1415, FILES[w.files ?? "docs"]);
   const remote = PushesTest.remote();
@@ -453,6 +460,103 @@ describe("the leak gate's process: the real leakgrep.sh, whose exit code decides
       for (const ran of [text, commits]) {
         expect(ran._tag === "Failure" && ran.failure._tag).toBe("LeakGrepRefused");
       }
+    }),
+  );
+});
+
+const poll = (status: "in_progress" | "success" | "failure") =>
+  Option.some(
+    status === "in_progress" ? { id: 1, status, conclusion: null } : { id: 1, status: "completed", conclusion: status },
+  );
+
+/** One admin merge with a wait, on checks that answer these polls, and the time it was given to finish. */
+const waited = (m: ReturnType<typeof memory>, polls: ReadonlyArray<ChecksTest.Poll>, every = 10) =>
+  Effect.gen(function* () {
+    const fiber = yield* Merge.merge({ dir: ".", pr: 1415, route: admin(), wait: { minutes: 5, every } }).pipe(
+      Effect.provide(Layer.merge(m.layer, ChecksTest.layer(polls, ""))),
+      Effect.result,
+      Effect.forkChild,
+    );
+
+    yield* TestClock.adjust("6 minutes");
+
+    return yield* Fiber.join(fiber);
+  });
+
+describe("merge: land.ts admin never merges ahead of ci-required, a can/ branch or a leak hit", () => {
+  // Plants: ask GitHub's merge while the check is missing or running (the 2026-11-22 shell chain);
+  // mark a draft ready before the leak gate or a can/ refusal; merge a can/ branch; read the check once
+  // after marking ready, so a check that has not registered yet is a refusal; drop the wait's limit.
+  it.effect.prop(
+    "property: a draft is marked ready, then GitHub's merge is asked once, pinned to the head, only once ci-required has appeared, ended and succeeded, and never for a can/ branch or a leak hit",
+    {
+      draft: Schema.Boolean,
+      can: Schema.Boolean,
+      leak: Leak,
+      before: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+      running: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+      end: Schema.Literals(["success", "failure", "never"]),
+    },
+    ({ draft, can, leak, before, running, end }) =>
+      Effect.gen(function* () {
+        const m = memory({ draft, leak, head: can ? "can/theirs" : branch });
+
+        const polls = [
+          ...Array.from({ length: before }, () => Option.none()),
+          ...Array.from({ length: running }, () => poll("in_progress")),
+          poll(end === "never" ? "in_progress" : end),
+        ];
+
+        const answer = yield* waited(m, polls);
+        const refusedEarly = can || leak !== "clean";
+        const merges = !refusedEarly && end === "success";
+
+        expect(answer._tag).toBe(merges ? "Success" : "Failure");
+
+        expect(m.github.calls).toEqual([
+          ...(draft && !refusedEarly ? [{ _tag: "ready", number: 1415 }] : []),
+          ...(merges ? [{ _tag: "admin", number: 1415, oid }] : []),
+        ]);
+      }),
+    { arbitrary: { seed: 1249, runs: runsFor({ fast: 60, full: 200 }) } },
+  );
+
+  // Plant: let a draft through without a wait, which the check of a ready pull request cannot have registered for.
+  it.effect("scenario: without a wait a draft is refused and not marked ready, as before", () =>
+    Effect.gen(function* () {
+      const m = memory({ draft: true });
+      const refused = yield* Effect.flip(merge(m, admin()));
+      expect(refused.reason).toContain("draft, not merged");
+      expect(m.github.calls).toEqual([]);
+    }),
+  );
+
+  // Plant: pin the merge to the head read before the wait.
+  it.effect("scenario: a push during the wait moves the head, and nothing is merged", () =>
+    Effect.gen(function* () {
+      const m = memory();
+      const moved = "f".repeat(40);
+
+      const checks = Layer.succeed(
+        Checks,
+        Checks.of({
+          job: () =>
+            Effect.sync(() => {
+              m.github.prs[0] = { ...m.github.prs[0]!, oid: moved };
+
+              return poll("success");
+            }),
+          log: () => Effect.succeed(""),
+        }),
+      );
+
+      const fiber = yield* Merge.merge({ dir: ".", pr: 1415, route: admin(), wait: { minutes: 5, every: 60 } }).pipe(
+        Effect.provide(Layer.merge(m.layer, checks)),
+        Effect.flip,
+      );
+
+      expect(fiber.reason).toContain(`its head moved from ${oid} to ${moved}`);
+      expect(m.github.calls).toEqual([]);
     }),
   );
 });
