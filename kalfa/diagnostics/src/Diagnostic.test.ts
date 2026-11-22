@@ -1,5 +1,5 @@
 // The laws of what a diagnostic is (Diagnostic.ts): the code's form, the place's rules, a reported
-// diagnostic and a declared code. They are laws D1 to D4 of the approved plan for ticket 1917.
+// diagnostic and a declared code. They are laws D1 to D4.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Exit, Schema } from "effect";
 import {
@@ -7,14 +7,18 @@ import {
   blank,
   CODE_BREAKS,
   codeParts,
+  blanksFrom,
+  fieldVariants,
   goodCode,
-  goodFields,
+  goodFieldsAndParts,
   goodPlaces,
-  nonBlank,
+  goodText,
   otherSeverity,
   PLACE_BREAKS,
   placeParts,
+  placeVariants,
   SEED,
+  TEXT_KINDS,
   toCode,
 } from "./Diagnostic.test-support.ts";
 import * as Diagnostic from "./Diagnostic.ts";
@@ -41,18 +45,24 @@ describe("D1, the code's form", () => {
   );
 });
 
-// D2. Plant: drop the "a column needs a line" check, and the column-with-no-line break is accepted.
+// D2. Plant: drop the "a column needs a line" check, and the column-with-no-line break is accepted. One plant
+// per kind of odd segment, each a wrong rule for a segment in Diagnostic.ts: refuse a segment that starts with a
+// dot; refuse a segment that holds a space; accept only [a-zA-Z0-9_~@+().-] in a segment; accept only printable
+// ASCII in a segment.
 describe("D2, the place", () => {
   it.prop(
-    "a place is the whole repo or a path from its root, with a line and a column only from 1; every break of that is refused",
-    { parts: placeParts },
-    ({ parts }) => {
-      for (const good of goodPlaces(parts)) {
-        expect(takesPlace(good), JSON.stringify(good)).toBe(true);
-      }
+    "a place is the whole repo or a path from its root, with a line and a column only from 1, whatever characters its segments hold; every break of that is refused",
+    { drawn: placeParts },
+    ({ drawn }) => {
+      // The drawn parts, and the parts with every segment made into each kind of odd segment.
+      for (const parts of placeVariants(drawn)) {
+        for (const good of goodPlaces(parts)) {
+          expect(takesPlace(good), JSON.stringify(good)).toBe(true);
+        }
 
-      for (const broken of PLACE_BREAKS) {
-        expect(takesPlace(broken.apply(parts)), `${broken.name}: ${JSON.stringify(broken.apply(parts))}`).toBe(false);
+        for (const broken of PLACE_BREAKS) {
+          expect(takesPlace(broken.apply(parts)), `${broken.name}: ${JSON.stringify(broken.apply(parts))}`).toBe(false);
+        }
       }
     },
     { arbitrary: { seed: SEED, runs: 200 } },
@@ -81,22 +91,41 @@ const REPORTED_BREAKS: ReadonlyArray<Break<Wrongs, object>> = [
   { name: "no hint", apply: ({ good }) => without(good, "hint") },
 ];
 
-// A good input for a reported diagnostic, made here: Reported's own Arbitrary is not the law's to rely on.
-const goodReported = Arbitrary.all({ code: goodCode, fields: goodFields }).pipe(
-  Arbitrary.map(({ code, fields }) => ({ code, ...fields })),
+// A good input for a reported diagnostic, made here: Reported's own Arbitrary is not the law's to rely on. It
+// holds the code, the fields, and the same fields made odd one kind at a time.
+const goodReported = Arbitrary.all({ code: goodCode, drawn: goodFieldsAndParts }).pipe(
+  Arbitrary.map(({ code, drawn }) => ({
+    good: { code, ...drawn.fields },
+    odd: fieldVariants(drawn).map((fields) => ({ code, ...fields })),
+  })),
 );
 
-// D3. Plant: check the hint with isNonEmpty only, and the blank-hint break is accepted.
+// D3. Plant: check the hint with isNonEmpty only, and the blank-hint break is accepted. One plant per kind of
+// odd text, each a wrong rule for text in Diagnostic.ts: refuse text whose first character is whitespace;
+// refuse a tab, a line feed or a carriage return anywhere; refuse a character past U+024F; refuse more than 16
+// characters; and for blanks, count only space, tab and line feed as blank.
 describe("D3, a reported diagnostic", () => {
   it.prop(
-    "a reported diagnostic has five good fields and round trips; every blank, wrong or missing field is refused",
-    { good: goodReported, blanks: blank, severity: otherSeverity },
-    ({ good, blanks, severity }) => {
-      expect(takesReported(good)).toBe(true);
-      expect(Schema.encodeSync(Diagnostic.Reported)(Schema.decodeUnknownSync(Diagnostic.Reported)(good))).toEqual(good);
+    "a reported diagnostic has five good fields, of any text, and round trips; every blank, wrong or missing field is refused",
+    { drawn: goodReported, blanks: blank, severity: otherSeverity },
+    ({ drawn: { good, odd }, blanks, severity }) => {
+      for (const each of [good, ...odd]) {
+        expect(takesReported(each)).toBe(true);
+        expect(Schema.encodeSync(Diagnostic.Reported)(Schema.decodeUnknownSync(Diagnostic.Reported)(each))).toEqual(
+          each,
+        );
+      }
 
-      for (const broken of REPORTED_BREAKS) {
-        expect(takesReported(broken.apply({ good, blanks, severity })), broken.name).toBe(false);
+      // Each kind of blank, beside the good fields, and the drawn blank beside each kind of odd good field.
+      const wrongs = [
+        ...blanksFrom(blanks).map((blanked) => ({ good, blanks: blanked, severity })),
+        ...odd.map((each) => ({ good: each, blanks, severity })),
+      ];
+
+      for (const wrong of wrongs) {
+        for (const broken of REPORTED_BREAKS) {
+          expect(takesReported(broken.apply(wrong)), broken.name).toBe(false);
+        }
       }
     },
     { arbitrary: { seed: SEED, runs: 200 } },
@@ -104,7 +133,7 @@ describe("D3, a reported diagnostic", () => {
 });
 
 // Text with whitespace around it, which `make` keeps as given.
-const markdown = Arbitrary.all([blank, nonBlank, blank]).pipe(Arbitrary.map((parts) => parts.join("")));
+const markdown = Arbitrary.all([blank, goodText, blank]).pipe(Arbitrary.map((parts) => parts.join("")));
 
 // D4. Plant: trim `explain` before keeping it, and a text with spaces around it comes back changed.
 describe("D4, make declares", () => {
@@ -112,10 +141,13 @@ describe("D4, make declares", () => {
     "a good code and a text give a declared code that holds both exactly as given",
     { code: goodCode, explain: markdown },
     ({ code, explain }) => {
-      const declared = Diagnostic.make(code, { explain });
+      // The text as drawn, and made into each kind of odd text.
+      for (const each of [explain, ...TEXT_KINDS.map((kind) => kind.apply(explain))]) {
+        const declared = Diagnostic.make(code, { explain: each });
 
-      expect(declared.code).toBe(code);
-      expect(declared.explain).toBe(explain);
+        expect(declared.code).toBe(code);
+        expect(declared.explain).toBe(each);
+      }
     },
     { arbitrary: { seed: SEED, runs: 100 } },
   );
@@ -132,7 +164,11 @@ describe("D4, make declares", () => {
         );
       }
 
-      expect(() => Diagnostic.make(toCode(parts), { explain: blanks })).toThrow(new RegExp(`${toCode(parts)}|explain`));
+      for (const blanked of blanksFrom(blanks)) {
+        expect(() => Diagnostic.make(toCode(parts), { explain: blanked })).toThrow(
+          new RegExp(`${toCode(parts)}|explain`),
+        );
+      }
     },
     { arbitrary: { seed: SEED, runs: 100 } },
   );

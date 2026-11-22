@@ -1,7 +1,7 @@
-// D8 and D9 of the approved plan for ticket 1917: the public types of
-// `report` and of the test Layer. They are checked by the compiler, which the lead runs after the build.
+// D8, D9 and D16: the public types of `report`, of the test Layer and of the service's own method. They are
+// checked by the compiler, not by a test run.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Layer } from "effect";
+import { type Context, Effect, type Layer } from "effect";
 import type * as Diagnostic from "./Diagnostic.ts";
 import * as Diagnostics from "./Diagnostics.ts";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
@@ -49,4 +49,28 @@ it("D8 type: report takes only a declared code and the fields beside it", () => 
 it("D9 type: the test Layer provides both services and a read needs the test service", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(testLayerContract).toBeFunction();
+});
+
+type Service = Context.Service.Shape<typeof Diagnostics.Diagnostics>;
+
+const serviceContract = (service: Service, decoded: Diagnostic.Reported) => {
+  // D16 plant: widen the service method's parameter back to `Diagnostic.Reported`, or keep it but drop the
+  // brand, or give the brand an optional key: both lines below compile, and their `@ts-expect-error` is unused.
+  // @ts-expect-error a value decoded with the public Schemas is not what `report` hands the service
+  expectTypeOf(service.report(decoded)).toBeObject();
+  // @ts-expect-error nor is one that never passed `report`'s checks: a blank message and hint and a bad place
+  expectTypeOf(service.report({ ...decoded, message: "", hint: "", place: { path: "/etc/../x" } })).toBeObject();
+
+  // A provider may read every field without naming the brand: a function over the wider type fits.
+  const provider = (diagnostic: Diagnostic.Reported): Effect.Effect<void> =>
+    Effect.sync(() => {
+      void [diagnostic.code, diagnostic.severity, diagnostic.message, diagnostic.place, diagnostic.hint];
+    });
+
+  expectTypeOf(provider).toExtend<Service["report"]>();
+};
+
+it("D16 type: only report hands the service a diagnostic", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(serviceContract).toBeFunction();
 });

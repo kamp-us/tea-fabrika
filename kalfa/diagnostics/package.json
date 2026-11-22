@@ -13,7 +13,6 @@
     "@rslib/core": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:",
-    "fast-check": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -1,4 +1,4 @@
-// D10 to D12 of the approved plan for ticket 1917: what the package
+// D10 to D12: what the package
 // exports, what its manifest says, and that none of its files names this repo. They read the package's own
 // module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
 // pieces below, so this file is not itself a hit.
@@ -46,7 +46,7 @@ it("D10 scenario: TestDiagnostics exports the service, its Layer and the read, a
 
 // D11. Plant: add a repo package to the dev dependencies, and the check on package names fails.
 it.effect(
-  "D11 scenario: the manifest names no repo package, has no dependencies, one peer, and the exports the plan lists",
+  "D11 scenario: the manifest names no repo package, has no dependencies, one peer, and the exports listed",
   () =>
     Effect.gen(function* () {
       // scenario: the package's own manifest at head; no generated input says what a manifest holds.
@@ -77,8 +77,8 @@ it.effect(
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 
-// What the package must not name (decision 0047: it holds nothing specific to this repo), in pieces so this
-// file does not hold them whole.
+// What the package must not name: it holds nothing specific to the repo it sits in. In pieces, so this file
+// does not hold them whole.
 const FORBIDDEN = [
   ["fab", "rika"],
   ["kam", "pus"],

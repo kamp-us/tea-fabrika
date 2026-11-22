@@ -1,9 +1,9 @@
 // What the laws of this package's three modules share: generators for good and broken codes, places and
-// texts. Each law applies every break to each good value it draws, so each case a law must reach is in every
-// run, and no run can pass on less.
+// texts. Each law applies every break and every kind of odd good value to each value it draws, so each case a
+// law must reach is in every run, and no run can pass on less.
 import { Arbitrary, Array as Arr, Schema } from "effect";
 
-/** The shared seed (AGENTS.md), so a red run repeats. */
+/** The shared seed: a fixed seed makes a red run repeat. */
 export const SEED = 119120;
 
 /** A break: a name, and what it makes of good parts. */
@@ -71,8 +71,23 @@ interface PlaceInput {
   readonly column?: number;
 }
 
-// A segment never starts with a dot, so it is never "." or "..".
+// A drawn segment is plain: it never starts with a dot, so it is never "." or "..". The odd good segments are
+// made from it by SEGMENT_KINDS.
 const segment = pattern(/^[a-zA-Z0-9_~@+()-][a-zA-Z0-9_~@+().-]{0,5}$/);
+
+/** A kind of odd but good path segment: what it makes of a plain segment. */
+const SEGMENT_KINDS: ReadonlyArray<Break<string, string>> = [
+  { name: "starts with a dot", apply: (part) => `.${part}` },
+  { name: "starts with two dots", apply: (part) => `..${part}` },
+  { name: "only three dots", apply: () => "..." },
+  { name: "a space at the start", apply: (part) => ` ${part}` },
+  { name: "a space inside", apply: (part) => `${part} ${part}` },
+  { name: "a space at the end", apply: (part) => `${part} ` },
+  { name: "ASCII punctuation", apply: (part) => `${part}#%,=[]{}!$&';:` },
+  { name: "a letter past ASCII", apply: (part) => `${part}é` },
+  { name: "a character past U+024F", apply: (part) => `${part}设` },
+  { name: "a character outside the Basic Multilingual Plane", apply: (part) => `${part}\u{1F600}` },
+];
 
 /** The parts of a place that has a file, a line and a column, and where a break goes in the path. */
 interface PlaceParts {
@@ -96,6 +111,12 @@ export const goodPlaces = ({ segments, line, column }: PlaceParts): ReadonlyArra
 
   return [{ path: "." }, { path }, { path, line }, { path, line, column }];
 };
+
+/** The parts as drawn, and the parts with every segment made into each kind of odd good segment. */
+export const placeVariants = (parts: PlaceParts): ReadonlyArray<PlaceParts> => [
+  parts,
+  ...SEGMENT_KINDS.map((kind) => ({ ...parts, segments: parts.segments.map(kind.apply) })),
+];
 
 const through = ({ segments, at }: PlaceParts, item: string): string =>
   segments.toSpliced(at % (segments.length + 1), 0, item).join("/");
@@ -126,25 +147,76 @@ export const PLACE_BREAKS: ReadonlyArray<Break<PlaceParts, PlaceInput>> = [
   { name: "a line on the whole repo", apply: ({ line }) => ({ path: ".", line }) },
 ];
 
-/** One good place, of any of the four kinds. */
+/** One good place, of any of the four kinds, with plain segments or odd ones. */
 const goodPlace: Arbitrary.Arbitrary<PlaceInput> = Arbitrary.all({
   parts: placeParts,
+  variant: between(0, SEGMENT_KINDS.length),
   kind: between(0, 3),
-}).pipe(Arbitrary.map(({ parts, kind }) => Arr.getUnsafe(goodPlaces(parts), kind)));
+}).pipe(
+  Arbitrary.map(({ parts, variant, kind }) =>
+    Arr.getUnsafe(goodPlaces(Arr.getUnsafe(placeVariants(parts), variant)), kind),
+  ),
+);
 
-/** One broken place, of any of the breaks. */
+/** One broken place, of any of the breaks, made from plain segments or odd ones. */
 export const brokenPlace: Arbitrary.Arbitrary<PlaceInput> = Arbitrary.all({
   parts: placeParts,
+  variant: between(0, SEGMENT_KINDS.length),
   broken: pick(PLACE_BREAKS),
-}).pipe(Arbitrary.map(({ parts, broken }) => broken.apply(parts)));
+}).pipe(Arbitrary.map(({ parts, variant, broken }) => broken.apply(Arr.getUnsafe(placeVariants(parts), variant))));
 
 // ---- texts
 
-/** Some text that is not only spaces: it starts with a visible character, and may hold spaces after. */
-export const nonBlank: Arbitrary.Arbitrary<string> = pattern(/^[!-~¡-ɏ][ -~¡-ɏ]{0,15}$/);
+/** Some text that is not only whitespace: it starts with a visible character, and may hold spaces after. */
+const nonBlank: Arbitrary.Arbitrary<string> = pattern(/^[!-~¡-ɏ][ -~¡-ɏ]{0,15}$/);
 
-/** Text that is empty or only spaces, tabs and line breaks. */
-export const blank: Arbitrary.Arbitrary<string> = pattern(/^[ \t\n]{0,4}$/);
+/** A kind of odd but good text: what it makes of some plain good text. */
+export const TEXT_KINDS: ReadonlyArray<Break<string, string>> = [
+  { name: "a space before the first visible character", apply: (text) => ` ${text}` },
+  { name: "a tab before the first visible character", apply: (text) => `\t${text}` },
+  { name: "a line break before the first visible character", apply: (text) => `\n${text}` },
+  { name: "a no-break space before the first visible character", apply: (text) => `\u00A0${text}` },
+  { name: "a tab inside", apply: (text) => `${text}\t${text}` },
+  { name: "a line break inside", apply: (text) => `${text}\n${text}` },
+  { name: "a carriage return and a line break inside", apply: (text) => `${text}\r\n${text}` },
+  { name: "a character past U+024F", apply: (text) => `${text}设` },
+  { name: "a character outside the Basic Multilingual Plane", apply: (text) => `${text}\u{1F600}` },
+  { name: "more than 16 characters", apply: (text) => text.padEnd(200, "x") },
+];
+
+/** Every character that `String.prototype.trim` removes. */
+const TRIMMED: ReadonlyArray<string> = [
+  " ",
+  "\t",
+  "\n",
+  "\r",
+  "\v",
+  "\f",
+  "\u00A0",
+  "\u1680",
+  ...Array.from({ length: 11 }, (_, index) => String.fromCharCode(0x2000 + index)),
+  "\u2028",
+  "\u2029",
+  "\u202F",
+  "\u205F",
+  "\u3000",
+  "\uFEFF",
+];
+
+/** Text that is empty or only whitespace, from every character `trim` removes. */
+export const blank: Arbitrary.Arbitrary<string> = Arbitrary.array(
+  between(0, TRIMMED.length - 1).pipe(Arbitrary.map((index) => Arr.getUnsafe(TRIMMED, index))),
+  { maxLength: 4 },
+).pipe(Arbitrary.map((chars) => chars.join("")));
+
+/** The empty text, each whitespace character alone, and the drawn blank: every kind of blank text. */
+export const blanksFrom = (drawn: string): ReadonlyArray<string> => ["", ...TRIMMED, drawn];
+
+/** Good text, plain or made odd by a drawn kind. */
+export const goodText: Arbitrary.Arbitrary<string> = Arbitrary.all({
+  plain: nonBlank,
+  kind: pick([{ apply: (plain: string) => plain }, ...TEXT_KINDS]),
+}).pipe(Arbitrary.map(({ plain, kind }) => kind.apply(plain)));
 
 /** A severity that is neither of the two, near misses included. */
 export const otherSeverity: Arbitrary.Arbitrary<string> = pick([
@@ -162,7 +234,30 @@ export const otherSeverity: Arbitrary.Arbitrary<string> = pick([
 /** What a caller gives `report` beside the code: a good set of fields. */
 export const goodFields = Arbitrary.all({
   severity: pick(["error", "warning"]),
-  message: nonBlank,
+  message: goodText,
   place: goodPlace,
-  hint: nonBlank,
+  hint: goodText,
 });
+
+/** A set of good fields. */
+type GoodFields = typeof goodFields extends Arbitrary.Arbitrary<infer Fields> ? Fields : never;
+
+/** Drawn fields with a drawn place's parts, from which `fieldVariants` makes the odd good ones. */
+export const goodFieldsAndParts = Arbitrary.all({ fields: goodFields, parts: placeParts });
+
+/**
+ * The good fields made odd, one kind at a time: the message and the hint into each kind of text, and the place
+ * into each kind of path segment. Each is good, so each must be accepted and reported.
+ */
+export const fieldVariants = ({
+  fields,
+  parts,
+}: {
+  readonly fields: GoodFields;
+  readonly parts: PlaceParts;
+}): ReadonlyArray<GoodFields> => [
+  ...TEXT_KINDS.map((kind) => ({ ...fields, message: kind.apply(fields.message), hint: kind.apply(fields.hint) })),
+  ...placeVariants(parts)
+    .slice(1)
+    .map((variant) => ({ ...fields, place: Arr.getUnsafe(goodPlaces(variant), 3) })),
+];
