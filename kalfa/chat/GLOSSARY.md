@@ -48,6 +48,11 @@ The name the asker gives a reply before it is posted. The same reply id is the s
 nothing new. A reply id is public: a provider may write it into the message where the chat app's people can read it.
 _Avoid_: idempotency key, nonce, request id, message id (a message's own id comes from the chat app)
 
+**Undeliverable**:
+How a reply ends when the chat app refuses it for good, such as a locked thread or a room that is gone. It is
+written down once and never tried again; the asker reads the ending and decides what to do.
+_Avoid_: failed, dropped, bounced, dead letter
+
 **Mention**:
 A part of a body that names an account, such as the bot's, so that they hear it.
 _Avoid_: ping, tag, at, highlight

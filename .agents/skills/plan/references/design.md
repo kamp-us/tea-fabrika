@@ -68,8 +68,8 @@ checked on every pull
   does not say again what its parent already says: inside an outcome, the reason is `reason`, not
   `outcomeReason`. If a short word could mean two things, pick a clearer short word before you reach
   for a long one. A short word keeps its one meaning inside its
-  bounded context: `at` is a time, `by` is who wrote it, `_tag`
-  is the case. Today's code keeps `why` and `kind` until that code goes.
+  bounded context: `at` is a time, `_tag` is the case. Who acted is named for what they did
+  (`author`, `approver`, `canceler`), never a bare `by`. Today's code keeps `why` and `kind` until that code goes.
 
   ```ts
   // Yes: read it out loud and it is a sentence.
