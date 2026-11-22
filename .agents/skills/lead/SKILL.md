@@ -535,7 +535,8 @@ visible, and never weaken the rules to hide this message.
    through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
-   are green. Both leak-check the change, each commit and the title and description, then add it to
+   are green; it marks a draft ready itself, so give it `--wait` to
+   let the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
    the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
    is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
    check (it once merged past a printed hit).

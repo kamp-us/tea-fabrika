@@ -35,7 +35,11 @@ head=$(git -C "$LAND_QUEST" rev-parse HEAD)
 case "$1 $2" in
 "pr list") echo "\${LAND_OPEN:-}" ;;
 "pr create") echo "https://github.com/owner/repo/pull/77" ;;
-"pr view") printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":false,"title":"%s","body":"What the quest did.","mergeCommit":null}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "\${LAND_TITLE:-T652 fixture: one quest}" ;;
+"pr view")
+  # A draft stays one until the call to mark it ready has been made.
+  draft=false
+  [ "\${LAND_DRAFT:-}" = 1 ] && ! grep -q "^gh pr ready" "$LAND_CALLS" && draft=true
+  printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"What the quest did.","mergeCommit":null}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" ;;
 "api -i") printf 'HTTP/2.0 200 OK\\n\\r\\n{"check_runs":[{"id":1,"status":"completed","conclusion":"%s","app":{"slug":"github-actions"}}]}' "\${LAND_REQUIRED:-success}" ;;
 esac
 `;
@@ -61,6 +65,12 @@ type World = {
   readonly wip?: boolean;
   /** `ci-required` failed at the pushed head. */
   readonly red?: boolean;
+  /** The pull request is a draft until it is marked ready. */
+  readonly draft?: boolean;
+  /** The pull request's state at GitHub; open when left out. */
+  readonly state?: "OPEN" | "CLOSED";
+  /** Run this command after `land.ts`, in place of `run <quest> <ticket>`; the main checkout is then the quest's tree. */
+  readonly command?: ReadonlyArray<string>;
   /** The ready record names the quest `lane`, as one written before the rule that a lane is called a quest does. */
   readonly laneKey?: boolean;
 };
@@ -85,7 +95,9 @@ const land = (world: World) => {
       GIT_COMMITTER_NAME: undefined,
       GIT_COMMITTER_EMAIL: undefined,
       EMAIL: undefined,
-      MAIN: join(dir, "main"),
+      MAIN: join(dir, world.command ? "quest" : "main"),
+      LAND_DRAFT: world.draft ? "1" : "",
+      LAND_STATE: world.state ?? "OPEN",
       BOXES: join(dir, "boxes"),
       REMOTE: join(dir, "origin"),
       GH_REPO: "owner/repo",
@@ -193,7 +205,7 @@ const land = (world: World) => {
     }
 
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
-    const ran = script_("run", "t652f", "652");
+    const ran = script_(...(world.command ?? ["run", "t652f", "652"]));
     expect(ran.error).toBeUndefined();
     const calls = existsSync(env.LAND_CALLS) ? readFileSync(env.LAND_CALLS, "utf8").trim().split("\n") : [];
     const head = git(quest, "rev-parse", "HEAD");
@@ -345,6 +357,40 @@ describe("land.ts, today's tooling", () => {
     expect(got.err).toContain("refused at the queue check: pr 77: ci-required is failure at");
     expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toEqual([]);
   });
+
+  // Plant: refuse a draft at the queue check, as `queue` did, so a caller's wait for a merge never ends.
+  it("scenario: `land.ts queue` marks a draft pull request ready, then queues it, as `admin` marks one ready before it waits", () => {
+    const got = land({ ...fine, draft: true, command: ["queue", "77"] });
+    expect(got.code, got.err).toBe(0);
+    const asked = got.calls.filter((c) => /^gh pr (ready|merge)/.test(c));
+    expect(asked).toEqual([
+      "gh pr ready 77 -R owner/repo",
+      `gh pr merge 77 -R owner/repo --squash --match-head-commit ${got.head}`,
+    ]);
+  });
+
+  // A caller's `&&` stops only on a non-zero exit, so every refusal of the queue command must give one.
+  it("property: `land.ts queue` exits non-zero on every refusal and asks no merge then, zero when it queues", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          state: fc.constantFrom("OPEN" as const, "CLOSED" as const),
+          draft: fc.boolean(),
+          red: fc.boolean(),
+          leak: fc.boolean(),
+        }),
+        (world) => {
+          const got = land({ ...fine, ...world, command: ["queue", "77"] });
+          const queues = world.state === "OPEN" && !world.red && !world.leak;
+
+          expect(got.code, got.err).toBe(queues ? 0 : 1);
+          expect(got.err.includes("land: refused at the"), got.err).toBe(!queues);
+          expect(got.calls.filter((c) => c.startsWith("gh pr merge"))).toHaveLength(queues ? 1 : 0);
+        },
+      ),
+      { seed: 1942, numRuns: 12 },
+    );
+  }, 300_000);
 
   it("T652 scenario: a mid-quest handover (no PR files) merges main, signs and pushes the -wip backup, then stops with no PR and nothing queued", () => {
     const got = land({ ...fine, behind: true, wip: true });
