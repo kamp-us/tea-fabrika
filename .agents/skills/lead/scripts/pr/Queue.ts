@@ -52,7 +52,7 @@ export type Ask = {
 class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbol }>()("Pending", {}) {}
 
 /** The required check at `oid` as it stands: read once, or again until it ends or the wait is over. */
-const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined) {
+export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined) {
   const checks = yield* Checks;
   const read = checks.job(oid, REQUIRED);
 

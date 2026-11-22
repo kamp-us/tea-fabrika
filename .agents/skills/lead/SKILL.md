@@ -542,7 +542,11 @@ visible, and never weaken the rules to hide this message.
    GitHub then tests the pull request on newest main and merges it. Nobody merges main in to catch
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
-   pass `--auto`. Three exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev
+   pass `--auto`. Three exceptions take `land.ts admin <pr>`, the only admin merge (never a bare
+   `gh pr merge --admin`, never a shell chain around `gh pr checks --watch`): it marks a draft ready,
+   waits for `ci-required` to appear and end (`--wait-minutes`, default 30), and refuses unless it is
+   a success at the head it merges, the leak grep is clean and the branch does not start `can/`. The
+   exceptions are: a sev
    fix at either level, on a branch `sev.ts fix` named in a sev1 or `open --allow` or `next` named in a
    sev0, with current main in its head
    (the [sev skill](../sev/SKILL.md)); a
@@ -748,7 +752,8 @@ these caps. Each one came from a laptop that became unusable. This list is their
 - `gh pr edit` fails here with a classic Projects error. Use `gh api -X PATCH`.
 - On a draft pull request the required check is named `ci-required (draft)` on purpose
   (`.github/workflows/check.yaml`), so `gh pr checks <pr> --required` finds nothing. Use
-  `gh pr checks <pr>` without the flag, or mark the pull request ready first.
+  `gh pr checks <pr>` without the flag, or mark the pull request ready first. Right after that,
+  `--watch` can return before the new check registers, so never merge on it: `land.ts admin` waits.
 - In `claude -p`, `--allowedTools` only pre-approves. `--tools` is what limits an agent; without it
   the agent keeps a shell and can read what you meant to hide, git history included.
 - A plain `rg` (or `rg .`) from the repo root searches our dot folders, `.kalfa/decisions/` and
