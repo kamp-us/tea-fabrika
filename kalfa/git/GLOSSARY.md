@@ -43,7 +43,7 @@ Getting a remote's commits and refs without moving any of this repository's own 
 _Avoid_: pull, sync, download
 
 **Push**:
-Sending commits to a remote and moving one of its refs to point at them.
+Changing one ref on a remote: moving it to point at commits the push sends, or removing it.
 _Avoid_: upload, publish, sync
 
 **Fast-forward**:
@@ -51,8 +51,14 @@ A ref moving to a commit that keeps every commit the ref had before.
 _Avoid_: forward push, clean update
 
 **Force push**:
-A push that moves a ref so it drops commits it had before. Whether a ref allows one is a setting.
+A push that moves a ref so it drops commits it had before. A ref set to keep its commits refuses one; which refs keep
+their commits is a setting.
 _Avoid_: overwrite, rewrite push
+
+**Delete push**:
+A push that removes a ref from a remote and sends no commits. It names the commit it expects to remove. A ref set to
+keep its commits refuses one, as it refuses a force push.
+_Avoid_: remove, prune, drop
 
 **Rebase**:
 Putting a branch's own commits on a new base. It makes new commits; the old ones stay as they were.
