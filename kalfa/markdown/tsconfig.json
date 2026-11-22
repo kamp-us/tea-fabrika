@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryArrowBlock": "error",
+                "preferUnsafeConstructor": "error",
+                "unnecessaryEffectGen": "error",
+                "runOfExitToRunExit": "error",
+                "effectSucceedWithVoid": "error",
+                "schemaNumber": "error",
+                "schemaClassMissingBrand": "error",
+                "instanceOfSchema": "error"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "include": ["src"]
+}

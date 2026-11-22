@@ -708,6 +708,7 @@ describe("the real rule file on planted trees", () => {
       "next-settings": 2, // T664's approved plan: settings sits on layer 2, above telemetry
       "next-telemetry": 1,
       "kalfa-config": 1, // kalfa-config-PLAN.md:318: it imports next-vitest (0), and next-settings (2) imports it
+      "kalfa-markdown": 0, // ticket 1926: it imports no other package, so it ranks with the lowest
       "next-shared": 0,
       "next-vitest": 0, // the shared test package rule: the test primitives, a package of their own below everything else of ours
     });
