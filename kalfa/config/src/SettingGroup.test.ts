@@ -1420,7 +1420,7 @@ const WRITES: ReadonlyArray<(target: object, key: PropertyKey, junk: unknown) =>
 
 /** One write on `target` at `key`. A write that throws changed nothing, as one that answers `false` did not. */
 const tamper = (write: (typeof WRITES)[number], target: unknown, key: PropertyKey, junk: unknown) =>
-  Predicate.isObject(target)
+  Predicate.isObjectOrArray(target)
     ? Effect.ignore(Effect.try({ try: () => write(target, key, junk), catch: () => "refused" as const }))
     : Effect.void;
 
@@ -1572,7 +1572,9 @@ it.effect.prop(
           for (const write of WRITES) {
             // Every table value, array value and origin, the value a live one yields included, whatever the write does.
             for (const target of [...Object.values(seen_.now), ...Object.values(seen_.origins)]) {
-              const keys = Predicate.isObject(target) ? [...Reflect.ownKeys(target), "0", "length", "extra"] : [];
+              const keys = Predicate.isObjectOrArray(target)
+                ? [...Reflect.ownKeys(target), "0", "length", "extra"]
+                : [];
 
               for (const key of keys) {
                 yield* tamper(write, target, key, junk);
