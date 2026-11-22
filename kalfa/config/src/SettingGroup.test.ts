@@ -1415,6 +1415,7 @@ const WRITES: ReadonlyArray<(target: object, key: PropertyKey, junk: unknown) =>
   (target, key, junk) =>
     Object.defineProperty(target, key, { value: junk, writable: true, configurable: true, enumerable: true }),
   (target, key) => Reflect.deleteProperty(target, key),
+  (target, _key, junk) => (Array.isArray(target) ? target.push(junk) : undefined),
 ];
 
 /** One write on `target` at `key`. A write that throws changed nothing, as one that answers `false` did not. */
@@ -1484,6 +1485,112 @@ it.effect.prop(
         Effect.provide(MemoryFiles.layer({ files })),
         Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...environment() } }))),
       );
+    }),
+  check,
+);
+
+/** One declared setting of the nested law: its value, whether it is live, and whether a file or its default gives it. */
+interface Kept {
+  readonly name: string;
+  readonly field: string;
+  readonly live: boolean;
+}
+
+const KEPT: ReadonlyArray<Kept> = ["file", "dflt"].flatMap((source) =>
+  [
+    { word: "pair", live: false },
+    { word: "tags", live: false },
+    { word: "lpair", live: true },
+  ].map(({ word, live }) => ({ name: `t0${source}.${source[0]}${word}`, field: `${source[0]}${word}`, live })),
+);
+
+const Nested = Schema.Struct({ app: Word, junk: Seed });
+
+// Plants, each with the fix undone for that one case: (a) a table value left writable; (b) an array value left
+// writable; (c) each origin object left writable; (d) the value a `Live` yields left writable; (e) the declaration's
+// own default object handed out as the value.
+it.effect.prop(
+  "B16 no write to a table value, an array value, an origin or the value a live setting yields changes what a later reader or a later start gets, nor the declaration's default",
+  { input: Nested },
+  ({ input: { app, junk } }) =>
+    Effect.gen(function* () {
+      const defaults = { pair: { a: 1, b: 2 }, tags: ["x", "y"], lpair: { a: 3 } };
+
+      const settings = KEPT.map(({ name, live }) => {
+        const word = name.split(".")[1]?.slice(1);
+        const described = Setting.withDescription("A kept value.");
+
+        if (word === "tags") {
+          const made = Setting.make(name, Schema.Array(Schema.String)).pipe(
+            described,
+            Setting.withDefault(defaults.tags),
+          );
+
+          return live ? made.pipe(Setting.live) : made;
+        }
+
+        const made = Setting.make(name, Pairing).pipe(
+          described,
+          Setting.withDefault(word === "pair" ? defaults.pair : defaults.lpair),
+        );
+
+        return live ? made.pipe(Setting.live) : made;
+      });
+
+      const group = makeGroup(app, settings);
+
+      // The file gives each `file` setting its value, and leaves each `dflt` one to its default.
+      const files = {
+        [repoFile(app).path]: '[t0file]\nftags = ["p", "q"]\n[t0file.fpair]\na = 11\nb = 12\n[t0file.flpair]\na = 13\n',
+      };
+
+      // Each reader sees every value as plain data: a live one yielded, an origin as it is.
+      const seeing = Effect.gen(function* () {
+        const values: Readonly<Record<string, unknown>> = yield* group;
+        const origins: Readonly<Record<string, unknown>> = yield* SettingGroup.origins(group);
+        const now: Record<string, unknown> = {};
+
+        for (const { field: key, live } of KEPT) {
+          const value = values[key];
+          now[key] = live && isReading(value) ? yield* value : value;
+        }
+
+        return { values, origins, now, plain: structuredClone({ now, origins }) };
+      });
+
+      const started = <A, E, R>(program: Effect.Effect<A, E, R>) =>
+        program.pipe(
+          Effect.provide(SettingGroup.layer(group, { version: VERSION, repo: ROOT })),
+          Effect.provide(MemoryFiles.layer({ files })),
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...environment() } }))),
+        );
+
+      const first = yield* started(
+        Effect.gen(function* () {
+          const seen_ = yield* seeing;
+
+          for (const write of WRITES) {
+            // Every table value, array value and origin, the value a live one yields included, whatever the write does.
+            for (const target of [...Object.values(seen_.now), ...Object.values(seen_.origins)]) {
+              const keys = Predicate.isObject(target) ? [...Reflect.ownKeys(target), "0", "length", "extra"] : [];
+
+              for (const key of keys) {
+                yield* tamper(write, target, key, junk);
+              }
+            }
+
+            const later = yield* seeing;
+            expect(later.plain).toEqual(seen_.plain);
+          }
+
+          return seen_.plain;
+        }),
+      );
+
+      // A second start, on its own layer, gets what the first one first read, and the declaration's default is as it was.
+      const second = yield* started(Effect.map(seeing, (seen_) => seen_.plain));
+      expect(second).toEqual(first);
+      expect(defaults).toEqual({ pair: { a: 1, b: 2 }, tags: ["x", "y"], lpair: { a: 3 } });
     }),
   check,
 );
