@@ -1,6 +1,6 @@
-// D10 to D12: what the package
-// exports, what its manifest says, and that none of its files names this repo. They read the package's own
-// module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
+// D10 to D12 and D24: what the package
+// exports, what its manifest says, that none of its files names this repo, and that its README shows each kind of
+// place. They read the package's own module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
 // pieces below, so this file is not itself a hit.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -113,5 +113,27 @@ it.effect("D12 scenario: no file of the package names this repo", () =>
     expect(texts.filter(({ text }) => FORBIDDEN.some((word) => text.includes(word))).map(({ file }) => file)).toEqual(
       [],
     );
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// D24. Plant: delete the flag example from the README, and its tag is missing from the failure.
+it.effect("D24 scenario: the README shows each kind of place with its text form", () =>
+  Effect.gen(function* () {
+    // scenario: the package's own README at head; no generated input says what a README shows.
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+
+    const readme = yield* fs.readFileString(path.join(yield* packageDir, "README.md"));
+
+    const tags = ["repo", "home", "environment", "flag"].filter((tag) => !readme.includes(`_tag: "${tag}"`));
+
+    expect(tags).toEqual([]);
+    // A home place is shown both ways: starting with the home folder, and starting with a variable.
+    expect(readme).toMatch(/_tag: "home",\s*path: "~\//);
+    expect(readme).toMatch(/_tag: "home",\s*path: "\$[A-Z][A-Z0-9_]*\//);
+    // The text form of each kind: a file with a line and column, an environment variable, and a flag.
+    expect(readme).toMatch(/\S+:\d+:\d+/);
+    expect(readme).toMatch(/environment variable [A-Z][A-Z0-9_]*/);
+    expect(readme).toMatch(/flag --[a-z][a-z0-9.-]*/);
   }).pipe(Effect.provide(NodeServices.layer)),
 );

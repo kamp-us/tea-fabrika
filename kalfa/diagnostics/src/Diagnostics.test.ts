@@ -2,29 +2,24 @@
 // order, what it refuses, that each build of the Layer starts empty, and the span a report makes. They are
 // laws D5 to D7 and D17.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Array as Arr, Cause, Effect, Exit, Result, Schema, Tracer } from "effect";
+import { Arbitrary, Array as Arr, Cause, Effect, Exit, Result, Schema } from "effect";
 import {
   between,
   blank,
   blanksFrom,
-  brokenPlace,
+  brokenPlaces,
   fieldVariants,
   goodCode,
   goodFields,
   goodFieldsAndParts,
+  type Item,
+  observed,
+  placeParts,
   SEED,
 } from "./Diagnostic.test-support.ts";
 import * as Diagnostic from "./Diagnostic.ts";
 import * as Diagnostics from "./Diagnostics.ts";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
-
-type Fields = Parameters<typeof Diagnostics.report>[1];
-
-// One thing a handler reports: a code, which `make` declares, and good fields.
-interface Item {
-  readonly code: string;
-  readonly fields: Fields;
-}
 
 const declare = (code: string): Diagnostic.Declared => Diagnostic.make(code, { explain: "A long text." });
 
@@ -59,14 +54,15 @@ const items: Arbitrary.Arbitrary<ReadonlyArray<Item>> = Arbitrary.all({
 // One thing, and another with the same code and other fields, to build the lists every run must hold.
 const pair = Arbitrary.all({ code: goodCode, first: goodFields, second: goodFields });
 
-// One item for each kind of odd good field: the message and hint into each kind of text, the place into each
-// kind of path segment.
+// One item for each kind of odd good field: the message and hint into each kind of text, and the place into each
+// class of each of the four kinds.
 const oddItems = Arbitrary.all({ code: goodCode, drawn: goodFieldsAndParts }).pipe(
   Arbitrary.map(({ code, drawn }): ReadonlyArray<Item> => fieldVariants(drawn).map((fields) => ({ code, fields }))),
 );
 
-// D5. Plant: keep only the last report, or drop a report that repeats the one before it. Each plant of D2 and D3
-// that refuses a kind of odd path or text turns this law red too: that report dies and is not collected.
+// D5. Plant: keep only the last report, or drop a report that repeats the one before it; drop `line` from a home
+// place in the test Layer's append. Each plant of D2, D3, D18, D19 and D20 that refuses a good class turns this law
+// red too: that report dies and is not collected.
 describe("D5, report collects in order", () => {
   it.effect.prop(
     "reporting each of a list under the test Layer reads back the same list, in order, repeats kept",
@@ -86,23 +82,27 @@ describe("D5, report collects in order", () => {
   );
 });
 
-// What is wrong with a report's fields: a blank message, a blank hint or a place the rules refuse.
-interface Wrongs {
-  readonly fields: Fields;
+// Every bad set of fields a run tries: each kind of blank in the message and in the hint, and each bad place.
+const badFields = ({
+  fields,
+  blanks,
+  parts,
+}: {
+  readonly fields: Item["fields"];
   readonly blanks: string;
-  readonly place: Fields["place"];
-}
-
-// Every bad set of fields a run tries: each kind of blank in the message and in the hint, and the bad place.
-const badFields = ({ fields, blanks, place }: Wrongs): ReadonlyArray<{ name: string; fields: Fields }> => [
+  readonly parts: Parameters<typeof brokenPlaces>[0];
+}): ReadonlyArray<{ readonly name: string; readonly fields: object }> => [
   ...blanksFrom(blanks).flatMap((each) => [
     { name: `a blank message ${JSON.stringify(each)}`, fields: { ...fields, message: each } },
     { name: `a blank hint ${JSON.stringify(each)}`, fields: { ...fields, hint: each } },
   ]),
-  { name: "a bad place", fields: { ...fields, place } },
+  ...brokenPlaces(parts).map(({ name, value }) => ({
+    name: `a bad place, ${name}: ${JSON.stringify(value)}`,
+    fields: { ...fields, place: value },
+  })),
 ];
 
-// The good things (the odd good ones first), a spot among them, and what a bad one is made of.
+// The good things (a sample of the odd good ones first), a spot among them, and what a bad one is made of.
 const withABadOne = Arbitrary.all({
   list: items,
   odd: oddItems,
@@ -110,7 +110,7 @@ const withABadOne = Arbitrary.all({
   code: goodCode,
   fields: goodFields,
   blanks: blank,
-  place: brokenPlace,
+  parts: placeParts,
 });
 
 // Whether an exit is a defect holding a SchemaError and no typed failure.
@@ -121,35 +121,31 @@ const diedOfSchemaError = <A, E>(exit: Exit.Exit<A, E>): boolean =>
 
 // D6. Plant: append the report before it is checked, and the bad one is collected; or fail with the error
 // instead of dying, and the exit holds a typed failure; or count only space, tab and line feed as blank, and a
-// hint of a no-break space is collected. A plant of D2 or D3 that refuses a kind of odd good report makes it die
-// before the spot, so the list before the spot is short.
+// hint of a no-break space is collected; or drop the first-part rule from `isRepoPath`, and a repo place that
+// starts with `~/` is collected. A plant of D2, D3, D18, D19 or D20 that refuses a kind of odd good report can
+// make it die before the spot, so the list before the spot is short.
 describe("D6, bad fields die and report nothing", () => {
   it.effect.prop(
-    "a report with a blank message or hint, or a bad place, dies with a SchemaError and collects nothing",
+    "a report with a blank message or hint, or a bad place of any kind, dies with a SchemaError and collects nothing",
     { shape: withABadOne },
     ({ shape }) =>
       Effect.gen(function* () {
-        const good = [...shape.odd, ...shape.list];
+        // Every eighth odd good report, so each run holds a spread of kinds and classes without a long list.
+        const good = [...shape.odd.filter((_, index) => index % 8 === shape.spot % 8), ...shape.list];
         // The reports before the spot: those up to a drawn spot, and then all of them.
         const befores = [good.slice(0, shape.spot % (good.length + 1)), good];
 
         // Each run puts every kind of bad fields at the spot, one after the other, each under its own Layer.
-        const bads = badFields({ fields: shape.fields, blanks: shape.blanks, place: shape.place });
+        const bads = badFields({ fields: shape.fields, blanks: shape.blanks, parts: shape.parts });
 
         for (const before of befores) {
           for (const { name, fields } of bads) {
-            const bad: Item = { code: shape.code, fields };
-
             // The exit and what the Layer holds are read in one provide: the Layer is gone after it.
-            const run = yield* reportAll([...before, bad]).pipe(
-              Effect.exit,
-              Effect.flatMap((exit) => Effect.map(TestDiagnostics.reported, (seen) => ({ exit, seen }))),
-              Effect.provide(TestDiagnostics.layer),
-            );
+            const run = yield* observed(shape.code, fields, before);
 
             expect(diedOfSchemaError(run.exit), name).toBe(true);
             // The reports before the spot stay, and the bad one is not among them.
-            expect(run.seen, name).toEqual(expected(before));
+            expect(run.reported, name).toEqual(expected(before));
           }
         }
       }),
@@ -178,55 +174,32 @@ describe("D7, each build starts empty", () => {
   );
 });
 
-// Reports one thing under a recording tracer, and answers the spans the tracer was asked to make.
-const recordedSpans = ({ code, fields }: Item) =>
-  Effect.gen(function* () {
-    const delegate = yield* Tracer.Tracer;
-    const spans: Array<Tracer.Span> = [];
-
-    const tracer = Tracer.make({
-      span(options) {
-        const span = delegate.span(options);
-        spans.push(span);
-
-        return span;
-      },
-    });
-
-    yield* Diagnostics.report(declare(code), fields).pipe(
-      Effect.withTracer(tracer),
-      Effect.provide(TestDiagnostics.layer),
-    );
-
-    return spans;
-  });
-
-// D17. Plant: name the span `Diagnostics.report`; annotate a bare `code` or `severity`; add the message or the
-// hint as an attribute.
+// D17 [secrets]. Plant: name the span `Diagnostics.report`; annotate a bare `code` or `severity`; add the message or
+// the hint as an attribute; add `kalfa.diagnostics.place` with `formatPlace`'s text; put the path in
+// `kalfa.diagnostics.place.type`; leave out `kalfa.diagnostics.place.type`.
 describe("D17, the span", () => {
   it.effect.prop(
-    "a report ends one span named diagnostics.report, with the code and the severity under kalfa.diagnostics.* and no message or hint",
-    { code: goodCode, fields: goodFields },
-    ({ code, fields }) =>
+    "a report of any kind of place ends one span named diagnostics.report, with exactly the code, the severity and the kind of place under kalfa.diagnostics.*, and nothing of the message, the hint or the place",
+    { code: goodCode, drawn: goodFieldsAndParts },
+    ({ code, drawn }) =>
       Effect.gen(function* () {
-        const spans = yield* recordedSpans({ code, fields });
+        // The drawn fields, and the fields with the place made into each class of each kind.
+        for (const fields of [drawn.fields, ...fieldVariants(drawn)]) {
+          const { exit, spans } = yield* observed(code, fields);
 
-        expect(spans.map((span) => span.name)).toEqual(["diagnostics.report"]);
+          expect(Exit.isSuccess(exit)).toBe(true);
+          expect(spans.map((span) => span.name)).toEqual(["diagnostics.report"]);
 
-        const [span] = spans;
+          const [span] = spans;
 
-        expect(span?.status._tag).toBe("Ended");
-        expect(span?.attributes.get("kalfa.diagnostics.code")).toBe(code);
-        expect(span?.attributes.get("kalfa.diagnostics.severity")).toBe(fields.severity);
-        expect(span?.attributes.has("code")).toBe(false);
-        expect(span?.attributes.has("severity")).toBe(false);
-
-        const others = [...(span?.attributes ?? [])]
-          .filter(([key]) => key !== "kalfa.diagnostics.code" && key !== "kalfa.diagnostics.severity")
-          .map(([, value]) => value);
-
-        expect(others).not.toContain(fields.message);
-        expect(others).not.toContain(fields.hint);
+          expect(span?.status._tag).toBe("Ended");
+          // Exactly these three attributes, so no other holds the message, the hint or any part of the place.
+          expect(Object.fromEntries(span?.attributes ?? [])).toEqual({
+            "kalfa.diagnostics.code": code,
+            "kalfa.diagnostics.severity": fields.severity,
+            "kalfa.diagnostics.place.type": fields.place._tag,
+          });
+        }
       }),
     { arbitrary: { seed: SEED, runs: 100 } },
   );
