@@ -1,0 +1,46 @@
+{
+  "name": "@kalfa/git",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Read commits and refs from a git repository with no working copy: one service, an in-memory adapter and an adapter that runs the git binary, and the laws both pass.",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    "./CommitId": "./src/CommitId.ts",
+    "./Ref": "./src/Ref.ts",
+    "./Commit": "./src/Commit.ts",
+    "./Settings": "./src/Settings.ts",
+    "./Repository": "./src/Repository.ts",
+    "./memory": "./src/MemoryRepository.ts",
+    "./process": "./src/ProcessRepository.ts",
+    "./test": "./src/RepositoryTest.ts",
+    "./test/History": "./src/HistoryTest.ts",
+    "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "@effect/vitest": "catalog:",
+    "effect": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/vitest": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

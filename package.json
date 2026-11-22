@@ -41,6 +41,7 @@
     "@effect/vitest": "catalog:",
     "@kalfa/ci": "workspace:*",
     "@kalfa/config": "workspace:*",
+    "@kalfa/git": "workspace:*",
     "@kalfa/records": "workspace:*",
     "@kampus/vitest": "workspace:*",
     "@oxlint/plugins": "catalog:",
