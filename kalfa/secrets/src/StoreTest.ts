@@ -1,15 +1,18 @@
-// The laws every secret store passes (M1a to M1f), exported as `/test`. A runner gives a `Subject`: how to make an empty store of its own kind
+// The laws every secret store passes (M1a to M1g), exported as `/test`. A runner gives a `Subject`: how to make an empty store of its own kind
 // and how a person puts a value into it or takes one out. The suite draws a texture, makes one value for every class the plan names, puts
 // each into the store and asks the store's `holds` port. A store that passes these answers as every other one does. Later parts of the
 // suite check a store's other ports, which a store that has them passes too.
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, Effect, type Layer, Schema } from "effect";
+import { Arbitrary, Array as Arr, Effect, type Layer, Option, Schema } from "effect";
 import * as Name from "./Name.ts";
 import {
+  between,
   findable,
+  found,
   holder,
   needles,
   outcome,
+  pick,
   reachable,
   reading,
   SEED,
@@ -62,6 +65,23 @@ const fine = (held: Store.Held, text: string) => {
 };
 
 const FOUND = { hidden: true, exact: true, isVersion: true, version: expect.any(String) };
+
+/** One step of a person at a store: put a value of a class (or the empty text) into one of two items, or take the item's value out. */
+const steps = Arbitrary.all({ move: pick(["c", "d", "e", "empty", "remove"] as const), item: between(0, 1) });
+
+type Step = typeof steps extends Arbitrary.Arbitrary<infer A> ? A : never;
+
+/** Every drawn run starts with a take-out followed by a put, on each item, more than once, so no run passes without reaching them. */
+const OPENING: ReadonlyArray<Step> = [
+  { move: "c", item: 0 },
+  { move: "remove", item: 0 },
+  { move: "c", item: 0 },
+  { move: "remove", item: 0 },
+  { move: "d", item: 0 },
+  { move: "e", item: 1 },
+  { move: "remove", item: 1 },
+  { move: "e", item: 1 },
+];
 
 export const suite = <Item, R>(name: string, subject: Subject<Item, R>, options: SuiteOptions): void => {
   const run = { arbitrary: { runs: options.runs, seed: SEED }, timeout: options.timeout };
@@ -280,6 +300,52 @@ export const suite = <Item, R>(name: string, subject: Subject<Item, R>, options:
               `${value.id}: no value in a Found but the one Redacted`,
             ).toEqual([]);
           }
+        }),
+      run,
+    );
+
+    // Plant: a take-out forgets the item's earlier versions, so the next put starts again (the memory store deletes the shelf in `remove`).
+    it.effect.prop(
+      "M1g reuse: puts and take-outs in any order on the same name never give a version twice, and a take-out leaves the name Missing absent",
+      { texture: valueTexture, tail: Arbitrary.array(steps, { minLength: 2, maxLength: 16 }) },
+      ({ texture, tail }) =>
+        Effect.gen(function* () {
+          const classes = valueClasses(texture);
+          expect(classIds(classes), "the generator reaches every value class").toBe("cdef");
+
+          const texts = { c: "", d: "", e: "", empty: "" };
+
+          for (const value of classes) {
+            texts[value.id === "f" ? "empty" : value.id] = value.text;
+          }
+
+          const sequence = [...OPENING, ...tail];
+          const seen: Array<Array<string>> = [[], []];
+
+          yield* Effect.gen(function* () {
+            for (const [index, step] of sequence.entries()) {
+              const at = itemAt(subject, step.item);
+
+              if (step.move === "remove") {
+                yield* subject.remove(at);
+                expect(outcome(yield* read(at)), `step ${index}: taken out`).toBe("missing absent");
+              } else if (step.move === "empty") {
+                yield* subject.put(at, texts.empty);
+                expect(outcome(yield* read(at)), `step ${index}: the empty text`).toBe("missing absent");
+              } else {
+                yield* subject.put(at, texts[step.move]);
+
+                const version = Option.getOrElse(
+                  Option.map(found(yield* read(at)), (each) => each.version),
+                  () => "",
+                );
+
+                expect(version, `step ${index}: a put value has a version`).not.toBe("");
+                expect(seen[step.item], `step ${index}: a version new for this name`).not.toContain(version);
+                seen[step.item]?.push(version);
+              }
+            }
+          }).pipe(Effect.provide(subject.empty));
         }),
       run,
     );
