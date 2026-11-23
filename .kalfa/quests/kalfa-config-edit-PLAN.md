@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749, 1806, 1843, 0063, 0088, 0089; body 2faafd57eabf
+Approved by the lead agent, builds issues 1749, 1806, 1843, 0063, 0088, 0089; body f2ef78e71528
 Plancheck-Version: 3
 
 # Plan: edit one setting in a configuration file's text, in memory or on disk (ticket 1843)
@@ -725,3 +725,23 @@ send-back already says.
 3. **Decision 0088 wants the error's place as data.** An edit knows exactly which file it refused (`repo` or `user`),
    and `SettingsError` carries only the name a person reads. Adding the kind is the error ticket 0088 names, not this
    one.
+
+## Amendment 1 (2026-11-22): the check stays an Effect; L2 reaches every file
+
+The review of slice 1 found two gaps.
+
+1. **A setting whose schema decodes asynchronously crashed the start.** `Schema.decodeUnknownResult` dies on async
+   decoding, and `Setting.make` takes any `Codec<A, unknown>`, so "purity is a type fact" was wrong. The lead's call:
+   the whole-file check in `internal/check.ts` answers an `Effect` with no requirements (`Schema.decodeUnknownEffect`,
+   as main's `start.ts` does), and the start yields it as before. Slice 2's `Edit.set` and `Edit.remove` answer
+   `Effect<string, SettingsError>` with no requirements, as Markdown's set does, in place of `Result`; T7 says so.
+   The TOML format in `internal/toml.ts` stays `Result`: it decodes no schema. Why: slice 1 promised no behavior
+   change, and an Effect that needs no service is as safe to call; ruling out async schemas would need a law no type
+   can hold. 80% sure. Cost: the pure edit is not a `Result` in its type.
+2. **L2 tried only two files.** A new law, O2 (test, scenario, in `kalfa/config/src/SettingGroup.test.ts` or a new
+   `kalfa/config/src/SettingGroup.async.test.ts`): a setting whose schema decodes with an async `transformEffect`
+   and has a value in the repo file starts with that value, as on main. Plant: decode the file with
+   `decodeUnknownResult`: O2 red. L2's generator draws other `kalfa/config/src` files too, at the top level and under
+   `internal/`, each refused when it imports the parser. Plant: widen the exemption to `internal/**`: L2 red.
+
+Also: "Effect 4.1.3 has no `Result.try`" was wrong; `Result.try` exists, and `internal/toml.ts` uses it.
