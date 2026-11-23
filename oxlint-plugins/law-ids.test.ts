@@ -48,6 +48,26 @@ describe("law ids", () => {
     expect(said).toContain("kalfa/one/src/B.test.ts:4");
   });
 
+  it("refuses two different laws with one id in one file", () => {
+    const { status, said } = run({
+      ...PACKAGE,
+      "kalfa/one/src/A.test.ts": `it("P13 the version for merges: a", () => {});\nit("P13 vector: parse.changes reads b", () => {});\n`,
+    });
+
+    expect(status).toBe(1);
+    expect(said).toContain("kalfa/one/src/A.test.ts:1");
+    expect(said).toContain("kalfa/one/src/A.test.ts:2");
+  });
+
+  it("allows one law with several cases", () => {
+    const { status } = run({
+      ...PACKAGE,
+      "kalfa/one/src/A.test.ts": `it("P3 the time limit: a", () => {});\nit("P3 the time limit: b", () => {});\nit("P4 scenario: c", () => {});\nit("P4 scenario: d", () => {});\n`,
+    });
+
+    expect(status).toBe(0);
+  });
+
   it("allows one law named from a support file and from a test file", () => {
     const { status } = run({
       ...PACKAGE,
