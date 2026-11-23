@@ -742,6 +742,7 @@
         "kalfa/config/*.ts",
         "kalfa/diagnostics/src/**",
         "kalfa/git/src/**",
+        "kalfa/github/src/**",
         "kalfa/markdown/src/**"
       ],
       "excludeFiles": ["kalfa/**/*.test.ts", "kalfa/**/*.test.tsx"],
@@ -5125,6 +5126,224 @@
           { "name": "global", "message": "@kalfa/markdown uses no Node global." },
           { "name": "self", "message": "@kalfa/markdown uses no global object." },
           { "name": "window", "message": "@kalfa/markdown uses no global object." }
+        ]
+      }
+    },
+    {
+      // @kalfa/github (ticket 1944) declares a REST operation and calls it through a service: it imports no kalfa or repo package, no Telemetry (its one span is made with `Effect.fn`), no Node module and no platform package, reads GitHub's types
+      // from `@octokit/openapi-types` as types only (the package has no JavaScript to load), and prints nothing. `node:*` holds `node:fs` and not `node:fs/promises`, so both spellings are listed, and every name of Node 26's
+      // `require("node:module").builtinModules` is written bare below, subpaths included (regenerate the list with that call when Node moves). The other `@octokit` packages are listed by the shape of their names, not by a `!` exemption of the types package: oxlint reads the groups together, and an exemption in one group un-restricts a value import of that package in the other. The live Layer (ticket 1945) reaches the network through Effect's `HttpClient` and
+      // opens what it needs in its own file. Its tests and test support are left out. An override replaces a rule's options, so this repeats the base entries.
+      "files": ["kalfa/github/src/**"],
+      "excludeFiles": ["kalfa/github/src/**/*.test.ts", "kalfa/github/src/**/*.test-support.ts"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@kalfa/**", "@kampus/**", "@tea-fabrika/**", "../../**"],
+                "message": "@kalfa/github imports no kalfa package and nothing of this repo (decision 0047): it is usable alone."
+              },
+              {
+                "group": ["@opentelemetry/**", "@effect/opentelemetry", "@effect/opentelemetry/**"],
+                "message": "@kalfa/github imports no Telemetry: its span is made with Effect.fn."
+              },
+              {
+                "group": ["node:*", "node:*/**", "@effect/platform-*", "@effect/platform-*/**"],
+                "message": "@kalfa/github takes values and does no IO: no Node module and no platform package."
+              },
+              {
+                "group": [
+                  "_http_agent",
+                  "_http_agent/**",
+                  "_http_client",
+                  "_http_client/**",
+                  "_http_common",
+                  "_http_common/**",
+                  "_http_incoming",
+                  "_http_incoming/**",
+                  "_http_outgoing",
+                  "_http_outgoing/**",
+                  "_http_server",
+                  "_http_server/**",
+                  "_tls_common",
+                  "_tls_common/**",
+                  "_tls_wrap",
+                  "_tls_wrap/**",
+                  "assert",
+                  "assert/**",
+                  "assert/strict",
+                  "async_hooks",
+                  "async_hooks/**",
+                  "buffer",
+                  "buffer/**",
+                  "child_process",
+                  "child_process/**",
+                  "cluster",
+                  "cluster/**",
+                  "console",
+                  "console/**",
+                  "constants",
+                  "constants/**",
+                  "crypto",
+                  "crypto/**",
+                  "dgram",
+                  "dgram/**",
+                  "diagnostics_channel",
+                  "diagnostics_channel/**",
+                  "dns",
+                  "dns/**",
+                  "dns/promises",
+                  "domain",
+                  "domain/**",
+                  "events",
+                  "events/**",
+                  "fs",
+                  "fs/**",
+                  "fs/promises",
+                  "http",
+                  "http/**",
+                  "http2",
+                  "http2/**",
+                  "https",
+                  "https/**",
+                  "inspector",
+                  "inspector/**",
+                  "inspector/promises",
+                  "module",
+                  "module/**",
+                  "net",
+                  "net/**",
+                  "os",
+                  "os/**",
+                  "path",
+                  "path/**",
+                  "path/posix",
+                  "path/win32",
+                  "perf_hooks",
+                  "perf_hooks/**",
+                  "process",
+                  "process/**",
+                  "punycode",
+                  "punycode/**",
+                  "querystring",
+                  "querystring/**",
+                  "readline",
+                  "readline/**",
+                  "readline/promises",
+                  "repl",
+                  "repl/**",
+                  "stream",
+                  "stream/**",
+                  "stream/consumers",
+                  "stream/promises",
+                  "stream/web",
+                  "string_decoder",
+                  "string_decoder/**",
+                  "sys",
+                  "sys/**",
+                  "timers",
+                  "timers/**",
+                  "timers/promises",
+                  "tls",
+                  "tls/**",
+                  "trace_events",
+                  "trace_events/**",
+                  "tty",
+                  "tty/**",
+                  "url",
+                  "url/**",
+                  "util",
+                  "util/**",
+                  "util/types",
+                  "v8",
+                  "v8/**",
+                  "vm",
+                  "vm/**",
+                  "wasi",
+                  "wasi/**",
+                  "worker_threads",
+                  "worker_threads/**",
+                  "zlib",
+                  "zlib/**"
+                ],
+                "message": "@kalfa/github takes values and does no IO: no Node module, written without its node: prefix either."
+              },
+              {
+                "group": ["@octokit/openapi-types", "@octokit/openapi-types/**"],
+                "allowTypeImports": true,
+                "message": "@octokit/openapi-types has no JavaScript to load: import its `paths` with `import type`."
+              },
+              {
+                "group": [
+                  "octokit",
+                  "octokit/**",
+                  "@octokit/[!o]*",
+                  "@octokit/[!o]*/**",
+                  "@octokit/oauth-*",
+                  "@octokit/oauth-*/**",
+                  "@octokit/openapi",
+                  "@octokit/openapi/**",
+                  "@octokit/openapi-[!t]*",
+                  "@octokit/openapi-[!t]*/**",
+                  "@octokit/openapi-types-*",
+                  "@octokit/openapi-types-*/**",
+                  "openapi-typescript",
+                  "openapi-typescript/**"
+                ],
+                "message": "@kalfa/github reads GitHub's description through @octokit/openapi-types only, as types."
+              }
+            ]
+          }
+        ],
+        "eslint/no-console": "error",
+        "eslint/no-new-func": "error",
+        "eslint/no-restricted-globals": [
+          "error",
+          { "name": "console", "message": "@kalfa/github prints nothing." },
+          { "name": "process", "message": "@kalfa/github reads no process and no environment." },
+          { "name": "Buffer", "message": "@kalfa/github uses no Node global." },
+          {
+            "name": "globalThis",
+            "message": "A ban on `process` alone misses `globalThis.process`: no global object here."
+          },
+          { "name": "global", "message": "@kalfa/github uses no Node global." },
+          { "name": "self", "message": "@kalfa/github uses no global object." },
+          { "name": "window", "message": "@kalfa/github uses no global object." },
+          { "name": "Function", "message": "@kalfa/github builds no function from text." },
+          {
+            "name": "fetch",
+            "message": "@kalfa/github does no IO: the live Layer reaches the network through Effect's HttpClient."
+          },
+          {
+            "name": "XMLHttpRequest",
+            "message": "@kalfa/github does no IO: the live Layer reaches the network through Effect's HttpClient."
+          },
+          {
+            "name": "WebSocket",
+            "message": "@kalfa/github does no IO: the live Layer reaches the network through Effect's HttpClient."
+          }
         ]
       }
     }
