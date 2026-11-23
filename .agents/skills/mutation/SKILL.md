@@ -190,5 +190,6 @@ The test config and typecheck.ts hold worker, home and typecheck limits.
 
 ## Never
 
+- Write scratch files outside your own scratch folder, the one your brief names.
 - A survivor the product should catch, but a law cannot reach, goes in the report for the lead.
 - Write a mutation skip list: that is the exam, and the owner's.

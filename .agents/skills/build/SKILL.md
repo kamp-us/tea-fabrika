@@ -83,6 +83,8 @@ These hold in every build round, so the brief does not repeat them.
   nothing by dropping code). Ignore git's `gc.log` warnings. Run `pnpm install --frozen-lockfile`
   only when a module is missing.
 - **Do not start subagents.** Do not mark the pull request ready, merge it or wait on CI.
+- **Write scratch files only in your own scratch folder,** the one your brief names. A folder another agent
+  shares is never written.
 - **Fix it properly.** No skip, no weaker assertion, no raised timeout, no `as` cast to quiet a
   type. No allow-list or ledger row added, no lint rule turned down, no `oxlint-disable` on wrong
   code. An import line a list
