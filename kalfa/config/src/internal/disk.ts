@@ -153,7 +153,26 @@ const onDisk = Effect.fnUntraced(function* (call: Call, place: Place) {
 });
 
 /**
- * One disk call: finds the file as the start does and changes it. Annotates the span the caller made with whether the text changed.
+ * Finds both files as the start does and picks the one a call is about. No file is known before the environment is read, so a failure to read it ends `The <file> configuration was not changed.`
+ */
+const located = Effect.fnUntraced(function* (app: string, format: Format, file: Setting.File, repo: string) {
+  const provider = yield* ConfigProvider.ConfigProvider;
+  const closing = `The ${file === "repo" ? "repo" : "user"} configuration was not changed.`;
+  const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider, closing) };
+  const names = { repo: found.repo.name, user: found.user.name };
+  // A file name cast past the types reaches the user configuration, never a key that `Object` holds.
+  const place = file === "repo" ? found.repo : found.user;
+
+  return { names, place };
+});
+
+/** The file a call is about, named as a write names it: `.<app>/<app>.toml`, `~/.<app>/<app>.toml` or `$<APP>_HOME/<app>.toml`. */
+export const fileName = Effect.fnUntraced(function* (app: string, format: Format, file: Setting.File, repo: string) {
+  return (yield* located(app, format, file, repo)).place.name;
+});
+
+/**
+ * One disk call: finds the file as the start does and changes it. Annotates the current span with whether the text changed.
  */
 const write = Effect.fnUntraced(function* (
   group: Group,
@@ -164,13 +183,7 @@ const write = Effect.fnUntraced(function* (
   edit: Call["edit"],
 ) {
   const { app } = group;
-  const provider = yield* ConfigProvider.ConfigProvider;
-  // No file is known before the environment is read, so a failure to read it names the configuration.
-  const closing = `The ${file === "repo" ? "repo" : "user"} configuration was not changed.`;
-  const found = { repo: yield* repoPlace(app, format, repo), user: yield* userPlace(app, format, provider, closing) };
-  const names = { repo: found.repo.name, user: found.user.name };
-  // A file name cast past the types reaches the user configuration, never a key that `Object` holds.
-  const place = file === "repo" ? found.repo : found.user;
+  const { names, place } = yield* located(app, format, file, repo);
 
   const changed = yield* onDisk({ app, kind, name: place.name, names, edit }, place);
 
@@ -185,8 +198,8 @@ const attributes = (group: Group, setting: Setting.Any, file: Setting.File) =>
     "kalfa.config.file": file,
   });
 
-/** Sets one setting in the file `file` of `group`, on disk, in a span `config.set`. */
-export const set = Effect.fn("config.set")(function* (
+/** Sets one setting in the file `file` of `group`, on disk, in the current span. */
+export const setBare = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
   setting: Setting.Any,
@@ -200,8 +213,8 @@ export const set = Effect.fn("config.set")(function* (
   );
 });
 
-/** Takes one setting out of the file `file` of `group`, on disk, in a span `config.remove`. */
-export const remove = Effect.fn("config.remove")(function* (
+/** Takes one setting out of the file `file` of `group`, on disk, in the current span. */
+export const removeBare = Effect.fnUntraced(function* (
   group: Group,
   format: Format,
   setting: Setting.Any,
@@ -212,4 +225,14 @@ export const remove = Effect.fn("config.remove")(function* (
   yield* write(group, format, file, repo, "remove", (text, names) =>
     change.remove(group, format, { file, names }, text, setting),
   );
+});
+
+/** Sets one setting in the file `file` of `group`, on disk, in a span `config.set`. */
+export const set = Effect.fn("config.set")(function* (...call: Parameters<typeof setBare>) {
+  return yield* setBare(...call);
+});
+
+/** Takes one setting out of the file `file` of `group`, on disk, in a span `config.remove`. */
+export const remove = Effect.fn("config.remove")(function* (...call: Parameters<typeof removeBare>) {
+  return yield* removeBare(...call);
 });

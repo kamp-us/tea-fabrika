@@ -11,7 +11,6 @@ import { line, listing } from "./internal/cli/listing.ts";
 import * as disk from "./internal/disk.ts";
 import { type SettingsError, stop } from "./internal/error.ts";
 import { segments } from "./internal/names.ts";
-import { shown } from "./internal/place.ts";
 import { textSource } from "./internal/read.ts";
 import * as references from "./internal/reference.ts";
 import * as schemas from "./internal/schema.ts";
@@ -100,6 +99,17 @@ export const config = <const App extends string>(
     }),
   ).pipe(Command.withDescription("Print one setting's value as JSON"));
 
+  /** The first steps of a `set` or a `remove`, in the run's span: the app, and the setting once the typed name is found. */
+  const opened = Effect.fnUntraced(function* (typed: string) {
+    yield* annotate;
+
+    const setting = yield* named(group, typed, "Nothing was changed.");
+
+    yield* Effect.annotateCurrentSpan("kalfa.config.setting", setting.name);
+
+    return setting;
+  });
+
   const set = Command.make(
     "set",
     {
@@ -112,20 +122,17 @@ export const config = <const App extends string>(
         Flag.optional,
       ),
     },
-    Effect.fnUntraced(function* ({ name, value, file }) {
-      const setting = yield* named(group, name, "Nothing was changed.");
+    Effect.fn("config.set")(function* ({ name, value, file }) {
+      const setting = yield* opened(name);
       const chosen = Option.getOrElse(file, () => setting.files[0]);
+      // A text the schema refuses stops before any file is touched. The error names the file the write would, and never holds the text.
+      const found = yield* disk.fileName(app, toml, chosen, options.repo);
 
-      // A text the schema refuses stops before any file is found, and the error never holds the text.
       const given = yield* Config.schema(setting.schema, segments(setting.name))
         .parse(textSource(value))
-        .pipe(
-          Effect.mapError(() =>
-            unfit(app, setting, shown(app, toml)[chosen], `The ${chosen} configuration was not changed.`),
-          ),
-        );
+        .pipe(Effect.mapError(() => unfit(app, setting, found, `The ${chosen} configuration was not changed.`)));
 
-      yield* disk.set(group, toml, setting, given, chosen, options.repo);
+      yield* disk.setBare(group, toml, setting, given, chosen, options.repo);
     }),
   ).pipe(Command.withDescription("Set one setting in a configuration file"));
 
@@ -138,10 +145,10 @@ export const config = <const App extends string>(
         Flag.optional,
       ),
     },
-    Effect.fnUntraced(function* ({ name, file }) {
-      const setting = yield* named(group, name, "Nothing was changed.");
+    Effect.fn("config.remove")(function* ({ name, file }) {
+      const setting = yield* opened(name);
 
-      yield* disk.remove(
+      yield* disk.removeBare(
         group,
         toml,
         setting,
@@ -165,7 +172,7 @@ export const config = <const App extends string>(
 
   const schema = Command.make(
     "schema",
-    { file: file.pipe(Flag.withDescription("The file the schema is for: repo or user"), Flag.withDefault("repo")) },
+    { file: file.pipe(Flag.withDescription("The file the schema is for"), Flag.withDefault("repo")) },
     Effect.fn("config.schema")(function* ({ file }) {
       yield* annotate;
       yield* print(yield* Effect.sync(() => schemas.text(group, file)));
