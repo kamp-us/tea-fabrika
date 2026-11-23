@@ -54,6 +54,10 @@ when to keep going and how to write for a reader who saw none of the work.
 - **Each check that guards data gets a class that reaches it.** A guarding check is a scope, a
   re-read, an equality, a schema or an own-key read. Its class passes every earlier check, since an
   input that fails an earlier one never reaches it, and its Laws row plants the deletion of that check.
+- **A type derived from a value** (an options object, a config) lists every way that value can be
+  typed: no type args, explicit type args, optional keys, a union, `undefined` where
+  `exactOptionalPropertyTypes` is off, a widened type. Each way gets its own `type:` law in the Laws
+  table, and a run-time guard fails loudly where a type hole remains, a typing the types let through.
 - When secrets must stay out of records, URLs or spans, use `[secrets]` and generated flows.
   Inspect every named output, including encoded URLs, and plant a leak into each.
 - `plancheck.sh` checks file owners and keeps exam paths with `tests`.
