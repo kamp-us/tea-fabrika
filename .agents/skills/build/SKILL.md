@@ -105,7 +105,8 @@ These hold in every build round, so the brief does not repeat them.
   code. An import line a list
   already holds stays byte for byte as main has it. Only a secret, a paid account or a person's Mac
   stops you.
-- **Checks, in this order:** every law green, one file at a time; `pnpm format`; `pnpm lint` once;
+- **Checks, in this order:** every law green, one file at a time, each `*.types.test.ts` the change
+  touches included, by path under vitest as well as in the typecheck (only vitest runs its bodies); `pnpm format`; `pnpm lint` once;
   the list ratchet CI runs that local lint does not,
   `node next/apps/fabrika/src/exam/ratchet.ts --base "$(git merge-base origin/main HEAD)"`, exits 0;
   `nice -n 15 pnpm exec vitest run --changed origin/main` once, as `AGENTS.md`, "Checks", asks, and
