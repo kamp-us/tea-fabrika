@@ -1,3 +1,4 @@
+import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
 // @ts-expect-error Test sources are not public package subpaths.
 import type * as Test from "@kalfa/config/App.test";
@@ -55,6 +56,30 @@ const checked: Effect.Effect<number, Files.SettingsError | Snapshot.SnapshotErro
   ),
 );
 
+// The root entry: declare a setting with a pipe, group it, and read it through the group's layer.
+const declared: Root.Setting.Setting<"service.port", number, false> = Root.Setting.make(
+  "service.port",
+  Schema.Int,
+).pipe(
+  Root.Setting.withDefault(3000),
+  Root.Setting.withDescription("The service port."),
+  Root.Setting.files(["repo", "user"]),
+);
+
+const declaredGroup = Root.SettingGroup.make("demo", declared);
+
+const rooted: Effect.Effect<number, Root.SettingGroup.SettingsError, FileSystem.FileSystem | Path.Path> = Effect.gen(
+  function* () {
+    const values = yield* declaredGroup;
+
+    const origins: Readonly<Record<"service.port", Sources.Origin>> = yield* Root.SettingGroup.origins(declaredGroup);
+
+    void origins;
+
+    return values.port;
+  },
+).pipe(Effect.provide(Root.SettingGroup.layer(declaredGroup, { version: "1.2.3" })));
+
 const refusals: [typeof Private, typeof Test] | null = null;
 
-void [checked, Sources, Toml, Codec, JsonSchema, refusals];
+void [checked, rooted, Sources, Toml, Codec, JsonSchema, refusals];

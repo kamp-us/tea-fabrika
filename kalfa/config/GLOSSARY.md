@@ -15,9 +15,18 @@ One named value an app declares once, with its type, its default and a sentence 
 data: text, numbers, booleans, and arrays and records of those. It may hold a secret's name, never a secret's value.
 _Avoid_: option, config key, parameter, variable, host setting
 
+**Setting group**:
+The settings one program reads together, under one app. A program reads its group only through the group's layer,
+which starts it.
+_Avoid_: config object, settings bag, namespace
+
 **Default**:
 The value a setting has when no source gives one.
 _Avoid_: fallback, initial value
+
+**Required setting**:
+A setting with no default. The start stops when no source gives it.
+_Avoid_: mandatory setting
 
 ### Where values come from
 

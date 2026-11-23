@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as Root from "@kalfa/config";
 import * as App from "@kalfa/config/App";
 import * as Codec from "@kalfa/config/Codec";
 import * as Files from "@kalfa/config/Files";
@@ -11,7 +12,7 @@ import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Sources from "@kalfa/config/Sources";
 import * as Toml from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { Digest } from "effect/crypto";
 
 const publicModules = {
@@ -32,6 +33,9 @@ const publicModules = {
 for (const name of Object.keys(publicModules)) {
   assert.ok(import.meta.resolve(`@kalfa/config/${name}`).endsWith(`/dist/${name}.js`));
 }
+
+// The root entry: `@kalfa/config` itself, beside the twelve modules.
+assert.ok(import.meta.resolve("@kalfa/config").endsWith("/dist/index.js"));
 
 const app = App.make({ name: "demo", list: "demo config get" });
 
@@ -82,10 +86,39 @@ const runtime = Effect.gen(function* () {
   }
 }).pipe(Effect.provide(layers));
 
+// A setting declared with a pipe, grouped, and read through the group's layer from the repo file.
+const declared = Root.Setting.make("service.port", Schema.Int).pipe(
+  Root.Setting.withDefault(3000),
+  Root.Setting.withDescription("The service port."),
+);
+
+const declaredGroup = Root.SettingGroup.make("demo", declared);
+
+const rooted = Effect.gen(function* () {
+  const values = yield* declaredGroup;
+  const origins = yield* Root.SettingGroup.origins(declaredGroup);
+
+  assert.equal(values.port, 4100);
+
+  assert.deepEqual(origins["service.port"], { _tag: "file", file: ".demo/demo.toml", line: 2 });
+}).pipe(
+  Effect.provide(Root.SettingGroup.layer(declaredGroup, { version: "1.2.3", repo: "/work" })),
+  Effect.provide(
+    Layer.mergeAll(
+      FileSystem.layerNoop({ readFileString: () => Effect.succeed("[service]\nport = 4100\n") }),
+      Path.layer,
+      ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+    ),
+  ),
+);
+
 // edge: this fixture is the installed Node ESM client, outside the Effect test runner.
 await Effect.runPromise(runtime);
 
-for (const name of ["internal/edit", "App.test"]) {
+// edge: the same client runs the root entry's program.
+await Effect.runPromise(rooted);
+
+for (const name of ["internal/edit", "internal/start", "internal/document", "App.test"]) {
   await assert.rejects(import(`@kalfa/config/${name}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 }
 

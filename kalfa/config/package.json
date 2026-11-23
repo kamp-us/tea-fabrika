@@ -27,6 +27,7 @@
     "!dist/.rsbuild"
   ],
   "exports": {
+    ".": "./src/index.ts",
     "./App": "./src/App.ts",
     "./Setting": "./src/Setting.ts",
     "./Sources": "./src/Sources.ts",
@@ -43,6 +44,10 @@
   },
   "publishConfig": {
     "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
       "./App": {
         "types": "./dist/App.d.ts",
         "default": "./dist/App.js"

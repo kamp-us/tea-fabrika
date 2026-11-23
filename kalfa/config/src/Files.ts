@@ -7,7 +7,6 @@
  */
 import * as Effect from "effect/Effect";
 import * as Order from "effect/Order";
-import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
@@ -15,6 +14,7 @@ import * as SchemaIssue from "effect/SchemaIssue";
 import * as Str from "effect/String";
 import type { App } from "./App.ts";
 import * as Codec from "./Codec.ts";
+import { at, distance, leaf, lineAt, type Path, same, shape } from "./internal/document.ts";
 import type * as Setting from "./Setting.ts";
 import type { TomlDocument } from "./Toml.ts";
 
@@ -49,8 +49,6 @@ export const STOP = "The instance did not start.";
 
 type Declaration = Setting.Setting<unknown>;
 
-type Path = ReadonlyArray<string>;
-
 interface Place {
   /** The name a person reads, as `~/.fabrika/fabrika.toml`. */
   readonly file: string;
@@ -59,37 +57,14 @@ interface Place {
 
 const owner = { person: "a person's", repo: "a repo's" } as const;
 
-const same = (a: Path, b: Path) => a.length === b.length && a.every((s, n) => s === b[n]);
-
 /** Whether `path` is the declaration's own path or one of its tables. */
 const under = (d: Declaration, path: Path) => path.every((s, n) => d.segments[n] === s);
 
-const at = (value: TomlDocument["value"], path: Path) =>
-  path.reduce<unknown>((v, key) => (Predicate.isObject(v) ? v[key] : undefined), value);
-
-/** The first key/value at or under `path`. */
-const leaf = (value: TomlDocument["value"], path: Path): Path => {
-  const below = at(value, path);
-  const key = Predicate.isObject(below) ? Rec.keys(below)[0] : undefined;
-
-  return key === undefined ? path : leaf(value, [...path, key]);
-};
-
-/** A value as the message shows it: a scalar as written, an array or a table only by its shape. */
-const shape = (value: unknown) =>
-  Array.isArray(value) ? "[…]" : Predicate.isObject(value) ? "{…}" : JSON.stringify(value);
-
 /** "file, line n" for the key at `path`, or for its nearest table with a line. */
 const located = (place: Place, path: Path) => {
-  for (let n = path.length; n > 0; n--) {
-    const span = place.document.spans.find((s) => same(s.path, path.slice(0, n)));
+  const line = lineAt(place.document, path);
 
-    if (span !== undefined) {
-      return `${place.file}, line ${span.line}`;
-    }
-  }
-
-  return place.file;
+  return line === undefined ? place.file : `${place.file}, line ${line}`;
 };
 
 /**
@@ -109,22 +84,6 @@ export const refused = (location: string, d: Declaration, shown: string) => {
     reason: "invalid",
     message: `${location}: ${d.path} = ${shown} is not ${expected}.\n  ${rule} ${STOP}`,
   });
-};
-
-/** Edits from one key to another, a swap of two letters counting as one. */
-const distance = (a: string, b: string) => {
-  const rows = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => i + j));
-  const cell = (i: number, j: number) => rows[i]?.[j] ?? 0;
-
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const swap = a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1] && i > 1 && j > 1 ? cell(i - 2, j - 2) + 1 : Infinity;
-      const edit = cell(i - 1, j - 1) + (a[i - 1] === b[j - 1] ? 0 : 1);
-      rows[i]?.splice(j, 1, Math.min(cell(i - 1, j) + 1, cell(i, j - 1) + 1, edit, swap));
-    }
-  }
-
-  return cell(a.length, b.length);
 };
 
 /** The Struct a file is decoded with: every table and leaf optional. */
