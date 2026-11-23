@@ -118,11 +118,27 @@ const resolve = Effect.fnUntraced(function* (
     origin: () => Origin.cases.flag.make({ name: `--${s.name}` }),
   }));
 
-  // A file-only setting skips the environment. An environment variable reads at its own name, so the origin names what was read.
+  // An environment variable reads at its own name, so the origin names what was read.
   const env: Source = {
     provider: setup.provider.pipe(ConfigProvider.mapInput(() => [name])),
     origin: () => Origin.cases.env.make({ name }),
   };
+
+  // A file-only setting is never read from the environment, and a variable that names it stops the start. The check asks the source the read would ask, so it sees what the read would have taken, and it never decodes the text.
+  if (s.fileOnly) {
+    const named = yield* holder(setup, s, [env]);
+
+    if (Option.isSome(named)) {
+      return yield* stop(
+        app,
+        "scope",
+        `${name}: ${s.name} may be set only in ${places(app, s, names)}.`,
+        undefined,
+        undefined,
+        closing,
+      );
+    }
+  }
 
   const sources = [...Option.toArray(flag), ...(s.fileOnly ? [] : [env]), files.repo, files.user];
   const first = yield* holder(setup, s, sources);
