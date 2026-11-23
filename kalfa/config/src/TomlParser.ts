@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
 import { type Fault } from "./internal/format.ts";
-import { toml } from "./internal/toml.ts";
+import { single, toml } from "./internal/toml.ts";
 import { Conflict, Syntax, Toml, TomlError, Value } from "./Toml.ts";
 
 const reason = (fault: Fault, path: ReadonlyArray<string>): Syntax | Value | Conflict => {
@@ -44,7 +44,7 @@ export const layer = Layer.succeed(
   Toml,
   Toml.of({
     parse: (text) => lift(() => toml.parse(text), []),
-    set: (text, path, value) => lift(() => toml.set(text, path, value), path),
-    remove: (text, path) => lift(() => toml.remove(text, path), path),
+    set: (text, path, value) => lift(() => single.set(text, path, value), path),
+    remove: (text, path) => lift(() => single.remove(text, path), path),
   }),
 );

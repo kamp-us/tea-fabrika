@@ -32,6 +32,8 @@ export interface Format {
   /** The file ending: the file is `.<app>/<app>.<extension>`. */
   readonly extension: string;
   readonly parse: (text: string) => Result.Result<Document, Fault>;
+  /** Sets the value at `path`, writing only the keys that differ. An array is replaced whole. */
   readonly set: (text: string, path: ReadonlyArray<string>, value: unknown) => Result.Result<string, Fault>;
+  /** Takes the key at `path` out, or the whole table there with the comments it owns. */
   readonly remove: (text: string, path: ReadonlyArray<string>) => Result.Result<string, Fault>;
 }
