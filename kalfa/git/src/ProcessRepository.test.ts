@@ -1,4 +1,4 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P16, P19): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P16, P19, P23): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
 // how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
 // call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id and of a diff. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
@@ -27,7 +27,10 @@ import {
   flatSignatureArb,
   messageVariants,
   ModelDiff,
+  NAME_CLASSES,
+  nameCarrier,
   partArb,
+  textureArb,
   wordArb,
 } from "./History.test-support.ts";
 import { byBytes, bytes as objectBytes } from "./internal/object.ts";
@@ -2231,6 +2234,69 @@ it.effect.prop(
         }
 
         expect(last, "every path ends in a marked name").toContain("zq");
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant (the match of a listed name against the asked one): compare one byte less, skip the length check, accept any byte, stop at
+// the first equal byte, or match a listed name by its start or its end. With siblings that start with the asked name, end with it, are
+// its start, or differ in one character or in other characters of its byte length, listed before it or after it, the file read is the
+// asked one.
+it.effect.prop(
+  "P23 readFile among neighbors on the stand-in: the listed name that is the asked name byte for byte is the file read, whatever siblings start with it, end with it, are its start or are as long as it",
+  { commit: commitIdArb, texture: textureArb },
+  ({ commit: from, texture }) =>
+    Effect.gen(function* () {
+      const carrier = nameCarrier(texture);
+      expect(carrier.classes, "the generator reaches every name class").toEqual(NAME_CLASSES);
+
+      for (const [k, node] of carrier.history.nodes.entries()) {
+        const commit = commitIdFrom(`${k}${from.slice(1)}`);
+        const sorted = [...node.files].sort((a, b) => byBytes(a.path, b.path));
+        const below = (path: string) => path.slice(path.indexOf("/") + 1);
+        const named = (each: (typeof sorted)[number], n: number) => ({ ...each, blob: hexId("b", n + 1) });
+        const files = sorted.map(named);
+
+        const entries = files.map((each) => ({
+          mode: "100644",
+          type: "blob",
+          id: each.blob,
+          name: k === 0 ? each.path : below(each.path),
+        }));
+
+        const trees = new Map<string, Held["trees"] extends ReadonlyMap<string, infer E> ? E : never>(
+          k === 0
+            ? [[commit, entries]]
+            : [
+                [
+                  commit,
+                  [
+                    {
+                      mode: "040000",
+                      type: "tree",
+                      id: hexId("e", 1),
+                      name: node.files[0]?.path.split("/")[0] ?? "dir",
+                    },
+                  ],
+                ],
+                [hexId("e", 1), entries],
+              ],
+        );
+
+        const held: Held = {
+          trees,
+          blobs: new Map(files.map((each) => [each.blob, each.content])),
+          printed: new Map(),
+        };
+
+        const { repo } = yield* open(readScript(commit, held), {});
+
+        for (const each of files) {
+          const path = Schema.decodeUnknownSync(Tree.Path)(each.path);
+          const read = yield* repo.readFile(commit, path);
+          expect(Option.getOrUndefined(read), `${each.path}: its own bytes`).toEqual(each.content);
+        }
       }
     }),
   { arbitrary: { runs: 100, seed: 119120 } },

@@ -36,6 +36,8 @@ import {
   LIMIT_CLASSES,
   limitCarrier,
   blobId,
+  NAME_CLASSES,
+  nameCarrier,
   READ_CLASSES,
   readCarrier,
   reachedReadClasses,
@@ -2861,6 +2863,28 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
           );
 
           expect(changed, "the generator reaches files with bytes").toBeGreaterThan(20);
+        }),
+      run,
+    );
+
+    // Plant: match a listed name by its start, its end or its length only, (b) red; take the first listed name that shares the asked
+    // name's first bytes. On `/process` the match is the bytes of the listed name against the asked name's: compare one byte less,
+    // skip the length check, accept any byte, or stop at the first equal byte.
+    it.effect.prop(
+      "S36 the asked name among its neighbors: with siblings that start with it, end with it, are its start, or differ from it in one character or in other characters of the same byte length, each file reads as its own bytes, in the top folder and in a folder below",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = nameCarrier(texture);
+          expect(carrier.classes, "the generator reaches every name class").toEqual(NAME_CLASSES);
+          expect(carrier.cases.length, "the generator reaches many names").toBeGreaterThan(40);
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              yield* readAll(seeded, carrier, "names", DEFAULT.limits.blob, { text: false });
+            }),
+          );
         }),
       run,
     );

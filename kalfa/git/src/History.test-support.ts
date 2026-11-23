@@ -9,6 +9,7 @@
 // every run, each one applied to the run's drawn value, so a missing class fails a law loudly.
 import { createHash } from "node:crypto";
 import { Arbitrary, Predicate, Result, Schema } from "effect";
+import { Path } from "./Tree.ts";
 
 // ---------------------------------------------------------------------------------------------------------
 // Pieces
@@ -1287,6 +1288,106 @@ export const readCarrier = (texture: Texture): ReadCarrier => {
   }
 
   return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, cases };
+};
+
+/** What the names of a sibling tree are made of, each reached in every run by `nameCarrier`. */
+export const NAME_CLASSES = [
+  "a name that starts with the asked name",
+  "a name that ends with the asked name",
+  "a name that is the start of the asked name",
+  "a name of the asked length that differs in one character",
+  "a name of the asked byte length made of other characters",
+] as const;
+
+const utf8Length = (text: string): number => utf8(text).length;
+
+/**
+ * Two commits of files whose names sit close to each other: for each of four asked names (two of them with a character of two or
+ * three bytes), a sibling that starts with it, one that ends with it, one that is its start, ones of its length that differ in one
+ * character, and ones of its byte length made of other characters; each at the top in the first commit and in a folder in the
+ * second. Every name holds its own bytes, so a read that takes a neighbor's file is seen. The cases are every read of a file.
+ */
+export const nameCarrier = (texture: Texture): ReadCarrier & { readonly classes: ReadonlyArray<string> } => {
+  const asked = [
+    `a${at(texture.parts, 0)}`,
+    `\u00e9${at(texture.parts, 1)}`,
+    `${at(texture.parts, 2)}\u8BBE`,
+    `\u{1F600}${at(texture.parts, 3)}`,
+  ];
+
+  const reached = new Set<string>();
+  const names = new Map<string, number>();
+
+  const take = (name: string, label?: (typeof NAME_CLASSES)[number]): void => {
+    if (Schema.is(Path)(name) && !names.has(name)) {
+      names.set(name, names.size);
+
+      if (label !== undefined) {
+        reached.add(label);
+      }
+    }
+  };
+
+  for (const name of asked) {
+    const characters = Array.from(name);
+    take(name);
+    take(`${name}0`, NAME_CLASSES[0]);
+    take(`${name}z`, NAME_CLASSES[0]);
+    take(`0${name}`, NAME_CLASSES[1]);
+    take(`z${name}`, NAME_CLASSES[1]);
+    take(characters.slice(0, -1).join(""), NAME_CLASSES[2]);
+    take(characters.slice(0, 1).join(""), NAME_CLASSES[2]);
+
+    for (const [i, character] of characters.entries()) {
+      const before = characters.slice(0, i).join("");
+      const after = characters.slice(i + 1).join("");
+
+      for (const other of ["0", "~"]) {
+        if (utf8Length(character) === 1 && character !== other) {
+          take(`${before}${other}${after}`, NAME_CLASSES[3]);
+        }
+      }
+
+      if (utf8Length(character) > 1) {
+        take(`${before}${"0".repeat(utf8Length(character))}${after}`, NAME_CLASSES[4]);
+      }
+    }
+  }
+
+  const content = (n: number): Uint8Array =>
+    Uint8Array.from({ length: 3 + (n % 5) }, (_, k) => [n & 255, n >> 8][k] ?? (n * 31 + k * 7) & 255);
+
+  const draw = new Draw(texture);
+  const word = draw.word();
+  const author = draw.signature(draw.int(4_000_000_000));
+  const committer = draw.signature(0);
+  const folder = `dir${at(texture.parts, 4)}`;
+
+  const layouts: ReadonlyArray<(name: string) => string> = [(name) => name, (name) => `${folder}/${name}`];
+
+  const nodes = layouts.map((place, i): Node => ({
+    parents: i === 0 ? [] : [i - 1],
+    author,
+    committer: { ...committer, seconds: BASE_SECONDS + i },
+    message: word,
+    files: [...names].map(([name, n]) => file(place(name), content(n))),
+  }));
+
+  const cases = nodes.flatMap((node, commit) =>
+    node.files.map((each): ReadCase => ({
+      label: `names: ${each.path}`,
+      classes: [],
+      commit,
+      path: each.path,
+      expected: readModel(node.files, each.path),
+    })),
+  );
+
+  return {
+    history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] },
+    cases,
+    classes: NAME_CLASSES.filter((label) => reached.has(label)),
+  };
 };
 
 /** The classes of `READ_CLASSES` that the cases of a carrier reach, in the list's order. */
