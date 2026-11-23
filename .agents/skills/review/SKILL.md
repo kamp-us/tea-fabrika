@@ -81,6 +81,13 @@ Never print npm, pnpm or env settings. The runner strips secret settings and red
      ends your turn with no answer, so plant by reading there.
    - Delete at least one guarding check (a scope, a re-read, an equality, a schema, an own-key read)
      and report whether a law went red. A guarding check whose deletion turns no law red is a finding.
+   - Run the guard check on the branch:
+     `node .agents/skills/mutation/scripts/survivors.ts --out <your scratch folder>/survivors --head HEAD`.
+     When it refuses the scope as too wide, name the files that hold the guarding checks with
+     `--files`. Each `lived` or `no law ran` line in a guarding check that no `Plant:` or
+     `Survivor:` line of the tests or fix commits' bodies explains is a finding. Give its run time,
+     and what it could not judge: its `static` lines and the mutants a capped run did not reach.
+     Where your box cannot start Docker, say so, and the lead runs it.
    - A law moved onto a schema's Arbitrary keeps its old reach.
    - If secrets must stay out of records, URLs or spans, the plan's Law cell has `[secrets]` and
      the law generates flows: made-up words, keys and passes, operation orders, refusals and

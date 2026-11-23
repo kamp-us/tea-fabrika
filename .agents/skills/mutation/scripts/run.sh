@@ -8,13 +8,16 @@
 # reaches a file by its package name (`@tea-fabrika/tracker`) never sees a mutant (ticket 457).
 # BASELINE, when set, names vitest's JSON report of a plain run of the same tests here: the test
 # and hook limit is then limit.ts's answer for it, else the fast check's 10 s (ticket 605).
+# CAP_SECONDS is the time cap on Stryker, in whole seconds; unset, the fast check's five minutes.
 set -eu
 : "${T:?T must name the ticket}"
 : "${BUILD:?BUILD must name the build commit}"
 : "${RELATED:?RELATED must list the test paths}"
 case ${FINAL:-1} in 0|1) ;; *) echo "FINAL must be 0 or 1" >&2; exit 1 ;; esac
 case ${IN_PLACE:-0} in 0) IN_PLACE=false ;; 1) IN_PLACE=true ;; *) echo "IN_PLACE must be 0 or 1" >&2; exit 1 ;; esac
-export T BUILD RELATED IN_PLACE BASELINE
+CAP_SECONDS=${CAP_SECONDS:-300}
+case $CAP_SECONDS in ''|0*|*[!0-9]*) echo "CAP_SECONDS must be a whole number of seconds, 1 or more" >&2; exit 1 ;; esac
+export T BUILD RELATED IN_PLACE BASELINE CAP_SECONDS
 exec node --input-type=module -e '
 import {spawn} from "node:child_process";
 import {rmSync} from "node:fs";
@@ -30,7 +33,7 @@ const stop = () => {
   kill("SIGTERM");
   hard = setTimeout(() => kill("SIGKILL"), 1000);
 };
-const cap = setTimeout(stop, 300_000);
+const cap = setTimeout(stop, Number(process.env.CAP_SECONDS) * 1000);
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 child.once("exit", (code) => {

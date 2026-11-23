@@ -70,6 +70,16 @@ this skill for the law. The reviewer reads that law on its recheck.
      names (a scope, a re-read, an equality, a schema, an own-key read) and show its deletion plant
      red, one `Plant:` line each. A class that fails an earlier check never reaches a later one, so it does not
      count as reaching it.
+   - **Run the guard check before you commit,** since a hand plant misses what you did not think
+     to break:
+     `node .agents/skills/mutation/scripts/survivors.ts --out <your scratch folder>/survivors --files <the plan's product files, comma-separated>`.
+     It mutates those files in the mutation container against the laws that load them, and prints
+     one line per mutant that lived (`lived`, or `no law ran`) with its file, line and what
+     changed. Kill each one with a law and its `Plant:` line, or explain it in the commit body as
+     `Survivor: <file>:<line> <one-line reason>`, such as a log text or a mutant that changes no
+     behavior. A `static` line is code that runs as the module loads, which Stryker skips: plant
+     it by hand when it guards. A run stuck on `baseline_failed` means a law is red because the
+     build is not in: write `Survivor: after build`, and the review runs it.
    - A shape check (an import ban, a naming rule) is a lint rule, not a test.
    - If secrets must stay out of records, URLs or spans, require `[secrets]` in the plan's Law
      cell and a property over generated flows. Generate made-up words, keys and passes,
@@ -171,8 +181,9 @@ These hold in every tests round, so the brief does not repeat them.
 - **Commit and push:** commit your own paths by name with the step-commit skill's
   `stepcommit.sh --body-file <file> tests <ticket> "<subject>" <path>...`, a plain-word subject,
   no trailer naming a chat tool and no session link. The body file is your plant record: one line
-  per new law, `Plant: <law title>: <what you broke>: <the failure's first line>`, and the reach
-  table under them when the plan has a `## Generators` section. The reviewer reads it from
+  per new law, `Plant: <law title>: <what you broke>: <the failure's first line>`, one
+  `Survivor:` line per guard-check survivor you explain, and the reach table under them when the
+  plan has a `## Generators` section. The reviewer reads it from
   `git log`, not from your answer, and `stepcommit.sh` refuses a tests commit with no `Plant:`
   line. A fix round commits the same way, `stepcommit.sh --body-file <file> fix ...`, with the plants it ran: a `fix` commit that names a test file (`*.test.ts`, `*.test-support.ts`) is refused without a `Plant:` line.
   `stepcommit.sh` leak-checks and pushes. No force push. A refused push is reported with its
