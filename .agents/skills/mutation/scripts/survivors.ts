@@ -16,7 +16,8 @@
 //   `--head` (HEAD when none) as the answer to the mutant on that line; `<file>:*` answers a file no law loads
 //   or every mutant of a file. A line has its evidence after ` -- `: `Survivor: <file>:<line> <reason> -- <the
 //   input or plant tried and why it cannot reach the line, or why the mutant is equivalent>`. A line with no
-//   evidence, or one bare word of it ("unreachable"), answers nothing. `--answers` names a file of such lines too, such as the commit body about to be
+//   evidence, or one bare word of it ("unreachable"), answers nothing. The check reads one line, so the
+//   reason and the evidence stay on it. `--answers` names a file of such lines too, such as the commit body about to be
 //   written. An answered mutant is counted and no longer listed, so exit 0 says every survivor is killed or
 //   answered. Without either flag no line is read and a mutant that lived is always listed.
 // - `--out` is your scratch folder; mutbox's whole answer is `<out>/mutbox.json`.
@@ -375,6 +376,9 @@ export const answersIn = (text: string): ReadonlyArray<Answer> =>
 export const isAnswered = (answers: ReadonlyArray<Answer>, file: string, line: number | null): boolean =>
   Arr.some(answers, (answer) => answer.file === file && (answer.line === null || answer.line === line));
 
+/** The exit code: 1 while a mutant lived or a file has no law that loads it, and no `Survivor:` line answers it; else 0. Pure. */
+export const exitCode = (open: number, unloaded: number): 0 | 1 => (open + unloaded > 0 ? 1 : 0);
+
 // ---------------------------------------------------------------- the run
 
 const git = (root: string, args: ReadonlyArray<string>, env: ReadonlyArray<string> = []) =>
@@ -389,6 +393,18 @@ const ok = Effect.fnUntraced(function* (root: string, args: ReadonlyArray<string
   }
 
   return got.out;
+});
+
+/** The `Survivor:` lines of the file `--answers` names; a file that cannot be read is a refusal naming it. */
+export const readAnswers = Effect.fnUntraced(function* (file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+
+  return answersIn(
+    yield* fs
+      .readFileString(path.resolve(file))
+      .pipe(Effect.mapError(() => Refused.make({ detail: `--answers names no readable file: ${file}` }))),
+  );
 });
 
 const z = (text: string) => Arr.filter(Str.split(text, "\0"), (s) => s !== "");
@@ -590,13 +606,7 @@ const check = Effect.fnUntraced(function* (ask: {
 
   const answers = [
     ...(ask.answered ? answersIn(yield* ok(root, ["log", "--format=%B", `${base}..${ask.head ?? "HEAD"}`])) : []),
-    ...(ask.answers === undefined
-      ? []
-      : answersIn(
-          yield* fs
-            .readFileString(path.resolve(ask.answers))
-            .pipe(Effect.mapError(() => Refused.make({ detail: `--answers names no readable file: ${ask.answers}` }))),
-        )),
+    ...(ask.answers === undefined ? [] : yield* readAnswers(ask.answers)),
   ];
 
   if (files.length === 0) {
@@ -618,7 +628,7 @@ const check = Effect.fnUntraced(function* (ask: {
     }
 
     return yield* Effect.sync(() => {
-      process.exitCode = unloaded.length > 0 ? 1 : 0;
+      process.exitCode = exitCode(0, unloaded.length);
     });
   }
 
@@ -744,11 +754,9 @@ const check = Effect.fnUntraced(function* (ask: {
     ),
   );
 
-  if (lines.length > 0) {
-    yield* Effect.sync(() => {
-      process.exitCode = 1;
-    });
-  }
+  yield* Effect.sync(() => {
+    process.exitCode = exitCode(open.length, unloaded.length);
+  });
 });
 
 /** A refusal's one line on stderr, and exit 2. */

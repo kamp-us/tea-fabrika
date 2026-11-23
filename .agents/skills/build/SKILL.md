@@ -54,7 +54,7 @@ for the product code.
    files that hold the guarding checks with `--files`. Answer each survivor in a guarding check:
    a law is missing, so list it in your report and end with `answer: send tests <the survivors>`;
    or it guards nothing, so write `Survivor: <file>:<line> <reason> -- <evidence>` in the commit body
-   (`<file>:*` for a whole file). The evidence is the input or plant you tried and why it cannot
+   (`<file>:*` for a whole file), the whole line on one line: the check reads one line. The evidence is the input or plant you tried and why it cannot
    reach the line, or one sentence on why the mutant is equivalent: "unreachable" alone answers
    nothing. Leave the `static` lines as they are:
    code that runs as the module loads, which Stryker skips and the reviewer plants by hand.

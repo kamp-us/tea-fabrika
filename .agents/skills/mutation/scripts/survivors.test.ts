@@ -1,10 +1,12 @@
-import { Array as Arr, Result } from "effect";
+import { it as effect } from "@effect/vitest";
+import { Array as Arr, Effect, FileSystem, Layer, Path, PlatformError, Result, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   answersIn,
   changed,
   coverage,
+  exitCode,
   isAnswered,
   lawFolder,
   leftOut,
@@ -12,6 +14,7 @@ import {
   normal,
   parentEntries,
   pick,
+  readAnswers,
   reach,
   resolve,
   staticLines,
@@ -481,4 +484,66 @@ describe("survivors, which mutants a Survivor: line answers", () => {
       options,
     );
   });
+});
+
+describe("survivors, the exit code and the answers file", () => {
+  // Zero is as likely as any count, so the case with nothing left to answer is always reached.
+  const count = fc.oneof(fc.constant(0), fc.nat({ max: 20 }));
+
+  // Plants: always 0; always 1; count only the mutants that lived and not the files no law loads (or the reverse).
+  it("the exit code is 1 while any mutant or any unloaded file has no answer, and 0 otherwise", () => {
+    fc.assert(
+      fc.property(count, count, (open, unloaded) => {
+        expect(exitCode(open, unloaded)).toBe(open === 0 && unloaded === 0 ? 0 : 1);
+      }),
+      options,
+    );
+  });
+
+  const disk = (files: Readonly<Record<string, string>>) =>
+    Layer.mergeAll(
+      Path.layer,
+      FileSystem.layerNoop({
+        readFileString: (path) =>
+          path in files
+            ? Effect.succeed(files[path] ?? "")
+            : Effect.fail(
+                PlatformError.systemError({
+                  _tag: "NotFound",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+      }),
+    );
+
+  // Plants: let a read that failed give no answers; name the wrong file in the refusal; read a different file.
+  effect.effect.prop(
+    "--answers reads the Survivor: lines of its file, and a file that cannot be read is a refusal naming it",
+    {
+      dir: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+      name: Schema.String.check(Schema.isPattern(/^[a-z]{1,8}$/)),
+      lines: Schema.Array(
+        Schema.Literals([
+          "Survivor: a/b.ts:3 log text -- the line only words a message and no input changes what runs",
+          "Survivor: a/b.ts:* thin glue -- no law loads it, and a call of it only forwards",
+          "Plant: a law: a break: red",
+        ]),
+      ),
+    },
+    ({ dir, name, lines }) =>
+      Effect.gen(function* () {
+        const file = `/${dir}/${name}.txt`;
+        const text = Arr.join(lines, "\n");
+
+        expect(yield* readAnswers(file).pipe(Effect.provide(disk({ [file]: text })))).toEqual(answersIn(text));
+
+        const refused = yield* readAnswers(file).pipe(Effect.flip, Effect.provide(disk({})));
+
+        expect(refused._tag).toBe("Refused");
+        expect(refused.detail).toContain(file);
+      }),
+    { arbitrary: { seed: options.seed, runs: options.numRuns } },
+  );
 });
