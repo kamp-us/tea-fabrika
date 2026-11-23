@@ -15,21 +15,27 @@ import {
   Effect,
   Exit,
   Layer,
+  Logger,
   Match,
   Option,
   Predicate,
+  type Queue,
+  References,
   Schema,
   SchemaGetter,
   SchemaIssue,
   Scope,
   Stream,
+  Tracer,
 } from "effect";
 import * as Digest from "effect/crypto/Digest";
+import * as QueueModule from "effect/Queue";
 import { TestClock } from "effect/testing";
 import * as AppModule from "./App.ts";
 import { Setting, SettingGroup } from "./index.ts";
-import { hash, read } from "./internal/snapshot.ts";
-import { watched } from "./internal/window.ts";
+import type { Settled } from "./internal/read.ts";
+import { hash, make, read } from "./internal/snapshot.ts";
+import { debounce, watched } from "./internal/window.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { Reach } from "./SettingGroup.edit.test-support.ts";
 import * as OldSnapshot from "./Snapshot.ts";
@@ -115,7 +121,7 @@ export type Draw = typeof Draw.Type;
 
 export const pick = (draw: Draw, n: number): number => draw.picks[n % draw.picks.length] ?? 0;
 
-const number = (draw: Draw, n: number): number => draw.numbers[n % draw.numbers.length] ?? 4100;
+export const number = (draw: Draw, n: number): number => draw.numbers[n % draw.numbers.length] ?? 4100;
 
 const word = (draw: Draw, n: number): string => draw.words[n % draw.words.length] ?? "w";
 
@@ -182,7 +188,7 @@ const declare = (decl: Decl): Setting.Any => {
 
 const groupFrom = (app: string, settings: Array<Setting.Any>) => SettingGroup.make(app, ...settings);
 
-const makeGroup = (app: string, decls: ReadonlyArray<Decl>) =>
+export const makeGroup = (app: string, decls: ReadonlyArray<Decl>) =>
   groupFrom(
     app,
     decls.map((decl) => declare(decl)),
@@ -279,14 +285,67 @@ interface Rig {
   readonly window: number;
 }
 
-const started = (group: Group, scene: Scene, disk: MemoryFiles.LiveDisk, scope: Scope.Scope) =>
+/** One structured log line. */
+interface Line {
+  /** The whole entry as the logger wrote it, for a law that scans every part of it. */
+  readonly raw: string;
+  readonly level: string;
+  readonly message: string;
+  readonly annotations: Readonly<Record<string, unknown>>;
+}
+
+/** What a running group logged and the spans it ended. */
+interface Capture {
+  readonly logs: Array<Line>;
+  readonly spans: Array<Tracer.NativeSpan>;
+}
+
+export const capturing = (): Capture => ({ logs: [], spans: [] });
+
+/** Runs a build with the capture's logger and tracer, at every log level, so a fiber it forks logs there too. */
+const recorded =
+  (capture: Capture | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    if (capture === undefined) {
+      return effect;
+    }
+
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = new Tracer.NativeSpan(options);
+        capture.spans.push(span);
+
+        return span;
+      },
+    });
+
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      capture.logs.push({
+        raw: JSON.stringify(entry),
+        level: entry.level,
+        message: Array.isArray(entry.message) ? entry.message.join(" ") : String(entry.message),
+        annotations: entry.annotations,
+      });
+    });
+
+    return effect.pipe(
+      Effect.provide(Logger.layer([logger])),
+      Effect.provideService(References.MinimumLogLevel, "All"),
+      Effect.provideService(Tracer.Tracer, tracer),
+    );
+  };
+
+const started = (group: Group, scene: Scene, disk: MemoryFiles.LiveDisk, scope: Scope.Scope, capture?: Capture) =>
   Layer.buildWithScope(
     SettingGroup.layer(group, { version: VERSION, repo: ROOT, flags: scene.flags }).pipe(
       Layer.provideMerge(disk.layer),
       Layer.provideMerge(digestLayer),
     ),
     scope,
-  ).pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME, ...scene.env } }))));
+  ).pipe(
+    recorded(capture),
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME, ...scene.env } }))),
+  );
 
 /**
  * The digest a running group makes its snapshots with: SHA-256 computed in the call, so an item of the stream is made in the turns the scheduler gives it and the law needs no real time. Effect's own layer runs on `crypto.subtle`, which answers on the event loop after a time no turn of the scheduler can count, so a law that read the items a fixed number of turns after a change read them early on a busy machine. Every read and every hash outside a running group is made on that layer.
@@ -301,7 +360,7 @@ const digestLayer = Layer.succeed(Digest.Digest)({
 });
 
 /** Starts the scene's group and keeps it running until the rig's scope closes. */
-export const boot = Effect.fnUntraced(function* (scene: Scene) {
+export const boot = Effect.fnUntraced(function* (scene: Scene, capture?: Capture) {
   const { group } = scene;
   const site = siteFor(group.app, scene.moved);
 
@@ -314,8 +373,11 @@ export const boot = Effect.fnUntraced(function* (scene: Scene) {
   });
 
   const scope = yield* Scope.make();
+
   // A start that fails leaves nothing running.
-  const context = yield* started(group, scene, disk, scope).pipe(Effect.tapError(() => Scope.close(scope, Exit.void)));
+  const context = yield* started(group, scene, disk, scope, capture).pipe(
+    Effect.tapError(() => Scope.close(scope, Exit.void)),
+  );
 
   const rig: Rig = { group, app: group.app, disk, scope, context, window: 100 };
 
@@ -328,7 +390,10 @@ export const close = (rig: Rig) => Scope.close(rig.scope, Exit.void);
 const isReading = (value: unknown): value is Effect.Effect<unknown> => Effect.isEffect(value);
 
 /** What the start gave: each field's value (a live one read), and each origin. */
-export const running = (rig: Rig) =>
+export const running = (rig: {
+  readonly group: Group;
+  readonly context: Context.Context<SettingGroup.Identifier<string, Array<Setting.Any>>>;
+}) =>
   Effect.gen(function* () {
     const values: Readonly<Record<string, unknown>> = yield* rig.group;
     const now: Record<string, unknown> = {};
@@ -380,7 +445,10 @@ export const takeFirst = Effect.fnUntraced(function* (scene: Scene) {
 
 const TURNS = 10;
 
-const turns = Effect.forEach(Array.from({ length: TURNS }), () => Effect.yieldNow, { discard: true, concurrency: 1 });
+const turns = Effect.forEach(Array.from({ length: TURNS }), () => Effect.yieldNow, {
+  discard: true,
+  concurrency: 1,
+});
 
 /** Lets every event the disk has given reach the follower, which then waits out its window on the clock. */
 const settle = (rig: Rig) =>
@@ -613,7 +681,7 @@ const scriptDecls = (draw: Draw): ReadonlyArray<Decl & { readonly file: "repo" |
   { name: named(draw.c), kind: "number", file: "repo" },
 ];
 
-const scriptGroup = (draw: Draw) => makeGroup(draw.app, scriptDecls(draw));
+export const scriptGroup = (draw: Draw) => makeGroup(draw.app, scriptDecls(draw));
 
 export const initial = (draw: Draw): Layouts => ({
   repo: { choices: { [named(draw.a)]: 1, [named(draw.c)]: 1 }, pad: 0, tail: 0 },
@@ -770,7 +838,7 @@ interface Plain {
   hash: unknown;
 }
 
-const plain = (item: SettingGroup.Snapshot): Plain => ({
+export const plain = (item: SettingGroup.Snapshot): Plain => ({
   app: item.app,
   values: { ...item.values },
   origins: { ...item.origins },
@@ -778,7 +846,7 @@ const plain = (item: SettingGroup.Snapshot): Plain => ({
 });
 
 /** The snapshot with its hash made over the values it holds now. */
-const sealed = (snapshot: Plain) =>
+export const sealed = (snapshot: Plain) =>
   Effect.gen(function* () {
     return { ...snapshot, hash: yield* hash(snapshot.values) };
   }).pipe(Effect.provide(Digest.layerWebCrypto));
@@ -1409,3 +1477,197 @@ export const ordered = (draw: Draw, item: SettingGroup.Snapshot): Effect.Effect<
 
     return found;
   }).pipe(Effect.provide(Digest.layerWebCrypto));
+
+// ---------------------------------------------------------------------------------------------
+// Slice 2: a group started from a stream of snapshots
+// ---------------------------------------------------------------------------------------------
+
+/** What a snapshot says for the receiver's group, as a few numbers: the live number and table, the restart number and text, the quiet window, and the line a key sits on. */
+interface Frame {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: string;
+  readonly window: string;
+  readonly pad: number;
+}
+
+/** The receiver's group: two live settings (a number, a table), two restart settings (a number, a text), and the window. */
+const receiverDecls = (draw: Draw): ReadonlyArray<Decl> => [
+  { name: named(draw.a), kind: "number", live: true },
+  { name: named(draw.b), kind: "table", live: true },
+  { name: named(draw.c), kind: "number" },
+  { name: named(draw.d), kind: "text" },
+];
+
+export const receiverGroup = (draw: Draw) => makeGroup(draw.app, receiverDecls(draw));
+
+const valueFor = (draw: Draw, name: string, frame: Frame): unknown =>
+  Match.value(name).pipe(
+    Match.when(named(draw.a), () => frame.a),
+    Match.when(named(draw.b), () => ({ a: frame.b })),
+    Match.when(named(draw.c), () => frame.c),
+    Match.when(named(draw.d), () => frame.d),
+    Match.orElse(() => frame.window),
+  );
+
+/** The resolved list a frame stands for, in the group's order, the window last. */
+export const settledFrom = (draw: Draw, group: Group, frame: Frame): ReadonlyArray<Settled> =>
+  readGroup(group).settings.map((setting, i) => ({
+    setting,
+    value: valueFor(draw, setting.name, frame),
+    origin:
+      setting.name === debounce.name
+        ? Origin.cases.default.make({})
+        : Origin.cases.file.make({ file: `.${group.app}/${group.app}.toml`, line: frame.pad + i + 1 }),
+  }));
+
+/** The snapshot the loader makes for a frame. */
+export const snapshotFrom = (draw: Draw, group: Group, frame: Frame) =>
+  make(readGroup(group), settledFrom(draw, group, frame)).pipe(Effect.provide(digestLayer));
+
+export type Move = "live" | "restart" | "origin" | "nothing" | "refused" | "back";
+
+export const MOVES: ReadonlyArray<Move> = ["live", "restart", "origin", "nothing", "refused", "back"];
+
+/** One later snapshot of a stream: the frame it holds, or none for a snapshot that does not fit. */
+interface Later {
+  readonly id: Move;
+  readonly frame: Frame | undefined;
+}
+
+export const FIRST = (draw: Draw): Frame => ({
+  a: number(draw, 0),
+  b: number(draw, 1),
+  c: number(draw, 2),
+  d: word(draw, 0),
+  window: "100 millis",
+  pad: 0,
+});
+
+/**
+ * Six later snapshots, one for each class: a live value moves, a restart value moves (and the window), only a line moves, nothing moves, one does not fit, and the restart values go back to where the start had them. The restart values change at the second, stay at the third and the fourth, and go back at the sixth.
+ */
+export const laters = (draw: Draw): ReadonlyArray<Later> => {
+  const first = FIRST(draw);
+  const live = { ...first, a: first.a + 1, b: first.b + 1 };
+  const restart = { ...live, c: first.c + 1, d: `${first.d}x`, window: "200 millis" };
+  const origin = { ...restart, pad: 1 };
+  const back = { ...origin, c: first.c, d: first.d, window: first.window };
+
+  return [
+    { id: "live", frame: live },
+    { id: "restart", frame: restart },
+    { id: "origin", frame: origin },
+    { id: "nothing", frame: origin },
+    { id: "refused", frame: undefined },
+    { id: "back", frame: back },
+  ];
+};
+
+/** A snapshot that does not fit, made from a good one: the live number is given an origin no start gives it. */
+export const refusedFrom = (draw: Draw, item: SettingGroup.Snapshot): Effect.Effect<unknown> =>
+  sealed({
+    ...plain(item),
+    origins: { ...item.origins, [named(draw.a)]: Origin.cases.flag.make({ name: `--${named(draw.b)}` }) },
+  });
+
+/** A receiver: the queue its snapshots come through, and what its layer built. */
+interface Inbox {
+  readonly group: Group;
+  readonly queue: Queue.Queue<unknown, Cause.Done>;
+  readonly scope: Scope.Closeable;
+  readonly context: Context.Context<SettingGroup.Identifier<string, Array<Setting.Any>> | Digest.Digest>;
+  readonly capture: Capture;
+}
+
+/** A group a layer from snapshots starts, in a process that holds no file system, no path and no configuration to read: a provider that dies if it is asked. The first items are in the queue before the layer builds, and a stream that ends does so before it too. */
+export const openInbox = Effect.fnUntraced(function* (
+  group: Group,
+  items: ReadonlyArray<unknown>,
+  options: { readonly ending?: boolean } = {},
+) {
+  const queue = yield* QueueModule.unbounded<unknown, Cause.Done>();
+
+  for (const item of items) {
+    yield* QueueModule.offer(queue, item);
+  }
+
+  if (options.ending === true) {
+    yield* QueueModule.end(queue);
+  }
+
+  const scope = yield* Scope.make();
+  const capture = capturing();
+
+  const dying = ConfigProvider.layer(
+    ConfigProvider.make(() => Effect.die(new Error("a Worker reads no configuration"))),
+  );
+
+  const context = yield* Layer.buildWithScope(
+    SettingGroup.layerFromSnapshots(group, Stream.fromQueue(queue)).pipe(Layer.provideMerge(digestLayer)),
+    scope,
+  ).pipe(
+    recorded(capture),
+    Effect.provide(dying),
+    Effect.tapError(() => Scope.close(scope, Exit.void)),
+  );
+
+  const inbox: Inbox = { group, queue, scope, context, capture };
+
+  return inbox;
+});
+
+export const closeInbox = (inbox: Inbox) => Scope.close(inbox.scope, Exit.void);
+
+/** One more snapshot into the queue, and the scheduler's turns for the receiver to take it. */
+export const feed = (inbox: Inbox, item: unknown) => QueueModule.offer(inbox.queue, item).pipe(Effect.andThen(turns));
+
+/** The stream ends, and the receiver has its turns. */
+export const endInbox = (inbox: Inbox) => QueueModule.end(inbox.queue).pipe(Effect.andThen(turns));
+
+/** Whether a value is a live field's `changes`: a Stream that cannot fail and needs nothing. */
+const isChanges = (value: unknown): value is Stream.Stream<unknown> => Stream.isStream(value);
+
+/** The values each live field's `changes` gives from now on, by field, the first value waited for. */
+export const watchLive = Effect.fnUntraced(function* (target: {
+  readonly group: Group;
+  readonly scope: Scope.Scope;
+  readonly context: Context.Context<SettingGroup.Identifier<string, Array<Setting.Any>>>;
+}) {
+  const values: Readonly<Record<string, unknown>> = yield* target.group.pipe(Effect.provideContext(target.context));
+  const seen: Record<string, Array<unknown>> = {};
+
+  for (const [name, value] of Object.entries(values)) {
+    if (Predicate.hasProperty(value, "changes") && isChanges(value.changes)) {
+      const list: Array<unknown> = [];
+      seen[name] = list;
+
+      yield* Stream.runForEach(value.changes, (item) => Effect.sync(() => void list.push(item))).pipe(
+        Effect.forkIn(target.scope),
+      );
+
+      for (let left = 1000; left > 0 && list.length === 0; left--) {
+        yield* Effect.yieldNow;
+      }
+    }
+  }
+
+  return seen;
+});
+
+/** The receiver's own stream of snapshots: the one it holds now. */
+export const heldNow = (inbox: Inbox) =>
+  Stream.runHead(SettingGroup.snapshots(inbox.group)).pipe(
+    Effect.map(Option.getOrThrow),
+    Effect.provideContext(inbox.context),
+  );
+
+export const infos = (capture: Capture): ReadonlyArray<string> =>
+  capture.logs.filter((line) => line.level === "INFO").map((line) => line.message);
+
+export const warnings = (capture: Capture): ReadonlyArray<string> =>
+  capture.logs.filter((line) => line.level === "WARN").map((line) => line.message);
+
+/** The line a restart change is logged as, by the receiver. */
+export const restartLine = (app: string, name: string) => `${name} changed. It applies when ${app} starts again.`;

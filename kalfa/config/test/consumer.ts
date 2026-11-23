@@ -15,7 +15,7 @@ import type * as Snapshot from "@kalfa/config/Snapshot";
 import * as Sources from "@kalfa/config/Sources";
 import * as Toml from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 
 const app: App.App = App.make({ name: "demo", list: "demo config get" });
@@ -93,6 +93,24 @@ const removed: Effect.Effect<string, Root.SettingGroup.SettingsError> = Root.Set
   "user",
 ).remove(declared);
 
+// The Worker's start (ticket 1845, slice 2): the loader's group gives one snapshot, and the same group starts from a
+// one-item stream of it with no file system and no path, needing only the digest.
+const snapshotted: Effect.Effect<
+  Root.SettingGroup.Snapshot,
+  Root.SettingGroup.SettingsError,
+  FileSystem.FileSystem | Path.Path | Digest.Digest
+> = Stream.runHead(Root.SettingGroup.snapshots(declaredGroup)).pipe(
+  Effect.map(Option.getOrThrow),
+  Effect.provide(Root.SettingGroup.layer(declaredGroup, { version: "1.2.3" })),
+);
+
+const worker = (
+  snapshot: Root.SettingGroup.Snapshot,
+): Effect.Effect<number, Root.SettingGroup.SettingsError, Digest.Digest> =>
+  Effect.map(declaredGroup, (values) => values.port).pipe(
+    Effect.provide(Root.SettingGroup.layerFromSnapshots(declaredGroup, Stream.make(snapshot))),
+  );
+
 const refusals: [typeof Private, typeof Test] | null = null;
 
-void [checked, rooted, edited, removed, Sources, Toml, Codec, JsonSchema, refusals];
+void [checked, rooted, edited, removed, snapshotted, worker, Sources, Toml, Codec, JsonSchema, refusals];

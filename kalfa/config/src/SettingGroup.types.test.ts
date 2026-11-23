@@ -15,6 +15,10 @@
 //   Ticket 1845, slice 1 (the reasons are ten, `snapshot` added): leave `"snapshot"` out of `SettingsError`'s literals.
 // - SN11 (ticket 1845, slice 1): (a) type `snapshots`' requirement as `Identifier<App, R>` only and provide `Digest` inside:
 //   the exact-type line fails; (b) add `Digest` to the layer from files: the T3 line on the layer's services fails.
+// - SN12 (ticket 1845, slice 2): (a) type `layerFromSnapshots`' stream as `Stream<unknown, unknown, RS>`: the
+//   failing-stream line compiles, so its `@ts-expect-error` is unused; (b) build the receiver through `start`: the layer's
+//   requirements gain `FileSystem` and `Path`, so the exact-services line fails; (c) give the `restart` update a `value`
+//   field: the `@ts-expect-error` on it is unused.
 // - T7 (ticket 1843, slice 2): type `SettingGroup.edit`'s `set` as taking `setting: Setting.Any`, so the
 //   `@ts-expect-error` for another group's setting is unused.
 // - T9 (ticket 1843, slice 3): type the disk `set`'s value as `unknown`, so the `@ts-expect-error` for a wrong value is
@@ -27,12 +31,13 @@
 //   `NotPlain`; (c) drop its "met before" check; (d) compare with "assignable one way" in place of `Same`; (e) answer
 //   `T` whole at the record line.
 import { expectTypeOf, it } from "@effect/vitest";
-import { Effect, type FileSystem, Option, type Path, Schema } from "effect";
+import { Context, Effect, type FileSystem, Option, type Path, Schema } from "effect";
 import type * as Digest from "effect/crypto/Digest";
 import type * as Duration from "effect/Duration";
 import type * as Layer from "effect/Layer";
 import type * as Stream from "effect/Stream";
 import { Setting, SettingGroup } from "./index.ts";
+import { Update } from "./internal/apply.ts";
 
 const Rule = Schema.Literals(["people", "robots"]);
 
@@ -296,6 +301,42 @@ it("SN11 type: `snapshots(group)` is exactly a stream of snapshots that cannot f
   >();
   expectTypeOf<Layer.Services<typeof demoLayer>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
   expectTypeOf<Effect.Services<typeof provided>>().toEqualTypeOf<FileSystem.FileSystem | Path.Path>();
+});
+
+// SN12: the receiver's layer needs what the stream needs and the digest, and no file system, no path and no
+// configuration; its stream cannot fail; the group yields the values the layer from files gives; and a restart update
+// holds no value, so a running process cannot set a restart value from one.
+class Carrier extends Context.Service<Carrier, { readonly name: string }>()("Carrier") {}
+
+declare const carried: Stream.Stream<unknown, never, Carrier>;
+
+declare const failing: Stream.Stream<unknown, Error, Carrier>;
+
+const received = SettingGroup.layerFromSnapshots(group, carried);
+
+const receiving = () => [
+  // @ts-expect-error SN12: a stream that can fail is the app's to handle, not the receiver's
+  SettingGroup.layerFromSnapshots(group, failing),
+
+  // @ts-expect-error SN12: a restart update has no value
+  Update.cases.restart.make({ name: "instance.port", value: 1 }),
+];
+
+type Restart = typeof Update.cases.restart.Type;
+
+it("SN12 type: `layerFromSnapshots(group, s)` is exactly a layer of the group's identifier that fails only with SettingsError and needs what the stream needs and the digest, never a file system or a path, the group yields the same values, and a restart update has no value", () => {
+  expectTypeOf(receiving).toBeFunction();
+  expectTypeOf<typeof received>().toEqualTypeOf<
+    Layer.Layer<
+      SettingGroup.Identifier<"demo", typeof group.settings>,
+      SettingGroup.SettingsError,
+      Carrier | Digest.Digest
+    >
+  >();
+  expectTypeOf<Layer.Success<typeof received>>().toEqualTypeOf<Layer.Success<typeof demoLayer>>();
+  expectTypeOf<Layer.Services<typeof received>>().toEqualTypeOf<Carrier | Digest.Digest>();
+  expectTypeOf<Effect.Success<Effect.Effect<Effect.Success<typeof group>>>>().toEqualTypeOf<Values>();
+  expectTypeOf<keyof Restart>().toEqualTypeOf<"_tag" | "name">();
 });
 
 // T6: a setting's value is plain data. The lines that must compile are in `plain`, the lines that must not are in
