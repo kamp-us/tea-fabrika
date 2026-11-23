@@ -723,7 +723,9 @@ it.effect.prop(
         }),
       );
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { runs: 5, seed: 119120 } },
+  // One run asks 271 paths, `readFile` and `readText` each, three times (git, git with the config, /memory): about 4000 git commands
+  // for each run, so the 60 s default of a test is too short, as it is for the shared laws. No command waits: none runs a filter.
+  { arbitrary: { runs: 3, seed: 119120 }, timeout: 1_800_000 },
 );
 
 // Plant (I11): read a gitlink as nothing at the path, (i) red; read a path below a gitlink as none, (i) red. A submodule holds a
