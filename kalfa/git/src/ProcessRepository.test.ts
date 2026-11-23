@@ -2239,12 +2239,49 @@ it.effect.prop(
   { arbitrary: { runs: 100, seed: 119120 } },
 );
 
+type Listing = Held["trees"] extends ReadonlyMap<string, infer E> ? E : never;
+
+// The trees of a set of files, one listing for each folder, each in git's order; the first one set is the commit's own.
+const grow = (
+  id: string,
+  files: ReadonlyArray<{ readonly rel: string; readonly blob: string }>,
+  trees: Map<string, Listing>,
+  next: { n: number },
+): void => {
+  trees.set(id, []);
+  const folders = new Map<string, Array<{ readonly rel: string; readonly blob: string }>>();
+  const entries: Array<Listing[number]> = [];
+
+  for (const each of files) {
+    const slash = each.rel.indexOf("/");
+
+    if (slash === -1) {
+      entries.push({ mode: "100644", type: "blob", id: each.blob, name: each.rel });
+    } else {
+      const head = each.rel.slice(0, slash);
+      folders.set(head, [...(folders.get(head) ?? []), { rel: each.rel.slice(slash + 1), blob: each.blob }]);
+    }
+  }
+
+  for (const [name, inside] of folders) {
+    next.n += 1;
+    const child = hexId("e", next.n);
+    entries.push({ mode: "040000", type: "tree", id: child, name });
+    grow(child, inside, trees, next);
+  }
+
+  trees.set(
+    id,
+    entries.toSorted((a, b) => byBytes(a.name, b.name)),
+  );
+};
+
 // Plant (the match of a listed name against the asked one): compare one byte less, skip the length check, accept any byte, stop at
 // the first equal byte, or match a listed name by its start or its end. With siblings that start with the asked name, end with it, are
 // its start, or differ in one character or in other characters of its byte length, listed before it or after it, the file read is the
-// asked one.
+// asked one; and a name that is not there, which only starts the names of files and folders, reads as none.
 it.effect.prop(
-  "P23 readFile among neighbors on the stand-in: the listed name that is the asked name byte for byte is the file read, whatever siblings start with it, end with it, are its start or are as long as it",
+  "P23 readFile among neighbors on the stand-in: the listed name that is the asked name byte for byte is the file read, whatever siblings start with it, end with it, are its start or are as long as it, and a name that only starts others is none",
   { commit: commitIdArb, texture: textureArb },
   ({ commit: from, texture }) =>
     Effect.gen(function* () {
@@ -2253,35 +2290,13 @@ it.effect.prop(
 
       for (const [k, node] of carrier.history.nodes.entries()) {
         const commit = commitIdFrom(`${k}${from.slice(1)}`);
-        const sorted = [...node.files].sort((a, b) => byBytes(a.path, b.path));
-        const below = (path: string) => path.slice(path.indexOf("/") + 1);
-        const named = (each: (typeof sorted)[number], n: number) => ({ ...each, blob: hexId("b", n + 1) });
-        const files = sorted.map(named);
-
-        const entries = files.map((each) => ({
-          mode: "100644",
-          type: "blob",
-          id: each.blob,
-          name: k === 0 ? each.path : below(each.path),
-        }));
-
-        const trees = new Map<string, Held["trees"] extends ReadonlyMap<string, infer E> ? E : never>(
-          k === 0
-            ? [[commit, entries]]
-            : [
-                [
-                  commit,
-                  [
-                    {
-                      mode: "040000",
-                      type: "tree",
-                      id: hexId("e", 1),
-                      name: node.files[0]?.path.split("/")[0] ?? "dir",
-                    },
-                  ],
-                ],
-                [hexId("e", 1), entries],
-              ],
+        const files = node.files.map((each, n) => ({ ...each, blob: hexId("b", n + 1) }));
+        const trees = new Map<string, Listing>();
+        grow(
+          commit,
+          files.map((each) => ({ rel: each.path, blob: each.blob })),
+          trees,
+          { n: 0 },
         );
 
         const held: Held = {
@@ -2291,12 +2306,22 @@ it.effect.prop(
         };
 
         const { repo } = yield* open(readScript(commit, held), {});
+        let nones = 0;
 
-        for (const each of files) {
+        for (const each of carrier.cases.filter((one) => one.commit === k)) {
           const path = Schema.decodeUnknownSync(Tree.Path)(each.path);
           const read = yield* repo.readFile(commit, path);
-          expect(Option.getOrUndefined(read), `${each.path}: its own bytes`).toEqual(each.content);
+          expect(each.expected.kind === "file" || each.expected.kind === "none", `${each.label}: a file or none`).toBe(
+            true,
+          );
+          nones += each.expected.kind === "none" ? 1 : 0;
+
+          expect(Option.getOrUndefined(read), `${each.label}: its own bytes, or none`).toEqual(
+            each.expected.kind === "file" ? each.expected.bytes : undefined,
+          );
         }
+
+        expect(nones, "the generator asks names that are not there").toBeGreaterThan(1);
       }
     }),
   { arbitrary: { runs: 100, seed: 119120 } },

@@ -1140,6 +1140,7 @@ export const READ_CLASSES = [
   "(b) a path no tree has",
   "(b) a name that shares its start with a file",
   "(b) a name that shares its end with a file",
+  "(b) a name that is the start of a file's name",
   "(b) a path below a file",
   "(b) a path in a folder that does not exist",
   "(b) a commit with no files",
@@ -1271,6 +1272,13 @@ export const readCarrier = (texture: Texture): ReadCarrier => {
       ]);
       add(`${entry.label}: end of ${each.path}`, sibling(`x${last}`), ["(b) a name that shares its end with a file"]);
 
+      // The start of the name: absent, though the names that start with it are there (`a` beside `a.b`, `a-b`, `a0`).
+      const shorter = sibling(Array.from(last).slice(0, -1).join(""));
+
+      if (Array.from(last).length > 1 && Schema.is(Path)(shorter)) {
+        add(`${entry.label}: start of ${each.path}`, shorter, ["(b) a name that is the start of a file's name"]);
+      }
+
       for (let n = 1; n < parts.length; n++) {
         add(
           `${entry.label}: folder ${parts.slice(0, n).join("/")}`,
@@ -1297,6 +1305,7 @@ export const NAME_CLASSES = [
   "a name that is the start of the asked name",
   "a name of the asked length that differs in one character",
   "a name of the asked byte length made of other characters",
+  "an asked name that is absent and is the start of names that exist",
 ] as const;
 
 const utf8Length = (text: string): number => utf8(text).length;
@@ -1354,6 +1363,16 @@ export const nameCarrier = (texture: Texture): ReadCarrier & { readonly classes:
     }
   }
 
+  // Names that are asked and are not there, each the start of names that are: files beside it (`m.b`, `m-b`, `m0`, `mb`) and folders
+  // (`m.d/x`, `m-d/x`). A name that only starts other names is none, never a folder.
+  const absent = [`m${at(texture.parts, 5)}`, `\u00fc${at(texture.parts, 6)}`];
+
+  const beside = absent.flatMap((name) =>
+    [`${name}.b`, `${name}-b`, `${name}0`, `${name}b`, `${name}.d/x`, `${name}-d/x`].filter((each) =>
+      Schema.is(Path)(each),
+    ),
+  );
+
   const content = (n: number): Uint8Array =>
     Uint8Array.from({ length: 3 + (n % 5) }, (_, k) => [n & 255, n >> 8][k] ?? (n * 31 + k * 7) & 255);
 
@@ -1370,18 +1389,34 @@ export const nameCarrier = (texture: Texture): ReadCarrier & { readonly classes:
     author,
     committer: { ...committer, seconds: BASE_SECONDS + i },
     message: word,
-    files: [...names].map(([name, n]) => file(place(name), content(n))),
+    files: [
+      ...[...names].map(([name, n]) => file(place(name), content(n))),
+      ...beside.map((name, i) => file(place(name), content(names.size + i))),
+    ],
   }));
 
-  const cases = nodes.flatMap((node, commit) =>
-    node.files.map((each): ReadCase => ({
+  const cases = nodes.flatMap((node, commit) => [
+    ...node.files.map((each): ReadCase => ({
       label: `names: ${each.path}`,
       classes: [],
       commit,
       path: each.path,
       expected: readModel(node.files, each.path),
     })),
-  );
+    ...absent.map((name): ReadCase => {
+      const path = (layouts[commit] ?? ((text: string) => text))(name);
+
+      return {
+        label: `names: absent ${path}`,
+        classes: [NAME_CLASSES[5]],
+        commit,
+        path,
+        expected: readModel(node.files, path),
+      };
+    }),
+  ]);
+
+  reached.add(NAME_CLASSES[5]);
 
   return {
     history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] },
