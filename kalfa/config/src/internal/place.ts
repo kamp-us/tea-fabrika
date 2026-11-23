@@ -8,7 +8,7 @@ import { stop } from "./error.ts";
 import type { Document, Format } from "./format.ts";
 
 /** Where a file is read from, and the name a person reads. */
-interface Place {
+export interface Place {
   readonly path: string;
   readonly name: string;
 }
@@ -82,8 +82,8 @@ export const parse = (app: string, format: Format, name: string, text: string, c
       ),
   });
 
-/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. */
-export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place) {
+/** Reads and parses one file. A missing file counts as empty, any other failure to read it fails as `read`. The message ends with `closing`, the start's own sentence when none is given. */
+export const load = Effect.fnUntraced(function* (app: string, format: Format, place: Place, closing?: string) {
   const fs = yield* FileSystem.FileSystem;
 
   const text = yield* fs
@@ -92,9 +92,9 @@ export const load = Effect.fnUntraced(function* (app: string, format: Format, pl
       Effect.catchTag("PlatformError", (cause) =>
         cause.reason._tag === "NotFound"
           ? Effect.succeed("")
-          : Effect.fail(stop(app, "read", "could not be read.", { file: place.name }, cause)),
+          : Effect.fail(stop(app, "read", "could not be read.", { file: place.name }, cause, closing)),
       ),
     );
 
-  return yield* Effect.fromResult(parse(app, format, place.name, text));
+  return yield* Effect.fromResult(parse(app, format, place.name, text, closing));
 });
