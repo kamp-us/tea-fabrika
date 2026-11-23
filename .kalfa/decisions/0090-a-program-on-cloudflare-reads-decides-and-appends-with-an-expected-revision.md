@@ -28,6 +28,8 @@ append is the only part of a program's transaction that has to be atomic.
 - This brings back the expected revision that the Ledger's protocol
   (https://github.com/kamp-us/tea-fabrika/issues/1764) dropped, as an option on `append` and not as a second call. The
   line in decision 0083 that rejected it is reworded, with a pointer here.
+- Program's takeover and CI's choice are written once, as this read, decide and append, so the same code runs on every
+  Ledger and not only on Cloudflare.
 - The Ledger's `transaction` stays for code that runs where the Ledger is, and admissions still run inside the
   append's own synchronous transaction (decision 0078). A `RemoteLedger` still has no `transaction` (decision 0076); its
   `append` takes the option.

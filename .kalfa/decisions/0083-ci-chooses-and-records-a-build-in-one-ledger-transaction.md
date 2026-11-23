@@ -8,6 +8,9 @@ transaction. We chose this because a second copy's transaction then reads the fi
 taken, and it uses what the Ledger already promises. The design ticket is
 https://github.com/kamp-us/tea-fabrika/issues/1887.
 
+Decision 0090 changes the how: CI reads, asks the pure value, and appends one fact with an expected revision, then reads
+again, in place of one Ledger transaction. The rest of this decision stands.
+
 ## Considered Options
 
 - Bring the expected revision back on an append: rejected then, because Ledger's protocol dropped it and CI would be its
@@ -19,9 +22,9 @@ https://github.com/kamp-us/tea-fabrika/issues/1887.
 
 ## Consequences
 
-- CI needs a Ledger with `transaction`, except on Cloudflare, where decision 0090 has it read, choose and append once
-  with an expected revision. A `RemoteLedger` has no `transaction` (decision 0076), so CI runs where the Ledger is and
-  never over the signed-in connection.
+- CI needs a Ledger with `transaction`. Decision 0090 changes this: CI reads, chooses and appends with an expected
+  revision, so it needs only `append` and `read`. A `RemoteLedger` has no `transaction` (decision 0076), so a CI that
+  needed one would have to run where the Ledger is.
 - A transaction is synchronous, so the call to the host comes after it lands. A crash between the two leaves an admit
   with no build on the host. A restart replays the entries, and the host's start finds or starts by build id, so that
   build is started then.
