@@ -13,6 +13,7 @@ import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Setting from "./Declaration.ts";
 import { SettingsError } from "./internal/error.ts";
+import { type FlagValues, type Flags, make as build } from "./internal/flags.ts";
 import { frozen } from "./internal/frozen.ts";
 import type { Live } from "./internal/live.ts";
 import { field, variable } from "./internal/names.ts";
@@ -30,6 +31,18 @@ export {
 };
 
 export type {
+  /**
+   * What a command's handler gets for the group's flags: each flag's text, or none when the person did not give it. Pass it to `layer` as its `flags`.
+   *
+   * @category models
+   */
+  FlagValues,
+  /**
+   * One `effect/cli` flag per setting a flag may set, by setting name. A file-only setting has none, so each named key is optional.
+   *
+   * @category models
+   */
+  Flags,
   /**
    * The value of a live setting, an Effect to yield for the value now, a different type from the plain value of a restart setting.
    *
@@ -199,17 +212,33 @@ export const make = <const App extends string, const R extends ReadonlyArray<Set
 };
 
 /**
+ * One `effect/cli` flag per setting, for the app's own command: named as the setting is, as `--instance.port`, with the setting's description as its help text. A file-only setting has no flag.
+ *
+ * **Gotchas**
+ *
+ * Throws an `Error` for a setting whose name is a flag Effect's command line keeps for itself, as `help` or `version`.
+ *
+ * @category combinators
+ */
+export const flags = <App extends string, R extends ReadonlyArray<Setting.Any>>(
+  group: SettingGroup<App, R>,
+): Flags<R> =>
+  // SAFETY: `build` gives one key for each setting that is not file-only, named by the setting, which is `Flags`
+  // written as a type.
+  build(group.settings) as Flags<R>;
+
+/**
  * Starts a group's settings once and provides them to every program that reads the group.
  *
  * **Details**
  *
- * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default.
+ * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given.
  *
  * @category layers
  */
 export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
-  options: { readonly version: string; readonly repo?: string },
+  options: { readonly version: string; readonly repo?: string; readonly flags?: FlagValues<R> },
 ): Layer.Layer<Identifier<App, R>, SettingsError, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     key(group.app, group.settings),
