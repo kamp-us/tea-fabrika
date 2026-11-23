@@ -261,3 +261,10 @@ export const gitTable =
         return rest(call);
     }
   };
+
+/**
+ * What `merge-tree --write-tree --no-messages --name-only -z` prints: the tree and then each conflicting path, every
+ * one ended by a NUL byte. A clean merge prints the tree alone.
+ */
+export const mergeTreeOutput = (tree: string, paths: ReadonlyArray<string> = []): string =>
+  `${[tree, ...paths].join("\0")}\0`;

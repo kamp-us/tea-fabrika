@@ -1,0 +1,108 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git -C <repository> -c core.quotepath=off merge-tree --write-tree --no-messages --name-only -z --merge-base=<base> <ours> <theirs>, one run per row, the exit code and standard output kept (the output as base64, so every NUL byte and every byte of a path stays); the three commits of each row made by git commit in a scratch repository, with no user or system config",
+  "rows": [
+    {
+      "note": "a clean merge: each side changes another file",
+      "code": 0,
+      "output": "MGUyYmFhNDkzNWRlOWU3OTk1MDYzMjhjOWZkODAwYzg1YzE3MTFjOQA=",
+      "expect": {
+        "tree": "0e2baa4935de9e799506328c9fd800c85c1711c9",
+        "paths": []
+      }
+    },
+    {
+      "note": "a clean merge that deletes every file",
+      "code": 0,
+      "output": "NGI4MjVkYzY0MmNiNmViOWEwNjBlNTRiZjhkNjkyODhmYmVlNDkwNAA=",
+      "expect": {
+        "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+        "paths": []
+      }
+    },
+    {
+      "note": "one conflict",
+      "code": 1,
+      "output": "NjIxOGNhZGYxM2I0NjA4YWUwYzhhNTQzOTUyMjY2NDZlN2FmZWRiMwBhAA==",
+      "expect": {
+        "tree": "6218cadf13b4608ae0c8a54395226646e7afedb3",
+        "paths": [
+          "a"
+        ]
+      }
+    },
+    {
+      "note": "three conflicts and a clean path, given out of byte order by the names' letters",
+      "code": 1,
+      "output": "YTQ3MGJmYmY5YzVlNzUyNDJmYzA3YjQ1YmEzNGIyYjM3MDM2ZmU4NwBhAG0AegA=",
+      "expect": {
+        "tree": "a470bfbf9c5e75242fc07b45ba34b2b37036fe87",
+        "paths": [
+          "a",
+          "m",
+          "z"
+        ]
+      }
+    },
+    {
+      "note": "conflicts at names with a line break, a space, a leading quote and characters past U+024F",
+      "code": 1,
+      "output": "OTc3Zjc5YTRhYzY5YTc1OGU3YzIzNDU4ZmRkMzIxYzdhZmQ2NzFjYgAicQAtZABhIGIAbApiAOiuvgDwn5iAAA==",
+      "expect": {
+        "tree": "977f79a4ac69a758e7c23458fdd321c7afd671cb",
+        "paths": [
+          "\"q",
+          "-d",
+          "a b",
+          "l\nb",
+          "设",
+          "😀"
+        ]
+      }
+    },
+    {
+      "note": "modify and delete",
+      "code": 1,
+      "output": "NmNmZjczMmIyNjM1N2U0NTNjYzg1ZTNhNWFiYzMxOWM2ODlhZmI3ZQBhAA==",
+      "expect": {
+        "tree": "6cff732b26357e453cc85e3a5abc319c689afb7e",
+        "paths": [
+          "a"
+        ]
+      }
+    },
+    {
+      "note": "add and add",
+      "code": 1,
+      "output": "YzRjYjZiNzdjZWRiMGM4NDRhYTkyNDRjYTY5NTU2NmY4ZDg3NWY3OABuAA==",
+      "expect": {
+        "tree": "c4cb6b77cedb0c844aa9244ca695566f8d875f78",
+        "paths": [
+          "n"
+        ]
+      }
+    },
+    {
+      "note": "a file on one side where the other has a folder",
+      "code": 1,
+      "output": "MDJjMjc5ZjA0NmM3ZTIwM2I3M2QxYTNmYzBjMWM1OWM3ZDkwYjNmMQBhfjJhZGNiYzJjMTdhMzJmMTJlOTZiOGMzNjRhMTZjNTY2NTI0ZDczYjUA",
+      "expect": {
+        "tree": "02c279f046c7e203b73d1a3fc0c1c59c7d90b3f1",
+        "paths": [
+          "a~2adcbc2c17a32f12e96b8c364a16c566524d73b5"
+        ]
+      }
+    },
+    {
+      "note": "a folder's own file conflicts beside a clean path in the same folder",
+      "code": 1,
+      "output": "MWY5YzQwN2RjOGFhM2QyNjcwMTM0ZGFmYWMxYTBlN2I4YmZiYzkxYgBkL2YA",
+      "expect": {
+        "tree": "1f9c407dc8aa3d2670134dafac1a0e7b8bfbc91b",
+        "paths": [
+          "d/f"
+        ]
+      }
+    }
+  ]
+}

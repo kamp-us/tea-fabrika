@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 // K1 to K4: what the package's own files say. It stands alone (decision on small libraries usable alone):
 // it names no other package of this repository, it has no dependencies, and no file in it names the repository.
@@ -28,6 +28,7 @@ const EXPORTS = [
   "./Diff",
   "./Settings",
   "./Repository",
+  "./MergeCommit",
   "./memory",
   "./process",
   "./test",
@@ -36,8 +37,8 @@ const EXPORTS = [
 ];
 
 // Plant: add a package of the repository (the shared test package) to the dev dependencies; add the npm package `diff` to
-// `dependencies`; leave `./Diff` out of the exports.
-it("K1 scenario: the manifest names no workspace package, has no dependencies, and exports exactly the plan's list", () => {
+// `dependencies`; leave `./Diff` out of the exports; export `./internal/object`; point `./MergeCommit` at a file that is not there.
+it("K1 scenario: the manifest names no workspace package, has no dependencies, exports exactly the plan's list, and each export is a file", () => {
   const parsed = Schema.decodeUnknownSync(Manifest)(manifest);
 
   const names = [
@@ -62,6 +63,13 @@ it("K1 scenario: the manifest names no workspace package, has no dependencies, a
   ).toEqual(["effect"]);
   expect([...optional].sort(), "the test tools are optional peers").toEqual(["@effect/vitest", "vitest"]);
   expect(Object.keys(parsed.exports).sort()).toEqual([...EXPORTS].sort());
+
+  for (const [name, target] of Object.entries(parsed.exports)) {
+    expect(
+      existsSync(fileURLToPath(new URL(target, new URL("../", import.meta.url)))),
+      `${name} is the file ${target}`,
+    ).toBe(true);
+  }
 });
 
 const WORDS = [`fab${"rika"}`, `kam${"pus"}`, `kamp-${"us"}`, `.kal${"fa/"}`];

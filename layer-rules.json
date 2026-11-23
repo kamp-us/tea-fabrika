@@ -467,6 +467,12 @@
       "imports": []
     },
     {
+      "name": "kalfa-github",
+      "layer": 0,
+      "paths": ["kalfa/github/src"],
+      "imports": []
+    },
+    {
       "name": "kalfa-markdown",
       "layer": 0,
       "paths": ["kalfa/markdown/src"],
@@ -524,6 +530,7 @@
     "kalfa/config/src",
     "kalfa/diagnostics/src",
     "kalfa/git/src",
+    "kalfa/github/src",
     "kalfa/markdown/src"
   ],
   "testFiles": ["**/*.test.ts", "**/*.test.tsx"],

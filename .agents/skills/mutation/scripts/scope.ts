@@ -61,7 +61,7 @@ export const PRODUCT = [
 ] as const;
 
 /** A file that holds mutants: the pathspec above, read as git reads it (its `*` crosses `/`). */
-const product = (path: string) =>
+export const product = (path: string) =>
   Arr.some(EXTENSIONS, (extension) => pipe(path, Str.endsWith(extension))) &&
   !pipe(path, Str.includes(".test.")) &&
   !Arr.some(DECLARATIONS, (extension) => pipe(path, Str.endsWith(extension)));

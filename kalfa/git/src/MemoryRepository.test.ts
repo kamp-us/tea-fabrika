@@ -1,15 +1,17 @@
 // The laws of the in-memory adapter: its ids are git's (M1, M3), its store refuses what git refuses (M2, M4), it
-// holds the files it was given (M5), and it passes the shared laws of Repository (S1 to S11), at 100 runs.
+// holds the files it was given (M5), merges a file against a folder as a conflict (M6), and it passes the shared laws of
+// Repository (S1 to S14), at 100 runs.
 import { expect, it } from "@effect/vitest";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
-import * as CommitId from "./CommitId.ts";
 import fastImport from "./fixtures/fast-import-2.40.1.json" with { type: "json" };
 import treeIds from "./fixtures/tree-ids-2.40.1.json" with { type: "json" };
 import {
   CONFLICT_CLASSES,
   conflictClasses,
+  folderCarrier,
+  FOLDER_MERGE_CLASSES,
   missingId,
   shapes,
   textureArb,
@@ -17,92 +19,23 @@ import {
   TREE_ID,
   treeArb,
   treeClasses,
-  type FileSpec,
-  type FlatSignature,
-  type History,
 } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
-import * as Ref from "./Ref.ts";
+import {
+  build,
+  commitIdFrom,
+  idAt,
+  memorySubject,
+  pathFrom,
+  refNameFrom,
+  signature,
+  toFile,
+  toFileMap,
+  treeIdFrom,
+} from "./MemorySeed.test-support.ts";
 import { expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import * as RepositoryTest from "./RepositoryTest.ts";
-import * as Tree from "./Tree.ts";
-
-const signature = (flat: FlatSignature): Commit.Signature =>
-  new Commit.Signature({
-    name: flat.name,
-    email: flat.email,
-    at: { seconds: flat.seconds, offset: flat.offset },
-  });
-
-const commitIdFrom = (text: string): CommitId.CommitId => Schema.decodeUnknownSync(CommitId.CommitId)(text);
-
-const refNameFrom = (text: string): Ref.RefName => Schema.decodeUnknownSync(Ref.RefName)(text);
-
-const treeIdFrom = (text: string): Tree.TreeId => Schema.decodeUnknownSync(Tree.TreeId)(text);
-
-const pathFrom = (text: string): Tree.Path => Schema.decodeUnknownSync(Tree.Path)(text);
-
-const toFile = (mode: string, content: Uint8Array): MemoryRepository.File => ({
-  mode: Schema.decodeUnknownSync(Tree.Mode)(mode),
-  content,
-});
-
-/** The files of a node as the memory store takes them: a Map, so a path named `__proto__` is a path like any other. */
-const toFileMap = (files: ReadonlyArray<FileSpec>): ReadonlyMap<Tree.Path, MemoryRepository.File> =>
-  new Map(files.map((file) => [pathFrom(file.path), toFile(file.mode, file.content)]));
-
-const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.CommitId => {
-  const id = ids[index];
-
-  if (id === undefined) {
-    throw new Error(`no id for commit ${index}`);
-  }
-
-  return id;
-};
-
-/** A store holding the history: trees and ids computed as git computes them, refs pointed, shallow commits marked. */
-const build = (
-  history: History,
-): Effect.Effect<
-  {
-    readonly store: MemoryRepository.Store;
-    readonly ids: ReadonlyArray<CommitId.CommitId>;
-    readonly trees: ReadonlyArray<Tree.TreeId>;
-  },
-  never,
-  Digest.Digest
-> =>
-  Effect.gen(function* () {
-    let store = MemoryRepository.empty;
-    const ids: Array<CommitId.CommitId> = [];
-    const trees: Array<Tree.TreeId> = [];
-
-    for (const node of history.nodes) {
-      const made = yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(node.files)));
-
-      const commit = yield* MemoryRepository.commit({
-        tree: made.id,
-        parents: node.parents.map((parent) => idAt(ids, parent)),
-        author: signature(node.author),
-        committer: signature(node.committer),
-        message: node.message,
-      });
-
-      store = yield* Effect.orDie(Effect.fromResult(MemoryRepository.add(made.store, commit)));
-      ids.push(commit.id);
-      trees.push(made.id);
-    }
-
-    for (const ref of history.refs) {
-      store = yield* Effect.orDie(
-        Effect.fromResult(MemoryRepository.point(store, refNameFrom(ref.name), idAt(ids, ref.commit))),
-      );
-    }
-
-    return { store: { ...store, shallow: new Set(history.shallow.map((i) => idAt(ids, i))) }, ids, trees };
-  });
 
 const Recorded = Schema.Struct({
   git: Schema.String,
@@ -420,20 +353,42 @@ it.effect.prop(
   { arbitrary: { runs: 100, seed: 119120 } },
 );
 
-const subject: RepositoryTest.Subject = {
-  seed: (history, config) =>
+// Plant: delete the check for a path that is a folder of another in the merge, so `tree` refuses the files and the call
+// dies, with no Conflict.
+it.effect.prop(
+  "M6 a file against a folder: mergeTrees gives Conflict naming both paths and no other, and the store is as it was",
+  { texture: textureArb },
+  ({ texture }) =>
     Effect.gen(function* () {
-      const { store, ids, trees } = yield* build(history);
-      const context = yield* Layer.build(MemoryRepository.layer(store, config));
+      const made = folderCarrier(texture);
+      expect(
+        made.cases.map((each) => each.label),
+        "the generator reaches every class",
+      ).toEqual([...FOLDER_MERGE_CLASSES]);
 
-      return {
-        repository: Context.get(context, Repository.Repository),
-        ids,
-        trees,
-        fingerprint: Context.get(context, MemoryRepository.MemoryStore).get,
-        hidden: [],
-      };
-    }).pipe(Effect.provide(Digest.layerWebCrypto)),
-};
+      const { store, ids } = yield* build(made.history);
+      const context = yield* Layer.build(MemoryRepository.layer(store, RepositoryTest.settings()));
+      const repository = Context.get(context, Repository.Repository);
+      const current = Context.get(context, MemoryRepository.MemoryStore);
+      const before = held(yield* current.get);
 
-RepositoryTest.suite("memory", subject, { runs: 100, timeout: 300_000 });
+      for (const merge of made.cases) {
+        const paths = merge.expected.kind === "conflict" ? merge.expected.paths : [];
+        expect(paths.length, `${merge.label}: the model names the file and its folder's file`).toBeGreaterThan(1);
+
+        const error = yield* Effect.flip(
+          repository.mergeTrees({
+            mergeBase: idAt(ids, merge.base),
+            ours: idAt(ids, merge.ours),
+            theirs: idAt(ids, merge.theirs),
+          }),
+        ).pipe(Effect.orDie);
+
+        expectFailure(error, Repository.Conflict, { paths }, merge.label);
+        expect(held(yield* current.get), `${merge.label}: the store is as it was`).toEqual(before);
+      }
+    }).pipe(Effect.scoped, Effect.provide(Digest.layerWebCrypto)),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+RepositoryTest.suite("memory", memorySubject, { runs: 100, timeout: 300_000 });

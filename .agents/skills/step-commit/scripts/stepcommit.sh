@@ -72,6 +72,33 @@ branch = git("branch", "--show-current").stdout.decode().strip()
 # ticket is any note on its commits, signed or not: a refusal here only asks for another ticket.
 if step == "lead" and not only:
     quest = branch.removesuffix("-wip")
+    # A lead link is signed under a real ticket: an open one in the tracker, or an open GitHub issue of this
+    # repo (the kalfa build tickets are issues). A made-up number (ticket 0, 9902) is a link no ticket owns,
+    # and two such links collide as stale_link. STEPCOMMIT_TICKETS names the command that lists the tracker's
+    # tickets (a test's stub); the default asks the app's own tracker.
+    unknown = "a lead link cannot be signed: "
+    main_dir = os.environ.get("MAIN") or str(pathlib.Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()).parent)
+    lister = os.environ["STEPCOMMIT_TICKETS"].split() if os.environ.get("STEPCOMMIT_TICKETS") else ["node", main_dir + "/apps/fabrika/src/cli.ts", "post", "list", "--as", "lead"]
+    home = os.environ.get("FABRIKA_HOME") or str(pathlib.Path.home() / "Library/Application Support/@kampus/fabrika-app")
+    try: listed = subprocess.run(lister, capture_output=True, text=True, env=dict(os.environ, FABRIKA_HOME=home))
+    except OSError: listed = None
+    tracker = None if listed is None or listed.returncode else {m.group(1) for m in re.finditer(r": #([0-9]+) open ", listed.stdout)}
+    if tracker is None or ticket not in tracker:
+        # Not an open tracker ticket: is it an open GitHub issue? A pull request answers `issue view` too, and its url says /pull/.
+        try: viewed = subprocess.run(["gh", "issue", "view", ticket, "--json", "state,url"], capture_output=True, text=True)
+        except OSError: viewed = None
+        issue = None
+        if viewed is not None and not viewed.returncode:
+            try: issue = json.loads(viewed.stdout)
+            except ValueError: issue = None
+        found = isinstance(issue, dict) and isinstance(issue.get("url"), str) and "/issues/" in issue["url"]
+        # GitHub answered "no such issue" (exit 1 and its own words), as against not answering at all.
+        answered = issue is not None or (viewed is not None and "Could not resolve" in viewed.stderr)
+        if found and issue.get("state") == "OPEN": pass
+        elif not answered:
+            refuse(unknown + "ticket " + ticket + " is not an open tracker ticket" + (" (the tracker cannot be read)" if tracker is None else "") + " and GitHub cannot say if it is an open issue", 5)
+        else:
+            refuse(f"unknown_ticket: {ticket} is not an open tracker ticket or an open GitHub issue; sign a lead link under the ticket of the work (file one with tracker_file when there is none), never a made-up number", 5)
     # gh pr list --json commits asks for every author too, which GitHub refuses as too big.
     query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName baseRefOid headRefOid commits(first:100){totalCount nodes{commit{oid}}}}}}}"
     cannot = "open PRs cannot be read, so a lead link cannot be checked: "

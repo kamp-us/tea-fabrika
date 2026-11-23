@@ -16,8 +16,11 @@ import type * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 
+// What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge.
+const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+
 // What every command starts with: no replacement objects, the path as the git directory (git never looks for a repository
-// around it), and no hook, no automatic gc or maintenance.
+// around it), no hook, no automatic gc or maintenance, and the merge settings at git's defaults.
 const start = (path: string): ReadonlyArray<string> => [
   "--no-replace-objects",
   `--git-dir=${path}`,
@@ -27,6 +30,7 @@ const start = (path: string): ReadonlyArray<string> => [
   "gc.auto=0",
   "-c",
   "maintenance.auto=false",
+  ...MERGE_PINS.flatMap((pin) => ["-c", pin]),
 ];
 
 // Beside PATH, the only variables a command sees: no user or system config, no prompt, no lock taken to refresh, one language.
@@ -303,7 +307,7 @@ const failed = Effect.fnUntraced(function* (
 const blobSides = (change: Parse.Change): ReadonlyArray<Parse.Side> =>
   [change.before, change.after].flatMap((side) => (side === undefined || Parse.isGitlink(side) ? [] : [side]));
 
-const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repository.Raw => {
+const calls = (run: Run, listed: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
   const { limits } = settings;
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
@@ -470,6 +474,41 @@ const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repositor
 
       return new Commit.Commit({ ...commit, id });
     }),
+    mergeTrees: Effect.fnUntraced(function* ({ mergeBase, ours, theirs }) {
+      // `--merge-base` came in git 2.40, so an older git refuses before any command runs.
+      if (!canMerge(version)) {
+        return yield* unavailable(new Repository.GitTooOld({ found: version.found, needs: MERGE_NEEDS }));
+      }
+
+      yield* known(run, [mergeBase, ours, theirs]);
+
+      const output = yield* run([
+        "merge-tree",
+        "--write-tree",
+        "--no-messages",
+        "--name-only",
+        "-z",
+        `--merge-base=${mergeBase}`,
+        ours,
+        theirs,
+      ]);
+
+      // Exit 0 is a clean merge, which prints the tree alone. Exit 1 is a conflict, which prints the tree and then each path.
+      if (output.code !== 0 && output.code !== 1) {
+        return yield* exited(output);
+      }
+
+      const { tree, paths } = yield* Effect.fromResult(Parse.mergeTree(yield* stdoutText(output)));
+      const [first, ...rest] = paths;
+
+      if (output.code === 0) {
+        return tree;
+      }
+
+      return first === undefined
+        ? yield* unavailable(new Repository.Unreadable({ cause: new Error("a conflict named no path") }))
+        : yield* new Repository.Conflict({ paths: [first, ...rest] });
+    }),
     moveRef: Effect.fnUntraced(function* (move) {
       yield* known(run, [move.to]);
 
@@ -489,15 +528,22 @@ const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repositor
   };
 };
 
-// git 2.38 is the oldest the calls are held to.
+// git 2.38 is the oldest the calls are held to, and the oldest a layer opens on.
+const OPEN_NEEDS = "2.38";
+
 const isNewEnough = ({ major, minor }: Parse.Version): boolean => major > 2 || (major === 2 && minor >= 38);
+
+// `merge-tree --merge-base` needs git 2.40.
+const MERGE_NEEDS = "2.40";
+
+const canMerge = ({ major, minor }: Parse.Version): boolean => major > 2 || (major === 2 && minor >= 40);
 
 /**
  * Layer that provides `Repository` over the bare repository at `path`, by running the `git` binary.
  *
  * **Details**
  *
- * Building it runs `git version` (2.38 or newer, else `GitTooOld`) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner`, which the app provides.
+ * Building it runs `git version` (2.38 or newer, else `GitTooOld`; `mergeTrees` needs 2.40 and fails with `GitTooOld` as a `GitUnavailable` reason on older git) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner`, which the app provides.
  *
  * @category layers
  */
@@ -531,19 +577,21 @@ export const layer = (options: {
         yield* Effect.annotateCurrentSpan({ "kalfa.git.version": printed.found });
 
         if (!isNewEnough(printed)) {
-          return yield* new Repository.GitTooOld({ found: printed.found });
+          return yield* new Repository.GitTooOld({ found: printed.found, needs: OPEN_NEEDS });
         }
 
         if ((yield* run(["rev-parse", "--git-dir"])).code !== 0) {
           return yield* new Repository.NoRepository({ path: options.path });
         }
+
+        return printed;
       });
 
-      yield* Effect.timeoutOrElse(open(), {
+      const version = yield* Effect.timeoutOrElse(open(), {
         duration: after,
         orElse: () => Effect.fail(new Repository.TimedOut({ after })),
       });
 
-      return Repository.make(calls(run, listed, options.settings), options.settings);
+      return Repository.make(calls(run, listed, options.settings, version), options.settings);
     }),
   );

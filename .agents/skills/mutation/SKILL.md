@@ -115,6 +115,18 @@ It prints one JSON line and writes it to `<out>/mutbox.json`: `done`, `skip` (no
 - **A dry run is not proof.** Ignored or uncovered mutants alone are not proof either. At least
   one mutant needs a real test result. Record the dry-run log and the actual result counts.
 
+## The guard check
+
+The builder runs it once its laws are green, and the reviewer on the branch, as their skills say.
+It is the same container run on a smaller scope: `scripts/survivors.ts` picks the product files
+(those a change touches, or those `--files` names), finds the laws whose imports reach them, and
+hands mutbox a commit whose parent holds the base's version of those files, so the sampler draws
+from their changed lines (a named file the change does not touch is mutated whole). Its header
+holds the flags, the settings `MUTATE_SECONDS` (default 300) and `MUTATE_FILES` (default 8), the
+exits, and what it cannot see. It prints one line per survivor: `lived` (a law ran it and
+passed), `no law ran`, or `no law loads` for a file no law reaches, then `static` lines Stryker
+skipped, then the counts and seconds. A scope past `MUTATE_FILES` is refused before Docker starts.
+
 ## The hourly run, in CI
 
 The hourly run on main runs in

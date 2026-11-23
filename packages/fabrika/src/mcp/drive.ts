@@ -22,6 +22,17 @@ import { type Call, callOf, RUNS, type Tool, toolNamesOf, toolsOf } from "./tool
 //   yield* drive.call("runs", {})
 //   // {kind: "done", data: {programs: [...], yours: [{program, run, view}], tiles: [{run, program}]}}
 //
+// A call answers once the run has handled its value and its window has caught up: a query's view
+// is the page of that query, and a file's view says the number of the ticket it filed, never the
+// view an earlier call left. A program says what caught up means in its view's `settled`
+// (./../program/program.ts). The wait is bounded by `settle`, a setting of the door; when it runs
+// out the call still answers, with the view as it is and `settled: false` beside it.
+//
+//   yield* drive.call("tracker_query", {value: {ticket: 7}})
+//   // {kind: "done", data: {program: "tracker", run: "tracker:agent:5c1e", word: "queued", view: {page: {kind: "ticket", number: 7, ...}, ...}}}
+//   yield* drive.call("tracker_file", {value: {title: "Login fails", body: ""}})
+//   // {kind: "done", data: {..., view: {filed: 8, saving: [], ...}}}
+//
 // The runs live in the scope it is made in: the connection's. Closing it stops them, as a
 // terminal closing hangs up its shell. Their state is what their program keeps; the tracker's is
 // on the ledger, so nothing is lost.
@@ -85,6 +96,12 @@ export interface Drive {
 /** How long a fresh run is given to show its first state. */
 const FIRST_STATE = Duration.seconds(5);
 
+/**
+ * How long a call waits, by default, for the run to handle its value and its window to catch up
+ * (`settle`). A door's own value wins.
+ */
+export const SETTLE = Duration.seconds(10);
+
 /** What a run's window shows now: its view of its machine, or `null` (no view, or no state yet). */
 const viewNow = (run: AnyRun): unknown => {
   const declared = viewOf(run.program);
@@ -109,6 +126,29 @@ const shown = (run: AnyRun) => {
   );
 };
 
+/**
+ * Done once the run has handled every value told and its window has caught up with them; it never
+ * is if the window does not, so the caller bounds it.
+ */
+const caughtUp = (run: AnyRun) => {
+  const declared = viewOf(run.program);
+  const machine = declared === undefined ? undefined : run.machines[declared.machine];
+  const settled = declared?.settled;
+
+  return Effect.gen(function* () {
+    yield* run.idle;
+
+    if (declared === undefined || machine === undefined || settled === undefined) {
+      return;
+    }
+
+    yield* machine.changes.pipe(
+      Stream.filter((state) => state !== null && settled(declared.of(state))),
+      Stream.runHead,
+    );
+  });
+};
+
 export const driveFor = (options: {
   /** The programs the agent drives, each packed with the agent's own services. */
   readonly list: ProgramList;
@@ -126,10 +166,16 @@ export const driveFor = (options: {
    * `runs` says it, so the agent knows why it cannot write.
    */
   readonly readOnly?: boolean | { readonly why: string } | undefined;
+  /**
+   * How long one call waits for its value to be handled and its program's view to catch up
+   * (`settle` in ./drive.ts's header). It answers anyway when this runs out. `SETTLE` when left out.
+   */
+  readonly settle?: Duration.Input | undefined;
 }) =>
   Effect.gen(function* () {
     const { list, tiles, job, stop, restart, line } = options;
     const readOnly = options.readOnly ?? false;
+    const settle = options.settle ?? SETTLE;
     /** The host's own tools, after `runs`: each one the host hands. */
     const host: readonly Tool[] = [
       ...(job === undefined ? [] : [JOB_TOOL]),
@@ -264,9 +310,19 @@ export const driveFor = (options: {
               } as const;
             }
 
+            // Told is not done: the value is in the mailbox, its handler has not run. The view is read
+            // once the run has handled it and its window has caught up, or when `settle` runs out.
+            const caught = yield* caughtUp(run).pipe(Effect.timeoutOption(settle));
+
             return {
               kind: "done",
-              data: { program: c.program, run: run.id, word, view: viewNow(run) },
+              data: {
+                program: c.program,
+                run: run.id,
+                word,
+                view: viewNow(run),
+                ...(Option.isSome(caught) ? {} : { settled: false }),
+              },
             } as const;
           });
       }

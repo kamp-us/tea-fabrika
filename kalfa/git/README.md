@@ -1,11 +1,11 @@
 # @kalfa/git
 
-Read commits, refs and changes from a git repository that has no working copy, write a commit and move a ref. One
-service, `Repository`, with six read calls and two write calls, two adapters that answer them, and the laws both
-adapters pass.
+Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref and merge trees.
+One service, `Repository`, with six read calls and three write calls, a helper that writes a merge commit, two adapters
+that answer the calls, and the laws both adapters pass.
 
-It never reads HEAD and never touches a working copy. Only `writeCommit` and `moveRef` change the repository, and
-neither sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
+It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef` and `mergeTrees` change the
+repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
 ## The six calls
@@ -66,6 +66,51 @@ const program = Effect.gen(function* () {
   `RefInTheWay` naming the other ref. A failed call leaves every ref as it was. A call that ends in `TimedOut` may have
   moved the ref, so read it again. In the git adapter, a symbolic ref whose target is at `from` becomes a plain ref, and its target stays where it was.
 
+## Merge two commits
+
+```ts
+import * as MergeCommit from "@kalfa/git/MergeCommit";
+
+const candidate = Effect.gen(function* () {
+  const repo = yield* Repository.Repository;
+  // ours is the line the merge is made on, theirs the line that joins it. Parents: [ours, theirs].
+  const merge = yield* MergeCommit.mergeCommit({ ours: main, theirs: branchTip, author, message: "Merge feature\n" });
+  // Nothing has moved yet: the caller points a ref at the commit, only if it is where it read it.
+  yield* repo.moveRef({ ref: candidateRef, from: Option.none(), to: merge.id });
+  return merge;
+});
+```
+
+- `mergeTrees({ mergeBase, ours, theirs })` merges the trees of two commits over the tree of a third, and answers the id
+  of the merged tree, which the repository then holds. It fails `Conflict` naming each path that could not be combined
+  (each once, sorted by UTF-8 bytes, never empty). It reads no history, so a shallow repository answers, and it moves no
+  ref.
+- `MergeCommit.mergeCommit({ ours, theirs, author, message })` finds the merge base with `mergeBases`, merges, and
+  writes the commit with `writeCommit`: parents `[ours, theirs]`, the caller's author and message as given, the
+  settings' committer. It fails `UnrelatedHistories` when the two commits share no history, `SeveralMergeBases` (naming
+  the bases) on a criss-cross, and `Conflict` when a path cannot be combined. A `theirs` that `ours` already reaches
+  still makes a commit, on `ours`' tree. It moves no ref.
+
+The git adapter merges with `git merge-tree --write-tree --merge-base`, which needs git 2.40. On older git `mergeTrees`
+fails with `GitUnavailable` whose reason is `GitTooOld { found, needs: "2.40" }` and runs no command; every other call
+still works on 2.38 and newer. Each command starts with `-c merge.renames=true -c merge.directoryRenames=conflict -c
+merge.renormalize=false`, git's defaults written out, so a repository's own config never steers a merge.
+
+**The memory adapter merges by whole file.** For each path it compares the entries (mode and blob) of the merge base,
+ours and theirs: if ours and theirs are the same, that is the answer; if theirs is the merge base's, ours is; if ours is
+the merge base's, theirs is; else the path conflicts. A merged path that is a folder of another merged path conflicts
+on both. This is the level git decides first, so the memory adapter is stricter than git, never looser. Where the two
+differ, a caller's law that needs git's answer runs on the git adapter:
+
+1. Both sides change one file in places that do not overlap: git merges the lines, memory conflicts.
+2. One side changes a file's mode and the other its content: git takes both, memory conflicts.
+3. Renames: one side moves a file while the other changes it, or adds a file to a folder the first side moved. git
+   follows the rename, memory sees a change against a delete.
+4. A file on one side where the other side has a folder: git moves the file to a new name and conflicts, memory
+   conflicts on both paths and writes no tree.
+5. A `.gitattributes` file with a merge driver or text rules: a newer git may read it from the trees. Memory holds no
+   submodules either.
+
 ## Two adapters
 
 - `@kalfa/git/memory` keeps a store as a plain value of commits, trees, blobs, refs and shallow commits. A commit's id
@@ -73,7 +118,8 @@ const program = Effect.gen(function* () {
   in a real repository.
 - `@kalfa/git/process` runs the git binary (2.38 or newer) on a bare repository, through Effect's
   `ChildProcessSpawner`. It writes a commit with `hash-object -t commit -w --stdin`, from the same bytes the memory
-  adapter hashes, so one commit has one id in both, and moves a ref with `update-ref --no-deref`. The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
+  adapter hashes, so one commit has one id in both, moves a ref with `update-ref --no-deref`, and merges with
+  `merge-tree` (git 2.40 for that call only). The app provides the Node spawner at the top. Every command runs with `--git-dir`, with no
   replacement objects, no hooks and no config of the machine, and with only `PATH` and a pinned set of variables.
 
 ```ts
@@ -169,5 +215,5 @@ optional peers, needed only by `/test`.
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
 to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span. The range's patch id, the diff itself, merging, reading a file, fetch and push come in later tickets
-of this package.
+content in a span. The range's patch id, the diff itself, reading a file, rebase, squash, fetch and push come in later
+tickets of this package.

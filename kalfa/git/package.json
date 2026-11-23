@@ -15,6 +15,7 @@
     "./Diff": "./src/Diff.ts",
     "./Settings": "./src/Settings.ts",
     "./Repository": "./src/Repository.ts",
+    "./MergeCommit": "./src/MergeCommit.ts",
     "./memory": "./src/MemoryRepository.ts",
     "./process": "./src/ProcessRepository.ts",
     "./test": "./src/RepositoryTest.ts",

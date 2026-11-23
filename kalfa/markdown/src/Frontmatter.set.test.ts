@@ -5,7 +5,7 @@
 // one wrong rule in Frontmatter.ts, run once by hand against a copy of the product and never kept.
 import { expect, it } from "@effect/vitest";
 import { deepStrictEqual, strictEqual } from "@effect/vitest/utils";
-import { Effect, Equal, Exit, Option, Predicate, Result, Schema, Tracer } from "effect";
+import { Arbitrary, Effect, Equal, Exit, Option, Predicate, Result, Schema, Tracer } from "effect";
 import * as Support from "./Frontmatter.set.test-support.ts";
 import * as Base from "./Frontmatter.test-support.ts";
 import * as Frontmatter from "./Frontmatter.ts";
@@ -91,47 +91,77 @@ it.effect("scenario: E1 the ticket's file: only the one value changes, every oth
   }),
 );
 
+// E2's check on a list of cases, for the property's runs and for the pinned run.
+const keepsBytes = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const seen = new Set<string>();
+
+    for (const c of cases) {
+      const text = Support.fileText(c.typed, c.body);
+      const changed = Support.changedKeys(c.typed, c.values);
+      const added = Support.addedKeys(c.typed, c.values);
+      const answer = yield* labeled(c.name, Support.setOnce(text, c.values));
+      const kept = Support.keeps(c.typed, answerFrontmatter(answer, c.name), changed, added.length > 0);
+
+      if (Result.isFailure(kept)) {
+        return expect.unreachable(`${c.name}: ${kept.failure}`);
+      }
+
+      // New keys are written as `write` writes them, at the first key's column, and nothing else is added.
+      const adding = kept.success.find((written) => written.keys.length === 0);
+
+      if (adding !== undefined && !c.typed.flow) {
+        strictEqual(adding.text, Support.appendedText(c.typed, c.values, added), `${c.name}: the added keys' lines`);
+      }
+
+      strictEqual(answer.startsWith(c.typed.fence), true, `${c.name}: the opening fence`);
+      strictEqual(Frontmatter.split(answer).body, c.body, `${c.name}: the body`);
+
+      for (const form of c.forms) {
+        seen.add(form);
+      }
+    }
+
+    deepStrictEqual(Support.unreached(seen, classes), [], "classes never checked in this run");
+  });
+
 // E2. Plants, each one wrong rule in Frontmatter.ts (run once, never kept): start a later-line value's text at the end of its key's `:`, so
 // `  # note` goes, (h) red; end a value's text at yaml's node end, so ` # c` goes, (i) red; rebuild the frontmatter from the pairs' own texts, so
 // comment and blank lines go, (j) red. The other classes' plants are E3's.
-it.effect.prop(
-  "E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end",
-  { run: Base.run },
-  ({ run }) =>
-    Effect.gen(function* () {
-      const cases = Support.typedSets(run);
-      const seen = new Set<string>();
+// Each group of classes is a law of its own with 300 runs (Support.CASE_GROUPS), so a law holds a third of a run's work.
+for (const group of Support.CASE_GROUPS) {
+  it.effect.prop(
+    `E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end, for ${group.name}`,
+    { run: Base.run },
+    ({ run }) => keepsBytes(Support.groupCases(run, group), group.classes),
+    runs(300),
+  );
+}
 
-      for (const c of cases) {
-        const text = Support.fileText(c.typed, c.body);
-        const changed = Support.changedKeys(c.typed, c.values);
-        const added = Support.addedKeys(c.typed, c.values);
-        const answer = yield* labeled(c.name, Frontmatter.set(text, c.values, Base.S1));
-        const kept = Support.keeps(c.typed, answerFrontmatter(answer, c.name), changed, added.length > 0);
+// E3's read-back of a list of cases, for the property's runs and for the pinned run.
+const readsBack = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const seen = new Set<string>();
 
-        if (Result.isFailure(kept)) {
-          return expect.unreachable(`${c.name}: ${kept.failure}`);
-        }
+    for (const c of cases) {
+      const answer = yield* labeled(c.name, Support.setOnce(Support.fileText(c.typed, c.body), c.values));
+      const file = yield* labeled(`${c.name}, read again`, Frontmatter.read(answer, Base.S1));
+      const expected = { ...Support.dataRead(c.typed), ...c.values };
 
-        // New keys are written as `write` writes them, at the first key's column, and nothing else is added.
-        const adding = kept.success.find((written) => written.keys.length === 0);
-
-        if (adding !== undefined && !c.typed.flow) {
-          strictEqual(adding.text, Support.appendedText(c.typed, c.values, added), `${c.name}: the added keys' lines`);
-        }
-
-        strictEqual(answer.startsWith(c.typed.fence), true, `${c.name}: the opening fence`);
-        strictEqual(Frontmatter.split(answer).body, c.body, `${c.name}: the body`);
-
-        for (const form of c.forms) {
-          seen.add(form);
-        }
+      // The message is made only on a failure: cut to JSON for every case, it was a tenth of the law's time.
+      if (!Equal.equals(file.data, expected)) {
+        expect.unreachable(`${c.name}: ${short(file.data)} is not ${short(expected)}`);
       }
 
-      deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
-    }),
-  runs(300),
-);
+      strictEqual(file.body, c.body, `${c.name}: body`);
+
+      for (const form of c.forms) {
+        seen.add(form);
+      }
+    }
+
+    deepStrictEqual(Support.unreached(seen, classes), [], "classes never checked in this run");
+  });
 
 // E3. Plants: end a value's text at its first space, (a) red; for a quoted value, end its text at its start plus its read text's length, (b) red;
 // for a block scalar, end its text at the end of its header line, (c) red (the plan's wording, before its last line break, gives the same bytes
@@ -141,42 +171,41 @@ it.effect.prop(
 // text, (l) red; put new keys at column 0, (m) red; append a new key as a new line in a flow top map, (n) red; take new keys' column from the first
 // pair and fail when there is none (not for a flow map), (p) red; write a new text plain when the old value was plain `old`, (q) red; skip a key the file lacks, (u) red; apply
 // the edits from the first offset to the last without moving later ones when two to five values change, (v) red.
+for (const group of Support.CASE_GROUPS) {
+  it.effect.prop(
+    `E3 it reads back: the answer reads as the old data with the set values over it, for ${group.name}`,
+    { run: Base.run },
+    ({ run }) => readsBack(Support.groupCases(run, group), group.classes),
+    runs(300),
+  );
+}
+
 it.effect.prop(
-  "E3 it reads back: the answer reads as the old data with the set values over it, under S1, S2, S3 and S5",
+  "E3 it reads back under S2, S3 and S5: the answer reads as the old data with the set values over it",
   { run: Base.run },
   ({ run }) =>
     Effect.gen(function* () {
-      const cases = Support.typedSets(run);
-      const typed = Support.schemaSets(run);
-      const seen = new Set<string>();
-
-      for (const c of cases) {
-        const answer = yield* labeled(c.name, Frontmatter.set(Support.fileText(c.typed, c.body), c.values, Base.S1));
-        const file = yield* labeled(`${c.name}, read again`, Frontmatter.read(answer, Base.S1));
-        const expected = { ...Support.dataRead(c.typed), ...c.values };
-
-        strictEqual(
-          Equal.equals(file.data, expected),
-          true,
-          `${c.name}: ${short(file.data)} is not ${short(expected)}`,
-        );
-        strictEqual(file.body, c.body, `${c.name}: body`);
-
-        for (const form of c.forms) {
-          seen.add(form);
-        }
-      }
-
-      for (const schema of typed) {
+      for (const schema of Support.schemaSets(run)) {
         const back = yield* labeled(schema.name, schema.check);
 
         strictEqual(back.same, true, `${schema.name}: ${back.detail}`);
         strictEqual(back.bodyKept, true, `${schema.name}: body`);
       }
-
-      deepStrictEqual(Support.unreached(seen, OLD_AND_VALUES), [], "classes never checked in this run");
     }),
   runs(300),
+);
+
+// E2 and E3 on the wide cases. A run takes three of the collection grid's nine old forms, six of the mix's nineteen, and the scalar and key texts it
+// draws; this run takes every one, with the first texts and keys every run draws alike (one key is 19,000 characters long). Plant (run once, restored):
+// `set` returns the text as it was past 60 changed keys: the wide grid changes 180 and goes red, a run's 60 does not reach it.
+it.effect("pinned: E2 and E3 over the wide cases, the whole grid and the first texts and keys", () =>
+  Effect.gen(function* () {
+    const [run] = yield* Arbitrary.sampleEffect(Base.run, { count: 1, seed: 119120 });
+    const cases = Support.typedSets(run ?? expect.unreachable("no run"), true);
+
+    yield* keepsBytes(cases, OLD_AND_VALUES);
+    yield* readsBack(cases, OLD_AND_VALUES);
+  }),
 );
 
 // E4. Plant: find the closing fence by the last fence line, not the next, (z) red.

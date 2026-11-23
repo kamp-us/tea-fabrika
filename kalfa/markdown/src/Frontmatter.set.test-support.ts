@@ -8,6 +8,7 @@
 //
 // The plan names 26 classes, (a) to (z). A class is a list of forms, `FORMS`. Every case carries the forms its pieces hold, a law keeps the forms of the
 // cases it checked, and a law fails when a class has a form that no checked case held (`unreached`), so no class is left to chance.
+import type { Exit } from "effect";
 import { Effect, Equal, Predicate, Result, Schema } from "effect";
 import * as Base from "./Frontmatter.test-support.ts";
 import * as Frontmatter from "./Frontmatter.ts";
@@ -257,12 +258,15 @@ const ANCHOR: Slot = {
 
 const KEY_GROUP_IDS = [...Base.TEXT_GROUPS, ...Base.KEY_GROUPS].map((group) => group.id);
 
-/** Keys from every group of 1926, written as explicit keys: a key may hold anything, and over 1,024 characters it must be one. */
-const groupKeyMembers = (seeds: ReadonlyArray<Base.Seed>): ReadonlyArray<Member> =>
+/**
+ * Keys from every group of 1926, written as explicit keys: a key may hold anything, and over 1,024 characters it must be one. A run takes each
+ * group's drawn key; a short first key is in every run, and `wide` adds the first key when it is long (up to 19,000 characters), which every run draws alike, so the pinned run holds it.
+ */
+const groupKeyMembers = (seeds: ReadonlyArray<Base.Seed>, wide: boolean): ReadonlyArray<Member> =>
   [...Base.TEXT_GROUPS, ...Base.KEY_GROUPS].flatMap((group) => {
     const pool = group.pool(seeds);
 
-    return [...new Set([pool[0], pool.at(-1)])]
+    return [...new Set([...(wide || (pool[0]?.length ?? 0) <= 200 ? [pool[0]] : []), pool.at(-1)])]
       .filter((text): text is string => text !== undefined)
       .map((text): Member => ({
         cls: "l",
@@ -518,9 +522,9 @@ const makeCase = (
   forms: formsOfCase(typed, extra),
 });
 
-const membersIn = (cls: string, run: Base.Run): ReadonlyArray<Member> => [
+const membersIn = (cls: string, run: Base.Run, wide: boolean): ReadonlyArray<Member> => [
   ...OLD.filter((m) => m.cls === cls),
-  ...(cls === "l" ? groupKeyMembers(run.seeds) : []),
+  ...(cls === "l" ? groupKeyMembers(run.seeds, wide) : []),
 ];
 
 // A few members of every class, for the files that mix forms.
@@ -548,8 +552,18 @@ const MIX_FORMS = [
 
 const MIX = (): ReadonlyArray<Member> => OLD.filter((m) => MIX_FORMS.includes(m.form));
 
-const oldClassCase = (cls: string, run: Base.Run, n: number): SetCase => {
-  const members = membersIn(cls, run);
+// The styled files (class (m) indented, class (o) CRLF) need every kind of old value once, which the class cases already hold: a run's styled
+// files take `NARROW_MIX` of the mix, starting where the run's pick says, and the pinned run takes all of it (`wide`).
+const NARROW_MIX = 6;
+
+const mixFor = (run: Base.Run, wide: boolean): ReadonlyArray<Member> => {
+  const all = MIX();
+
+  return wide ? all : Array.from({ length: NARROW_MIX }, (_, i) => at(all, (run.picks[1] ?? 0) + i));
+};
+
+const oldClassCase = (cls: string, run: Base.Run, n: number, wide: boolean): SetCase => {
+  const members = membersIn(cls, run, wide);
   const comments = cls === "j" ? COMMENTS : BLANKS;
   const typed = typedFrom(members, LF, comments, cls === "j" ? ["j:comment lines"] : [], cls === "k" ? [ANCHOR] : []);
 
@@ -564,9 +578,9 @@ const commentsCase = (run: Base.Run, n: number): SetCase => {
 };
 
 // Class (m): a top-level map indented two spaces. Class (o): CRLF.
-const styled = (name: string, style: Style, form: string, run: Base.Run, n: number): SetCase => {
+const styled = (name: string, style: Style, form: string, run: Base.Run, n: number, wide: boolean): SetCase => {
   const typed = typedFrom(
-    MIX(),
+    mixFor(run, wide),
     style,
     BLANKS,
     [form],
@@ -627,12 +641,13 @@ const sideCase = (typed: Typed, name: string, run: Base.Run, n: number): SetCase
 };
 
 // Class (q): scalars of every JSON kind over a plain old value; texts from every text group.
-const scalarCase = (run: Base.Run, n: number): SetCase => {
-  // The first pieces of each group, and the pieces drawn for this run.
+const scalarCase = (run: Base.Run, n: number, wide: boolean): SetCase => {
+  // The pieces drawn for this run, and when `wide` also the first pieces of each group, which every run draws alike: a run that took them
+  // again was a third of the law's time, so they are the pinned run's.
   const texts = Base.TEXT_GROUPS.flatMap((group) => {
     const pool = group.pool(run.seeds);
 
-    return [...pool.slice(0, 8), ...pool.slice(-6)].map((text) => [group.id, text] as const);
+    return [...(wide ? pool.slice(0, 8) : []), ...pool.slice(-6)].map((text) => [group.id, text] as const);
   });
 
   const list: ReadonlyArray<readonly [string, Json]> = [
@@ -727,7 +742,11 @@ const GRID_FORMS = [
 const GRID_MEMBERS = OLD.filter((m) => GRID_FORMS.includes(m.form));
 
 // Classes (r) and (s): a list or map over each kind of old value, so over every place a new value goes.
-const collectionCase = (run: Base.Run, n: number): SetCase => {
+// A run takes `NARROW` of the grid's members, starting where the run's pick says, so 300 runs take each place a new value goes many times over;
+// the pinned run takes them all (`wide`). Every list and map value is in every run, so every class (r) and (s) form is reached by every run.
+const NARROW = 3;
+
+const collectionCase = (run: Base.Run, n: number, wide: boolean): SetCase => {
   const news: ReadonlyArray<readonly [string, Json]> = [
     ...LIST_VALUES,
     ["s:empty", {}],
@@ -735,8 +754,12 @@ const collectionCase = (run: Base.Run, n: number): SetCase => {
     ["s:keys", keyedMap(run.seeds)],
   ];
 
+  const start = run.picks[0] ?? 0;
+
+  const members = wide ? GRID_MEMBERS : Array.from({ length: NARROW }, (_, i) => at(GRID_MEMBERS, start + i));
+
   const { typed, values } = grid(
-    GRID_MEMBERS,
+    members,
     news.map(([, value]) => value),
   );
 
@@ -818,21 +841,79 @@ const sameCase = (run: Base.Run, n: number): SetCase => {
   ]);
 };
 
-export const casesFor = (run: Base.Run): ReadonlyArray<SetCase> => [
-  ...OLD_CLASSES.map((cls, i) => oldClassCase(cls, run, i)),
+export const casesFor = (run: Base.Run, wide = false): ReadonlyArray<SetCase> => [
+  ...OLD_CLASSES.map((cls, i) => oldClassCase(cls, run, i, wide)),
   commentsCase(run, 12),
-  styled("indented map", { indent: 2, crlf: false }, "m:indented", run, 13),
-  styled("crlf file", { indent: 0, crlf: true }, "o:crlf", run, 14),
+  styled("indented map", { indent: 2, crlf: false }, "m:indented", run, 13, wide),
+  styled("crlf file", { indent: 0, crlf: true }, "o:crlf", run, 14, wide),
   ...FLOW_FILES.map((file, i) => sideCase(flowFile(file), `flow map ${file}`, run, 15 + i)),
   ...NO_PAIR_FILES.map((file, i) => sideCase(noPairFile(file), `no pair: ${file}`, run, 18 + i)),
-  scalarCase(run, 21),
-  collectionCase(run, 22),
+  scalarCase(run, 21, wide),
+  collectionCase(run, 22, wide),
   ...planCases(run, 23),
   sameCase(run, 30),
 ];
 
 /** Every class's cases: typed files with the values a call sets, for the laws about bytes and about reading back. */
 export const typedSets = casesFor;
+
+/**
+ * The cases of a run in three groups of classes, which E2 and E3 each take as a law of its own with all of its runs: each law then holds a third of a
+ * run's work, so none of them nears CI's time limit, and every class is reached by one law in every run.
+ */
+export interface CaseGroup {
+  readonly name: string;
+  readonly classes: ReadonlyArray<string>;
+  readonly from: number;
+  readonly to: number | undefined;
+}
+
+export const CASE_GROUPS: ReadonlyArray<CaseGroup> = [
+  { name: "the old forms, classes a to l", classes: OLD_CLASSES, from: 0, to: OLD_CLASSES.length + 1 },
+  {
+    name: "the styled and the side files, classes m to p",
+    classes: ["m", "n", "o", "p"],
+    from: OLD_CLASSES.length + 1,
+    to: 21,
+  },
+  { name: "the new values, classes q to v", classes: ["q", "r", "s", "u", "v"], from: 21, to: undefined },
+];
+
+export const groupCases = (run: Base.Run, group: CaseGroup, wide = false): ReadonlyArray<SetCase> =>
+  casesFor(run, wide).slice(group.from, group.to);
+
+type SetAnswer = Exit.Exit<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter>;
+
+const answered = new Map<string, SetAnswer>();
+
+// A number JSON cannot hold, or minus zero, must keep its own key.
+const cacheKey = (text: string, values: Readonly<Record<string, Json>>): string =>
+  `${text}\u0000${JSON.stringify(values, (_key, item: Json) =>
+    Predicate.isNumber(item) && (!Number.isFinite(item) || Object.is(item, -0)) ? { "#number": String(item) } : item,
+  )}`;
+
+/**
+ * What `Frontmatter.set` answers a text and values under S1, made once for the whole run of the file: E2 and E3 each ask it of the same cases (the
+ * runs of one seed are the same in every law), and the call is a pure function of its arguments, so the second law reads the first one's answer.
+ */
+export const setOnce = (
+  text: string,
+  values: Readonly<Record<string, Json>>,
+): Effect.Effect<string, Frontmatter.NoFrontmatter | Frontmatter.BadFrontmatter> =>
+  Effect.suspend(() => {
+    const key = cacheKey(text, values);
+    const hit = answered.get(key);
+
+    return hit !== undefined
+      ? hit
+      : Effect.exit(Frontmatter.set(text, values, Base.S1)).pipe(
+          Effect.flatMap((exit) => {
+            answered.set(key, exit);
+
+            return exit;
+          }),
+        );
+  });
 
 // ---------------------------------------------------------------------------------------------------------------------
 // What a law may ask of a call: which bytes changed, where, and what was written
