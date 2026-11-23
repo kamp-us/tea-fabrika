@@ -4,14 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import fc from "fast-check";
 import { expect, it } from "vitest";
+import { planReport } from "./sizecap.plan.ts";
 
-// Lead tooling: plancheck.sh runs `sizecap.plan.ts` on every draft call, in place of `sizecap.ts plan`, because it starts 0.35 s sooner. It must say what
-// `sizecap.ts plan` says. Plants (each run once, restored): print the table total without the slices' count; skip the advice lines; exit 0 on an unreadable plan.
+// Lead tooling: plancheck.sh runs `sizecap.plan.ts` on every draft call, and `sizecap.ts plan` prints the same report from the same function. The run of the
+// file says `planReport` of the plan, line for line. Plants (each run once, restored): print the table total without the slices' count; skip the advice lines;
+// exit 0 on an unreadable plan.
 const options = { seed: 119120, numRuns: 12 };
 
 const light = join(import.meta.dirname, "sizecap.plan.ts");
-
-const whole = join(import.meta.dirname, "sizecap.ts");
 
 const run = (script: string, args: ReadonlyArray<string>) => {
   const ran = spawnSync(process.execPath, [script, ...args], { encoding: "utf8", timeout: 30_000 });
@@ -38,7 +38,7 @@ const LINES = [
   "",
 ];
 
-it("property: sizecap.plan.ts prints and exits as `sizecap.ts plan` does, on any plan", () => {
+it("property: sizecap.plan.ts prints the plan report, one line each, and exits 0, on any plan", () => {
   const folder = mkdtempSync(join(tmpdir(), "sizecap-plan-"));
 
   try {
@@ -47,7 +47,7 @@ it("property: sizecap.plan.ts prints and exits as `sizecap.ts plan` does, on any
         const plan = join(folder, "plan.md");
         writeFileSync(plan, lines.join("\n"));
 
-        expect(run(light, [plan])).toEqual(run(whole, ["plan", plan]));
+        expect(run(light, [plan])).toEqual({ code: 0, out: `${planReport(lines.join("\n")).join("\n")}\n`, err: "" });
       }),
       options,
     );
@@ -56,15 +56,35 @@ it("property: sizecap.plan.ts prints and exits as `sizecap.ts plan` does, on any
   }
 });
 
-it("property: an unreadable plan is named on stderr and exits 2, as `sizecap.ts plan` does", () => {
+it("property: an unreadable plan is named on stderr, prints nothing and exits 2", () => {
   fc.assert(
     fc.property(fc.stringMatching(/^[a-z]{3,8}$/), (name) => {
       const missing = join(tmpdir(), `sizecap-plan-missing-${name}`);
       const got = run(light, [missing]);
 
-      expect(got.code).toBe(2);
-      expect(got).toEqual(run(whole, ["plan", missing]));
+      expect(got).toEqual({ code: 2, out: "", err: `sizecap: cannot read ${missing}\n` });
     }),
     { seed: 119120, numRuns: 5 },
   );
+});
+
+it("pinned: a plan with a table total of 1,320 lines and three slices, one with no estimate, prints the size line and one advice line", () => {
+  const folder = mkdtempSync(join(tmpdir(), "sizecap-plan-"));
+
+  try {
+    const plan = join(folder, "plan.md");
+    writeFileSync(plan, LINES.filter((line) => !line.includes("fenced") && !line.startsWith("```")).join("\n"));
+
+    expect(run(light, [plan])).toEqual({
+      code: 0,
+      out: [
+        "size: 1320 product lines in the files table, 3 slices, the largest 40",
+        'size: slice 2 (Second slice) gives no "<n> lines" estimate (advice only, no number caps the size of a pull request)',
+        "",
+      ].join("\n"),
+      err: "",
+    });
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });

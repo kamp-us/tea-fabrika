@@ -88,7 +88,7 @@ import {
 import type { PlatformError } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
-import { advise, adviceLine, planLine, readPlan } from "./sizecap.plan.ts";
+import { planReport } from "./sizecap.plan.ts";
 
 /**
  * Past this many product lines, `diff` asks whether the pull request should have been sliced. Advice
@@ -285,13 +285,7 @@ const plan = Command.make(
       .readFileString(file)
       .pipe(Effect.mapError(() => Failed.make({ reason: "file", message: `cannot read ${file}` })));
 
-    const size = readPlan(text);
-
-    yield* Console.log(planLine(size));
-    yield* Effect.forEach(advise(size), (advice) => Console.log(adviceLine(advice)), {
-      concurrency: 1,
-      discard: true,
-    });
+    yield* Effect.forEach(planReport(text), (line) => Console.log(line), { concurrency: 1, discard: true });
   }),
 );
 

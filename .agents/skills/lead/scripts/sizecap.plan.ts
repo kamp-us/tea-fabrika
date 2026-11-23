@@ -1,4 +1,4 @@
-// sizecap.plan.ts: the plan side of sizecap.ts, apart so `sizecap.plan.ts <plan.md>` starts cheaply. plancheck.sh runs it on every draft call; with the
+// sizecap.plan.ts: the plan side of sizecap, its one home. `sizecap.ts plan` takes it from here, and `sizecap.plan.ts <plan.md>` runs it alone so that it starts cheaply. plancheck.sh runs it on every draft call; with the
 // platform and cli layers of sizecap.ts loaded it took 0.35 s of the call's 0.5 s, and here it loads `effect` alone. It prints what
 // `sizecap plan <plan.md>` prints and exits as it does (0 when it ran, 2 when it could not read the plan); sizecap.ts takes these names from here.
 import { readFileSync } from "node:fs"; // edge: a plain `node` entry that must start without the platform layer, so it reads the one plan file with `node:fs`
@@ -174,6 +174,13 @@ export const planLine = (size: PlanSize): string => {
   return `size: ${table}, ${slices}`;
 };
 
+/** Every line `plan` prints for a plan's text: its size line, then each advice line. */
+export const planReport = (text: string): ReadonlyArray<string> => {
+  const size = readPlan(text);
+
+  return [planLine(size), ...Arr.map(advise(size), adviceLine)];
+};
+
 if (import.meta.main) {
   const file = process.argv[2] ?? "";
   const text = Result.getOrNull(Result.try(() => readFileSync(file, "utf8")));
@@ -182,11 +189,8 @@ if (import.meta.main) {
     console.error(`sizecap: cannot read ${file}`);
     process.exitCode = 2;
   } else {
-    const size = readPlan(text);
-    console.log(planLine(size));
-
-    for (const advice of advise(size)) {
-      console.log(adviceLine(advice));
+    for (const line of planReport(text)) {
+      console.log(line);
     }
   }
 }
