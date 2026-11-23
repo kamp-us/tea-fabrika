@@ -219,28 +219,29 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): En
 
 const format = { inlineTableStart: 0, multilineTable: false, multilineArray: false, trailingNewline: 0 } as const;
 
+/** The one assignment the serializer wrote for `source`. */
+const assignment = (source: string): AST.TOMLKeyValue => {
+  const node = syntax(source).body[0].body[0];
+
+  if (node?.type !== "TOMLKeyValue") {
+    throw new TypeError("The encoder did not produce an assignment.");
+  }
+
+  return node;
+};
+
 /** What the serializer writes for a value, as the text right of `=`. */
 const written = (value: Encoded): string => {
   const source = stringify({ value }, format);
-  const assignment = syntax(source).body[0].body[0];
 
-  if (assignment?.type !== "TOMLKeyValue") {
-    throw new TypeError("The encoder did not produce an assigned TOML value.");
-  }
-
-  return Str.slice(...assignment.value.range)(source);
+  return Str.slice(...assignment(source).value.range)(source);
 };
 
 /** A key as TOML writes it: bare when it can be, quoted when it must be. */
 const quoted = (segment: string): string => {
-  const text = stringify(Rec.fromEntries([[segment, 0]]), format);
-  const node = syntax(text).body[0].body[0];
+  const source = stringify(Rec.fromEntries([[segment, 0]]), format);
 
-  if (node?.type !== "TOMLKeyValue") {
-    throw new TypeError("The encoder did not produce a TOML key.");
-  }
-
-  return Str.slice(...node.key.range)(text);
+  return Str.slice(...assignment(source).key.range)(source);
 };
 
 const render = (path: ReadonlyArray<string>, value: unknown) =>
@@ -296,7 +297,11 @@ const oneSet = (text: string, path: ReadonlyArray<string>, value: unknown): Resu
     const source = yield* parseSource(text);
     yield* planned(Edit.check(source, path));
     const rendered = yield* render(path, value);
-    const candidate = yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys));
+
+    const candidate = yield* planned(
+      Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys, Edit.ending(text)),
+    );
+
     yield* parseSource(candidate);
 
     return candidate;
@@ -305,23 +310,28 @@ const oneSet = (text: string, path: ReadonlyArray<string>, value: unknown): Resu
 const oneRemove = (text: string, path: ReadonlyArray<string>): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
-    const candidate = yield* planned(Edit.remove(text, source, path));
+    const candidate = yield* planned(Edit.remove(text, source, path, Edit.ending(text)));
     yield* parseSource(candidate);
 
     return candidate;
   });
 
 /** Takes out the key at `path`, or the whole table or array of tables there with the comments it owns. */
-const take = (text: string, source: Edit.Index, path: ReadonlyArray<string>): Result.Result<string, Fault> => {
+const take = (
+  text: string,
+  source: Edit.Index,
+  path: ReadonlyArray<string>,
+  eol: string,
+): Result.Result<string, Fault> => {
   const form = Edit.formAt(source, path);
 
   return form === "spread" || form === "tables"
     ? Result.succeed(Edit.removeTable(text, source, path))
-    : planned(Edit.remove(text, source, path));
+    : planned(Edit.remove(text, source, path, eol));
 };
 
-/** One step of a plan, made on the text the step before it left. */
-const step = (text: string, next: Edit.Step): Result.Result<string, Fault> =>
+/** One step of a plan, made on the text the step before it left, with the line break of the text the edit began with. */
+const step = (text: string, next: Edit.Step, eol: string): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
 
@@ -333,12 +343,12 @@ const step = (text: string, next: Edit.Step): Result.Result<string, Fault> =>
 
           // Items under headers of their own: a new item gets its own header after its siblings.
           if (at !== undefined && nonEmpty(rendered.value)) {
-            return Edit.insertBlock(text, at, lines(path, rendered.value, `[${rendered.keys.join(".")}]`));
+            return Edit.insertBlock(text, at, lines(path, rendered.value, `[${rendered.keys.join(".")}]`), eol);
           }
 
-          return yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys));
+          return yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys, eol));
         }),
-      Remove: ({ path }) => take(text, source, path),
+      Remove: ({ path }) => take(text, source, path, eol),
       Blocks: ({ path, value }) =>
         Result.map(render(path, value), (rendered) => {
           const blocks = Arr.ensure(rendered.value);
@@ -349,7 +359,8 @@ const step = (text: string, next: Edit.Step): Result.Result<string, Fault> =>
             path,
             Edit.asBlocks(blocks)
               ? blocks.filter(isTable).map((element) => lines(path, element, `[[${rendered.keys.join(".")}]]`))
-              : [[`${rendered.keys.slice(Edit.home(source, path).length).join(".")} = ${rendered.text}`]],
+              : [[`${rendered.keys.slice(Edit.above(source, path).length).join(".")} = ${rendered.text}`]],
+            eol,
           );
         }),
     });
@@ -359,21 +370,24 @@ const step = (text: string, next: Edit.Step): Result.Result<string, Fault> =>
 const set = (text: string, path: ReadonlyArray<string>, value: unknown): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
+    const eol = Edit.ending(text);
     let answer = text;
 
     for (const next of Edit.plan(source, path, value)) {
-      answer = yield* step(answer, next);
+      answer = yield* step(answer, next, eol);
     }
 
-    yield* parseSource(answer);
+    // The line break and the final break are the input's, whatever the steps made of the text between them.
+    const kept = Edit.keepEnd(text, answer);
+    yield* parseSource(kept);
 
-    return answer;
+    return kept;
   });
 
 const remove = (text: string, path: ReadonlyArray<string>): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
-    const candidate = yield* take(text, source, path);
+    const candidate = Edit.keepEnd(text, yield* take(text, source, path, Edit.ending(text)));
     yield* parseSource(candidate);
 
     return candidate;

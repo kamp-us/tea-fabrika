@@ -93,7 +93,8 @@ export const equal = (left: unknown, right: unknown): boolean => {
   return Equal.equals(left, right);
 };
 
-const ending = (text: string): string => /\r?\n/.exec(text)?.[0] ?? "\n";
+/** The text's own line break: its first one, or LF. @internal */
+export const ending = (text: string): string => /\r?\n/.exec(text)?.[0] ?? "\n";
 
 /**
  * Where the line holding offset `at` starts. The text before `at` holds that line's newline, so a
@@ -114,10 +115,10 @@ const tidy = (text: string, candidate: string): string =>
   !Str.endsWith("\n")(text) && Str.endsWith("\n")(candidate) ? `${candidate} ` : candidate;
 
 // Comments are parser ranges, including the #, never text guessed from a string's contents.
-const retained = (text: string, index: Index, range: Range): string =>
+const retained = (text: string, index: Index, range: Range, eol: string): string =>
   index.comments
     .filter((comment) => comment.start >= range.start && comment.end <= range.end)
-    .map((comment) => Str.slice(comment.start, comment.end)(text) + ending(text))
+    .map((comment) => Str.slice(comment.start, comment.end)(text) + eol)
     .join("");
 
 /** @internal */
@@ -150,8 +151,14 @@ export const check = (index: Index, path: ReadonlyArray<string>): Result.Result<
   return Result.succeed(undefined);
 };
 
-const commentEdits = (text: string, index: Index, assignment: Assignment, removed: Range): Array<Splice> => {
-  const comments = retained(text, index, removed);
+const commentEdits = (
+  text: string,
+  index: Index,
+  assignment: Assignment,
+  removed: Range,
+  eol: string,
+): Array<Splice> => {
+  const comments = retained(text, index, removed, eol);
 
   if (comments === "") {
     return [];
@@ -159,13 +166,18 @@ const commentEdits = (text: string, index: Index, assignment: Assignment, remove
 
   // An inline member can follow a sibling's comments. Keep retained comments after that sibling.
   const at = assignment.inline !== undefined ? assignment.start : lineStart(text, assignment.start);
-  const before = at > lineStart(text, at) ? ending(text) : "";
+  const before = at > lineStart(text, at) ? eol : "";
 
   return [{ start: at, end: at, text: before + comments }];
 };
 
 /** @internal */
-export const remove = (text: string, index: Index, path: ReadonlyArray<string>): Result.Result<string, Refusal> => {
+export const remove = (
+  text: string,
+  index: Index,
+  path: ReadonlyArray<string>,
+  eol: string,
+): Result.Result<string, Refusal> => {
   const checked = check(index, path);
 
   if (Result.isFailure(checked)) {
@@ -178,7 +190,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
     return Result.succeed(text);
   }
 
-  const edits: Array<Splice> = [{ ...assignment, text: "" }, ...commentEdits(text, index, assignment, assignment)];
+  const edits: Array<Splice> = [{ ...assignment, text: "" }, ...commentEdits(text, index, assignment, assignment, eol)];
 
   if (assignment.inline !== undefined) {
     const start = assignment.inline.start;
@@ -196,8 +208,7 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
   return Result.succeed(tidy(text, apply(text, edits)));
 };
 
-const insertLine = (text: string, at: number, content: string): string => {
-  const eol = ending(text);
+const insertLine = (text: string, at: number, content: string, eol: string): string => {
   const before = at > 0 && text[at - 1] !== "\n" ? eol : "";
   const after = at < text.length || Str.endsWith("\n")(text) ? eol : "";
 
@@ -212,6 +223,7 @@ export const set = (
   value: unknown,
   rendered: string,
   keys: ReadonlyArray<string>,
+  eol: string,
 ): Result.Result<string, Refusal> => {
   const checked = check(index, path);
 
@@ -229,7 +241,7 @@ export const set = (
     return Result.succeed(
       apply(text, [
         { ...assignment.value, text: rendered },
-        ...commentEdits(text, index, assignment, assignment.value),
+        ...commentEdits(text, index, assignment, assignment.value, eol),
       ]),
     );
   }
@@ -258,7 +270,7 @@ export const set = (
 
   if (parentPath.length > 0 && read(index.value, parentPath) === undefined) {
     return Result.succeed(
-      insertLine(text, text.length, `[${keys.slice(0, -1).join(".")}]${ending(text)}${keys.at(-1)} = ${rendered}`),
+      insertLine(text, text.length, `[${keys.slice(0, -1).join(".")}]${eol}${keys.at(-1)} = ${rendered}`, eol),
     );
   }
 
@@ -267,7 +279,9 @@ export const set = (
       .filter((candidate) => prefix(candidate.path, parentPath))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? index.sections[0];
 
-  return Result.succeed(insertLine(text, section.end, `${keys.slice(section.path.length).join(".")} = ${rendered}`));
+  return Result.succeed(
+    insertLine(text, section.end, `${keys.slice(section.path.length).join(".")} = ${rendered}`, eol),
+  );
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -318,14 +332,14 @@ export const formAt = (index: Index, path: ReadonlyArray<string>): Form => {
 export const asBlocks = (value: ReadonlyArray<unknown>): boolean => value.length > 0 && value.every(Predicate.isObject);
 
 /** The table the line above the first block of the array at `path` sits in: where a line written in its place lives. */
-export const home = (index: Index, path: ReadonlyArray<string>): Path => {
+export const above = (index: Index, path: ReadonlyArray<string>): Path => {
   const first = index.sections.findIndex((section) => section.path.length > path.length && prefix(path, section.path));
 
   return index.sections.at(first - 1)?.path ?? [];
 };
 
 const holds = (index: Index, path: ReadonlyArray<string>): boolean => {
-  const table = home(index, path);
+  const table = above(index, path);
 
   return table.length < path.length && prefix(table, path);
 };
@@ -423,12 +437,6 @@ const blocksUnder = (text: string, index: Index, path: ReadonlyArray<string>): R
       : [];
   });
 
-/** A cut that reaches the end of a text with no final line break also takes the break before it, so the text stays without one. */
-const flush = (text: string, cut: Range): Range =>
-  cut.end === text.length && !Str.endsWith("\n")(text) && cut.start > 0
-    ? { start: cut.start - ending(text).length, end: cut.end }
-    : cut;
-
 /** The blocks, in the text's order, merged where they touch. A run of blocks that ends the file takes the blank lines above it. */
 const runs = (text: string, blocks: ReadonlyArray<Range>): ReadonlyArray<Range> => {
   const found: Array<Range> = [];
@@ -443,9 +451,7 @@ const runs = (text: string, blocks: ReadonlyArray<Range>): ReadonlyArray<Range> 
     }
   }
 
-  return found.map((run) =>
-    run.end === text.length ? flush(text, { start: blanksAbove(text, run.start), end: run.end }) : run,
-  );
+  return found.map((run) => (run.end === text.length ? { start: blanksAbove(text, run.start), end: run.end } : run));
 };
 
 /** The line holding the range, whole, with its line break. */
@@ -472,7 +478,7 @@ export const removeTable = (text: string, index: Index, path: ReadonlyArray<stri
         prefix(path, assignment.path) &&
         !blocks.some((block) => assignment.start >= block.start && assignment.start < block.end),
     )
-    .map((assignment) => flush(text, wholeLine(text, assignment)));
+    .map((assignment) => wholeLine(text, assignment));
 
   return apply(
     text,
@@ -504,8 +510,8 @@ export const blockAt = (index: Index, parent: ReadonlyArray<string>): number | u
 };
 
 /** Writes `lines` as a block at `at`, one blank line before it. @internal */
-export const insertBlock = (text: string, at: number, lines: ReadonlyArray<string>): string =>
-  insertLine(text, at, ["", ...lines].join(ending(text)));
+export const insertBlock = (text: string, at: number, lines: ReadonlyArray<string>, eol: string): string =>
+  insertLine(text, at, ["", ...lines].join(eol), eol);
 
 /**
  * Takes out the blocks at or under `path` and writes the `groups` where the first of them started, at its header: the
@@ -518,21 +524,29 @@ export const replaceBlocks = (
   index: Index,
   path: ReadonlyArray<string>,
   groups: ReadonlyArray<ReadonlyArray<string>>,
+  eol: string,
 ): string => {
-  const eol = ending(text);
   const blocks = blocksUnder(text, index, path);
   const second = blocks.filter((block) => block.path.length === path.length + 1).at(1);
   const spaced = second !== undefined && blanksAbove(text, second.header) < second.header ? eol : "";
-
-  // The new blocks end with a line break unless the old ones ended a text that has none.
-  const closing = blocks.at(-1)?.end === text.length && !Str.endsWith("\n")(text) ? "" : eol;
 
   return apply(text, [
     ...blocks.slice(0, 1).map((first) => ({
       start: first.header,
       end: first.end,
-      text: groups.map((group) => group.join(eol)).join(eol + spaced) + closing,
+      text: groups.map((group) => group.join(eol)).join(eol + spaced) + eol,
     })),
     ...runs(text, blocks.slice(1)).map((cut) => ({ ...cut, text: "" })),
   ]);
+};
+
+/** The answer with the original's last line break: one only when the original ended with one. @internal */
+export const keepEnd = (original: string, answer: string): string => {
+  const broken = (text: string) => Str.endsWith("\n")(text);
+
+  if (answer === "" || broken(original) === broken(answer)) {
+    return answer;
+  }
+
+  return broken(answer) ? answer.replace(/\r?\n$/u, "") : answer + ending(original);
 };
