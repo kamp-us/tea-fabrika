@@ -14,8 +14,8 @@
 // - A fix is admitted only when its head holds origin/main's head, which Merge reads through the `Branches`
 //   service (`behind(oid)` is 0 when the head holds main), beside `ci-required` and the leak gate. A ready pull
 //   request in a sev0 lands with no catch-up (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order), and still needs `ci-required` green, as a sev0 branch does today.
-// - `Done`'s admin case says why: `for` is `fix`, `ready` or `asked`, and `level` is `sev0` or `sev1` for a fix or a
-//   ready one, and `null` when the owner asked (any other pull request). Every admin merge needs `ci-required` green
+// - `Done`'s admin case says why: `for` is `fix`, `ready` or `other`, and `level` is `sev0` or `sev1` for a fix or a
+//   ready one, and `null` for any other pull request, whose line gives no reason. Every admin merge needs `ci-required` green
 //   at the head, docs included.
 // The `sev` label is no input of Merge in B1: PullRequests reads none, and the route alone grants, so a label
 // alone grants nothing by construction and no law here can vary it.
@@ -179,17 +179,15 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
   );
 
   it.effect(
-    "scenario: a clean pull request with ci-required green is admin-merged at its head, code or docs, and the line says the owner asked",
+    "scenario: a clean pull request with ci-required green is admin-merged at its head, code or docs, and the line says only what happened",
     () =>
       Effect.gen(function* () {
         for (const files of ["code", "docs"] as const) {
           const m = memory({ files });
           const done = yield* merge(m, admin());
-          expect(done).toMatchObject({ _tag: "admin", for: "asked", level: null });
+          expect(done).toMatchObject({ _tag: "admin", for: "other", level: null });
           expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
-          expect(Merge.line(done)).toBe(
-            `pr 1415: admin-merged at ${oid}, the owner asked; read the push run on main next`,
-          );
+          expect(Merge.line(done)).toBe(`pr 1415: admin-merged at ${oid}; read the push run on main next`);
         }
       }),
   );
@@ -277,9 +275,9 @@ const routeFor = (level: "sev1" | "sev0", listing: Listing, alsoY: boolean) => {
         : admin([], null, []);
 };
 
-/** What the branch is to the route: `fix` or `ready`, and any other branch is `asked`, the owner's own ask. */
+/** What the branch is to the route: `fix` or `ready`, and any other branch is `other`. */
 const roleFor = (level: "sev1" | "sev0", listing: Listing) =>
-  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "asked";
+  listing === "fix" ? "fix" : level === "sev0" && listing === "ready" ? "ready" : "other";
 
 describe("merge: a sev fix is admin-merged in both levels, on current main", () => {
   // R6 of .kalfa/quests/sev-runbooks-PLAN.md. In a sev0 `sev.ts allow` lets in fixes and other ready pull
@@ -288,7 +286,7 @@ describe("merge: a sev fix is admin-merged in both levels, on current main", () 
   // ancestor check of a ready pull request too (a sev0 ready one behind main is refused: red); read the sev1 fix
   // as any branch (a sev1 that names fix y admits x); skip ci-required; ask the catch-up of a branch the level does not name as a fix.
   it.effect.prop(
-    "property: --admin lands a pull request as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch), a ready one (a sev0's `allow` branch) or one the owner asked for; each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, the others no catch-up",
+    "property: --admin lands a pull request as a fix (the sev1 log's fix, or a sev0's `open --allow` or `next` branch), a ready one (a sev0's `allow` branch) or any other pull request; each needs ci-required green at its head and a clean leak gate, and a fix also a head that holds origin/main, the others no catch-up",
     {
       level: Schema.Literals(["sev1", "sev0"]),
       listing: Listing,
@@ -322,13 +320,13 @@ describe("merge: a sev fix is admin-merged in both levels, on current main", () 
         expect(answer._tag).toBe(merges ? "Success" : "Failure");
 
         if (merges && answer._tag === "Success") {
-          // Why it was allowed: a fix at its level, a ready one in a sev0, or the owner asked, with no level.
+          // Why it was allowed: a fix at its level, a ready one in a sev0, or neither, with no level.
           expect(answer.success).toMatchObject({
             _tag: "admin",
             pr: 1415,
             oid,
             for: role,
-            level: role === "asked" ? null : level,
+            level: role === "other" ? null : level,
           });
         }
       }),

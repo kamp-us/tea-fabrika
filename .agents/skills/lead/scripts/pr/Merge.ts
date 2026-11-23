@@ -12,7 +12,7 @@
 //           ci-required. It says why it was allowed: a sev fix at either level (the sev1's named fix,
 //           or a sev0's `open --allow` or `next` branch, as a sev fix is admin-merged one at a time on
 //           current main), a ready pull request an open sev0 allows (no pull request is in a stack,
-//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, that the owner asked.
+//           and in a sev0 the lead admin-merges ready ones in order), or, for any other, no reason is given.
 //
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
@@ -59,9 +59,9 @@ export const Done = Schema.TaggedUnion({
   admin: {
     pr: Schema.Number,
     oid: Schema.String,
-    /** Why it was allowed: a sev fix, a ready pull request in a sev0, or the owner asked. */
-    for: Schema.Literals(["fix", "ready", "asked"]),
-    /** The level a fix or a ready pull request landed in; `null` when the owner asked. */
+    /** Why it was allowed: a sev fix, a ready pull request in a sev0, or `other` for any other pull request (docs and tooling under the standing rule, or one the owner asked for). */
+    for: Schema.Literals(["fix", "ready", "other"]),
+    /** The level a fix or a ready pull request landed in; `null` for any other. */
     level: Schema.NullOr(Schema.Literals(["sev0", "sev1"])),
   },
   merged: { pr: Schema.Number, commit: Schema.String },
@@ -69,7 +69,7 @@ export const Done = Schema.TaggedUnion({
 
 export type Done = typeof Done.Type;
 
-/** Why the admin merge is allowed for this branch: a sev fix, a ready pull request in a sev0, or the owner asked. */
+/** Why the admin merge is allowed for this branch: a sev fix, a ready pull request in a sev0, or none of those. */
 const adminFor = (head: string, route: AdminRoute) => {
   if (route.sev1 === head) {
     return { for: "fix" as const, level: "sev1" as const };
@@ -83,7 +83,7 @@ const adminFor = (head: string, route: AdminRoute) => {
     return { for: "ready" as const, level: "sev0" as const };
   }
 
-  return { for: "asked" as const, level: null };
+  return { for: "other" as const, level: null };
 };
 
 /** How long `land.ts admin` gives `ci-required` to appear and end, and the seconds between two reads; its flags change both. */
@@ -183,12 +183,12 @@ export const line = (done: Done): string =>
   Done.match(done, {
     queued: (d) => Queue.line(Queue.Added.cases.queued.make({ pr: d.pr, oid: d.oid })),
     admin: (d) =>
-      `pr ${d.pr}: admin-merged at ${d.oid}, ${
-        d.for === "asked"
-          ? "the owner asked"
+      `pr ${d.pr}: admin-merged at ${d.oid}${
+        d.for === "other"
+          ? ""
           : d.for === "fix"
-            ? `a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
-            : "a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
+            ? `, a ${d.level} fix (a sev fix is admin-merged one at a time on current main)`
+            : ", a ready pull request in a sev0 (no pull request is in a stack, and in a sev0 the lead admin-merges ready ones in order)"
       }; read the push run on main next`,
     merged: (d) => `pr ${d.pr}: already merged at ${d.commit}`,
   });
