@@ -6,24 +6,28 @@
 // every fix round). Each passed its own tests and its review, because both use made-up cases. This runs the
 // changed check on the real ones.
 //
-//   nice -n 15 node .agents/skills/lead/scripts/replay.ts <pr> [--merged <n>]
-//   nice -n 15 node .agents/skills/lead/scripts/replay.ts --head <ref> [--base <ref>] [--merged <n>] [--check <id>]...
+//   nice -n 15 node .agents/skills/lead/scripts/replay.ts <pr> [flags]
+//   nice -n 15 node .agents/skills/lead/scripts/replay.ts --head <ref> [--base <ref>] [flags]
+//   flags: --merged <n> (20)  --check <id> (repeat)  --cap <n> (8)  --retries <n> (3); `--help` says what each does.
 //
 // `<pr>` names the pull request that changes a check. `--head` names a commit instead, for a change that
 // has no pull request yet or one that merged already; `--base` is where the change starts (default
-// origin/main). The checks the change touches:
+// origin/main). A check's files are every file in its folder that is no test file, test helper or fixture; the
+// checks the change touches are named from them:
 //
-//   land check     land.ts, pr/*.ts, leakgrep.sh      replayed for real: git and GitHub are read as they are
-//   oxlint plugins oxlint-plugins/*, .oxlintrc.json    replayed: each old pull request's changed files, at its
-//                                                      merge commit, linted by this version and by the base's
-//   survivor scope survivors.ts (scope, cap), scope.ts replayed: `pick` on each pull request's changed files
-//   the rest       stepcommit.sh, the vitest reporters, the CI gate scripts, the survivor gate's exit rules
-//                                                      listed as "not replayed", each with its reason
+//   land           land.ts, leakgrep.sh, pr/, ci/ (lead scripts)  replayed for real: git and GitHub are read as they are
+//   oxlint         oxlint-plugins/, .oxlintrc.json                replayed: each old pull request's changed files, at its
+//                                                                 merge commit, linted by this version and by the base's
+//   survivors      mutation/scripts/, mutbox.ts                   replayed: `pick` (file scope and cap) on each pull request's
+//                                                                 changed files; its exit rules are listed as not replayed
+//   stepcommit     step-commit/scripts/                           listed as "not replayed", with its reason
+//   reporters      .github/ci/*reporter.ts, vitest.hostrun.ts     listed as "not replayed", with its reason and the one upload that would fix it
+//   gates          the rest of .github/ci/, .github/workflows/    listed as "not replayed", with its reason
 //
-// A change that touches none of them prints that and exits 0. `--check <id>` (one of land, oxlint, survivors, stepcommit,
-// reporters, gates; repeat it for several) replays only those of the touched checks. With a pull request, the checks it touches come from
-// `git diff <base>...<pr head>`; with `--head`, from `git diff <base> <head>`, what the head's tree changes in the
-// base's, so a commit that main already holds can be compared with main's newer check.
+// A change that touches none of them prints that and exits 0. `--check <id>` replays only that check, and each other
+// check the change touches is listed as "not replayed (left out by --check)". With a pull request, the checks it
+// touches come from `git diff <base>...<pr head>`; with `--head`, from `git diff <base> <head>`, what the head's tree
+// changes in the base's, so a commit that main already holds can be compared with main's newer check.
 //
 // What a replay does, one pull request at a time, under `nice -n 15`, with no CI run and no test run:
 //   1. makes two scratch worktrees, the change's head and the base (`<base>`, origin/main unless told),
@@ -35,7 +39,9 @@
 //      too, so a refusal main also gives is told from a new one.
 // The land check runs two ways, since `land.ts check` stops at its first refusal and a refusal that hides
 // another would hide the very one under test: `land.ts check <pr>` as the lead runs it, and the version's own
-// `unsignedCommits` on the pull request's head, run by a child node in that version's worktree.
+// `unsignedCommits` on the pull request's head, run by a child node in that version's worktree. A probe whose answer
+// holds a `gh` or GitHub failure (an HTTP 502, a failed exit) is tried `--retries` more times; trouble that stays is
+// listed as "not replayed" with its reason, never as a refusal.
 //
 // Output: one line per refusal, `refused: pr <n> [<check>] new|also on main: <reason>`, then one line per
 // check or pull request it could not replay, `not replayed: ...`, then a count. Exit 1 when any refusal is
@@ -46,6 +52,7 @@
 // was open then, a note signed on another machine), since it reads the repo as it stands today; every refusal
 // of a merged pull request is read with that in mind. And what the "not replayed" lines name.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import type { Duration } from "effect";
 import { Console, Effect, Exit, FileSystem, Option, Path, Ref, Schema, Scope } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { run } from "./pr/command.ts";
@@ -68,7 +75,11 @@ export type Kind = {
   readonly gap?: string;
 };
 
-const isLaw = (path: string) => /\.(test|test-support|integration\.test)\.[cm]?[jt]s$/.test(path);
+/** A test file, a test helper or a fixture: what a check's folder holds that is no part of the check. */
+const isLaw = (path: string) =>
+  /\.(test|test-support|integration\.test)\.[cm]?[jt]s$/.test(path) ||
+  /(^|\/)(test-helpers|fixtures)\//.test(path) ||
+  /Test\.ts$/.test(path);
 
 const LEAD = ".agents/skills/lead/scripts/";
 
@@ -83,14 +94,14 @@ export const KINDS: ReadonlyArray<Kind> = [
       !isLaw(p) &&
       (p === `${LEAD}land.ts` ||
         p === `${LEAD}leakgrep.sh` ||
-        (p.startsWith(`${LEAD}pr/`) && p.endsWith(".ts") && !p.endsWith("Test.ts"))),
+        p.startsWith(`${LEAD}pr/`) ||
+        p.startsWith(`${LEAD}ci/`)),
     replay: Replay.cases.land.make({}),
   },
   {
     id: "stepcommit",
     label: "stepcommit.sh",
-    matches: (p) =>
-      p === ".agents/skills/step-commit/scripts/stepcommit.sh" || p.endsWith("/step-commit/scripts/exam.py"),
+    matches: (p) => !isLaw(p) && p.startsWith(".agents/skills/step-commit/scripts/"),
     replay: notReplayed(
       "it checks the files a step is about to commit in a working tree; no saved pull request data holds that, and replaying it means redoing each pull request's commits",
     ),
@@ -98,27 +109,21 @@ export const KINDS: ReadonlyArray<Kind> = [
   {
     id: "survivors",
     label: "the survivor gate",
-    matches: (p) =>
-      !isLaw(p) &&
-      (/^\.agents\/skills\/mutation\/scripts\/(survivors|scope|sample)\.ts$/.test(p) || p === `${LEAD}mutbox.ts`),
+    matches: (p) => !isLaw(p) && (p.startsWith(".agents/skills/mutation/scripts/") || p === `${LEAD}mutbox.ts`),
     replay: Replay.cases.scope.make({}),
     gap: "the survivor gate's exit rules (a mutant that lived, a file no law loads) need a mutation run's results; CI keeps no mutbox artifact, and the 61 mutbox.json files in the boxes folder are one-off runs of other changes, so only its file scope and cap are replayed",
   },
   {
     id: "oxlint",
     label: "the oxlint plugins",
-    matches: (p) =>
-      !isLaw(p) &&
-      (p === ".oxlintrc.json" ||
-        (/^oxlint-plugins\/[^/]+\.(ts|mjs)$/.test(p) && !p.endsWith("-support.ts")) ||
-        /^oxlint-plugins\/css\//.test(p)),
+    matches: (p) => !isLaw(p) && (p === ".oxlintrc.json" || p.startsWith("oxlint-plugins/")),
     replay: Replay.cases.oxlint.make({}),
     gap: "only `oxlint-plugins/lint.ts` on the files each pull request changed, as it stood at that pull request; not the whole-repo lint (ledger pruning, dead code, layers, stylelint)",
   },
   {
     id: "reporters",
     label: "the vitest reporters",
-    matches: (p) => !isLaw(p) && (/^\.github\/ci\/[a-z0-9-]*reporter\.ts$/.test(p) || p === "vitest.hostrun.ts"),
+    matches: (p) => !isLaw(p) && (/^\.github\/ci\/([^/]*-)?reporter\.ts$/.test(p) || p === "vitest.hostrun.ts"),
     replay: notReplayed(
       "a reporter reads a live run, each test with the time limit it ran under. CI saves per-file seconds (`timings-*`) and, for a pull request's related tests, the vitest JSON (`results-related-*`, 7 days): per-test durations but no limit, which the slow-test reporter judges against. One small upload would make it replayable: the reporter writes its `Timed` rows (file, name, ms, limit) to a JSON file and the test legs upload it, as they upload `timings-*`",
     ),
@@ -126,8 +131,7 @@ export const KINDS: ReadonlyArray<Kind> = [
   {
     id: "gates",
     label: "the CI gate scripts",
-    matches: (p) =>
-      !isLaw(p) && (/^\.github\/ci\/[^/]+\.(mjs|ts)$/.test(p) || /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)),
+    matches: (p) => !isLaw(p) && (p.startsWith(".github/ci/") || /^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)),
     replay: notReplayed(
       "a gate reads one workflow run's event and job results; replaying it starts a CI run, which this never does",
     ),
@@ -179,7 +183,11 @@ const compare = (head: ReadonlyArray<Refusal>, base: ReadonlyArray<Refusal>): Re
 };
 
 /** What every replay of every target found. */
-type Replayed = { readonly found: ReadonlyArray<Found>; readonly notReplayed: ReadonlyArray<string> };
+type Replayed = {
+  readonly found: ReadonlyArray<Found>;
+  readonly notReplayed: ReadonlyArray<string>;
+  readonly leftOut: ReadonlyArray<string>;
+};
 
 /**
  * The head's version of each replayed kind on each target, one at a time. Only a target the head refuses
@@ -190,6 +198,8 @@ export const replayAll = Effect.fn("replay.replayAll")(function* (a: {
   readonly kinds: ReadonlyArray<Kind>;
   readonly targets: ReadonlyArray<Target>;
   readonly probe: Probe;
+  /** The touched kinds `--check` left out: listed, never run. */
+  readonly leftOut?: ReadonlyArray<Kind>;
 }) {
   const found: Array<Found> = [];
   const gaps: Array<string> = [];
@@ -216,8 +226,35 @@ export const replayAll = Effect.fn("replay.replayAll")(function* (a: {
     }
   }
 
-  return { found, notReplayed: gaps } satisfies Replayed;
+  return { found, notReplayed: gaps, leftOut: (a.leftOut ?? []).map((k) => k.label) } satisfies Replayed;
 });
+
+/**
+ * A probe that tries again, `again` more times and `pause` apart, while its answer holds GitHub's trouble; the last
+ * answer stands, so trouble that stays is listed as not read, never as a refusal.
+ */
+export const settled =
+  (probe: Probe, again: number, pause: Duration.Input): Probe =>
+  (kind, version, target) =>
+    Effect.gen(function* () {
+      let answer = yield* probe(kind, version, target);
+
+      for (let tried = 0; tried < again && flaky(answer); tried += 1) {
+        yield* Effect.sleep(pause);
+        answer = yield* probe(kind, version, target);
+      }
+
+      return answer;
+    });
+
+/** The touched kinds `--check` keeps to replay, and the ones it leaves out; no ids keeps every one. */
+export const choose = (
+  touched: ReadonlyArray<Kind>,
+  only: ReadonlyArray<string>,
+): { readonly run: ReadonlyArray<Kind>; readonly leftOut: ReadonlyArray<Kind> } =>
+  only.length === 0
+    ? { run: touched, leftOut: [] }
+    : { run: touched.filter((k) => only.includes(k.id)), leftOut: touched.filter((k) => !only.includes(k.id)) };
 
 const oneLine = (text: string, most = 400) => {
   const flat = text.replace(/\s+/g, " ").trim();
@@ -245,6 +282,7 @@ export const report = (a: Replayed & { readonly targets: number }): { lines: Rea
           `refused: pr ${first?.pr} [${first?.check}] also on main: ${rest.length + 1} refusal(s), the first: ${oneLine(first?.reason ?? "")}`,
       ),
       ...a.notReplayed.map((reason) => `not replayed: ${oneLine(reason)}`),
+      ...a.leftOut.map((label) => `not replayed (left out by --check): ${label}`),
       `replay: ${fresh} new refusal(s), ${a.found.length - fresh} also on main, over ${a.targets} pull request(s)`,
     ],
     code: fresh > 0 ? 1 : 0,
@@ -257,6 +295,19 @@ const nothingChanged = "replay: the change touches no check replay knows; nothin
 // ---------------------------------------------------------------- the land check, for real
 
 const REFUSED = /^land: refused at the (\w+) check: (.*)$/;
+
+/**
+ * Trouble with GitHub and not a verdict on a pull request: `gh` failed to answer (an HTTP error, a failed exit, a rate
+ * limit, no network). Such a line may sit inside any refusal reason, as `land.ts check` words a failed read.
+ */
+export const GITHUB_TROUBLE =
+  /\bgh\b[^\n]*?(exited \d+|HTTP [45]\d\d|Server Error|Bad Gateway|rate limit|timed out|Could not resolve host)/i;
+
+/** The start of every unreadable line that GitHub's trouble made, which `settled` tries again. */
+export const GITHUB_FAILED = "gh failed: ";
+
+/** Whether a probe's answer holds GitHub's trouble, so another try may read what this one could not. */
+export const flaky = (outcome: Outcome): boolean => outcome.unreadable.some((u) => u.startsWith(GITHUB_FAILED));
 
 /** Refused at these is the run's own trouble (a fetch, the env), not a verdict on the pull request. */
 const TROUBLE = new Set(["env", "check", "fetch"]);
@@ -282,6 +333,10 @@ export const readCheck = (pr: number, code: number, stderr: string): Outcome => 
   }
 
   const [, check = "", reason = ""] = named;
+
+  if (GITHUB_TROUBLE.test(reason)) {
+    return { refusals: [], unreadable: [`${GITHUB_FAILED}${oneLine(reason, 200)}`] };
+  }
 
   return TROUBLE.has(check)
     ? { refusals: [], unreadable: [`land.ts check could not run: ${reason}`] }
@@ -753,6 +808,8 @@ type Ask = {
   readonly base: Option.Option<string>;
   readonly merged: number;
   readonly only: ReadonlyArray<string>;
+  readonly cap: number;
+  readonly retries: number;
 };
 
 const replay = Effect.fn("replay.run")(function* (ask: Ask) {
@@ -840,15 +897,16 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
   }
 
   const touchedKinds = changedChecks(touched);
-  const kinds = ask.only.length === 0 ? touchedKinds : touchedKinds.filter((k) => ask.only.includes(k.id));
+  const { run: kinds, leftOut } = choose(touchedKinds, ask.only);
 
-  if (kinds.length === 0) {
+  if (touchedKinds.length === 0) {
     yield* Console.log(nothingChanged);
 
     return 0;
   }
 
-  const targets = yield* pullRequests(tools, ask.merged, Option.getOrUndefined(ask.pr));
+  // Nothing to replay when `--check` kept none of the touched kinds: no pull request is read for it.
+  const targets = kinds.length === 0 ? [] : yield* pullRequests(tools, ask.merged, Option.getOrUndefined(ask.pr));
 
   const replayed = yield* Effect.gen(function* () {
     const scratch = yield* fs
@@ -862,7 +920,7 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
       trees: { head: yield* worktree(room, "head", head), base: yield* worktree(room, "base", base) },
       commits: { head, base },
       pluginModules: path.resolve(here, "../../../../oxlint-plugins/node_modules"),
-      cap: 8,
+      cap: ask.cap,
       held: yield* Ref.make<Held>(null),
     };
 
@@ -873,7 +931,12 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
       ),
     );
 
-    return yield* replayAll({ kinds, targets, probe: probeFor(world) });
+    return yield* replayAll({
+      kinds,
+      targets,
+      probe: settled(probeFor(world), ask.retries, "2 seconds"),
+      leftOut,
+    });
   }).pipe(Effect.scoped);
 
   const said = report({ ...replayed, targets: targets.length });
@@ -887,14 +950,53 @@ const setExit = (code: number) =>
     process.exitCode = code;
   });
 
+/** The files cap a run uses when a version's survivors.ts shows no `MUTATE_FILES` default of its own. */
+export const DEFAULT_CAP = 8;
+
+/** How many more times a probe is tried when GitHub fails to answer, and how many pull requests are replayed. */
+export const DEFAULT_RETRIES = 3;
+
+export const DEFAULT_MERGED = 20;
+
 const command = Command.make(
   "replay",
   {
-    pr: Argument.Int("pr").pipe(Argument.optional),
-    head: Flag.String("head").pipe(Flag.optional),
-    base: Flag.String("base").pipe(Flag.optional),
-    merged: Flag.Int("merged").pipe(Flag.withDefault(20)),
-    only: Flag.String("check").pipe(Flag.atLeast(0)),
+    pr: Argument.Int("pr").pipe(
+      Argument.withDescription("the pull request that changes a check (or give --head)"),
+      Argument.optional,
+    ),
+    head: Flag.String("head").pipe(
+      Flag.withDescription("a commit to replay in place of a pull request; compared with --base as two trees"),
+      Flag.optional,
+    ),
+    base: Flag.String("base").pipe(
+      Flag.withDescription("where the change starts (default origin/main)"),
+      Flag.optional,
+    ),
+    merged: Flag.Int("merged").pipe(
+      Flag.withDescription(
+        `how many of the last merged pull requests to replay on (default ${DEFAULT_MERGED}); every open one is`,
+      ),
+      Flag.withDefault(DEFAULT_MERGED),
+    ),
+    only: Flag.String("check").pipe(
+      Flag.withDescription(
+        "replay only this check: land, oxlint, survivors, stepcommit, reporters or gates (repeat for several); the other touched checks are listed as left out",
+      ),
+      Flag.atLeast(0),
+    ),
+    cap: Flag.Int("cap").pipe(
+      Flag.withDescription(
+        `the survivor gate's files cap, used when a version's survivors.ts shows no MUTATE_FILES default (default ${DEFAULT_CAP})`,
+      ),
+      Flag.withDefault(DEFAULT_CAP),
+    ),
+    retries: Flag.Int("retries").pipe(
+      Flag.withDescription(
+        `how many more times to try a probe whose answer holds a gh or GitHub failure, 2 seconds apart (default ${DEFAULT_RETRIES}); trouble that stays is listed as not replayed`,
+      ),
+      Flag.withDefault(DEFAULT_RETRIES),
+    ),
   },
   (ask) =>
     replay(ask).pipe(

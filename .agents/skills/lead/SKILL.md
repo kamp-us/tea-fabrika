@@ -364,7 +364,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
 | `land.ts wait <pr>` | wait until `ci-required` has ended at the pull request's current head, as `queue --wait` and `admin --wait` do; exits 0 only on success, names a cancelled run; `--wait-minutes`, `--every-seconds` |
 | `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name, leak, or `fabrika close ticket` line whose number is no open tracker ticket (an open GitHub issue is closed with `Closes #N`) |
-| `replay.ts <pr>` | run a changed check (the pull request's version against main's) on the last 20 merged and every open pull request, and list each refusal, new or already on main; exit 1 on a new one. It replays the land checks, the oxlint plugins and the survivor gate's file scope and cap; any other check, and each part it cannot see, is listed as `not replayed`, with why; see [How a change lands](#how-a-change-lands) |
+| `replay.ts <pr>` | run a changed check on the last 20 merged and every open pull request before it lands; its header says which checks it replays and which it lists as `not replayed`; see [How a change lands](#how-a-change-lands) |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
@@ -675,15 +675,12 @@ Then `git pull --ff-only origin main` and `pnpm install --frozen-lockfile` in th
   `gh api repos/kamp-us/tea-fabrika/actions/jobs/<id>/logs --allow-escape-sequences`, on the job whose
   step failed. A job GitHub shows as `cancelled` may be the red job itself, ended by its own
   `stop the run` step.
-- **A pull request that changes a check lands after a replay.** A check is `land.ts` and what it reads in `pr/`,
-  `stepcommit.sh`, `survivors.ts`, an oxlint plugin, a vitest reporter or a CI gate script. Once its steps pass and
-  before `arm` or `queue`, run `nice -n 15 node .agents/skills/lead/scripts/replay.ts <pr>` in the background: it runs
-  the pull request's version of the check on the last 20 merged pull requests and every open one. Exit 0 lands it.
-  On exit 1, each `refused: ... new` line is an old pull request that main's check passed and this one refuses: fix
-  the check until the replay exits 0, or write in the PR body why that old pull request was really wrong. Each
-  `not replayed` line is a part of the check no replay saw: read it by hand and say so in the PR body. `replay.ts`
-  runs a land check, an oxlint plugin and the survivor scope; `stepcommit.sh`, a vitest reporter and a CI gate are listed
-  with why, and the reporter's line names the one upload that would make it replayable.
+- **A pull request that changes a check lands after a replay.** A check is one that `replay.ts`'s header names. Once its
+  steps pass and before `arm` or `queue`, run `nice -n 15 node .agents/skills/lead/scripts/replay.ts <pr>` in the
+  background: it runs the pull request's version of the check on the last 20 merged pull requests and every open one.
+  Exit 0 lands it. On exit 1, each `refused: ... new` line is an old pull request that main's check passed and this one
+  refuses: fix the check until the replay exits 0, or write in the PR body why that old pull request was really wrong.
+  Each `not replayed` line is named in the PR body.
 - **No agent approves a pull request, and no agent answers a question the machine put to a
   person.**
 - **A step is a program,** and a prompt you would have typed is its first source. A v0 has no

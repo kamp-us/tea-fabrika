@@ -1,11 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Effect } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
   changedChecks,
+  choose,
+  DEFAULT_CAP,
+  flaky,
+  GITHUB_FAILED,
   KINDS,
   type Kind,
-  LINT_FILES,
   lintable,
   merges,
   type Outcome,
@@ -19,6 +24,7 @@ import {
   Replay,
   replayAll,
   report,
+  settled,
   scopeDriver,
   signedDriver,
   signedRefusal,
@@ -45,7 +51,6 @@ const noCheck = fc.oneof(
     `${LEAD}pr/PullRequestsTest.ts`,
     ".agents/skills/lead/SKILL.md",
     "oxlint-plugins/no-of.test.ts",
-    "oxlint-plugins/README.md",
     ".github/ci/slow-test-reporter.test.ts",
     ".agents/skills/mutation/scripts/survivors.test.ts",
   ),
@@ -64,6 +69,11 @@ const checkPaths = [
   ["oxlint-plugins/index.ts", "oxlint"],
   [".github/ci/slow-test-reporter.ts", "reporters"],
   ["vitest.hostrun.ts", "reporters"],
+  ["oxlint-plugins/css-support.ts", "oxlint"],
+  ["oxlint-plugins/README.md", "oxlint"],
+  [".agents/skills/mutation/scripts/run.sh", "survivors"],
+  [".agents/skills/step-commit/scripts/exam.py", "stepcommit"],
+  [`${LEAD}ci/ChecksGh.ts`, "land"],
   [".github/ci/gate.mjs", "gates"],
   [".github/ci/required.mjs", "gates"],
   [".github/workflows/check.yaml", "gates"],
@@ -159,6 +169,154 @@ describe("changedChecks", () => {
     ));
 });
 
+describe("a check's folder", () => {
+  // Every folder a check keeps its files in, with the kind it makes; reporters share .github/ci with the gates, told by name.
+  const folders = [
+    [`${LEAD}pr/`, "land"],
+    [`${LEAD}ci/`, "land"],
+    [".agents/skills/step-commit/scripts/", "stepcommit"],
+    [".agents/skills/mutation/scripts/", "survivors"],
+    ["oxlint-plugins/", "oxlint"],
+    [".github/ci/", "gates"],
+  ] as const;
+
+  const kept = fc.tuple(fc.constantFrom(...folders), word, fc.constantFrom("ts", "mjs", "sh", "py", "md", "json"));
+
+  it("every file in it that is no test, test helper or fixture names its check", () =>
+    fc.assert(
+      fc.property(kept, ([[folder, id], name, ext]) => {
+        fc.pre(!(folder === ".github/ci/" && ext === "ts" && name.endsWith("reporter")));
+        expect(changedChecks([`${folder}${name}.${ext}`]).map((k) => k.id)).toEqual([id]);
+      }),
+    ));
+
+  it("a test, a test-support file, a helper or a fixture in it names no check", () =>
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...folders),
+        word,
+        fc.constantFrom(
+          "{n}.test.ts",
+          "{n}.test-support.ts",
+          "{n}.integration.test.ts",
+          "test-helpers/{n}.ts",
+          "fixtures/{n}.ts",
+        ),
+        ([folder], name, shape) => {
+          expect(changedChecks([`${folder}${shape.replaceAll("{n}", name)}`])).toEqual([]);
+        },
+      ),
+    ));
+});
+
+describe("--check", () => {
+  const touched = fc.subarray([...KINDS], { minLength: 1 });
+  const ids = fc.subarray(KINDS.map((k) => k.id));
+
+  it("keeps the kinds it names and leaves out the rest: none lost, none twice", () =>
+    fc.assert(
+      fc.property(touched, ids, (kinds, only) => {
+        const { run, leftOut } = choose(kinds, only);
+        expect([...run, ...leftOut].map((k) => k.id).sort()).toEqual(kinds.map((k) => k.id).sort());
+        expect(run.filter((k) => leftOut.includes(k))).toEqual([]);
+        expect(run.every((k) => only.length === 0 || only.includes(k.id))).toBe(true);
+        expect(leftOut.length === 0 || only.length > 0).toBe(true);
+      }),
+    ));
+
+  it("each kind it leaves out is a `not replayed (left out by --check)` line, and no run fails for it", () =>
+    fc.assert(
+      fc.asyncProperty(touched, targets, (kinds, ts) =>
+        ran(
+          Effect.gen(function* () {
+            const { run, leftOut } = choose(kinds, [kinds[0]?.id ?? ""]);
+            const replayed = yield* replayAll({ kinds: run, targets: ts, probe: probing(new Map()).probe, leftOut });
+            const said = report({ ...replayed, targets: ts.length });
+
+            for (const kind of leftOut) {
+              expect(said.lines).toContain(`not replayed (left out by --check): ${kind.label}`);
+            }
+
+            expect(said.code).toBe(0);
+          }),
+        ),
+      ),
+    ));
+});
+
+describe("GitHub's trouble", () => {
+  const trouble = fc.constantFrom(
+    "gh api --paginate exited 1: gh: Server Error (HTTP 502)",
+    "gh pr view exited 1: HTTP 503: Service Unavailable",
+    "gh api graphql exited 1: API rate limit exceeded",
+    "gh pr view exited 1: Could not resolve host: api.github.com",
+  );
+
+  const line = (check: string, cause: string) => `land: refused at the ${check} check: pr 1: ${cause}\n`;
+
+  it("a failed `gh` read inside a refusal is listed as not read, never a refusal of the pull request", () =>
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1 }),
+        fc.constantFrom("body", "leak", "queue", "check"),
+        trouble,
+        (pr, at, cause) => {
+          const read = readCheck(pr, 1, line(at, cause));
+          expect(read.refusals).toEqual([]);
+          expect(read.unreadable).toHaveLength(1);
+          expect(flaky(read)).toBe(true);
+        },
+      ),
+    ));
+
+  it("a refusal that names no `gh` failure is a refusal, and not tried again", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1 }), fc.constantFrom("body", "leak"), reasons, (pr, at, cause) => {
+        const read = readCheck(pr, 1, line(at, cause));
+        expect(read.refusals).toHaveLength(1);
+        expect(flaky(read)).toBe(false);
+      }),
+    ));
+
+  const failing = (times: number) => {
+    const calls: Array<number> = [];
+
+    const probe: Probe = () =>
+      Effect.sync(() => {
+        calls.push(calls.length);
+
+        return calls.length <= times
+          ? ({ refusals: [], unreadable: [`${GITHUB_FAILED}HTTP 502`] } satisfies Outcome)
+          : ({ refusals: [], unreadable: [] } satisfies Outcome);
+      });
+
+    return { probe, calls };
+  };
+
+  it("a probe is tried again while GitHub fails, up to the retries, and the last answer stands", () =>
+    fc.assert(
+      fc.asyncProperty(fc.integer({ min: 0, max: 6 }), fc.integer({ min: 0, max: 5 }), (times, again) =>
+        ran(
+          Effect.gen(function* () {
+            const { probe, calls } = failing(times);
+            const got = yield* settled(probe, again, 0)(land(), "head", target(1));
+            expect(calls).toHaveLength(Math.min(times, again) + 1);
+            expect(flaky(got)).toBe(times > again);
+            expect(got.refusals).toEqual([]);
+          }),
+        ),
+      ),
+    ));
+});
+
+describe("the files cap", () => {
+  // Pinned: the flag's default is the cap survivors.ts itself holds, so a run with no flag replays the real gate.
+  it("pinned: the default of --cap is the MUTATE_FILES default of survivors.ts", () => {
+    const source = readFileSync(join(import.meta.dirname, "../../mutation/scripts/survivors.ts"), "utf8");
+    expect(capFrom(source)).toBe(DEFAULT_CAP);
+  });
+});
+
 describe("the verdict", () => {
   it("exits 1 exactly when the head gives a refusal the base does not, and marks each one", () =>
     fc.assert(
@@ -221,7 +379,7 @@ describe("the verdict", () => {
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 9999 }), fc.integer({ min: 1, max: 40 }), word, (pr, count, check) => {
         const found = Array.from({ length: count }, (_, i) => ({ pr, check, reason: `reason ${i}`, fresh: false }));
-        const said = report({ found, notReplayed: [], targets: 1 });
+        const said = report({ found, notReplayed: [], leftOut: [], targets: 1 });
         const lines = said.lines.filter((l) => l.startsWith("refused:"));
         expect(lines).toHaveLength(1);
         expect(lines[0]).toContain(`${count} refusal(s)`);
@@ -232,7 +390,7 @@ describe("the verdict", () => {
   it("one line for each refusal naming its pull request, its check and its reason", () =>
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 9999 }), word, reasons, (pr, check, reason) => {
-        const said = report({ found: [{ pr, check, reason, fresh: true }], notReplayed: [], targets: 1 });
+        const said = report({ found: [{ pr, check, reason, fresh: true }], notReplayed: [], leftOut: [], targets: 1 });
         const line = said.lines.find((l) => l.startsWith("refused:"));
         expect(line).toContain(`pr ${pr}`);
         expect(line).toContain(check);
@@ -493,10 +651,6 @@ describe("lintable", () => {
         },
       ),
     ));
-
-  it("a lint run takes a bounded number of files", () => {
-    expect(LINT_FILES).toBeGreaterThan(0);
-  });
 });
 
 describe("reading the lint", () => {
@@ -570,9 +724,12 @@ describe("the survivor scope", () => {
       }),
     ));
 
-  it("the driver imports the version's own survivors.ts and runs its `pick` on the input it is given", () => {
-    const text = scopeDriver("/tree/.agents/skills/mutation/scripts/survivors.ts");
-    expect(text).toContain(JSON.stringify("file:///tree/.agents/skills/mutation/scripts/survivors.ts"));
-    expect(text).toContain("survivors.pick(");
-  });
+  it("the driver imports the version's own survivors.ts and runs its `pick` on the input it is given", () =>
+    fc.assert(
+      fc.property(fc.stringMatching(/^\/[a-z0-9/-]{1,30}$/), (tree) => {
+        const text = scopeDriver(`${tree}/survivors.ts`);
+        expect(text).toContain(JSON.stringify(`file://${tree}/survivors.ts`));
+        expect(text).toContain("survivors.pick(");
+      }),
+    ));
 });
