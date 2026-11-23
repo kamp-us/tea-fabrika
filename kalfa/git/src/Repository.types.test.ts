@@ -7,6 +7,7 @@ import type * as Digest from "effect/crypto/Digest";
 import type { ChildProcessSpawner } from "effect/process";
 import type { Commit, Signature } from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
+import type { PatchId } from "./Diff.ts";
 import type * as MemoryRepository from "./MemoryRepository.ts";
 import type * as MergeCommit from "./MergeCommit.ts";
 import type * as ProcessRepository from "./ProcessRepository.ts";
@@ -16,12 +17,14 @@ import type { Path, TreeId } from "./Tree.ts";
 
 type Fails = Repository.GitUnavailable | Repository.TimedOut;
 
-// Plant (T2): add `R = Scope` to `walk`; type `include` as `ReadonlyArray`, so the empty-include line compiles.
+// Plant (T2): add `R = Scope` to `walk`; type `include` as `ReadonlyArray`, so the empty-include line compiles. Plant (T5, ticket
+// 1933): add `HistoryTooShort` to `patchId`'s errors; make `patchId` answer a `PatchId` and not an `Option` of one; give it a
+// requirement `Scope`.
 const calls = (repo: Repository.Repository["Service"]) => {
   expectTypeOf<
     Pick<
       Context.Service.Shape<typeof Repository.Repository>,
-      "readCommit" | "readRefs" | "walk" | "mergeBases" | "isAncestor"
+      "readCommit" | "readRefs" | "walk" | "mergeBases" | "isAncestor" | "patchId"
     >
   >().toEqualTypeOf<{
     readonly readCommit: (
@@ -53,6 +56,13 @@ const calls = (repo: Repository.Repository["Service"]) => {
       ancestor: CommitId,
       of: CommitId,
     ) => Effect.Effect<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort | Fails>;
+    readonly patchId: (
+      from: CommitId,
+      to: CommitId,
+    ) => Effect.Effect<
+      Option.Option<PatchId>,
+      Repository.NoSuchCommit | Repository.TooMany | Repository.DiffTooLarge | Fails
+    >;
   }>();
 
   // @ts-expect-error A walk names at least one commit to include.

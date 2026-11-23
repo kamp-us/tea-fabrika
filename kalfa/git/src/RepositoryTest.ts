@@ -1,4 +1,4 @@
-// The laws every adapter of `Repository` passes (S1 to S14), exported as `/test`. A runner gives a
+// The laws every adapter of `Repository` passes (S1 to S18), exported as `/test`. A runner gives a
 // `Subject`: how to seed a history into its own kind of store. The suite draws a texture, makes one
 // history for each shape class from it, seeds each, and compares every answer with the model in
 // History.test-support.ts. A subject that passes these laws answers as every other one does.
@@ -26,6 +26,13 @@ import {
   writeSpecs,
   WRITE_SHAPE_CLASSES,
   writtenSize,
+  changedFiles,
+  comparedBytes,
+  EDIT_CLASSES,
+  editCarrier,
+  LIMIT_CLASSES,
+  limitCarrier,
+  reachedEditClasses,
   withCanary,
   CARRIER_CLASSES,
   carrier,
@@ -53,6 +60,7 @@ import {
   refQueries,
   walkModel,
   CRISS,
+  type EditCarrier,
   type Committer,
   type History,
   type MergeCase,
@@ -114,11 +122,25 @@ export interface SuiteOptions {
 
 /** Settings with generous limits, the ones a law wants to push set, and the committer every written commit names. */
 export const settings = (
-  limits: { readonly commits?: number; readonly refs?: number; readonly bytes?: number } = {},
+  limits: {
+    readonly commits?: number;
+    readonly refs?: number;
+    readonly bytes?: number;
+    readonly files?: number;
+    readonly diff?: number;
+  } = {},
   committer: Committer = COMMITTER,
 ): Settings.Settings =>
   Schema.decodeUnknownSync(Settings.Settings)({
-    limits: { commits: 1000, refs: 1000, bytes: 1_000_000, time: "10 seconds", ...limits },
+    limits: {
+      commits: 1000,
+      refs: 1000,
+      bytes: 1_000_000,
+      files: 1000,
+      diff: 10_000_000,
+      time: "10 seconds",
+      ...limits,
+    },
     committer,
   });
 
@@ -226,6 +248,53 @@ const readBack = (seeded: Seeded, history: History, label: string): Effect.Effec
 const isMissing = Schema.is(Repository.NoSuchCommit);
 
 const failure = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<E, never> => Effect.flip(effect).pipe(Effect.orDie);
+
+/** What a span holds beyond what a call's arguments say, and what it must not hold. */
+interface Extra {
+  readonly present: Record<string, unknown>;
+  readonly absent: ReadonlyArray<string>;
+}
+
+const NO_EXTRA: Extra = { present: {}, absent: [] };
+
+const NOTHING_PATCHED: Extra = { present: {}, absent: ["kalfa.git.patch"] };
+
+const patched = (id: Option.Option<string>): Extra =>
+  Option.isSome(id) ? { present: { "kalfa.git.patch": id.value }, absent: [] } : NOTHING_PATCHED;
+
+/** The failure of a call that must fail: a call that answers is a failed law, with `label` to say which. */
+const refused = <A, E>(effect: Effect.Effect<A, E>, label: string): Effect.Effect<E | undefined> =>
+  Effect.map(Effect.result(effect), (result) => {
+    expect(Result.isFailure(result), `${label} fails`).toBe(true);
+
+    return Result.isFailure(result) ? result.failure : undefined;
+  });
+
+/** The answer of a call that must answer: a call that fails is a failed law, with `label` to say which. */
+const answered = <A, E>(effect: Effect.Effect<A, E>, label: string): Effect.Effect<A | undefined> =>
+  Effect.map(Effect.result(effect), (result) => {
+    expect(Result.isSuccess(result), `${label} answers`).toBe(true);
+
+    return Result.isSuccess(result) ? result.success : undefined;
+  });
+
+/** The patch id of each case of an edit carrier, in case order: the id, or undefined for no change. */
+const patchIds = (seeded: Seeded, carrier: EditCarrier): Effect.Effect<ReadonlyArray<string | undefined>> =>
+  Effect.forEach(
+    carrier.cases,
+    (each) =>
+      Effect.map(
+        answered(seeded.repository.patchId(idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)), each.label),
+        (id) => (id === undefined ? undefined : Option.getOrUndefined(id)),
+      ),
+    { concurrency: 1 },
+  );
+
+const everyEditClass = (carrier: EditCarrier): EditCarrier => {
+  expect(reachedEditClasses(carrier), "the generator reaches every edit class").toEqual(EDIT_CLASSES);
+
+  return carrier;
+};
 
 // ---------------------------------------------------------------------------------------------------------
 // The checks the write laws share
@@ -790,7 +859,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
         Effect.gen(function* () {
           const seen = everyShape(texture)
             .filter((shape) => shape.history.nodes.length > 0)
-            .map((shape) => ({ label: shape.label, history: withCanary(shape.history) }));
+            .map((shape) => ({ label: shape.label, history: withCanary(shape.history, true) }));
 
           // The committer of the settings is a canary too, so a span that names the committer is seen.
           const config = settings({}, { name: `${CANARY}-bot`, email: `${CANARY}-bot@example.test` });
@@ -801,24 +870,26 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               const a = idAt(ids, 0);
               const b = idAt(ids, ids.length - 1);
 
+              // What a span holds only when the call has an answer to hold: the patch id, and none for no change.
               const calls: ReadonlyArray<{
                 readonly call: string;
-                readonly run: Effect.Effect<unknown, unknown>;
+                readonly note?: string;
+                readonly run: Effect.Effect<Extra, unknown>;
                 readonly expected: Record<string, unknown>;
               }> = [
                 {
                   call: "readCommit",
-                  run: seeded.repository.readCommit(b),
+                  run: Effect.as(seeded.repository.readCommit(b), NO_EXTRA),
                   expected: { "vcs.ref.head.revision": b },
                 },
                 {
                   call: "readRefs",
-                  run: seeded.repository.readRefs(refNameFrom("refs/heads/main")),
+                  run: Effect.as(seeded.repository.readRefs(refNameFrom("refs/heads/main")), NO_EXTRA),
                   expected: { "kalfa.git.under": "refs/heads/main", "kalfa.git.refs": 1 },
                 },
                 {
                   call: "walk",
-                  run: seeded.repository.walk({ include: [b], exclude: [] }),
+                  run: Effect.as(seeded.repository.walk({ include: [b], exclude: [] }), NO_EXTRA),
                   expected: {
                     "kalfa.git.include": [b],
                     "kalfa.git.exclude": [],
@@ -827,7 +898,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 },
                 {
                   call: "mergeBases",
-                  run: seeded.repository.mergeBases(a, b),
+                  run: Effect.as(seeded.repository.mergeBases(a, b), NO_EXTRA),
                   expected: {
                     "vcs.ref.head.revision": a,
                     "vcs.ref.base.revision": b,
@@ -836,20 +907,37 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 },
                 {
                   call: "isAncestor",
-                  run: seeded.repository.isAncestor(a, b),
+                  run: Effect.as(seeded.repository.isAncestor(a, b), NO_EXTRA),
                   expected: {
                     "vcs.ref.base.revision": a,
                     "vcs.ref.head.revision": b,
                     "kalfa.git.ancestor": isAncestorModel(shape.history, 0, ids.length - 1),
                   },
                 },
+                {
+                  call: "patchId",
+                  note: "two commits",
+                  run: Effect.map(seeded.repository.patchId(a, b), patched),
+                  expected: { "vcs.ref.base.revision": a, "vcs.ref.head.revision": b },
+                },
+                {
+                  call: "patchId",
+                  note: "no change",
+                  run: Effect.as(seeded.repository.patchId(b, b), NOTHING_PATCHED),
+                  expected: { "vcs.ref.base.revision": b, "vcs.ref.head.revision": b },
+                },
               ];
 
               const secrets = [CANARY, ...seeded.hidden];
 
-              for (const { call, run: effect, expected } of calls) {
-                const { spans } = yield* traced(effect);
-                expectSpan(`${shape.label}, ${call}`, spans, call, expected, secrets);
+              for (const { call, note, run: effect, expected } of calls) {
+                const { answer: extra, spans } = yield* traced(effect);
+                const place = `${shape.label}, ${call}${note === undefined ? "" : ` (${note})`}`;
+                const attributes = expectSpan(place, spans, call, { ...expected, ...extra.present }, secrets);
+
+                for (const key of extra.absent) {
+                  expect(Object.keys(attributes), `${place}: no ${key} attribute`).not.toContain(key);
+                }
               }
 
               // The write calls: a commit written and a ref made and moved, each ending one span.
@@ -958,7 +1046,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
     // Plant: add a `head` key to the service; let `readRefs` pack refs, so the object count changes; let `writeCommit`
     // point `refs/heads/main` at the commit it wrote.
     it.effect.prop(
-      "S10 no working copy: the service has the five read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
+      "S10 no working copy: the service has the six read calls and the three write calls, no list of reads changes the store, and no list of writes or merges moves a ref",
       { texture: textureArb },
       ({ texture }) =>
         seedEach(subject, everyShape(texture), DEFAULT, (seeded, shape) =>
@@ -968,6 +1056,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
               "mergeBases",
               "mergeTrees",
               "moveRef",
+              "patchId",
               "readCommit",
               "readRefs",
               "walk",
@@ -991,6 +1080,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 seeded.repository.walk({ include: [x], exclude: [y] }),
                 seeded.repository.mergeBases(x, y),
                 seeded.repository.isAncestor(x, y),
+                seeded.repository.patchId(x, y),
               ];
 
               yield* Effect.exit(calls[(texture.nums[k + 48] ?? 0) % calls.length] ?? Effect.void);
@@ -1095,6 +1185,234 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
           expect(same, "the generator reaches commits with equal files").toBeGreaterThan(0);
           expect(apart, "the generator reaches commits with different files").toBeGreaterThan(0);
         }),
+      run,
+    );
+    // Slice 1 of ticket 1933: the patch id. Each law relates ids one adapter gave; no law compares ids across adapters.
+
+    // Plant: hash each line's number, (l) red; hash the base's mode where it does not change, (l) red; hash a text file's blob
+    // ids, (l) red; read a NUL at byte 8001 as a binary file, (c) red.
+    it.effect.prop(
+      "S11b the same edit gives the same id: one edit on bases that differ in another file, the line next to it, the file's mode or where in the file it sits",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              const ids = yield* patchIds(seeded, carrier);
+              let equal = 0;
+
+              for (const group of carrier.same) {
+                expect(group.length, "a group is an edit on more than one base").toBeGreaterThan(1);
+                const [lead, ...rest] = group;
+
+                for (const next of rest) {
+                  const place = `${carrier.cases[next]?.label} and ${carrier.cases[lead ?? 0]?.label}`;
+                  expect(carrier.cases[next]?.key, `${place}: the model names them alike`).toBe(
+                    carrier.cases[lead ?? 0]?.key,
+                  );
+                  expect(ids[lead ?? 0], `${place}: the edit has an id`).toBeDefined();
+                  expect(ids[next], `${place}: one edit, one id`).toBe(ids[lead ?? 0]);
+                }
+              }
+
+              for (const [i, a] of carrier.cases.entries()) {
+                for (const [j, b] of carrier.cases.entries()) {
+                  if (i < j && a.key !== undefined && a.key === b.key) {
+                    equal += 1;
+                    expect(ids[i], `${a.label} and ${b.label}: the model names them alike, so they have one id`).toBe(
+                      ids[j],
+                    );
+                  }
+                }
+              }
+
+              expect(equal, "the generator reaches changes the model names alike").toBeGreaterThan(3);
+            }),
+          );
+        }),
+      run,
+    );
+
+    // Plant: strip whitespace before hashing, (m) red; drop each line's end, (m) red; hash a binary file by its path alone,
+    // (n) red; leave modes out, (n) red; hash a new or deleted file by its path alone, (a) red; fold punctuation or non-ASCII
+    // characters of a path together, (k) red; hash a file's first change block only, (g) red; read a NUL at byte 8000 as text or a
+    // file as binary only when both sides have a NUL, (c) red.
+    it.effect.prop(
+      "S20 a different edit gives a different id: one line changed (its text, a trailing space, its line end), the mode, the path, the line, a binary byte, the other way round",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const seeded = yield* subject.seed(carrier.history, DEFAULT);
+              const ids = yield* patchIds(seeded, carrier);
+              const drawn = ids[carrier.drawn];
+              let apart = 0;
+
+              expect(drawn, "the drawn edit has an id").toBeDefined();
+
+              for (const variant of carrier.variants) {
+                const place = carrier.cases[variant]?.label;
+                expect(carrier.cases[variant]?.key, `${place}: the model names it apart from the drawn edit`).not.toBe(
+                  carrier.cases[carrier.drawn]?.key,
+                );
+                expect(ids[variant], `${place}: an id apart from the drawn edit's`).not.toBe(drawn);
+                expect(ids[variant], `${place}: it has an id`).toBeDefined();
+              }
+
+              for (const [i, a] of carrier.cases.entries()) {
+                for (const [j, b] of carrier.cases.entries()) {
+                  if (i < j && a.key !== undefined && b.key !== undefined && a.key !== b.key) {
+                    apart += 1;
+                    expect(
+                      ids[i],
+                      `${a.label} and ${b.label}: the model names them apart, so their ids differ`,
+                    ).not.toBe(ids[j]);
+                  }
+                }
+              }
+
+              expect(apart, "the generator reaches changes the model names apart").toBeGreaterThan(100);
+            }),
+          );
+        }),
+      run,
+    );
+
+    // Plant: answer an id for no change, (f) red; answer none for a mode-only change, (b) red; answer none for an empty new file,
+    // (f) red; fail on bytes that are not UTF-8, (e) red; read the history, so a shallow repository fails, red.
+    it.effect.prop(
+      "S21 none means no change: patchId of a commit with itself, or with another commit of the same files, is none; a mode-only change, an empty new file and a latin-1 file each have an id, in a shallow repository too",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = everyEditClass(editCarrier(texture));
+          const cut = cutShallow(carrier.history);
+          expect(cut, "the carrier is a line of commits, so a commit has a parent to hide").toBeDefined();
+
+          const check = (history: History, label: string) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const seeded = yield* subject.seed(history, DEFAULT);
+                const ids = yield* patchIds(seeded, carrier);
+
+                for (const [i, each] of carrier.cases.entries()) {
+                  expect(
+                    ids[i] === undefined,
+                    `${label}: ${each.label} has ${each.key === undefined ? "no" : "an"} id`,
+                  ).toBe(each.key === undefined);
+                }
+
+                for (const wanted of ["a mode-only change", "an empty file added", "latin-1 lines"]) {
+                  const at = carrier.cases.findIndex((each) => each.label === wanted);
+                  expect(at, `${wanted} is drawn`).toBeGreaterThanOrEqual(0);
+                  expect(ids[at], `${label}: ${wanted} has an id`).toBeDefined();
+                }
+
+                for (const [k, id] of seeded.ids.entries()) {
+                  expect(
+                    Option.isNone(yield* seeded.repository.patchId(id, id)),
+                    `${label}: commit ${k} with itself`,
+                  ).toBe(true);
+                }
+
+                return ids;
+              }),
+            );
+
+          const whole = yield* check(carrier.history, "whole");
+          const shallow = yield* check(cut ?? carrier.history, "shallow");
+          expect(shallow, "a shallow repository gives the ids a whole one gives").toEqual(whole);
+        }),
+      run,
+    );
+
+    // Plant: delete the files check, (h) red; delete the size check, (h) red; count `>=` for `>` on either limit: red; check the
+    // size before the files: red; count the files that do not change: red; count only one side's bytes: red.
+    it.effect.prop(
+      "S17 limits never cut: at exactly limits.files files and limits.diff bytes patchId answers, one more fails with TooMany or DiffTooLarge, over both is TooMany",
+      { texture: textureArb },
+      ({ texture }) =>
+        Effect.gen(function* () {
+          const carrier = limitCarrier(texture);
+          const files = changedFiles(carrier.before, carrier.after);
+          const bytes = comparedBytes(carrier.before, carrier.after);
+          expect(files, "files to cut").toBeGreaterThan(1);
+          expect(bytes, "bytes to cut").toBeGreaterThan(1);
+          const reached = new Set<string>();
+
+          const ask = <A, E>(
+            limits: { readonly files: number; readonly diff: number },
+            call: (seeded: Seeded) => Effect.Effect<A, E>,
+          ): Effect.Effect<A, E> =>
+            Effect.scoped(Effect.flatMap(subject.seed(carrier.history, settings(limits)), call));
+
+          const patch = (seeded: Seeded) => seeded.repository.patchId(idAt(seeded.ids, 0), idAt(seeded.ids, 1));
+
+          const exact = yield* answered(ask({ files, diff: bytes }, patch), "at exactly both limits");
+          reached.add("exactly the files limit");
+          reached.add("exactly the diff limit");
+          expect(exact !== undefined && Option.isSome(exact), "at exactly both limits it has an id").toBe(true);
+
+          const roomy = yield* answered(ask({ files: files + 5, diff: bytes + 50 }, patch), "with room to spare");
+          expect(roomy, "limits that are not reached change nothing").toEqual(exact);
+
+          const tooMany = yield* refused(ask({ files: files - 1, diff: bytes }, patch), "one file too many");
+          reached.add("one file more than the limit");
+          expectFailure(tooMany, Repository.TooMany, { limit: "files", most: files - 1 }, "the files limit");
+
+          const tooLarge = yield* refused(ask({ files, diff: bytes - 1 }, patch), "one byte too many");
+          reached.add("one byte more than the limit");
+          expectFailure(tooLarge, Repository.DiffTooLarge, { most: bytes - 1 }, "the diff limit");
+
+          const both = yield* refused(ask({ files: files - 1, diff: bytes - 1 }, patch), "over both limits");
+          reached.add("over both limits");
+          expectFailure(both, Repository.TooMany, { limit: "files", most: files - 1 }, "over both is the files limit");
+
+          expect([...reached].sort(), "the law reaches every limit class").toEqual([...LIMIT_CLASSES].sort());
+        }),
+      run,
+    );
+
+    // Plant: answer none for an unknown `from`, (i) red; answer none for an unknown `to`, (i) red; check the limits before the
+    // ids, red.
+    it.effect.prop(
+      "S18 unknown ids: an id the store lacks, or a tree's id, on either side fails patchId with NoSuchCommit naming it, never none, even when a limit would fail first",
+      { texture: textureArb },
+      ({ texture }) =>
+        seedEach(subject, everyShape(texture), settings({ files: 1, diff: 1 }), (seeded, shape) =>
+          Effect.gen(function* () {
+            const taken = seeded.ids;
+            const first = commitIdFrom(missingId(texture, 0, taken));
+            const second = commitIdFrom(missingId(texture, 1, [...taken, first]));
+            const tree = commitIdFrom(TREE_ID);
+            const known = seeded.ids[0] ?? second;
+            const real = seeded.trees.find((id) => id !== TREE_ID);
+            const missing = [first, second, tree, ...(real === undefined ? [] : [commitIdFrom(real)])];
+            const gone = seeded.ids.length === 0 ? missing : undefined;
+
+            for (const absent of missing) {
+              for (const [side, call] of [
+                ["from", seeded.repository.patchId(absent, known)],
+                ["to", seeded.repository.patchId(known, absent)],
+              ] as const) {
+                const error = yield* refused(call, `${shape.label}: an unknown ${side}`);
+                expect(isMissing(error), `${shape.label}: an unknown ${side} fails with NoSuchCommit`).toBe(true);
+
+                if (isMissing(error)) {
+                  expect(gone ?? [absent], `${shape.label}: it names the id it was asked for on ${side}`).toContain(
+                    error.id,
+                  );
+                }
+              }
+            }
+          }),
+        ),
       run,
     );
 

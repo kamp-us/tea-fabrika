@@ -1,7 +1,7 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P13): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P14): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
 // how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
-// call reaches a remote, what `merge-tree` printed and the version a merge needs. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
+// call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -53,7 +53,7 @@ const script =
 
 const open = (
   run: (call: Call) => Reply,
-  limits: { readonly commits?: number; readonly refs?: number; readonly bytes?: number } = {},
+  limits: Parameters<typeof settings>[0] = {},
   env: Record<string, string> = { PATH: "/usr/bin:/bin" },
   config: Settings.Settings = settings(limits),
 ) =>
@@ -168,7 +168,14 @@ it.effect.prop(
           ProcessRepository.layer({
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              limits: {
+                commits: 100,
+                refs: 100,
+                bytes: 100_000,
+                files: 100,
+                diff: 100_000,
+                time: `${seconds} seconds`,
+              },
               committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
@@ -232,7 +239,14 @@ it.effect.prop(
           ProcessRepository.layer({
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              limits: {
+                commits: 100,
+                refs: 100,
+                bytes: 100_000,
+                files: 100,
+                diff: 100_000,
+                time: `${seconds} seconds`,
+              },
               committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
@@ -605,6 +619,457 @@ it.effect.prop(
             { code, stderr: said.slice(0, bytes) },
             `${length} bytes of stderr, ${way}`,
           );
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const ZEROS = "0".repeat(40);
+
+type Status = "A" | "D" | "M" | "T";
+
+interface Entry {
+  readonly status: Status;
+  readonly path: string;
+  readonly mode: { readonly before: string; readonly after: string };
+  readonly id: { readonly before: string; readonly after: string };
+  /** What `cat-file --batch-check` says of each blob, 0 for a side the file lacks. */
+  readonly size: { readonly before: number; readonly after: number };
+}
+
+const blobId = (n: number): string => n.toString(16).padStart(40, "d");
+
+// git's raw list, as `diff-tree -r -z --no-renames` prints it: `:<mode> <mode> <id> <id> <status>`, a NUL, the path, a NUL.
+const rawList = (entries: ReadonlyArray<Entry>): string =>
+  entries
+    .map((e) => `:${e.mode.before} ${e.mode.after} ${e.id.before} ${e.id.after} ${e.status}\0${e.path}\0`)
+    .join("");
+
+/** What the stand-in is made to say for one `patchId` call: the raw list, the blob sizes, the patch and what `patch-id` prints. */
+interface Script {
+  readonly from: string;
+  readonly to: string;
+  readonly entries: ReadonlyArray<Entry>;
+  readonly patch: Uint8Array;
+  readonly printed: string;
+}
+
+// The sizes of the blobs git is asked about, and the commits it is asked about, as `cat-file --batch-check` answers.
+const checking = (script: Script, call: Call): Reply => {
+  const sizes = new Map(
+    script.entries.flatMap((e) => [[e.id.before, e.size.before] as const, [e.id.after, e.size.after] as const]),
+  );
+
+  const asked = new TextDecoder()
+    .decode(call.input)
+    .split("\n")
+    .filter((line) => line !== "");
+
+  return {
+    code: 0,
+    stdout: asked.map((id) => (sizes.has(id) ? `${id} blob ${sizes.get(id)}\n` : `${id} commit 200\n`)).join(""),
+  };
+};
+
+const patchScript =
+  (script: Script, rest: (call: Call) => Reply | undefined = () => undefined) =>
+  (call: Call): Reply => {
+    const mine = rest(call);
+
+    if (mine !== undefined) {
+      return mine;
+    }
+
+    switch (call.verb) {
+      case "version":
+        return { code: 0, stdout: "git version 2.40.1\n" };
+      case "rev-parse":
+        return { code: 0, stdout: ".\n" };
+      case "cat-file":
+        return checking(script, call);
+      case "diff-tree":
+        return call.rest.includes("-z")
+          ? { code: 0, stdout: rawList(script.entries) }
+          : { code: 0, stdout: script.patch };
+      case "patch-id":
+        return { code: 0, stdout: script.printed };
+      default:
+        return { code: 0 };
+    }
+  };
+
+const STATUSES: ReadonlyArray<Status> = ["A", "D", "M", "T"];
+
+const entryFor = (status: Status, n: number, part: string, before: number, after: number): Entry => {
+  const gone = { mode: "000000", id: ZEROS };
+
+  switch (status) {
+    case "A":
+      return {
+        status,
+        path: `a${part}`,
+        mode: { before: gone.mode, after: "100644" },
+        id: { before: gone.id, after: blobId(2 * n + 1) },
+        size: { before: 0, after },
+      };
+    case "D":
+      return {
+        status,
+        path: `d${part}`,
+        mode: { before: "100644", after: gone.mode },
+        id: { before: blobId(2 * n), after: gone.id },
+        size: { before, after: 0 },
+      };
+    case "M":
+      return {
+        status,
+        path: `m${part}`,
+        mode: { before: "100644", after: "100755" },
+        id: { before: blobId(2 * n), after: blobId(2 * n + 1) },
+        size: { before, after },
+      };
+    case "T":
+      return {
+        status,
+        path: `t${part}`,
+        mode: { before: "100644", after: "120000" },
+        id: { before: blobId(2 * n), after: blobId(2 * n + 1) },
+        size: { before, after },
+      };
+  }
+};
+
+const GITLINK: Entry = {
+  status: "A",
+  path: "sub-module",
+  mode: { before: "000000", after: "160000" },
+  id: { before: ZEROS, after: `${"c".repeat(39)}1` },
+  size: { before: 0, after: 0 },
+};
+
+// A file made a submodule and a submodule made a file: one `T` entry each, with a file on one side and a submodule on the other.
+// The file's bytes count against `limits.diff`, and the submodule's id is never asked about.
+const submodules = (before: number, after: number): ReadonlyArray<Entry> => [
+  {
+    status: "T",
+    path: "file-made-submodule",
+    mode: { before: "100644", after: "160000" },
+    id: { before: blobId(1001), after: `${"c".repeat(39)}2` },
+    size: { before, after: 0 },
+  },
+  {
+    status: "T",
+    path: "submodule-made-file",
+    mode: { before: "160000", after: "100755" },
+    id: { before: `${"c".repeat(39)}3`, after: blobId(1002) },
+    size: { before: 0, after },
+  },
+];
+
+// The sides of an entry that hold a file: the blobs git is asked the size of, and the bytes that count against `limits.diff`.
+const fileSides = (entry: Entry): ReadonlyArray<{ readonly id: string; readonly size: number }> => [
+  ...(entry.mode.before === "000000" || entry.mode.before === "160000"
+    ? []
+    : [{ id: entry.id.before, size: entry.size.before }]),
+  ...(entry.mode.after === "000000" || entry.mode.after === "160000"
+    ? []
+    : [{ id: entry.id.after, size: entry.size.after }]),
+];
+
+interface Spec {
+  readonly from: string;
+  readonly parts: ReadonlyArray<string>;
+  readonly sizes: ReadonlyArray<number>;
+  readonly count: number;
+  readonly shift: number;
+  readonly patch: Uint8Array;
+  readonly printed: string;
+}
+
+// One `patchId` call to make: two commits, the raw list git prints for them, which holds files, a submodule added and a file and a
+// submodule made each other, and the limits that fit it exactly.
+const scene = ({ from, parts, sizes, count, shift, patch, printed }: Spec) => {
+  const first = commitIdFrom(from);
+  const second = commitIdFrom(`b${from.slice(1)}`);
+
+  const real = Array.from({ length: count }, (_, i) =>
+    entryFor(
+      STATUSES[(shift + i) % STATUSES.length] ?? "M",
+      i,
+      parts[i] ?? "p",
+      sizes[2 * i] ?? 1,
+      sizes[2 * i + 1] ?? 1,
+    ),
+  );
+
+  const entries = [...real, GITLINK, ...submodules(sizes[12] ?? 1, sizes[13] ?? 1)];
+  const script: Script = { from: first, to: second, entries, patch, printed: `${printed} ${ZEROS}\n` };
+  const sides = entries.flatMap(fileSides);
+
+  return {
+    first,
+    second,
+    real,
+    entries,
+    script,
+    files: entries.length,
+    bytes: sides.reduce((total, side) => total + side.size, 0),
+    blobs: new Set(sides.map((side) => side.id)),
+  };
+};
+
+const SPEC = {
+  from: commitIdArb,
+  parts: Arbitrary.array(partArb, { minLength: 8, maxLength: 8 }),
+  sizes: Arbitrary.array(int(1, 40), { minLength: 16, maxLength: 16 }),
+  count: int(4, 6),
+  shift: int(0, 3),
+  patch: Arbitrary.array(int(0, 255), { minLength: 1, maxLength: 60 }).pipe(
+    Arbitrary.map((octets) => Uint8Array.from(octets)),
+  ),
+  printed: commitIdArb,
+};
+
+const CHECK = ["cat-file", "--batch-check"];
+
+const OPENING = [["version"], ["rev-parse", "--git-dir"]];
+
+const commandsSeen = (calls: ReadonlyArray<Call>): ReadonlyArray<ReadonlyArray<string>> =>
+  calls.map((seen) => seen.args);
+
+// The lines a command was given on stdin, as a set.
+const asked = (call: Call | undefined): ReadonlySet<string> =>
+  new Set(
+    new TextDecoder()
+      .decode(call?.input)
+      .split("\n")
+      .filter((line) => line !== ""),
+  );
+
+// Plant: read empty `patch-id` output as none, red; add `--stable`, red; run `diff-tree -p` before the size check, red; pipe
+// `diff-tree` into `patch-id`: the stand-in sees one piped command, red; ask `cat-file` the size of a gitlink's id, (j) red;
+// ignore the exit code of `diff-tree -r -z` or of `diff-tree -p`, so a failure answers none, red; count `>=` for `>` on `files`,
+// red; delete the files check or the size check, (h) red; run the later commands after an empty raw list, red; delete the check
+// that both commits are known, (i) red.
+it.effect.prop(
+  "P14 a patch id's commands: known, the raw list, the sizes, the patch and `patch-id --verbatim`, in that order, with the limits checked before the content is read",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const { first, second, real, script, files, bytes, blobs } = scene(spec);
+      const { patch, printed } = spec;
+      expect(
+        real.map((e) => e.status),
+        "every status of the raw list is read",
+      ).toEqual(expect.arrayContaining([...STATUSES]));
+
+      const RAW = ["diff-tree", "-r", "-z", "--no-renames", first, second];
+
+      const PATCH = [
+        "diff-tree",
+        "-r",
+        "-p",
+        "-U0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        first,
+        second,
+      ];
+
+      const PATCH_ID = ["patch-id", "--verbatim"];
+
+      const ask = (limits: Parameters<typeof settings>[0], rest?: (call: Call) => Reply | undefined) =>
+        Effect.gen(function* () {
+          const { repo, stand } = yield* open(patchScript(script, rest), limits);
+
+          return { result: yield* Effect.result(repo.patchId(first, second)), seen: yield* stand.calls };
+        });
+
+      // Exactly at both limits: every command, in order, and the patch reaches `patch-id` byte for byte.
+      const whole = yield* ask({ files, diff: bytes });
+      expect(Result.isSuccess(whole.result), "at both limits it answers").toBe(true);
+
+      if (Result.isSuccess(whole.result)) {
+        expect(whole.result.success, "what patch-id printed").toEqual(Option.some(printed));
+      }
+
+      expect(commandsSeen(whole.seen), "every command, in order").toEqual(
+        [...OPENING, CHECK, RAW, CHECK, PATCH, PATCH_ID].map((rest) => [...START, ...rest]),
+      );
+      expect(
+        whole.seen.some((seen) => seen.piped),
+        "no command is a pipe",
+      ).toBe(false);
+      const [known, , sizesCall, , idCall] = whole.seen.slice(2);
+
+      expect(asked(known), "known is asked about both commits").toEqual(new Set([first, second]));
+      expect(idCall?.input, "the patch reaches patch-id byte for byte").toEqual(patch);
+      expect(asked(sizesCall), "the sizes are asked of each blob of the raw list, and of no submodule").toEqual(blobs);
+
+      // One entry more than `files`: TooMany, and no size is asked.
+      const crowded = yield* ask({ files: files - 1, diff: bytes });
+      expect(Result.isFailure(crowded.result), "one file too many fails").toBe(true);
+
+      if (Result.isFailure(crowded.result)) {
+        expectFailure(
+          crowded.result.failure,
+          Repository.TooMany,
+          { limit: "files", most: files - 1 },
+          "the files limit",
+        );
+      }
+
+      expect(commandsSeen(crowded.seen), "no size is asked before the files limit is checked").toEqual(
+        [...OPENING, CHECK, RAW].map((rest) => [...START, ...rest]),
+      );
+
+      // One byte more than `diff`: DiffTooLarge, and no patch is printed.
+      const heavy = yield* ask({ files, diff: bytes - 1 });
+      expect(Result.isFailure(heavy.result), "one byte too many fails").toBe(true);
+
+      if (Result.isFailure(heavy.result)) {
+        expectFailure(heavy.result.failure, Repository.DiffTooLarge, { most: bytes - 1 }, "the diff limit");
+      }
+
+      expect(commandsSeen(heavy.seen), "no patch is printed before the size limit is checked").toEqual(
+        [...OPENING, CHECK, RAW, CHECK].map((rest) => [...START, ...rest]),
+      );
+
+      // Nothing changed: the raw list is empty, the answer is none, and no later command runs.
+      const quiet = yield* Effect.gen(function* () {
+        const { repo, stand } = yield* open(patchScript({ ...script, entries: [] }), { files, diff: bytes });
+
+        return { result: yield* Effect.result(repo.patchId(first, second)), seen: yield* stand.calls };
+      });
+
+      expect(Result.isSuccess(quiet.result), "an empty raw list answers").toBe(true);
+
+      if (Result.isSuccess(quiet.result)) {
+        expect(Option.isNone(quiet.result.success), "an empty raw list is none").toBe(true);
+      }
+
+      expect(commandsSeen(quiet.seen), "nothing runs after an empty raw list").toEqual(
+        [...OPENING, CHECK, RAW].map((rest) => [...START, ...rest]),
+      );
+
+      // A raw list with entries and a `patch-id` that prints nothing is no answer, never none.
+      const silent = yield* ask({ files, diff: bytes }, (call) =>
+        call.verb === "patch-id" ? { code: 0, stdout: "" } : undefined,
+      );
+
+      expect(Result.isFailure(silent.result), "an id that is missing after changes fails").toBe(true);
+
+      if (Result.isFailure(silent.result)) {
+        unavailable(silent.result.failure, Repository.Unreadable, {}, "patch-id printed nothing");
+      }
+
+      // A command that fails is never no change: its exit code ends the call.
+      const fails: ReadonlyArray<readonly [string, (call: Call) => boolean]> = [
+        ["the raw list", (call) => call.verb === "diff-tree" && call.rest.includes("-z")],
+        ["the patch", (call) => call.verb === "diff-tree" && call.rest.includes("-p")],
+        ["patch-id", (call) => call.verb === "patch-id"],
+      ];
+
+      for (const [label, is] of fails) {
+        const failing = yield* ask({ files, diff: bytes }, (call) =>
+          is(call) ? { code: 128, stderr: "fatal" } : undefined,
+        );
+
+        expect(Result.isFailure(failing.result), `${label} that exits 128 fails the call`).toBe(true);
+
+        if (Result.isFailure(failing.result)) {
+          unavailable(failing.result.failure, Repository.Exited, { code: 128 }, `${label} exits 128`);
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// A call to `patchId` on the stand-in, with the limits and the answers that the scene's script is told to change.
+const patching = (
+  made: ReturnType<typeof scene>,
+  limits: Parameters<typeof settings>[0],
+  rest?: (call: Call) => Reply | undefined,
+) =>
+  Effect.gen(function* () {
+    const { repo, stand } = yield* open(patchScript(made.script, rest), limits);
+
+    return { result: yield* Effect.result(repo.patchId(made.first, made.second)), seen: yield* stand.calls };
+  });
+
+// Plant: delete the check that each blob of the raw list is a blob git found (a missing one counts as 0 bytes); accept any type
+// of object as a blob.
+it.effect.prop(
+  "P14b a blob git cannot size: a blob it does not find, or finds as another object, fails the call and no patch is printed",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const made = scene(spec);
+
+      const sizing = (call: Call): boolean =>
+        call.verb === "cat-file" && [...made.blobs].some((id) => asked(call).has(id));
+
+      for (const found of ["missing", "tree", "tag"] as const) {
+        // The first blob asked is the one git cannot size as a blob; every other is a small blob. The limits leave room.
+        const answer = (call: Call): Reply | undefined =>
+          sizing(call)
+            ? {
+                code: 0,
+                stdout: [...asked(call)]
+                  .map((id, i) => (i === 0 ? `${id} ${found}${found === "missing" ? "" : " 1"}\n` : `${id} blob 1\n`))
+                  .join(""),
+              }
+            : undefined;
+
+        const { result, seen } = yield* patching(made, { files: made.files, diff: made.bytes + 1000 }, answer);
+        expect(Result.isFailure(result), `a blob that is ${found} fails the call`).toBe(true);
+
+        if (Result.isFailure(result)) {
+          unavailable(result.failure, Repository.Unreadable, {}, `a blob that is ${found}`);
+        }
+
+        expect(
+          seen.some((each) => each.verb === "diff-tree" && each.rest.includes("-p")),
+          `a blob that is ${found}: no patch is printed`,
+        ).toBe(false);
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: accept a `patch-id` line with no commit id after the patch id, or with more than one; accept a text that is no patch id.
+it.effect.prop(
+  "P14c a patch-id line: a patch id, a space and one commit id is read; any other line is no answer",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const made = scene(spec);
+      const limits = { files: made.files, diff: made.bytes };
+      const id = spec.printed;
+
+      const good = yield* patching(made, limits);
+      expect(Result.isSuccess(good.result), "a patch id and a commit id are read").toBe(true);
+
+      const lines: ReadonlyArray<readonly [string, string]> = [
+        ["a patch id alone", `${id}\n`],
+        ["a patch id and two more words", `${id} ${ZEROS} ${ZEROS}\n`],
+        ["a patch id and an empty word", `${id}  ${ZEROS}\n`],
+        ["a text that is no patch id", `z${id.slice(1)} ${ZEROS}\n`],
+        ["a space and nothing before it", ` ${ZEROS}\n`],
+      ];
+
+      for (const [label, printed] of lines) {
+        const { result } = yield* patching(made, limits, (call) =>
+          call.verb === "patch-id" ? { code: 0, stdout: printed } : undefined,
+        );
+
+        expect(Result.isFailure(result), `${label} is no answer`).toBe(true);
+
+        if (Result.isFailure(result)) {
+          unavailable(result.failure, Repository.Unreadable, {}, label);
         }
       }
     }),

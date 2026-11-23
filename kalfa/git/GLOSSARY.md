@@ -142,8 +142,14 @@ _Avoid_: clash, failure
 
 **Patch id**:
 A name git gives a commit's or a range's changes, from the lines added and removed and not from where they sit. Two
-changes with the same patch id make the same edit, even on different bases.
+changes with the same patch id make the same edit, even on different bases. Whitespace and a line's end count; the
+lines around a change do not; a patch id compares only with ids the same adapter gave.
 _Avoid_: diff hash, change id, fingerprint
+
+**Binary file**:
+A file git does not split into lines: one with a NUL byte in its first 8000 bytes. A diff names it and its blobs,
+with no lines.
+_Avoid_: blob (every file is one), non-text
 
 **Credential**:
 What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call.

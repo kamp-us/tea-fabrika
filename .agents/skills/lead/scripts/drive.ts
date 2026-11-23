@@ -1600,7 +1600,12 @@ const handlers = (env: Env, started: readonly Phase[], path: string) => {
         const { ask } = cmd;
         const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
 
-        return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
+        return yield* Publish.publish({
+          dir: env.MAIN,
+          branch: ask.branch,
+          source: Publish.Source.cases.commit.make({ sha: cmd.head }),
+          text,
+        }).pipe(
           Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
         );

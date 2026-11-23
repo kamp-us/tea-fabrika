@@ -1610,7 +1610,7 @@ const handlers = (s: Setup) => {
         const readied = yield* Publish.ready({
           dir: env.MAIN,
           branch: s.branch,
-          head: cmd.head,
+          source: Publish.Source.cases.commit.make({ sha: cmd.head }),
           text: { title, body },
         }).pipe(
           Effect.map((p) => ({ pr: p.pr, detail: p.opened ? "opened" : "existing" })),

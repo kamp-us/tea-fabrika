@@ -1,10 +1,11 @@
-// The laws of the values (G1 to G7): a commit id, a ref name, a branch name, a commit and its signatures,
-// the settings, a path in a tree, and a tree id, a blob id and a file mode. Every class a generator must reach is applied to each run's drawn value, and the law
+// The laws of the values (G1 to G9): a commit id, a ref name, a branch name, a commit and its signatures,
+// the settings, a path in a tree, a tree id, a blob id and a file mode, and a patch id. Every class a generator must reach is applied to each run's drawn value, and the law
 // names the classes it needs, so a class dropped from a generator fails here loudly.
 import { expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import * as Diff from "./Diff.ts";
 import checkRefFormat from "./fixtures/check-ref-format-2.40.1.json" with { type: "json" };
 import {
   COMMITTER_ACCEPT_CLASSES,
@@ -311,7 +312,7 @@ it.prop(
 
 const decoded = Schema.decodeUnknownResult(Settings.Settings);
 
-const KEYS = ["commits", "refs", "bytes", "time"] as const;
+const KEYS = ["commits", "refs", "bytes", "files", "diff", "time"] as const;
 
 const NOT_A_TIME = [
   ["zero seconds", "0 seconds"],
@@ -327,12 +328,21 @@ const NOT_A_TIME = [
 ] as const;
 
 // Plant: give `commits` a default; drop the text check on `time`, so `"ten"` is accepted; drop the finite check on `time`,
-// so `"Infinity"` is accepted.
+// so `"Infinity"` is accepted; give `diff` a default; accept `files: 0` (a `files` that is any whole number); leave `files`
+// out of the limits.
 it.prop(
   "G5 settings: Settings accepts every positive count and duration text, refuses the rest, and has no default",
   { limits: limitsArb },
   ({ limits }) => {
-    const good = { commits: limits.commits, refs: limits.refs, bytes: limits.bytes, time: limits.time };
+    const good = {
+      commits: limits.commits,
+      refs: limits.refs,
+      bytes: limits.bytes,
+      files: limits.files,
+      diff: limits.diff,
+      time: limits.time,
+    };
+
     expect(Result.isSuccess(decoded({ limits: good, committer: COMMITTER })), `${limits.time} is accepted`).toBe(true);
 
     for (const key of KEYS) {
@@ -675,6 +685,32 @@ it.prop(
         Result.isFailure(Schema.decodeUnknownResult(Commit.Commit)({ ...plain, tree: text })),
         `a commit whose tree is ${label} is refused`,
       ).toBe(true);
+    }
+  },
+  RUNS,
+);
+
+// Plant: allow `{40}|{64}` in the pattern; add the `i` flag; drop the pattern from `PatchId` and keep its brand.
+it.prop(
+  "G9 patch ids: PatchId accepts 40 lowercase hex and refuses each other form, and keeps the text",
+  { id: commitIdArb },
+  ({ id }) => {
+    const refusals = idRefusals(id);
+    expect(
+      refusals.map(([label]) => label),
+      "the generator reaches every refused form",
+    ).toEqual(ID_REFUSE_CLASSES);
+
+    const decode = Schema.decodeUnknownResult(Diff.PatchId);
+    const good = decode(id);
+    expect(Result.isSuccess(good), "lowercase hex is a patch id").toBe(true);
+
+    if (Result.isSuccess(good)) {
+      expect(good.success, "the text is kept").toBe(id);
+    }
+
+    for (const [label, text] of refusals) {
+      expect(Result.isFailure(decode(text)), `${label} is refused`).toBe(true);
     }
   },
   RUNS,

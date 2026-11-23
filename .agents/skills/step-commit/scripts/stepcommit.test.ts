@@ -122,6 +122,8 @@ const fs=require("node:fs"),cp=require("node:child_process");
 const args=process.argv.slice(2);
 fs.appendFileSync(process.env.T321_CALLS,JSON.stringify(args)+"\n");
 if(args[0]==="commits"&&args[1]==="sign") process.exit(0);
+// The typecheck a package runs for CI (--dir <package> run typecheck ...): T_TYPECHECK=fail answers with one error.
+if(args.includes("typecheck")) { if(process.env.T_TYPECHECK==="fail"){console.error("src/owned.ts(1,7): error TS2322: fixture type error");process.exit(2);} process.exit(0); }
 if(args[0]==="exec"&&args[1]==="oxfmt") {
  const r=cp.spawnSync(process.env.T321_OXFMT,args.slice(2),{encoding:"utf8"});
  process.stdout.write(r.stdout||""); process.stderr.write(r.stderr||""); process.exit(r.status??2);
@@ -1659,5 +1661,39 @@ describe("a step commit ends a merge of main (2026-11-22, pull request 1942), to
       }),
       options,
     );
+  });
+});
+
+describe("a commit that names a .ts file runs its package's typecheck, as CI does, today's tooling", () => {
+  // Plant: skip the typecheck, or run it for a commit that holds no .ts file.
+  it("scenario: a failing typecheck refuses the commit and prints the error; a passing one, and a commit with no .ts file, commit", () => {
+    for (const [verdict, path, code] of [
+      ["fail", "src/owned.ts", 8],
+      ["pass", "src/owned.ts", 0],
+      ["fail", "src/notes.md", 0],
+    ] satisfies Array<[string, string, number]>) {
+      withRepo(
+        [
+          ["src/owned.ts", "tests"],
+          ["src/notes.md", "tests"],
+        ],
+        (r) => {
+          put(join(r.repo, "src/package.json"), '{"scripts":{"typecheck":"tsc --noEmit -p ."}}\n');
+          r.changed(path, path.endsWith(".md") ? "notes\n" : 'export const value: string = "a";\n');
+          r.env.T_TYPECHECK = verdict;
+          const got = r.commit("tests", [path], true);
+          expect(got.code, got.text).toBe(code);
+          const calls = join(r.dir, "calls");
+          const ran = existsSync(calls) && readFileSync(calls, "utf8").includes("typecheck");
+          expect(ran).toBe(path.endsWith(".ts"));
+
+          if (code === 8) {
+            expect(got.text).toContain("TS2322");
+            expect(r.git("rev-parse", "HEAD").trim()).toBe(r.base);
+            expect(r.git("diff", "--cached", "--name-only").trim()).toBe("");
+          }
+        },
+      );
+    }
   });
 });

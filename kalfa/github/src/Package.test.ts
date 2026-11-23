@@ -5,7 +5,8 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
+import * as GitHub from "./GitHub.ts";
 import { RUN_TIME_ONLY } from "./Octokit.test-support.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -94,4 +95,48 @@ it("R1 scenario: the README carries each route that is checked only at run time"
   const readme = read(join(root, "README.md"));
 
   expect(RUN_TIME_ONLY.filter((route) => !readme.includes(route))).toEqual([]);
+});
+
+/** The source files of the package, tests and test support left out. */
+const sources = (): ReadonlyArray<string> =>
+  files().filter((path) => path.startsWith("src/") && !path.endsWith(".test.ts") && !path.endsWith(".test-support.ts"));
+
+// P3. Plant: add a reason class named `Unreachable` to the union, and a reason of that tag is read; write the word in a source file.
+it("P3 scenario: GitHubError's reason is ClientError or Undecodable and nothing else, and no source file names Unreachable", () => {
+  // scenario: the module's own Schema and the package's source at head; no generated input says which tags a union holds.
+  const clientError = new GitHub.GitHubError({
+    operation: "GET /zen",
+    reason: new GitHub.ClientError({ status: 404 }),
+  });
+
+  const inputRefused = new GitHub.GitHubError({
+    operation: "GET /zen",
+    reason: new GitHub.Undecodable({ side: "input", message: "m" }),
+  });
+
+  const answerRefused = new GitHub.GitHubError({
+    operation: "GET /zen",
+    reason: new GitHub.Undecodable({ side: "answer", message: "m" }),
+  });
+
+  const accepted = (wire: object) => Option.isSome(Schema.decodeUnknownOption(GitHub.GitHubError)(wire));
+  const encode = Schema.encodeSync(GitHub.GitHubError);
+
+  expect(accepted(encode(clientError)), "a 4xx").toBe(true);
+  expect(accepted(encode(inputRefused)), "an input that cannot be encoded").toBe(true);
+  expect(accepted(encode(answerRefused)), "an answer that cannot be read").toBe(true);
+
+  for (const tag of ["Unreachable", "Unavailable", "ServerError", "RateLimited", "LoginFailed"]) {
+    const foreign = Schema.TaggedStruct(tag, { status: Schema.Int, message: Schema.String }).make({
+      status: 500,
+      message: "m",
+    });
+
+    expect(accepted({ ...encode(clientError), reason: foreign }), `${tag} is not a reason of this ticket`).toBe(false);
+  }
+
+  const word = part("Un", "reachable");
+
+  expect(sources().length, "the package has source files").toBeGreaterThan(1);
+  expect(sources().filter((path) => read(join(root, path)).includes(word))).toEqual([]);
 });

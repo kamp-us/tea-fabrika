@@ -26,7 +26,7 @@ const TimeText = Schema.String.check(
  *
  * **Details**
  *
- * `commits` is the most commits one walk, or one merge-base answer, holds. `refs` is the most refs one `readRefs` answer holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `time` is the longest one call may take, as duration text above zero such as `"10 seconds"`. A call that would pass a limit fails and never answers a cut list.
+ * `commits` is the most commits one walk, or one merge-base answer, holds. `refs` is the most refs one `readRefs` answer holds. `bytes` is the most bytes one commit object holds, and the most stderr an error keeps. `files` is the most files one diff names, and a file that changes kind counts once. `diff` is the most bytes of file content one diff compares: each changed file's content before and after. `time` is the longest one call may take, as duration text above zero such as `"10 seconds"`. A call that would pass a limit fails and never answers a cut list.
  *
  * @category models
  */
@@ -34,6 +34,8 @@ export const Limits = Schema.Struct({
   commits: Count,
   refs: Count,
   bytes: Count,
+  files: Count,
+  diff: Count,
   time: TimeText,
 });
 
