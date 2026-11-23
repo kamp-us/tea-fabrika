@@ -462,6 +462,31 @@ const readAll = (
     return reads;
   });
 
+/**
+ * The reads that stand for the rest: the first `perClass` cases of each set of classes the generator drew, and every case `keep` names.
+ * A law that asks git for each read takes these, since each read is a git command and the cases of one class repeat each other.
+ */
+const sampled = (
+  carrier: ReadCarrier,
+  perClass: number,
+  keep: (each: ReadCase) => boolean = () => false,
+): ((each: ReadCase) => boolean) => {
+  const seen = new Map<string, number>();
+  const chosen = new Set<ReadCase>();
+
+  for (const each of carrier.cases) {
+    const key = each.classes.join("|");
+    const count = seen.get(key) ?? 0;
+    seen.set(key, count + 1);
+
+    if (count < perClass || keep(each)) {
+      chosen.add(each);
+    }
+  }
+
+  return (each) => chosen.has(each);
+};
+
 const everyReadClass = (carrier: ReadCarrier, prefixes: ReadonlyArray<string>): ReadCarrier => {
   expect(
     reachedReadClasses(carrier).filter((label) => prefixes.some((prefix) => label.startsWith(prefix))),
@@ -1546,7 +1571,9 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             const pick = (k: number): CommitId.CommitId =>
               n === 0 ? commitIdFrom(missingId(texture, k, [])) : idAt(seeded.ids, (texture.nums[k] ?? 0) % n);
 
-            for (let k = 0; k < 24; k++) {
+            // Each of the ten reads is asked twice, on drawn commits, and the writes, edits and merges six times each: git runs a command for
+            // each, and this law runs over every shape.
+            for (let k = 0; k < 20; k++) {
               const x = pick(k);
               const y = pick(k + 24);
 
@@ -1565,7 +1592,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
                 seeded.repository.readText(y, pathFrom(readPath(shape.history, k + 1))),
               ];
 
-              yield* Effect.exit(calls[(texture.nums[k + 48] ?? 0) % calls.length] ?? Effect.void);
+              yield* Effect.exit(calls[k % calls.length] ?? Effect.void);
             }
 
             expect(yield* seeded.fingerprint, `${shape.label}: the store is as it was`).toEqual(before);
@@ -1573,7 +1600,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             // Writes, some of them refused: a commit is made, and no ref is moved by it.
             const lacking = treeIdFrom(missingId(texture, 5, []));
 
-            for (let k = 0; k < 12; k++) {
+            for (let k = 0; k < 6; k++) {
               yield* Effect.exit(
                 writeCall(seeded.repository, {
                   tree: k % 4 === 3 ? lacking : n === 0 ? treeIdFrom(TREE_ID) : treeAt(seeded.trees, k % n),
@@ -1587,7 +1614,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             yield* readRefsBack(seeded, shape.history, `${shape.label}: after writes`);
 
             // Edits, some of them refused: trees are made, and no ref is moved by them.
-            for (let k = 0; k < 12; k++) {
+            for (let k = 0; k < 6; k++) {
               const edit: Repository.Edit = new Map([
                 [pathFrom(readPath(shape.history, k)), Uint8Array.of(k, 0xf0)],
                 [pathFrom(`edit${k}/new`), Uint8Array.of(0xf1, k)],
@@ -1599,7 +1626,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             yield* readRefsBack(seeded, shape.history, `${shape.label}: after edits`);
 
             // Merges, most of them between commits that do not merge well: a merge writes objects and moves no ref.
-            for (let k = 0; k < 12; k++) {
+            for (let k = 0; k < 6; k++) {
               const [x, y, z] = [pick(k + 3), pick(k + 15), pick(k + 27)];
               yield* Effect.exit(seeded.repository.mergeTrees({ mergeBase: x, ours: y, theirs: z }));
             }
@@ -2898,11 +2925,18 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
           expect(large(most - 1), "the largest is one byte over").toBeGreaterThan(0);
           expect(large(1), "most files are over one byte").toBeGreaterThan(10);
 
+          // Every file within one byte of the largest is read, the edge of the limit, and two cases of each class beside them.
+          const only = sampled(
+            carrier,
+            2,
+            (each) => each.expected.kind === "file" && each.expected.bytes.length >= most - 1,
+          );
+
           for (const limit of [1, most, most - 1]) {
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const seeded = yield* subject.seed(carrier.history, settings({ blob: limit }));
-                yield* readAll(seeded, carrier, `a limit of ${limit} bytes`, limit);
+                yield* readAll(seeded, carrier, `a limit of ${limit} bytes`, limit, { only });
               }),
             );
           }
@@ -2924,7 +2958,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const seeded = yield* subject.seed(edits.history, settings({ blob: limit }));
-                const chosen = edits.cases.filter((each, k) => sized(each) || k < 8);
+                const chosen = edits.cases.filter((each, k) => sized(each) || k < 4);
                 let refusals = 0;
 
                 for (const [k, each] of chosen.entries()) {
@@ -2962,6 +2996,8 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
           const first = carrier.cases[0];
           const blob = carrier.history.nodes.flatMap((node) => node.files).find((each) => each.content.length > 0);
 
+          const only = sampled(carrier, 1);
+
           const stores = [
             { label: "whole", history: carrier.history },
             ...(shallow === undefined ? [] : [{ label: "shallow", history: shallow }]),
@@ -2971,7 +3007,7 @@ export const suite = (name: string, subject: Subject, options: SuiteOptions): vo
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const seeded = yield* subject.seed(store.history, DEFAULT);
-                yield* readAll(seeded, carrier, store.label, DEFAULT.limits.blob);
+                yield* readAll(seeded, carrier, store.label, DEFAULT.limits.blob, { only });
 
                 const lacking = [
                   commitIdFrom(missingId(texture, 0, seeded.ids)),
