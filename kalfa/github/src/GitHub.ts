@@ -125,12 +125,11 @@ export const route = <
   Success extends Schema.Constraint = never,
   Query extends Schema.Struct.Fields = Record<never, never>,
   Payload extends Schema.Constraint = never,
-  const Body extends "json" | "text" = "json",
-  const Auth extends "login" | "none" = "login",
+  const Settings extends Check.Settings = Record<never, never>,
 >(
   route: R,
-  ...options: Check.Options<R, Success, Query, Payload, Body, Auth>
-): Route<R, Success, Schema.Struct<Query>, Payload, Body, Auth> => {
+  ...options: Check.Options<R, Success, Query, Payload, Settings>
+): Route<R, Success, Schema.Struct<Query>, Payload, Check.BodyKind<Settings>, Check.AuthKind<Settings>> => {
   const [given] = options;
   const success: Success | undefined = given?.success;
   const query: Query | undefined = given?.query;
@@ -145,10 +144,12 @@ export const route = <
     ...(query === undefined ? {} : { query: Schema.Struct(query) }),
     ...(payload === undefined ? {} : { payload }),
     ...(bodiless === undefined ? {} : { bodiless }),
-    // SAFETY: a route that left `body` out has the default its type parameter has, "json".
-    body: given?.body ?? ("json" as Body),
-    // SAFETY: a route that left `auth` out has the default its type parameter has, "login".
-    auth: given?.auth ?? ("login" as Auth),
+    // SAFETY: `body` and `auth` are typed from the options object alone (`BodyKind` and `AuthKind`), and a route that says
+    // neither has the defaults they give, "json" and "login"; no type argument can say another, since the options must be
+    // the settings' own object.
+    body: (given?.body ?? "json") as Check.BodyKind<Settings>,
+    // SAFETY: as for `body` above.
+    auth: (given?.auth ?? "login") as Check.AuthKind<Settings>,
     ...(accept === undefined ? {} : { accept }),
   });
 };
@@ -179,7 +180,7 @@ export const Auth = Data.taggedEnum<Auth>();
  *
  * @category models
  */
-export type QueryValue = string | number | boolean | ReadonlyArray<string | number | boolean>;
+export type QueryValue = wire.QueryValue;
 
 /**
  * What `call` hands the `GitHub` service: the route as declared, with the path filled and the query and body encoded.

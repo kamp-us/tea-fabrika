@@ -1,5 +1,7 @@
-// The parts of a call that need no Schema: filling the path, leaving out what a caller left out, and reading GitHub's
-// error body. Each is pure and gives a `Result` or an `Option`, and `call` lifts it into an Effect.
+// The parts of a call that need no Schema: filling the path, leaving out what a caller left out, checking what a URL can
+// carry, reading GitHub's error body, and saying whether a failed write may have applied. Each is pure: the first three
+// give a `Result` that `call` lifts into an Effect, `errorBody` gives its fields (each `undefined` when absent), and
+// `mayHaveApplied` gives a boolean.
 import { Option, Predicate, Result, Schema } from "effect";
 
 const NAME = /\{([^{}]+)\}/g;
@@ -143,10 +145,11 @@ export const prune = (tree: Tree): Result.Result<Schema.Json, string> =>
 export const pruneObject = (record: { readonly [key: string]: Tree }): Result.Result<Schema.JsonObject, string> =>
   pruneRecord(record, "the value");
 
-/** The query as a URL carries it: each value a text, a number, a boolean, or a list of them. */
-export type QueryRecord = Readonly<
-  Record<string, string | number | boolean | ReadonlyArray<string | number | boolean>>
->;
+/** What a URL's query can carry for one key: a text, a number, a boolean, or a list of them. */
+export type QueryValue = string | number | boolean | ReadonlyArray<string | number | boolean>;
+
+/** The query as a URL carries it. */
+export type QueryRecord = Readonly<Record<string, QueryValue>>;
 
 const isCarried = (value: Schema.Json): value is string | number | boolean =>
   Predicate.isString(value) || Predicate.isNumber(value) || Predicate.isBoolean(value);

@@ -217,10 +217,6 @@ type SuccessPart<R extends RouteName, S extends Schema.Constraint, B extends "js
       ? { readonly success?: never }
       : { readonly success?: S & FitsAnswer<R, S> };
 
-// A route GitHub answers only in text must say `body: "text"`; any other may say how its answer is read.
-type BodyPart<R extends RouteName, B extends "json" | "text"> =
-  IsTextOnly<R> extends true ? { readonly body: B & "text" } : { readonly body?: B };
-
 // A route with a body-less 2xx beside a 2xx with a body must say which statuses have none: the types know it, and a run
 // does not, so the declaration carries it as a value that the compiler holds to the types.
 type BodilessPart<R extends RouteName> = [Bodiless<R>] extends [never]
@@ -229,42 +225,63 @@ type BodilessPart<R extends RouteName> = [Bodiless<R>] extends [never]
     ? { readonly bodiless?: never }
     : { readonly bodiless: readonly [Bodiless<R>, ...Array<Bodiless<R>>] };
 
+/**
+ * The options of `route` that change its type: how the answer is read, and who the request is sent as. A route's `body` and
+ * `auth` are read from the options object itself, so what the type says is what the options say, and no type argument can
+ * claim another.
+ */
+export interface Settings {
+  readonly body?: "json" | "text";
+  readonly auth?: "none";
+}
+
+/** How a route's answer is read: the `body` its options say, and `"json"` when they say none. */
+export type BodyKind<O extends Settings> = O extends { readonly body: infer B extends "json" | "text" } ? B : "json";
+
+/** Who a route's request is sent as: the `auth` its options say, and `"login"` when they say none. */
+export type AuthKind<O extends Settings> = O extends { readonly auth: infer A extends "none" } ? A : "login";
+
 /** What a caller may pass to `route` after the route text, each part by the description's rules. */
 type Declaration<
   R extends RouteName,
   S extends Schema.Constraint,
   Q extends Fields,
   P extends Schema.Constraint,
-  B extends "json" | "text",
-  A extends "login" | "none",
+  O extends Settings,
 > = QueryPart<R, Q> &
   PayloadPart<R, P> &
-  SuccessPart<R, S, B> &
-  BodilessPart<R> &
-  BodyPart<R, B> & { readonly auth?: A extends "none" ? A : never; readonly accept?: string };
+  SuccessPart<R, S, BodyKind<O>> &
+  BodilessPart<R> & { readonly accept?: string };
 
-type Needs<R extends RouteName> =
+type Needs<R extends RouteName, O extends Settings> =
   IsTextOnly<R> extends true
     ? true
-    : HasRequired<QueryParams<R>> extends true
-      ? true
-      : BodyRequired<R> extends true
+    : [keyof O] extends [never]
+      ? HasRequired<QueryParams<R>> extends true
         ? true
-        : [Bodiless<R>] extends [never]
-          ? false
-          : [Exclude<SuccessStatus<R>, Bodiless<R>>] extends [never]
+        : BodyRequired<R> extends true
+          ? true
+          : [Bodiless<R>] extends [never]
             ? false
-            : true;
+            : [Exclude<SuccessStatus<R>, Bodiless<R>>] extends [never]
+              ? false
+              : true
+      : true;
 
-/** The arguments of `route` after the route text: present exactly when the description requires a part. */
+// A route GitHub answers only in text must say `body: "text"`; any other may say how its answer is read.
+type Given<R extends RouteName, O extends Settings> = IsTextOnly<R> extends true ? O & { readonly body: "text" } : O;
+
+/** The arguments of `route` after the route text: present exactly when the description requires a part, or a setting is said. */
 export type Options<
   R extends RouteName,
   S extends Schema.Constraint,
   Q extends Fields,
   P extends Schema.Constraint,
-  B extends "json" | "text",
-  A extends "login" | "none",
-> = Needs<R> extends true ? [options: Declaration<R, S, Q, P, B, A>] : [options?: Declaration<R, S, Q, P, B, A>];
+  O extends Settings,
+> =
+  Needs<R, O> extends true
+    ? [options: Given<R, O> & Declaration<R, S, Q, P, O>]
+    : [options?: Given<R, O> & Declaration<R, S, Q, P, O>];
 
 type Absent<K extends string> = { readonly [P in K]?: never };
 
