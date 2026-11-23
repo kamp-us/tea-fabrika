@@ -5,10 +5,13 @@
  *
  * A commit's id and a tree's id are computed as git computes them, so the same commit with the same files has the same id here and in a real repository. The store holds only what git's format can hold: a message is a `string`, so a commit that is not UTF-8 cannot be put in memory, and a path is a `Path`, so one git refuses cannot be put in a tree.
  */
-import { Context, Effect, Layer, Ref as Cell, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Ref as Cell, Result, Schema } from "effect";
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import { PatchId } from "./Diff.ts";
+import { joined } from "./internal/bytes.ts";
+import * as Lines from "./internal/lines.ts";
 import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
@@ -368,6 +371,136 @@ const isAncestor = (
 ): Result.Result<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort> =>
   Result.map(history(store, [ancestor, descendant]), () => reach(store, [descendant]).has(ancestor));
 
+// A file changed between two trees: where it is, and what it was and is, with the bytes of each side.
+interface Changed {
+  readonly path: Tree.Path;
+  readonly before?: Held;
+  readonly after?: Held;
+}
+
+interface Held {
+  readonly entry: Tree.Entry;
+  readonly content: Uint8Array;
+}
+
+const NO_BYTES = new Uint8Array();
+
+const filesAt = (store: Store, id: CommitId): ReadonlyMap<Tree.Path, Tree.Entry> =>
+  store.trees.get(store.commits.get(id)?.tree ?? EMPTY_TREE) ?? new Map();
+
+const held = (store: Store, entry: Tree.Entry | undefined): Held | undefined =>
+  entry === undefined ? undefined : { entry, content: store.blobs.get(entry.blob) ?? NO_BYTES };
+
+// The files that differ between two commits' trees, in path byte order: new, gone, or with another mode or other bytes.
+const changed = (store: Store, from: CommitId, to: CommitId): ReadonlyArray<Changed> => {
+  const before = filesAt(store, from);
+  const after = filesAt(store, to);
+
+  return [...new Set([...before.keys(), ...after.keys()])]
+    .sort(byBytes)
+    .filter((path) => {
+      const was = before.get(path);
+      const now = after.get(path);
+
+      return was === undefined || now === undefined || was.mode !== now.mode || was.blob !== now.blob;
+    })
+    .map((path) => {
+      const was = held(store, before.get(path));
+      const now = held(store, after.get(path));
+
+      return { path, ...(was === undefined ? {} : { before: was }), ...(now === undefined ? {} : { after: now }) };
+    });
+};
+
+const patchLimits = (
+  files: ReadonlyArray<Changed>,
+  limits: Settings.Settings["limits"],
+): Result.Result<void, Repository.TooMany | Repository.DiffTooLarge> => {
+  if (files.length > limits.files) {
+    return Result.fail(new Repository.TooMany({ limit: "files", most: limits.files }));
+  }
+
+  const content = files.reduce(
+    (total, file) => total + (file.before?.content.length ?? 0) + (file.after?.content.length ?? 0),
+    0,
+  );
+
+  return content > limits.diff
+    ? Result.fail(new Repository.DiffTooLarge({ most: limits.diff }))
+    : Result.succeed(undefined);
+};
+
+const encoder = new TextEncoder();
+
+// A field of what a patch id hashes: a letter for what it is, its length and its bytes, so no two changes write the same bytes.
+const field = (kind: string, octets: Uint8Array): Uint8Array => {
+  const head = encoder.encode(`${kind}${octets.length}:`);
+  const whole = new Uint8Array(head.length + octets.length);
+  whole.set(head);
+  whole.set(octets, head.length);
+
+  return whole;
+};
+
+const word = (kind: string, text: string): Uint8Array => field(kind, encoder.encode(text));
+
+const isLink = (side: Held): boolean => side.entry.mode === "120000";
+
+type Kind = "new" | "deleted" | "kind" | "modified";
+
+const changeKind = ({ before, after }: Changed): Kind => {
+  if (before === undefined) {
+    return "new";
+  }
+
+  if (after === undefined) {
+    return "deleted";
+  }
+
+  return isLink(before) === isLink(after) ? "modified" : "kind";
+};
+
+// A mode goes into the id where it is new, gone or changed, and not where it stays the same: a file that is executable on two
+// bases and edited the same way has one id.
+const modes = (file: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
+  const sides = [file.before, file.after].flatMap((side) => (side === undefined ? [] : [side.entry.mode]));
+
+  return kind === "modified" && sides[0] === sides[1] ? [] : sides.map((mode) => word("m", mode));
+};
+
+// What a changed file's bytes add to the id. A binary file counts by its blobs on both sides, as git names it. A text file
+// counts by its removed and added lines, each with its own end, and where a line sits and the lines around it count for nothing.
+// A file that changed kind has every old line removed and every new line added, as git prints it. A file with the same bytes on
+// both sides, and a new mode, adds nothing.
+const edits = ({ before, after }: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
+  const old = before?.content ?? NO_BYTES;
+  const next = after?.content ?? NO_BYTES;
+
+  if (before !== undefined && before.entry.blob === after?.entry.blob) {
+    return [];
+  }
+
+  if (Lines.isBinary(old) || Lines.isBinary(next)) {
+    return [word("b", before?.entry.blob ?? "-"), word("b", after?.entry.blob ?? "-")];
+  }
+
+  if (kind === "kind") {
+    return [...Lines.split(old).map((line) => field("-", line)), ...Lines.split(next).map((line) => field("+", line))];
+  }
+
+  return Lines.blocks(old, next).flatMap((block) => [
+    ...block.removed.map((line) => field("-", line)),
+    ...block.added.map((line) => field("+", line)),
+  ]);
+};
+
+// One changed file as bytes to hash: what kind of change, its path, its modes, its edits.
+const section = (file: Changed): ReadonlyArray<Uint8Array> => {
+  const kind = changeKind(file);
+
+  return [word("k", kind), word("p", file.path), ...modes(file, kind), ...edits(file, kind)];
+};
+
 /**
  * Layer that provides `Repository` over a store held in memory, and `MemoryStore` to read it and move it.
  *
@@ -379,11 +512,29 @@ const isAncestor = (
  */
 export const layer = (store: Store, settings: Settings.Settings): Layer.Layer<Repository.Repository | MemoryStore> =>
   Layer.effectContext(
-    Effect.map(Cell.make(store), (cell) => {
+    Effect.gen(function* () {
+      const cell = yield* Cell.make(store);
+      const digest = yield* Digest.Digest.pipe(Effect.provide(Digest.layerWebCrypto));
       const { limits } = settings;
 
       const read = <A, E>(call: (held: Store) => Result.Result<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.get(cell), (held) => Effect.fromResult(call(held)));
+
+      const patchId = Effect.fnUntraced(function* (from: CommitId, to: CommitId) {
+        const store = yield* Cell.get(cell);
+        yield* Effect.fromResult(found(store, from));
+        yield* Effect.fromResult(found(store, to));
+        const files = changed(store, from, to);
+        yield* Effect.fromResult(patchLimits(files, limits));
+
+        if (files.length === 0) {
+          return Option.none();
+        }
+
+        const hex = yield* digest.digestHex(Digest.sha1, joined(files.flatMap(section)));
+
+        return Option.some(Schema.decodeSync(PatchId)(hex));
+      });
 
       return Context.make(
         Repository.Repository,
@@ -394,6 +545,7 @@ export const layer = (store: Store, settings: Settings.Settings): Layer.Layer<Re
             walk: (range) => read((held) => walk(held, limits, range)),
             mergeBases: (a, b) => read((held) => mergeBases(held, limits, a, b)),
             isAncestor: (ancestor, descendant) => read((held) => isAncestor(held, ancestor, descendant)),
+            patchId,
           },
           settings,
         ),

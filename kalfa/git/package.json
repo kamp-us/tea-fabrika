@@ -12,6 +12,7 @@
     "./Ref": "./src/Ref.ts",
     "./Commit": "./src/Commit.ts",
     "./Tree": "./src/Tree.ts",
+    "./Diff": "./src/Diff.ts",
     "./Settings": "./src/Settings.ts",
     "./Repository": "./src/Repository.ts",
     "./memory": "./src/MemoryRepository.ts",

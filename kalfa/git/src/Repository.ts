@@ -5,10 +5,11 @@
  *
  * This file holds the contract and the one wrap every adapter gets, and nothing that runs git. A call never reads HEAD, never writes and never changes the repository. Each adapter is its own entry point, `memory` and `process`, and `test` holds the laws they all pass.
  */
-import { Context, Effect, Schema } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import type * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import type { PatchId } from "./Diff.ts";
 import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
 
@@ -67,14 +68,28 @@ export class HistoryTooShort extends Schema.TaggedError<HistoryTooShort, { reado
 ) {}
 
 /**
- * An answer would hold more than a limit allows: more commits (a walk or a merge-base answer) or more refs than the setting.
+ * An answer would hold more than a limit allows: more commits (a walk or a merge-base answer), more refs or more changed files than the setting.
  *
  * @category errors
  */
 export class TooMany extends Schema.TaggedError<TooMany, { readonly brand: unique symbol }>()("TooMany", {
-  limit: Schema.Literals(["commits", "refs"]),
+  limit: Schema.Literals(["commits", "refs", "files"]),
   most: Schema.Int,
 }) {}
+
+/**
+ * The files of a diff hold more content than `limits.diff` allows, counting each changed file's bytes before and after.
+ *
+ * **Details**
+ *
+ * It is checked before any content is read, so a diff is never cut.
+ *
+ * @category errors
+ */
+export class DiffTooLarge extends Schema.TaggedError<DiffTooLarge, { readonly brand: unique symbol }>()(
+  "DiffTooLarge",
+  { most: Schema.Int },
+) {}
 
 /**
  * A commit object is larger than `limits.bytes`.
@@ -165,6 +180,37 @@ export class NoRepository extends Schema.TaggedError<NoRepository, { readonly br
 type Fails = GitUnavailable | TimedOut;
 
 /**
+ * The calls an adapter writes: the shape of `Repository`, before `make` wraps each.
+ *
+ * @category models
+ */
+export interface Raw {
+  readonly readCommit: (
+    id: CommitId,
+  ) => Effect.Effect<Commit.Commit, NoSuchCommit | TooLarge | UnreadableCommit | Fails>;
+  readonly readRefs: (under: Ref.RefName) => Effect.Effect<ReadonlyArray<Ref.Ref>, TooMany | RefNotCommit | Fails>;
+  readonly walk: (range: {
+    readonly include: NonEmptyReadonlyArray<CommitId>;
+    readonly exclude: ReadonlyArray<CommitId>;
+  }) => Effect.Effect<
+    ReadonlyArray<Commit.Commit>,
+    NoSuchCommit | TooMany | TooLarge | UnreadableCommit | HistoryTooShort | Fails
+  >;
+  readonly mergeBases: (
+    a: CommitId,
+    b: CommitId,
+  ) => Effect.Effect<ReadonlyArray<CommitId>, NoSuchCommit | TooMany | HistoryTooShort | Fails>;
+  readonly isAncestor: (
+    ancestor: CommitId,
+    descendant: CommitId,
+  ) => Effect.Effect<boolean, NoSuchCommit | HistoryTooShort | Fails>;
+  readonly patchId: (
+    from: CommitId,
+    to: CommitId,
+  ) => Effect.Effect<Option.Option<PatchId>, NoSuchCommit | TooMany | DiffTooLarge | Fails>;
+}
+
+/**
  * Service that reads commits and refs from one repository.
  *
  * **Details**
@@ -174,38 +220,16 @@ type Fails = GitUnavailable | TimedOut;
  * - `walk` answers every commit an `include` commit reaches, itself included, that no `exclude` commit reaches, oldest first: each commit comes after its parents.
  * - `mergeBases` answers the best common ancestors of two commits, sorted by id. `[]` means the two share no history.
  * - `isAncestor` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
+ * - `patchId` answers the name of the changes from the files of `from` to the files of `to`, or none when the two hold the same files. It reads no history, so it answers in a shallow repository. It fails with `NoSuchCommit` for an id the repository lacks, then with `TooMany` (`files`) and `DiffTooLarge`, each before any content is read.
  *
  * In a shallow repository `walk`, `mergeBases` and `isAncestor` fail with `HistoryTooShort`.
  *
  * @category services
  */
-export class Repository extends Context.Service<
-  Repository,
-  {
-    readonly readCommit: (
-      id: CommitId,
-    ) => Effect.Effect<Commit.Commit, NoSuchCommit | TooLarge | UnreadableCommit | Fails>;
-    readonly readRefs: (under: Ref.RefName) => Effect.Effect<ReadonlyArray<Ref.Ref>, TooMany | RefNotCommit | Fails>;
-    readonly walk: (range: {
-      readonly include: NonEmptyReadonlyArray<CommitId>;
-      readonly exclude: ReadonlyArray<CommitId>;
-    }) => Effect.Effect<
-      ReadonlyArray<Commit.Commit>,
-      NoSuchCommit | TooMany | TooLarge | UnreadableCommit | HistoryTooShort | Fails
-    >;
-    readonly mergeBases: (
-      a: CommitId,
-      b: CommitId,
-    ) => Effect.Effect<ReadonlyArray<CommitId>, NoSuchCommit | TooMany | HistoryTooShort | Fails>;
-    readonly isAncestor: (
-      ancestor: CommitId,
-      descendant: CommitId,
-    ) => Effect.Effect<boolean, NoSuchCommit | HistoryTooShort | Fails>;
-  }
->()("@kalfa/git/Repository") {}
+export class Repository extends Context.Service<Repository, Raw>()("@kalfa/git/Repository") {}
 
 /**
- * Wraps an adapter's five calls with a span each and the time limit.
+ * Wraps an adapter's calls with a span each and the time limit.
  *
  * **When to use**
  *
@@ -217,7 +241,7 @@ export class Repository extends Context.Service<
  *
  * @category constructors
  */
-export const make = (raw: Repository["Service"], settings: Settings.Settings): Repository["Service"] => {
+export const make = (raw: Raw, settings: Settings.Settings): Repository["Service"] => {
   const after = Settings.timeLimit(settings);
 
   const limited = <A, E, R>(call: Effect.Effect<A, E, R>): Effect.Effect<A, E | TimedOut, R> =>
@@ -259,6 +283,16 @@ export const make = (raw: Repository["Service"], settings: Settings.Settings): R
       yield* Effect.annotateCurrentSpan({ "kalfa.git.ancestor": answer });
 
       return answer;
+    }),
+    patchId: Effect.fn("git.patchId")(function* (from: CommitId, to: CommitId) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.base.revision": from, "vcs.ref.head.revision": to });
+      const patch = yield* limited(raw.patchId(from, to));
+
+      if (Option.isSome(patch)) {
+        yield* Effect.annotateCurrentSpan({ "kalfa.git.patch": patch.value });
+      }
+
+      return patch;
     }),
   };
 };

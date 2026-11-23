@@ -5,9 +5,10 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a read. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`.
  */
-import { Config, Duration, Effect, Layer, Stream } from "effect";
+import { Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { CommitId } from "./CommitId.ts";
+import { joined } from "./internal/bytes.ts";
 import * as Parse from "./internal/parse.ts";
 import type * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
@@ -54,7 +55,14 @@ interface Output {
   readonly stderr: string;
 }
 
-type Run = (args: ReadonlyArray<string>, input?: string) => Effect.Effect<Output, Repository.GitUnavailable>;
+type Run = (args: ReadonlyArray<string>, input?: Uint8Array) => Effect.Effect<Output, Repository.GitUnavailable>;
+
+// A command whose stdout is read only until it holds `entries` entries of `diff-tree -z`, and then it is let go: the answer is
+// then the files limit and no more of the list is read. A list that holds no more entries than that is read whole.
+type Listed = (
+  args: ReadonlyArray<string>,
+  entries: number,
+) => Effect.Effect<Output, Repository.GitUnavailable | Repository.TooMany>;
 
 // The first `most` bytes of what a stream says, the rest read and left out so a full pipe never stalls git.
 const firstBytes = (most: number) => (kept: Uint8Array, chunk: Uint8Array) => {
@@ -70,7 +78,28 @@ const firstBytes = (most: number) => (kept: Uint8Array, chunk: Uint8Array) => {
   return together;
 };
 
-// One command, in a scope that ends with it: the child never outlives the call, and a time limit that interrupts the call ends it.
+// A child in the caller's scope: it never outlives the call, and a time limit that interrupts the call ends it.
+const child = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  path: string,
+  env: Record<string, string>,
+  args: ReadonlyArray<string>,
+  input: Uint8Array | undefined,
+) =>
+  spawner
+    .spawn(
+      ChildProcess.make("git", [...start(path), ...args], {
+        extendEnv: false,
+        env,
+        forceKillAfter: KILL_AFTER,
+        stdin: input === undefined ? "ignore" : Stream.make(input),
+      }),
+    )
+    .pipe(Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))));
+
+const unreadable = (cause: unknown): Repository.GitUnavailable => unavailable(new Repository.Unreadable({ cause }));
+
+// One command, in a scope that ends with it.
 const runner = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   path: string,
@@ -80,16 +109,7 @@ const runner = (
   Effect.fnUntraced(function* (args, input) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* spawner
-          .spawn(
-            ChildProcess.make("git", [...start(path), ...args], {
-              extendEnv: false,
-              env,
-              forceKillAfter: KILL_AFTER,
-              stdin: input === undefined ? "ignore" : Stream.make(encoder.encode(input)),
-            }),
-          )
-          .pipe(Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))));
+        const handle = yield* child(spawner, path, env, args, input);
 
         const [stdout, stderr, code] = yield* Effect.all(
           [
@@ -98,9 +118,69 @@ const runner = (
             handle.exitCode,
           ],
           { concurrency: 3 },
-        ).pipe(Effect.mapError((cause) => unavailable(new Repository.Unreadable({ cause }))));
+        ).pipe(Effect.mapError(unreadable));
 
         return { code, stdout, stderr: new TextDecoder().decode(stderr) };
+      }),
+    );
+  });
+
+// What `diff-tree -z` has read so far: its chunks, and how many NUL bytes they hold. An entry ends with its second NUL.
+interface Read {
+  readonly chunks: ReadonlyArray<Uint8Array>;
+  readonly nuls: number;
+}
+
+const nulsIn = (chunk: Uint8Array): number => {
+  let count = 0;
+
+  for (let at = chunk.indexOf(0); at !== -1; at = chunk.indexOf(0, at + 1)) {
+    count += 1;
+  }
+
+  return count;
+};
+
+// Like `runner`, for a list whose length the caller limits: stdout is read until it holds one entry more than `entries`, then
+// the child is let go with the call's scope, with no exit code asked of it. stderr is read beside, so a full pipe never stalls git.
+const lister = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  path: string,
+  env: Record<string, string>,
+  settings: Settings.Settings,
+): Listed =>
+  Effect.fnUntraced(function* (args, entries) {
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* child(spawner, path, env, args, undefined);
+
+        const errors = yield* Effect.forkScoped(
+          Stream.runFold(handle.stderr, () => new Uint8Array(), firstBytes(settings.limits.bytes)),
+        );
+
+        const nothing: Read = { chunks: [], nuls: 0 };
+
+        const read = yield* handle.stdout.pipe(
+          Stream.scan(
+            () => nothing,
+            (so, chunk: Uint8Array) => ({ chunks: [...so.chunks, chunk], nuls: so.nuls + nulsIn(chunk) }),
+          ),
+          Stream.takeUntil((so) => so.nuls >= 2 * (entries + 1)),
+          Stream.runLast,
+          Effect.mapError(unreadable),
+        );
+
+        const seen = Option.getOrElse(read, () => nothing);
+
+        if (seen.nuls >= 2 * (entries + 1)) {
+          return yield* new Repository.TooMany({ limit: "files", most: entries });
+        }
+
+        const [stderr, code] = yield* Effect.all([Fiber.join(errors), handle.exitCode], { concurrency: 2 }).pipe(
+          Effect.mapError(unreadable),
+        );
+
+        return { code, stdout: joined(seen.chunks), stderr: new TextDecoder().decode(stderr) };
       }),
     );
   });
@@ -114,7 +194,7 @@ const succeeded = (output: Output): Effect.Effect<Output, Repository.GitUnavaila
 const stdoutText = (output: Output): Effect.Effect<string, Repository.GitUnavailable> =>
   Effect.fromResult(Parse.lossless(output.stdout));
 
-const lines = (ids: ReadonlyArray<CommitId>): string => ids.map((id) => `${id}\n`).join("");
+const lines = (ids: ReadonlyArray<string>): Uint8Array => encoder.encode(ids.map((id) => `${id}\n`).join(""));
 
 // Every id is a commit the repository holds, asked before any call that names commits, so an exit code of 128 later
 // is never a missing commit. A tree, a blob or a tag with that id is not a commit either.
@@ -131,6 +211,20 @@ const known = Effect.fnUntraced(function* (run: Run, ids: ReadonlyArray<CommitId
   return checked;
 });
 
+// The size of each blob, asked of git before any of them is read. A blob that git cannot find is no answer.
+const blobSizes = Effect.fnUntraced(function* (run: Run, ids: ReadonlyArray<string>) {
+  const output = yield* Effect.flatMap(run(["cat-file", "--batch-check"], lines(ids)), succeeded);
+  const checked = yield* Effect.fromResult(Parse.checks(yield* stdoutText(output)));
+
+  for (const id of ids) {
+    if (checked.get(id)?.type !== "blob") {
+      return yield* unreadable(new Error("git has no blob that a raw entry names"));
+    }
+  }
+
+  return checked;
+});
+
 // A call that reads history fails on a shallow repository, before any answer could be a guess.
 const whole = Effect.fnUntraced(function* (run: Run) {
   const output = yield* Effect.flatMap(run(["rev-parse", "--is-shallow-repository"]), succeeded);
@@ -141,11 +235,18 @@ const whole = Effect.fnUntraced(function* (run: Run) {
   }
 
   if (answer !== "false") {
-    return yield* unavailable(new Repository.Unreadable({ cause: new Error("git said neither true nor false") }));
+    return yield* unreadable(new Error("git said neither true nor false"));
   }
 });
 
-const calls = (run: Run, settings: Settings.Settings): Repository.Repository["Service"] => {
+// The bytes of content a changed file holds on each side, from the sizes `cat-file --batch-check` gave. A side the file lacks has none.
+const blobBytes = (change: Parse.Change, sizes: ReadonlyMap<string, Parse.Checked>): number =>
+  [change.before, change.after].reduce(
+    (total, side) => total + (side === undefined ? 0 : (sizes.get(side.id)?.size ?? 0)),
+    0,
+  );
+
+const calls = (run: Run, listed: Listed, settings: Settings.Settings): Repository.Raw => {
   const { limits } = settings;
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
@@ -238,6 +339,58 @@ const calls = (run: Run, settings: Settings.Settings): Repository.Repository["Se
 
       return true;
     }),
+    patchId: Effect.fnUntraced(function* (from, to) {
+      yield* known(run, [from, to]);
+
+      const raw = yield* Effect.flatMap(
+        listed(["diff-tree", "-r", "-z", "--no-renames", from, to], limits.files),
+        succeeded,
+      );
+
+      const changed = yield* Effect.fromResult(Parse.changes(raw.stdout));
+
+      if (changed.length === 0) {
+        return Option.none();
+      }
+
+      // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob.
+      const blobs = [
+        ...new Set(
+          changed
+            .filter((each) => !each.gitlink)
+            .flatMap((each) => [each.before, each.after].flatMap((side) => side?.id ?? [])),
+        ),
+      ];
+
+      const sizes = blobs.length === 0 ? new Map<string, Parse.Checked>() : yield* blobSizes(run, blobs);
+      const bytes = changed.reduce((total, each) => total + (each.gitlink ? 0 : blobBytes(each, sizes)), 0);
+
+      if (bytes > limits.diff) {
+        return yield* new Repository.DiffTooLarge({ most: limits.diff });
+      }
+
+      // Two commands one after the other and never a pipe: a pipe's exit code is the last command's only, so a `diff-tree`
+      // that failed would hand `patch-id` nothing, and nothing would read as no change.
+      const patch = yield* Effect.flatMap(
+        run([
+          "diff-tree",
+          "-r",
+          "-p",
+          "-U0",
+          "--no-renames",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--full-index",
+          from,
+          to,
+        ]),
+        succeeded,
+      );
+
+      const printed = yield* Effect.flatMap(run(["patch-id", "--verbatim"], patch.stdout), succeeded);
+
+      return Option.some(yield* Effect.fromResult(Parse.patchId(yield* stdoutText(printed))));
+    }),
   };
 };
 
@@ -270,7 +423,9 @@ export const layer = (options: {
         Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))),
       );
 
-      const run = runner(spawner, options.path, { PATH: path, ...PINNED }, options.settings);
+      const env = { PATH: path, ...PINNED };
+      const run = runner(spawner, options.path, env, options.settings);
+      const listed = lister(spawner, options.path, env, options.settings);
       const after = Settings.timeLimit(options.settings);
 
       const open = Effect.fn("git.open")(function* () {
@@ -294,6 +449,6 @@ export const layer = (options: {
         orElse: () => Effect.fail(new Repository.TimedOut({ after })),
       });
 
-      return Repository.make(calls(run, options.settings), options.settings);
+      return Repository.make(calls(run, listed, options.settings), options.settings);
     }),
   );
