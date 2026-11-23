@@ -713,6 +713,7 @@ describe("the real rule file on planted trees", () => {
       "next-vitest": 0, // the shared test package rule: the test primitives, a package of their own below everything else of ours
       "kalfa-git": 0, // T1932's approved plan: source control reads commits and refs and imports no package of ours, so it ranks lowest
       "kalfa-diagnostics": 0, // it imports no package of ours, and kalfa-config (1) ranks above it
+      "kalfa-github": 0, // T1944's approved plan: it imports no package of ours yet; ticket 1945 raises it above kalfa-config with that edge
     });
   });
 

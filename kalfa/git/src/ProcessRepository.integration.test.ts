@@ -1,5 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-// The git-binary adapter on the real git binary (I1 to I6). Real git runs in temp folders, so this file runs
+// The git-binary adapter on the real git binary (I1 to I9). Real git runs in temp folders, so this file runs
 // only in CI's full run and in a cloud box, never on the laptop (the host's test config refuses it by name).
 // A stand-in cannot do this job: these laws are the proof that `/process` answers what `/memory` answers and
 // that the parser reads what real git writes.
@@ -11,6 +11,7 @@ import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
 import {
   TREE_CARRIER_CLASSES,
+  editCarrier,
   shapes,
   textureArb,
   treeCarrier,
@@ -18,6 +19,7 @@ import {
   type History,
 } from "./History.test-support.ts";
 import * as MemoryRepository from "./MemoryRepository.ts";
+import * as MergeCommitTest from "./MergeCommit.test-support.ts";
 import { bareRepository, fastImport, git, openRepository, processSubject } from "./ProcessSeed.test-support.ts";
 import * as Ref from "./Ref.ts";
 import { expectFailure } from "./Repository.test-support.ts";
@@ -50,9 +52,11 @@ const bytes = (...parts: ReadonlyArray<string | Uint8Array>): Uint8Array => {
 
 const ADA = "Ada <ada@example.test> 1700000000 +0000";
 
-// I1 runs the shared laws S1 to S13 on real git, 10 runs each, over bare repositories the seeder fills with files.
+// I1 runs the shared laws S1 to S18 on real git, 10 runs each, over bare repositories the seeder fills with files.
 // Plant: each S law's plant, run once on `/process`.
 RepositoryTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
+
+MergeCommitTest.suite("process", processSubject, { runs: 10, timeout: 1_800_000 });
 
 const signature = (flat: FlatSignature): Commit.Signature =>
   new Commit.Signature({ name: flat.name, email: flat.email, at: { seconds: flat.seconds, offset: flat.offset } });
@@ -245,6 +249,131 @@ it.effect(
     }).pipe(Effect.provide(NodeServices.layer)),
 );
 
+const idAt = (ids: ReadonlyArray<CommitId.CommitId>, index: number): CommitId.CommitId => {
+  const id = ids[index];
+
+  if (id === undefined) {
+    throw new Error(`the seeder gave no id for commit ${index}`);
+  }
+
+  return id;
+};
+
+const patchIdOrUndefined = (repo: Repository.Repository["Service"], from: CommitId.CommitId, to: CommitId.CommitId) =>
+  Effect.map(repo.patchId(from, to), Option.getOrUndefined);
+
+// Plant (I8): run porcelain `git diff` in place of `diff-tree`, which reads `diff.noprefix` and `diff.orderFile`; drop
+// `--verbatim`, which `patchid.stable` would change; leave `--no-renames` out. The ids of every edit of the generator, asked of one
+// bare repository, are the same before and after its config gets the four lines.
+it.effect.prop(
+  "I8 scenario: a repository's own config steers nothing: diff.noprefix, diff.orderFile, diff.algorithm=patience and patchid.stable=true change no patch id",
+  { texture: textureArb },
+  ({ texture }) =>
+    Effect.gen(function* () {
+      const carrier = editCarrier(texture);
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const seeded = yield* processSubject.seed(carrier.history, settings);
+          const [dir] = seeded.hidden;
+
+          if (dir === undefined) {
+            return yield* Effect.die("the seeder gave no repository folder");
+          }
+
+          const ids = () =>
+            Effect.forEach(
+              carrier.cases,
+              (each) => patchIdOrUndefined(seeded.repository, idAt(seeded.ids, each.from), idAt(seeded.ids, each.to)),
+              { concurrency: 1 },
+            );
+
+          const without = yield* ids();
+          const fs = yield* FileSystem.FileSystem;
+          // A file that puts the paths ending in 0 first, which a porcelain diff would follow.
+          yield* fs.writeFileString(`${dir}/order`, "*0\n");
+
+          for (const [key, value] of [
+            ["diff.noprefix", "true"],
+            ["diff.orderFile", `${dir}/order`],
+            ["diff.algorithm", "patience"],
+            ["patchid.stable", "true"],
+          ] as const) {
+            yield* git(dir, ["config", key, value]);
+          }
+
+          expect(yield* ids(), "the same ids with the four config lines").toEqual(without);
+          expect(without.filter((id) => id !== undefined).length, "the edits have ids").toBeGreaterThan(20);
+        }),
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+  { arbitrary: { runs: 5, seed: 119120 } },
+);
+
+const GITLINK_A = "a".repeat(40);
+
+const GITLINK_B = "b".repeat(40);
+
+// Plant (I9): ask `cat-file` the size of a gitlink's id, so `patchId` fails on the submodule; leave the file side of a `T` entry
+// out of the sizes, so the file made a submodule is not counted.
+it.effect(
+  "I9 scenario: a commit with a submodule entry gets a patch id on real git, which follows the submodule's commit, even when the diff limit is one byte, and a file made a submodule counts the file's bytes",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bareRepository;
+
+      const commit = (mark: number, parent: number | undefined, change: string): Uint8Array =>
+        bytes(
+          `commit refs/heads/main\nmark :${mark}\n`,
+          `author ${ADA}\ncommitter ${ADA}\n`,
+          "data 2\nc",
+          String(mark),
+          "\n",
+          parent === undefined ? "" : `from :${parent}\n`,
+          change,
+          "\n",
+        );
+
+      const [c0, c1, c2, c3, c4] = yield* fastImport(
+        dir,
+        bytes(
+          commit(1, undefined, "M 100644 inline a\ndata 2\nx\n\n"),
+          commit(2, 1, `M 160000 ${GITLINK_A} sub\n`),
+          commit(3, 2, `M 160000 ${GITLINK_B} sub\n`),
+          commit(4, 2, ""),
+          // The file `a` becomes a submodule: one `T` entry, whose file side is 2 bytes.
+          commit(5, 1, `M 160000 ${GITLINK_B} a\n`),
+        ),
+      );
+
+      const repo = yield* openRepository(dir, RepositoryTest.settings({ files: 1, diff: 1 }));
+      const [id0, id1, id2, id3, id4] = [c0, c1, c2, c3, c4].map((id) => commitIdFrom(id ?? ""));
+
+      if (id0 === undefined || id1 === undefined || id2 === undefined || id3 === undefined || id4 === undefined) {
+        return yield* Effect.die("fast-import gave fewer commits");
+      }
+
+      const added = yield* patchIdOrUndefined(repo, id0, id1);
+      const moved = yield* patchIdOrUndefined(repo, id1, id2);
+      const addedOther = yield* patchIdOrUndefined(repo, id0, id2);
+
+      expect(added, "a submodule added has an id").toBeDefined();
+      expect(moved, "a submodule moved to another commit has an id").toBeDefined();
+      expect(added, "another commit in the submodule is another change").not.toBe(moved);
+      expect(addedOther, "the same submodule at another commit added is another change").not.toBe(added);
+      expect(yield* patchIdOrUndefined(repo, id1, id3), "a commit with the same files is no change").toBeUndefined();
+
+      // A file made a submodule: the file's bytes count against the one-byte limit, though the other side is a submodule.
+      const error = yield* Effect.flip(repo.patchId(id0, id4));
+      expectFailure(
+        error,
+        Repository.DiffTooLarge,
+        { most: 1 },
+        "a file made a submodule is over a diff limit of one byte",
+      );
+    }).pipe(Effect.provide(NodeServices.layer)),
+);
+
 // Plant (I6): drop `--no-deref` from `update-ref`, so git follows the symbolic ref and moves its target.
 it.effect(
   "I6 scenario: moveRef of a symbolic ref whose target is at `from` makes it a plain ref at `to` and leaves the target where it was",
@@ -277,4 +406,170 @@ it.effect(
         "the alias is a plain ref at `to`, the target is where it was",
       ).toEqual([`refs/heads/alias|${y}|`, `refs/heads/main|${x}|`, `refs/heads/other|${y}|`]);
     }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+/** One commit of a hand-made history: its first parent by index, and its files as path, text and mode. */
+interface Made {
+  readonly parent: number | undefined;
+  readonly files: ReadonlyArray<readonly [path: string, text: string, mode?: string]>;
+}
+
+/** A fast-import stream of the commits, each holding exactly its files, on a branch of its own. */
+const madeStream = (made: ReadonlyArray<Made>): Uint8Array =>
+  bytes(
+    ...made.flatMap((each, i): ReadonlyArray<string | Uint8Array> => [
+      each.parent === undefined ? "reset refs/seed/tmp\n" : "",
+      `commit refs/seed/tmp\nmark :${i + 1}\nauthor ${ADA}\ncommitter ${ADA}\ndata 2\nm\n\n`,
+      each.parent === undefined ? "" : `from :${each.parent + 1}\n`,
+      "deleteall\n",
+      ...each.files.flatMap(([path, text, mode]): ReadonlyArray<string> => [
+        `M ${mode ?? "100644"} inline ${path}\ndata ${new TextEncoder().encode(text).length}\n${text}\n`,
+      ]),
+      "\n",
+    ]),
+    "reset refs/seed/tmp\n\n",
+  );
+
+/** A real bare repository holding the commits (`ours` is the second, `theirs` the third), and the service on it. */
+const mergedRepository = (made: ReadonlyArray<Made>, config: ReadonlyArray<readonly [string, string]> = []) =>
+  Effect.gen(function* () {
+    const dir = yield* bareRepository;
+    const ids = (yield* fastImport(dir, madeStream(made))).map(commitIdFrom);
+
+    for (const [key, value] of config) {
+      yield* git(dir, ["config", key, value]);
+    }
+
+    const [mergeBase, ours, theirs] = ids;
+
+    if (mergeBase === undefined || ours === undefined || theirs === undefined) {
+      return yield* Effect.die("fast-import gave fewer than three commits");
+    }
+
+    return { dir, merge: { mergeBase, ours, theirs }, repo: yield* openRepository(dir, settings) };
+  });
+
+const LINES = Array.from({ length: 10 }, (_, i) => `line ${i + 1} of a file long enough for git to see it again\n`);
+
+// vector: git's own answers where `/memory`, which merges whole files, answers differently. Plant (I7): set
+// `merge.directoryRenames=true` in the repository's own config and drop the three `-c merge.*` pins, so the folder move
+// comes back as a clean tree and not a conflict; read the files by whole file, so the by-line case is a conflict; let a
+// mode change and a content change conflict. (git 2.40.1's `merge-tree` ignores `merge.renames` in a repository's config,
+// so that pin is held by P5 alone.)
+it.effect(
+  "I7 scenario: on real git a merge goes by line, takes a mode change and a content change together, follows a rename, reports a folder move as a conflict whatever the repository's own config says, and moves a file that stands where a folder is wanted",
+  () =>
+    Effect.gen(function* () {
+      // 1. Ours changes the first line and theirs the last: git merges the lines, `/memory` would conflict.
+      const byLine = yield* mergedRepository([
+        { parent: undefined, files: [["f", "a\nb\nc\n"]] },
+        { parent: 0, files: [["f", "A\nb\nc\n"]] },
+        { parent: 0, files: [["f", "a\nb\nC\n"]] },
+      ]);
+
+      const lines = yield* byLine.repo.mergeTrees(byLine.merge);
+      expect(yield* git(byLine.dir, ["cat-file", "-p", `${lines}:f`]), "by line: both changes are in the file").toBe(
+        "A\nb\nC\n",
+      );
+
+      // 2. Ours makes the file executable and theirs changes its content: git takes both, `/memory` would conflict.
+      const both = yield* mergedRepository([
+        { parent: undefined, files: [["f", "1\n"]] },
+        { parent: 0, files: [["f", "1\n", "100755"]] },
+        { parent: 0, files: [["f", "2\n"]] },
+      ]);
+
+      const taken = yield* both.repo.mergeTrees(both.merge);
+      expect(yield* git(both.dir, ["ls-tree", "--format=%(objectmode) %(path)", taken]), "mode").toBe("100755 f\n");
+      expect(yield* git(both.dir, ["cat-file", "-p", `${taken}:f`]), "content").toBe("2\n");
+
+      // 3. Ours renames the file and theirs changes it: git follows the rename, even when the repository's own config
+      // turns rename detection off. `/memory` sees a change against a delete.
+      const [first, ...rest] = LINES;
+
+      const renamed = yield* mergedRepository(
+        [
+          { parent: undefined, files: [["a", LINES.join("")]] },
+          { parent: 0, files: [["b", LINES.join("")]] },
+          { parent: 0, files: [["a", `${first?.toUpperCase() ?? ""}${rest.join("")}`]] },
+        ],
+        [["merge.renames", "false"]],
+      );
+
+      const followed = yield* renamed.repo.mergeTrees(renamed.merge);
+      expect(yield* git(renamed.dir, ["ls-tree", "--name-only", followed]), "the file is at its new name").toBe("b\n");
+      expect(yield* git(renamed.dir, ["cat-file", "-p", `${followed}:b`]), "with theirs' change").toBe(
+        `${first?.toUpperCase() ?? ""}${rest.join("")}`,
+      );
+
+      // 3b. Ours moves a folder and theirs adds a file to it: git reports the move as a conflict, naming the file at its new
+      // place, even when the repository's own config says to move the file along, since every command pins the answer.
+      const text = LINES.join("");
+
+      const moved = yield* mergedRepository(
+        [
+          {
+            parent: undefined,
+            files: [
+              ["d/x", text],
+              ["d/y", `${text}y\n`],
+            ],
+          },
+          {
+            parent: 0,
+            files: [
+              ["e/x", text],
+              ["e/y", `${text}y\n`],
+            ],
+          },
+          {
+            parent: 0,
+            files: [
+              ["d/x", text],
+              ["d/y", `${text}y\n`],
+              ["d/n", "n\n"],
+            ],
+          },
+        ],
+        [["merge.directoryRenames", "true"]],
+      );
+
+      expectFailure(
+        yield* failure(moved.repo.mergeTrees(moved.merge)),
+        Repository.Conflict,
+        { paths: ["e/n"] },
+        "a folder move",
+      );
+
+      // 4. Ours adds a file where theirs adds a folder: git moves the file to a name of its own and conflicts, naming that
+      // name; `/memory` conflicts on both paths and writes no tree.
+      const aside = yield* mergedRepository([
+        { parent: undefined, files: [] },
+        { parent: 0, files: [["a", "o\n"]] },
+        { parent: 0, files: [["a/b", "t\n"]] },
+      ]);
+
+      const error = yield* failure(aside.repo.mergeTrees(aside.merge));
+      expectFailure(error, Repository.Conflict, {}, "a file against a folder");
+
+      if (Schema.is(Repository.Conflict)(error)) {
+        expect(error.paths.length, "one path").toBe(1);
+        expect(error.paths[0]?.startsWith("a~"), "the file moved to a name of its own").toBe(true);
+      }
+
+      // 5. The same one folder deeper: a file at `a/b` against a file at `a/b/c`.
+      const deeper = yield* mergedRepository([
+        { parent: undefined, files: [] },
+        { parent: 0, files: [["a/b", "o\n"]] },
+        { parent: 0, files: [["a/b/c", "t\n"]] },
+      ]);
+
+      const deep = yield* failure(deeper.repo.mergeTrees(deeper.merge));
+      expectFailure(deep, Repository.Conflict, {}, "a file in a folder against a file below it");
+
+      if (Schema.is(Repository.Conflict)(deep)) {
+        expect(deep.paths.length, "one path").toBe(1);
+        expect(deep.paths[0]?.startsWith("a/b~"), "the file moved to a name of its own").toBe(true);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

@@ -7,7 +7,7 @@
 //
 // A generator's reach is part of its law: every list named `*_CLASSES` below is a class the laws check in
 // every run, each one applied to the run's drawn value, so a missing class fails a law loudly.
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Predicate, Schema } from "effect";
 
 // ---------------------------------------------------------------------------------------------------------
 // Pieces
@@ -512,6 +512,8 @@ export const limitsArb = Arbitrary.all({
   commits: intBetween(1, 1_000_000_000),
   refs: intBetween(1, 1_000_000_000),
   bytes: intBetween(1, 1_000_000_000),
+  files: intBetween(1, 1_000_000_000),
+  diff: intBetween(1, 1_000_000_000),
   time: durationTextArb,
 });
 
@@ -1062,10 +1064,14 @@ export const treeCarrier = (
 /** The same history with a canary in every message, name and email, so a span that leaks one is seen. */
 export const CANARY = "canary-7f3a9c";
 
-export const withCanary = (history: History): History => ({
+/** With `canaryFiles`, every commit's files are replaced by one whose path and line carry the canary (a merge's files stay, since its model reads them). */
+export const withCanary = (history: History, canaryFiles = false): History => ({
   ...history,
   nodes: history.nodes.map((node, i) => ({
     ...node,
+    // A path and a line of every commit carry the canary, so a call that puts either in a span is seen. Every commit holds
+    // other files, so two different commits always differ in a changed file.
+    files: canaryFiles ? [textFile(`${CANARY}-path-${i}`, `${CANARY}-line-${i}\n`)] : node.files,
     message: `${CANARY}-message-${i}`,
     author: { ...node.author, name: `${CANARY}-author-${i}`, email: `${CANARY}-author-${i}@example.test` },
     committer: { ...node.committer, name: `${CANARY}-committer-${i}`, email: `${CANARY}-committer-${i}@example.test` },
@@ -1287,6 +1293,616 @@ export const drawPairs = (shape: Shape, texture: Texture, k: number): ReadonlyAr
 };
 
 // ---------------------------------------------------------------------------------------------------------
+// Edits: the files of two commits, and the change between them as the model names it (ticket 1933)
+// ---------------------------------------------------------------------------------------------------------
+
+const NO_BYTES = new Uint8Array();
+
+/** One character for each byte, so a text of bytes compares and prints exactly. */
+const latin1 = (octets: Uint8Array): string => Array.from(octets, (octet) => String.fromCharCode(octet)).join("");
+
+const joined = (...parts: ReadonlyArray<string | ReadonlyArray<number>>): Uint8Array =>
+  Uint8Array.from(parts.flatMap((part) => (Predicate.isString(part) ? [...utf8(part)] : [...part])));
+
+/** git's own rule for a file it does not split into lines: a NUL byte among the first 8000. */
+const hasNul = (octets: Uint8Array): boolean => octets.subarray(0, 8000).includes(0);
+
+/** The lines of a file, each with its own end. A last line with no newline has none. */
+const splitLines = (octets: Uint8Array): ReadonlyArray<string> => {
+  const text = latin1(octets);
+  const found: Array<string> = [];
+  let start = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\n") {
+      found.push(text.slice(start, i + 1));
+      start = i + 1;
+    }
+  }
+
+  return start < text.length ? [...found, text.slice(start)] : found;
+};
+
+/**
+ * The lines removed and added from one smallest diff, each block with its removed lines first. A file the generator draws
+ * has one smallest diff, so any smallest diff is the one git prints.
+ */
+const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const n = before.length;
+  const m = after.length;
+  // `longest.get(i, j)` is the length of the longest common run of `before` from i and `after` from j.
+  const table = new Map<number, number>();
+  const longest = (i: number, j: number): number => (i >= n || j >= m ? 0 : (table.get(i * (m + 1) + j) ?? 0));
+
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      table.set(
+        i * (m + 1) + j,
+        before[i] === after[j] ? longest(i + 1, j + 1) + 1 : Math.max(longest(i + 1, j), longest(i, j + 1)),
+      );
+    }
+  }
+
+  const changes: Array<string> = [];
+  let i = 0;
+  let j = 0;
+
+  while (i < n || j < m) {
+    if (i < n && j < m && before[i] === after[j]) {
+      i += 1;
+      j += 1;
+    } else if (j >= m || (i < n && longest(i + 1, j) >= longest(i, j + 1))) {
+      changes.push(`-${before[i]}`);
+      i += 1;
+    } else {
+      changes.push(`+${after[j]}`);
+      j += 1;
+    }
+  }
+
+  return changes;
+};
+
+const isLink = (mode: FileSpec["mode"]): boolean => mode === "120000";
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((octet, i) => octet === b[i]);
+
+// What a changed file adds to the key: a binary file by the bytes on both sides (git names it by its two blobs), a text file by
+// its removed and added lines in order. `all` is a file that changed kind, whose every old line is removed and every new one added.
+const body = (before: Uint8Array | undefined, after: Uint8Array | undefined, all: boolean): ReadonlyArray<string> => {
+  if (hasNul(before ?? NO_BYTES) || hasNul(after ?? NO_BYTES)) {
+    return ["binary", before === undefined ? "-" : latin1(before), after === undefined ? "-" : latin1(after)];
+  }
+
+  const old = splitLines(before ?? NO_BYTES);
+  const next = splitLines(after ?? NO_BYTES);
+
+  return all ? [...old.map((line) => `-${line}`), ...next.map((line) => `+${line}`)] : lineChanges(old, next);
+};
+
+const section = (path: string, before: FileSpec | undefined, after: FileSpec | undefined): ReadonlyArray<string> => {
+  if (before === undefined && after !== undefined) {
+    return ["new", path, after.mode, ...body(undefined, after.content, false)];
+  }
+
+  if (before !== undefined && after === undefined) {
+    return ["deleted", path, before.mode, ...body(before.content, undefined, false)];
+  }
+
+  if (before === undefined || after === undefined) {
+    return [];
+  }
+
+  if (isLink(before.mode) !== isLink(after.mode)) {
+    return ["kind", path, before.mode, after.mode, ...body(before.content, after.content, true)];
+  }
+
+  const modes = before.mode === after.mode ? [] : [`mode ${before.mode} ${after.mode}`];
+
+  return sameBytes(before.content, after.content)
+    ? ["modified", path, ...modes]
+    : ["modified", path, ...modes, ...body(before.content, after.content, false)];
+};
+
+const changedSections = (
+  before: ReadonlyArray<FileSpec>,
+  after: ReadonlyArray<FileSpec>,
+): ReadonlyArray<{ readonly path: string; readonly from: FileSpec | undefined; readonly to: FileSpec | undefined }> => {
+  const was = new Map(before.map((each) => [each.path, each]));
+  const now = new Map(after.map((each) => [each.path, each]));
+
+  return [...new Set([...was.keys(), ...now.keys()])]
+    .sort(byBytes)
+    .map((path) => ({ path, from: was.get(path), to: now.get(path) }))
+    .filter(
+      ({ from, to }) =>
+        from === undefined || to === undefined || from.mode !== to.mode || !sameBytes(from.content, to.content),
+    );
+};
+
+/**
+ * The model's name for the change from one set of files to another: what a patch id must be equal for. It holds each changed
+ * file in path byte order, with its path, a mode only where it is new, gone or changed, and its removed and added lines with
+ * their own ends, or both sides' bytes for a binary file. It holds no blob id of a text file and no line number. Two changes
+ * have one patch id exactly when their keys are equal, and `undefined` is no change.
+ */
+export const changeKey = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): string | undefined => {
+  const sections = changedSections(before, after).map(({ path, from, to }) => section(path, from, to));
+
+  return sections.length === 0 ? undefined : JSON.stringify(sections);
+};
+
+/** How many files two sets of files differ in: a file that changes kind counts once. */
+export const changedFiles = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): number =>
+  changedSections(before, after).length;
+
+/** The bytes of content a diff compares: each changed file's bytes before and after, none for a side the file lacks. */
+export const comparedBytes = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): number =>
+  changedSections(before, after).reduce(
+    (total, { from, to }) => total + (from?.content.length ?? 0) + (to?.content.length ?? 0),
+    0,
+  );
+
+/** One edit the generator draws: the commits it goes from and to, the files of both, and the model's key of the change. */
+export interface EditCase {
+  readonly label: string;
+  /** The classes of the plan this case reaches. */
+  readonly classes: ReadonlyArray<string>;
+  /** Indexes into the carrier's history. */
+  readonly from: number;
+  readonly to: number;
+  readonly before: ReadonlyArray<FileSpec>;
+  readonly after: ReadonlyArray<FileSpec>;
+  readonly key: string | undefined;
+}
+
+export interface EditCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<EditCase>;
+  /** Each group is the cases that are one edit on bases that differ: their keys, and so their ids, are equal. */
+  readonly same: ReadonlyArray<ReadonlyArray<number>>;
+  /** The drawn edit every `variants` case is one change away from. */
+  readonly drawn: number;
+  readonly variants: ReadonlyArray<number>;
+}
+
+export const EDIT_CLASSES = [
+  "(a) a new file",
+  "(a) a deleted file",
+  "(a) a changed file",
+  "(a) a file made a link",
+  "(a) a link made a file",
+  "(a) a file made a link with the same bytes",
+  "(a) a link made a file with the same bytes",
+  "(b) a mode-only change",
+  "(c) a NUL in the first 8000 bytes on one side",
+  "(c) a NUL at byte 8000, binary",
+  "(c) a NUL at byte 8001, text",
+  "(d) a last line that loses its newline",
+  "(d) a last line that gains its newline",
+  "(d) CRLF lines",
+  "(d) a change of whitespace only",
+  "(e) a text file in latin-1 bytes",
+  "(f) no change",
+  "(f) an empty file added",
+  "(g) change blocks at the first line and at the last",
+  "(k) the sort traps in the changed paths",
+  "(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__",
+  "(l) the same edit on a base that differs in another file",
+  "(l) the same edit on a base that differs on the line next to it",
+  "(l) the same edit where the edited file is executable on the base",
+  "(l) the same edit lower in the file",
+  "(m) one line changed from the drawn edit: other text",
+  "(m) one line changed from the drawn edit: a trailing space",
+  "(m) one line changed from the drawn edit: its line end only",
+  "(m) the drawn edit at another path",
+  "(m) the drawn edit on another line",
+  "(m) the drawn edit reversed",
+  "(n) a binary edit with other bytes",
+  "(n) the same binary edit on a base that differs in another file",
+  "(n) the drawn edit with a mode change added",
+] as const;
+
+const numbered = (tag: string, count: number, end = "\n"): ReadonlyArray<string> =>
+  Array.from({ length: count }, (_, i) => `${tag}:${i}${end}`);
+
+const replaceAt = (lines: ReadonlyArray<string>, index: number, line: string): ReadonlyArray<string> =>
+  lines.map((each, i) => (i === index ? line : each));
+
+const withoutLastEnd = (lines: ReadonlyArray<string>): ReadonlyArray<string> =>
+  lines.map((each, i) => (i === lines.length - 1 ? each.replace(/\n$/, "") : each));
+
+/**
+ * A history of one line of commits, and the edits between pairs of them. Every file is lines no other line of its file
+ * repeats, and every inserted line is new to its file, so an edit has one smallest diff and git and the memory adapter
+ * print the same lines. A case holds its two commits; a reversed case reuses them the other way round.
+ */
+export const editCarrier = (texture: Texture): EditCarrier => {
+  const p = at(texture.parts, 0);
+  const q = at(texture.parts, 1);
+  const r = at(texture.parts, 2);
+  const src = `s${p}/f${q}`;
+
+  const text = (path: string, lines: ReadonlyArray<string>, mode: FileSpec["mode"] = "100644"): FileSpec =>
+    textFile(path, lines.join(""), mode);
+
+  const base = numbered(p, 5);
+  const drawn = replaceAt(base, 2, `${p}:new2\n`);
+  const other = text(`o${q}`, [`${p}-o:${q}\n`]);
+  const alike = text(`o${q}`, [`${r}-x:${q}\n`, "y\n"]);
+
+  const seed = at(texture.signatures, 0);
+  const nodes: Array<Node> = [];
+
+  const commit = (files: ReadonlyArray<FileSpec>): number => {
+    const i = nodes.length;
+
+    nodes.push({
+      parents: i === 0 ? [] : [i - 1],
+      author: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      committer: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      message: `edit ${i}`,
+      files,
+    });
+
+    return i;
+  };
+
+  const cases: Array<EditCase> = [];
+
+  const made = (
+    label: string,
+    classes: ReadonlyArray<string>,
+    before: ReadonlyArray<FileSpec>,
+    after: ReadonlyArray<FileSpec>,
+  ): EditCase => {
+    const edit: EditCase = {
+      label,
+      classes,
+      from: commit(before),
+      to: commit(after),
+      before,
+      after,
+      key: changeKey(before, after),
+    };
+
+    cases.push(edit);
+
+    return edit;
+  };
+
+  const reversed = (label: string, classes: ReadonlyArray<string>, source: EditCase): EditCase => {
+    const edit: EditCase = {
+      label,
+      classes,
+      from: source.to,
+      to: source.from,
+      before: source.after,
+      after: source.before,
+      key: changeKey(source.after, source.before),
+    };
+
+    cases.push(edit);
+
+    return edit;
+  };
+
+  // The drawn edit, and the same edit on bases that differ.
+  const first = made("the drawn edit", ["(a) a changed file"], [other, text(src, base)], [other, text(src, drawn)]);
+
+  const same = [
+    first,
+    made(
+      "the same edit, another file differs",
+      ["(l) the same edit on a base that differs in another file"],
+      [alike, text(src, base)],
+      [alike, text(src, drawn)],
+    ),
+    made(
+      "the same edit, the line next to it differs",
+      ["(l) the same edit on a base that differs on the line next to it"],
+      [other, text(src, replaceAt(base, 1, `${p}:next1\n`))],
+      [other, text(src, replaceAt(replaceAt(base, 1, `${p}:next1\n`), 2, `${p}:new2\n`))],
+    ),
+    made(
+      "the same edit, the file is executable on the base",
+      ["(l) the same edit where the edited file is executable on the base"],
+      [other, text(src, base, "100755")],
+      [other, text(src, drawn, "100755")],
+    ),
+    made(
+      "the same edit, lower in the file",
+      ["(l) the same edit lower in the file"],
+      [other, text(src, [`${p}:top0\n`, `${p}:top1\n`, ...base])],
+      [other, text(src, [`${p}:top0\n`, `${p}:top1\n`, ...drawn])],
+    ),
+  ];
+
+  // One change away from the drawn edit.
+  const variants = [
+    made(
+      "other text",
+      ["(m) one line changed from the drawn edit: other text"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:other2\n`))],
+    ),
+    made(
+      "a trailing space",
+      ["(m) one line changed from the drawn edit: a trailing space"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:new2 \n`))],
+    ),
+    made(
+      "its line end only",
+      ["(m) one line changed from the drawn edit: its line end only"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 2, `${p}:new2\r\n`))],
+    ),
+    made(
+      "the drawn edit at another path",
+      ["(m) the drawn edit at another path"],
+      [other, text(`s${p}/g${q}`, base)],
+      [other, text(`s${p}/g${q}`, drawn)],
+    ),
+    made(
+      "the drawn edit on another line",
+      ["(m) the drawn edit on another line"],
+      [other, text(src, base)],
+      [other, text(src, replaceAt(base, 3, `${p}:new2\n`))],
+    ),
+    reversed("the drawn edit reversed", ["(m) the drawn edit reversed"], first),
+    made(
+      "the drawn edit with a mode change added",
+      ["(n) the drawn edit with a mode change added"],
+      [other, text(src, base)],
+      [other, text(src, drawn, "100755")],
+    ),
+  ];
+
+  // Binary files: named by their two blobs.
+  const binary = (path: string, last: number): ReadonlyArray<FileSpec> => [
+    file(path, joined("a", [0], String.fromCharCode(last))),
+  ];
+
+  const bin = `b${p}`;
+
+  const binaryEdit = made(
+    "a binary edit",
+    ["(n) a binary edit with other bytes"],
+    binary(bin, 0x62),
+    binary(bin, 0x63),
+  );
+
+  made("a binary edit with other bytes", ["(n) a binary edit with other bytes"], binary(bin, 0x62), binary(bin, 0x64));
+
+  const sameBinary = made(
+    "the same binary edit beside another file",
+    ["(n) the same binary edit on a base that differs in another file"],
+    [other, ...binary(bin, 0x62)],
+    [other, ...binary(bin, 0x63)],
+  );
+
+  // A file that turns binary on one side: two bases that differ only in an unchanged line, so a decision that reads it as
+  // text would give both one id.
+  const turns = (first: string): ReadonlyArray<FileSpec> => [file(`x${p}`, joined(first, "x\n"))];
+  const turned = (first: string): ReadonlyArray<FileSpec> => [file(`x${p}`, joined(first, "x", [0], "\n"))];
+  made("text becomes binary", ["(c) a NUL in the first 8000 bytes on one side"], turns("q\n"), turned("q\n"));
+  made(
+    "text becomes binary, another base",
+    ["(c) a NUL in the first 8000 bytes on one side"],
+    turns("r\n"),
+    turned("r\n"),
+  );
+
+  // A NUL at index 8000 is the 8001st byte, which git does not look at; at index 7999 it does. Each pair is one edit (the first
+  // letter of the long line) on two bases that differ in the line above it.
+  const nul = (above: string, first: string, index: number): Uint8Array =>
+    joined(above, first, "x".repeat(index - above.length - 1), [0], "t\n");
+
+  const long =
+    (above: string, index: number) =>
+    (first: string): ReadonlyArray<FileSpec> => [file(`n${p}`, nul(above, first, index))];
+
+  const text8001 = [
+    made("a NUL at byte 8001", ["(c) a NUL at byte 8001, text"], long("q\n", 8000)("a"), long("q\n", 8000)("b")),
+    made(
+      "a NUL at byte 8001, another base",
+      ["(c) a NUL at byte 8001, text"],
+      long("r\n", 8000)("a"),
+      long("r\n", 8000)("b"),
+    ),
+  ];
+
+  made("a NUL at byte 8000", ["(c) a NUL at byte 8000, binary"], long("q\n", 7999)("a"), long("q\n", 7999)("b"));
+  made(
+    "a NUL at byte 8000, another base",
+    ["(c) a NUL at byte 8000, binary"],
+    long("r\n", 7999)("a"),
+    long("r\n", 7999)("b"),
+  );
+
+  // Kinds of file: new, gone, links.
+  made("a new file", ["(a) a new file"], [other], [other, text(src, base)]);
+  made("a deleted file", ["(a) a deleted file"], [other, text(src, base)], [other]);
+  made("a file made a link", ["(a) a file made a link"], [text(src, base)], [text(src, [`t${q}`], "120000")]);
+  made("a link made a file", ["(a) a link made a file"], [text(src, [`t${q}`], "120000")], [text(src, base)]);
+
+  // A file and a link that hold the same bytes are two blobs of one id, yet git prints every old line removed and every new line
+  // added, so two such changes with other bytes are two changes.
+  for (const target of [`x${q}`, `y${q}`]) {
+    made(
+      `a file made a link, both holding ${target}`,
+      ["(a) a file made a link with the same bytes"],
+      [text(src, [target])],
+      [text(src, [target], "120000")],
+    );
+    made(
+      `a link made a file, both holding ${target}`,
+      ["(a) a link made a file with the same bytes"],
+      [text(src, [target], "120000")],
+      [text(src, [target])],
+    );
+  }
+
+  // Modes.
+  made("a mode-only change", ["(b) a mode-only change"], [text(src, base)], [text(src, base, "100755")]);
+  made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
+    file(bin, joined("a", [0], "b"), "100755"),
+  ]);
+
+  // Line ends.
+  made(
+    "the last line loses its newline",
+    ["(d) a last line that loses its newline"],
+    [text(src, base)],
+    [text(src, withoutLastEnd(base))],
+  );
+  made(
+    "the last line gains its newline",
+    ["(d) a last line that gains its newline"],
+    [text(src, withoutLastEnd(base))],
+    [text(src, base)],
+  );
+
+  const crlf = numbered(p, 4, "\r\n");
+  made("CRLF lines", ["(d) CRLF lines"], [text(src, crlf)], [text(src, replaceAt(crlf, 2, `${p}:new2\r\n`))]);
+  made(
+    "a change of whitespace only",
+    ["(d) a change of whitespace only"],
+    [text(src, base)],
+    [text(src, replaceAt(base, 2, ` ${p}:2\n`))],
+  );
+
+  // Bytes that are not UTF-8, and no NUL.
+  const latin = (lines: ReadonlyArray<string>): Uint8Array =>
+    joined(...lines.flatMap((line): ReadonlyArray<string | ReadonlyArray<number>> => [[0xe9], line]));
+
+  made("latin-1 lines", ["(e) a text file in latin-1 bytes"], [file(src, latin(base))], [file(src, latin(drawn))]);
+
+  // Nothing changed, and an empty file.
+  made("no change", ["(f) no change"], [other, text(src, base)], [other, text(src, base)]);
+  made("an empty file added", ["(f) an empty file added"], [other], [other, file(`e${p}`, NO_BYTES)]);
+
+  // Several blocks.
+  made(
+    "blocks at the first line and at the last",
+    ["(g) change blocks at the first line and at the last"],
+    [text(src, base)],
+    [text(src, replaceAt(replaceAt(base, 0, `${p}:new0\n`), 4, `${p}:new4\n`))],
+  );
+  made(
+    "blocks at the first line and at the last but one",
+    ["(g) change blocks at the first line and at the last"],
+    [text(src, base)],
+    [text(src, replaceAt(replaceAt(base, 0, `${p}:new0\n`), 3, `${p}:new3\n`))],
+  );
+
+  // Paths: names that sort in traps, and wide characters.
+  const trap = [`f${p}/c`, `f${p}-b`, `f${p}.b`, `f${p}0`];
+  const pair = [`${p}:a\n`, `${p}:b\n`];
+
+  made(
+    "the sort traps",
+    ["(k) the sort traps in the changed paths"],
+    trap.map((path) => text(path, pair)),
+    trap.map((path) => text(path, replaceAt(pair, 1, `${p}:new\n`))),
+  );
+
+  // The same edit at paths one character apart: a hash that folds punctuation or non-ASCII characters together would give two of
+  // these one id.
+  for (const path of [`k${p}-b`, `k${p}.b`]) {
+    made(
+      `the drawn edit at ${path}`,
+      ["(k) the sort traps in the changed paths"],
+      [other, text(path, base)],
+      [other, text(path, drawn)],
+    );
+  }
+
+  for (const mark of ["\u8BBE", "\uFF5A", "\u{1F600}"]) {
+    made(
+      `the drawn edit at ${mark}${p}`,
+      ["(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__"],
+      [other, text(`${mark}${p}`, base)],
+      [other, text(`${mark}${p}`, drawn)],
+    );
+  }
+
+  const wide = ["\u8BBE", "\uFF5A", "\u{1F600}", "\u0250", "\uE000"].map((mark) => `${mark}${p}`).concat("__proto__");
+
+  made(
+    "wide characters and __proto__",
+    ["(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__"],
+    wide.map((path) => text(path, pair)),
+    wide.map((path) => text(path, replaceAt(pair, 0, `${p}:new\n`))),
+  );
+
+  return {
+    history: { nodes, refs: [], shallow: [] },
+    cases,
+    same: [same, [binaryEdit, sameBinary], text8001].map((group) => group.map((each) => cases.indexOf(each))),
+    drawn: cases.indexOf(first),
+    variants: variants.map((each) => cases.indexOf(each)),
+  };
+};
+
+/** The classes of `EDIT_CLASSES` the carrier's cases reach, in the list's order. */
+export const reachedEditClasses = (carrier: EditCarrier): ReadonlyArray<string> => {
+  const reached = new Set(carrier.cases.flatMap((each) => each.classes));
+
+  return EDIT_CLASSES.filter((label) => reached.has(label));
+};
+
+export const LIMIT_CLASSES = [
+  "exactly the files limit",
+  "one file more than the limit",
+  "exactly the diff limit",
+  "one byte more than the limit",
+  "over both limits",
+] as const;
+
+/**
+ * Two commits that differ in four files (one changed, one new, one gone, one whose mode only changes) beside two files that
+ * do not change and are larger than the changed ones together, so a count that includes them is seen.
+ */
+export const limitCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly before: ReadonlyArray<FileSpec>; readonly after: ReadonlyArray<FileSpec> } => {
+  const [a, b, c, d] = [at(texture.blobs, 0), at(texture.blobs, 1), at(texture.blobs, 2), at(texture.blobs, 3)];
+  const p = at(texture.parts, 0);
+  const big = (k: number): Uint8Array => Uint8Array.from({ length: 4000 }, (_, i) => (i * 7 + k) & 255);
+  const longer = Uint8Array.from([...a, 0x41]);
+
+  const before = [
+    file(`u${p}1`, big(1)),
+    file(`u${p}2`, big(2)),
+    file(`c${p}`, a),
+    file(`g${p}`, b),
+    file(`m${p}`, d, "100644"),
+  ];
+
+  const after = [
+    file(`u${p}1`, big(1)),
+    file(`u${p}2`, big(2)),
+    file(`c${p}`, longer),
+    file(`n${p}`, c),
+    file(`m${p}`, d, "100755"),
+  ];
+
+  const seedSignature = at(texture.signatures, 0);
+
+  const nodes = [before, after].map((files, i): Node => ({
+    parents: i === 0 ? [] : [0],
+    author: { ...seedSignature, seconds: BASE_SECONDS + i, offset: "+0000" },
+    committer: { ...seedSignature, seconds: BASE_SECONDS + i, offset: "+0000" },
+    message: `limit ${i}`,
+    files,
+  }));
+
+  return { history: { nodes, refs: [], shallow: [] }, before, after };
+};
+
 // Writing a commit and moving a ref
 // ---------------------------------------------------------------------------------------------------------
 
@@ -1472,4 +2088,367 @@ export const moveCarrier = (
       branch: `refs/heads/b${part}`,
     },
   };
+};
+
+// ---------------------------------------------------------------------------------------------------------
+// Merging three commits' trees
+// ---------------------------------------------------------------------------------------------------------
+
+/** Whether two files are the same entry of a tree: the same mode and the same bytes, or both absent. */
+const sameFile = (a: FileSpec | undefined, b: FileSpec | undefined): boolean =>
+  a === undefined || b === undefined
+    ? a === b
+    : a.mode === b.mode &&
+      a.content.length === b.content.length &&
+      a.content.every((octet, i) => octet === b.content[i]);
+
+/** What a path holds after a merge, by what the merge base, ours and theirs hold there: one of the two sides, or neither. */
+const settle = (
+  base: FileSpec | undefined,
+  ours: FileSpec | undefined,
+  theirs: FileSpec | undefined,
+): FileSpec | undefined | "conflict" => {
+  if (sameFile(ours, theirs) || sameFile(theirs, base)) {
+    return ours;
+  }
+
+  return sameFile(ours, base) ? theirs : "conflict";
+};
+
+/** What a merge of three trees answers: the files of the merged tree, or the paths that could not be combined. */
+export type MergeAnswer =
+  | { readonly kind: "clean"; readonly files: ReadonlyArray<FileSpec> }
+  | { readonly kind: "conflict"; readonly paths: ReadonlyArray<string> };
+
+/**
+ * The model of a merge, whole file by whole file: for each path, the entries (mode and bytes) of the merge base, ours and
+ * theirs. If ours and theirs are the same, that is the answer; if ours is the base's, theirs is; if theirs is the base's,
+ * ours is; else the path conflicts. A merged tree where one path is a folder of another conflicts on both paths.
+ */
+export const mergeModel = (
+  base: ReadonlyArray<FileSpec>,
+  ours: ReadonlyArray<FileSpec>,
+  theirs: ReadonlyArray<FileSpec>,
+): MergeAnswer => {
+  const held = (files: ReadonlyArray<FileSpec>): ReadonlyMap<string, FileSpec> =>
+    new Map(files.map((each) => [each.path, each]));
+
+  const [b, o, t] = [held(base), held(ours), held(theirs)];
+  const merged = new Map<string, FileSpec>();
+  const conflicts = new Set<string>();
+
+  for (const path of new Set([...b.keys(), ...o.keys(), ...t.keys()])) {
+    const kept = settle(b.get(path), o.get(path), t.get(path));
+
+    if (kept === "conflict") {
+      conflicts.add(path);
+    } else if (kept !== undefined) {
+      merged.set(path, kept);
+    }
+  }
+
+  for (const path of merged.keys()) {
+    const names = path.split("/");
+
+    for (let depth = 1; depth < names.length; depth++) {
+      const folder = names.slice(0, depth).join("/");
+
+      if (merged.has(folder)) {
+        conflicts.add(folder);
+        conflicts.add(path);
+      }
+    }
+  }
+
+  return conflicts.size > 0
+    ? { kind: "conflict", paths: [...conflicts].sort(byBytes) }
+    : { kind: "clean", files: [...merged.values()] };
+};
+
+/** The merges that git and `/memory` both answer alike, then the conflicts they both see. Each class is reached in every run. */
+export const MERGE_CLASSES = [
+  "only ours changes a path",
+  "only theirs changes a path",
+  "both make the same change",
+  "ours deletes a path theirs leaves",
+  "theirs deletes a path ours leaves",
+  "theirs adds a file two folders deep",
+  "both delete one path",
+  "ours is the merge base",
+  "every file deleted",
+  "binary content changed on one side",
+  "a mode made executable on one side",
+  "a link's target changed on one side",
+  "names on the object prototype",
+  "both change a one-line file to different lines",
+  "ours deletes what theirs changes",
+  "theirs deletes what ours changes",
+  "both add one path with different one-line contents",
+  "conflicts at names with a space, a line break, a leading quote and characters past U+024F",
+] as const;
+
+/** The classes of `MERGE_CLASSES` whose answer is a conflict: the last five. */
+export const CONFLICT_MERGE_CLASSES: ReadonlyArray<string> = MERGE_CLASSES.slice(13);
+
+/** The merges only `/memory` answers, since git renames a file that stands where a folder is wanted. */
+export const FOLDER_MERGE_CLASSES = [
+  "ours adds a file, theirs adds a file in a folder of its name",
+  "ours adds a file in a folder, theirs adds a file of the folder's name",
+  "a file against a file two folders below it",
+  "a file in a folder against a file below it",
+] as const;
+
+/** One merge in a history: three commits by index, and what the merge of their trees must answer. */
+export interface MergeCase {
+  readonly label: string;
+  readonly base: number;
+  readonly ours: number;
+  readonly theirs: number;
+  /** The commit whose tree the merge must give, when it is clean. */
+  readonly tree: number | undefined;
+  readonly expected: MergeAnswer;
+}
+
+/** A history that holds many merges at once, each between commits of its own, and the other facts the merge laws read. */
+export interface MergeCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<MergeCase>;
+  /** `theirs` is a commit `ours` already reaches: the merge makes a commit all the same, with the tree of `ours`. */
+  readonly inside: { readonly ours: number; readonly theirs: number };
+  /** Two commits that share no history. */
+  readonly unrelated: { readonly ours: number; readonly theirs: number };
+  /** Two commits with two best common ancestors, `bases` by index. */
+  readonly criss: { readonly ours: number; readonly theirs: number; readonly bases: readonly [number, number] };
+}
+
+interface Sides {
+  readonly base: ReadonlyArray<FileSpec>;
+  readonly ours: ReadonlyArray<FileSpec>;
+  readonly theirs: ReadonlyArray<FileSpec>;
+}
+
+const bump = (content: Uint8Array, by: number): Uint8Array => Uint8Array.from([...content, by]);
+
+const join = (a: Sides, b: Sides): Sides => ({
+  base: [...a.base, ...b.base],
+  ours: [...a.ours, ...b.ours],
+  theirs: [...a.theirs, ...b.theirs],
+});
+
+/**
+ * The files of one class of merge, as the three sides' files. No side both deletes a path and adds another (so git finds
+ * no rename), no path changes its mode on one side and its content on the other, and no path is a folder of another.
+ * Every conflict is a one-line text file, so git cannot merge it by line.
+ */
+const focus = (label: (typeof MERGE_CLASSES)[number], draw: Draw, tag: string): Sides => {
+  const path = (letter: string): string => `${tag}${letter}${draw.part()}`;
+  const [v0, other] = [draw.blob(), draw.blob()];
+  const [v1, v2] = [bump(v0, 1), bump(v0, 2)];
+  const word = draw.word();
+  const line = (side: string): Uint8Array => utf8(`${side}:${word}\n`);
+  const [x, y] = [path("x"), path("y")];
+
+  switch (label) {
+    case "only ours changes a path":
+      return { base: [file(x, v0)], ours: [file(x, v1)], theirs: [file(x, v0)] };
+    case "only theirs changes a path":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [file(x, v2)] };
+    case "both make the same change":
+      return {
+        base: [file(x, v0), file(y, other)],
+        ours: [file(x, v1), file(`${y}-new`, v2), file(y, other, "100755")],
+        theirs: [file(x, v1), file(`${y}-new`, v2), file(y, other, "100755")],
+      };
+    case "ours deletes a path theirs leaves":
+      return { base: [file(x, v0)], ours: [], theirs: [file(x, v0)] };
+    case "theirs deletes a path ours leaves":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [] };
+    case "theirs adds a file two folders deep":
+      return {
+        base: [file(x, v0)],
+        ours: [file(x, v0)],
+        theirs: [file(x, v0), file(`g${draw.part()}/h${draw.part()}/${y}`, v1)],
+      };
+    case "both delete one path":
+      return { base: [file(x, v0), file(y, other)], ours: [file(y, other)], theirs: [file(y, other)] };
+    case "ours is the merge base":
+      return { base: [file(x, v0)], ours: [file(x, v0)], theirs: [file(x, v1), file(y, other)] };
+    case "every file deleted": {
+      const inside = file(`f${draw.part()}/${y}`, other);
+
+      return { base: [file(x, v0), inside], ours: [], theirs: [file(x, v0), inside] };
+    }
+
+    case "binary content changed on one side": {
+      const binary = Uint8Array.of(0x00, 0xff, 0xfe, 0x00, ...v0);
+
+      return { base: [file(x, binary)], ours: [file(x, bump(binary, 0))], theirs: [file(x, binary)] };
+    }
+
+    case "a mode made executable on one side":
+      return { base: [file(x, v0)], ours: [file(x, v0, "100755")], theirs: [file(x, v0)] };
+    case "a link's target changed on one side":
+      return {
+        base: [file(x, utf8(`t${word}`), "120000")],
+        ours: [file(x, utf8(`u${word}`), "120000")],
+        theirs: [file(x, utf8(`t${word}`), "120000")],
+      };
+    case "names on the object prototype": {
+      const content = (i: number): Uint8Array => bump(v0, i + 3);
+      const at = (i: number, bytes: Uint8Array): FileSpec => file(PROTOTYPE_NAMES[i] ?? x, bytes);
+
+      return {
+        base: PROTOTYPE_NAMES.map((_, i) => at(i, content(i))),
+        ours: PROTOTYPE_NAMES.map((_, i) => at(i, i === 0 ? bump(content(i), 1) : content(i))),
+        theirs: PROTOTYPE_NAMES.map((_, i) => at(i, i === 1 ? bump(content(i), 2) : content(i))),
+      };
+    }
+
+    case "both change a one-line file to different lines":
+      return { base: [file(x, line("b"))], ours: [file(x, line("o"))], theirs: [file(x, line("t"))] };
+    case "ours deletes what theirs changes":
+      return { base: [file(x, line("b"))], ours: [], theirs: [file(x, line("t"))] };
+    case "theirs deletes what ours changes":
+      return { base: [file(x, line("b"))], ours: [file(x, line("o"))], theirs: [] };
+    case "both add one path with different one-line contents":
+      return { base: [], ours: [file(x, line("o"))], theirs: [file(x, line("t"))] };
+    case "conflicts at names with a space, a line break, a leading quote and characters past U+024F": {
+      const names = ["a b", "l\nb", '"q', "ｚ", "\u{1F600}", "设", "-d"].map((name) => `${name}${draw.part()}`);
+
+      return {
+        base: names.map((name) => file(name, line("b"))),
+        ours: names.map((name) => file(name, line("o"))),
+        theirs: names.map((name) => file(name, line("t"))),
+      };
+    }
+  }
+};
+
+/** Three paths beside the one in focus: one nobody changes, one only ours changes and one only theirs changes. */
+const beside = (draw: Draw, tag: string): Sides => {
+  const [kept, byOurs, byTheirs] = [draw.blob(), draw.blob(), draw.blob()];
+  const [first, second, folder, third] = [draw.part(), draw.part(), draw.part(), draw.part()];
+  const [k, o, t] = [`${tag}k${first}`, `${tag}o${second}`, `d${tag}${folder}/${tag}t${third}`];
+
+  return {
+    base: [file(k, kept), file(o, byOurs), file(t, byTheirs)],
+    ours: [file(k, kept), file(o, bump(byOurs, 1)), file(t, byTheirs)],
+    theirs: [file(k, kept), file(o, byOurs), file(t, bump(byTheirs, 2))],
+  };
+};
+
+const folderSides = (label: (typeof FOLDER_MERGE_CLASSES)[number], draw: Draw): Sides => {
+  const [a, b, c] = [draw.part(), draw.part(), draw.part()];
+  const [v0, v1] = [draw.blob(), draw.blob()];
+  const name = `a${a}`;
+
+  switch (label) {
+    case "ours adds a file, theirs adds a file in a folder of its name":
+      return { base: [], ours: [file(name, v0)], theirs: [file(`${name}/${b}`, v1)] };
+    case "ours adds a file in a folder, theirs adds a file of the folder's name":
+      return { base: [], ours: [file(`${name}/${b}`, v1)], theirs: [file(name, v0)] };
+    case "a file against a file two folders below it":
+      return { base: [], ours: [file(name, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
+    case "a file in a folder against a file below it":
+      return { base: [], ours: [file(`${name}/${b}`, v0)], theirs: [file(`${name}/${b}/${c}`, v1)] };
+  }
+};
+
+/** A history being built one commit at a time, each with drawn authorship and message. */
+const commits = (draw: Draw) => {
+  const nodes: Array<Node> = [];
+
+  const commit = (parents: ReadonlyArray<number>, files: ReadonlyArray<FileSpec>): number => {
+    nodes.push({
+      parents,
+      author: draw.signature(draw.int(4_000_000_000)),
+      committer: draw.signature(BASE_SECONDS + nodes.length * 60),
+      message: draw.word(),
+      files,
+    });
+
+    return nodes.length - 1;
+  };
+
+  return { nodes, commit };
+};
+
+/**
+ * One history that holds a merge for each class of `MERGE_CLASSES`, each between commits of its own (a base, ours and
+ * theirs, with a commit beside them for the files a clean merge must give), and the commits the helper's laws read: one
+ * whose second side is already in the first, two unrelated roots and a criss-cross. `tag` goes in front of every
+ * path's first part, so a law can make each path carry a canary. Without `answers` no commit holds the files a clean
+ * merge must give, so the store holds no tree that a merge could find and not make.
+ */
+export const mergeCarrier = (texture: Texture, tag = "", answers = true): MergeCarrier => {
+  const draw = new Draw(texture);
+  const { nodes, commit } = commits(draw);
+
+  const made = MERGE_CLASSES.map((label) => {
+    // Nothing is beside the files of a merge that deletes every one of them: its answer is git's empty tree.
+    const sides =
+      label === "every file deleted" ? focus(label, draw, tag) : join(focus(label, draw, tag), beside(draw, tag));
+
+    const base = commit([], sides.base);
+
+    // Ours is the merge base itself: its commit is the base's, so the files it holds are the base's too.
+    const isBase = label === "ours is the merge base";
+    const oursFiles = isBase ? sides.base : sides.ours;
+    const ours = isBase ? base : commit([base], oursFiles);
+    const theirs = commit([base], sides.theirs);
+
+    return { label, base, ours, theirs, answer: mergeModel(sides.base, oursFiles, sides.theirs) };
+  });
+
+  // A commit for the files each clean merge must give, so a law compares tree ids and never lists files.
+  const cases = made.map(({ label, base, ours, theirs, answer }): MergeCase => ({
+    label,
+    base,
+    ours,
+    theirs,
+    tree: answer.kind === "clean" && answers ? commit([], answer.files) : undefined,
+    expected: answer,
+  }));
+
+  const kept = beside(draw, tag);
+  const root = commit([], kept.base);
+  const theirs = commit([root], kept.theirs);
+  const ours = commit([theirs], [...kept.theirs, file(`${tag}z${draw.part()}`, draw.blob())]);
+
+  const crissFiles = (i: number): ReadonlyArray<FileSpec> => [textFile(`${tag}c${draw.part()}`, `${i}\n`)];
+  const crissRoot = commit([], crissFiles(0));
+  const [left, right] = [commit([crissRoot], crissFiles(1)), commit([crissRoot], crissFiles(2))];
+  const [first, second] = [commit([left, right], crissFiles(3)), commit([right, left], crissFiles(4))];
+
+  return {
+    history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] },
+    cases,
+    inside: { ours, theirs },
+    unrelated: { ours: made[0]?.base ?? 0, theirs: made[1]?.base ?? 0 },
+    criss: { ours: first, theirs: second, bases: [left, right] },
+  };
+};
+
+/** A history with a merge for each class of `FOLDER_MERGE_CLASSES`, with the paths each conflict must name. */
+export const folderCarrier = (
+  texture: Texture,
+): { readonly history: History; readonly cases: ReadonlyArray<MergeCase> } => {
+  const draw = new Draw(texture);
+  const { nodes, commit } = commits(draw);
+
+  const cases = FOLDER_MERGE_CLASSES.map((label): MergeCase => {
+    const sides = join(folderSides(label, draw), beside(draw, ""));
+    const base = commit([], sides.base);
+
+    return {
+      label,
+      base,
+      ours: commit([base], sides.ours),
+      theirs: commit([base], sides.theirs),
+      tree: undefined,
+      expected: mergeModel(sides.base, sides.ours, sides.theirs),
+    };
+  });
+
+  return { history: { nodes, refs: [], shallow: [] }, cases };
 };

@@ -3,7 +3,7 @@
  *
  * **Details**
  *
- * `make` starts a setting and each combinator hands back the same type it was given, so the order in a pipe never matters. Only `live` changes the type: it turns the live mark on, and the group then reads that setting as a `Live` to yield, where a restart setting reads as its plain value. A `Setting` is not an Effect. It is read only through its group, so nothing reads it from the environment alone and skips the files.
+ * `make` starts a setting and each combinator hands back the same type it was given, so the order in a pipe never matters. Only `live` and `fileOnly` change the type, each by turning its own mark on. A live setting is read by the group as a `Live` to yield, where a restart setting reads as its plain value, and a file-only setting has no flag. A `Setting` is not an Effect. It is read only through its group, so nothing reads it from the environment alone and skips the files.
  */
 import type * as Brand from "effect/Brand";
 import * as Option from "effect/Option";
@@ -26,7 +26,7 @@ export type File = "repo" | "user";
 export type Files = readonly [File, ...Array<File>];
 
 /**
- * One declared setting of type `A`, named `N`, and live when `L` is true.
+ * One declared setting of type `A`, named `N`, live when `L` is true and file-only when `F` is true.
  *
  * **Details**
  *
@@ -34,14 +34,14 @@ export type Files = readonly [File, ...Array<File>];
  *
  * @category models
  */
-export interface Setting<N extends string, A, L extends boolean = false> extends Pipeable {
+export interface Setting<N extends string, A, L extends boolean = false, F extends boolean = false> extends Pipeable {
   readonly name: N;
   readonly schema: Schema.Codec<A, unknown>;
   readonly default: Option.Option<A>;
   readonly description: string | undefined;
   readonly files: Files;
   readonly live: L;
-  readonly fileOnly: boolean;
+  readonly fileOnly: F;
 }
 
 /**
@@ -49,14 +49,14 @@ export interface Setting<N extends string, A, L extends boolean = false> extends
  *
  * @category models
  */
-export type Any = Setting<string, any, boolean>;
+export type Any = Setting<string, any, boolean, boolean>;
 
 /**
  * The type of a setting's value.
  *
  * @category models
  */
-export type Type<S extends Any> = S extends Setting<string, infer A, boolean> ? A : never;
+export type Type<S extends Any> = S extends Setting<string, infer A, boolean, boolean> ? A : never;
 
 type Fields = Omit<Any, keyof Pipeable>;
 
@@ -172,20 +172,26 @@ export const files =
     build(self, { files });
 
 /**
- * Marks a setting that only a file may set. The environment is not read for it.
+ * Marks a setting that only a file may set: no flag is made for it, and a flag or an environment variable that names it stops the start.
+ *
+ * **Details**
+ *
+ * It turns the file-only mark on and keeps the live mark as it was. A setting cannot be made file-only twice.
  *
  * @category combinators
  */
-export const fileOnly = <S extends Any>(self: S): S => build(self, { fileOnly: true });
+export const fileOnly = <N extends string, A, L extends boolean>(
+  self: Setting<N, A, L, false>,
+): Setting<N, A, L, true> => build(self, { fileOnly: true });
 
 /**
  * Turns the live mark on: a running process sees a new value of the setting without a restart.
  *
  * **Details**
  *
- * It is the one combinator that changes the type, and a setting cannot be made live twice.
+ * It keeps the file-only mark as it was, and a setting cannot be made live twice.
  *
  * @category combinators
  */
-export const live = <N extends string, A>(self: Setting<N, A, false>): Setting<N, A, true> =>
+export const live = <N extends string, A, F extends boolean>(self: Setting<N, A, false, F>): Setting<N, A, true, F> =>
   build(self, { live: true });

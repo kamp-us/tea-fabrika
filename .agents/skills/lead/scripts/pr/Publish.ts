@@ -75,12 +75,27 @@ export type Published = {
   readonly edited?: true;
 };
 
+/**
+ * Where the pushed commit comes from. A `checkout` pushes the HEAD of the checkout in `dir`, so the checkout must be
+ * on the branch it publishes (`publish.ts`). A `commit` names the exact SHA it pushes (drive's box, the quest's
+ * ready step), so no checkout is in question.
+ */
+export const Source = Schema.TaggedUnion({
+  checkout: { head: Schema.String, checkedOut: Schema.String },
+  commit: { sha: Schema.String },
+});
+
+export type Source = typeof Source.Type;
+
+/** The SHA a source pushes. */
+const sha = Source.match({ checkout: (s) => s.head, commit: (s) => s.sha });
+
 export type Ask = {
   /** The checkout the commit is in. */
   readonly dir: string;
   readonly branch: string;
-  /** The exact commit SHA to push and use when opening a draft. */
-  readonly head: string;
+  /** Where the pushed commit comes from. */
+  readonly source: Source;
   /** What a new draft says. A pull request already open keeps its own words, except for those in `given`. */
   readonly text: Text;
   /** The title and the body that were asked for by name. A part left out stays as the open pull request has it. */
@@ -96,9 +111,21 @@ const checked = (branch: string) =>
 
 export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   const branch = yield* checked(a.branch);
+
+  if (a.source._tag === "checkout" && a.source.checkedOut !== branch) {
+    const { checkedOut } = a.source;
+
+    return yield* NoBranch.make({
+      reason:
+        `this checkout is on ${checkedOut === "" ? "no branch (detached HEAD)" : checkedOut}, not ${branch}, ` +
+        `so its HEAD does not belong on ${branch}; run publish.ts from ${branch}'s worktree (\`git worktree list\` shows it)`,
+    });
+  }
+
+  const head = sha(a.source);
   const pushes = yield* Pushes;
   const prs = yield* PullRequests;
-  yield* pushes.leakGrep(a.dir, a.head);
+  yield* pushes.leakGrep(a.dir, head);
 
   const given = a.given !== undefined && (a.given.title !== undefined || a.given.body !== undefined) ? a.given : null;
 
@@ -106,7 +133,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
     yield* pushes.leakText(a.dir, squashWords({ title: given.title ?? "", body: given.body ?? "" }));
   }
 
-  yield* pushes.push(a.dir, branch, a.head);
+  yield* pushes.push(a.dir, branch, head);
   const open = yield* prs.openOn(branch);
 
   if (open._tag === "Some") {
@@ -123,7 +150,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
     return { pr: number, opened: false, draft: open.value.draft, edited: true } satisfies Published;
   }
 
-  const pr = yield* prs.draft(branch, a.text, a.head);
+  const pr = yield* prs.draft(branch, a.text, head);
 
   return { pr, opened: true, draft: true } satisfies Published;
 });

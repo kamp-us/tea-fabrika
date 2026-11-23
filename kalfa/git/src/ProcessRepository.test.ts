@@ -1,12 +1,13 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P11): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P14): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
-// how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, and that no
-// call reaches a remote. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
+// how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, that no
+// call reaches a remote, what `merge-tree` printed, the version a merge needs and the commands of a patch id. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
+import mergeTreeRows from "./fixtures/merge-tree-2.40.1.json" with { type: "json" };
 import {
   commitIdArb,
   committerFrom,
@@ -15,14 +16,14 @@ import {
   partArb,
   wordArb,
 } from "./History.test-support.ts";
-import { bytes as objectBytes } from "./internal/object.ts";
+import { byBytes, bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
 import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import { settings } from "./RepositoryTest.ts";
 import * as Settings from "./Settings.ts";
-import { gitTable, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
+import { gitTable, mergeTreeOutput, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
 import * as Tree from "./Tree.ts";
 
 const int = (minimum: number, maximum: number): Arbitrary.Arbitrary<number> =>
@@ -52,7 +53,7 @@ const script =
 
 const open = (
   run: (call: Call) => Reply,
-  limits: { readonly commits?: number; readonly refs?: number; readonly bytes?: number } = {},
+  limits: Parameters<typeof settings>[0] = {},
   env: Record<string, string> = { PATH: "/usr/bin:/bin" },
   config: Settings.Settings = settings(limits),
 ) =>
@@ -167,7 +168,14 @@ it.effect.prop(
           ProcessRepository.layer({
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              limits: {
+                commits: 100,
+                refs: 100,
+                bytes: 100_000,
+                files: 100,
+                diff: 100_000,
+                time: `${seconds} seconds`,
+              },
               committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
@@ -231,7 +239,14 @@ it.effect.prop(
           ProcessRepository.layer({
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
-              limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              limits: {
+                commits: 100,
+                refs: 100,
+                bytes: 100_000,
+                files: 100,
+                diff: 100_000,
+                time: `${seconds} seconds`,
+              },
               committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
@@ -331,7 +346,7 @@ it.effect.prop(
           expect(Result.isSuccess(result), `${found} opens exactly when it is 2.38 or newer`).toBe(isNewEnough(ma, mi));
 
           if (Result.isFailure(result)) {
-            expectFailure(result.failure, Repository.GitTooOld, {}, `${found} is too old`);
+            expectFailure(result.failure, Repository.GitTooOld, { needs: "2.38" }, `${found} is too old`);
             expect(JSON.stringify(result.failure), `${found}: names what it found`).toContain(`${ma}.${mi}.${pa}`);
           }
         }
@@ -362,9 +377,16 @@ const upper = Arbitrary.array(Arbitrary.schema(Schema.Literals([..."ABCDEFGHIJKL
   maxLength: 8,
 }).pipe(Arbitrary.map((letters) => letters.join("")));
 
-// Plant: `extendEnv: true`; drop `--no-replace-objects`.
+/** What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge. */
+const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+
+/** The `-c` settings in the start of a command's arguments. */
+const startConfigs = (args: ReadonlyArray<string>): ReadonlyArray<string> =>
+  args.flatMap((word, i) => (args[i - 1] === "-c" ? [word] : []));
+
+// Plant: `extendEnv: true`; drop `--no-replace-objects`; drop `merge.renames=true` from the start of the commands.
 it.effect.prop(
-  "P5 git's environment: every command has the same arguments' start, extendEnv false, and only PATH and the pinned set",
+  "P5 git's environment: every command has the same arguments' start with the three merge pins, extendEnv false, and only PATH and the pinned set",
   { a: commitIdArb, path: wordArb, names: Arbitrary.array(upper, { minLength: 1, maxLength: 5 }), value: wordArb },
   ({ a, path, names, value }) =>
     Effect.gen(function* () {
@@ -389,6 +411,7 @@ it.effect.prop(
         repo.walk({ include: [first], exclude: [second] }),
         repo.mergeBases(first, second),
         repo.isAncestor(first, second),
+        repo.mergeTrees({ mergeBase: first, ours: first, theirs: second }),
       ];
 
       for (const call of calls) {
@@ -396,10 +419,15 @@ it.effect.prop(
       }
 
       const seen = yield* stand.calls;
-      expect(seen.length, "opening and five calls ran git").toBeGreaterThan(5);
+      expect(seen.length, "opening and six calls ran git").toBeGreaterThan(5);
+      expect(
+        seen.map((call) => call.verb),
+        "the merge ran git too",
+      ).toContain("merge-tree");
 
       for (const call of seen) {
         expect(call.args.slice(0, 2), `${call.verb}: the start`).toEqual(["--no-replace-objects", `--git-dir=${PATH}`]);
+        expect(startConfigs(call.args), `${call.verb}: the merge pins`).toEqual(expect.arrayContaining(MERGE_PINS));
         expect(call.extendEnv, `${call.verb}: nothing inherited`).toBe(false);
         expect(call.env, `${call.verb}: PATH and the pinned set only`).toEqual({ PATH: inherited["PATH"], ...PINNED });
       }
@@ -460,9 +488,11 @@ const START = [
   "gc.auto=0",
   "-c",
   "maintenance.auto=false",
+  ...MERGE_PINS.flatMap((pin) => ["-c", pin]),
 ];
 
-// Plant: swap the two ids given to `merge-base`; drop `--not` from `rev-list`.
+// Plant: swap the two ids given to `merge-base`; drop `--not` from `rev-list`; swap ours and theirs given to `merge-tree`;
+// drop `--name-only` or `-z` from it.
 it.effect.prop(
   "P7 git's arguments: each call asks git for exactly its plumbing command, with its ids and counts in order",
   { a: commitIdArb, commits: int(1, 40), refs: int(1, 40), withExclude: Arbitrary.schema(Schema.Boolean) },
@@ -524,6 +554,23 @@ it.effect.prop(
           (repo) => repo.isAncestor(one, two),
           [CHECK, SHALLOW, ["merge-base", "--is-ancestor", ids[0] ?? "", ids[1] ?? ""]],
         ],
+        [
+          "mergeTrees",
+          (repo) => repo.mergeTrees({ mergeBase: one, ours: two, theirs: three }),
+          [
+            CHECK,
+            [
+              "merge-tree",
+              "--write-tree",
+              "--no-messages",
+              "--name-only",
+              "-z",
+              `--merge-base=${ids[0] ?? ""}`,
+              ids[1] ?? "",
+              ids[2] ?? "",
+            ],
+          ],
+        ],
       ];
 
       for (const [name, call, expected] of cases) {
@@ -572,6 +619,457 @@ it.effect.prop(
             { code, stderr: said.slice(0, bytes) },
             `${length} bytes of stderr, ${way}`,
           );
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const ZEROS = "0".repeat(40);
+
+type Status = "A" | "D" | "M" | "T";
+
+interface Entry {
+  readonly status: Status;
+  readonly path: string;
+  readonly mode: { readonly before: string; readonly after: string };
+  readonly id: { readonly before: string; readonly after: string };
+  /** What `cat-file --batch-check` says of each blob, 0 for a side the file lacks. */
+  readonly size: { readonly before: number; readonly after: number };
+}
+
+const blobId = (n: number): string => n.toString(16).padStart(40, "d");
+
+// git's raw list, as `diff-tree -r -z --no-renames` prints it: `:<mode> <mode> <id> <id> <status>`, a NUL, the path, a NUL.
+const rawList = (entries: ReadonlyArray<Entry>): string =>
+  entries
+    .map((e) => `:${e.mode.before} ${e.mode.after} ${e.id.before} ${e.id.after} ${e.status}\0${e.path}\0`)
+    .join("");
+
+/** What the stand-in is made to say for one `patchId` call: the raw list, the blob sizes, the patch and what `patch-id` prints. */
+interface Script {
+  readonly from: string;
+  readonly to: string;
+  readonly entries: ReadonlyArray<Entry>;
+  readonly patch: Uint8Array;
+  readonly printed: string;
+}
+
+// The sizes of the blobs git is asked about, and the commits it is asked about, as `cat-file --batch-check` answers.
+const checking = (script: Script, call: Call): Reply => {
+  const sizes = new Map(
+    script.entries.flatMap((e) => [[e.id.before, e.size.before] as const, [e.id.after, e.size.after] as const]),
+  );
+
+  const asked = new TextDecoder()
+    .decode(call.input)
+    .split("\n")
+    .filter((line) => line !== "");
+
+  return {
+    code: 0,
+    stdout: asked.map((id) => (sizes.has(id) ? `${id} blob ${sizes.get(id)}\n` : `${id} commit 200\n`)).join(""),
+  };
+};
+
+const patchScript =
+  (script: Script, rest: (call: Call) => Reply | undefined = () => undefined) =>
+  (call: Call): Reply => {
+    const mine = rest(call);
+
+    if (mine !== undefined) {
+      return mine;
+    }
+
+    switch (call.verb) {
+      case "version":
+        return { code: 0, stdout: "git version 2.40.1\n" };
+      case "rev-parse":
+        return { code: 0, stdout: ".\n" };
+      case "cat-file":
+        return checking(script, call);
+      case "diff-tree":
+        return call.rest.includes("-z")
+          ? { code: 0, stdout: rawList(script.entries) }
+          : { code: 0, stdout: script.patch };
+      case "patch-id":
+        return { code: 0, stdout: script.printed };
+      default:
+        return { code: 0 };
+    }
+  };
+
+const STATUSES: ReadonlyArray<Status> = ["A", "D", "M", "T"];
+
+const entryFor = (status: Status, n: number, part: string, before: number, after: number): Entry => {
+  const gone = { mode: "000000", id: ZEROS };
+
+  switch (status) {
+    case "A":
+      return {
+        status,
+        path: `a${part}`,
+        mode: { before: gone.mode, after: "100644" },
+        id: { before: gone.id, after: blobId(2 * n + 1) },
+        size: { before: 0, after },
+      };
+    case "D":
+      return {
+        status,
+        path: `d${part}`,
+        mode: { before: "100644", after: gone.mode },
+        id: { before: blobId(2 * n), after: gone.id },
+        size: { before, after: 0 },
+      };
+    case "M":
+      return {
+        status,
+        path: `m${part}`,
+        mode: { before: "100644", after: "100755" },
+        id: { before: blobId(2 * n), after: blobId(2 * n + 1) },
+        size: { before, after },
+      };
+    case "T":
+      return {
+        status,
+        path: `t${part}`,
+        mode: { before: "100644", after: "120000" },
+        id: { before: blobId(2 * n), after: blobId(2 * n + 1) },
+        size: { before, after },
+      };
+  }
+};
+
+const GITLINK: Entry = {
+  status: "A",
+  path: "sub-module",
+  mode: { before: "000000", after: "160000" },
+  id: { before: ZEROS, after: `${"c".repeat(39)}1` },
+  size: { before: 0, after: 0 },
+};
+
+// A file made a submodule and a submodule made a file: one `T` entry each, with a file on one side and a submodule on the other.
+// The file's bytes count against `limits.diff`, and the submodule's id is never asked about.
+const submodules = (before: number, after: number): ReadonlyArray<Entry> => [
+  {
+    status: "T",
+    path: "file-made-submodule",
+    mode: { before: "100644", after: "160000" },
+    id: { before: blobId(1001), after: `${"c".repeat(39)}2` },
+    size: { before, after: 0 },
+  },
+  {
+    status: "T",
+    path: "submodule-made-file",
+    mode: { before: "160000", after: "100755" },
+    id: { before: `${"c".repeat(39)}3`, after: blobId(1002) },
+    size: { before: 0, after },
+  },
+];
+
+// The sides of an entry that hold a file: the blobs git is asked the size of, and the bytes that count against `limits.diff`.
+const fileSides = (entry: Entry): ReadonlyArray<{ readonly id: string; readonly size: number }> => [
+  ...(entry.mode.before === "000000" || entry.mode.before === "160000"
+    ? []
+    : [{ id: entry.id.before, size: entry.size.before }]),
+  ...(entry.mode.after === "000000" || entry.mode.after === "160000"
+    ? []
+    : [{ id: entry.id.after, size: entry.size.after }]),
+];
+
+interface Spec {
+  readonly from: string;
+  readonly parts: ReadonlyArray<string>;
+  readonly sizes: ReadonlyArray<number>;
+  readonly count: number;
+  readonly shift: number;
+  readonly patch: Uint8Array;
+  readonly printed: string;
+}
+
+// One `patchId` call to make: two commits, the raw list git prints for them, which holds files, a submodule added and a file and a
+// submodule made each other, and the limits that fit it exactly.
+const scene = ({ from, parts, sizes, count, shift, patch, printed }: Spec) => {
+  const first = commitIdFrom(from);
+  const second = commitIdFrom(`b${from.slice(1)}`);
+
+  const real = Array.from({ length: count }, (_, i) =>
+    entryFor(
+      STATUSES[(shift + i) % STATUSES.length] ?? "M",
+      i,
+      parts[i] ?? "p",
+      sizes[2 * i] ?? 1,
+      sizes[2 * i + 1] ?? 1,
+    ),
+  );
+
+  const entries = [...real, GITLINK, ...submodules(sizes[12] ?? 1, sizes[13] ?? 1)];
+  const script: Script = { from: first, to: second, entries, patch, printed: `${printed} ${ZEROS}\n` };
+  const sides = entries.flatMap(fileSides);
+
+  return {
+    first,
+    second,
+    real,
+    entries,
+    script,
+    files: entries.length,
+    bytes: sides.reduce((total, side) => total + side.size, 0),
+    blobs: new Set(sides.map((side) => side.id)),
+  };
+};
+
+const SPEC = {
+  from: commitIdArb,
+  parts: Arbitrary.array(partArb, { minLength: 8, maxLength: 8 }),
+  sizes: Arbitrary.array(int(1, 40), { minLength: 16, maxLength: 16 }),
+  count: int(4, 6),
+  shift: int(0, 3),
+  patch: Arbitrary.array(int(0, 255), { minLength: 1, maxLength: 60 }).pipe(
+    Arbitrary.map((octets) => Uint8Array.from(octets)),
+  ),
+  printed: commitIdArb,
+};
+
+const CHECK = ["cat-file", "--batch-check"];
+
+const OPENING = [["version"], ["rev-parse", "--git-dir"]];
+
+const commandsSeen = (calls: ReadonlyArray<Call>): ReadonlyArray<ReadonlyArray<string>> =>
+  calls.map((seen) => seen.args);
+
+// The lines a command was given on stdin, as a set.
+const asked = (call: Call | undefined): ReadonlySet<string> =>
+  new Set(
+    new TextDecoder()
+      .decode(call?.input)
+      .split("\n")
+      .filter((line) => line !== ""),
+  );
+
+// Plant: read empty `patch-id` output as none, red; add `--stable`, red; run `diff-tree -p` before the size check, red; pipe
+// `diff-tree` into `patch-id`: the stand-in sees one piped command, red; ask `cat-file` the size of a gitlink's id, (j) red;
+// ignore the exit code of `diff-tree -r -z` or of `diff-tree -p`, so a failure answers none, red; count `>=` for `>` on `files`,
+// red; delete the files check or the size check, (h) red; run the later commands after an empty raw list, red; delete the check
+// that both commits are known, (i) red.
+it.effect.prop(
+  "P14 a patch id's commands: known, the raw list, the sizes, the patch and `patch-id --verbatim`, in that order, with the limits checked before the content is read",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const { first, second, real, script, files, bytes, blobs } = scene(spec);
+      const { patch, printed } = spec;
+      expect(
+        real.map((e) => e.status),
+        "every status of the raw list is read",
+      ).toEqual(expect.arrayContaining([...STATUSES]));
+
+      const RAW = ["diff-tree", "-r", "-z", "--no-renames", first, second];
+
+      const PATCH = [
+        "diff-tree",
+        "-r",
+        "-p",
+        "-U0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        first,
+        second,
+      ];
+
+      const PATCH_ID = ["patch-id", "--verbatim"];
+
+      const ask = (limits: Parameters<typeof settings>[0], rest?: (call: Call) => Reply | undefined) =>
+        Effect.gen(function* () {
+          const { repo, stand } = yield* open(patchScript(script, rest), limits);
+
+          return { result: yield* Effect.result(repo.patchId(first, second)), seen: yield* stand.calls };
+        });
+
+      // Exactly at both limits: every command, in order, and the patch reaches `patch-id` byte for byte.
+      const whole = yield* ask({ files, diff: bytes });
+      expect(Result.isSuccess(whole.result), "at both limits it answers").toBe(true);
+
+      if (Result.isSuccess(whole.result)) {
+        expect(whole.result.success, "what patch-id printed").toEqual(Option.some(printed));
+      }
+
+      expect(commandsSeen(whole.seen), "every command, in order").toEqual(
+        [...OPENING, CHECK, RAW, CHECK, PATCH, PATCH_ID].map((rest) => [...START, ...rest]),
+      );
+      expect(
+        whole.seen.some((seen) => seen.piped),
+        "no command is a pipe",
+      ).toBe(false);
+      const [known, , sizesCall, , idCall] = whole.seen.slice(2);
+
+      expect(asked(known), "known is asked about both commits").toEqual(new Set([first, second]));
+      expect(idCall?.input, "the patch reaches patch-id byte for byte").toEqual(patch);
+      expect(asked(sizesCall), "the sizes are asked of each blob of the raw list, and of no submodule").toEqual(blobs);
+
+      // One entry more than `files`: TooMany, and no size is asked.
+      const crowded = yield* ask({ files: files - 1, diff: bytes });
+      expect(Result.isFailure(crowded.result), "one file too many fails").toBe(true);
+
+      if (Result.isFailure(crowded.result)) {
+        expectFailure(
+          crowded.result.failure,
+          Repository.TooMany,
+          { limit: "files", most: files - 1 },
+          "the files limit",
+        );
+      }
+
+      expect(commandsSeen(crowded.seen), "no size is asked before the files limit is checked").toEqual(
+        [...OPENING, CHECK, RAW].map((rest) => [...START, ...rest]),
+      );
+
+      // One byte more than `diff`: DiffTooLarge, and no patch is printed.
+      const heavy = yield* ask({ files, diff: bytes - 1 });
+      expect(Result.isFailure(heavy.result), "one byte too many fails").toBe(true);
+
+      if (Result.isFailure(heavy.result)) {
+        expectFailure(heavy.result.failure, Repository.DiffTooLarge, { most: bytes - 1 }, "the diff limit");
+      }
+
+      expect(commandsSeen(heavy.seen), "no patch is printed before the size limit is checked").toEqual(
+        [...OPENING, CHECK, RAW, CHECK].map((rest) => [...START, ...rest]),
+      );
+
+      // Nothing changed: the raw list is empty, the answer is none, and no later command runs.
+      const quiet = yield* Effect.gen(function* () {
+        const { repo, stand } = yield* open(patchScript({ ...script, entries: [] }), { files, diff: bytes });
+
+        return { result: yield* Effect.result(repo.patchId(first, second)), seen: yield* stand.calls };
+      });
+
+      expect(Result.isSuccess(quiet.result), "an empty raw list answers").toBe(true);
+
+      if (Result.isSuccess(quiet.result)) {
+        expect(Option.isNone(quiet.result.success), "an empty raw list is none").toBe(true);
+      }
+
+      expect(commandsSeen(quiet.seen), "nothing runs after an empty raw list").toEqual(
+        [...OPENING, CHECK, RAW].map((rest) => [...START, ...rest]),
+      );
+
+      // A raw list with entries and a `patch-id` that prints nothing is no answer, never none.
+      const silent = yield* ask({ files, diff: bytes }, (call) =>
+        call.verb === "patch-id" ? { code: 0, stdout: "" } : undefined,
+      );
+
+      expect(Result.isFailure(silent.result), "an id that is missing after changes fails").toBe(true);
+
+      if (Result.isFailure(silent.result)) {
+        unavailable(silent.result.failure, Repository.Unreadable, {}, "patch-id printed nothing");
+      }
+
+      // A command that fails is never no change: its exit code ends the call.
+      const fails: ReadonlyArray<readonly [string, (call: Call) => boolean]> = [
+        ["the raw list", (call) => call.verb === "diff-tree" && call.rest.includes("-z")],
+        ["the patch", (call) => call.verb === "diff-tree" && call.rest.includes("-p")],
+        ["patch-id", (call) => call.verb === "patch-id"],
+      ];
+
+      for (const [label, is] of fails) {
+        const failing = yield* ask({ files, diff: bytes }, (call) =>
+          is(call) ? { code: 128, stderr: "fatal" } : undefined,
+        );
+
+        expect(Result.isFailure(failing.result), `${label} that exits 128 fails the call`).toBe(true);
+
+        if (Result.isFailure(failing.result)) {
+          unavailable(failing.result.failure, Repository.Exited, { code: 128 }, `${label} exits 128`);
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// A call to `patchId` on the stand-in, with the limits and the answers that the scene's script is told to change.
+const patching = (
+  made: ReturnType<typeof scene>,
+  limits: Parameters<typeof settings>[0],
+  rest?: (call: Call) => Reply | undefined,
+) =>
+  Effect.gen(function* () {
+    const { repo, stand } = yield* open(patchScript(made.script, rest), limits);
+
+    return { result: yield* Effect.result(repo.patchId(made.first, made.second)), seen: yield* stand.calls };
+  });
+
+// Plant: delete the check that each blob of the raw list is a blob git found (a missing one counts as 0 bytes); accept any type
+// of object as a blob.
+it.effect.prop(
+  "P14b a blob git cannot size: a blob it does not find, or finds as another object, fails the call and no patch is printed",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const made = scene(spec);
+
+      const sizing = (call: Call): boolean =>
+        call.verb === "cat-file" && [...made.blobs].some((id) => asked(call).has(id));
+
+      for (const found of ["missing", "tree", "tag"] as const) {
+        // The first blob asked is the one git cannot size as a blob; every other is a small blob. The limits leave room.
+        const answer = (call: Call): Reply | undefined =>
+          sizing(call)
+            ? {
+                code: 0,
+                stdout: [...asked(call)]
+                  .map((id, i) => (i === 0 ? `${id} ${found}${found === "missing" ? "" : " 1"}\n` : `${id} blob 1\n`))
+                  .join(""),
+              }
+            : undefined;
+
+        const { result, seen } = yield* patching(made, { files: made.files, diff: made.bytes + 1000 }, answer);
+        expect(Result.isFailure(result), `a blob that is ${found} fails the call`).toBe(true);
+
+        if (Result.isFailure(result)) {
+          unavailable(result.failure, Repository.Unreadable, {}, `a blob that is ${found}`);
+        }
+
+        expect(
+          seen.some((each) => each.verb === "diff-tree" && each.rest.includes("-p")),
+          `a blob that is ${found}: no patch is printed`,
+        ).toBe(false);
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: accept a `patch-id` line with no commit id after the patch id, or with more than one; accept a text that is no patch id.
+it.effect.prop(
+  "P14c a patch-id line: a patch id, a space and one commit id is read; any other line is no answer",
+  SPEC,
+  (spec) =>
+    Effect.gen(function* () {
+      const made = scene(spec);
+      const limits = { files: made.files, diff: made.bytes };
+      const id = spec.printed;
+
+      const good = yield* patching(made, limits);
+      expect(Result.isSuccess(good.result), "a patch id and a commit id are read").toBe(true);
+
+      const lines: ReadonlyArray<readonly [string, string]> = [
+        ["a patch id alone", `${id}\n`],
+        ["a patch id and two more words", `${id} ${ZEROS} ${ZEROS}\n`],
+        ["a patch id and an empty word", `${id}  ${ZEROS}\n`],
+        ["a text that is no patch id", `z${id.slice(1)} ${ZEROS}\n`],
+        ["a space and nothing before it", ` ${ZEROS}\n`],
+      ];
+
+      for (const [label, printed] of lines) {
+        const { result } = yield* patching(made, limits, (call) =>
+          call.verb === "patch-id" ? { code: 0, stdout: printed } : undefined,
+        );
+
+        expect(Result.isFailure(result), `${label} is no answer`).toBe(true);
+
+        if (Result.isFailure(result)) {
+          unavailable(result.failure, Repository.Unreadable, {}, label);
         }
       }
     }),
@@ -831,7 +1329,7 @@ const ALLOWED = [
   "update-ref",
 ];
 
-// Plant: run `push` after `update-ref`.
+// Plant: run `push` after `update-ref`; run `fetch` after `merge-tree`.
 it.effect(
   "P11 scenario: across every call, the git commands that run are plumbing that reads and writes this repository, and none reaches a remote",
   () =>
@@ -848,7 +1346,16 @@ it.effect(
       const table: Table = { commits: [a, b], trees: [tree], refs: [[ref, a]] };
 
       const { repo, stand } = yield* open(
-        gitTable(table, (call) => (call.verb === "hash-object" ? { code: 0, stdout: `${written}\n` } : { code: 0 })),
+        gitTable(table, (call) => {
+          switch (call.verb) {
+            case "hash-object":
+              return { code: 0, stdout: `${written}\n` };
+            case "merge-tree":
+              return { code: 0, stdout: mergeTreeOutput(tree) };
+            default:
+              return { code: 0 };
+          }
+        }),
       );
 
       const author = new Commit.Signature({
@@ -865,6 +1372,7 @@ it.effect(
         repo.isAncestor(a, b),
         repo.writeCommit({ tree, parents: [a], author, message: "m\n" }),
         repo.moveRef({ ref, from: Option.some(a), to: b }),
+        repo.mergeTrees({ mergeBase: a, ours: a, theirs: b }),
       ];
 
       for (const call of calls) {
@@ -879,5 +1387,214 @@ it.effect(
       expect(verbs.has("hash-object") && verbs.has("update-ref"), "the scenario reaches both write commands").toBe(
         true,
       );
+      expect(verbs.has("merge-tree"), "the scenario reaches the merge command").toBe(true);
     }),
+);
+
+/** The failure of an answer that must be one: an answer is a thrown mistake with the law's words. */
+const answerFailure = <A, E>(answer: Result.Result<A, E>, place: string): E => {
+  if (Result.isFailure(answer)) {
+    return answer.failure;
+  }
+
+  throw new Error(`${place}: the call answered, and it must fail`);
+};
+
+const RecordedMerges = Schema.Struct({
+  git: Schema.String,
+  command: Schema.String,
+  rows: Schema.Array(
+    Schema.Struct({
+      note: Schema.String,
+      code: Schema.Int,
+      output: Schema.String,
+      expect: Schema.Struct({ tree: Schema.String, paths: Schema.Array(Schema.String) }),
+    }),
+  ),
+});
+
+/** The paths a conflict names: each once, sorted by their UTF-8 bytes. */
+const onceByBytes = (paths: ReadonlyArray<string>): ReadonlyArray<string> => [...new Set(paths)].sort(byBytes);
+
+// vector: git 2.40.1's `merge-tree -z` printed the exit code and the bytes of each row below, and the reader gives the tree
+// of a clean merge and the paths of a conflict, each once, sorted by bytes, from the recorded bytes and from the same paths
+// listed in another order with one of them twice.
+// Plant: delete the check that the output ends in a NUL, so a path with no ending NUL is a path; skip the check of each
+// path, so an empty path, `.git` or `a/../b` is a path; split the output on line breaks, so the path with a line break is cut; read exit 1 with no paths as a clean
+// merge; keep the paths in the order git printed them, or twice; read any other code as a merge; skip the check that the
+// three are commits, so `merge-tree` runs on a commit the repository lacks.
+it.effect.prop(
+  "P12 merge-tree's output: exit 0 is the tree, exit 1 is a Conflict with its paths once each and sorted by bytes, any other code is Exited, output with no tree is Unreadable, and a commit that is none stops it",
+  { a: commitIdArb, junk: wordArb, other: int(2, 255), turn: int(0, 50), repeat: int(0, 50) },
+  ({ a, junk, other, turn, repeat }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(`${letter}${a.slice(1)}`);
+      const [base, ours, theirs] = [id("b"), id("c"), id("d")];
+      const tree = `e${a.slice(1)}`;
+      const table: Table = { commits: [base, ours, theirs], trees: [], refs: [] };
+
+      const ask = (reply: Reply, held: Table = table) =>
+        Effect.gen(function* () {
+          const { repo, stand } = yield* open(
+            gitTable(held, (call) => (call.verb === "merge-tree" ? reply : { code: 0 })),
+          );
+
+          return { answer: yield* Effect.result(repo.mergeTrees({ mergeBase: base, ours, theirs })), stand };
+        });
+
+      const recorded = Schema.decodeUnknownSync(RecordedMerges)(mergeTreeRows);
+      expect(recorded.git).toContain("git version");
+      expect(recorded.rows.length, "the list is not empty").toBeGreaterThan(6);
+      expect(recorded.rows.filter((row) => row.code === 0).length, "the list holds clean merges").toBeGreaterThan(1);
+      expect(recorded.rows.filter((row) => row.code === 1).length, "the list holds conflicts").toBeGreaterThan(4);
+
+      for (const row of recorded.rows) {
+        const text = Buffer.from(row.output, "base64").toString("utf8");
+        const { answer } = yield* ask({ code: row.code, stdout: text });
+
+        if (row.code === 0) {
+          expect(Result.isSuccess(answer) ? answer.success : answer, row.note).toBe(row.expect.tree);
+
+          continue;
+        }
+
+        expectFailure(
+          answerFailure(answer, row.note),
+          Repository.Conflict,
+          { paths: onceByBytes(row.expect.paths) },
+          row.note,
+        );
+
+        // The same paths, in another order and one of them twice: still each once, sorted.
+        const paths = row.expect.paths;
+        const turned = [...paths.slice(turn % paths.length), ...paths.slice(0, turn % paths.length)];
+        const again = mergeTreeOutput(row.expect.tree, [...turned, turned[repeat % turned.length] ?? ""]);
+        const scrambled = yield* ask({ code: 1, stdout: again });
+
+        expectFailure(
+          answerFailure(scrambled.answer, `${row.note}, scrambled`),
+          Repository.Conflict,
+          { paths: onceByBytes(paths) },
+          `${row.note}, scrambled`,
+        );
+      }
+
+      // Any other code is no answer, whatever it printed.
+      for (const code of [other, 2, 128, 255]) {
+        const { answer } = yield* ask({ code, stdout: mergeTreeOutput(tree, ["x"]), stderr: junk });
+
+        unavailable(answerFailure(answer, `exit ${code}`), Repository.Exited, { code }, `exit ${code}`);
+      }
+
+      // Output with no tree is unreadable, with either code; so is a conflict that names no path.
+      for (const [label, code, stdout] of [
+        ["no output, exit 0", 0, ""],
+        ["text that is no tree, exit 0", 0, `not a tree ${junk}\0`],
+        ["no output, exit 1", 1, ""],
+        ["text that is no tree, exit 1", 1, `not a tree ${junk}\0path\0`],
+        ["a tree and no ending NUL, exit 0", 0, tree],
+        ["a path with no ending NUL, exit 1", 1, `${tree}\0ab`],
+        ["an empty path, exit 1", 1, `${tree}\0\0`],
+        ["a path that names .git, exit 1", 1, `${tree}\0.git\0`],
+        ["a path with a part `..`, exit 1", 1, `${tree}\0a/../b\0`],
+      ] as const) {
+        const { answer } = yield* ask({ code, stdout });
+
+        unavailable(answerFailure(answer, label), Repository.Unreadable, {}, label);
+      }
+
+      const none = yield* ask({ code: 1, stdout: mergeTreeOutput(tree) });
+      expectFailure(
+        answerFailure(none.answer, "a conflict with no path"),
+        Repository.GitUnavailable,
+        {},
+        "a conflict with no path",
+      );
+
+      // A commit that is missing, or an object that is no commit, stops the call before `merge-tree` runs.
+      for (const [label, lacking] of [
+        ["the merge base", base],
+        ["ours", ours],
+        ["theirs", theirs],
+      ] as const) {
+        for (const [kind, held] of [
+          ["missing", { ...table, commits: table.commits.filter((commit) => commit !== lacking) }],
+          ["a tree", { ...table, commits: table.commits.filter((commit) => commit !== lacking), trees: [lacking] }],
+        ] as const) {
+          const { answer, stand } = yield* ask({ code: 0, stdout: mergeTreeOutput(tree) }, held);
+
+          expectFailure(
+            answerFailure(answer, `${label} ${kind}`),
+            Repository.NoSuchCommit,
+            { id: lacking },
+            `${label} ${kind}`,
+          );
+          expect(
+            (yield* stand.calls).filter((call) => call.verb === "merge-tree"),
+            `${label} ${kind}: merge-tree did not run`,
+          ).toEqual([]);
+        }
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+// Plant: delete the gate, so `merge-tree` is recorded on git 2.39; compare the version as text, so 2.100 reads as older;
+// run `cat-file` before the gate, so the call has run a command; name no `needs`, or "2.38".
+it.effect.prop(
+  "P13 the version for merges: a layer opened on git below 2.40 fails mergeTrees with GitTooOld needing 2.40 before it runs a command, and git 2.40 and newer runs merge-tree",
+  { major: int(2, 12), minor: int(0, 150), patch: int(0, 20) },
+  ({ major, minor, patch }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(letter.repeat(40));
+      const [base, ours, theirs] = [id("a"), id("b"), id("c")];
+      const tree = "d".repeat(40);
+
+      const cases: ReadonlyArray<readonly [number, number, number]> = [
+        [major, minor, patch],
+        [2, 38, 0],
+        [2, 39, 3],
+        [2, 40, 0],
+        [2, 40, 1],
+        [2, 100, 0],
+        [3, 0, 0],
+        [10, 0, 0],
+      ];
+
+      for (const [ma, mi, pa] of cases.filter(([x, y]) => isNewEnough(x, y))) {
+        for (const label of LABELS) {
+          const text = versionText(label, ma, mi, pa);
+          const found = `${label} ${ma}.${mi}.${pa}`;
+
+          const { repo, stand } = yield* open((call) =>
+            call.verb === "version"
+              ? { code: 0, stdout: text }
+              : script([base, ours, theirs], 200, (inner) =>
+                  inner.verb === "merge-tree" ? { code: 0, stdout: mergeTreeOutput(tree) } : { code: 0 },
+                )(call),
+          );
+
+          const opened = (yield* stand.calls).length;
+          const answer = yield* Effect.result(repo.mergeTrees({ mergeBase: base, ours, theirs }));
+          const ran = (yield* stand.calls).slice(opened);
+
+          const merges = ma > 2 || mi >= 40;
+          expect(Result.isSuccess(answer), `${found}: merges exactly when it is 2.40 or newer`).toBe(merges);
+
+          if (merges) {
+            expect(Result.isSuccess(answer) ? answer.success : answer, `${found}: merges`).toBe(tree);
+            expect(
+              ran.map((call) => call.verb),
+              `${found}: ran merge-tree`,
+            ).toContain("merge-tree");
+          } else {
+            const error = answerFailure(answer, `${found} is too old to merge`);
+            unavailable(error, Repository.GitTooOld, { needs: "2.40" }, `${found} is too old to merge`);
+            expect(JSON.stringify(error), `${found}: names what it found`).toContain(`${ma}.${mi}.${pa}`);
+            expect(ran, `${found}: no command ran`).toEqual([]);
+          }
+        }
+      }
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
 );

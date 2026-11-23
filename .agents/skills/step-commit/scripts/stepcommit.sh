@@ -72,18 +72,33 @@ branch = git("branch", "--show-current").stdout.decode().strip()
 # ticket is any note on its commits, signed or not: a refusal here only asks for another ticket.
 if step == "lead" and not only:
     quest = branch.removesuffix("-wip")
-    # A lead link is signed under a real ticket: an open one in the tracker. A made-up number (ticket 0,
-    # 9902) is a link no ticket owns, and two such links collide as stale_link. STEPCOMMIT_TICKETS names
-    # the command that lists the tracker's tickets (a test's stub); the default asks the app's own tracker.
+    # A lead link is signed under a real ticket: an open one in the tracker, or an open GitHub issue of this
+    # repo (the kalfa build tickets are issues). A made-up number (ticket 0, 9902) is a link no ticket owns,
+    # and two such links collide as stale_link. STEPCOMMIT_TICKETS names the command that lists the tracker's
+    # tickets (a test's stub); the default asks the app's own tracker.
     unknown = "a lead link cannot be signed: "
     main_dir = os.environ.get("MAIN") or str(pathlib.Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()).parent)
     lister = os.environ["STEPCOMMIT_TICKETS"].split() if os.environ.get("STEPCOMMIT_TICKETS") else ["node", main_dir + "/apps/fabrika/src/cli.ts", "post", "list", "--as", "lead"]
     home = os.environ.get("FABRIKA_HOME") or str(pathlib.Path.home() / "Library/Application Support/@kampus/fabrika-app")
     try: listed = subprocess.run(lister, capture_output=True, text=True, env=dict(os.environ, FABRIKA_HOME=home))
-    except OSError as e: refuse(unknown + "the tracker cannot be read: " + str(e), 5)
-    if listed.returncode: refuse(unknown + "the tracker cannot be read, so ticket " + ticket + " cannot be checked", 5)
-    if ticket not in {m.group(1) for m in re.finditer(r": #([0-9]+) open ", listed.stdout)}:
-        refuse(f"unknown_ticket: {ticket} is not an open tracker ticket; sign a lead link under the ticket of the work (file one with tracker_file when there is none), never a made-up number", 5)
+    except OSError: listed = None
+    tracker = None if listed is None or listed.returncode else {m.group(1) for m in re.finditer(r": #([0-9]+) open ", listed.stdout)}
+    if tracker is None or ticket not in tracker:
+        # Not an open tracker ticket: is it an open GitHub issue? A pull request answers `issue view` too, and its url says /pull/.
+        try: viewed = subprocess.run(["gh", "issue", "view", ticket, "--json", "state,url"], capture_output=True, text=True)
+        except OSError: viewed = None
+        issue = None
+        if viewed is not None and not viewed.returncode:
+            try: issue = json.loads(viewed.stdout)
+            except ValueError: issue = None
+        found = isinstance(issue, dict) and isinstance(issue.get("url"), str) and "/issues/" in issue["url"]
+        # GitHub answered "no such issue" (exit 1 and its own words), as against not answering at all.
+        answered = issue is not None or (viewed is not None and "Could not resolve" in viewed.stderr)
+        if found and issue.get("state") == "OPEN": pass
+        elif not answered:
+            refuse(unknown + "ticket " + ticket + " is not an open tracker ticket" + (" (the tracker cannot be read)" if tracker is None else "") + " and GitHub cannot say if it is an open issue", 5)
+        else:
+            refuse(f"unknown_ticket: {ticket} is not an open tracker ticket or an open GitHub issue; sign a lead link under the ticket of the work (file one with tracker_file when there is none), never a made-up number", 5)
     # gh pr list --json commits asks for every author too, which GitHub refuses as too big.
     query = "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:100){totalCount nodes{number headRefName baseRefOid headRefOid commits(first:100){totalCount nodes{commit{oid}}}}}}}"
     cannot = "open PRs cannot be read, so a lead link cannot be checked: "
@@ -321,6 +336,31 @@ try:
                 refuse("not_formatted: staged files need formatting")
             if formatted.returncode:
                 refuse(f"formatter_failed: installed formatter exited {formatted.returncode}", 2)
+    # CI's typecheck job runs `typecheck` in every workspace package (scripts/typecheck.ts CHECK); a commit
+    # that passes lint and tests can still fail it. Run that same script, with CHECK's incremental flags,
+    # in each package that owns a committed .ts file, so the package list stays the packages' own
+    # `typecheck` scripts and there is no second copy. A box's commit (STEPCOMMIT_BOX) skips it: drive's
+    # host part checks there. No .ts file, or no package with a typecheck script above it: nothing runs.
+    if not named_box:
+        owners_seen = {}
+        for p in staged:
+            if not re.search(r"\.(ts|tsx|mts|cts)\Z", p) or not (root / p).exists(): continue
+            d = pathlib.PurePosixPath(p).parent
+            while str(d) != ".":
+                pkg = root / d / "package.json"
+                if pkg.is_file():
+                    try: scripts = json.loads(pkg.read_text()).get("scripts", {})
+                    except ValueError: scripts = {}
+                    if "typecheck" in scripts: owners_seen[str(d)] = True; break
+                d = d.parent
+        for d in owners_seen:
+            checked = subprocess.run(
+                ["nice", "-n", "15", "pnpm", "--dir", str(root / d), "run", "typecheck", "--incremental", "--tsBuildInfoFile", "node_modules/.cache/tsc/typecheck.tsbuildinfo"],
+                capture_output=True, text=True, env=dict(os.environ, CI="1"),
+            )
+            if checked.returncode:
+                print(checked.stdout + checked.stderr, file=sys.stderr)
+                refuse("typecheck_failed: " + d + " does not typecheck; CI would fail it. Fix the errors above", 8)
 except SystemExit:
     git("--literal-pathspecs", "restore", "--staged", "--", *staged)
     raise

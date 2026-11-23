@@ -9,10 +9,11 @@ import { Clock, Context, Effect, Option, Schema } from "effect";
 import type { NonEmptyReadonlyArray } from "effect/Array";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import type { PatchId } from "./Diff.ts";
 import { bytes } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Settings from "./Settings.ts";
-import { TreeId } from "./Tree.ts";
+import { Path, TreeId } from "./Tree.ts";
 
 /**
  * The repository holds no commit with that id: it is missing, or it names a tree, a blob or a tag.
@@ -78,14 +79,28 @@ export class HistoryTooShort extends Schema.TaggedError<HistoryTooShort, { reado
 ) {}
 
 /**
- * An answer would hold more than a limit allows: more commits (a walk or a merge-base answer) or more refs than the setting.
+ * An answer would hold more than a limit allows: more commits (a walk or a merge-base answer), more refs or more changed files than the setting.
  *
  * @category errors
  */
 export class TooMany extends Schema.TaggedError<TooMany, { readonly brand: unique symbol }>()("TooMany", {
-  limit: Schema.Literals(["commits", "refs"]),
+  limit: Schema.Literals(["commits", "refs", "files"]),
   most: Schema.Int,
 }) {}
+
+/**
+ * The files of a diff hold more content than `limits.diff` allows, counting each changed file's bytes before and after.
+ *
+ * **Details**
+ *
+ * It is checked before any content is read, so a diff is never cut.
+ *
+ * @category errors
+ */
+export class DiffTooLarge extends Schema.TaggedError<DiffTooLarge, { readonly brand: unique symbol }>()(
+  "DiffTooLarge",
+  { most: Schema.Int },
+) {}
 
 /**
  * A commit object is larger than `limits.bytes`.
@@ -141,6 +156,19 @@ export class RefInTheWay extends Schema.TaggedError<RefInTheWay, { readonly bran
 }) {}
 
 /**
+ * The trees of the two sides of a merge could not be combined: each path in `paths` was changed on both sides, in ways that do not agree.
+ *
+ * **Details**
+ *
+ * `paths` holds each conflicting path once, sorted by its UTF-8 bytes, and is never empty.
+ *
+ * @category errors
+ */
+export class Conflict extends Schema.TaggedError<Conflict, { readonly brand: unique symbol }>()("Conflict", {
+  paths: Schema.NonEmptyArray(Path),
+}) {}
+
+/**
  * A call took longer than `limits.time`.
  *
  * @category errors
@@ -178,6 +206,20 @@ export class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand:
 }) {}
 
 /**
+ * The git binary is older than a call needs. `found` holds the version it printed, as numbers, and `needs` the oldest the call takes.
+ *
+ * **Details**
+ *
+ * When a layer is built it fails with `needs` of `"2.38"`, the oldest the calls are held to. `mergeTrees` needs `"2.40"` and fails as a `GitUnavailable` reason before it runs a command.
+ *
+ * @category errors
+ */
+export class GitTooOld extends Schema.TaggedError<GitTooOld, { readonly brand: unique symbol }>()("GitTooOld", {
+  found: Schema.String,
+  needs: Schema.String,
+}) {}
+
+/**
  * Git could not answer. The `reason` says how.
  *
  * @category errors
@@ -185,22 +227,9 @@ export class Unreadable extends Schema.TaggedError<Unreadable, { readonly brand:
 export class GitUnavailable extends Schema.TaggedError<GitUnavailable, { readonly brand: unique symbol }>()(
   "GitUnavailable",
   {
-    reason: Schema.Union([NotStarted, Exited, Unreadable]),
+    reason: Schema.Union([NotStarted, Exited, Unreadable, GitTooOld]),
   },
 ) {}
-
-/**
- * The git binary is older than 2.38. `found` holds the version it printed, as numbers.
- *
- * **Details**
- *
- * It fails only when a layer is built.
- *
- * @category errors
- */
-export class GitTooOld extends Schema.TaggedError<GitTooOld, { readonly brand: unique symbol }>()("GitTooOld", {
-  found: Schema.String,
-}) {}
 
 /**
  * The path holds no git repository.
@@ -217,6 +246,8 @@ export class NoRepository extends Schema.TaggedError<NoRepository, { readonly br
 ) {}
 
 type Fails = GitUnavailable | TimedOut;
+
+const isConflict = Schema.is(Conflict);
 
 // What a caller says to write a commit: the committer is the settings' and the clock's, never the caller's.
 type NewCommit = {
@@ -236,8 +267,10 @@ type NewCommit = {
  * - `walk` answers every commit an `include` commit reaches, itself included, that no `exclude` commit reaches, oldest first: each commit comes after its parents.
  * - `mergeBases` answers the best common ancestors of two commits, sorted by id. `[]` means the two share no history.
  * - `isAncestor` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
+ * - `patchId` answers the name of the changes from the files of `from` to the files of `to`, or none when the two hold the same files. It reads no history, so it answers in a shallow repository. It fails with `NoSuchCommit` for an id the repository lacks, then with `TooMany` (`files`) and `DiffTooLarge`, each before any content is read.
  *
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
+ * - `mergeTrees` merges the trees of `ours` and `theirs` over the tree of `mergeBase`, file by file, and answers the id of the merged tree, which the repository then holds. It fails `Conflict` naming each path that cannot be combined. It reads no history, so a shallow repository answers, and it moves no ref. Merging needs git 2.40 in the git adapter.
  * - `moveRef` points `ref` at `to`, making it or moving it, only if the ref is at `from` now: `Option.none()` means it must not exist. It fails `RefMoved` when it is elsewhere and `RefInTheWay` when another ref is in the way, and then leaves every ref as it was. A call that ends in `TimedOut` may have moved the ref, so read it again.
  *
  * In a shallow repository `walk`, `mergeBases` and `isAncestor` fail with `HistoryTooShort`.
@@ -266,6 +299,10 @@ export class Repository extends Context.Service<
       ancestor: CommitId,
       descendant: CommitId,
     ) => Effect.Effect<boolean, NoSuchCommit | HistoryTooShort | Fails>;
+    readonly patchId: (
+      from: CommitId,
+      to: CommitId,
+    ) => Effect.Effect<Option.Option<PatchId>, NoSuchCommit | TooMany | DiffTooLarge | Fails>;
     readonly writeCommit: (
       commit: NewCommit,
     ) => Effect.Effect<Commit.Commit, NoSuchTree | NoSuchCommit | NulInMessage | TooLargeToWrite | Fails>;
@@ -274,6 +311,11 @@ export class Repository extends Context.Service<
       readonly from: Option.Option<CommitId>;
       readonly to: CommitId;
     }) => Effect.Effect<void, NoSuchCommit | RefMoved | RefInTheWay | Fails>;
+    readonly mergeTrees: (merge: {
+      readonly mergeBase: CommitId;
+      readonly ours: CommitId;
+      readonly theirs: CommitId;
+    }) => Effect.Effect<TreeId, NoSuchCommit | Conflict | Fails>;
   }
 >()("@kalfa/git/Repository") {}
 
@@ -289,7 +331,7 @@ export type Raw = Omit<Repository["Service"], "writeCommit"> & {
 };
 
 /**
- * Wraps an adapter's seven calls with a span each and the time limit, and gives each commit written its committer.
+ * Wraps an adapter's eight calls with a span each and the time limit, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -344,6 +386,16 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
 
       return answer;
     }),
+    patchId: Effect.fn("git.patchId")(function* (from: CommitId, to: CommitId) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.base.revision": from, "vcs.ref.head.revision": to });
+      const patch = yield* limited(raw.patchId(from, to));
+
+      if (Option.isSome(patch)) {
+        yield* Effect.annotateCurrentSpan({ "kalfa.git.patch": patch.value });
+      }
+
+      return patch;
+    }),
     writeCommit: Effect.fn("git.writeCommit")(function* (commit: NewCommit) {
       yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": commit.tree, "kalfa.git.parents": commit.parents });
 
@@ -379,6 +431,28 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       }
 
       return yield* limited(raw.moveRef(move));
+    }),
+    mergeTrees: Effect.fn("git.mergeTrees")(function* (merge: {
+      readonly mergeBase: CommitId;
+      readonly ours: CommitId;
+      readonly theirs: CommitId;
+    }) {
+      yield* Effect.annotateCurrentSpan({
+        "vcs.ref.base.revision": merge.ours,
+        "vcs.ref.head.revision": merge.theirs,
+        "kalfa.git.merge_base": merge.mergeBase,
+      });
+
+      // A conflict is how a merge ends, so its span says how many paths and the paths are kept out of it.
+      const tree = yield* limited(raw.mergeTrees(merge)).pipe(
+        Effect.tapError((error) =>
+          isConflict(error) ? Effect.annotateCurrentSpan({ "kalfa.git.conflicts": error.paths.length }) : Effect.void,
+        ),
+      );
+
+      yield* Effect.annotateCurrentSpan({ "kalfa.git.tree": tree });
+
+      return tree;
     }),
   };
 };

@@ -1,6 +1,6 @@
 // A stand-in for the process spawner: it answers each git command from a script, records every command
-// with its environment, and counts how many child scopes have ended, so a law can see a child was ended
-// without a real signal.
+// with its environment and the bytes it was given on stdin, and counts how many child scopes have ended, so a law can
+// see a child was ended without a real signal. A piped command (`ChildProcess.pipeTo`) is recorded as one command.
 import { Duration, Effect, Layer, Option, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Command } from "effect/process/ChildProcess";
@@ -15,8 +15,10 @@ export interface Call {
   /** How long the command's scope waits after the first signal before it kills the child outright, if it says. */
   readonly forceKillAfter: Duration.Duration | undefined;
   readonly env: Readonly<Record<string, string>>;
-  /** What the command was given on stdin, byte for byte, or undefined when it was given none. */
-  readonly input: Uint8Array | undefined;
+  /** Every byte the command was given on stdin: none at all when it was given nothing. */
+  readonly input: Uint8Array;
+  /** The command is a pipe of two commands, which the stand-in does not run apart. Its `verb` is `<piped>`. */
+  readonly piped: boolean;
 }
 
 /**
@@ -27,7 +29,11 @@ export interface Call {
  * command's `forceKillAfter` and never without one, as Effect's Node spawner does.
  */
 export type Reply =
-  | { readonly code: number; readonly stdout?: string; readonly stderr?: string | ReadonlyArray<string> }
+  | {
+      readonly code: number;
+      readonly stdout?: string | Uint8Array;
+      readonly stderr?: string | ReadonlyArray<string>;
+    }
   | "hang"
   | "hang, ignores the first signal"
   | "cannot start";
@@ -40,18 +46,6 @@ interface StandIn {
 }
 
 const encoder = new TextEncoder();
-
-const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
-  const whole = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
-  let at = 0;
-
-  for (const chunk of chunks) {
-    whole.set(chunk, at);
-    at += chunk.length;
-  }
-
-  return whole;
-};
 
 const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
   for (let i = 0; i < args.length; i++) {
@@ -67,7 +61,40 @@ const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
   return { verb: "", rest: [] };
 };
 
-const commandFrom = (command: Command): Omit<Call, "input"> | undefined => {
+// The stream a command was given as its stdin, if it was given one.
+const stdinStream = (stdin: ChildProcess.CommandOptions["stdin"]) => {
+  if (stdin === undefined || Predicate.isString(stdin)) {
+    return undefined;
+  }
+
+  if (Stream.isStream(stdin)) {
+    return stdin;
+  }
+
+  return Predicate.isString(stdin.stream) ? undefined : stdin.stream;
+};
+
+// The bytes a standard command was given on stdin, whole: none at all when it has no stream.
+const stdinBytes = (command: Command): Effect.Effect<Uint8Array> => {
+  const stream = ChildProcess.isStandardCommand(command) ? stdinStream(command.options.stdin) : undefined;
+
+  return Effect.orDie(Stream.mkUint8Array(stream ?? Stream.empty));
+};
+
+const commandFrom = (command: Command, input: Uint8Array): Call | undefined => {
+  if (ChildProcess.isPipedCommand(command)) {
+    return {
+      args: [],
+      verb: "<piped>",
+      rest: [],
+      extendEnv: undefined,
+      forceKillAfter: undefined,
+      env: {},
+      input: new Uint8Array(),
+      piped: true,
+    };
+  }
+
   if (!ChildProcess.isStandardCommand(command)) {
     return undefined;
   }
@@ -86,7 +113,7 @@ const commandFrom = (command: Command): Omit<Call, "input"> | undefined => {
       ? undefined
       : Option.getOrUndefined(Duration.fromInput(command.options.forceKillAfter));
 
-  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env };
+  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env, input, piped: false };
 };
 
 /** A spawner that answers from `script`, which sees every command and says what it does. */
@@ -97,24 +124,11 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
 
     const spawn: ChildProcessSpawner.ChildProcessSpawner["Service"]["spawn"] = (command) =>
       Effect.gen(function* () {
-        const made = commandFrom(command);
+        const call = commandFrom(command, yield* stdinBytes(command));
 
-        if (made === undefined) {
-          return yield* Effect.die("the stand-in runs standard commands only");
+        if (call === undefined) {
+          return yield* Effect.die("the stand-in runs standard and piped commands only");
         }
-
-        const configured = ChildProcess.isStandardCommand(command) ? command.options.stdin : undefined;
-
-        const stdin =
-          configured !== undefined && !Predicate.isString(configured) && "stream" in configured
-            ? configured.stream
-            : configured;
-
-        const given = stdin === undefined || Predicate.isString(stdin) ? undefined : stdin;
-
-        const input = given === undefined ? undefined : concat(yield* Effect.orDie(Stream.runCollect(given)));
-
-        const call: Call = { ...made, input };
 
         yield* Ref.update(calls, (all) => [...all, call]);
         const reply = script(call);
@@ -138,10 +152,12 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
 
         const stuck = reply === "hang" || reply === "hang, ignores the first signal";
 
-        const chunks = (text: string | ReadonlyArray<string> | undefined) =>
-          Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
-            Stream.map((chunk) => encoder.encode(chunk)),
-          );
+        const chunks = (text: string | Uint8Array | ReadonlyArray<string> | undefined) =>
+          text instanceof Uint8Array
+            ? Stream.make(text)
+            : Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
+                Stream.map((chunk) => encoder.encode(chunk)),
+              );
 
         const out = stuck ? Stream.never : chunks(reply.stdout);
         const err = stuck ? Stream.never : chunks(reply.stderr);
@@ -245,3 +261,10 @@ export const gitTable =
         return rest(call);
     }
   };
+
+/**
+ * What `merge-tree --write-tree --no-messages --name-only -z` prints: the tree and then each conflicting path, every
+ * one ended by a NUL byte. A clean merge prints the tree alone.
+ */
+export const mergeTreeOutput = (tree: string, paths: ReadonlyArray<string> = []): string =>
+  `${[tree, ...paths].join("\0")}\0`;

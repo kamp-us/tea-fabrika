@@ -127,14 +127,29 @@ _Avoid_: squash merge, flatten, fold
 A commit with two parents, joining two lines of commits.
 _Avoid_: land, merge (Delivery's word is land)
 
+**Ours and theirs**:
+The two sides a merge joins. Ours is the line the merge is made on, and becomes the merge commit's first parent; theirs is
+the line that joins it.
+_Avoid_: left and right, source and target, head and base
+
+**Unrelated histories**:
+Two commits with no merge base. A merge commit of them is refused.
+_Avoid_: orphan, disjoint
+
 **Conflict**:
 When a rebase or a merge cannot combine the files by itself. It stops and names the files.
 _Avoid_: clash, failure
 
 **Patch id**:
 A name git gives a commit's or a range's changes, from the lines added and removed and not from where they sit. Two
-changes with the same patch id make the same edit, even on different bases.
+changes with the same patch id make the same edit, even on different bases. Whitespace and a line's end count; the
+lines around a change do not; a patch id compares only with ids the same adapter gave.
 _Avoid_: diff hash, change id, fingerprint
+
+**Binary file**:
+A file git does not split into lines: one with a NUL byte in its first 8000 bytes. A diff names it and its blobs,
+with no lines.
+_Avoid_: blob (every file is one), non-text
 
 **Credential**:
 What git hands a remote to log in on a fetch or a push: a user name and a password. It is asked for at each call.

@@ -14,6 +14,8 @@ work. It starts each step, reads what comes back, and lands the result.
 When staffing work, follow for
 actual productive worker counts, fresh verification and immediate replacements. The brief names
 the bounded task and the ticket it serves. Before starting lanes, group tickets that will touch the same files into one lane.
+Tickets whose plans' files share a package folder run one after the other: start the next when the first lands.
+Only tickets with disjoint files build side by side.
 
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
@@ -346,7 +348,7 @@ Read the header before you run one; this table only says what each is for.
 | `runplan.sh` | a read-only plan writer in the main checkout |
 | `botpush.mjs` | push a branch and its step notes as the bot, in one atomic push |
 | `worktree.ts <name> <branch>` | make `../tf-<name>` on a new branch from `origin/main`, upstream `origin/<branch>`, packages installed |
-| `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder; on a branch whose PR is open, the same flags set that PR's title and body (draft state unchanged), so never `gh api -X PATCH` by hand |
+| `publish.ts <branch> [--title <t>] [--body-file <f>]` | leak-check, refuse unless the checkout is on `<branch>` (run it from that branch's worktree), push HEAD and open a draft PR when the branch has none; `stepcommit.sh` runs it, and after `--commit-only` you run it, giving a new draft its title and its body (written with the pr skill) in place of the placeholder; on a branch whose PR is open, the same flags set that PR's title and body (draft state unchanged), so never `gh api -X PATCH` by hand |
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |

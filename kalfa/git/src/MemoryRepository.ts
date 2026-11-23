@@ -9,6 +9,9 @@ import { Context, Effect, Layer, Option, Ref as Cell, Result, Schema } from "eff
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
+import { PatchId } from "./Diff.ts";
+import { joined } from "./internal/bytes.ts";
+import * as Lines from "./internal/lines.ts";
 import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
 import * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
@@ -128,6 +131,18 @@ const treeId = (folder: Folder): Effect.Effect<Tree.TreeId, never, Digest.Digest
     return Schema.decodeSync(Tree.TreeId)(yield* digest.digestHex(Digest.sha1, hashed("tree", treeBytes(lines))));
   });
 
+// A tree's id from the entries it holds, with each folder hashed first. The one place the folders of a tree are built.
+const entriesTree = (entries: ReadonlyMap<Tree.Path, Tree.Entry>): Effect.Effect<Tree.TreeId, never, Digest.Digest> => {
+  const root: Folder = { files: new Map(), folders: new Map() };
+
+  for (const [path, entry] of entries) {
+    const names = path.split("/");
+    folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
+  }
+
+  return treeId(root);
+};
+
 /**
  * Puts files and their blobs in a store and gives the id of the tree they make, as git computes it.
  *
@@ -147,21 +162,17 @@ export const tree = (
     }
 
     const digest = yield* Digest.Digest;
-    const root: Folder = { files: new Map(), folders: new Map() };
     const entries = new Map<Tree.Path, Tree.Entry>();
     const blobs = new Map(store.blobs);
 
     for (const [path, file] of files) {
-      const names = path.split("/");
       const id = Schema.decodeSync(Tree.BlobId)(yield* digest.digestHex(Digest.sha1, hashed("blob", file.content)));
-      const entry = new Tree.Entry({ mode: file.mode, blob: id });
 
-      folderAt(root, names.slice(0, -1)).files.set(names.at(-1) ?? path, entry);
-      entries.set(path, entry);
+      entries.set(path, new Tree.Entry({ mode: file.mode, blob: id }));
       blobs.set(id, file.content.slice());
     }
 
-    const id = yield* treeId(root);
+    const id = yield* entriesTree(entries);
 
     return { store: { ...store, trees: new Map(store.trees).set(id, entries), blobs }, id };
   });
@@ -368,6 +379,130 @@ const isAncestor = (
 ): Result.Result<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort> =>
   Result.map(history(store, [ancestor, descendant]), () => reach(store, [descendant]).has(ancestor));
 
+// A file changed between two trees: where it is, and what it was and is, with the bytes of each side.
+interface Changed {
+  readonly path: Tree.Path;
+  readonly before?: Held;
+  readonly after?: Held;
+}
+
+interface Held {
+  readonly entry: Tree.Entry;
+  readonly content: Uint8Array;
+}
+
+const NO_BYTES = new Uint8Array();
+
+const filesAt = (store: Store, id: CommitId): ReadonlyMap<Tree.Path, Tree.Entry> =>
+  store.trees.get(store.commits.get(id)?.tree ?? EMPTY_TREE) ?? new Map();
+
+const held = (store: Store, entry: Tree.Entry | undefined): Held | undefined =>
+  entry === undefined ? undefined : { entry, content: store.blobs.get(entry.blob) ?? NO_BYTES };
+
+// The files that differ between two commits' trees, in path byte order: new, gone, or with another mode or other bytes.
+const changed = (store: Store, from: CommitId, to: CommitId): ReadonlyArray<Changed> => {
+  const before = filesAt(store, from);
+  const after = filesAt(store, to);
+
+  return [...new Set([...before.keys(), ...after.keys()])]
+    .sort(byBytes)
+    .filter((path) => {
+      const was = before.get(path);
+      const now = after.get(path);
+
+      return was === undefined || now === undefined || was.mode !== now.mode || was.blob !== now.blob;
+    })
+    .map((path) => {
+      const was = held(store, before.get(path));
+      const now = held(store, after.get(path));
+
+      return { path, ...(was === undefined ? {} : { before: was }), ...(now === undefined ? {} : { after: now }) };
+    });
+};
+
+const patchLimits = (
+  files: ReadonlyArray<Changed>,
+  limits: Settings.Settings["limits"],
+): Result.Result<void, Repository.TooMany | Repository.DiffTooLarge> => {
+  if (files.length > limits.files) {
+    return Result.fail(new Repository.TooMany({ limit: "files", most: limits.files }));
+  }
+
+  const content = files.reduce(
+    (total, file) => total + (file.before?.content.length ?? 0) + (file.after?.content.length ?? 0),
+    0,
+  );
+
+  return content > limits.diff
+    ? Result.fail(new Repository.DiffTooLarge({ most: limits.diff }))
+    : Result.succeed(undefined);
+};
+
+const encoder = new TextEncoder();
+
+// A field of what a patch id hashes: a letter for what it is, its length and its bytes, so no two changes write the same bytes.
+const field = (kind: string, octets: Uint8Array): Uint8Array =>
+  joined([encoder.encode(`${kind}${octets.length}:`), octets]);
+
+const word = (kind: string, text: string): Uint8Array => field(kind, encoder.encode(text));
+
+const isLink = (side: Held): boolean => side.entry.mode === "120000";
+
+type Kind = "new" | "deleted" | "kind" | "modified";
+
+const changeKind = ({ before, after }: Changed): Kind => {
+  if (before === undefined) {
+    return "new";
+  }
+
+  if (after === undefined) {
+    return "deleted";
+  }
+
+  return isLink(before) === isLink(after) ? "modified" : "kind";
+};
+
+// A mode goes into the id where it is new, gone or changed, and not where it stays the same: a file that is executable on two
+// bases and edited the same way has one id.
+const modes = (file: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
+  const sides = [file.before, file.after].flatMap((side) => (side === undefined ? [] : [side.entry.mode]));
+
+  return kind === "modified" && sides[0] === sides[1] ? [] : sides.map((mode) => word("m", mode));
+};
+
+// What a changed file's bytes add to the id. A binary file counts by its blobs on both sides, as git names it. A text file
+// counts by its removed and added lines, each with its own end, and where a line sits and the lines around it count for nothing.
+// A file that changed kind has every old line removed and every new line added, as git prints it. A file with the same bytes on
+// both sides and a new mode, but the same kind, adds nothing.
+const edits = ({ before, after }: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
+  const old = before?.content ?? NO_BYTES;
+  const next = after?.content ?? NO_BYTES;
+
+  if (kind !== "kind" && before !== undefined && before.entry.blob === after?.entry.blob) {
+    return [];
+  }
+
+  if (Lines.isBinary(old) || Lines.isBinary(next)) {
+    return [word("b", before?.entry.blob ?? "-"), word("b", after?.entry.blob ?? "-")];
+  }
+
+  if (kind === "kind") {
+    return [...Lines.split(old).map((line) => field("-", line)), ...Lines.split(next).map((line) => field("+", line))];
+  }
+
+  return Lines.blocks(old, next).flatMap((block) => [
+    ...block.removed.map((line) => field("-", line)),
+    ...block.added.map((line) => field("+", line)),
+  ]);
+};
+
+// One changed file as bytes to hash: what kind of change, its path, its modes, its edits.
+const section = (file: Changed): ReadonlyArray<Uint8Array> => {
+  const kind = changeKind(file);
+
+  return [word("k", kind), word("p", file.path), ...modes(file, kind), ...edits(file, kind)];
+};
+
 // What a write to the store answers, and the store after it: a call that fails leaves the store as it was.
 type Step<A, E> = readonly [Result.Result<A, E>, Store];
 
@@ -412,12 +547,88 @@ const withRef = (
   return [Result.succeed(undefined), { ...store, refs: new Map(store.refs).set(move.ref, move.to) }];
 };
 
+// The files of a commit, by path.
+const commitFiles = (
+  store: Store,
+  id: CommitId,
+): Result.Result<ReadonlyMap<Tree.Path, Tree.Entry>, Repository.NoSuchCommit> =>
+  Result.flatMap(found(store, id), (held) => {
+    const files = store.trees.get(held.tree);
+
+    // A commit whose files the store lacks is no commit a merge can read.
+    return files === undefined ? Result.fail(new Repository.NoSuchCommit({ id })) : Result.succeed(files);
+  });
+
+const isSame = (a: Tree.Entry | undefined, b: Tree.Entry | undefined): boolean =>
+  a === undefined || b === undefined ? a === b : a.mode === b.mode && a.blob === b.blob;
+
+// What a path holds after a merge, by whole file: if ours and theirs are the same, that is the answer; if theirs is the
+// merge base's, ours is; if ours is the merge base's, theirs is; else the path conflicts.
+const settle = (
+  base: Tree.Entry | undefined,
+  ours: Tree.Entry | undefined,
+  theirs: Tree.Entry | undefined,
+): Tree.Entry | undefined | "conflict" => {
+  if (isSame(ours, theirs) || isSame(theirs, base)) {
+    return ours;
+  }
+
+  return isSame(ours, base) ? theirs : "conflict";
+};
+
+// The files of the merge of two commits over their merge base, or each path that cannot be combined. A merged path that
+// is a folder of another merged path, a file `a` beside a file `a/b`, conflicts on both.
+const merged = (
+  store: Store,
+  merge: { readonly mergeBase: CommitId; readonly ours: CommitId; readonly theirs: CommitId },
+): Result.Result<ReadonlyMap<Tree.Path, Tree.Entry>, Repository.NoSuchCommit | Repository.Conflict> =>
+  Result.gen(function* () {
+    const base = yield* commitFiles(store, merge.mergeBase);
+    const ours = yield* commitFiles(store, merge.ours);
+    const theirs = yield* commitFiles(store, merge.theirs);
+    const kept = new Map<Tree.Path, Tree.Entry>();
+    const conflicts = new Set<Tree.Path>();
+
+    for (const path of new Set([...base.keys(), ...ours.keys(), ...theirs.keys()])) {
+      const settled = settle(base.get(path), ours.get(path), theirs.get(path));
+
+      if (settled === "conflict") {
+        conflicts.add(path);
+      } else if (settled !== undefined) {
+        kept.set(path, settled);
+      }
+    }
+
+    const keptByName = new Map<string, Tree.Path>();
+
+    for (const path of kept.keys()) {
+      keptByName.set(path, path);
+    }
+
+    for (const path of kept.keys()) {
+      const names = path.split("/");
+
+      for (let depth = 1; depth < names.length; depth++) {
+        const folder = keptByName.get(names.slice(0, depth).join("/"));
+
+        if (folder !== undefined) {
+          conflicts.add(folder);
+          conflicts.add(path);
+        }
+      }
+    }
+
+    const [first, ...rest] = [...conflicts].sort(byBytes);
+
+    return first === undefined ? kept : yield* Result.fail(new Repository.Conflict({ paths: [first, ...rest] }));
+  });
+
 /**
  * Layer that provides `Repository` over a store held in memory, and `MemoryStore` to read it and move it.
  *
  * **Details**
  *
- * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. It needs a `Digest`, which gives a written commit its id.
+ * Each call reads the store as it is then. The calls answer as git does and fail as the shared laws say. A write is one step on the store, so two writes never interleave. A merge works file by file: a path changed on both sides to different things is a conflict, even where git would merge the lines. It needs a `Digest`, which gives a written commit its id.
  *
  * @category layers
  */
@@ -434,6 +645,22 @@ export const layer = (
       const read = <A, E>(call: (held: Store) => Result.Result<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.get(cell), (held) => Effect.fromResult(call(held)));
 
+      const patchId = Effect.fnUntraced(function* (from: CommitId, to: CommitId) {
+        const store = yield* Cell.get(cell);
+        yield* Effect.fromResult(found(store, from));
+        yield* Effect.fromResult(found(store, to));
+        const files = changed(store, from, to);
+        yield* Effect.fromResult(patchLimits(files, limits));
+
+        if (files.length === 0) {
+          return Option.none();
+        }
+
+        const hex = yield* digest.digestHex(Digest.sha1, joined(files.flatMap(section)));
+
+        return Option.some(Schema.decodeSync(PatchId)(hex));
+      });
+
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.modify(cell, call), Effect.fromResult);
 
@@ -446,12 +673,25 @@ export const layer = (
             walk: (range) => read((held) => walk(held, limits, range)),
             mergeBases: (a, b) => read((held) => mergeBases(held, limits, a, b)),
             isAncestor: (ancestor, descendant) => read((held) => isAncestor(held, ancestor, descendant)),
+            patchId,
             writeCommit: (fields) =>
               commit(fields).pipe(
                 Effect.provideService(Digest.Digest, digest),
                 Effect.flatMap((made) => write((held) => withCommit(held, made))),
               ),
             moveRef: (move) => write((held) => withRef(held, move)),
+            mergeTrees: Effect.fnUntraced(function* (merge) {
+              const held = yield* Cell.get(cell);
+              const files = yield* Effect.fromResult(merged(held, merge));
+              const id = yield* entriesTree(files).pipe(Effect.provideService(Digest.Digest, digest));
+
+              // The merged tree joins the store as it is now, so a write that came between is kept.
+              yield* Cell.update(cell, (now) =>
+                now.trees.has(id) ? now : { ...now, trees: new Map(now.trees).set(id, files) },
+              );
+
+              return id;
+            }),
           },
           settings,
         ),

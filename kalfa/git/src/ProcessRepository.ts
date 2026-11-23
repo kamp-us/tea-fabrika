@@ -5,18 +5,22 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Config, Duration, Effect, Layer, Option, Predicate, Stream } from "effect";
+import { Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
+import { joined } from "./internal/bytes.ts";
 import { bytes } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
 import type * as Ref from "./Ref.ts";
 import * as Repository from "./Repository.ts";
 import * as Settings from "./Settings.ts";
 
+// What git's merge reads from a repository's own config, written out at git's defaults, so no config steers a merge.
+const MERGE_PINS = ["merge.renames=true", "merge.directoryRenames=conflict", "merge.renormalize=false"];
+
 // What every command starts with: no replacement objects, the path as the git directory (git never looks for a repository
-// around it), and no hook, no automatic gc or maintenance.
+// around it), no hook, no automatic gc or maintenance, and the merge settings at git's defaults.
 const start = (path: string): ReadonlyArray<string> => [
   "--no-replace-objects",
   `--git-dir=${path}`,
@@ -26,6 +30,7 @@ const start = (path: string): ReadonlyArray<string> => [
   "gc.auto=0",
   "-c",
   "maintenance.auto=false",
+  ...MERGE_PINS.flatMap((pin) => ["-c", pin]),
 ];
 
 // Beside PATH, the only variables a command sees: no user or system config, no prompt, no lock taken to refresh, one language.
@@ -56,10 +61,14 @@ interface Output {
   readonly stderr: string;
 }
 
-type Run = (
+type Run = (args: ReadonlyArray<string>, input?: Uint8Array) => Effect.Effect<Output, Repository.GitUnavailable>;
+
+// A command whose stdout is read only until it holds `entries` entries of `diff-tree -z`, and then it is let go: the answer is
+// then the files limit and no more of the list is read. A list that holds no more entries than that is read whole.
+type Listed = (
   args: ReadonlyArray<string>,
-  input?: string | Uint8Array,
-) => Effect.Effect<Output, Repository.GitUnavailable>;
+  entries: number,
+) => Effect.Effect<Output, Repository.GitUnavailable | Repository.TooMany>;
 
 // The first `most` bytes of what a stream says, the rest read and left out so a full pipe never stalls git.
 const firstBytes = (most: number) => (kept: Uint8Array, chunk: Uint8Array) => {
@@ -75,7 +84,28 @@ const firstBytes = (most: number) => (kept: Uint8Array, chunk: Uint8Array) => {
   return together;
 };
 
-// One command, in a scope that ends with it: the child never outlives the call, and a time limit that interrupts the call ends it.
+// A child in the caller's scope: it never outlives the call, and a time limit that interrupts the call ends it.
+const child = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  path: string,
+  env: Record<string, string>,
+  args: ReadonlyArray<string>,
+  input: Uint8Array | undefined,
+) =>
+  spawner
+    .spawn(
+      ChildProcess.make("git", [...start(path), ...args], {
+        extendEnv: false,
+        env,
+        forceKillAfter: KILL_AFTER,
+        stdin: input === undefined ? "ignore" : Stream.make(input),
+      }),
+    )
+    .pipe(Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))));
+
+const unreadable = (cause: unknown): Repository.GitUnavailable => unavailable(new Repository.Unreadable({ cause }));
+
+// One command, in a scope that ends with it.
 const runner = (
   spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   path: string,
@@ -85,17 +115,7 @@ const runner = (
   Effect.fnUntraced(function* (args, input) {
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        const handle = yield* spawner
-          .spawn(
-            ChildProcess.make("git", [...start(path), ...args], {
-              extendEnv: false,
-              env,
-              forceKillAfter: KILL_AFTER,
-              stdin:
-                input === undefined ? "ignore" : Stream.make(Predicate.isString(input) ? encoder.encode(input) : input),
-            }),
-          )
-          .pipe(Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))));
+        const handle = yield* child(spawner, path, env, args, input);
 
         const [stdout, stderr, code] = yield* Effect.all(
           [
@@ -104,9 +124,69 @@ const runner = (
             handle.exitCode,
           ],
           { concurrency: 3 },
-        ).pipe(Effect.mapError((cause) => unavailable(new Repository.Unreadable({ cause }))));
+        ).pipe(Effect.mapError(unreadable));
 
         return { code, stdout, stderr: new TextDecoder().decode(stderr) };
+      }),
+    );
+  });
+
+// What `diff-tree -z` has read so far: its chunks, and how many NUL bytes they hold. An entry ends with its second NUL.
+interface Read {
+  readonly chunks: ReadonlyArray<Uint8Array>;
+  readonly nuls: number;
+}
+
+const nulsIn = (chunk: Uint8Array): number => {
+  let count = 0;
+
+  for (let at = chunk.indexOf(0); at !== -1; at = chunk.indexOf(0, at + 1)) {
+    count += 1;
+  }
+
+  return count;
+};
+
+// Like `runner`, for a list whose length the caller limits: stdout is read until it holds one entry more than `entries`, then
+// the child is let go with the call's scope, with no exit code asked of it. stderr is read beside, so a full pipe never stalls git.
+const lister = (
+  spawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  path: string,
+  env: Record<string, string>,
+  settings: Settings.Settings,
+): Listed =>
+  Effect.fnUntraced(function* (args, entries) {
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const handle = yield* child(spawner, path, env, args, undefined);
+
+        const errors = yield* Effect.forkScoped(
+          Stream.runFold(handle.stderr, () => new Uint8Array(), firstBytes(settings.limits.bytes)),
+        );
+
+        const nothing: Read = { chunks: [], nuls: 0 };
+
+        const read = yield* handle.stdout.pipe(
+          Stream.scan(
+            () => nothing,
+            (so, chunk: Uint8Array) => ({ chunks: [...so.chunks, chunk], nuls: so.nuls + nulsIn(chunk) }),
+          ),
+          Stream.takeUntil((so) => so.nuls >= 2 * (entries + 1)),
+          Stream.runLast,
+          Effect.mapError(unreadable),
+        );
+
+        const seen = Option.getOrElse(read, () => nothing);
+
+        if (seen.nuls >= 2 * (entries + 1)) {
+          return yield* new Repository.TooMany({ limit: "files", most: entries });
+        }
+
+        const [stderr, code] = yield* Effect.all([Fiber.join(errors), handle.exitCode], { concurrency: 2 }).pipe(
+          Effect.mapError(unreadable),
+        );
+
+        return { code, stdout: joined(seen.chunks), stderr: new TextDecoder().decode(stderr) };
       }),
     );
   });
@@ -121,7 +201,7 @@ const succeeded = (output: Output): Effect.Effect<Output, Repository.GitUnavaila
 const stdoutText = (output: Output): Effect.Effect<string, Repository.GitUnavailable> =>
   Effect.fromResult(Parse.lossless(output.stdout));
 
-const lines = (ids: ReadonlyArray<string>): string => ids.map((id) => `${id}\n`).join("");
+const lines = (ids: ReadonlyArray<string>): Uint8Array => encoder.encode(ids.map((id) => `${id}\n`).join(""));
 
 // What the repository holds under each id, from one `cat-file --batch-check`: its type, and nothing for an id it lacks.
 const held = Effect.fnUntraced(function* (
@@ -147,6 +227,19 @@ const known = Effect.fnUntraced(function* (run: Run, ids: ReadonlyArray<CommitId
   return checked;
 });
 
+// The size of each blob, asked of git before any of them is read. A blob that git cannot find is no answer.
+const blobSizes = Effect.fnUntraced(function* (run: Run, ids: ReadonlyArray<string>) {
+  const checked = yield* held(run, ids);
+
+  for (const id of ids) {
+    if (checked.get(id)?.type !== "blob") {
+      return yield* unreadable(new Error("git has no blob that a raw entry names"));
+    }
+  }
+
+  return checked;
+});
+
 // A call that reads history fails on a shallow repository, before any answer could be a guess.
 const whole = Effect.fnUntraced(function* (run: Run) {
   const output = yield* Effect.flatMap(run(["rev-parse", "--is-shallow-repository"]), succeeded);
@@ -157,7 +250,7 @@ const whole = Effect.fnUntraced(function* (run: Run) {
   }
 
   if (answer !== "false") {
-    return yield* unavailable(new Repository.Unreadable({ cause: new Error("git said neither true nor false") }));
+    return yield* unreadable(new Error("git said neither true nor false"));
   }
 });
 
@@ -210,7 +303,11 @@ const failed = Effect.fnUntraced(function* (
   return yield* exited(output);
 });
 
-const calls = (run: Run, settings: Settings.Settings): Repository.Raw => {
+// The sides of a changed file that hold a blob: a side the file lacks and a submodule's side hold none.
+const blobSides = (change: Parse.Change): ReadonlyArray<Parse.Side> =>
+  [change.before, change.after].flatMap((side) => (side === undefined || Parse.isGitlink(side) ? [] : [side]));
+
+const calls = (run: Run, listed: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
   const { limits } = settings;
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
@@ -303,6 +400,53 @@ const calls = (run: Run, settings: Settings.Settings): Repository.Raw => {
 
       return true;
     }),
+    patchId: Effect.fnUntraced(function* (from, to) {
+      yield* known(run, [from, to]);
+
+      const raw = yield* Effect.flatMap(
+        listed(["diff-tree", "-r", "-z", "--no-renames", from, to], limits.files),
+        succeeded,
+      );
+
+      const changed = yield* Effect.fromResult(Parse.changes(raw.stdout));
+
+      if (changed.length === 0) {
+        return Option.none();
+      }
+
+      // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob, and a file made a
+      // submodule still holds one on its file side.
+      const blobs = [...new Set(changed.flatMap(blobSides).map((side) => side.id))];
+      const sizes = blobs.length === 0 ? new Map<string, Parse.Checked>() : yield* blobSizes(run, blobs);
+
+      const bytes = changed.flatMap(blobSides).reduce((total, side) => total + (sizes.get(side.id)?.size ?? 0), 0);
+
+      if (bytes > limits.diff) {
+        return yield* new Repository.DiffTooLarge({ most: limits.diff });
+      }
+
+      // Two commands one after the other and never a pipe: a pipe's exit code is the last command's only, so a `diff-tree`
+      // that failed would hand `patch-id` nothing, and nothing would read as no change.
+      const patch = yield* Effect.flatMap(
+        run([
+          "diff-tree",
+          "-r",
+          "-p",
+          "-U0",
+          "--no-renames",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--full-index",
+          from,
+          to,
+        ]),
+        succeeded,
+      );
+
+      const printed = yield* Effect.flatMap(run(["patch-id", "--verbatim"], patch.stdout), succeeded);
+
+      return Option.some(yield* Effect.fromResult(Parse.patchId(yield* stdoutText(printed))));
+    }),
     writeCommit: Effect.fnUntraced(function* (commit) {
       const checked = yield* held(run, [commit.tree, ...commit.parents]);
 
@@ -330,6 +474,41 @@ const calls = (run: Run, settings: Settings.Settings): Repository.Raw => {
 
       return new Commit.Commit({ ...commit, id });
     }),
+    mergeTrees: Effect.fnUntraced(function* ({ mergeBase, ours, theirs }) {
+      // `--merge-base` came in git 2.40, so an older git refuses before any command runs.
+      if (!canMerge(version)) {
+        return yield* unavailable(new Repository.GitTooOld({ found: version.found, needs: MERGE_NEEDS }));
+      }
+
+      yield* known(run, [mergeBase, ours, theirs]);
+
+      const output = yield* run([
+        "merge-tree",
+        "--write-tree",
+        "--no-messages",
+        "--name-only",
+        "-z",
+        `--merge-base=${mergeBase}`,
+        ours,
+        theirs,
+      ]);
+
+      // Exit 0 is a clean merge, which prints the tree alone. Exit 1 is a conflict, which prints the tree and then each path.
+      if (output.code !== 0 && output.code !== 1) {
+        return yield* exited(output);
+      }
+
+      const { tree, paths } = yield* Effect.fromResult(Parse.mergeTree(yield* stdoutText(output)));
+      const [first, ...rest] = paths;
+
+      if (output.code === 0) {
+        return tree;
+      }
+
+      return first === undefined
+        ? yield* unavailable(new Repository.Unreadable({ cause: new Error("a conflict named no path") }))
+        : yield* new Repository.Conflict({ paths: [first, ...rest] });
+    }),
     moveRef: Effect.fnUntraced(function* (move) {
       yield* known(run, [move.to]);
 
@@ -349,15 +528,22 @@ const calls = (run: Run, settings: Settings.Settings): Repository.Raw => {
   };
 };
 
-// git 2.38 is the oldest the calls are held to.
+// git 2.38 is the oldest the calls are held to, and the oldest a layer opens on.
+const OPEN_NEEDS = "2.38";
+
 const isNewEnough = ({ major, minor }: Parse.Version): boolean => major > 2 || (major === 2 && minor >= 38);
+
+// `merge-tree --merge-base` needs git 2.40.
+const MERGE_NEEDS = "2.40";
+
+const canMerge = ({ major, minor }: Parse.Version): boolean => major > 2 || (major === 2 && minor >= 40);
 
 /**
  * Layer that provides `Repository` over the bare repository at `path`, by running the `git` binary.
  *
  * **Details**
  *
- * Building it runs `git version` (2.38 or newer, else `GitTooOld`) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner`, which the app provides.
+ * Building it runs `git version` (2.38 or newer, else `GitTooOld`; `mergeTrees` needs 2.40 and fails with `GitTooOld` as a `GitUnavailable` reason on older git) and `git rev-parse --git-dir` with `--git-dir` (else `NoRepository`), in a span named `git.open` that records the version. `PATH` is read once through `Config`, as the one inherited variable. It needs a `ChildProcessSpawner`, which the app provides.
  *
  * @category layers
  */
@@ -378,7 +564,9 @@ export const layer = (options: {
         Effect.mapError((cause) => unavailable(new Repository.NotStarted({ cause }))),
       );
 
-      const run = runner(spawner, options.path, { PATH: path, ...PINNED }, options.settings);
+      const env = { PATH: path, ...PINNED };
+      const run = runner(spawner, options.path, env, options.settings);
+      const listed = lister(spawner, options.path, env, options.settings);
       const after = Settings.timeLimit(options.settings);
 
       const open = Effect.fn("git.open")(function* () {
@@ -389,19 +577,21 @@ export const layer = (options: {
         yield* Effect.annotateCurrentSpan({ "kalfa.git.version": printed.found });
 
         if (!isNewEnough(printed)) {
-          return yield* new Repository.GitTooOld({ found: printed.found });
+          return yield* new Repository.GitTooOld({ found: printed.found, needs: OPEN_NEEDS });
         }
 
         if ((yield* run(["rev-parse", "--git-dir"])).code !== 0) {
           return yield* new Repository.NoRepository({ path: options.path });
         }
+
+        return printed;
       });
 
-      yield* Effect.timeoutOrElse(open(), {
+      const version = yield* Effect.timeoutOrElse(open(), {
         duration: after,
         orElse: () => Effect.fail(new Repository.TimedOut({ after })),
       });
 
-      return Repository.make(calls(run, options.settings), options.settings);
+      return Repository.make(calls(run, listed, options.settings, version), options.settings);
     }),
   );

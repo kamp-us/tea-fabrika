@@ -42,7 +42,7 @@ export type {
    */
   FlagValues,
   /**
-   * One `effect/cli` flag per setting a flag may set, by setting name. A file-only setting has none, so each named key is optional.
+   * One `effect/cli` flag per setting a flag may set, by setting name. A file-only setting has no key, so a record that names one does not compile, and each other key is optional.
    *
    * @category models
    */
@@ -240,7 +240,7 @@ export const flags = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * **Details**
  *
- * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. A group with a live setting also gets the restart setting `config.watch.debounce`, the quiet window, 100 milliseconds by default. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given.
+ * It runs in a span named `config.layer` with the attribute `kalfa.config.app`, and no value goes in the span. A group with a live setting also gets the restart setting `config.watch.debounce`, the quiet window, 100 milliseconds by default. In order: it reads the repo configuration at `<repo>/.<app>/<app>.toml`, checks the minimum version `<app>-version` against `version`, checks the repo configuration whole, then finds, reads and checks the user configuration whole, and only then resolves each setting by precedence: command-line flag, environment variable, repo configuration, user configuration, default. Fails with one `SettingsError`, the repo configuration's first. `repo` is the folder that holds `.<app>/`, the current folder by default. `flags` is what the command's handler got for `flags(group)`: a flag's text is read as the variable's text is, and with no `flags`, no flag was given. A file-only setting is read from its files and its default only, and a flag or a variable that names it stops the start with `scope`.
  *
  * A group with a live setting then watches the folder of each configuration file for as long as the layer lives. A file that has been quiet for the window is read again and checked whole as the start does, every setting is resolved again, and each live value that differs is published to its `changes`. A refused file is logged as a warning with its file and line, the last good values hold, and nothing fails. A restart setting whose value changed is logged once and applies at the next start. A file that cannot be watched is logged once and followed only at a restart. The watch ends with the layer.
  *

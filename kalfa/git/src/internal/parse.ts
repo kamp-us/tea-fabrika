@@ -3,9 +3,11 @@
 import { Result, Schema } from "effect";
 import * as Commit from "../Commit.ts";
 import { CommitId } from "../CommitId.ts";
+import { PatchId } from "../Diff.ts";
 import * as Ref from "../Ref.ts";
 import * as Repository from "../Repository.ts";
-import { TreeId } from "../Tree.ts";
+import { Path, TreeId } from "../Tree.ts";
+import { byBytes, OBJECT_ID } from "./object.ts";
 
 const NEWLINE = 0x0a;
 
@@ -35,11 +37,15 @@ export interface Checked {
 /**
  * Reads `cat-file --batch-check`: each object that exists, by id. An id git calls missing is left out.
  *
+ * **Details**
+ *
+ * The id is any object's: a commit's, a tree's or a blob's.
+ *
  * @internal
  */
-export const checks = (output: string): Result.Result<ReadonlyMap<CommitId, Checked>, Repository.GitUnavailable> =>
+export const checks = (output: string): Result.Result<ReadonlyMap<string, Checked>, Repository.GitUnavailable> =>
   Result.gen(function* () {
-    const found = new Map<CommitId, Checked>();
+    const found = new Map<string, Checked>();
 
     for (const line of output.split("\n").filter((each) => each !== "")) {
       const [id, type, size, ...rest] = line.split(" ");
@@ -146,6 +152,48 @@ export const refs = (
     }
 
     return read;
+  });
+
+/**
+ * What `merge-tree --write-tree --no-messages --name-only -z` printed: the merged tree, and each conflicting path once, sorted by UTF-8 bytes.
+ *
+ * @internal
+ */
+export interface MergeTree {
+  readonly tree: TreeId;
+  readonly paths: ReadonlyArray<Path>;
+}
+
+/**
+ * Reads the output of `merge-tree -z`: the tree's id and then each conflicting path, every one ended by a NUL byte.
+ *
+ * **Details**
+ *
+ * The text is split on NUL and never on line breaks, since a path may hold one. Output that holds no tree, or that does not end in a NUL, is unreadable.
+ *
+ * @internal
+ */
+export const mergeTree = (output: string): Result.Result<MergeTree, Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    if (!output.endsWith("\0")) {
+      return yield* Result.fail(unreadable("merge-tree printed no tree"));
+    }
+
+    const [first, ...rest] = output.slice(0, -1).split("\0");
+
+    const tree = yield* Result.mapError(Schema.decodeUnknownResult(TreeId)(first), () =>
+      unreadable("merge-tree printed a tree that is no tree id"),
+    );
+
+    const paths = yield* Result.all(
+      rest.map((path) =>
+        Result.mapError(Schema.decodeUnknownResult(Path)(path), () =>
+          unreadable("merge-tree named a path that is no path of a tree"),
+        ),
+      ),
+    );
+
+    return { tree, paths: [...new Set(paths)].sort(byBytes) };
   });
 
 /**
@@ -336,3 +384,128 @@ export const commits = (
  */
 export const lossless = (output: Uint8Array): Result.Result<string, Repository.GitUnavailable> =>
   Result.mapError(text(output), () => unreadable("git printed text that is not UTF-8"));
+
+const NUL = 0x00;
+
+const COLON = 0x3a;
+
+// What `diff-tree -r -z` prints before an entry's path: two modes, two ids and one status letter.
+const RAW_HEAD = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z])$/;
+
+// A file that is absent on one side of an entry has this mode.
+const ABSENT = "000000";
+
+// The mode of a submodule.
+const GITLINK = "160000";
+
+/**
+ * One side of a changed file, as the raw list holds it: a mode and an object id. The object is a blob, or a commit when the mode is a submodule's.
+ *
+ * @internal
+ */
+export interface Side {
+  readonly mode: string;
+  readonly id: string;
+}
+
+/**
+ * One entry of `diff-tree -r -z --no-renames`: a file that is new (A), gone (D), changed (M) or changed in kind (T). A side the file lacks is left out.
+ *
+ * @internal
+ */
+export interface Change {
+  readonly status: "A" | "D" | "M" | "T";
+  readonly path: string;
+  readonly before?: Side;
+  readonly after?: Side;
+  /** Either side is a submodule, which holds a commit and no file. */
+  readonly gitlink: boolean;
+}
+
+/**
+ * Whether one side of an entry is a submodule, which holds a commit and no file. A file made a submodule has a file on one side and a submodule on the other.
+ *
+ * @internal
+ */
+export const isGitlink = (side: Side): boolean => side.mode === GITLINK;
+
+const side = (mode: string, id: string): Result.Result<Side | undefined, Repository.GitUnavailable> =>
+  mode === ABSENT
+    ? Result.succeed(undefined)
+    : OBJECT_ID.test(id)
+      ? Result.succeed({ mode, id })
+      : Result.fail(unreadable("a raw entry names an object that is not an id"));
+
+const change = (head: string, path: string): Result.Result<Change, Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    const [, from, to, was, now, status] = RAW_HEAD.exec(head) ?? [];
+
+    if (from === undefined || to === undefined || was === undefined || now === undefined) {
+      return yield* Result.fail(unreadable("a raw entry has an unexpected form"));
+    }
+
+    if (status !== "A" && status !== "D" && status !== "M" && status !== "T") {
+      return yield* Result.fail(unreadable("a raw entry has a status no call reads"));
+    }
+
+    const before = yield* side(from, was);
+    const after = yield* side(to, now);
+
+    return {
+      status,
+      path,
+      ...(before === undefined ? {} : { before }),
+      ...(after === undefined ? {} : { after }),
+      gitlink: from === GITLINK || to === GITLINK,
+    };
+  });
+
+/**
+ * Reads `diff-tree -r -z --no-renames`: each entry as `:<mode> <mode> <id> <id> <status>`, a NUL, the path and a NUL.
+ *
+ * **Details**
+ *
+ * The path is read as it is, with no quote, and must be UTF-8. A list that ends before an entry's last NUL fails: it is cut, which is no answer.
+ *
+ * @internal
+ */
+export const changes = (output: Uint8Array): Result.Result<ReadonlyArray<Change>, Repository.GitUnavailable> =>
+  Result.gen(function* () {
+    const read: Array<Change> = [];
+
+    for (let start = 0; start < output.length;) {
+      const middle = output.indexOf(NUL, start);
+      const end = middle === -1 ? -1 : output.indexOf(NUL, middle + 1);
+
+      if (output[start] !== COLON || end === -1) {
+        return yield* Result.fail(unreadable("a raw entry is cut or has an unexpected form"));
+      }
+
+      const path = yield* Result.mapError(text(output.subarray(middle + 1, end)), () =>
+        unreadable("git printed a path that is not UTF-8"),
+      );
+
+      read.push(yield* change(String.fromCharCode(...output.subarray(start, middle)), path));
+      start = end + 1;
+    }
+
+    return read;
+  });
+
+/**
+ * Reads what `patch-id` prints for one patch: the patch id, a space and the commit id the patch came from, which is all zeros for a patch with no commit.
+ *
+ * **Details**
+ *
+ * Nothing printed is no id: the call that asked had a patch, so its answer is never none.
+ *
+ * @internal
+ */
+export const patchId = (output: string): Result.Result<PatchId, Repository.GitUnavailable> => {
+  const [first] = output.split("\n");
+  const [id, ...rest] = (first ?? "").split(" ");
+
+  return rest.length === 1
+    ? Result.mapError(Schema.decodeUnknownResult(PatchId)(id), () => unreadable("patch-id printed no patch id"))
+    : Result.fail(unreadable("patch-id printed no patch id"));
+};
