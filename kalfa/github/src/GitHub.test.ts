@@ -1198,11 +1198,12 @@ describe("C12, a text answer", () => {
   );
 });
 
-// C13, who a request is sent as. Plant: drop `options.token` (g); let a token win on an `auth: "none"` route (g); fill `accept`
-// with a default in `call` (h).
+// C13, who a request is sent as. Plant: drop `options.token` (g); let a token win on an `auth: "none"` route, or drop it and
+// send as None, in place of dying (g); fill `accept` with a default in `call` (h). F2 (TestGitHub.test.ts) holds the same
+// defect on a route whose value lies about its type, with every form of the token; here it is the declared `Zen`.
 describe("C13, who a request is sent as", () => {
   it.effect.prop(
-    "the Request says Token with the call's own token, None on an auth: none route even past the types, else Login, and carries accept exactly when the route declared one",
+    "the Request says Token with the call's own token, None on an auth: none route, else Login, a token forced past the types onto an auth: none route is a defect that names the route and sends nothing, and the Request carries accept exactly when the route declared one",
     { drawn: slice1 },
     ({ drawn }) =>
       Effect.gen(function* () {
@@ -1229,14 +1230,31 @@ describe("C13, who a request is sent as", () => {
           drawn.token,
         );
 
-        // (g) A route that sends no token sends none, and a token forced past the types does not change that.
+        // (g) A route that sends no token sends none, and a token forced past the types is a defect and no request.
         const bare = yield* observed(GitHub.call(Zen, {}), () => text("z"));
 
         expect(bare.requests[0]?.auth._tag).toBe("None");
 
-        const forced = yield* observed(GitHub.call(Zen, {}, untyped({ token })), () => text("z"));
+        const secret = `ghp_zq${drawn.length.toString(36)}x${drawn.token}`;
 
-        expect(forced.requests[0]?.auth._tag, "g: a token past the types").toBe("None");
+        const forced = yield* observed(GitHub.call(Zen, {}, untyped({ token: Redacted.make(secret) })), () =>
+          text("z"),
+        );
+
+        expect(Exit.isFailure(forced.exit) && Cause.hasDies(forced.exit.cause), "g: a token past the types dies").toBe(
+          true,
+        );
+        expect(forced.requests, "g: nothing sent").toHaveLength(0);
+
+        if (Exit.isFailure(forced.exit)) {
+          const rendered = [Cause.pretty(forced.exit.cause), String(Cause.squash(forced.exit.cause))].join("\n");
+
+          expect(rendered, "g: the route").toContain("GET /zen");
+
+          for (const form of tokenForms(secret)) {
+            expect(rendered, `g: shows ${form}`).not.toContain(form);
+          }
+        }
 
         // (h) `accept` is there exactly when the route declared it, and is the one declared.
         const asked = yield* observed(GitHub.call(Readme, { params: REPO }), () => text("z"));
