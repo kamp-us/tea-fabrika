@@ -5,7 +5,7 @@
  *
  * No file of this package imports a Node module, this one included. The app provides the Node spawner at the top. Every command runs with an environment of `PATH` and a pinned set, so no repository config, hook or inherited `GIT_` variable steers a call. No call reads the text git says on stderr for its meaning: a missing commit is asked first with `cat-file --batch-check`, and a ref that could not be moved is read again with `for-each-ref`. It writes with `hash-object` and `update-ref` and runs no command that reaches a remote.
  */
-import { Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
+import { Array as Arr, Config, Duration, Effect, Fiber, Layer, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
@@ -349,10 +349,28 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
     }
   });
 
-  // The patch of the two commits, with no context lines. Its size is bounded by the limits, so it is read whole.
+  // The patch of the two commits, with no context lines. Its size is bounded by the limits, so it is read whole. Two settings
+  // of a repository, or of the machine, make git print a text edit as `Binary files differ`, which would change the patch id and
+  // the diff: a file over `core.bigFileThreshold`, and a file an attributes file marks binary. The threshold is set above the
+  // content limit, which no changed file passes, and the attributes file is none.
   const patchBytes = (from: CommitId, to: CommitId) =>
     Effect.flatMap(
-      run(["diff-tree", "-r", "-p", "-U0", "--no-renames", "--no-ext-diff", "--no-textconv", "--full-index", from, to]),
+      run([
+        "-c",
+        `core.bigFileThreshold=${limits.diff + 1}`,
+        "-c",
+        "core.attributesFile=/dev/null",
+        "diff-tree",
+        "-r",
+        "-p",
+        "-U0",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--full-index",
+        from,
+        to,
+      ]),
       succeeded,
     );
 
@@ -465,7 +483,7 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
 
       const contents = yield* Effect.fromResult(Parse.patch(changed, (yield* patchBytes(from, to)).stdout));
 
-      return yield* Effect.fromResult(Parse.files(changed, contents));
+      return yield* Effect.fromResult(Parse.files(Arr.zip(changed, contents)));
     }),
     writeCommit: Effect.fnUntraced(function* (commit) {
       const checked = yield* held(run, [commit.tree, ...commit.parents]);

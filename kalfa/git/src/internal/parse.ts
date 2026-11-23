@@ -701,43 +701,36 @@ const entry = (side: Side | undefined): Result.Result<Entry, Repository.GitUnava
   );
 
 /**
- * Joins the entries of the raw list with their contents, read from the patch, into the diff.
+ * Joins each entry of the raw list with its content, read from the patch, into the diff.
  *
  * **Details**
  *
- * A new file has only an after side, a deleted file only a before side, and a changed file or a type change both. An entry that lacks a side its status needs is `Unreadable`, as is a list and a content list of different lengths. A submodule is no file, so a call keeps it out first.
+ * A call pairs the two lists with `Array.zip`, so an entry never lacks its content. A new file has only an after side, a deleted file only a before side, and a changed file or a type change both. An entry that lacks a side its status needs, or whose side is no file of a tree (a submodule, a folder), is `Unreadable`. A call keeps submodules out first.
  *
  * @internal
  */
 export const files = (
-  changed: ReadonlyArray<Change>,
-  contents: ReadonlyArray<Diff.Content>,
+  pairs: ReadonlyArray<readonly [Change, Diff.Content]>,
 ): Result.Result<Diff.Diff, Repository.GitUnavailable> =>
-  Result.gen(function* () {
-    if (changed.length !== contents.length) {
-      return yield* Result.fail(unreadable("a patch has another count of contents than the raw list has entries"));
-    }
+  Result.all(
+    pairs.map(([each, content]) =>
+      Result.flatMap(filePath(each), (path): Result.Result<Diff.FileChange, Repository.GitUnavailable> => {
+        if (each.status === "A") {
+          return Result.map(entry(each.after), (after) => Diff.New.make({ path, after, content }));
+        }
 
-    const read: Array<Diff.FileChange> = [];
+        if (each.status === "D") {
+          return Result.map(entry(each.before), (before) => Diff.Deleted.make({ path, before, content }));
+        }
 
-    for (const [at, each] of changed.entries()) {
-      const content = contents[at];
-      const path = yield* filePath(each);
-
-      if (content === undefined) {
-        return yield* Result.fail(unreadable("a raw entry has no content"));
-      }
-
-      if (each.status === "A") {
-        read.push(Diff.New.make({ path, after: yield* entry(each.after), content }));
-      } else if (each.status === "D") {
-        read.push(Diff.Deleted.make({ path, before: yield* entry(each.before), content }));
-      } else {
-        read.push(
-          Diff.Modified.make({ path, before: yield* entry(each.before), after: yield* entry(each.after), content }),
-        );
-      }
-    }
-
-    return read;
-  });
+        return Result.gen(function* () {
+          return Diff.Modified.make({
+            path,
+            before: yield* entry(each.before),
+            after: yield* entry(each.after),
+            content,
+          });
+        });
+      }),
+    ),
+  );
