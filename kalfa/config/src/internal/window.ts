@@ -1,12 +1,16 @@
 /**
  * The quiet window of a group with a live setting: how long a configuration file must stay unchanged before the running program reads it again. It is a restart setting the package adds to such a group, so a flag, a variable and both files set it by the usual precedence.
  */
-import { Result, Schema } from "effect";
+import { Schema } from "effect";
 import * as Setting from "../Declaration.ts";
 
-const Length = Schema.String.check(
-  Schema.makeFilter((text: string) => Result.isSuccess(Schema.decodeUnknownResult(Schema.DurationFromString)(text))),
-).annotate({ title: "a length of time", description: "Write it as text, as 100 millis or 2 seconds." });
+/** A length of time as Effect's `Duration.fromInput` reads text: a number, spaces and a unit, or Infinity. W1 holds the two together. The `u` flag is what gives the pattern a JSON Schema form. */
+const Pattern = /^(?:-?Infinity|-?\d+(?:\.\d+)?\s+(?:nanos?|micros?|millis?|seconds?|minutes?|hours?|days?|weeks?))$/u;
+
+const Length = Schema.String.check(Schema.isPattern(Pattern)).annotate({
+  title: "a length of time",
+  description: "Write it as text, as 100 millis or 2 seconds.",
+});
 
 /** The setting itself. A length of time is text, as decision 0089 says, and is decoded to a `Duration` where the follower builds its window. */
 export const debounce = Setting.make("config.watch.debounce", Length).pipe(

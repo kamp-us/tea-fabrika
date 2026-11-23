@@ -103,3 +103,7 @@ _Avoid_: dump, export, resolved config
 **Loading process**:
 The process that reads an app's configuration files and gives a stream of snapshots to a process that cannot read them, as a Worker.
 _Avoid_: main process, parent, host, server
+
+**Reference**:
+The Markdown page of every setting of an app: its files, its environment variable and flag, its default and when a change applies. It is made from the declarations alone, never from a loaded value.
+_Avoid_: docs, manual, settings page

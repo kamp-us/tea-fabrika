@@ -16,6 +16,9 @@
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "mdast-util-from-markdown": "catalog:",
+    "mdast-util-gfm": "catalog:",
+    "micromark-extension-gfm": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

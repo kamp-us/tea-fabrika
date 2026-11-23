@@ -834,7 +834,7 @@ const TypoCase = Schema.Struct({
   pad: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 4 })),
 });
 
-// Plant: guess among every setting, whatever file it may be set in.
+// Plants: guess among every setting, whatever file it may be set in; take the first guess in the group's order, not the nearest.
 it.effect.prop(
   "B4 a key within two edits of a setting the file may set fails `unknown` at its line and names a guess among those; a key farther away names none",
   { input: TypoCase },
@@ -863,6 +863,18 @@ it.effect.prop(
           expect(error.file).toBe(place.name);
           expect(error.line).toBe(pad + 2);
 
+          // The message in full: where, what is wrong, the nearest guess when there is one, and the closing.
+          const typed = `${table}.${key}`;
+
+          const nearest = near.reduce<string | undefined>(
+            (best, name) => (best === undefined || distance(name, typed) < distance(best, typed) ? name : best),
+            undefined,
+          );
+
+          expect(error.message, typed).toBe(
+            `${place.name}, line ${pad + 2}: there is no setting ${typed}.${nearest === undefined ? "" : ` Did you mean ${nearest}?`}\n  ${app} did not start.`,
+          );
+
           const said = specs.map(({ entry }) => named(entry)).filter((name) => mentions(error.message, name));
           // A guess is never a setting this file may not set, nor one more than two edits away.
           expect(said.every((name) => near.includes(name))).toBe(true);
@@ -882,6 +894,33 @@ it.effect.prop(
         }
 
         yield* attempt(far, far, []);
+
+        // Two settings one edit apart in one table: the typed key is one edit from the longer name and two from the shorter,
+        // so the guess is the longer, whichever of the two is declared first.
+        const [one] = trio;
+
+        if (one !== undefined) {
+          const short = `${one.table}.${one.key}`;
+          const long = `${short}z`;
+
+          for (const names of [
+            [short, long],
+            [long, short],
+          ]) {
+            const pair = makeGroup(
+              app,
+              names.map((name) => declare(name, { files: ["repo", "user"] })),
+            );
+
+            const text = `[${one.table}]\n${one.key}zz = 4000\n`;
+            const { exit } = yield* start(pair, { disk: { files: { [place.path]: text } } });
+            const error = seen(exit);
+
+            expect(error.reason).toBe("unknown");
+            expect(error.message, `declared as ${names.join(", ")}`).toContain(`Did you mean ${long}?`);
+            expect(error.message, `declared as ${names.join(", ")}`).not.toContain(`Did you mean ${short}?`);
+          }
+        }
       }
     }),
   check,
