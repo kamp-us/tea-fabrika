@@ -307,7 +307,7 @@ const failed = Effect.fnUntraced(function* (
 const blobSides = (change: Parse.Change): ReadonlyArray<Parse.Side> =>
   [change.before, change.after].flatMap((side) => (side === undefined || Parse.isGitlink(side) ? [] : [side]));
 
-const calls = (run: Run, listed: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
+const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
   const { limits } = settings;
 
   // The objects of commits whose sizes are within `limits.bytes`, read with one `cat-file --batch`.
@@ -324,6 +324,37 @@ const calls = (run: Run, listed: Listed, settings: Settings.Settings, version: P
 
     return yield* Effect.fromResult(Parse.commits(output.stdout));
   });
+
+  // The commits are known, and then the files they differ in, from the raw list of `diff-tree`, read only as far as the files limit.
+  const entries = Effect.fnUntraced(function* (from: CommitId, to: CommitId) {
+    yield* known(run, [from, to]);
+
+    const raw = yield* Effect.flatMap(
+      list(["diff-tree", "-r", "-z", "--no-renames", from, to], limits.files),
+      succeeded,
+    );
+
+    return yield* Effect.fromResult(Parse.changes(raw.stdout));
+  });
+
+  // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob, and a file made a
+  // submodule still holds one on its file side.
+  const withinSize = Effect.fnUntraced(function* (changed: ReadonlyArray<Parse.Change>) {
+    const blobs = [...new Set(changed.flatMap(blobSides).map((side) => side.id))];
+    const sizes = blobs.length === 0 ? new Map<string, Parse.Checked>() : yield* blobSizes(run, blobs);
+    const bytes = changed.flatMap(blobSides).reduce((total, side) => total + (sizes.get(side.id)?.size ?? 0), 0);
+
+    if (bytes > limits.diff) {
+      return yield* new Repository.DiffTooLarge({ most: limits.diff });
+    }
+  });
+
+  // The patch of the two commits, with no context lines. Its size is bounded by the limits, so it is read whole.
+  const patchBytes = (from: CommitId, to: CommitId) =>
+    Effect.flatMap(
+      run(["diff-tree", "-r", "-p", "-U0", "--no-renames", "--no-ext-diff", "--no-textconv", "--full-index", from, to]),
+      succeeded,
+    );
 
   return {
     readCommit: Effect.fnUntraced(function* (id) {
@@ -401,51 +432,40 @@ const calls = (run: Run, listed: Listed, settings: Settings.Settings, version: P
       return true;
     }),
     patchId: Effect.fnUntraced(function* (from, to) {
-      yield* known(run, [from, to]);
-
-      const raw = yield* Effect.flatMap(
-        listed(["diff-tree", "-r", "-z", "--no-renames", from, to], limits.files),
-        succeeded,
-      );
-
-      const changed = yield* Effect.fromResult(Parse.changes(raw.stdout));
+      const changed = yield* entries(from, to);
 
       if (changed.length === 0) {
         return Option.none();
       }
 
-      // The size of each file's blobs, asked of git before any content is read. A submodule holds no blob, and a file made a
-      // submodule still holds one on its file side.
-      const blobs = [...new Set(changed.flatMap(blobSides).map((side) => side.id))];
-      const sizes = blobs.length === 0 ? new Map<string, Parse.Checked>() : yield* blobSizes(run, blobs);
-
-      const bytes = changed.flatMap(blobSides).reduce((total, side) => total + (sizes.get(side.id)?.size ?? 0), 0);
-
-      if (bytes > limits.diff) {
-        return yield* new Repository.DiffTooLarge({ most: limits.diff });
-      }
+      yield* withinSize(changed);
 
       // Two commands one after the other and never a pipe: a pipe's exit code is the last command's only, so a `diff-tree`
       // that failed would hand `patch-id` nothing, and nothing would read as no change.
-      const patch = yield* Effect.flatMap(
-        run([
-          "diff-tree",
-          "-r",
-          "-p",
-          "-U0",
-          "--no-renames",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--full-index",
-          from,
-          to,
-        ]),
-        succeeded,
-      );
-
+      const patch = yield* patchBytes(from, to);
       const printed = yield* Effect.flatMap(run(["patch-id", "--verbatim"], patch.stdout), succeeded);
 
       return Option.some(yield* Effect.fromResult(Parse.patchId(yield* stdoutText(printed))));
+    }),
+    diff: Effect.fnUntraced(function* (from, to) {
+      const changed = yield* entries(from, to);
+
+      if (changed.length === 0) {
+        return [];
+      }
+
+      // A submodule has a commit and no file, so it has no lines: the first one in the raw list is named before any size is asked.
+      const submodule = changed.find((each) => each.gitlink);
+
+      if (submodule !== undefined) {
+        return yield* new Repository.NotAFile({ path: submodule.path });
+      }
+
+      yield* withinSize(changed);
+
+      const contents = yield* Effect.fromResult(Parse.patch(changed, (yield* patchBytes(from, to)).stdout));
+
+      return yield* Effect.fromResult(Parse.files(changed, contents));
     }),
     writeCommit: Effect.fnUntraced(function* (commit) {
       const checked = yield* held(run, [commit.tree, ...commit.parents]);
@@ -566,7 +586,7 @@ export const layer = (options: {
 
       const env = { PATH: path, ...PINNED };
       const run = runner(spawner, options.path, env, options.settings);
-      const listed = lister(spawner, options.path, env, options.settings);
+      const list = lister(spawner, options.path, env, options.settings);
       const after = Settings.timeLimit(options.settings);
 
       const open = Effect.fn("git.open")(function* () {
@@ -592,6 +612,6 @@ export const layer = (options: {
         orElse: () => Effect.fail(new Repository.TimedOut({ after })),
       });
 
-      return Repository.make(calls(run, listed, options.settings, version), options.settings);
+      return Repository.make(calls(run, list, options.settings, version), options.settings);
     }),
   );
