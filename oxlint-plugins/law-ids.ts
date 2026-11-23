@@ -79,10 +79,16 @@ for (const file of tracked.filter((f) => SOURCE.test(f))) {
   const text = readFileSync(join(root, file), "utf8");
 
   for (const match of text.matchAll(NAME)) {
-    const line = text.slice(0, match.index + match[0].indexOf(match[1])).split("\n").length;
-    const key = `${packageOf(file)}|${match[2]}`;
+    const [whole, quote, id, rest] = match;
 
-    found.set(key, [...(found.get(key) ?? []), { name: match[2] + match[3], at: `${file}:${line}` }]);
+    if (quote === undefined || id === undefined || rest === undefined) {
+      continue;
+    }
+
+    const line = text.slice(0, match.index + whole.indexOf(quote)).split("\n").length;
+    const key = `${packageOf(file)}|${id}`;
+
+    found.set(key, [...(found.get(key) ?? []), { name: id + rest, at: `${file}:${line}` }]);
   }
 }
 
