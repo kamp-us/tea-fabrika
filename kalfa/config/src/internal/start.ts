@@ -261,9 +261,21 @@ const resolve = Effect.fnUntraced(function* (
   files: Readonly<Record<Setting.File, Source>>,
   names: Names,
   provider: ConfigProvider.ConfigProvider,
+  given: Option.Option<string>,
 ) {
   const { app } = group;
   const name = variable(app, s.name);
+
+  // A file-only setting has no flag: a value can reach here only from a record the program built by hand.
+  if (s.fileOnly && Option.isSome(given)) {
+    return yield* stop(app, "scope", `--${s.name}: ${s.name} may be set only in ${places(app, s, names)}.`);
+  }
+
+  // A flag's text is read as a variable's is: one value, answered at every path the schema asks about.
+  const flag = Option.map(given, (text): Source => ({
+    provider: ConfigProvider.make(() => Effect.succeed(ConfigProvider.makeValue(text))),
+    origin: () => Origin.cases.flag.make({ name: `--${s.name}` }),
+  }));
 
   // A file-only setting skips the environment. An environment variable reads at its own name, so the origin names what was read.
   const env: Source = {
@@ -271,7 +283,7 @@ const resolve = Effect.fnUntraced(function* (
     origin: () => Origin.cases.env.make({ name }),
   };
 
-  const sources = [...(s.fileOnly ? [] : [env]), files.repo, files.user];
+  const sources = [...Option.toArray(flag), ...(s.fileOnly ? [] : [env]), files.repo, files.user];
   const first = yield* holder(app, s, sources);
 
   if (Option.isNone(first)) {
@@ -307,7 +319,11 @@ const resolve = Effect.fnUntraced(function* (
  */
 export const start = Effect.fnUntraced(function* (
   group: Group,
-  options: { readonly version: string; readonly repo?: string },
+  options: {
+    readonly version: string;
+    readonly repo?: string;
+    readonly flags?: Readonly<Record<string, Option.Option<string> | undefined>>;
+  },
 ) {
   const { app } = group;
   const path = yield* Path.Path;
@@ -332,7 +348,9 @@ export const start = Effect.fnUntraced(function* (
   const origins: Record<string, Origin> = {};
 
   for (const s of group.settings) {
-    const resolved = yield* resolve(group, s, files, names, provider);
+    // Only the record's own keys count: a setting named `constructor` has no flag unless the record holds one.
+    const given = Option.getOrUndefined(Rec.get(options.flags ?? {}, s.name)) ?? Option.none();
+    const resolved = yield* resolve(group, s, files, names, provider, given);
     // What a reader gets is a frozen copy: no write to it reaches another reader, another start or the declaration's default.
     const settled = frozen(resolved.value);
 
