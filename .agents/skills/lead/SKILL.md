@@ -14,6 +14,8 @@ work. It starts each step, reads what comes back, and lands the result.
 When staffing work, follow for
 actual productive worker counts, fresh verification and immediate replacements. The brief names
 the bounded task and the ticket it serves. Before starting lanes, group tickets that will touch the same files into one lane.
+Tickets whose plans' files share a package folder run one after the other: start the next when the first lands.
+Only tickets with disjoint files build side by side.
 
 ```text
 plan (read-only) -> lead approves -> box -> tests -> build -> review
