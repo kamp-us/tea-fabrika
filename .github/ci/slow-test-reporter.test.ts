@@ -6,7 +6,7 @@
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as fc from "fast-check";
-import SlowTestReporter, { DEFAULT_SHARE, decodeShare, line, slow, type Timed } from "./slow-test-reporter.ts";
+import SlowTestReporter, { DEFAULT_SHARE, decodeShare, LISTED, line, slow, type Timed } from "./slow-test-reporter.ts";
 
 const options = { numRuns: runsFor({ fast: 100, full: 100 }) };
 
@@ -102,12 +102,35 @@ it("a full-depth run names each slow test once and fails once, and a run with no
 
       const over = placed.filter((one) => one.over).map((one) => one.test);
 
-      expect(result.said).toEqual(over.map((test) => line(test, 0.5)));
+      const named = result.said.filter((text) => text.startsWith("slow law:"));
+
+      expect(named).toEqual(over.map((test) => line(test, 0.5)));
       expect(result.failed).toBe(over.length > 0 ? 1 : 0);
 
       for (const [index, test] of over.entries()) {
-        expect(result.said[index]).toContain(test.file);
-        expect(result.said[index]).toContain(test.name);
+        expect(named[index]).toContain(test.file);
+        expect(named[index]).toContain(test.name);
+      }
+    }),
+    options,
+  );
+});
+
+it("a full-depth run lists its slowest tests, slowest first, six at most, whether or not any is over the bar", () => {
+  fc.assert(
+    fc.property(fc.array(placedAt(50), { maxLength: 12 }), (placed) => {
+      const tests = placed.map((one) => one.test);
+      const listed = run("full", tests).said.filter((text) => text.startsWith("slowest law:"));
+
+      const expected = tests
+        .map((test) => test.ms)
+        .sort((left, right) => right - left)
+        .slice(0, LISTED);
+
+      expect(listed).toHaveLength(Math.min(LISTED, tests.length));
+
+      for (const [index, text] of listed.entries()) {
+        expect(text).toContain(`${(expected[index]! / 1000).toFixed(1)} s of `);
       }
     }),
     options,

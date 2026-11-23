@@ -32,6 +32,13 @@ export interface Timed {
 export const slow = (tests: readonly Timed[], share: number): readonly Timed[] =>
   tests.filter((test) => test.limit > 0 && test.ms > share * test.limit);
 
+/** How many of the slowest tests a full-depth run lists, whether or not any is over the bar. */
+export const LISTED = 6;
+
+/** The `LISTED` slowest tests, slowest first. */
+export const slowest = (tests: readonly Timed[]): readonly Timed[] =>
+  [...tests].sort((left, right) => right.ms - left.ms).slice(0, LISTED);
+
 const seconds = (ms: number) => (ms / 1000).toFixed(1);
 
 /** The line that names one slow test, what to do, and the setting that moves the bar. */
@@ -97,6 +104,10 @@ export default class SlowTestReporter implements Reporter {
             ];
       }),
     );
+
+    for (const test of slowest(timed)) {
+      this.out(`slowest law: ${seconds(test.ms)} s of ${seconds(test.limit)} s, ${test.file} > ${test.name}`);
+    }
 
     const found = slow(timed, this.share);
 
