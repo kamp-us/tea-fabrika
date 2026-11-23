@@ -5,7 +5,7 @@
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Context, Duration } from "effect";
 import { Data, DateTime, type Effect, type Option, Schema } from "effect";
-import type { ListCheckRuns, Shouter } from "./GitHub.test-support.ts";
+import type { ListCheckRuns, Shouter, ShoutedAnswer, ShoutedIssue, ShoutedQuery } from "./GitHub.test-support.ts";
 import { Dispatch, DispatchUnread, ShoutedRuns } from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
 import type * as Check from "./internal/Check.ts";
@@ -454,6 +454,10 @@ const callType = () => {
 
   expectTypeOf<Needs<typeof shouted>>().toEqualTypeOf<GitHub.GitHub | Shouter>();
   expectTypeOf<GitHub.Services<typeof ShoutedRuns>>().toEqualTypeOf<Shouter>();
+  // The service sits in one part only: the query's encoding, the payload's encoding, or the success's decoding.
+  expectTypeOf<GitHub.Services<typeof ShoutedQuery>>().toEqualTypeOf<Shouter>();
+  expectTypeOf<GitHub.Services<typeof ShoutedIssue>>().toEqualTypeOf<Shouter>();
+  expectTypeOf<GitHub.Services<typeof ShoutedAnswer>>().toEqualTypeOf<Shouter>();
   expectTypeOf<GitHub.Services<typeof cancel>>().toEqualTypeOf<never>();
   expectTypeOf<Failed<typeof shouted>>().toEqualTypeOf<Failures>();
   expectTypeOf<GitHub.Success<typeof cancel>>().toEqualTypeOf<void>();

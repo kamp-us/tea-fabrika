@@ -478,6 +478,14 @@ export const ShoutedRuns = GitHub.route(CHECK_RUNS, {
   success: Schema.Struct({ check_runs: Schema.Array(Schema.Struct({ id: Schema.Int, name: Shouted })) }),
 });
 
+/** The check runs route with the service in its query only. */
+export const ShoutedQuery = GitHub.route(CHECK_RUNS, { query: { per_page: Schema.Int, check_name: Shouted } });
+
+/** The check runs route with the service in its answer only: a success Schema whose decoding needs a service. */
+export const ShoutedAnswer = GitHub.route(CHECK_RUNS, {
+  success: Schema.Struct({ check_runs: Schema.Array(Schema.Struct({ id: Schema.Int, name: Shouted })) }),
+});
+
 /** An issue whose title passes through the service. */
 export const ShoutedIssue = GitHub.route(CREATE_ISSUE, { payload: Schema.Struct({ title: Shouted }) });
 

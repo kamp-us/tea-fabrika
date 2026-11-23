@@ -945,6 +945,9 @@ describe("C9, the span", () => {
             readonly name: string;
             readonly program: Effect.Effect<unknown, GitHub.GitHubError | GitHub.RateLimited, GitHub.GitHub>;
             readonly reply: GitHub.Reply;
+            // The route a place calls when it is not the check runs route, and false when `call` refuses before it sends.
+            readonly operation?: { readonly method: GitHub.Method; readonly route: string };
+            readonly sends?: false;
           }> = [
             { name: "a path value", program: runs(marker), reply: json({ check_runs: [] }) },
             { name: "a query value", program: runs("main", marker), reply: json({ check_runs: [] }) },
@@ -952,6 +955,7 @@ describe("C9, the span", () => {
               name: "a payload value",
               program: GitHub.call(CreateIssue, { params: OWNER, payload: { title: marker } }),
               reply: json({}, 201),
+              operation: CreateIssue,
             },
             {
               name: "a read answer field",
@@ -970,6 +974,27 @@ describe("C9, the span", () => {
               program: runs("main"),
               reply: json({ check_runs: [{ id: 1, name: "n", status: marker, conclusion: null }] }),
             },
+            // The token route's payload, refused: a value outside the Schema, and a key the Schema lacks (through a variable).
+            {
+              name: "a refused token value",
+              program: GitHub.call(MakeToken, {
+                params: { installation_id: 1 },
+                payload: untyped({ permissions: { issues: marker } }),
+              }),
+              reply: json({}, 201),
+              operation: MakeToken,
+              sends: false,
+            },
+            {
+              name: "an extra payload key",
+              program: GitHub.call(MakeToken, {
+                params: { installation_id: 1 },
+                payload: untyped({ repositories: [], surprise: marker }),
+              }),
+              reply: json({}, 201),
+              operation: MakeToken,
+              sends: false,
+            },
           ];
 
           for (const place of places) {
@@ -983,13 +1008,15 @@ describe("C9, the span", () => {
 
             const [span] = spans;
             const attributes = Object.fromEntries(span?.attributes ?? []);
-            const operation = place.name === "a payload value" ? CreateIssue : ListCheckRuns;
+            const operation = place.operation ?? ListCheckRuns;
 
             expect(span?.status._tag, label).toBe("Ended");
             expect(attributes["http.request.method"], label).toBe(operation.method);
             expect(attributes["kalfa.github.operation"], label).toBe(operation.route);
-            expect(requests.length, label).toBe(1);
-            expect(attributes["http.response.status_code"], label).toBe(place.reply.status);
+            expect(requests.length, label).toBe(place.sends === false ? 0 : 1);
+            expect(attributes["http.response.status_code"], label).toBe(
+              place.sends === false ? undefined : place.reply.status,
+            );
 
             for (const key of Object.keys(attributes)) {
               expect(key, label).not.toBe("url.full");
@@ -1000,6 +1027,14 @@ describe("C9, the span", () => {
               attributesText(span ?? { attributes: new Map() }),
               `${label}: an attribute holds the marker`,
             ).not.toContain(tag);
+
+            // `Undecodable.message` says where the value was and what was expected, never the value; the `SchemaError` that holds
+            // the value is its `cause`.
+            const held = reasonHeld(exit);
+
+            if (Predicate.isTagged(held?.reason, "Undecodable")) {
+              expect(held?.reason.message, `${label}: Undecodable.message holds the marker`).not.toContain(tag);
+            }
 
             if (Exit.isFailure(exit)) {
               for (const error of Cause.prettyErrors(exit.cause, { includeCauseInStack: true })) {
