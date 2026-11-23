@@ -270,6 +270,51 @@ export type Needed<Q extends Schema.Constraint, P extends Schema.Constraint, S e
   | P["EncodingServices"]
   | S["DecodingServices"];
 
+// An answer GitHub's description has, with every key optional at every depth: a test's fake gives part of one.
+type Partly<D> =
+  D extends ReadonlyArray<infer I>
+    ? ReadonlyArray<Partly<I>>
+    : D extends object
+      ? { readonly [K in keyof D]?: Partly<D[K]> }
+      : D;
+
+type Fakeable<R extends RouteName> =
+  IsRunTimeOnly<R> extends true
+    ? Schema.Json
+    : [Answer<R>] extends [never]
+      ? undefined
+      : [Bodiless<R>] extends [never]
+        ? Partly<Answer<R>>
+        : Partly<Answer<R>> | undefined;
+
+/** What a test's fake may answer for a route: part of the description's answer, or any JSON for a route checked at run time only. */
+export type Faked<R extends RouteName> = Fakeable<R>;
+
+/** `unknown` when the fake's answer `A` names no key the description's answer lacks, at any depth, or a readable refusal. */
+export type ExactFake<R extends RouteName, A> =
+  IsRunTimeOnly<R> extends true
+    ? unknown
+    : [Answer<R>] extends [never]
+      ? unknown
+      : [Walk<A, Answer<R>, false>] extends [never]
+        ? unknown
+        : Refused<"an answer key the description does not have">;
+
+type FakeStatus<R extends RouteName> = [SuccessStatus<R>] extends [never] ? number : SuccessStatus<R>;
+
+/** The status option of a fake answer: required when 200 is not one of the route's 2xx statuses, and exactly those statuses. */
+export type StatusOption<R extends RouteName> =
+  200 extends FakeStatus<R>
+    ? [options?: { readonly status: FakeStatus<R> }]
+    : [options: { readonly status: FakeStatus<R> }];
+
+/** What a fake is handed of a request's body: the encoded payload, which is there when the route requires one. */
+export type AskedBody<P extends Schema.Constraint, R extends RouteName> = [P] extends [never]
+  ? undefined
+  : BodyRequired<R> extends true
+    ? P["Encoded"]
+    : P["Encoded"] | undefined;
+
 // A route the shape does not have reads as neither 1 nor 0, so the whole version is `never`.
 type Has<K, T> = [T] extends [never] ? "missing" : K extends keyof T ? 1 : 0;
 
