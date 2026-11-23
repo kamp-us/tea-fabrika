@@ -6,7 +6,7 @@ import {
   type Transport,
 } from "@modelcontextprotocol/server";
 import { serveStdio } from "@modelcontextprotocol/server/stdio";
-import { Cause, Clock, Deferred, Effect, Exit, Option, Queue, Schema, type Scope, Stream } from "effect";
+import { Cause, Clock, Deferred, type Duration, Effect, Exit, Option, Queue, Schema, type Scope, Stream } from "effect";
 import { Ndjson } from "effect/encoding";
 import { Socket } from "effect/socket";
 import type { Agent } from "../host/writer.ts";
@@ -92,6 +92,8 @@ export interface AgentOptions {
    * added there runs as it goes. A host counts the agents on its socket by it.
    */
   readonly attached?: (who: typeof Agent.Type) => Effect.Effect<void, never, Scope.Scope>;
+  /** How long a call on a program's input waits for its value to be handled and the view to catch up (./drive.ts). `SETTLE` when left out. */
+  readonly settle?: Duration.Input | undefined;
 }
 
 const decodeHandshake = Schema.decodeUnknownOption(Handshake);
@@ -214,6 +216,7 @@ export const serveAgent = (socket: Socket.Socket, options: AgentOptions) =>
           restart: restart === undefined ? undefined : (ask) => restart(who, ask),
           line: line === undefined ? undefined : (ask) => line(who, ask),
           readOnly: served.readOnly ?? false,
+          settle: options.settle,
         });
 
         if (options.attached !== undefined) {

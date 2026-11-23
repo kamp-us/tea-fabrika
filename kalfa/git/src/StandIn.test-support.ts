@@ -4,6 +4,7 @@
 import { Duration, Effect, Layer, Option, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Command } from "effect/process/ChildProcess";
+import { byBytes } from "./internal/object.ts";
 
 /** One git command as the stand-in saw it. `verb` is the plumbing command, after the global options. */
 export interface Call {
@@ -14,6 +15,8 @@ export interface Call {
   /** How long the command's scope waits after the first signal before it kills the child outright, if it says. */
   readonly forceKillAfter: Duration.Duration | undefined;
   readonly env: Readonly<Record<string, string>>;
+  /** What the command was given on stdin, byte for byte, or undefined when it was given none. */
+  readonly input: Uint8Array | undefined;
 }
 
 /**
@@ -38,6 +41,18 @@ interface StandIn {
 
 const encoder = new TextEncoder();
 
+const concat = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
+  const whole = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0));
+  let at = 0;
+
+  for (const chunk of chunks) {
+    whole.set(chunk, at);
+    at += chunk.length;
+  }
+
+  return whole;
+};
+
 const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i] ?? "";
@@ -52,7 +67,7 @@ const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
   return { verb: "", rest: [] };
 };
 
-const commandFrom = (command: Command): Call | undefined => {
+const commandFrom = (command: Command): Omit<Call, "input"> | undefined => {
   if (!ChildProcess.isStandardCommand(command)) {
     return undefined;
   }
@@ -82,11 +97,24 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
 
     const spawn: ChildProcessSpawner.ChildProcessSpawner["Service"]["spawn"] = (command) =>
       Effect.gen(function* () {
-        const call = commandFrom(command);
+        const made = commandFrom(command);
 
-        if (call === undefined) {
+        if (made === undefined) {
           return yield* Effect.die("the stand-in runs standard commands only");
         }
+
+        const configured = ChildProcess.isStandardCommand(command) ? command.options.stdin : undefined;
+
+        const stdin =
+          configured !== undefined && !Predicate.isString(configured) && "stream" in configured
+            ? configured.stream
+            : configured;
+
+        const given = stdin === undefined || Predicate.isString(stdin) ? undefined : stdin;
+
+        const input = given === undefined ? undefined : concat(yield* Effect.orDie(Stream.runCollect(given)));
+
+        const call: Call = { ...made, input };
 
         yield* Ref.update(calls, (all) => [...all, call]);
         const reply = script(call);
@@ -139,3 +167,81 @@ export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =
       ended: Ref.get(ended),
     };
   });
+
+/** What a stand-in's git holds, for the questions an adapter asks around a call: its commits, its trees and its refs. */
+export interface Table {
+  readonly commits: ReadonlyArray<string>;
+  readonly trees: ReadonlyArray<string>;
+  readonly refs: ReadonlyArray<readonly [name: string, commit: string]>;
+}
+
+const decoder = new TextDecoder();
+
+// git's own rule for a pattern without a wildcard: the ref itself, or a ref below it.
+const matches = (name: string, pattern: string): boolean => name === pattern || name.startsWith(`${pattern}/`);
+
+const printed = (format: string, name: string, commit: string): string =>
+  format
+    .replaceAll("%(objectname)", commit)
+    .replaceAll("%(objecttype)", "commit")
+    .replaceAll("%(symref)", "")
+    .replaceAll("%(refname)", name);
+
+/**
+ * A script that answers what git answers around a call (the version, whether the repository is shallow, which objects
+ * exist, which refs exist and where they point), from a table. Whatever else is asked goes to `rest`. It answers
+ * `for-each-ref` for any pattern, count and format built of the four names `objectname`, `objecttype`, `symref` and
+ * `refname`, so a law holds an adapter to git's answer and not to one way of asking.
+ */
+export const gitTable =
+  (table: Table, rest: (call: Call) => Reply = () => ({ code: 0 })) =>
+  (call: Call): Reply => {
+    switch (call.verb) {
+      case "version":
+        return { code: 0, stdout: "git version 2.40.1\n" };
+      case "rev-parse":
+        return { code: 0, stdout: call.rest.includes("--is-shallow-repository") ? "false\n" : ".\n" };
+      case "cat-file": {
+        if (!call.rest.includes("--batch-check")) {
+          return rest(call);
+        }
+
+        const asked = decoder
+          .decode(call.input ?? new Uint8Array())
+          .split("\n")
+          .filter((line) => line !== "");
+
+        return {
+          code: 0,
+          stdout: asked
+            .map((id) =>
+              table.commits.includes(id)
+                ? `${id} commit 200\n`
+                : table.trees.includes(id)
+                  ? `${id} tree 0\n`
+                  : `${id} missing\n`,
+            )
+            .join(""),
+        };
+      }
+
+      case "for-each-ref": {
+        const format =
+          call.rest.find((word) => word.startsWith("--format="))?.slice("--format=".length) ??
+          "%(objectname) %(objecttype) %(refname)";
+
+        const count = Number(call.rest.find((word) => word.startsWith("--count="))?.slice("--count=".length));
+        const patterns = call.rest.filter((word) => !word.startsWith("--"));
+
+        const found = table.refs
+          .filter(([name]) => patterns.length === 0 || patterns.some((pattern) => matches(name, pattern)))
+          .toSorted(([a], [b]) => byBytes(a, b))
+          .slice(0, Number.isInteger(count) && count > 0 ? count : undefined);
+
+        return { code: 0, stdout: found.map(([name, commit]) => `${printed(format, name, commit)}\n`).join("") };
+      }
+
+      default:
+        return rest(call);
+    }
+  };

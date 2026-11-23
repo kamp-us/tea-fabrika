@@ -206,6 +206,12 @@ export const Tracker = Schema.Struct({
   saving: Schema.Array(Saving),
   /** The last write that did not land, until the next write is asked for. */
   failed: Schema.NullOr(Failed),
+  /**
+   * The number of the ticket this tracker's last `file` landed as. `null`: none yet, or the last
+   * file is still on its way or did not land. Cleared when a file is asked for, so a caller who
+   * waits for its write to settle reads the number of its own ticket, never an earlier one's.
+   */
+  filed: Schema.NullOr(TicketNumber),
   /** Rows and facts that did not fit, in words: the newest few. */
   problems: Schema.Array(Schema.String),
   /** Why the last load failed. `null`: it did not. */
@@ -267,6 +273,7 @@ const start: Tracker = {
   open: null,
   saving: [],
   failed: null,
+  filed: null,
   problems: [],
   unreachable: null,
   quitting: false,
@@ -432,7 +439,12 @@ export const tracker = defineMachine({
         return [{ ...s, failed: { write: m.write, why: refused } }, []];
       }
 
-      const next = { ...s, saving: [...s.saving, { id: m.id, write: m.write }], failed: null };
+      const next = {
+        ...s,
+        saving: [...s.saving, { id: m.id, write: m.write }],
+        failed: null,
+        filed: m.write.kind === "file" ? null : s.filed,
+      };
       return [next, s.saving.length === 0 ? sendFirst(next) : []];
     },
     skip_onboarding: (s): Step => [{ ...s, skipped: true }, []],
@@ -479,7 +491,11 @@ export const tracker = defineMachine({
         return [pendingArea(next, front.write, m.value.area, s.load !== "idle"), sent];
       }
 
-      const [asking, asked] = hintFor(next, front.write, m.value.ticket);
+      const [asking, asked] = hintFor(
+        front.write.kind === "file" ? { ...next, filed: m.value.ticket } : next,
+        front.write,
+        m.value.ticket,
+      );
       return [asking, [...sent, ...asked]];
     },
     save_err: (s, m): Step =>
@@ -592,6 +608,8 @@ export const Shown = Schema.Struct({
   /** Writes not on the ledger yet, in the order asked. */
   saving: Schema.Array(Write),
   failed: Schema.NullOr(Failed),
+  /** The number of the ticket the last `file` landed as; `null`: none, or it is not on the ledger yet. */
+  filed: Schema.NullOr(TicketNumber),
   problems: Schema.Array(Schema.String),
   unreachable: Schema.NullOr(Schema.String),
   quitting: Schema.Boolean,
@@ -600,6 +618,14 @@ export const Shown = Schema.Struct({
   github: Schema.Struct({ read: Schema.Boolean, why: Schema.NullOr(Schema.String) }),
 });
 export type Shown = typeof Shown.Type;
+
+/**
+ * The view has caught up with what was told: the ledger has been read, and no write is still on
+ * its way. A host that tells the tracker for an agent waits for this, once the tracker has handled
+ * the value, before it shows the agent the view, so a query's page is that query's and a file's
+ * number is its own.
+ */
+export const settledOf = (shown: Shown): boolean => shown.ready && shown.saving.length === 0;
 
 /** A title the search finds: every title for "", else one with the text in it, in any case. */
 export const finds = (find: string, title: string): boolean => {
@@ -658,6 +684,7 @@ export const shownOf = (s: Tracker): Shown => ({
   page: s.open === null ? listOf(s) : ticketOf(s, s.open),
   saving: s.saving.map((w) => w.write),
   failed: s.failed,
+  filed: s.filed,
   problems: s.problems,
   unreachable: s.unreachable,
   quitting: s.quitting,

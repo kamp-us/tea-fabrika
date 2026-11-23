@@ -18,6 +18,10 @@ export const openIn = (listed: string): ReadonlyArray<number> =>
 export const firstError = (said: string): string =>
   said.split("\n").find((line) => line.includes("ERROR")) ?? "no reason given";
 
+/** The tracker's home folder: `FABRIKA_HOME` when it is set, else the app's own default, as env.sh gives it. */
+export const defaultHome = (): string =>
+  process.env.FABRIKA_HOME ?? `${process.env.HOME ?? ""}/Library/Application Support/@kampus/fabrika-app`;
+
 /** `main` is the main checkout, which holds the app; `home` is the app's home folder. */
 export const layer = (
   main: string,
@@ -38,14 +42,14 @@ export const layer = (
           });
 
           if (ran.code !== 0) {
-            return yield* new TicketsError({ reason: firstError(`${ran.out}\n${ran.err}`) });
+            return yield* TicketsError.make({ reason: firstError(`${ran.out}\n${ran.err}`) });
           }
 
           return ran.out;
         },
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", () =>
-          Effect.fail(new TicketsError({ reason: "the tracker could not start" })),
+          Effect.fail(TicketsError.make({ reason: "the tracker could not start" })),
         ),
       );
 
@@ -63,7 +67,7 @@ export const layer = (
             }),
           ).pipe(
             Effect.catchTag("PlatformError", () =>
-              Effect.fail(new TicketsError({ reason: "the comment file could not be written" })),
+              Effect.fail(TicketsError.make({ reason: "the comment file could not be written" })),
             ),
           ),
         close: (number) => Effect.asVoid(post(["close", String(number)])),

@@ -14,6 +14,7 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
+import type { FileSystem } from "effect";
 import { Array as Arr, String as Str, pipe, Effect, Match, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import type { ChildProcessSpawner } from "effect/process";
@@ -25,6 +26,7 @@ import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
 import { LeakGrepRefused, Pushes } from "../pr/Pushes.ts";
 import * as PushesProcess from "../pr/PushesProcess.ts";
 import * as Queue from "../pr/Queue.ts";
+import * as TicketsCli from "../pr/TicketsCli.ts";
 import * as Outcome from "./Outcome.ts";
 import { type Runner, StepFailed } from "./Runners.ts";
 import type { Step } from "./Step.ts";
@@ -142,7 +144,7 @@ const script = Effect.fn("landing.script")(function* (...parts: ReadonlyArray<st
   return path.join(import.meta.dirname, "..", ...parts);
 });
 
-type Spawns = ChildProcessSpawner.ChildProcessSpawner | Path.Path;
+type Spawns = ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path;
 
 /** The landing runners, by step name. */
 export const runners: Readonly<Record<string, Runner<Spawns>>> = {
@@ -217,6 +219,8 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
         Effect.provideServiceEffect(PullRequests, PullRequestsGh.make(repo, dir)),
         Effect.provideServiceEffect(Pushes, PushesProcess.make(scripts)),
         Effect.provideServiceEffect(Checks, ChecksGh.make(repo)),
+        // The body check reads the tracker's open tickets (a `fabrika close ticket` line must name one); the worktree holds the app that asks it, and the home is env.sh's.
+        Effect.provide(TicketsCli.layer(dir, TicketsCli.defaultHome())),
         Effect.match({ onFailure: queueRefused, onSuccess: (added) => Outcome.done(Queue.line(added)) }),
       ),
     );

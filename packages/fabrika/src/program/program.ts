@@ -487,6 +487,13 @@ export interface View<S, V> {
   readonly data: Schema.Codec<V, V>;
   /** What the window is shown, from that machine's state alone. Pure: a checker may call it. */
   readonly of: (state: S) => V;
+  /**
+   * The view has caught up with what was told: nothing it shows is still on its way (a write not
+   * on its ledger yet, a read not back yet). A host that tells a value for an agent waits for
+   * this, after the value is handled, before it shows the agent the view. Left out: the view is
+   * always caught up.
+   */
+  readonly settled?: (view: V) => boolean;
 }
 
 /** A program's view, of any machine and any data: what a host holds. */
@@ -494,6 +501,7 @@ export interface AnyView {
   readonly machine: string;
   readonly data: Schema.Top;
   readonly of: (state: any) => unknown;
+  readonly settled?: ((view: any) => boolean) | undefined;
 }
 
 /** The view of each program `defineProgram` made with one. */
@@ -809,6 +817,13 @@ export interface Run<F extends Flags, I extends Inputs, O extends Outputs, Ms ex
   mailbox(): Mailbox<I>;
   /** Wait for the run's end. */
   readonly ended: Effect.Effect<Ended<E>>;
+  /**
+   * Done once every value told so far has been handled: the mailbox is empty, no writer waits for
+   * room, and no handler holds a value. A host that tells a value and then reads what it did
+   * waits for this first. Done at once when the run is idle, and when the run ends. A control
+   * input's values are handled beside the order and are not waited for.
+   */
+  readonly idle: Effect.Effect<void>;
 }
 
 export type AnyRun = Run<any, any, any, any, any>;
@@ -1107,6 +1122,10 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
     // `CONTROL` tokens, each given back once its handler ends.
     const letters = yield* Queue.unbounded<Letter>();
     let held = 0;
+    /** How many told values a handler holds now: taken from the mailbox, not yet handled. */
+    let busy = 0;
+    /** Those that wait for `idle`. */
+    const idlers = new Set<Deferred.Deferred<void>>();
     const queue: Waiter[] = [];
     const controls = new Map<string, Control>();
 
@@ -1152,8 +1171,28 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
 
     const ended = yield* Deferred.make<Ended<E>>();
     let open = true;
+    /** Nothing told waits for a handler, and no handler holds a value. */
+    const quiet = () => held === 0 && busy === 0 && queue.every((waiter) => waiter.done === undefined);
+    /** Let go those that wait for `idle`: the set is emptied first, as one let go may wait again at once. */
+    const letGo = () => {
+      const waiting = [...idlers];
+      idlers.clear();
+
+      for (const idler of waiting) {
+        Deferred.doneUnsafe(idler, Effect.void);
+      }
+    };
+    /** Let go those that wait for `idle`, if the run is quiet. */
+    const rest = () => {
+      if (quiet()) {
+        letGo();
+      }
+    };
     const finish = () => {
       open = false;
+
+      // Nothing more will be handled: whoever waits for it is let go.
+      letGo();
 
       // Shut: nobody reads after the end, and an offer still waiting for room is let go with `stopped`.
       for (const waiter of queue.splice(0)) {
@@ -1337,6 +1376,7 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
           }
 
           held -= 1;
+          busy += 1;
           counted(letter.to, -1);
           flush();
         }),
@@ -1535,8 +1575,16 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
             }
 
             const handler = handlers[letter.to] as (value: unknown) => Effect.Effect<unknown>;
+            const handled = yield* Effect.suspend(() => handler(handed(letter.to, letter.told))).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  busy -= 1;
+                  rest();
+                }),
+              ),
+            );
 
-            if ((yield* handler(handed(letter.to, letter.told))) === ending) {
+            if (handled === ending) {
               return;
             }
           }
@@ -1693,6 +1741,15 @@ const begin = <F extends Flags, I extends Inputs, O extends Outputs, Ms extends 
         };
       },
       ended: Deferred.await(ended),
+      idle: Effect.suspend(() => {
+        if (!open || quiet()) {
+          return Effect.void;
+        }
+
+        const idler = Deferred.makeUnsafe<void>();
+        idlers.add(idler);
+        return Deferred.await(idler).pipe(Effect.onInterrupt(() => Effect.sync(() => idlers.delete(idler))));
+      }),
     };
     const shut = (name: string) => {
       if (!Object.hasOwn(program.inputs, name) || closed.has(name)) {

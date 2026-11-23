@@ -1,18 +1,29 @@
-// The laws of the git-binary adapter on a stand-in spawner (P2 to P8): what each exit code means, the time
+// The laws of the git-binary adapter on a stand-in spawner (P2 to P11): what each exit code means, the time
 // limit, git's version, the command's environment, the arguments of each call, that sizes are read before objects,
-// and how much stderr an error keeps. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
+// how much stderr an error keeps, what a failed `update-ref` means, the bytes a commit is written from, and that no
+// call reaches a remote. The real binary answers the shared laws in ProcessRepository.integration.test.ts.
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Result, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Context, Duration, Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
+import * as Commit from "./Commit.ts";
 import * as CommitId from "./CommitId.ts";
-import { commitIdArb, wordArb } from "./History.test-support.ts";
+import {
+  commitIdArb,
+  committerFrom,
+  flatSignatureArb,
+  messageVariants,
+  partArb,
+  wordArb,
+} from "./History.test-support.ts";
+import { bytes as objectBytes } from "./internal/object.ts";
 import * as ProcessRepository from "./ProcessRepository.ts";
 import * as Ref from "./Ref.ts";
-import { expectFailure } from "./Repository.test-support.ts";
+import { COMMITTER, expectFailure } from "./Repository.test-support.ts";
 import * as Repository from "./Repository.ts";
 import { settings } from "./RepositoryTest.ts";
 import * as Settings from "./Settings.ts";
-import { standIn, type Call, type Reply } from "./StandIn.test-support.ts";
+import { gitTable, standIn, type Call, type Reply, type Table } from "./StandIn.test-support.ts";
+import * as Tree from "./Tree.ts";
 
 const int = (minimum: number, maximum: number): Arbitrary.Arbitrary<number> =>
   Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum, maximum })));
@@ -43,12 +54,13 @@ const open = (
   run: (call: Call) => Reply,
   limits: { readonly commits?: number; readonly refs?: number; readonly bytes?: number } = {},
   env: Record<string, string> = { PATH: "/usr/bin:/bin" },
+  config: Settings.Settings = settings(limits),
 ) =>
   Effect.gen(function* () {
     const stand = yield* standIn(run);
 
     const context = yield* Layer.build(
-      ProcessRepository.layer({ path: PATH, settings: settings(limits) }).pipe(Layer.provide(stand.layer)),
+      ProcessRepository.layer({ path: PATH, settings: config }).pipe(Layer.provide(stand.layer)),
     );
 
     return { repo: Context.get(context, Repository.Repository), stand };
@@ -156,6 +168,7 @@ it.effect.prop(
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
               limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
         );
@@ -219,6 +232,7 @@ it.effect.prop(
             path: PATH,
             settings: Schema.decodeUnknownSync(Settings.Settings)({
               limits: { commits: 100, refs: 100, bytes: 100_000, time: `${seconds} seconds` },
+              committer: COMMITTER,
             }),
           }).pipe(Layer.provide(stand.layer)),
         );
@@ -562,4 +576,308 @@ it.effect.prop(
       }
     }),
   { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+/** The failure of a call that must fail: an answer is a defect that says so. */
+const mustFail = <A, E>(effect: Effect.Effect<A, E>, place: string): Effect.Effect<E> =>
+  Effect.flatMap(Effect.result(effect), (result) =>
+    Result.isFailure(result)
+      ? Effect.succeed(result.failure)
+      : Effect.die(new Error(`${place}: the call answered, and it must fail`)),
+  );
+
+const treeIdFrom = (text: string): Tree.TreeId => Schema.decodeUnknownSync(Tree.TreeId)(text);
+
+const refNameFrom = (text: string): Ref.RefName => Schema.decodeUnknownSync(Ref.RefName)(text);
+
+const NO_ID = "0".repeat(40);
+
+// Plant: read every failed `update-ref` as `RefMoved` (a ref in the way and an exit with the ref where it was are red);
+// read none as `RefInTheWay`; check the clash before the compare, so a ref that moved with a ref below it is the wrong
+// error; drop `--no-deref` or put the ids in another order, so the recorded arguments differ; run `update-ref` before
+// asking that `to` is a commit; ask `to` as any object, so a tree's id goes through.
+it.effect.prop(
+  "P9 a failed update-ref: exit 0 is done, and a failed one is RefMoved when the ref is not where from says, RefInTheWay when it is and a ref is in its way, else Exited with the code",
+  { a: commitIdArb, part: partArb, code: int(1, 255), junk: wordArb },
+  ({ a, part, code, junk }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(`${letter}${a.slice(1)}`);
+      const [to, x, y] = [id("b"), id("c"), id("d")];
+      const ref = `refs/kalfa/candidates/c${part}`;
+      const inside = `refs/heads/${part}/x`;
+      const table = (refs: Table["refs"]): Table => ({ commits: [to, x, y], trees: [id("e")], refs });
+
+      const moved = { label: "RefMoved" } as const;
+      const way = (other: string) => ({ label: "RefInTheWay", other }) as const;
+      const exited = { label: "Exited" } as const;
+
+      const cases: ReadonlyArray<{
+        readonly label: string;
+        readonly ref: string;
+        readonly from: Option.Option<CommitId.CommitId>;
+        readonly refs: Table["refs"];
+        readonly expected: typeof moved | ReturnType<typeof way> | typeof exited;
+      }> = [
+        { label: "from none while the ref exists", ref, from: Option.none(), refs: [[ref, x]], expected: moved },
+        {
+          label: "from a commit while the ref is at another",
+          ref,
+          from: Option.some(x),
+          refs: [[ref, y]],
+          expected: moved,
+        },
+        { label: "from a commit while the ref is gone", ref, from: Option.some(x), refs: [], expected: moved },
+        {
+          label: "from a commit while the ref is at another, and a ref is below it",
+          ref,
+          from: Option.some(x),
+          refs: [
+            [ref, y],
+            [`${ref}/sub`, x],
+          ],
+          expected: moved,
+        },
+        {
+          label: "from none, the ref gone, a ref below it",
+          ref,
+          from: Option.none(),
+          refs: [[`${ref}/sub`, x]],
+          expected: way(`${ref}/sub`),
+        },
+        {
+          label: "from none, the ref gone, a ref at a folder of it",
+          ref: inside,
+          from: Option.none(),
+          refs: [[`refs/heads/${part}`, x]],
+          expected: way(`refs/heads/${part}`),
+        },
+        { label: "from none, the ref gone, nothing in the way", ref, from: Option.none(), refs: [], expected: exited },
+        {
+          label: "from a commit, the ref at it, nothing in the way",
+          ref,
+          from: Option.some(x),
+          refs: [[ref, x]],
+          expected: exited,
+        },
+      ];
+
+      const updates = (calls: ReadonlyArray<Call>) => calls.filter((call) => call.verb === "update-ref");
+
+      for (const { label, ref: name, from, refs, expected } of cases) {
+        const { repo, stand } = yield* open(
+          gitTable(table(refs), (call) => (call.verb === "update-ref" ? { code, stderr: junk } : { code: 0 })),
+        );
+
+        const error = yield* mustFail(repo.moveRef({ ref: refNameFrom(name), from, to }), label);
+
+        switch (expected.label) {
+          case "RefMoved":
+            expectFailure(error, Repository.RefMoved, { ref: name }, label);
+            break;
+          case "RefInTheWay":
+            expectFailure(error, Repository.RefInTheWay, { ref: name, other: expected.other }, label);
+            break;
+          case "Exited":
+            unavailable(error, Repository.Exited, { code }, label);
+            break;
+        }
+
+        expect(
+          updates(yield* stand.calls).map((call) => call.rest),
+          `${label}: one update-ref, with its ref and both ids`,
+        ).toEqual([["--no-deref", name, to, Option.getOrElse(from, () => NO_ID)]]);
+      }
+
+      for (const from of [Option.none<CommitId.CommitId>(), Option.some(x)]) {
+        const { repo, stand } = yield* open(gitTable(table([[ref, x]]), () => ({ code: 0 })));
+        yield* repo.moveRef({ ref: refNameFrom(ref), from, to });
+
+        expect(
+          updates(yield* stand.calls).map((call) => call.rest),
+          "exit 0 is done: one update-ref, with its ref and both ids",
+        ).toEqual([["--no-deref", ref, to, Option.getOrElse(from, () => NO_ID)]]);
+      }
+
+      // A `to` that is no commit stops the call before `update-ref` runs.
+      for (const [label, absent] of [
+        ["a commit the repository lacks", id("f")],
+        ["a tree's id", commitIdFrom(id("e"))],
+      ] as const) {
+        const { repo, stand } = yield* open(gitTable(table([]), () => ({ code: 0 })));
+
+        expectFailure(
+          yield* mustFail(repo.moveRef({ ref: refNameFrom(ref), from: Option.none(), to: absent }), label),
+          Repository.NoSuchCommit,
+          { id: absent },
+          label,
+        );
+        expect(updates(yield* stand.calls), `${label}: nothing was updated`).toEqual([]);
+      }
+    }),
+  { arbitrary: { runs: 200, seed: 119120 } },
+);
+
+// Plant: add a newline at the message's end; drop `-w`; put `-t commit` after `--stdin`; hash before asking that the
+// tree is a tree and each parent a commit, so a refused write has run `hash-object`; accept any text git printed, so
+// output that is no commit id comes back as a commit.
+it.effect.prop(
+  "P10 the bytes written: writeCommit hands `hash-object -t commit -w --stdin` the bytes of internal/object.ts for the same fields, once the tree and the parents are known; output that is not one commit id is Unreadable",
+  {
+    a: commitIdArb,
+    author: flatSignatureArb,
+    person: flatSignatureArb,
+    word: wordArb,
+    seconds: int(0, 4_000_000_000),
+    many: int(0, 3),
+  },
+  ({ a, author, person, word, seconds, many }) =>
+    Effect.gen(function* () {
+      const id = (letter: string): CommitId.CommitId => commitIdFrom(`${letter}${a.slice(1)}`);
+      const tree = treeIdFrom(`b${a.slice(1)}`);
+      const parents = ["c", "d", "e"].slice(0, many).map(id);
+      const answer = id("f");
+      const committer = committerFrom(person);
+      const table: Table = { commits: [...parents, id("a")], trees: [tree], refs: [] };
+
+      const hashes = (calls: ReadonlyArray<Call>) => calls.filter((call) => call.verb === "hash-object");
+
+      const hashing = (stdout: string) =>
+        gitTable(table, (call) => (call.verb === "hash-object" ? { code: 0, stdout } : { code: 0 }));
+
+      const signed = new Commit.Signature({
+        name: author.name,
+        email: author.email,
+        at: { seconds: author.seconds, offset: author.offset },
+      });
+
+      yield* TestClock.setTime(seconds * 1000 + 999);
+
+      const { repo, stand } = yield* open(hashing(`${answer}\n`), {}, undefined, settings({}, committer));
+
+      for (const [label, message] of messageVariants(word)) {
+        if (label === "a NUL") {
+          continue;
+        }
+
+        const commit = yield* repo.writeCommit({ tree, parents, author: signed, message });
+        const call = hashes(yield* stand.calls).at(-1);
+        expect(call?.rest, `${label}: the arguments`).toEqual(["-t", "commit", "-w", "--stdin"]);
+
+        expect(call?.input, `${label}: the bytes`).toEqual(
+          objectBytes({
+            tree,
+            parents,
+            author: signed,
+            committer: new Commit.Signature({ ...committer, at: { seconds, offset: "+0000" } }),
+            message,
+          }),
+        );
+
+        expect(commit.id, `${label}: the id git printed`).toBe(answer);
+      }
+
+      for (const [label, stdout] of [
+        ["no output", ""],
+        ["text that is no id", `not an id ${word}\n`],
+        ["two ids", `${answer}\n${answer}\n`],
+        ["an id in capitals", `${answer.toUpperCase()}\n`],
+      ] as const) {
+        const { repo: odd } = yield* open(hashing(stdout), {}, undefined, settings({}, committer));
+
+        unavailable(
+          yield* mustFail(odd.writeCommit({ tree, parents, author: signed, message: "m\n" }), label),
+          Repository.Unreadable,
+          {},
+          label,
+        );
+      }
+
+      // A tree or a parent that is not there, or is an object of another kind, stops the call before anything is written.
+      const gone = id("9");
+
+      for (const [label, fields, kind, held] of [
+        ["a tree the repository lacks", { tree: treeIdFrom(gone), parents }, Repository.NoSuchTree, { id: gone }],
+        ["a commit's id as the tree", { tree: treeIdFrom(id("a")), parents }, Repository.NoSuchTree, { id: id("a") }],
+        ["a parent the repository lacks", { tree, parents: [id("a"), gone] }, Repository.NoSuchCommit, { id: gone }],
+        [
+          "a tree's id as a parent",
+          { tree, parents: [id("a"), commitIdFrom(tree)] },
+          Repository.NoSuchCommit,
+          { id: tree },
+        ],
+      ] as const) {
+        const refused = yield* open(hashing(`${answer}\n`), {}, undefined, settings({}, committer));
+        expectFailure(
+          yield* mustFail(refused.repo.writeCommit({ ...fields, author: signed, message: "m\n" }), label),
+          kind,
+          held,
+          label,
+        );
+        expect(hashes(yield* refused.stand.calls), `${label}: nothing was hashed`).toEqual([]);
+      }
+    }),
+  { arbitrary: { runs: 100, seed: 119120 } },
+);
+
+const ALLOWED = [
+  "version",
+  "rev-parse",
+  "cat-file",
+  "for-each-ref",
+  "rev-list",
+  "merge-base",
+  "merge-tree",
+  "hash-object",
+  "update-ref",
+];
+
+// Plant: run `push` after `update-ref`.
+it.effect(
+  "P11 scenario: across every call, the git commands that run are plumbing that reads and writes this repository, and none reaches a remote",
+  () =>
+    Effect.gen(function* () {
+      const [a, b] = ["a", "b"].map((letter) => commitIdFrom(letter.repeat(40)));
+      const tree = treeIdFrom("c".repeat(40));
+      const written = "d".repeat(40);
+      const ref = refNameFrom("refs/kalfa/candidates/p11");
+
+      if (a === undefined || b === undefined) {
+        return yield* Effect.die("the scenario made no ids");
+      }
+
+      const table: Table = { commits: [a, b], trees: [tree], refs: [[ref, a]] };
+
+      const { repo, stand } = yield* open(
+        gitTable(table, (call) => (call.verb === "hash-object" ? { code: 0, stdout: `${written}\n` } : { code: 0 })),
+      );
+
+      const author = new Commit.Signature({
+        name: "Ada",
+        email: "ada@example.test",
+        at: { seconds: 1, offset: "+0000" },
+      });
+
+      const calls: ReadonlyArray<Effect.Effect<unknown, unknown>> = [
+        repo.readCommit(a),
+        repo.readRefs(ref),
+        repo.walk({ include: [a], exclude: [b] }),
+        repo.mergeBases(a, b),
+        repo.isAncestor(a, b),
+        repo.writeCommit({ tree, parents: [a], author, message: "m\n" }),
+        repo.moveRef({ ref, from: Option.some(a), to: b }),
+      ];
+
+      for (const call of calls) {
+        yield* Effect.exit(call);
+      }
+
+      const verbs = new Set((yield* stand.calls).map((call) => call.verb));
+      expect(
+        [...verbs].filter((verb) => !ALLOWED.includes(verb)),
+        "no command outside the plumbing list",
+      ).toEqual([]);
+      expect(verbs.has("hash-object") && verbs.has("update-ref"), "the scenario reaches both write commands").toBe(
+        true,
+      );
+    }),
 );
