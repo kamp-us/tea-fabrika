@@ -5,17 +5,15 @@
  *
  * Paths are sorted before hashing, and origins stay out of it, so equal settings have one hash whatever source gave them.
  */
-import * as Digest from "effect/crypto/Digest";
-
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 
 import * as Codec from "./Codec.ts";
+import { hash } from "./internal/snapshot.ts";
 import type * as Setting from "./Setting.ts";
 import { Origin, type Resolved } from "./Sources.ts";
 
@@ -53,22 +51,6 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly 
     cause: Schema.optional(Schema.Defect()),
   },
 ) {}
-
-const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
-  const sorted = Rec.toEntries(values).sort(([a], [b]) => (a < b ? -1 : 1));
-
-  // The values are encoded JSON already, so a failure here is a bug, as in `make`'s own encode.
-  const text = yield* Schema.encodeUnknownEffect(
-    Schema.fromJsonString(Schema.Unknown, {
-      replacer: (_key, value: Schema.Json) =>
-        Predicate.isObject(value) ? Rec.fromEntries(Rec.toEntries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
-    }),
-  )(sorted).pipe(Effect.orDie);
-
-  const digest = yield* Digest.Digest;
-
-  return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
-});
 
 const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
   Origin.check(
@@ -125,7 +107,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const snapshot: Snapshot = {
     values,
     origins: Schema.decodeUnknownSync(Schema.Record(Schema.String, Origin))(resolved.origins),
-    hash: yield* hashValues(values),
+    hash: yield* hash(values),
   };
 
   return snapshot;
@@ -175,13 +157,13 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
     Rec.toEntries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
   );
 
-  const hash = yield* hashValues(canonical);
+  const canonicalHash = yield* hash(canonical);
 
-  if (saved.hash !== hash) {
+  if (saved.hash !== canonicalHash) {
     return yield* new SnapshotError({ message: "The saved settings hash does not match their values." });
   }
 
-  const snapshot: Snapshot = { values: canonical, origins: saved.origins, hash };
+  const snapshot: Snapshot = { values: canonical, origins: saved.origins, hash: canonicalHash };
 
   return { values, snapshot };
 });

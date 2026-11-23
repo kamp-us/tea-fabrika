@@ -6,7 +6,7 @@ import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
 import type * as Setting from "../Declaration.ts";
 import type { Origin } from "../Sources.ts";
-import { type Held, readRepo, readUser, type Setup, settle } from "./read.ts";
+import { type Held, readRepo, readUser, type Settled, type Setup, settle } from "./read.ts";
 import { ticks } from "./watch.ts";
 
 /** What the follower publishes to: the reference of each live setting by name, and the origins as they are now. */
@@ -15,6 +15,8 @@ interface Sinks {
   readonly origins: Ref.Ref<Readonly<Record<string, Origin>>>;
   /** What each setting's origin was at the start: a restart setting keeps it. */
   readonly started: ReadonlyMap<string, Origin>;
+  /** Every resolved list as taken: the one now, then each one a change takes. */
+  readonly taken: SubscriptionRef.SubscriptionRef<ReadonlyArray<Settled>>;
 }
 
 /** Publishes what one taken change moved: each live value that differs, and one line for each restart value that differs. The origins follow the live settings. */
@@ -55,6 +57,7 @@ const take = Effect.fnUntraced(function* (setup: Setup, sinks: Sinks, held: Held
   const next: Held = { repo, user, settled: yield* settle(taking, repo, user) };
 
   yield* publish(setup, sinks, held, next, file);
+  yield* SubscriptionRef.set(sinks.taken, next.settled);
 
   return next;
 });
