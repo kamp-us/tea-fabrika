@@ -16,11 +16,35 @@ import type * as Check from "./internal/Check.ts";
 /** The reply's content type: GitHub's JSON. */
 const HEADERS = { "content-type": "application/json; charset=utf-8" } as const;
 
+/** A text route's content type: GitHub answers `/zen` in plain text. */
+const TEXT_HEADERS = { "content-type": "text/plain; charset=utf-8" } as const;
+
 /** How often a watch asks again, when a test says nothing: the protocol's default poll interval. */
 const POLL = "30 seconds";
 
 type OperationRoute<Op extends GitHub.AnyRoute> =
-  Op extends GitHub.Route<infer R, Schema.Constraint, Schema.Constraint, Schema.Constraint> ? R : never;
+  Op extends GitHub.Route<
+    infer R,
+    Schema.Constraint,
+    Schema.Constraint,
+    Schema.Constraint,
+    "json" | "text",
+    "login" | "none"
+  >
+    ? R
+    : never;
+
+type OperationBody<Op extends GitHub.AnyRoute> =
+  Op extends GitHub.Route<
+    GitHub.RouteName,
+    Schema.Constraint,
+    Schema.Constraint,
+    Schema.Constraint,
+    infer B,
+    "login" | "none"
+  >
+    ? B
+    : never;
 
 /**
  * What a fake's `f` is handed of the request: the values that filled the path, the query, and the body, each as the Request
@@ -30,13 +54,15 @@ type OperationRoute<Op extends GitHub.AnyRoute> =
  */
 export interface Asked<Op extends GitHub.AnyRoute> {
   readonly params: Readonly<Record<string, string>>;
-  readonly query: Readonly<Record<string, Schema.Json>>;
+  readonly query: Readonly<Record<string, GitHub.QueryValue>>;
   /** The encoded payload, or `undefined` when the request carried no body. */
   readonly payload: Op extends GitHub.Route<
     infer R,
     Schema.Constraint,
     Schema.Constraint,
-    infer P extends Schema.Constraint
+    infer P extends Schema.Constraint,
+    "json" | "text",
+    "login" | "none"
   >
     ? Check.AskedBody<P, R>
     : never;
@@ -49,7 +75,11 @@ export interface Asked<Op extends GitHub.AnyRoute> {
  *
  * @category models
  */
-export type Answered<Op extends GitHub.AnyRoute, Status extends number = 200> = Check.Faked<OperationRoute<Op>, Status>;
+export type Answered<Op extends GitHub.AnyRoute, Status extends number = 200> = Check.Faked<
+  OperationRoute<Op>,
+  Status,
+  OperationBody<Op>
+>;
 
 /**
  * The status option of `answer`: required when 200 is not one of the route's 2xx statuses, and exactly those statuses.
@@ -114,10 +144,13 @@ export const answer = <
     const asked = { params: request.params, query: request.query, payload: request.body } as Asked<Op>;
     const value = f(asked);
 
+    const text = op.body === "text";
+
     return {
       status: given?.status ?? 200,
-      headers: HEADERS,
-      body: value === undefined ? "" : JSON.stringify(value),
+      headers: text ? TEXT_HEADERS : HEADERS,
+      // A text route's value is the body as it is; any other is written as JSON.
+      body: value === undefined ? "" : text ? String(value) : JSON.stringify(value),
     };
   },
 });
@@ -138,7 +171,7 @@ export const refuse = (
     readonly status: Status4xx;
     readonly message?: string;
     readonly documentation_url?: string;
-    readonly errors?: ReadonlyArray<Schema.Json>;
+    readonly errors?: string | ReadonlyArray<Schema.Json>;
   },
 ): Answer => {
   const { status, ...body } = said;

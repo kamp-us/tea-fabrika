@@ -112,8 +112,9 @@ it("R1 scenario: the README carries each route that is checked only at run time"
 const sources = (): ReadonlyArray<string> =>
   files().filter((path) => path.startsWith("src/") && !path.endsWith(".test.ts") && !path.endsWith(".test-support.ts"));
 
-// P3. Plant: add a reason class named `Unreachable` to the union, and a reason of that tag is read; write the word in a source file.
-it("P3 scenario: GitHubError's reason is ClientError or Undecodable and nothing else, and no source file names Unreachable", () => {
+// P3, widened in 1945 to the four reasons. Plant: add a reason class named `Unreachable` to the union, and a reason of that tag is
+// read; write the word in a source file; leave `Unavailable` out of the union, and its reason is refused.
+it("P3 scenario: GitHubError's reason is ClientError, ServerError, Unavailable or Undecodable and nothing else, and no source file names Unreachable", () => {
   // scenario: the module's own Schema and the package's source at head; no generated input says which tags a union holds.
   const clientError = new GitHub.GitHubError({
     operation: "GET /zen",
@@ -130,14 +131,26 @@ it("P3 scenario: GitHubError's reason is ClientError or Undecodable and nothing 
     reason: new GitHub.Undecodable({ side: "answer", message: "m" }),
   });
 
+  const serverError = new GitHub.GitHubError({
+    operation: "GET /zen",
+    reason: new GitHub.ServerError({ status: 502, mayHaveApplied: false }),
+  });
+
+  const unavailable = new GitHub.GitHubError({
+    operation: "POST /repos/{owner}/{repo}/issues",
+    reason: new GitHub.Unavailable({ mayHaveApplied: true, cause: new TypeError("fetch failed") }),
+  });
+
   const accepted = (wire: object) => Option.isSome(Schema.decodeUnknownOption(GitHub.GitHubError)(wire));
   const encode = Schema.encodeSync(GitHub.GitHubError);
 
   expect(accepted(encode(clientError)), "a 4xx").toBe(true);
   expect(accepted(encode(inputRefused)), "an input that cannot be encoded").toBe(true);
   expect(accepted(encode(answerRefused)), "an answer that cannot be read").toBe(true);
+  expect(accepted(encode(serverError)), "a 5xx").toBe(true);
+  expect(accepted(encode(unavailable)), "no answer at all").toBe(true);
 
-  for (const tag of ["Unreachable", "Unavailable", "ServerError", "RateLimited", "LoginFailed"]) {
+  for (const tag of ["Unreachable", "Timeout", "NotFound", "RateLimited", "LoginFailed"]) {
     const foreign = Schema.TaggedStruct(tag, { status: Schema.Int, message: Schema.String }).make({
       status: 500,
       message: "m",

@@ -250,5 +250,6 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
     );
 
     expect(hits).toEqual([]);
-  });
+    // One real oxlint run over the whole libfabrika source: 11 s alone and up to 30 s on a busy CI machine. Its own limit is the 120 s its spawn already has.
+  }, 120_000);
 });

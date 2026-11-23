@@ -167,35 +167,38 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
   // The cases are the eight combinations of a parse, a wrong ID and another blocking fire (the ID's word is the one draw besides), and each run starts the
   // real lint runner, 0.5 s. A law of all eight took 32 runs and 32 s in CI, four draws of each combination, so it is two laws by the parse: each keeps
   // four draws of each of its four combinations (one pinned, three drawn), and each is half the work.
+  // Each of the two laws took 16.0 to 17.0 s of CI's 60 s limit with the four pinned cases and 12 drawn, so it is 2 laws of the four pinned and 4 drawn each, with their own seeds.
   for (const parse of [false, true]) {
-    it(`a clean report passes, and a wrong ID or another blocking one fails, with${parse ? "" : "out"} a JSON.parse`, () => {
-      const seen = new Set<string>();
-      fc.assert(
-        fc.property(fc.record({ id: fc.boolean(), blocking: fc.boolean(), name: word }), ({ id, blocking, name }) => {
-          const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
-            "--warn=no-debugger",
-          ]);
+    for (const part of [1, 2]) {
+      it(`a clean report passes, and a wrong ID or another blocking one fails, with${parse ? "" : "out"} a JSON.parse, part ${part} of 2`, () => {
+        const seen = new Set<string>();
+        fc.assert(
+          fc.property(fc.record({ id: fc.boolean(), blocking: fc.boolean(), name: word }), ({ id, blocking, name }) => {
+            const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
+              "--warn=no-debugger",
+            ]);
 
-          const blocks = Number(parse) + Number(blocking) + Number(id);
-          expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
-          expect(ran.stdout.includes(CODE)).toBe(parse);
-          expect(ran.stdout.includes(ID)).toBe(id);
-          expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
-          seen.add(`${id}:${blocking}`);
-        }),
-        // The four combinations are drawn first, one each, so the coverage never rests on the seed; twelve more runs follow.
-        {
-          seed: 119120,
-          numRuns: 12,
-          examples: [false, true].flatMap((id) =>
-            [false, true].map(
-              (blocking) => [{ id, blocking, name: "word" }] as [{ id: boolean; blocking: boolean; name: string }],
+            const blocks = Number(parse) + Number(blocking) + Number(id);
+            expect(ran.stdout).toContain(`oxlint: ${blocks} blocking, 0 advice`);
+            expect(ran.stdout.includes(CODE)).toBe(parse);
+            expect(ran.stdout.includes(ID)).toBe(id);
+            expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
+            seen.add(`${id}:${blocking}`);
+          }),
+          // The four combinations are drawn first, one each, so the coverage never rests on the seed; four more runs follow.
+          {
+            seed: 119120 + part,
+            numRuns: 4,
+            examples: [false, true].flatMap((id) =>
+              [false, true].map(
+                (blocking) => [{ id, blocking, name: "word" }] as [{ id: boolean; blocking: boolean; name: string }],
+              ),
             ),
-          ),
-        },
-      );
-      expect(seen.size).toBe(4);
-    });
+          },
+        );
+        expect(seen.size).toBe(4);
+      });
+    }
   }
 
   // Law 10 of docs/plan/effect-rules-small.md, and T930 L9. Only the real lint runner reads the

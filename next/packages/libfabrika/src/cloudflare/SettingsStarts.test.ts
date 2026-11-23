@@ -1,6 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Option, Schema, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import * as Formatter from "effect/Formatter";
@@ -72,7 +73,8 @@ const open = Effect.gen(function* () {
   } satisfies StartsTest.Driver;
 }).pipe(Effect.provide(Digest.layerWebCrypto));
 
-StartsTest.suite(open);
+// The walk law took 17.3 s of CI's 60 s limit at 100 runs: it runs as 3 laws of 34 runs (9 fast).
+StartsTest.suite(open, runsFor({ fast: 9, full: 34 }), 3);
 
 for (const kind of StartsTest.originKinds) {
   StartsTest.law(

@@ -4,7 +4,7 @@
 // Octokit.test-support.ts. Each helper holds one law's lines, and its `it` only names the helper.
 import { expectTypeOf, it } from "@effect/vitest";
 import type { Context, Duration } from "effect";
-import { Data, DateTime, type Effect, type Option, Schema } from "effect";
+import { Data, DateTime, type Effect, type Option, Redacted, Schema, SchemaGetter } from "effect";
 import type { ListCheckRuns, Shouter, ShoutedAnswer, ShoutedIssue, ShoutedQuery } from "./GitHub.test-support.ts";
 import { Dispatch, DispatchUnread, ShoutedRuns } from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
@@ -20,9 +20,11 @@ import {
   DISPATCH,
   GET_BRANCH,
   GET_PULL,
+  GET_REPO,
   INSTALLATION_TOKEN,
   LANGUAGES,
   MERGE_RESULT,
+  README,
   SEARCH_ISSUES,
   STAR,
   UPDATE_ISSUE,
@@ -56,7 +58,7 @@ const routeText = () => {
     GitHub.route(DISPATCH, { payload: DispatchPayload, bodiless: [204] }),
     GitHub.route(GET_BRANCH),
     GitHub.route(GET_PULL),
-    GitHub.route(ZEN),
+    GitHub.route(ZEN, { body: "text" }),
     GitHub.route(LANGUAGES),
     GitHub.route(DELETE_ORG),
     GitHub.route(STAR),
@@ -247,7 +249,7 @@ const answerFields = () => {
   GitHub.route(DELETE_ORG, { success: Schema.Struct({ accepted: Schema.Unknown }) });
 
   // A part of the description that is open is checked at run time only: anything fits.
-  const zen = GitHub.route(ZEN, { success: Schema.String });
+  const zen = GitHub.route(ZEN, { body: "text", success: Schema.String });
   const languages = GitHub.route(LANGUAGES, { success: Schema.Struct({ anything: Schema.Finite }) });
 
   // A field found in one member of a `OneOf` answer compiles; one found in no member does not.
@@ -291,7 +293,7 @@ const bodilessAndBrand = () => {
   });
 
   // Only `route` makes a `Route`: an object with the same visible keys is not one.
-  const zen = GitHub.route(ZEN);
+  const zen = GitHub.route(ZEN, { body: "text" });
   const made: typeof zen = zen;
   // @ts-expect-error the literal has no brand
   // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- the law writes the look-alike a hand would write
@@ -346,7 +348,7 @@ const RepoParams = { owner: "o", repo: "r" } as const;
 
 const cancel = GitHub.route(CANCEL);
 
-const zen = GitHub.route(ZEN);
+const zen = GitHub.route(ZEN, { body: "text" });
 
 const issue = GitHub.route(CREATE_ISSUE, {
   payload: Schema.Struct({ title: Schema.String, body: Schema.optionalKey(Schema.String) }),
@@ -508,4 +510,201 @@ it("T7 type: call gives the success, or void, or an Option; fails with GitHubErr
 it("T8 type: only a Route reaches call, and the GitHub service is exactly send and poll", () => {
   // These compile-time laws need tsc, which the lead runs after the build.
   expectTypeOf(onlyRoute).toBeFunction();
+});
+
+// ---- 1945, slice 1: the route's new options and call's own options
+
+// A text read into a Struct: its Schema starts at a string and ends at an object.
+const Counted = Schema.String.pipe(
+  Schema.decodeTo(Schema.Struct({ length: Schema.Int }), {
+    decode: SchemaGetter.transform((text: string) => ({ length: text.length })),
+    encode: SchemaGetter.transform(() => ""),
+  }),
+);
+
+// T14. Plant: make `body` optional on every route, and the `/zen` line with no body compiles; type a text route's success as any
+// Schema, and the `Schema.Finite` line compiles; type `auth` as `string`, and the `"nobody"` line compiles; type `auth` as the
+// route's own parameter `A`, and the `"login"` line compiles.
+const routeOptions = () => {
+  const ok = [
+    GitHub.route(ZEN, { body: "text" }),
+    GitHub.route(ZEN, { body: "text", success: Schema.String }),
+    GitHub.route("GET /octocat", { body: "text", success: Schema.String }),
+    GitHub.route(ZEN, { body: "text", success: Counted }),
+    GitHub.route(README, { body: "text", accept: "application/vnd.github.raw+json", success: Schema.String }),
+    GitHub.route(ZEN, { body: "text", auth: "none", success: Schema.String }),
+    GitHub.route(GET_REPO, { auth: "none" }),
+    GitHub.route(GET_REPO, { accept: "application/vnd.github+json" }),
+    GitHub.route(GET_REPO, { body: "json" }),
+  ];
+
+  // @ts-expect-error GitHub answers /zen in text, so the route must say so
+  const noBody = GitHub.route(ZEN);
+  // @ts-expect-error nor does an options object that leaves `body` out say it
+  const noBodyOption = GitHub.route(ZEN, { success: Schema.String });
+  // @ts-expect-error octocat is text too
+  const octocat = GitHub.route("GET /octocat");
+  // @ts-expect-error a text answer is read from text, so a Schema that starts at a number does not fit
+  const number = GitHub.route(ZEN, { body: "text", success: Schema.Finite });
+  // @ts-expect-error `nobody` is no way to send a request
+  const nobody = GitHub.route(GET_REPO, { auth: "nobody" });
+  // @ts-expect-error `login` is what a route does when it says nothing, so it is no value to write
+  const login = GitHub.route(GET_REPO, { auth: "login" });
+  // @ts-expect-error `app` is no way this ticket sends a request
+  const app = GitHub.route(GET_REPO, { auth: "app" });
+  // @ts-expect-error a media type is a text
+  const accept = GitHub.route(GET_REPO, { accept: 1 });
+
+  expectTypeOf([ok, noBody, noBodyOption, octocat, number, nobody, login, app, accept]).toBeArray();
+  // The route holds what it was declared with, and the defaults when it left the options out.
+  expectTypeOf(GitHub.route(ZEN, { body: "text" }).body).toEqualTypeOf<"text">();
+  expectTypeOf(GitHub.route(GET_REPO).body).toEqualTypeOf<"json">();
+  expectTypeOf(GitHub.route(GET_REPO).auth).toEqualTypeOf<"login">();
+  expectTypeOf(GitHub.route(GET_REPO, { auth: "none" }).auth).toEqualTypeOf<"none">();
+};
+
+// T15. Plant: type `token` as `string | Redacted.Redacted<string>`, and the plain-text line compiles; read `CallOptions` without
+// the route's `auth`, and the `auth: "none"` line compiles.
+const callOptions = () => {
+  const repo = GitHub.route(GET_REPO, { success: Schema.Struct({ id: Schema.Int }) });
+  const zenText = GitHub.route(ZEN, { body: "text", auth: "none", success: Schema.String });
+  const params = { owner: "o", repo: "r" } as const;
+
+  const ok = [
+    GitHub.call(repo, { params }, { token: Redacted.make("t") }),
+    GitHub.call(repo, { params }, {}),
+    GitHub.call(repo, { params }),
+    GitHub.call(zenText, {}),
+    GitHub.call(zenText, {}, {}),
+  ];
+
+  // @ts-expect-error a token is a Redacted, never a plain text
+  const plain = GitHub.call(repo, { params }, { token: "t" });
+  // @ts-expect-error a route that sends no token takes none
+  const none = GitHub.call(zenText, {}, { token: Redacted.make("t") });
+
+  expectTypeOf([ok, plain, none]).toBeArray();
+  expectTypeOf(GitHub.call(zenText, {})).toEqualTypeOf<Effect.Effect<string, Failures, GitHub.GitHub>>();
+  expectTypeOf(GitHub.call(repo, { params }, { token: Redacted.make("t") })).toEqualTypeOf<
+    Effect.Effect<{ readonly id: number }, Failures, GitHub.GitHub>
+  >();
+  expectTypeOf(GitHub.call(repo, { params })).toEqualTypeOf<
+    Effect.Effect<{ readonly id: number }, Failures, GitHub.GitHub>
+  >();
+};
+
+// T17. A route's type holds what its value holds, however the route was built. The value holds the options' `body` and `auth`,
+// and `"json"` and `"login"` where they say none, so the type must say exactly that where the options fix it, and both
+// values wherever the options leave them open. Judging a `{ token }`: a route that may be `"none"` drops a token, whatever
+// else it may be, and a token silently dropped is T15's hole, so a route whose `auth` type includes `"none"` refuses it.
+// Plant: read a union of options by the keys they share (so `fromUnion` reads as the defaults), and its `body` and `auth` lines
+// fail; read an optional `body` or `auth` key as the default, and the `viaTypeArgument`, `optional` and `fromParameter` lines
+// fail; let a route whose `auth` may be `"none"` take a token, and the `maybeNone` lines compile; make the options never
+// required, and the `bareText` line compiles.
+type None = Record<never, never>;
+
+type Open = { readonly body?: "text"; readonly auth?: "none" };
+
+type Params = { readonly owner: string; readonly repo: string };
+
+const input = { params: { owner: "o", repo: "r" } } satisfies { readonly params: Params };
+
+const everyWay = () => {
+  // No options, and literal options.
+  const bare = GitHub.route(GET_REPO);
+  const text = GitHub.route(GET_REPO, { body: "text" });
+  const none = GitHub.route(GET_REPO, { auth: "none" });
+  const both = GitHub.route(GET_REPO, { body: "text", auth: "none" });
+  const zen = GitHub.route(ZEN, { body: "text" });
+  expectTypeOf(bare.body).toEqualTypeOf<"json">();
+  expectTypeOf(bare.auth).toEqualTypeOf<"login">();
+  expectTypeOf(text.body).toEqualTypeOf<"text">();
+  expectTypeOf(text.auth).toEqualTypeOf<"login">();
+  expectTypeOf(none.body).toEqualTypeOf<"json">();
+  expectTypeOf(none.auth).toEqualTypeOf<"none">();
+  expectTypeOf(both.body).toEqualTypeOf<"text">();
+  expectTypeOf(both.auth).toEqualTypeOf<"none">();
+  expectTypeOf(zen.auth).toEqualTypeOf<"login">();
+
+  // A type argument for the settings: it may say only what the options say.
+  const agreeing = GitHub.route<typeof GET_REPO, never, None, never, { body: "text" }>(GET_REPO, { body: "text" });
+  expectTypeOf(agreeing.body).toEqualTypeOf<"text">();
+  // @ts-expect-error the type says text, and no options say it
+  const bareText = GitHub.route<typeof GET_REPO, never, None, never, { body: "text" }>(GET_REPO);
+  // @ts-expect-error the type says none, and the options say nothing
+  const emptyNone = GitHub.route<typeof GET_REPO, never, None, never, { auth: "none" }>(GET_REPO, {});
+  // @ts-expect-error the type says none, and the options leave `auth` out
+  const noAuth = GitHub.route<typeof ZEN, never, None, never, { body: "text"; auth: "none" }>(ZEN, { body: "text" });
+  // A type argument whose keys are optional leaves both open.
+  const viaTypeArgument = GitHub.route<typeof GET_REPO, never, None, never, Open>(GET_REPO, {});
+  expectTypeOf(viaTypeArgument.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(viaTypeArgument.auth).toEqualTypeOf<"login" | "none">();
+
+  // An options variable with optional keys, and a widened one: the value may be either.
+  const typed: Open = { body: "text", auth: "none" };
+  const optional = GitHub.route(GET_REPO, typed);
+  expectTypeOf(optional.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(optional.auth).toEqualTypeOf<"login" | "none">();
+  const fromParameter = (options: Open) => GitHub.route(GET_REPO, options);
+  expectTypeOf(fromParameter({}).body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(fromParameter({}).auth).toEqualTypeOf<"login" | "none">();
+  const widened = (body: "json" | "text") => GitHub.route(GET_REPO, { body });
+  expectTypeOf(widened("text").body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(widened("text").auth).toEqualTypeOf<"login">();
+
+  // Options typed as a union: each member fixes one key and leaves the other open, so each key may be either value.
+  const pick = (n: number): { readonly body: "text" } | { readonly auth: "none" } =>
+    n === 0 ? { body: "text" } : { auth: "none" };
+
+  const fromUnion = GitHub.route(GET_REPO, pick(1));
+  expectTypeOf(fromUnion.body).toEqualTypeOf<"json" | "text">();
+  expectTypeOf(fromUnion.auth).toEqualTypeOf<"login" | "none">();
+  // A key whose value may be `undefined` reads as the default when it is, so it is no `"text"` or `"none"` for certain. This
+  // repo's config has `exactOptionalPropertyTypes` on, which refuses the options; a config without it would accept them, and
+  // F2 (the run-time law) is what holds then.
+  // @ts-expect-error a text that may be undefined is not a text for certain
+  const maybeText = (body: "text" | undefined) => GitHub.route(GET_REPO, { body });
+  // @ts-expect-error nor is a none that may be undefined
+  const maybeNobody = (auth: "none" | undefined) => GitHub.route(GET_REPO, { auth });
+
+  // A token: taken where the route sends the login, refused wherever it may send none.
+  const token = { token: Redacted.make("t") };
+  const taken = [GitHub.call(bare, input, token), GitHub.call(text, input, token), GitHub.call(zen, {}, token)];
+  // @ts-expect-error a route declared none sends no token
+  const noneToken = GitHub.call(none, input, token);
+  // @ts-expect-error a route that may be none drops a token
+  const maybeNone = GitHub.call(optional, input, token);
+  // @ts-expect-error a route that may be none drops a token, however it was built
+  const maybeNoneFromType = GitHub.call(viaTypeArgument, input, token);
+
+  // @ts-expect-error a route built from options of a union may be none
+  const maybeNoneFromUnion = GitHub.call(fromUnion, input, token);
+
+  expectTypeOf([
+    taken,
+    bareText,
+    emptyNone,
+    noAuth,
+    noneToken,
+    maybeNone,
+    maybeNoneFromType,
+    maybeNoneFromUnion,
+    maybeText,
+    maybeNobody,
+  ]).toBeArray();
+};
+
+it("T14 type: route takes body: text where GitHub answers text, a success read from text, auth: none and a media type, and refuses the rest", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(routeOptions).toBeFunction();
+});
+
+it("T15 type: call takes a token as a Redacted, refuses it on a route that sends none, and keeps the answer's type", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(callOptions).toBeFunction();
+});
+
+it("T17 type: a route's body and auth types hold what its value holds, however it was built, and a route that may send none takes no token", () => {
+  // These compile-time laws need tsc, which the lead runs after the build.
+  expectTypeOf(everyWay).toBeFunction();
 });

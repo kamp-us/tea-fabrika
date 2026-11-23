@@ -564,9 +564,19 @@ describe("loosening, today's tooling", () => {
   });
 
   // Plant: the old named-pattern-only parser clears these review2 misses. Each case runs alone.
-  it.each(["aliases", "conditions", "options", "removals", "assertions", "ranges"])(
-    "T318 review2 %s forms cannot clear a generated weaker law",
-    (kind) => {
+  // The `options` case compared 96 pairs in a run, 18.6 s of CI's 60 s limit, so each of its four flags is a case of its own.
+  for (const [kind, only] of [
+    ["aliases", undefined],
+    ["conditions", undefined],
+    ["options", "skip"],
+    ["options", "todo"],
+    ["options", "only"],
+    ["options", "fails"],
+    ["removals", undefined],
+    ["assertions", undefined],
+    ["ranges", undefined],
+  ] as const) {
+    it(`T318 review2 ${kind} forms cannot clear a generated weaker law${only === undefined ? "" : `, ${only}`}`, () => {
       fc.assert(
         fc.property(input, (v) => {
           const pairs: [string, string][] = [];
@@ -597,7 +607,7 @@ describe("loosening, today's tooling", () => {
           }
 
           if (kind === "options") {
-            for (const flag of ["skip", "todo", "only", "fails"]) {
+            for (const flag of only === undefined ? ["skip", "todo", "only", "fails"] : [only]) {
               for (const root of ["it", "describe"]) {
                 for (const declaration of [
                   `const settings: Options = {${flag}: false};`,
@@ -670,8 +680,8 @@ describe("loosening, today's tooling", () => {
         }),
         { seed: 31841, numRuns: 2, endOnFailure: true },
       );
-    },
-  );
+    });
+  }
 
   // Plant: clear a whole added statement, comment, or mapped move in an existing file.
   it("T318 existing files hit for all insertions comments and mapped moves", () => {
