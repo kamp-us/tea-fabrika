@@ -1,12 +1,15 @@
 # @kalfa/markdown
 
-Read, write and set values in a Markdown file's frontmatter against a schema. Frontmatter is the YAML block between two `---` lines at
-the top of a file. This package knows nothing about what a file means: it turns text into data and back, and it is the one
-place that decides how that YAML is read and written. Words: [GLOSSARY.md](./GLOSSARY.md).
+Read, write and set values in a Markdown file's frontmatter against a schema, and read its body into a document.
+Frontmatter is the YAML block between two `---` lines at the top of a file. This package knows nothing about what a file
+means: it turns text into data and back, and it is the one place that decides how that YAML and that Markdown are read and
+written. Words: [GLOSSARY.md](./GLOSSARY.md).
 
-It is private. Import one module, `@kalfa/markdown/Frontmatter`. It needs `effect` and `yaml`, takes text, and does no IO.
+It is private. Import `@kalfa/markdown/Frontmatter` for the frontmatter and `@kalfa/markdown/Markdown` for the body. It needs
+`effect`, `yaml` and the Markdown reader (`mdast-util-from-markdown`, `mdast-util-gfm`, `micromark-extension-gfm`, and
+`@types/mdast` for the types), takes text, and does no IO.
 
-## The four calls
+## The four frontmatter calls
 
 ```ts
 import * as Frontmatter from "@kalfa/markdown/Frontmatter";
@@ -98,7 +101,63 @@ until the caller changes it.
 - **Top level keys only, and no removal.** `values` never holds `undefined`, so a key is never taken out, and a key below
   the top level is set by setting the whole value of its top level key.
 
+## Reading a body: `Markdown.parse`
+
+```ts
+import * as Frontmatter from "@kalfa/markdown/Frontmatter";
+import * as Markdown from "@kalfa/markdown/Markdown";
+
+const file = "---\nsummary: x\n---\n# Data on top\n\nText with **bold**.\n\n```js\n# not a heading\n```\n";
+
+// parse: a plain function. Any text is a document, so it has no Effect, no error and no span.
+const document = Markdown.parse(Frontmatter.split(file).body);
+// Markdown.Document, which is mdast's Root. children: a heading (depth 1, "Data on top"), a paragraph and a code
+// (lang "js", value "# not a heading").
+
+// The first level-one heading. The package gives no call for it: what a record's title is stays Records'.
+const first = document.children.find((part) => part.type === "heading" && part.depth === 1);
+```
+
+- **A body, not a file.** `parse` cuts nothing. Read a whole file with its frontmatter and the first `---` is a thematic
+  break and the lines after it are a level-two heading. Pass `Frontmatter.split(text).body`.
+- **The tree is mdast's.** `Markdown.Document` is `Root` from `@types/mdast`, as it is. A caller that walks the tree imports
+  the part types from `mdast`.
+- **CommonMark with GitHub's Markdown.** Tables, strikethrough, footnotes and link literals (`www.x.com`) are read. Two
+  bodies that differ only in how they are typed (`**x**` and `__x__`, `-` and `*`, `# T` and `T` over `===`, a fence of
+  backticks and one of `~~~`) give the same document once every `position` is left out. A `# ` line inside a fenced or an
+  indented block is code, not a heading.
+- **The task-list check is off.** `[ ]` and `[x]` at the start of a list item stay text, so `- [ ] a` is a list item whose
+  text is `[ ] a` and `checked` is `null`. GitHub's own check throws in micromark's development build, and in its default
+  build drops the `[ ]` and puts a `checked` field on the root, for a body such as `-\n[ ] a` (an empty item, then a line
+  that starts with a check). The newest published versions keep the bug. A change that turns it back on needs that body to
+  read whole.
+- **The first level-one heading** is the first child of the root that is a `heading` of depth 1, as in the code above. A
+  heading inside a block quote or a list item is not a file's title, and a setext heading (`T` over `===`) counts.
+
+### A part's line in the whole file
+
+`parse` reads only the body, so every position counts from the body's start. The body is the end of the file byte for byte,
+so the text before it is `text.slice(0, text.length - body.length)`. Call it `before`.
+
+- **Line:** the part's line plus the line endings in `before`. A line ending is `\n`, `\r\n` or a lone `\r`, each counted
+  once, as CommonMark counts them. For a file `Frontmatter.write` made, that is the frontmatter's lines plus its two fences.
+- **Column:** the same in both, since the body starts at the start of a line.
+- **Offset:** the part's offset plus `before.length`.
+- **One exception:** micromark skips a U+FEFF at the very start of the body. Then the offsets, and the columns on the body's
+  first line, count from after it: add one to each.
+
+### Parts with no position
+
+Every part has a position except a `link` and its `text` that GFM's link-literal step made, for the smallest inputs
+`[a@b.x`, `_a@b.co_` and `http://.!-`. Their paragraph, heading or cell always has one, so take the nearest part above that
+has one. `see https://a.b now`, `www.x.com` and `a@b.co` alone keep their positions. The positions stay as mdast gives them:
+`parse` does not fill them in.
+
+Two parts that sit side by side can overlap: mdast starts a setext heading on the line of a link definition right above it,
+so the definition and the heading are siblings whose positions share that line (`[a]: /u\nT\n===` gives a definition at
+1:1 to 1:8 and a heading from 1:1 to 3:4).
+
 ## What it never does
 
-It never reads or writes a file, never prints or logs, and never puts any text of the file in its span. Reading a body into
-a Document comes in a later change.
+It never reads or writes a file, never prints or logs, and never puts any text of the file in its span. Writing a document
+back to text is not here.
