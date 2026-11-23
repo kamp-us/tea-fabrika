@@ -610,10 +610,10 @@ describe("reading the notes ref in one pass", () => {
     r.change("a.ts");
     r.signWith("build", "300");
     r.change("b.ts");
-    expect(r.signWith("build").version).toBe(1);
+    expect(r.signWith("build").answers[0]).toMatchObject({ version: 1 });
     r.change("c.ts");
-    expect(r.signWith("build").version).toBe(2);
+    expect(r.signWith("build").answers[0]).toMatchObject({ version: 2 });
     r.change("d.ts");
-    expect(r.signWith("build").version).toBe(3);
+    expect(r.signWith("build").answers[0]).toMatchObject({ version: 3 });
   });
 });

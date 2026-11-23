@@ -336,6 +336,31 @@ try:
                 refuse("not_formatted: staged files need formatting")
             if formatted.returncode:
                 refuse(f"formatter_failed: installed formatter exited {formatted.returncode}", 2)
+    # CI's typecheck job runs `typecheck` in every workspace package (scripts/typecheck.ts CHECK); a commit
+    # that passes lint and tests can still fail it. Run that same script, with CHECK's incremental flags,
+    # in each package that owns a committed .ts file, so the package list stays the packages' own
+    # `typecheck` scripts and there is no second copy. A box's commit (STEPCOMMIT_BOX) skips it: drive's
+    # host part checks there. No .ts file, or no package with a typecheck script above it: nothing runs.
+    if not named_box:
+        owners_seen = {}
+        for p in staged:
+            if not re.search(r"\.(ts|tsx|mts|cts)\Z", p) or not (root / p).exists(): continue
+            d = pathlib.PurePosixPath(p).parent
+            while str(d) != ".":
+                pkg = root / d / "package.json"
+                if pkg.is_file():
+                    try: scripts = json.loads(pkg.read_text()).get("scripts", {})
+                    except ValueError: scripts = {}
+                    if "typecheck" in scripts: owners_seen[str(d)] = True; break
+                d = d.parent
+        for d in owners_seen:
+            checked = subprocess.run(
+                ["nice", "-n", "15", "pnpm", "--dir", str(root / d), "run", "typecheck", "--incremental", "--tsBuildInfoFile", "node_modules/.cache/tsc/typecheck.tsbuildinfo"],
+                capture_output=True, text=True, env=dict(os.environ, CI="1"),
+            )
+            if checked.returncode:
+                print(checked.stdout + checked.stderr, file=sys.stderr)
+                refuse("typecheck_failed: " + d + " does not typecheck; CI would fail it. Fix the errors above", 8)
 except SystemExit:
     git("--literal-pathspecs", "restore", "--staged", "--", *staged)
     raise
