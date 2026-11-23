@@ -1346,40 +1346,6 @@ export const broken = (draw: Draws): ReadonlyArray<Broken> =>
     };
   });
 
-/** (s) A key that is not one key here: a record setting under its own header, as dotted sub-keys, and as an array of tables. */
-interface Tabled extends Scene {
-  readonly line: number;
-  readonly value: unknown;
-}
-
-export const tabled = (draw: Draws): ReadonlyArray<Tabled> =>
-  [false, true].flatMap((three, t) =>
-    (["header", "dotted", "root", "array"] as const).map((form, n) => {
-      const { r, c } = frame(draw, n + t, three, "rec");
-      const target = declare("rec", r.path.join("."));
-      const path = r.path.join(".");
-
-      const lines = {
-        header: [`${K}[${path}]`, `a${c.G}1`],
-        dotted: [header(r.tp), `${K}${r.key}.a${c.G}1`],
-        root: [`${K}${path}.a${c.G}1`],
-        array: [`${K}[[${path}]]`, `a${c.G}1`],
-      }[form];
-
-      const located = locate(body(c, [...fillers(draw), ...lines]));
-
-      return {
-        app: draw.app,
-        group: sceneGroup(draw, target),
-        target,
-        file: draw.file,
-        text: located.text,
-        line: lineNumber(located.text, located.key ?? 0),
-        value: draw.values.rec,
-      };
-    }),
-  );
-
 /** How a kind's value is written in a file: the same value, by the fixture writer (a number-as-text setting writes text). */
 const fileForm = (kind: Kind, value: unknown) => (kind === "count" ? literal(String(value)) : literal(value));
 
@@ -1487,13 +1453,6 @@ export const hiding = (draw: Draws): ReadonlyArray<Hiding> => {
       text: body(c, [`${draw.app}-version${c.G}${quoted}`, header(r.tp), line(c, r.other, "7")]),
       value: secret,
       file: "repo",
-    })),
-    // a record setting that is not one key here, set to a record with a secret key
-    make("edit", 6, (r, c) => ({
-      target: declare("rec", r.path.join(".")),
-      others: [],
-      text: body(c, [`[${r.path.join(".")}]`, `a${c.G}1`]),
-      value: { [secret]: 1 },
     })),
   ];
 };

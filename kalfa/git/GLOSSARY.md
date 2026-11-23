@@ -93,6 +93,14 @@ _Avoid_: parent (a direct one only), predecessor
 A best common ancestor of two commits. Two commits can have more than one, or none.
 _Avoid_: fork point, common ancestor, base (a branch's own)
 
+**Upstream**:
+The commits a branch's own changes are measured against, such as main, in git's own word.
+_Avoid_: target, base (a branch's own), parent branch
+
+**Diff**:
+The files two commits differ in, each with the lines added and removed.
+_Avoid_: patch, change set, delta, changes
+
 **Fetch**:
 Getting a remote's commits and refs without moving any of this repository's own branches.
 _Avoid_: pull, sync, download

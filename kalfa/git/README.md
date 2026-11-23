@@ -1,14 +1,14 @@
 # @kalfa/git
 
 Read commits, refs and changes from a git repository that has no working copy, write a commit, move a ref and merge trees.
-One service, `Repository`, with six read calls and three write calls, a helper that writes a merge commit, two adapters
+One service, `Repository`, with eight read calls and three write calls, a helper that writes a merge commit, two adapters
 that answer the calls, and the laws both adapters pass.
 
 It never reads HEAD and never touches a working copy. Only `writeCommit`, `moveRef` and `mergeTrees` change the
 repository, and none sends anything to a remote. It imports no other package of its repo, no Node module and no GitHub entry point,
 so anything can import it.
 
-## The six calls
+## The eight read calls
 
 ```ts
 import { Effect, Schema } from "effect";
@@ -24,7 +24,9 @@ const program = Effect.gen(function* () {
   const bases = yield* repo.mergeBases(branch, branch); // CommitId[], [] = no common history
   const landed = yield* repo.isAncestor(branch, branch); // boolean, true: a commit is its own ancestor
   const patch = yield* repo.patchId(branch, branch); // Option<PatchId>, none: the two commits hold the same files
-  return { own, bases, landed, patch };
+  const range = yield* repo.rangePatchId({ upstream: branch, commit: branch }); // Option<PatchId>, none: no own changes
+  const files = yield* repo.diff(branch, branch); // FileChange[], []: the two commits hold the same files
+  return { own, bases, landed, patch, range, files };
 });
 ```
 
@@ -38,8 +40,15 @@ const program = Effect.gen(function* () {
 - `patchId(from, to)` answers the patch id of the changes from `from`'s files to `to`'s, or none when the two hold
   the same files. A commit's own patch id is `patchId(parent, commit)`. It reads no history, so it answers in a shallow
   repository too.
+- `rangePatchId({ upstream, commit })` answers the patch id of a branch's own changes: `patchId` from the one merge base
+  of `commit` and `upstream` to `commit`, or none when the tip is its merge base. A branch rebased onto a newer upstream,
+  one with the upstream merged in and one squashed into a commit give one id when they make the same edit. It fails
+  `UnclearBase` naming the merge bases when there is none (no common history) or more than one (a criss-cross), and
+  `HistoryTooShort` in a shallow repository. It is one call: one span and one time limit around both of its reads.
+- `diff(from, to)` answers every file the two commits differ in, sorted by the path's UTF-8 bytes, or `[]` when they hold
+  the same files. See "The diff" below.
 
-A call never answers a guess. A shallow repository fails `walk`, `mergeBases` and `isAncestor` with
+A call never answers a guess. A shallow repository fails `walk`, `mergeBases`, `isAncestor` and `rangePatchId` with
 `HistoryTooShort`. An answer past a limit fails with `TooMany`, `TooLarge` or `DiffTooLarge`, never a cut list. A ref that is
 symbolic, or points at a tag, a tree or a blob, fails `readRefs` with `RefNotCommit`.
 
@@ -175,6 +184,36 @@ exist (`NoSuchCommit`), the changed files are at most `limits.files` (`TooMany` 
 content, each changed file's bytes before and after, is at most `limits.diff` (`DiffTooLarge`). A diff over a limit
 fails and is never cut. A submodule counts as a changed file of no bytes.
 
+## The diff
+
+```ts
+const files = yield* repo.diff(base, tip);
+// [{ _tag: "Modified", path, before: { mode, blob }, after: { mode, blob },
+//    content: { _tag: "Text", lines: [{ _tag: "Removed", at: 2, text: "b\n" }, { _tag: "Added", at: 2, text: "B\n" }] } }]
+```
+
+Each file is `New` (it has an `after`), `Deleted` (a `before`) or `Modified` (both), with its entry on each side: a mode and
+a blob id. A file made a link, or a link made a file, is one `Modified`, with every old line removed and every new line
+added. Its `content` is `Text` with its lines, or `Binary`, which holds no line: read the file by its blob ids. A line
+keeps its own end (`"b\n"`, `"b\r\n"`), and a last line with no newline has none, so `x` and `x\n` are two edits. `at`
+counts from 1, in the old file for a removed line and in the new file for an added one. In a block of changed lines, the
+removed lines come first. A mode-only change and an empty new file are `Text` with no lines, and so is a binary file whose
+bytes did not change. Renames and copies are never found: a rename is a deleted file and a new one.
+
+The checks run in this order, each before any content is read except the last: the commits exist (`NoSuchCommit`), the
+files are at most `limits.files` (`TooMany`), a submodule fails `NotAFile` naming its path as git prints it, the content is
+at most `limits.diff` (`DiffTooLarge`), and then a text file whose lines are not UTF-8 fails `NotUtf8` naming the first
+such file in path order. Only changed lines are read as text, and a binary file's bytes never fail. `patchId` needs no
+text, so it answers for the same change.
+
+**The two adapters may differ in two cases,** and the shared laws draw neither:
+
+1. **More than one smallest diff.** A block of changed lines among repeated lines can be shown with other lines, and git
+   also moves a block by its indent heuristic. The git adapter shows git's lines, the memory adapter shows the lines
+   of its own Myers diff.
+2. **Binary by attributes.** git may read a `.gitattributes` file and call a text file binary. The memory adapter uses only
+   the NUL rule.
+
 ## Settings
 
 The limits are required and have no default. The app gives each one where it builds the layer.
@@ -215,5 +254,5 @@ optional peers, needed only by `/test`.
 
 It has no working copy and no HEAD. It writes only the one commit and the one ref a caller asks for, and sends nothing
 to a remote. It imports no Node module and no package of its repo. It puts no message, name, email, path, line or file
-content in a span. The range's patch id, the diff itself, reading a file, rebase, squash, fetch and push come in later
-tickets of this package.
+content in a span: the diff's span says how many files and lines, and the range's span names its merge base. Reading a
+file, rebase, squash, fetch and push come in later tickets of this package.

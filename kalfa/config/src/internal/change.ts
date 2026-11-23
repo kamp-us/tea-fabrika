@@ -1,7 +1,7 @@
 /**
  * One edit of one configuration file's text, in memory: set one setting's value, or take it out. The text is the only input and the new text the only answer, so nothing is read or written here.
  *
- * Each step stops at the first fault with the one error, and no text comes back after it. Before the splice: the setting is one of the group's, its file scope holds the file, a value passes its schema and can be written, the text parses, and the whole file passes with this setting's own old value left out. After it: the answer parses, holds only the one change, and passes the whole check.
+ * Each step stops at the first fault with the one error, and no text comes back after it. A record is compared key by key by the format, and these checks guard that compare as they guard a one-key splice. Before the splice: the setting is one of the group's, its file scope holds the file, a value passes its schema and can be written, the text parses, and the whole file passes with this setting's own old value left out. After it: the answer parses, holds only the one change, and passes the whole check.
  */
 import { Effect, Option, Schema } from "effect";
 import * as Predicate from "effect/Predicate";

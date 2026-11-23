@@ -9,7 +9,7 @@ import { Context, Effect, Layer, Option, Ref as Cell, Result, Schema } from "eff
 import * as Digest from "effect/crypto/Digest";
 import * as Commit from "./Commit.ts";
 import { CommitId } from "./CommitId.ts";
-import { PatchId } from "./Diff.ts";
+import * as Diff from "./Diff.ts";
 import { joined } from "./internal/bytes.ts";
 import * as Lines from "./internal/lines.ts";
 import { byBytes, bytes, FOLDER, hashed, treeBytes, type Line } from "./internal/object.ts";
@@ -379,12 +379,10 @@ const isAncestor = (
 ): Result.Result<boolean, Repository.NoSuchCommit | Repository.HistoryTooShort> =>
   Result.map(history(store, [ancestor, descendant]), () => reach(store, [descendant]).has(ancestor));
 
-// A file changed between two trees: where it is, and what it was and is, with the bytes of each side.
-interface Changed {
-  readonly path: Tree.Path;
-  readonly before?: Held;
-  readonly after?: Held;
-}
+// A file changed between two trees: where it is, and what it was and is, with the bytes of each side. A file has at least one side.
+type Changed =
+  | { readonly path: Tree.Path; readonly before: Held; readonly after?: Held }
+  | { readonly path: Tree.Path; readonly before?: undefined; readonly after: Held };
 
 interface Held {
   readonly entry: Tree.Entry;
@@ -412,11 +410,15 @@ const changed = (store: Store, from: CommitId, to: CommitId): ReadonlyArray<Chan
 
       return was === undefined || now === undefined || was.mode !== now.mode || was.blob !== now.blob;
     })
-    .map((path) => {
+    .flatMap((path): ReadonlyArray<Changed> => {
       const was = held(store, before.get(path));
       const now = held(store, after.get(path));
 
-      return { path, ...(was === undefined ? {} : { before: was }), ...(now === undefined ? {} : { after: now }) };
+      if (was === undefined) {
+        return now === undefined ? [] : [{ path, after: now }];
+      }
+
+      return [{ path, before: was, ...(now === undefined ? {} : { after: now }) }];
     });
 };
 
@@ -470,6 +472,11 @@ const modes = (file: Changed, kind: Kind): ReadonlyArray<Uint8Array> => {
   return kind === "modified" && sides[0] === sides[1] ? [] : sides.map((mode) => word("m", mode));
 };
 
+// Whether a file's bytes are the same on both sides, so only its mode changed: no line is printed for it, binary or not. A file
+// that changes kind is never the same, since git prints it as a deleted file and a new one.
+const isModeOnly = (before: Held | undefined, after: Held | undefined, kind: Kind): boolean =>
+  kind !== "kind" && before !== undefined && before.entry.blob === after?.entry.blob;
+
 // What a changed file's bytes add to the id. A binary file counts by its blobs on both sides, as git names it. A text file
 // counts by its removed and added lines, each with its own end, and where a line sits and the lines around it count for nothing.
 // A file that changed kind has every old line removed and every new line added, as git prints it. A file with the same bytes on
@@ -478,7 +485,7 @@ const edits = ({ before, after }: Changed, kind: Kind): ReadonlyArray<Uint8Array
   const old = before?.content ?? NO_BYTES;
   const next = after?.content ?? NO_BYTES;
 
-  if (kind !== "kind" && before !== undefined && before.entry.blob === after?.entry.blob) {
+  if (isModeOnly(before, after, kind)) {
     return [];
   }
 
@@ -501,6 +508,60 @@ const section = (file: Changed): ReadonlyArray<Uint8Array> => {
   const kind = changeKind(file);
 
   return [word("k", kind), word("p", file.path), ...modes(file, kind), ...edits(file, kind)];
+};
+
+// UTF-8 or nothing: a byte that is not valid is a failure, never a replacement character. A leading BOM is kept.
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+const decoded = (octets: Uint8Array): Result.Result<string, unknown> => Result.try(() => utf8.decode(octets));
+
+// The lines of a changed text file as a diff holds them, or the first line that is not UTF-8. Removed lines come first in each
+// block and count from 1 in the old file, added lines count from 1 in the new one. A file that changed kind has every old line
+// removed and every new line added.
+const lineChanges = (file: Changed, kind: Kind): Result.Result<ReadonlyArray<Diff.Line>, unknown> => {
+  const old = file.before?.content ?? NO_BYTES;
+  const next = file.after?.content ?? NO_BYTES;
+
+  const blocks =
+    kind === "kind"
+      ? [{ removedAt: 0, removed: Lines.split(old), addedAt: 0, added: Lines.split(next) }]
+      : Lines.blocks(old, next);
+
+  return Result.all(
+    blocks.flatMap((block) => [
+      ...block.removed.map((line, at) =>
+        Result.map(decoded(line), (text) => Diff.Removed.make({ at: block.removedAt + at + 1, text })),
+      ),
+      ...block.added.map((line, at) =>
+        Result.map(decoded(line), (text) => Diff.Added.make({ at: block.addedAt + at + 1, text })),
+      ),
+    ]),
+  );
+};
+
+// One changed file as a diff holds it, or `NotUtf8` naming it when a line of it is not text.
+const fileChange = (file: Changed): Result.Result<Diff.FileChange, Repository.NotUtf8> => {
+  const kind = changeKind(file);
+  const { path, before, after } = file;
+
+  const content: Result.Result<Diff.Content, Repository.NotUtf8> = isModeOnly(before, after, kind)
+    ? Result.succeed(Diff.Text.make({ lines: [] }))
+    : Lines.isBinary(before?.content ?? NO_BYTES) || Lines.isBinary(after?.content ?? NO_BYTES)
+      ? Result.succeed(Diff.Binary.make({}))
+      : Result.match(lineChanges(file, kind), {
+          onFailure: () => Result.fail(new Repository.NotUtf8({ path })),
+          onSuccess: (lines) => Result.succeed(Diff.Text.make({ lines })),
+        });
+
+  return Result.map(content, (read) => {
+    if (before === undefined) {
+      return Diff.New.make({ path, after: after.entry, content: read });
+    }
+
+    return after === undefined
+      ? Diff.Deleted.make({ path, before: before.entry, content: read })
+      : Diff.Modified.make({ path, before: before.entry, after: after.entry, content: read });
+  });
 };
 
 // What a write to the store answers, and the store after it: a call that fails leaves the store as it was.
@@ -658,7 +719,19 @@ export const layer = (
 
         const hex = yield* digest.digestHex(Digest.sha1, joined(files.flatMap(section)));
 
-        return Option.some(Schema.decodeSync(PatchId)(hex));
+        return Option.some(Schema.decodeSync(Diff.PatchId)(hex));
+      });
+
+      // The checks in order: both commits, the files limit, the size limit, and only then the lines, so a diff is never cut.
+      const diff = Effect.fnUntraced(function* (from: CommitId, to: CommitId) {
+        const store = yield* Cell.get(cell);
+        yield* Effect.fromResult(found(store, from));
+        yield* Effect.fromResult(found(store, to));
+        const files = changed(store, from, to);
+        yield* Effect.fromResult(patchLimits(files, limits));
+
+        // The first file in path order whose lines are not UTF-8 names the failure.
+        return yield* Effect.fromResult(Result.all(files.map(fileChange)));
       });
 
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
@@ -674,6 +747,7 @@ export const layer = (
             mergeBases: (a, b) => read((held) => mergeBases(held, limits, a, b)),
             isAncestor: (ancestor, descendant) => read((held) => isAncestor(held, ancestor, descendant)),
             patchId,
+            diff,
             writeCommit: (fields) =>
               commit(fields).pipe(
                 Effect.provideService(Digest.Digest, digest),

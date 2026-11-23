@@ -7,7 +7,8 @@
 //
 // A generator's reach is part of its law: every list named `*_CLASSES` below is a class the laws check in
 // every run, each one applied to the run's drawn value, so a missing class fails a law loudly.
-import { Arbitrary, Predicate, Schema } from "effect";
+import { createHash } from "node:crypto";
+import { Arbitrary, Predicate, Result, Schema } from "effect";
 
 // ---------------------------------------------------------------------------------------------------------
 // Pieces
@@ -1323,11 +1324,19 @@ const splitLines = (octets: Uint8Array): ReadonlyArray<string> => {
   return start < text.length ? [...found, text.slice(start)] : found;
 };
 
+/** One line of a diff as the model names it: removed from the old file or added to the new one, where it sits, and its own bytes as text. */
+export interface LineEdit {
+  readonly kind: "Removed" | "Added";
+  readonly at: number;
+  readonly text: string;
+}
+
 /**
- * The lines removed and added from one smallest diff, each block with its removed lines first. A file the generator draws
- * has one smallest diff, so any smallest diff is the one git prints.
+ * The lines removed and added from one smallest diff, each block with its removed lines first, each with where it sits counting
+ * from 1: in the old file for a removed line, in the new file for an added one. A file the generator draws has one smallest diff,
+ * so any smallest diff is the one git prints.
  */
-const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>): ReadonlyArray<string> => {
+const lineEdits = (before: ReadonlyArray<string>, after: ReadonlyArray<string>): ReadonlyArray<LineEdit> => {
   const n = before.length;
   const m = after.length;
   // `longest.get(i, j)` is the length of the longest common run of `before` from i and `after` from j.
@@ -1343,7 +1352,7 @@ const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>
     }
   }
 
-  const changes: Array<string> = [];
+  const edits: Array<LineEdit> = [];
   let i = 0;
   let j = 0;
 
@@ -1352,16 +1361,19 @@ const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>
       i += 1;
       j += 1;
     } else if (j >= m || (i < n && longest(i + 1, j) >= longest(i, j + 1))) {
-      changes.push(`-${before[i]}`);
+      edits.push({ kind: "Removed", at: i + 1, text: before[i] ?? "" });
       i += 1;
     } else {
-      changes.push(`+${after[j]}`);
+      edits.push({ kind: "Added", at: j + 1, text: after[j] ?? "" });
       j += 1;
     }
   }
 
-  return changes;
+  return edits;
 };
+
+const lineChanges = (before: ReadonlyArray<string>, after: ReadonlyArray<string>): ReadonlyArray<string> =>
+  lineEdits(before, after).map((edit) => `${edit.kind === "Removed" ? "-" : "+"}${edit.text}`);
 
 const isLink = (mode: FileSpec["mode"]): boolean => mode === "120000";
 
@@ -1444,6 +1456,160 @@ export const comparedBytes = (before: ReadonlyArray<FileSpec>, after: ReadonlyAr
     0,
   );
 
+/** The id git gives a blob: the sha-1 of `blob <size>`, a NUL byte and its bytes. */
+const blobId = (content: Uint8Array): string =>
+  createHash("sha1").update(`blob ${content.length}\0`).update(content).digest("hex");
+
+const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/** A line as bytes of text (one character for each byte) read as UTF-8, or `undefined` when its bytes are not UTF-8. */
+const decodedLine = (line: string): string | undefined => {
+  const decoded = Result.try(() => strictUtf8.decode(Uint8Array.from(line, (character) => character.charCodeAt(0))));
+
+  return Result.isSuccess(decoded) ? decoded.success : undefined;
+};
+
+const ModelEntry = Schema.Struct({ mode: Schema.String, blob: Schema.String });
+
+const RemovedLine = Schema.TaggedStruct("Removed", { at: Schema.Int, text: Schema.String });
+
+const AddedLine = Schema.TaggedStruct("Added", { at: Schema.Int, text: Schema.String });
+
+const TextContent = Schema.TaggedStruct("Text", { lines: Schema.Array(Schema.Union([RemovedLine, AddedLine])) });
+
+const BinaryContent = Schema.TaggedStruct("Binary", {});
+
+const ModelContentSchema = Schema.Union([TextContent, BinaryContent]);
+
+const NewFile = Schema.TaggedStruct("New", { path: Schema.String, after: ModelEntry, content: ModelContentSchema });
+
+const DeletedFile = Schema.TaggedStruct("Deleted", {
+  path: Schema.String,
+  before: ModelEntry,
+  content: ModelContentSchema,
+});
+
+const ModifiedFile = Schema.TaggedStruct("Modified", {
+  path: Schema.String,
+  before: ModelEntry,
+  after: ModelEntry,
+  content: ModelContentSchema,
+});
+
+/**
+ * The model's diff, as plain data in the form `Diff.FileChange` encodes to. The laws build every expected value with these, so no
+ * tag is written by hand, and compare an adapter's encoded answer with them.
+ */
+export const ModelDiff = {
+  Removed: RemovedLine,
+  Added: AddedLine,
+  Text: TextContent,
+  Binary: BinaryContent,
+  Content: ModelContentSchema,
+  New: NewFile,
+  Deleted: DeletedFile,
+  Modified: ModifiedFile,
+  File: Schema.Union([NewFile, DeletedFile, ModifiedFile]),
+} as const;
+
+export type ModelContent = typeof ModelDiff.Content.Type;
+
+export type ModelFile = typeof ModelDiff.File.Type;
+
+/** What `diff` must answer: the files, or the first file in path byte order whose lines are not UTF-8. */
+export type DiffModel =
+  | { readonly kind: "files"; readonly files: ReadonlyArray<ModelFile> }
+  | { readonly kind: "not-utf8"; readonly path: string };
+
+const modelEntry = (spec: FileSpec) => ({ mode: spec.mode, blob: blobId(spec.content) });
+
+// The content of one changed file, or undefined when a line of it is not UTF-8. Bytes that did not change (a mode-only change)
+// hold no line, binary or not, as git prints no line for them; a file that changes kind (a link made a file) removes every old
+// line and adds every new one.
+const modelContent = (from: FileSpec | undefined, to: FileSpec | undefined): ModelContent | undefined => {
+  const kind = from !== undefined && to !== undefined && isLink(from.mode) !== isLink(to.mode);
+
+  if (!kind && from !== undefined && to !== undefined && sameBytes(from.content, to.content)) {
+    return ModelDiff.Text.make({ lines: [] });
+  }
+
+  if (hasNul(from?.content ?? NO_BYTES) || hasNul(to?.content ?? NO_BYTES)) {
+    return ModelDiff.Binary.make({});
+  }
+
+  const old = splitLines(from?.content ?? NO_BYTES);
+  const next = splitLines(to?.content ?? NO_BYTES);
+
+  const edits: ReadonlyArray<LineEdit> = kind
+    ? [
+        ...old.map((text, i): LineEdit => ({ kind: "Removed", at: i + 1, text })),
+        ...next.map((text, i): LineEdit => ({ kind: "Added", at: i + 1, text })),
+      ]
+    : lineEdits(old, next);
+
+  const lines: Array<typeof RemovedLine.Type | typeof AddedLine.Type> = [];
+
+  for (const edit of edits) {
+    const text = decodedLine(edit.text);
+
+    if (text === undefined) {
+      return undefined;
+    }
+
+    lines.push(
+      edit.kind === "Removed"
+        ? ModelDiff.Removed.make({ at: edit.at, text })
+        : ModelDiff.Added.make({ at: edit.at, text }),
+    );
+  }
+
+  return ModelDiff.Text.make({ lines });
+};
+
+const modelFile = (
+  path: string,
+  from: FileSpec | undefined,
+  to: FileSpec | undefined,
+  content: ModelContent,
+): ModelFile | undefined => {
+  if (from === undefined) {
+    return to === undefined ? undefined : ModelDiff.New.make({ path, after: modelEntry(to), content });
+  }
+
+  return to === undefined
+    ? ModelDiff.Deleted.make({ path, before: modelEntry(from), content })
+    : ModelDiff.Modified.make({ path, before: modelEntry(from), after: modelEntry(to), content });
+};
+
+/**
+ * What `diff` must answer for two sets of files: every file they differ in, in path byte order, with its entries on the sides it
+ * has and its lines as one smallest diff gives them; `[]` for the same files. A text file that holds a line that is not UTF-8
+ * fails the whole diff, naming the first such file in path order.
+ */
+export const diffModel = (before: ReadonlyArray<FileSpec>, after: ReadonlyArray<FileSpec>): DiffModel => {
+  const files: Array<ModelFile> = [];
+
+  for (const { path, from, to } of changedSections(before, after)) {
+    const content = modelContent(from, to);
+
+    if (content === undefined) {
+      return { kind: "not-utf8", path };
+    }
+
+    const made = modelFile(path, from, to, content);
+
+    if (made !== undefined) {
+      files.push(made);
+    }
+  }
+
+  return { kind: "files", files };
+};
+
+/** How many lines a model diff holds in all. */
+export const diffLines = (files: ReadonlyArray<ModelFile>): number =>
+  files.reduce((total, each) => total + (Predicate.isTagged(each.content, "Text") ? each.content.lines.length : 0), 0);
+
 /** One edit the generator draws: the commits it goes from and to, the files of both, and the model's key of the change. */
 export interface EditCase {
   readonly label: string;
@@ -1475,6 +1641,8 @@ export const EDIT_CLASSES = [
   "(a) a link made a file",
   "(a) a file made a link with the same bytes",
   "(a) a link made a file with the same bytes",
+  "(a) a binary file made a link",
+  "(a) a link made a binary file",
   "(b) a mode-only change",
   "(c) a NUL in the first 8000 bytes on one side",
   "(c) a NUL at byte 8000, binary",
@@ -1484,9 +1652,11 @@ export const EDIT_CLASSES = [
   "(d) CRLF lines",
   "(d) a change of whitespace only",
   "(e) a text file in latin-1 bytes",
+  "(e) a line that starts with a BOM",
   "(f) no change",
   "(f) an empty file added",
   "(g) change blocks at the first line and at the last",
+  "(g) lines only inserted and lines only removed",
   "(k) the sort traps in the changed paths",
   "(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__",
   "(l) the same edit on a base that differs in another file",
@@ -1695,6 +1865,15 @@ export const editCarrier = (texture: Texture): EditCarrier => {
     turned("r\n"),
   );
 
+  // The other way round, a file that is binary only before, and a binary file whose bytes are not UTF-8.
+  made("binary becomes text", ["(c) a NUL in the first 8000 bytes on one side"], turned("q\n"), turns("q\n"));
+  made(
+    "a binary file whose bytes are not UTF-8",
+    ["(c) a NUL in the first 8000 bytes on one side"],
+    [file(`m${p}`, joined("a", [0xe9, 0], "b"))],
+    [file(`m${p}`, joined("a", [0xe9, 0], "c"))],
+  );
+
   // A NUL at index 8000 is the 8001st byte, which git does not look at; at index 7999 it does. Each pair is one edit (the first
   // letter of the long line) on two bases that differ in the line above it.
   const nul = (above: string, first: string, index: number): Uint8Array =>
@@ -1728,6 +1907,21 @@ export const editCarrier = (texture: Texture): EditCarrier => {
   made("a file made a link", ["(a) a file made a link"], [text(src, base)], [text(src, [`t${q}`], "120000")]);
   made("a link made a file", ["(a) a link made a file"], [text(src, [`t${q}`], "120000")], [text(src, base)]);
 
+  // A binary file made a link and a link made a binary file: git prints one binary section and one text section, and the diff is
+  // `Binary` whichever comes first.
+  made(
+    "a binary file made a link",
+    ["(a) a binary file made a link"],
+    [file(src, joined("a", [0], "b"))],
+    [text(src, [`t${q}`], "120000")],
+  );
+  made(
+    "a link made a binary file",
+    ["(a) a link made a binary file"],
+    [text(src, [`t${q}`], "120000")],
+    [file(src, joined("a", [0], "b"))],
+  );
+
   // A file and a link that hold the same bytes are two blobs of one id, yet git prints every old line removed and every new line
   // added, so two such changes with other bytes are two changes.
   for (const target of [`x${q}`, `y${q}`]) {
@@ -1747,9 +1941,18 @@ export const editCarrier = (texture: Texture): EditCarrier => {
 
   // Modes.
   made("a mode-only change", ["(b) a mode-only change"], [text(src, base)], [text(src, base, "100755")]);
-  made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
+
+  const modeOnlyBinary = made("a mode-only change of a binary file", ["(b) a mode-only change"], binary(bin, 0x62), [
     file(bin, joined("a", [0], "b"), "100755"),
   ]);
+
+  // The same mode change of another binary file at the same path: no byte of either is in the change, so the two are one edit.
+  const modeOnlyOther = made(
+    "a mode-only change of another binary file at the same path",
+    ["(b) a mode-only change"],
+    [file(bin, joined("c", [0], "d"))],
+    [file(bin, joined("c", [0], "d"), "100755")],
+  );
 
   // Line ends.
   made(
@@ -1780,6 +1983,25 @@ export const editCarrier = (texture: Texture): EditCarrier => {
 
   made("latin-1 lines", ["(e) a text file in latin-1 bytes"], [file(src, latin(base))], [file(src, latin(drawn))]);
 
+  // A line that starts with a BOM keeps it: the diff holds the line as it is, and a reader that drops a leading BOM reads another line.
+  const bom = (lines: ReadonlyArray<string>) => lines.map((line, i) => (i === 0 ? `\uFEFF${line}` : line));
+  made(
+    "a line that starts with a BOM",
+    ["(e) a line that starts with a BOM"],
+    [text(src, bom(base))],
+    [text(src, bom(replaceAt(base, 0, `${p}:new0\n`)))],
+  );
+
+  // Two such files, whose paths sort one way by bytes and the other by UTF-16 units: the diff names the first by bytes.
+  const gone = [`\uE000${p}`, `\u{1F600}${p}`];
+
+  made(
+    "two latin-1 files, named by bytes",
+    ["(e) a text file in latin-1 bytes", "(k) characters past U+024F, from U+E000 to U+FFFF, and __proto__"],
+    gone.map((path) => file(path, latin(base))),
+    gone.map((path) => file(path, latin(drawn))),
+  );
+
   // Nothing changed, and an empty file.
   made("no change", ["(f) no change"], [other, text(src, base)], [other, text(src, base)]);
   made("an empty file added", ["(f) an empty file added"], [other], [other, file(`e${p}`, NO_BYTES)]);
@@ -1796,6 +2018,32 @@ export const editCarrier = (texture: Texture): EditCarrier => {
     ["(g) change blocks at the first line and at the last"],
     [text(src, base)],
     [text(src, replaceAt(replaceAt(base, 0, `${p}:new0\n`), 3, `${p}:new3\n`))],
+  );
+
+  // Blocks with nothing on one side: lines only inserted, only removed, and inserted before the first line.
+  made(
+    "two lines inserted in the middle",
+    ["(g) lines only inserted and lines only removed"],
+    [text(src, base)],
+    [text(src, [...base.slice(0, 2), `${p}:ins0\n`, `${p}:ins1\n`, ...base.slice(2)])],
+  );
+  made(
+    "two lines removed from the middle",
+    ["(g) lines only inserted and lines only removed"],
+    [text(src, base)],
+    [text(src, [...base.slice(0, 1), ...base.slice(3)])],
+  );
+  made(
+    "two lines inserted above a line changed",
+    ["(g) lines only inserted and lines only removed"],
+    [text(src, base)],
+    [text(src, [...base.slice(0, 1), `${p}:ins0\n`, `${p}:ins1\n`, ...replaceAt(base, 3, `${p}:new3\n`).slice(1)])],
+  );
+  made(
+    "a line inserted before the first",
+    ["(g) lines only inserted and lines only removed"],
+    [text(src, base)],
+    [text(src, [`${p}:top\n`, ...base])],
   );
 
   // Paths: names that sort in traps, and wide characters.
@@ -1841,7 +2089,9 @@ export const editCarrier = (texture: Texture): EditCarrier => {
   return {
     history: { nodes, refs: [], shallow: [] },
     cases,
-    same: [same, [binaryEdit, sameBinary], text8001].map((group) => group.map((each) => cases.indexOf(each))),
+    same: [same, [binaryEdit, sameBinary], text8001, [modeOnlyBinary, modeOnlyOther]].map((group) =>
+      group.map((each) => cases.indexOf(each)),
+    ),
     drawn: cases.indexOf(first),
     variants: variants.map((each) => cases.indexOf(each)),
   };
@@ -1903,6 +2153,127 @@ export const limitCarrier = (
   return { history: { nodes, refs: [], shallow: [] }, before, after };
 };
 
+/** The classes of `rangePatchId`: the drawn ranges, then the shapes of history and the shallow cut the law adds. */
+export const RANGE_PATCH_CLASSES = [
+  "(o) the branch before the upstream moved",
+  "(o) the branch rebased onto the upstream",
+  "(o) the upstream merged into the branch",
+  "(o) the branch's own commits, two of them",
+  "(r) the tip is its merge base",
+  "(r) the tip is the upstream",
+  "(p) no common history",
+  "(p) a criss-cross with two merge bases",
+  "(q) a shallow repository",
+] as const;
+
+/** One range of the carrier below: what it is measured against, its tip, and the one merge base the model names. */
+export interface RangeCase {
+  readonly label: string;
+  readonly classes: ReadonlyArray<string>;
+  readonly upstream: number;
+  readonly commit: number;
+  /** The one merge base of the two, by index. */
+  readonly base: number;
+  /** The model's key of the change from the base to the tip: equal keys are one edit; `undefined` is no change. */
+  readonly key: string | undefined;
+}
+
+export interface RangeCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<RangeCase>;
+}
+
+/**
+ * A main that moves on (`M0`, then `M1` with another file changed) and one edit of a source file made in other ways: on `M0`
+ * (`B1`), rebased onto `M1` (`B2`), made on `M0` and `M1` merged into it (`B3`), and made in two commits (`B4`, `B5`), beside a
+ * different edit (`B6`). Every range holds the one edit or none, from its merge base.
+ */
+export const rangeCarrier = (texture: Texture): RangeCarrier => {
+  const p = at(texture.parts, 0);
+  const q = at(texture.parts, 1);
+  const r = at(texture.parts, 2);
+  const src = `s${p}/f${q}`;
+  const base = numbered(p, 5);
+  const readme = (version: string): FileSpec => textFile(`n${q}`, `${r}:${version}\n`);
+  const source = (lines: ReadonlyArray<string>): FileSpec => textFile(src, lines.join(""));
+  const drawn = replaceAt(base, 2, `${p}:new2\n`);
+  const seed = at(texture.signatures, 0);
+  const nodes: Array<Node> = [];
+
+  const commit = (parents: ReadonlyArray<number>, files: ReadonlyArray<FileSpec>): number => {
+    const i = nodes.length;
+
+    nodes.push({
+      parents,
+      author: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      committer: { ...seed, seconds: BASE_SECONDS + i, offset: "+0000" },
+      message: `range ${i}`,
+      files,
+    });
+
+    return i;
+  };
+
+  const m0 = commit([], [readme("one"), source(base)]);
+  const m1 = commit([m0], [readme("two"), source(base)]);
+  const b1 = commit([m0], [readme("one"), source(drawn)]);
+  const b2 = commit([m1], [readme("two"), source(drawn)]);
+  const b3 = commit([b1, m1], [readme("two"), source(drawn)]);
+  const b4 = commit([m0], [readme("one"), source(replaceAt(base, 2, `${p}:tmp2\n`))]);
+  const b5 = commit([b4], [readme("one"), source(drawn)]);
+  const b6 = commit([m0], [readme("one"), source(replaceAt(base, 2, `${p}:other2\n`))]);
+
+  const cases: ReadonlyArray<Omit<RangeCase, "key">> = [
+    { label: "the branch on its own base", classes: [], upstream: m0, commit: b1, base: m0 },
+    {
+      label: "the branch before main moved",
+      classes: ["(o) the branch before the upstream moved"],
+      upstream: m1,
+      commit: b1,
+      base: m0,
+    },
+    {
+      label: "the branch rebased onto the new main",
+      classes: ["(o) the branch rebased onto the upstream"],
+      upstream: m1,
+      commit: b2,
+      base: m1,
+    },
+    {
+      label: "the new main merged into the branch",
+      classes: ["(o) the upstream merged into the branch"],
+      upstream: m1,
+      commit: b3,
+      base: m1,
+    },
+    {
+      label: "two commits that make the one edit",
+      classes: ["(o) the branch's own commits, two of them"],
+      upstream: m1,
+      commit: b5,
+      base: m0,
+    },
+    { label: "another edit", classes: [], upstream: m1, commit: b6, base: m0 },
+    {
+      label: "the tip is the merge base",
+      classes: ["(r) the tip is its merge base"],
+      upstream: m1,
+      commit: m0,
+      base: m0,
+    },
+    { label: "the tip is the upstream", classes: ["(r) the tip is the upstream"], upstream: m1, commit: m1, base: m1 },
+  ];
+
+  return {
+    history: { nodes, refs: [], shallow: [] },
+    cases: cases.map((each) => ({
+      ...each,
+      key: changeKey(nodes[each.base]?.files ?? [], nodes[each.commit]?.files ?? []),
+    })),
+  };
+};
+
+// ---------------------------------------------------------------------------------------------------------
 // Writing a commit and moving a ref
 // ---------------------------------------------------------------------------------------------------------
 

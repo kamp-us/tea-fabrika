@@ -2,6 +2,7 @@
  * The TOML format: the only file that knows the TOML parser and serializer. Edit receives source positions and text.
  */
 import { stringify } from "@decimalturn/toml-patch";
+import * as Arr from "effect/Array";
 import * as Predicate from "effect/Predicate";
 import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
@@ -99,7 +100,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
   const inlines: Array<Edit.Inline> = [];
 
   const sections: [Edit.Section, ...Array<Edit.Section>] = [
-    { path: [], line: 1, end: tables[0] !== undefined ? sectionStart(text, tables[0]) : text.length },
+    { path: [], line: 1, start: 0, end: tables[0] !== undefined ? sectionStart(text, tables[0]) : text.length },
   ];
 
   const visit = (parent: Edit.Path, node: AST.TOMLKeyValue, inline?: Edit.Range): Edit.Assignment => {
@@ -140,6 +141,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
     sections.push({
       path: table.resolvedKey,
       line: table.loc.start.line,
+      start: Edit.lineStart(text, table.range[0]),
       end: next !== undefined ? sectionStart(text, next) : text.length,
     });
 
@@ -217,32 +219,59 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): En
 
 const format = { inlineTableStart: 0, multilineTable: false, multilineArray: false, trailingNewline: 0 } as const;
 
+/** The one assignment the serializer wrote for `source`. */
+const assignment = (source: string): AST.TOMLKeyValue => {
+  const node = syntax(source).body[0].body[0];
+
+  if (node?.type !== "TOMLKeyValue") {
+    throw new TypeError("The encoder did not produce an assignment.");
+  }
+
+  return node;
+};
+
+/** What the serializer writes for a value, as the text right of `=`. */
+const written = (value: Encoded): string => {
+  const source = stringify({ value }, format);
+
+  return Str.slice(...assignment(source).value.range)(source);
+};
+
+/** A key as TOML writes it: bare when it can be, quoted when it must be. */
+const quoted = (segment: string): string => {
+  const source = stringify(Rec.fromEntries([[segment, 0]]), format);
+
+  return Str.slice(...assignment(source).key.range)(source);
+};
+
 const render = (path: ReadonlyArray<string>, value: unknown) =>
   Result.try({
     try: () => {
       const checked = encoded(value);
-      const source = stringify({ value: checked }, format);
-      const assignment = syntax(source).body[0].body[0];
 
-      if (assignment?.type !== "TOMLKeyValue") {
-        throw new TypeError("The encoder did not produce an assigned TOML value.");
-      }
-
-      const keys = path.map((segment) => {
-        const text = stringify(Rec.fromEntries([[segment, 0]]), format);
-        const node = syntax(text).body[0].body[0];
-
-        if (node?.type !== "TOMLKeyValue") {
-          throw new TypeError("The encoder did not produce a TOML key.");
-        }
-
-        return Str.slice(...node.key.range)(text);
-      });
-
-      return { value: checked, text: Str.slice(...assignment.value.range)(source), keys };
+      return { value: checked, text: written(checked), keys: path.map(quoted) };
     },
     catch: (cause: unknown) => Fault.cases.Value.make({ cause }),
   });
+
+type Table = { readonly [name: string]: Encoded };
+
+const isTable = (value: Encoded): value is Table => Predicate.isObject(value);
+
+const nonEmpty = (value: Encoded): value is Table => isTable(value) && !Rec.isEmptyRecord(value);
+
+/** A table as lines: its header, a line per key, and a block of its own, after a blank line, for each non-empty table in it. */
+const lines = (path: ReadonlyArray<string>, table: Table, header: string): ReadonlyArray<string> => {
+  const rows = Rec.toEntries(table);
+
+  return [
+    header,
+    ...rows.flatMap(([name, value]) => (nonEmpty(value) ? [] : [`${quoted(name)} = ${written(value)}`])),
+    ...rows.flatMap(([name, value]) =>
+      nonEmpty(value) ? ["", ...lines([...path, name], value, `[${[...path, name].map(quoted).join(".")}]`)] : [],
+    ),
+  ];
+};
 
 const planned = <A>(result: Result.Result<A, Edit.Refusal>): Result.Result<A, Fault> =>
   Result.mapError(result, (refusal) => Fault.cases.Conflict.make({ line: refusal.line, cause: refusal.cause }));
@@ -262,21 +291,103 @@ const parse = (text: string): Result.Result<Document, Fault> =>
     };
   });
 
-const set = (text: string, path: ReadonlyArray<string>, value: unknown): Result.Result<string, Fault> =>
+// Today's one-key edit: the path must be one assignment, or the edit is refused.
+const oneSet = (text: string, path: ReadonlyArray<string>, value: unknown): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
     yield* planned(Edit.check(source, path));
     const rendered = yield* render(path, value);
-    const candidate = yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys));
+
+    const candidate = yield* planned(
+      Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys, Edit.ending(text)),
+    );
+
     yield* parseSource(candidate);
 
     return candidate;
   });
 
+const oneRemove = (text: string, path: ReadonlyArray<string>): Result.Result<string, Fault> =>
+  Result.gen(function* () {
+    const source = yield* parseSource(text);
+    const candidate = yield* planned(Edit.remove(text, source, path, Edit.ending(text)));
+    yield* parseSource(candidate);
+
+    return candidate;
+  });
+
+/** Takes out the key at `path`, or the whole table or array of tables there with the comments it owns. */
+const take = (
+  text: string,
+  source: Edit.Index,
+  path: ReadonlyArray<string>,
+  eol: string,
+): Result.Result<string, Fault> => {
+  const form = Edit.formAt(source, path);
+
+  return form === "spread" || form === "tables"
+    ? Result.succeed(Edit.removeTable(text, source, path))
+    : planned(Edit.remove(text, source, path, eol));
+};
+
+/** One step of a plan, made on the text the step before it left, with the line break of the text the edit began with. */
+const step = (text: string, next: Edit.Step, eol: string): Result.Result<string, Fault> =>
+  Result.gen(function* () {
+    const source = yield* parseSource(text);
+
+    return yield* Edit.Step.match(next, {
+      Set: ({ path, value }) =>
+        Result.gen(function* () {
+          const rendered = yield* render(path, value);
+          const at = Edit.blockAt(source, path.slice(0, -1));
+
+          // Items under headers of their own: a new item gets its own header after its siblings.
+          if (at !== undefined && nonEmpty(rendered.value)) {
+            return Edit.insertBlock(text, at, lines(path, rendered.value, `[${rendered.keys.join(".")}]`), eol);
+          }
+
+          return yield* planned(Edit.set(text, source, path, rendered.value, rendered.text, rendered.keys, eol));
+        }),
+      Remove: ({ path }) => take(text, source, path, eol),
+      Blocks: ({ path, value }) =>
+        Result.map(render(path, value), (rendered) => {
+          const blocks = Arr.ensure(rendered.value);
+
+          return Edit.replaceBlocks(
+            text,
+            source,
+            path,
+            Edit.asBlocks(blocks)
+              ? blocks.filter(isTable).map((element) => lines(path, element, `[[${rendered.keys.join(".")}]]`))
+              : [[`${rendered.keys.slice(Edit.above(source, path).length).join(".")} = ${rendered.text}`]],
+            eol,
+          );
+        }),
+    });
+  });
+
+/** Writes only the keys that differ: an item that is the same keeps its lines, a new one is written, a gone one leaves. */
+const set = (text: string, path: ReadonlyArray<string>, value: unknown): Result.Result<string, Fault> =>
+  Result.gen(function* () {
+    const source = yield* parseSource(text);
+    const eol = Edit.ending(text);
+    let answer = text;
+
+    for (const next of Edit.plan(source, path, value)) {
+      answer = yield* step(answer, next, eol);
+    }
+
+    // The line break and the final break are the input's, whatever the steps made of the text between them.
+    const kept = Edit.keepEnd(text, answer);
+    yield* parseSource(kept);
+
+    return kept;
+  });
+
 const remove = (text: string, path: ReadonlyArray<string>): Result.Result<string, Fault> =>
   Result.gen(function* () {
     const source = yield* parseSource(text);
-    const candidate = yield* planned(Edit.remove(text, source, path));
+    const candidate = Edit.keepEnd(text, yield* take(text, source, path, Edit.ending(text)));
     yield* parseSource(candidate);
 
     return candidate;
@@ -284,3 +395,6 @@ const remove = (text: string, path: ReadonlyArray<string>): Result.Result<string
 
 /** The TOML format. */
 export const toml: Format = { name: "TOML", extension: "toml", parse, set, remove };
+
+/** Today's one-key set and remove, for the `Toml` service: a table under its own header is refused, not compared. */
+export const single = { set: oneSet, remove: oneRemove };

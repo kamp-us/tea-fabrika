@@ -58,7 +58,8 @@ _Avoid_: syntax, grammar, parser, serializer
 
 **Edit**:
 One change to one setting in a configuration file's text: setting its value or removing it. Every other line and
-comment stays as it was, and the whole edited text is checked before any text comes back.
+comment stays as it was, and the whole edited text is checked before any text comes back. A record is compared key by
+key: only the keys that differ are written, and a table that leaves takes its comments.
 _Avoid_: patch, update, write, mutation
 
 **File scope**:
