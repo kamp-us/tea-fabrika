@@ -254,7 +254,7 @@ export const layer = <App extends string, R extends ReadonlyArray<Setting.Any>>(
  *
  * **Details**
  *
- * An origin is the default, an environment variable by name, or a file and line. It holds no value, so it holds no secret.
+ * An origin is the default, a command-line flag by name, an environment variable by name, or a file and line. It holds no value, so it holds no secret.
  *
  * @category combinators
  */

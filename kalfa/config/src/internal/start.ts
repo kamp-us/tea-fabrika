@@ -348,7 +348,9 @@ export const start = Effect.fnUntraced(function* (
   const origins: Record<string, Origin> = {};
 
   for (const s of group.settings) {
-    const resolved = yield* resolve(group, s, files, names, provider, options.flags?.[s.name] ?? Option.none());
+    // Only the record's own keys count: a setting named `constructor` has no flag unless the record holds one.
+    const given = Option.getOrUndefined(Rec.get(options.flags ?? {}, s.name)) ?? Option.none();
+    const resolved = yield* resolve(group, s, files, names, provider, given);
     // What a reader gets is a frozen copy: no write to it reaches another reader, another start or the declaration's default.
     const settled = frozen(resolved.value);
 
