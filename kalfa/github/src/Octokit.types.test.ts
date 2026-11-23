@@ -70,7 +70,7 @@ const apiDate = () => {
 
   // A `paths` that lacks one of the two routes cannot say which date it describes, whatever the other holds. Plant: read
   // a route that is not there as a change that was kept, and `{}` reads as 2022-11-28.
-  expectTypeOf<Check.DescribedVersion<{}>>().toEqualTypeOf<never>();
+  expectTypeOf<Check.DescribedVersion<Record<never, never>>>().toEqualTypeOf<never>();
   expectTypeOf<Check.DescribedVersion<Pick<Shape<true, true, true>, PullPath>>>().toEqualTypeOf<never>();
   expectTypeOf<Check.DescribedVersion<Pick<Shape<false, false, false>, PullPath>>>().toEqualTypeOf<never>();
   expectTypeOf<Check.DescribedVersion<Pick<Shape<true, true, true>, DispatchPath>>>().toEqualTypeOf<never>();
