@@ -863,6 +863,18 @@ it.effect.prop(
           expect(error.file).toBe(place.name);
           expect(error.line).toBe(pad + 2);
 
+          // The message in full: where, what is wrong, the nearest guess when there is one, and the closing.
+          const typed = `${table}.${key}`;
+
+          const nearest = near.reduce<string | undefined>(
+            (best, name) => (best === undefined || distance(name, typed) < distance(best, typed) ? name : best),
+            undefined,
+          );
+
+          expect(error.message, typed).toBe(
+            `${place.name}, line ${pad + 2}: there is no setting ${typed}.${nearest === undefined ? "" : ` Did you mean ${nearest}?`}\n  ${app} did not start.`,
+          );
+
           const said = specs.map(({ entry }) => named(entry)).filter((name) => mentions(error.message, name));
           // A guess is never a setting this file may not set, nor one more than two edits away.
           expect(said.every((name) => near.includes(name))).toBe(true);

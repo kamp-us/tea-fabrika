@@ -299,6 +299,10 @@ it.effect.prop(
           ).toBe(file === "repo");
 
           if (file === "repo") {
+            expect(
+              Option.getOrUndefined(topAt(document, `${draw.app}-version`))?.description,
+              "the version's description",
+            ).toBe(`The oldest ${draw.app} version this repo works with, as 1.2.3.`);
             reach.mark("version");
           }
 
@@ -453,9 +457,10 @@ it.effect.prop(
           continue;
         }
 
-        // The description, as written but for a final break, which a paragraph cannot hold.
+        // The description, as written but for a final break, which a paragraph cannot hold, and for the one to three spaces
+        // that start a line, which Markdown drops from a paragraph's lines (four would make a code block).
         expect(section.paragraph, `${spec.name}: its description`).toBe(
-          spec.description.replace(/(?:\r\n|\r|\n)$/u, ""),
+          spec.description.replace(/(?:\r\n|\r|\n)$/u, "").replace(/^ {1,3}(?=\S)/gmu, ""),
         );
         expect(section.paragraphs, `${spec.name}: one paragraph`).toBe(1);
         expect(section.tables, `${spec.name}: one table`).toBe(1);

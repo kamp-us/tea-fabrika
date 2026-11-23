@@ -4,7 +4,7 @@
 // today pass the group without its window to the check and fail `unknown` at that key. Written before the fix.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ConfigProvider, Effect, Exit } from "effect";
+import { ConfigProvider, Effect, Exit, Match } from "effect";
 import { SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import {
@@ -25,9 +25,18 @@ const ROOT = "/work";
 
 const HOME = "/people/one";
 
-type Call = "set-repo" | "set-user" | "remove-repo" | "remove-user";
+type Repo = "repo" | "none" | "empty";
 
-const CALLS: ReadonlyArray<Call> = ["set-repo", "set-user", "remove-repo", "remove-user"];
+type Call = `${"set" | "remove"}-${"repo" | "user"}-${Repo}`;
+
+const OPTIONS: ReadonlyArray<Repo> = ["repo", "none", "empty"];
+
+const CALLS: ReadonlyArray<Call> = OPTIONS.flatMap((option) => [
+  `set-repo-${option}` as const,
+  `set-user-${option}` as const,
+  `remove-repo-${option}` as const,
+  `remove-user-${option}` as const,
+]);
 
 /** A file as a person writes it: the window set, and one setting set below it. */
 const seeded = (spec: Spec, window: string, value: unknown) => {
@@ -37,7 +46,8 @@ const seeded = (spec: Spec, window: string, value: unknown) => {
 };
 
 // Plants: (z) pass the group without `watched` to the disk calls, as today: every call fails `unknown` at the window's key,
-// red.
+// red; (r) read the repo folder as `options.repo`, with no `?.`: a call with no option throws, red; (r) read it as `"x"` when
+// none is given: the file is not found, red.
 it.effect.prop(
   "W2 the disk calls check the quiet window: for a group with a live setting and a file that sets the window, a disk set and a disk remove succeed as `edit` does and write the text `edit` answers",
   { draw: TextDraw },
@@ -54,59 +64,69 @@ it.effect.prop(
 
       const window = WINDOWS_VALID[pick(draw, 8) % WINDOWS_VALID.length] ?? "100 millis";
 
-      const places = {
-        repo: `${ROOT}/.${draw.app}/${draw.app}.toml`,
-        user: `${HOME}/.${draw.app}/${draw.app}.toml`,
-      };
-
       const texts = {
         repo: seeded(repoSpec, window, number(draw, 0)),
         user: seeded(userSpec, window, "people"),
       };
 
       const targets = { repo: repoSpec, user: userSpec } as const;
+      const user = `${HOME}/.${draw.app}/${draw.app}.toml`;
 
-      for (const file of ["repo", "user"] as const) {
-        const spec = targets[file];
-        const setting = group.settings.find((one) => one.name === spec.name);
-        const next = validValue(draw, spec, 1);
+      // The repo file is under the folder the call is given, or under the current one, which the in-memory disk roots.
+      const repoAt = (repo: Repo) => `${repo === "repo" ? ROOT : ""}/.${draw.app}/${draw.app}.toml`;
 
-        expect(setting, `${spec.name} is in the group`).toBeDefined();
+      const given = (repo: Repo): { readonly repo?: string } | undefined =>
+        Match.value(repo).pipe(
+          Match.when("repo", () => ({ repo: ROOT })),
+          Match.when("empty", () => ({})),
+          Match.orElse(() => undefined),
+        );
 
-        if (setting === undefined) {
-          continue;
-        }
+      for (const repo of OPTIONS) {
+        for (const file of ["repo", "user"] as const) {
+          const spec = targets[file];
+          const setting = group.settings.find((one) => one.name === spec.name);
+          const next = validValue(draw, spec, 1);
 
-        for (const call of ["set", "remove"] as const) {
-          const disk = MemoryFiles.writable({
-            files: { [places.repo]: texts.repo, [places.user]: texts.user },
-            folders: [`${ROOT}/.${draw.app}`, `${HOME}/.${draw.app}`],
-          });
+          expect(setting, `${spec.name} is in the group`).toBeDefined();
 
-          const editing = SettingGroup.edit(group, texts[file], file);
-          const wanted = yield* Effect.exit(call === "set" ? editing.set(setting, next) : editing.remove(setting));
+          if (setting === undefined) {
+            continue;
+          }
 
-          // `edit` is the oracle: it takes the file, so a disk call on the same file takes it too.
-          expect(Exit.isSuccess(wanted), `${call} ${file}: edit takes the file`).toBe(true);
+          for (const call of ["set", "remove"] as const) {
+            const disk = MemoryFiles.writable({
+              files: { [repoAt(repo)]: texts.repo, [user]: texts.user },
+              folders: [`${repo === "repo" ? ROOT : ""}/.${draw.app}`, `${HOME}/.${draw.app}`],
+            });
 
-          const exit = yield* Effect.exit(
-            (call === "set"
-              ? SettingGroup.set(group, setting, next, file, { repo: ROOT })
-              : SettingGroup.remove(group, setting, file, { repo: ROOT })
-            ).pipe(
-              Effect.provide(disk.layer),
-              Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME } }))),
-            ),
-          );
+            const editing = SettingGroup.edit(group, texts[file], file);
+            const wanted = yield* Effect.exit(call === "set" ? editing.set(setting, next) : editing.remove(setting));
 
-          expect(Exit.isSuccess(exit), `${call} ${file}: the disk call takes the file`).toBe(true);
+            // `edit` is the oracle: it takes the file, so a disk call on the same file takes it too.
+            expect(Exit.isSuccess(wanted), `${call} ${file}: edit takes the file`).toBe(true);
 
-          const left = (yield* disk.files)[places[file]];
+            const options = given(repo);
 
-          expect(left, `${call} ${file}: the file holds what edit answers`).toBe(
-            Exit.isSuccess(wanted) ? wanted.value : undefined,
-          );
-          reach.mark(`${call}-${file}`);
+            const exit = yield* Effect.exit(
+              (call === "set"
+                ? SettingGroup.set(group, setting, next, file, options)
+                : SettingGroup.remove(group, setting, file, options)
+              ).pipe(
+                Effect.provide(disk.layer),
+                Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnv({ env: { HOME } }))),
+              ),
+            );
+
+            expect(Exit.isSuccess(exit), `${call} ${file} with repo ${repo}: the disk call takes the file`).toBe(true);
+
+            const left = (yield* disk.files)[file === "repo" ? repoAt(repo) : user];
+
+            expect(left, `${call} ${file} with repo ${repo}: the file holds what edit answers`).toBe(
+              Exit.isSuccess(wanted) ? wanted.value : undefined,
+            );
+            reach.mark(`${call}-${file}-${repo}`);
+          }
         }
       }
 

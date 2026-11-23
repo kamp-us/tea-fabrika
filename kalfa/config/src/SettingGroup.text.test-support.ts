@@ -109,7 +109,12 @@ type Break = "\n" | "\r\n" | "\r";
 export const BREAKS: ReadonlyArray<Break> = ["\n", "\r\n", "\r"];
 
 /** The first line of a description: each character Markdown reads inside a line, a line that starts `1.`, a bar, a tab, `雪` and a backtick. */
-const MARKS = ["1. a|b *c* _d_ [e] <f> #g &h ~i +j !k -l `m =n (o) @p", "10.5 x\\y\\\\z:w", "雪\ttab"];
+const MARKS = [
+  "1. a|b *c* _d_ [e] <f> #g &h ~i +j !k -l `m =n (o) @p",
+  "12) 10.5 x\\y\\\\z:w",
+  "  10. 雪\ttab",
+  " 7) x",
+];
 
 /**
  * Every line that, at the start of a line or under a text line, changes what a block means in Markdown: an underline that
@@ -140,6 +145,8 @@ const CONSTRUCTS: ReadonlyArray<string> = [
   "[x]: y",
   "<div>",
   "- [ ] t",
+  "  1. x",
+  " 12) x",
 ];
 
 /**
@@ -190,7 +197,9 @@ type Kind =
   | "arrbounds"
   | "unique"
   | "props"
-  | "starts";
+  | "starts"
+  // An array held by a group of checks, `makeFilterGroup`, whose members each ask for the type they check.
+  | "grouped";
 
 type Files = Setting.Files;
 
@@ -321,6 +330,18 @@ const declare = (spec: Spec): Setting.Any => {
           scoped(spec),
         ),
       );
+    case "grouped":
+      return marked(
+        spec,
+        Setting.make(
+          spec.name,
+          Schema.Array(Schema.Int).check(
+            Schema.makeFilterGroup([Schema.isMinLength(1), Schema.isMaxLength(3)], {
+              toJsonSchema: () => ({ minItems: 1, maxItems: 3 }),
+            }),
+          ),
+        ).pipe(Setting.withDefault([1]), described(spec), scoped(spec)),
+      );
     case "starts":
       return marked(
         spec,
@@ -378,6 +399,7 @@ const defaultFor = (kind: Kind, text: string): Option.Option<Json> =>
     Match.when("unique", () => Option.some([1, 2])),
     Match.when("props", () => Option.some({ x: 1 })),
     Match.when("starts", () => Option.some("a1")),
+    Match.when("grouped", () => Option.some([1])),
     Match.orElse(() => Option.some(text)),
   );
 
@@ -418,7 +440,7 @@ export const specsC = (draw: TextDraw): ReadonlyArray<Spec> =>
   exact(draw, ["nonempty", "codepoints", "arrmin", "props"], 6);
 
 export const specsD = (draw: TextDraw): ReadonlyArray<Spec> =>
-  exact(draw, ["arrbounds", "unique", "starts", "nonempty"], 7);
+  exact(draw, ["arrbounds", "unique", "starts", "grouped"], 7);
 
 const exact = (draw: TextDraw, kinds: ReadonlyArray<Kind>, seed: number): ReadonlyArray<Spec> => {
   const names = namesFor(draw);
@@ -513,6 +535,7 @@ export const validValue = (draw: TextDraw, spec: Spec, n: number): Json =>
     Match.when("unique", () => [number(draw, n), number(draw, n + 1) + 1]),
     Match.when("props", () => ({ [word(draw, n)]: number(draw, n) })),
     Match.when("starts", () => `a${word(draw, n)}`),
+    Match.when("grouped", () => [number(draw, n), number(draw, n + 1)]),
     Match.orElse(() => TEXTS[pick(draw, n) % TEXTS.length] ?? "x"),
   );
 
@@ -533,6 +556,7 @@ const refusedValue = (draw: TextDraw, spec: Spec): Json =>
     Match.when("unique", () => [1, 1]),
     Match.when("props", () => ({})),
     Match.when("starts", () => "b"),
+    Match.when("grouped", () => []),
     Match.orElse(() => 5),
   );
 
