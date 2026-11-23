@@ -61,17 +61,17 @@ form, which `Diagnostic.formatPlace` gives.
 import * as Diagnostic from "@kalfa/diagnostics/Diagnostic";
 
 // A file in the repo: a path from the repo root, with a line and a column when known. The whole repo is ".".
-const repo = { _tag: "repo", path: "docs/setup.md", line: 12 };
+const repo: Diagnostic.Place = { _tag: "repo", path: "docs/setup.md", line: 12 };
 
 // A file under the home folder: starts with "~/" or "$NAME/". A login name is never printed.
-const home = { _tag: "home", path: "~/.demo/demo.toml", line: 3, column: 1 };
-const variableHome = { _tag: "home", path: "$DEMO_HOME/demo.toml", line: 2 };
+const home: Diagnostic.Place = { _tag: "home", path: "~/.demo/demo.toml", line: 3, column: 1 };
+const variableHome: Diagnostic.Place = { _tag: "home", path: "$DEMO_HOME/demo.toml", line: 2 };
 
 // An environment variable, by name. No line and no column.
-const environment = { _tag: "environment", name: "DEMO_INSTANCE_PORT" };
+const environment: Diagnostic.Place = { _tag: "environment", name: "DEMO_INSTANCE_PORT" };
 
 // A command-line flag, by name as typed, with its hyphens. No line and no column.
-const flag = { _tag: "flag", name: "--instance.port" };
+const flag: Diagnostic.Place = { _tag: "flag", name: "--instance.port" };
 
 Diagnostic.formatPlace(repo); // "docs/setup.md:12"
 Diagnostic.formatPlace(home); // "~/.demo/demo.toml:3:1"
@@ -82,12 +82,13 @@ Diagnostic.formatPlace(flag); // "flag --instance.port"
 
 - Lines and columns count from 1. A column needs a line. `.` takes no line.
 - A repo path has no leading `/`, no `./` start, no `.` or `..` part, no empty part, no trailing `/` and no backslash.
-  Its first part does not start with `~` or `$`, and is not a drive such as `C:`, so it never reads as a file outside
-  the repo.
+  Its first part does not start with `~` or `$` and holds no `:`, so it never reads as a file outside the repo: not
+  `~login`, not `$HOME`, not a drive such as `C:`, and not a scheme such as `file:`. A `:` deeper in the path is fine.
 - A home path is `~/` or `$NAME/` and then good parts. `~` alone, `~login/...`, `${NAME}/...` and an absolute path are
   refused. `$NAME` is a name a shell can expand.
-- An environment variable's name is a name a shell can expand. A flag's name holds no `=`, no space and no control
-  character, so no value rides along in it.
+- An environment variable's name is a name a shell can expand. A flag is `-` and exactly one character, or `--` and a
+  name. Its name holds no `=`, no space, no control character, no format character (such as a zero-width space) and no
+  lone surrogate, so no value rides along in it and nothing hides in it.
 - An environment variable and a flag take no line and no column. A line on one is refused, not dropped.
 - A refusal says which rule failed and never repeats the path, since a path may hold a login name.
 - The package reads no home folder and no environment. A place only names where: a reader's own shell expands `~` and

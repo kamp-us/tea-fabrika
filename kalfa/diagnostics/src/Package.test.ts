@@ -1,10 +1,11 @@
 // D10 to D12 and D24: what the package
 // exports, what its manifest says, that none of its files names this repo, and that its README shows each kind of
-// place. They read the package's own module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
+// place and its examples compile. They read the package's own module and files, so they run in memory on every pull request. The words D12 looks for are spelled in
 // pieces below, so this file is not itself a hit.
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as TestDiagnostics from "./TestDiagnostics.ts";
 
 const Manifest = Schema.Struct({
@@ -136,4 +137,76 @@ it.effect("D24 scenario: the README shows each kind of place with its text form"
     expect(readme).toMatch(/environment variable [A-Z][A-Z0-9_]*/);
     expect(readme).toMatch(/flag --[a-z][a-z0-9.-]*/);
   }).pipe(Effect.provide(NodeServices.layer)),
+);
+
+// The README's code blocks, one after the other, as one module: an import line a later block repeats is left out, so
+// the blocks share what the first ones declare, as a reader reads them.
+const readmeModule = (readme: string): string => {
+  const seen = new Set<string>();
+
+  const blocks = [...readme.matchAll(/```ts\n([\s\S]*?)```/g)].map(([, code = ""]) =>
+    code
+      .split("\n")
+      .filter((line) => {
+        if (!line.startsWith("import ")) {
+          return true;
+        }
+
+        const repeated = seen.has(line);
+        seen.add(line);
+
+        return !repeated;
+      })
+      .join("\n"),
+  );
+
+  return blocks.join("\n");
+};
+
+// D24, the README's examples compile. The code blocks are written to a scratch module inside the package, so
+// `@kalfa/diagnostics/...` and `effect` resolve as they do for a reader, and the package's own `tsc` compiles it with
+// the package's own settings. A place written without its type is an object whose `_tag` is a plain string, and
+// `formatPlace` then refuses it.
+// Plant: drop the `Diagnostic.Place` type from one example, and the compiler's refusal is in the failure.
+it.effect(
+  "D24 scenario: every code block of the README compiles, each place typed as Diagnostic.Place",
+  () =>
+    Effect.gen(function* () {
+      // scenario: the package's own README at head, compiled by the package's own compiler; no generated input says what a README example compiles to.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      const root = yield* packageDir;
+
+      const code = readmeModule(yield* fs.readFileString(path.join(root, "README.md")));
+
+      expect(code).toContain("Diagnostic.formatPlace(");
+
+      const scratch = yield* fs.makeTempDirectoryScoped({ directory: root, prefix: ".readme-check-" });
+
+      yield* fs.writeFileString(path.join(scratch, "examples.ts"), `${code}\n`);
+
+      yield* fs.writeFileString(
+        path.join(scratch, "tsconfig.json"),
+        JSON.stringify({ extends: "../tsconfig.json", include: ["examples.ts"] }),
+      );
+
+      const handle = yield* spawner.spawn(
+        ChildProcess.make(path.join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", scratch], { cwd: root }),
+      );
+
+      const output = yield* handle.all.pipe(
+        Stream.decodeText(),
+        Stream.runFold(
+          () => "",
+          (text, part) => text + part,
+        ),
+      );
+
+      expect(output.trim(), "the README's examples do not compile").toBe("");
+      expect(yield* handle.exitCode).toBe(0);
+      // The compiler alone would pass a place that is only passed on, never read: none is written without its type.
+      expect(code).not.toMatch(/(?:const|let) \w+ = \{\s*_tag:/);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  60_000,
 );
