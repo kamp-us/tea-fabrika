@@ -80,6 +80,15 @@ const Style = Schema.Struct({
 
 type Style = typeof Style.Type;
 
+/**
+ * How many keys a drawn record holds, and how many each record of a drawn table holds. A record drawn with no cap grows
+ * with fast-check's size, and a table of records grows with its square (about 4800 keys at size 100). One edit of a
+ * document that size took seconds, so a run of a law took up to 3 s and a law ran past CI's 60 s at full depth. A few
+ * keys reach every class a record has (a key that needs quotes, an empty one, none at all). A wide record is not lost: it
+ * is one case beside the drawn value, in `valuesFor`.
+ */
+const RECORD_KEYS = 5;
+
 /** One drawn value for each kind of setting. */
 const Values = Schema.Struct({
   port: Schema.Union([Schema.Literals([1, 65535]), Port]),
@@ -97,8 +106,10 @@ const Values = Schema.Struct({
   texts: Schema.Array(Text).check(Schema.isMaxLength(5)),
   grid: Schema.Array(Schema.Array(Small).check(Schema.isMaxLength(3))).check(Schema.isMaxLength(3)),
   rows: Schema.Array(Schema.Struct({ n: Small, tag: Schema.optionalKey(Text) })).check(Schema.isMaxLength(3)),
-  rec: Schema.Record(KeyText, Small),
-  tree: Schema.Record(KeyText, Schema.Record(KeyText, Small)),
+  rec: Schema.Record(KeyText, Small).check(Schema.isMaxProperties(RECORD_KEYS)),
+  tree: Schema.Record(KeyText, Schema.Record(KeyText, Small).check(Schema.isMaxProperties(RECORD_KEYS))).check(
+    Schema.isMaxProperties(RECORD_KEYS),
+  ),
   shape: Schema.Struct({
     a: Schema.optionalKey(Small),
     b: Schema.optionalKey(Schema.Struct({ c: Schema.optionalKey(Small) })),
@@ -858,7 +869,25 @@ export const valuesFor = (draw: Draws, p: Position): ReadonlyArray<unknown> => {
   const sixty =
     p.kind === "texts" && own ? [Array.from({ length: 60 }, (_, n) => base[n % Math.max(1, base.length)] ?? "x")] : [];
 
-  return [drawn, ...(own ? [...EDGES[p.kind], ...sixty] : [])];
+  // A record of 60 keys and a table of 8 records of 8 keys: the width the drawn records once had, in one case in place of
+  // every case. The keys are distinct and in a record key's alphabet: `aa`, `ab`, ... `ba`, ...
+  const keys = (count: number) =>
+    Array.from(
+      { length: count },
+      (_, n) => `${String.fromCharCode(97 + Math.floor(n / 26))}${String.fromCharCode(97 + (n % 26))}`,
+    );
+
+  const wide = (names: ReadonlyArray<string>, make: (n: number) => unknown) =>
+    Object.fromEntries(names.map((name, n) => [name, make(n)]));
+
+  const broad =
+    own && p.kind === "rec"
+      ? [wide(keys(60), (n) => n)]
+      : own && p.kind === "tree"
+        ? [wide(keys(8), () => wide(keys(8), (n) => n))]
+        : [];
+
+  return [drawn, ...(own ? [...EDGES[p.kind], ...sixty, ...broad] : [])];
 };
 
 // ---------------------------------------------------------------------------------------------
