@@ -8,6 +8,8 @@ import type { Traced } from "./index.ts";
 import * as MemorySocket from "./MemorySocket.ts";
 import {
   BROKEN_TRACE_CLASSES,
+  BAD_STATE_CLASSES,
+  badStateTraces,
   brokenMetas,
   droppedStates,
   end,
@@ -63,9 +65,11 @@ const idsFrom = (span: Option.Option<Tracer.ExternalSpan>) =>
   Option.map(span, ({ traceId, spanId, sampled }) => [traceId, spanId, sampled]);
 
 // T1. Plant: write the sampled flag as 01 always (l); write an empty tracestate when there is none (l); write a capital-letter id as
-// given (o: the writer promised a trace the reader drops); do not pad a 16-digit trace id (o).
+// given (o: the writer promised a trace the reader drops); do not pad a short trace id (o), pad only a 16-digit one, pad on the right
+// or with another digit, write a short id that is no hex or a long one cut to 32; write a tracestate no reader takes, or drop the
+// whole trace for it (n).
 it.effect.prop(
-  "T1 the trace is written and read: encodeTraced then decodeTraced gives the same trace id, span id, sampled flag and tracestate, and an id that is no W3C id writes no trace key",
+  "T1 the trace is written and read: encodeTraced then decodeTraced gives the same trace id, span id, sampled flag and tracestate, an id that is no W3C id writes no trace key, a short id is padded to 32 digits, and a tracestate no reader takes is dropped while its span crosses",
   { drawn: traceSeed, body: message },
   ({ drawn, body }) =>
     Effect.gen(function* () {
@@ -103,16 +107,41 @@ it.effect.prop(
       expect(hasNoTraceKey(bare), "a None trace writes no trace key").toBe(true);
       expect(yield* spanOfFrame(bare), "and reads back as None").toEqual(Option.none());
 
-      // A 16-digit trace id is written padded to 32 and reads back padded.
+      // A trace id of a drawn 1 to 31 digits is written padded to 32 on the left and reads back padded.
       const short = shortTrace(drawn);
       const padded = yield* tracedFrame(body, Option.some(externalSpanFor(short)));
-      expect(metaFrom(padded).params._meta?.traceparent, "o: a 16-digit trace id is padded").toBe(
-        `00-${"0".repeat(16)}${short.traceId}-${short.spanId}-01`,
-      );
+      const widened = `${"0".repeat(32 - short.traceId.length)}${short.traceId}`;
+      expect(
+        metaFrom(padded).params._meta?.traceparent,
+        `o: a trace id of ${short.traceId.length} digits is padded`,
+      ).toBe(`00-${widened}-${short.spanId}-01`);
       expect(
         Option.map(yield* spanOfFrame(padded), (span) => span.traceId),
         "o: and reads back padded",
-      ).toEqual(Option.some(`${"0".repeat(16)}${short.traceId}`));
+      ).toEqual(Option.some(widened));
+
+      // A valid span whose tracestate no reader would take still crosses with its ids, and the tracestate is dropped, not written.
+      const badStates = badStateTraces(drawn);
+      expect(
+        badStates.map(({ name }) => name),
+        "every class of a bad tracestate on a valid span is reached",
+      ).toEqual([...BAD_STATE_CLASSES]);
+
+      for (const trace of badStates) {
+        const frame = yield* tracedFrame(body, Option.some(externalSpanFor(trace)));
+        const meta = metaFrom(frame).params._meta;
+
+        expect(meta?.traceparent, `${trace.name}: the traceparent is written`).toBe(
+          `00-${trace.traceId}-${trace.spanId}-01`,
+        );
+        expect(meta?.tracestate, `${trace.name}: and no tracestate`).toBeUndefined();
+
+        const span = yield* spanOfFrame(frame);
+        expect(idsFrom(span), `${trace.name}: the span crosses`).toEqual(
+          Option.some([trace.traceId, trace.spanId, true]),
+        );
+        expect(Option.flatMap(span, stateFrom), `${trace.name}: with no tracestate`).toEqual(Option.none());
+      }
 
       // An id that is no W3C id writes no key, the tracestate of its span with it.
       const unwritable = unwritableTraces(drawn);

@@ -449,6 +449,18 @@ interface TraceSeed {
   readonly span: string;
   readonly state: string;
   readonly short: string;
+  /** Up to 64 hex digits, the first one not zero: a trace id's digits, cut to a drawn length. */
+  readonly digits: string;
+  /** The length of a short trace id, 1 to 31 digits. */
+  readonly length: number;
+  /** The length of a trace id that is too long, 33 to 64 digits. */
+  readonly long: number;
+  /** Where in a short trace id a wrong character goes. */
+  readonly at: number;
+  /** A character that is no lower-case hex digit. */
+  readonly mark: string;
+  /** A capital hex letter. */
+  readonly capital: string;
 }
 
 export const traceSeed: Arbitrary.Arbitrary<TraceSeed> = Arbitrary.all({
@@ -458,6 +470,12 @@ export const traceSeed: Arbitrary.Arbitrary<TraceSeed> = Arbitrary.all({
     Arbitrary.map((words) => words.map((each, index) => `v${index}=${each}`).join(",")),
   ),
   short: hex(16),
+  digits: hex(64),
+  length: between(1, 31),
+  long: between(33, 64),
+  at: between(0, 30),
+  mark: pick(["g", "z", "-", " ", "_", "G", "é", ":"]),
+  capital: pick(["A", "B", "C", "D", "E", "F"]),
 });
 
 /** A tracestate of `length` printable characters: made of a made-up word, padded with a letter. */
@@ -591,7 +609,20 @@ export const UNWRITABLE_CLASSES = [
   "o: an all-zero trace id",
   "o: an all-zero span id",
   "o: ids that are no hex",
+  "o: a short trace id with a character that is no hex digit",
+  "o: a short trace id with a capital letter",
+  "o: a trace id of 33 to 64 digits",
 ] as const;
+
+/** The digits of a short trace id: a drawn count of 1 to 31 hex digits, the first one not zero. */
+const shortDigits = (each: TraceSeed): string => each.digits.slice(0, each.length);
+
+/** The text with one character, at a position that wraps around its length, replaced by another. */
+const replacedAt = (text: string, at: number, mark: string): string => {
+  const index = at % text.length;
+
+  return `${text.slice(0, index)}${mark}${text.slice(index + 1)}`;
+};
 
 /** Spans to write that no reader would accept: the writer writes no trace key for any of them. */
 export const unwritableTraces = (each: TraceSeed): ReadonlyArray<WrittenTrace> => {
@@ -615,17 +646,44 @@ export const unwritableTraces = (each: TraceSeed): ReadonlyArray<WrittenTrace> =
     make(UNWRITABLE_CLASSES[8], "0".repeat(32), each.span),
     make(UNWRITABLE_CLASSES[9], each.trace, "0".repeat(16)),
     make(UNWRITABLE_CLASSES[10], "g".repeat(32), "z".repeat(16)),
+    make(UNWRITABLE_CLASSES[11], replacedAt(shortDigits(each), each.at, each.mark), each.span),
+    make(UNWRITABLE_CLASSES[12], replacedAt(shortDigits(each), each.at, each.capital), each.span),
+    make(UNWRITABLE_CLASSES[13], each.digits.slice(0, each.long), each.span),
   ];
 };
 
-/** A 16-digit trace id is written padded to 32 with zeros on the left, and reads back so. */
+/** A trace id of a drawn 1 to 31 digits is written padded to 32 with zeros on the left, and reads back so. */
 export const shortTrace = (each: TraceSeed): WrittenTrace => ({
-  name: "o: a 16-digit trace id",
-  traceId: each.short,
+  name: "o: a short trace id",
+  traceId: shortDigits(each),
   spanId: each.span,
   sampled: true,
   state: Option.none(),
 });
+
+/** The names of the classes of a valid span whose tracestate no reader would take, so none is written. */
+export const BAD_STATE_CLASSES = [
+  "n: written: a tracestate of 513 characters",
+  "n: written: a tracestate with a control character",
+  "n: written: an empty tracestate",
+] as const;
+
+/** Valid spans that hold a tracestate no reader would take: the span crosses, and the tracestate is dropped. */
+export const badStateTraces = (each: TraceSeed): ReadonlyArray<WrittenTrace> => {
+  const make = (name: (typeof BAD_STATE_CLASSES)[number], state: string): WrittenTrace => ({
+    name,
+    traceId: each.trace,
+    spanId: each.span,
+    sampled: true,
+    state: Option.some(state),
+  });
+
+  return [
+    make(BAD_STATE_CLASSES[0], paddedState(each.state, 513)),
+    make(BAD_STATE_CLASSES[1], `${each.state}${String.fromCharCode(7)}${each.state}`),
+    make(BAD_STATE_CLASSES[2], ""),
+  ];
+};
 
 /** The `params._meta` of a frame the package wrote: its two trace keys, when it wrote them. */
 export const metaFrom = Schema.decodeUnknownSync(
