@@ -41,7 +41,7 @@ export interface Held {
 }
 
 /** One setting's value, frozen, and where it came from. */
-interface Settled {
+export interface Settled {
   readonly setting: Setting.Any;
   readonly value: unknown;
   readonly origin: Origin;

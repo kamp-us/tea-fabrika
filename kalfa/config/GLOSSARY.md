@@ -97,5 +97,9 @@ _Avoid_: reload, static setting, cold setting
 ### What was loaded
 
 **Snapshot**:
-A checked record of every loaded value and its origin.
+A checked record of every loaded value of one app and its origin. A process that cannot read files starts from a stream of them.
 _Avoid_: dump, export, resolved config
+
+**Loading process**:
+The process that reads an app's configuration files and gives a stream of snapshots to a process that cannot read them, as a Worker.
+_Avoid_: main process, parent, host, server
