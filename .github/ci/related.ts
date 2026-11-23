@@ -1,8 +1,8 @@
 // Today's CI, both versions. The missing projects of an automatic PR/queue check; next and visual
 // remain on the existing next matrix. A pull request and a queue group pick tooling's plain laws
 // alone: every `.integration.` law, `next-integration`'s and `tooling-integration`'s alike, runs only
-// on main's full run (scheduled.yaml, on a push to main and hourly, main's full run starts on a push to main and an hourly catch-up), never on a pull request, a
-// queue group or a branch's proof run (integration laws run only in main's full run; a test's kind follows what it uses, never its name; `onMergeLine`). A selector error fails the
+// on main's full run (scheduled.yaml, on a push to main and hourly, main's full run starts on a push to main and an hourly catch-up) and in a proof run the lead
+// starts (proof.ts), never on a pull request or a queue group (a test's kind follows what it uses, never its name; `onMergeLine`). A selector error fails the
 // required check, never means zero.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

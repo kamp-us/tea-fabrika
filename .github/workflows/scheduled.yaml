@@ -3,10 +3,10 @@ name: scheduled
 # The full run, the whole suite (the merge line runs only the tests a change reaches, and a schedule runs every test). The merge line runs only the tests a change reaches: a pull
 # request and a merge queue group each run the in-memory next/ tests and the plain tooling tests
 # their diff reaches (check.yaml's next and related jobs, a test's kind follows what it uses, never its name), a pull request with the `visual`
-# label its visual tests too (a test that needs a real resource runs only in main's full run), and never an `.integration.` law, of next/ or of tooling
-# (integration laws run only in main's full run). This runs all of next/, every layer of it
+# label its visual tests too (a test that needs a real resource runs only in main's full run), and never an `.integration.` law, of next/ or of tooling.
+# This runs all of next/, every layer of it
 # (a test that needs a real resource runs only in main's full run): the in-memory tests, the real-resource ones (`*.integration.test.ts`), which only this
-# run runs, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
+# run and a branch's proof run below run, and the visual ones (`*.visual.test.ts`), and every tooling test, on main's head. A
 # push to main starts it when no full run on main started in the last hour, and an hourly catch-up
 # starts it on a head that has had none (main's full run starts on a push to main and an hourly catch-up): the `gate` job decides (gate.mjs), so a break no
 # diff reached shows within about an hour of its push, two at most when the next push is long in
@@ -40,21 +40,22 @@ name: scheduled
 #   gate            1      first; says start=true or start=false (gate.mjs), with the run list read
 #                          by the workflow's own token
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
-#                          projects, every file, no `--changed`; a branch's full set runs `next`
-#                          alone (integration laws run only in main's full run); on main each leg checks its report, and the one that ran
+#                          projects, every file, no `--changed`, on main and on a branch's full
+#                          set alike; on main each leg checks its report, and the one that ran
 #                          the @kalfa/config package law keeps the tested archive (SC22)
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` and `tooling-integration`
-#                          projects, every file, no `--changed`; a branch's full set runs
-#                          `tooling` alone (integration laws run only in main's full run); the 9 legs above are one matrix, the `tests` job
+#                          projects, every file, no `--changed`, on main and on a branch's full
+#                          set alike; the 9 legs above are one matrix, the `tests` job
 #   report          1      after the others, on any result but the gate's `false`; it fails unless
 #                          the run is green, so a run whose red leg left no failed job still ends
 #                          `failure`
 #
 # A branch's proof run (a branch's proof run runs only the tests its change reaches) is this workflow started by hand on a branch other than main. Its
 # `select` job runs proof.ts, which lists the tests the branch's change reaches against origin/main
-# with Vitest's own `--changed`, `.visual.` laws included. It runs no `.integration.` law, even one
-# its change reaches, on a changed set or a full set: only main's full run does. A change to a
+# with Vitest's own `--changed`, `.visual.` and `.integration.` laws included: the owner decided on
+# 2026-11-22 that a proof run the lead starts runs the integration laws its change reaches, so an
+# adapter's real-binary laws run before merge (pull requests and the merge queue still run none). A change to a
 # file in vitest.config.ts's `forceRerunTriggers` (a config, .oxlintrc.json, a tsconfig, the
 # lockfile, a package.json) runs the full set, on the `tests` legs above, and so does a hand start
 # whose `scope` input is `full`, for the test file that needs it (`law`). Any other change runs its set on
@@ -187,15 +188,14 @@ jobs:
   # minutes per red run (the review of pull request 1383, at green run 43775455200's leg times).
   #
   # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
-  # `next-integration` projects on main, and over `next` alone on a branch's full set, since only
-  # main's full run runs the real-resource laws (integration laws run only in main's full run; `PROJECTS` reads the ref), each a fifth of
+  # `next-integration` projects, on main and on a branch's full set alike, each a fifth of
   # the files by measured seconds; `e2e-1` and `e2e-2` fetch chromium and run the `next-visual`
   # project on their half of the visual files. A project, not a path, picks the files: `next/` as
   # a path would start `next-visual` on legs with no Chromium. Then every tooling test, on
   # `tooling-1` and `tooling-2`: the tests of neither version's product code (CI's own, the lint
-  # plugins, the root scripts and the skill scripts), the `tooling` project and, on main alone, the
-  # `tooling-integration` one, its laws that start a process (a test's kind follows what it uses, never its name; integration laws run only in main's full run), since a project ignores
-  # `--exclude` (a test that needs a real resource runs only in main's full run). `PROJECTS` reads the ref, as on the vitest legs. The merge line runs only
+  # plugins, the root scripts and the skill scripts), the `tooling` project and the
+  # `tooling-integration` one, its laws that start a process (a test's kind follows what it uses, never its name), since a project ignores
+  # `--exclude` (a test that needs a real resource runs only in main's full run). The merge line runs only
   # the plain tooling laws a change reaches (check.yaml's related job), so this is the only CI job
   # that runs them all. Today's tests run in no CI job. Nothing is narrowed: no `--changed`,
   # no list.
@@ -256,8 +256,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/5
           FABRIKA_TEST_DEPTH: full
-          PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project next --project next-integration' || '--project next' }}
-        run: pnpm exec vitest run $PROJECTS --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-integration --shard "$SHARD" --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # Main's full run keeps the tested @kalfa/config archive (SC22). The package law runs on one of
       # the numbered legs, whichever `Shards` gives it, so every numbered leg reads its own report
       # and says kept, absent (it ran no such law and left no folder) or refused (the step fails).
@@ -305,8 +304,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
-          PROJECTS: ${{ github.ref == 'refs/heads/main' && '--project tooling --project tooling-integration' || '--project tooling' }}
-        run: pnpm exec vitest run $PROJECTS --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project tooling --project tooling-integration --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
       # so the leg that failed is the one whose report is kept. Named `results-next-<leg>` and
       # `results-tooling-<k>`, as before the two jobs became one: vitest.shards.ts's rows are
@@ -402,9 +400,9 @@ jobs:
           retention-days: 90
 
   # A changed set's legs (a branch's proof run runs only the tests its change reaches): leg `k` runs exactly its list from `select`, over every project
-  # proof.ts lists, so a list may hold next/'s in-memory and visual laws and tooling tests together,
-  # at full depth, as the `tests` legs do. No real-resource law: only main's full run runs those
-  # (integration laws run only in main's full run), so a leg names no `next-integration` project either. Chromium comes first on a leg
+  # proof.ts lists, so a list may hold next/'s in-memory, real-resource and visual laws and tooling
+  # tests together, at full depth, as the `tests` legs do: a proof run the lead starts runs the
+  # integration laws its change reaches (the owner decided on 2026-11-22). Chromium comes first on a leg
   # whose list holds a visual file. Its own matrix, which a run starts only when `select` said
   # `changed` with a leg, so it and `tests` never run in one run, and its own fail-fast stops each
   # leg of it. Its legs are next legs for the report (`changed (k)`), with next's test step limit
@@ -443,7 +441,7 @@ jobs:
           FILES: ${{ fromJSON(needs.select.outputs.files)[matrix.shard] }}
           LEG: ${{ matrix.shard }}
           FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project next --project next-visual --project tooling $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
+        run: pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling --project tooling-integration $FILES --reporter=default --reporter=json --reporter=github-actions --reporter=./.github/ci/progress-reporter.ts --outputFile.json="$RUNNER_TEMP/results.json"
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

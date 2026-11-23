@@ -67,6 +67,10 @@ when to keep going and how to write for a reader who saw none of the work.
   the plan never says one runs narrowly there: it runs in CI.
   A law that can run on a stand-in (an in-memory layer) runs on every pull request, so a new
   `.integration.` law says in the plan why no stand-in will do.
+  Prove each behavior with a plain law on the stand-in, and keep the `.integration.` file as the
+  thin check that the real thing matches the stand-in.
+  A proof run the lead starts runs the `.integration.` laws its change reaches, so an adapter's
+  real-binary laws can run before merge; pull requests and the merge queue run none.
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes
   ([changing the product](../guidelines/references/changing-the-product.md), "Shoot more than one layout").

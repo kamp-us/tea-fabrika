@@ -499,7 +499,11 @@ visible, and never weaken the rules to hide this message.
 7. **Obtain proof the box cannot supply** before the first review. Use eligible CI for each
    law. Launchd, real Electron and process-signal laws use eligible disposable CI, never the owner's
    laptop. A workflow's green result
-   proves only the laws it actually ran. Keep the test's own temp home, label, files and processes;
+   proves only the laws it actually ran. A proof run you start runs the `.integration.` laws its
+   change reaches, so an adapter's real-binary laws run before merge; pull requests and the merge
+   queue run none. Start one with `gh workflow run scheduled.yaml --ref <branch>`, on a branch that
+   has main's `.github/ci/proof.ts`; a rerun trigger in the change runs the full set.
+   Keep the test's own temp home, label, files and processes;
    one Electron app at a time, each with its own short `FABRIKA_HOME`, never `FABRIKA_FOREGROUND=1`.
    No focus taken and nothing left behind. Look at every screenshot.
 8. **Ready to land.** A quest agent never signs as lead, pushes, opens the pull request or adds

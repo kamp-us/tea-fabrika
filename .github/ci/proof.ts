@@ -4,16 +4,18 @@
 //
 //   the branch's change against origin/main      the run tests
 //   touches a file in forceRerunTriggers         the full set, on the `tests` job, as main does,
-//                                                less every `.integration.` law (integration laws run only in main's full run)
+//                                                the `.integration.` laws included
 //   is started with `scope: full` for a `law`     the full set too, and the record keeps the inputs
 //   reaches some tests                           those, on as many `changed` legs as they need
 //   reaches no test                              nothing: the run is green with no test leg
 //
-// The set is Vitest's own (an existing, widely used tool comes before a hand-written one): `vitest list --changed <base>` over the `next`, `next-visual` and
-// `tooling` projects, the import graph `--changed` walks, with the files vitest.config.ts hands it as
-// watched files. The `.integration.` laws, `next-integration`'s and `tooling-integration`'s, run
-// only on main's full run, so a proof run lists none of them, even one its change reaches,
-// and `choose` drops any name a list still gives; today's run in no CI job (CI runs none of today's version's tests). A next/ change
+// The set is Vitest's own (an existing, widely used tool comes before a hand-written one): `vitest list --changed <base>` over every
+// project CI runs (PROJECTS), the import graph `--changed` walks, with the files vitest.config.ts hands it as
+// watched files. That includes the `.integration.` laws, `next-integration`'s (next/ and kalfa/) and
+// `tooling-integration`'s: the owner decided on 2026-11-22 that a proof run the lead starts runs the
+// integration laws its change reaches, so an adapter's real-binary laws run before merge. Pull
+// requests and the merge queue still run none (related.ts's `onMergeLine`, check.yaml). Today's
+// tests run in no CI job (CI runs none of today's version's tests). A next/ change
 // adds the in-memory reader tests too (changes.mjs's `readers`), as the merge line does: they read
 // next/'s source as text, so the import graph cannot reach them, and making each file they read a
 // rerun trigger would make every next/ change run everything.
@@ -46,7 +48,6 @@ import { appendFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Config, DateTime, Result, Schema } from "effect";
 import vitestPackage from "vitest/package.json" with { type: "json" };
-import { isIntegration } from "../../oxlint-plugins/test-names.ts";
 import { rowsAt } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { E2E_SETUP, fewest, isTrigger, list, room, seconds, split, withReaders } from "./legs.ts";
@@ -55,18 +56,19 @@ import { readEnv, stepFiles } from "./step-env.ts";
 export { isTrigger };
 
 /**
- * The projects a proof run lists and runs: every one CI runs but `next-integration` and
- * `tooling-integration`, which only main's full run runs, and today's left out (CI runs none of today's version's tests).
+ * The projects a proof run lists and runs: every one CI runs, the two integration projects included
+ * (the owner decided on 2026-11-22), and today's left out (CI runs none of today's version's tests).
+ * scheduled.yaml's `changed` legs name these, in this order.
  */
-export const PROJECTS = ["next", "next-visual", "tooling"] as const;
+export const PROJECTS = ["next", "next-integration", "next-visual", "tooling", "tooling-integration"] as const;
 
 /** The `--project` flags of `projects`, in their order. */
 const flags = (projects: readonly string[]) => projects.flatMap((project) => ["--project", project]);
 
 /**
  * The `vitest list` calls a changed set is read from: `reached`, the tests the change reaches
- * against `base` over PROJECTS, and `readers`, the in-memory reader tests, asked for only when the
- * change touches next/ (`null` otherwise). Neither names an integration project (integration laws run only in main's full run).
+ * against `base` over PROJECTS, the integration laws among them, and `readers`, the in-memory
+ * reader tests, asked for only when the change touches next/ (`null` otherwise).
  */
 export const listings = (base: string, changed: readonly string[]) => ({
   reached: [...flags(PROJECTS), `--changed=${base}`],
@@ -185,9 +187,7 @@ export const inProjects =
 /**
  * What the run tests. `triggers` come first, and so does `scope: full`: a change to a rerun trigger or
  * a hand start for the full set is the full set whatever the import graph says. Else `files`, the set
- * Vitest listed, split by `sizing`, less every `.integration.` law, of next/ or of tooling: only
- * main's full run runs those. PROJECTS already lists none of them; the name holds them out
- * whatever a list gives.
+ * Vitest listed, split by `sizing`, every `.integration.` law it holds included.
  */
 export const choose = (seen: Seen, triggers: readonly string[], files: readonly string[], sizing: Sizing): Proof => {
   if (triggers.length > 0 || seen.inputs._tag === "full") {
@@ -207,10 +207,7 @@ export const choose = (seen: Seen, triggers: readonly string[], files: readonly 
     throw new Error("proof: a test file's path holds a space, so it cannot be one word of a leg's list");
   }
 
-  const legs = legsOf(
-    files.filter((path) => !isIntegration(path)),
-    sizing,
-  );
+  const legs = legsOf(files, sizing);
 
   return {
     _tag: "changed",
@@ -282,14 +279,14 @@ export const summary = (proof: Proof): string => {
     const why =
       proof.inputs._tag === "full"
         ? [
-            `The full set, chosen by hand (\`scope: full\`) for the law \`${proof.inputs.law}\`: it runs every test but the \`.integration.\` laws, which only main's full run runs.`,
+            `The full set, chosen by hand (\`scope: full\`) for the law \`${proof.inputs.law}\`: it runs every test, the \`.integration.\` laws included, as main's full run does.`,
           ]
         : [];
 
     const triggered =
       proof.triggers.length > 0
         ? [
-            "The full set: the change touches a rerun trigger, so it runs every test but the `.integration.` laws, which only main's full run runs.",
+            "The full set: the change touches a rerun trigger, so it runs every test, the `.integration.` laws included, as main's full run does.",
             "",
             ...proof.triggers.map((path) => `- \`${path}\``),
           ]

@@ -598,7 +598,7 @@ const reachedP10 = new Set<string>();
 reachesAll(reachedP10, ["listed", "listed with a longer path", "unlisted", "unlisted with a longer path"]);
 
 it.prop(
-  "property: inProjects asks the lister for exactly the three projects and the path, and holds only when the list gives the path itself",
+  "property: inProjects asks the lister for exactly the proof's projects and the path, and holds only when the list gives the path itself",
   { probe: Probe },
   ({ probe: { wanted, listsIt, others, before, after } }) => {
     // P10. Plant, run once on proof.ts and restored: `includes` becomes a substring match (red:
@@ -686,18 +686,23 @@ const Touched = Schema.Array(
   ),
 ).check(Schema.isMaxLength(12));
 
-// scenario: the owner's call of 2026-11-18 (integration laws run only in main's full run): a branch's proof run lists no integration
-// project, even for a change that reaches one of its laws, and main's full run carries them. Plants,
-// each run once on proof.ts and restored: `PROJECTS` keeps next-integration (red: the reached call
-// names it, and the pinned test above with it); the readers call names next-integration again, as
-// it did before (red: the readers call names it).
+// scenario: the owner decided on 2026-11-22 that a proof run the lead starts runs the integration laws its
+// change reaches, so an adapter's real-binary laws run before merge; pull requests and the merge
+// queue still run none (related-selection.test.ts). The reached call lists both integration
+// projects with Vitest's own `--changed`, the reach logic of the plain laws. Plants, each run once
+// on proof.ts and restored: `PROJECTS` drops next-integration (red: the reached call does not name
+// it); `PROJECTS` drops tooling-integration (red, the same); the readers call names
+// next-integration (red: the readers call names it, and they are in-memory laws).
 it.prop(
-  "property: a proof run's vitest list calls name no integration project, for any change",
+  "property: a proof run's reached call names both integration projects beside the plain ones, for any change, and the readers call stays next alone",
   { base: Sha, changed: Touched },
   ({ base, changed }) => {
     const { reached, readers: asked } = listings(base, changed);
 
     expect(projectsIn(reached)).toEqual([...PROJECTS]);
+    expect(projectsIn(reached).toSorted()).toEqual(
+      ["next", "next-integration", "next-visual", "tooling", "tooling-integration"].toSorted(),
+    );
     expect(reached.at(-1)).toBe(`--changed=${base}`);
 
     // The reader tests are asked for only on a next/ change, and only their in-memory ones.
@@ -705,10 +710,6 @@ it.prop(
     expect(asked === null).toBe(!reaches);
     expect(asked === null ? [] : projectsIn(asked)).toEqual(reaches ? ["next"] : []);
     expect(asked?.slice(2) ?? []).toEqual(reaches ? readers : []);
-
-    for (const call of [reached, asked ?? []]) {
-      expect(projectsIn(call).filter((project) => project.endsWith("-integration"))).toEqual([]);
-    }
   },
   propertyOptions,
 );
@@ -732,28 +733,43 @@ const Listed = Schema.Array(
   ),
 ).check(Schema.isMaxLength(30), Schema.isUnique());
 
-// scenario: the review of this build: a branch's proof run ran tooling's three `.integration.` laws,
-// which its changed set reached through the `tooling` project. The integration-laws rule keeps every `.integration.` law,
-// of next/ or of tooling, off a proof run; the `tooling-integration` project keeps them out of
-// tooling's list, and `choose` holds them out by name whatever a list gives. Plant, run once on
-// proof.ts and restored: `choose` keeps every listed file (red: the real-resource names land on legs).
+// A kalfa/ adapter's real-binary law, the first a proof run is meant to reach: it is
+// `next-integration`'s, by vitest.config.ts's `INTEGRATION` globs.
+const KALFA_REAL = "kalfa/git/src/ProcessRepository.integration.test.ts";
+
+// scenario: the owner decided on 2026-11-22 that a proof run the lead starts runs the integration laws its
+// change reaches, of next/, of kalfa/ and of tooling. `choose` keeps every file the lists give, the
+// `.integration.` ones too, on the legs and in the printed lists the legs run. Plant, run once on
+// proof.ts and restored: `choose` drops every `.integration.` name again, as it did before (red:
+// the real-resource names are missing from the legs).
 it.prop(
-  "property: a changed set runs no .integration. law, of next/ or of tooling, whatever its lists hold",
+  "property: a changed set runs every file its lists give, each .integration. law of next/, kalfa/ or tooling among them",
   { listed: Listed },
   ({ listed }) => {
-    const files = [...listed, ...TOOLING_REAL];
+    const files = [...listed, ...TOOLING_REAL, KALFA_REAL];
 
-    const proof = choose(seen(["next/a.ts", ".github/ci/proof.ts"]), [], files, real);
+    const proof = choose(seen(["kalfa/git/src/ProcessRepository.ts", ".github/ci/proof.ts"]), [], files, real);
 
     const ran = proof._tag === "changed" ? Object.values(proof.legs).flat() : [];
 
     expect(proof._tag).toBe("changed");
-    expect(ran.toSorted()).toEqual(files.filter((path) => !/\.integration\./.test(path)).toSorted());
-    expect(ran.some((path) => TOOLING_REAL.includes(path))).toBe(false);
+    expect(ran.toSorted()).toEqual(files.toSorted());
 
-    // The step's printed lists, which the legs run, hold none either.
+    // The step's printed lists, which the legs run, hold every real-resource law too.
     const printed = outputs(proof, 1, real.most).find((line) => line.startsWith("files="))!;
-    expect(TOOLING_REAL.some((path) => printed.includes(path))).toBe(false);
+    expect([...TOOLING_REAL, KALFA_REAL].filter((path) => !printed.includes(path))).toEqual([]);
   },
   propertyOptions,
 );
+
+// The full set runs main's projects on a branch too (scheduled.yaml's `tests` legs, SC7 and SC8), so
+// its summary says the `.integration.` laws are in it. Plant, run once on proof.ts and restored: the
+// summary says the full set leaves them out again (red: the text names them as left out).
+it("pinned: a full set's summary says it runs the .integration. laws too, for a trigger and for a hand start", () => {
+  for (const inputs of [changedInputs, { _tag: "full", law: KALFA_REAL } as const]) {
+    const said = summary(choose(seen(["pnpm-lock.yaml"], inputs), ["pnpm-lock.yaml"], [], real));
+
+    expect(said, inputs._tag).toContain("the `.integration.` laws included");
+    expect(said, inputs._tag).not.toContain("but the `.integration.` laws");
+  }
+});

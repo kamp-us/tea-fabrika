@@ -318,7 +318,7 @@ const remap = (w: Workflow, change: (main: Record<string, string>, proof: Record
 
 // SC18's message, which a scenario on the next limit expects beside SC13's.
 const CHANGED_RULE =
-  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, none of them next-integration (integration laws run only in main's full run), at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
+  "SC18: changed runs only when select said changed with a leg, each leg its own list over proof.ts's projects, both integration projects among them, at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else";
 
 it("pinned: the real scheduled.yaml passes, against the real check.yaml", () => {
   expect(lintScheduled(read("scheduled.yaml"), check)).toEqual([]);
@@ -1053,31 +1053,32 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC7: next runs next/ as a path, so next-visual starts on legs with no Chromium",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("$PROJECTS ", "next/ ");
+      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "next/ ");
     },
   ],
-  // Main's full run runs every real-resource law, and a branch's full set none. Plants, each
-  // run once on scheduled.ts and restored: SC7's PROJECTS check dropped (red on the first three, the
-  // fourth caught by the command check above it).
+  // Main's full run and a branch's full set run every real-resource law alike: the owner decided on
+  // 2026-11-22 that a proof run the lead starts runs the integration laws its change reaches, and a
+  // full set is reached whole. Each plant was run once on the real scheduled.yaml and restored.
   [
     "SC7: main's full run drops next-integration, so the real-resource laws run nowhere",
-    (w) => (step(w, "tests", "vitest").env!["PROJECTS"] = `\${{ ${REF} && '--project next' || '--project next' }}`),
-  ],
-  [
-    "SC7: a branch's full set runs the real-resource laws, which only main's full run runs",
-    (w) =>
-      (step(w, "tests", "vitest").env!["PROJECTS"] =
-        `\${{ ${REF} && '--project next --project next-integration' || '--project next --project next-integration' }}`),
-  ],
-  [
-    "SC7: next's vitest legs lose their projects, so an empty $PROJECTS runs every project",
-    (w) => Reflect.deleteProperty(step(w, "tests", "vitest").env!, "PROJECTS"),
-  ],
-  [
-    "SC7: next's vitest legs name both projects in the command again, so a branch's full set runs next-integration",
     (w) => {
       const s = step(w, "tests", "vitest");
-      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project next --project next-integration ");
+      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "--project next ");
+    },
+  ],
+  [
+    "SC7: a branch's full set runs next alone again, so a proof run misses the real-resource laws its change reaches",
+    (w) => {
+      const s = step(w, "tests", "vitest");
+      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "$PROJECTS ");
+      s.env!["PROJECTS"] = `\${{ ${REF} && '--project next --project next-integration' || '--project next' }}`;
+    },
+  ],
+  [
+    "SC7: next's vitest legs lose their projects, so they run every project",
+    (w) => {
+      const s = step(w, "tests", "vitest");
+      s["run"] = String(s["run"]).replace("--project next --project next-integration ", "");
     },
   ],
   [
@@ -1118,45 +1119,48 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC8: tooling runs today's tests too",
-    (w) =>
-      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
-        `\${{ ${REF} && '--project tooling --project tooling-integration --project today' || '--project tooling' }}`),
+    (w) => {
+      const s = step(w, "tests", "tooling tests");
+      s["run"] = String(s["run"]).replace(
+        "--project tooling-integration ",
+        "--project tooling-integration --project today ",
+      );
+    },
   ],
   [
-    "SC8: tooling loses its projects, so an empty $PROJECTS runs every project",
-    (w) => Reflect.deleteProperty(step(w, "tests", "tooling tests").env!, "PROJECTS"),
+    "SC8: tooling loses its projects, so it runs every project",
+    (w) => {
+      const s = step(w, "tests", "tooling tests");
+      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "");
+    },
   ],
   [
     "SC8: tooling leaves the trees out with --exclude, which a project ignores",
     (w) => {
       const s = step(w, "tests", "tooling tests");
       s["run"] = String(s["run"]).replace(
-        "$PROJECTS ",
+        "--project tooling --project tooling-integration ",
         "--exclude 'next/**' --exclude 'apps/**' --exclude 'packages/**' --exclude 'programs/**' ",
       );
     },
   ],
-  // Integration laws run only in main's full run; a test's kind follows what it uses, never its name: main's full run runs every tooling law that starts a process, and a branch's full
-  // set none. Plants, each run once on scheduled.ts and restored: SC8's PROJECTS check dropped (red on
-  // the first two, and on "tooling runs today's tests too" and "tooling loses its projects" above;
-  // the third is caught by the command check above it).
+  // A test's kind follows what it uses, never its name: main's full run and a branch's full set both
+  // run every tooling law that starts a process (the owner decided on 2026-11-22 that a proof run the
+  // lead starts runs the integration laws its change reaches). Each plant was run once on the real
+  // scheduled.yaml and restored.
   [
     "SC8: main's full run drops tooling-integration, so the tooling laws that start a process run nowhere",
-    (w) =>
-      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
-        `\${{ ${REF} && '--project tooling' || '--project tooling' }}`),
-  ],
-  [
-    "SC8: a branch's full set runs tooling-integration, which only main's full run runs",
-    (w) =>
-      (step(w, "tests", "tooling tests").env!["PROJECTS"] =
-        `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling --project tooling-integration' }}`),
-  ],
-  [
-    "SC8: the tooling legs name both projects in the command again, so a branch's full set runs tooling-integration",
     (w) => {
       const s = step(w, "tests", "tooling tests");
-      s["run"] = String(s["run"]).replace("$PROJECTS ", "--project tooling --project tooling-integration ");
+      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "--project tooling ");
+    },
+  ],
+  [
+    "SC8: a branch's full set runs tooling alone again, so a proof run misses the tooling laws that start a process",
+    (w) => {
+      const s = step(w, "tests", "tooling tests");
+      s["run"] = String(s["run"]).replace("--project tooling --project tooling-integration ", "$PROJECTS ");
+      s.env!["PROJECTS"] = `\${{ ${REF} && '--project tooling --project tooling-integration' || '--project tooling' }}`;
     },
   ],
   [
@@ -1429,14 +1433,23 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC18: the changed legs start on a set of zero files",
     (w) => (w.jobs["changed"]!["if"] = "needs.gate.outputs.start == 'true' && needs.select.outputs.scope == 'changed'"),
   ],
-  // Integration laws run only in main's full run: a changed leg runs no real-resource law, so it names no next-integration project.
-  // proof.test.ts holds the same list against proof.ts's PROJECTS.
+  // The owner decided on 2026-11-22 that a proof run the lead starts runs the integration laws its
+  // change reaches: a changed leg runs both integration projects. proof.test.ts holds the same list
+  // against proof.ts's PROJECTS.
   [
-    "SC18: a changed leg runs the real-resource laws, which only main's full run runs",
+    "SC18: a changed leg drops next-integration, so the real-resource laws its change reaches never run",
     (w) =>
       (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
-        "--project next ",
-        "--project next --project next-integration ",
+        "--project next-integration ",
+        "",
+      )),
+  ],
+  [
+    "SC18: a changed leg drops tooling-integration, so the tooling laws that start a process never run",
+    (w) =>
+      (step(w, "changed", "vitest")["run"] = String(step(w, "changed", "vitest")["run"]).replace(
+        "--project tooling-integration ",
+        "",
       )),
   ],
   [
