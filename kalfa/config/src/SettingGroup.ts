@@ -21,7 +21,7 @@ import { field, variable } from "./internal/names.ts";
 import { shown } from "./internal/place.ts";
 import { type Resolved, start } from "./internal/start.ts";
 import { toml } from "./internal/toml.ts";
-import { watched } from "./internal/window.ts";
+import { debounce, type Watched, watched } from "./internal/window.ts";
 import type { Origin } from "./Sources.ts";
 
 export {
@@ -82,7 +82,7 @@ export type Values<R extends ReadonlyArray<Setting.Any>> = {
  *
  * @category models
  */
-export type Origins<R extends ReadonlyArray<Setting.Any>> = Readonly<Record<R[number]["name"], Origin>>;
+export type Origins<R extends ReadonlyArray<Setting.Any>> = Readonly<Record<Watched<R>[number]["name"], Origin>>;
 
 /**
  * What a program that reads a group needs: the group's layer.
@@ -172,15 +172,17 @@ const clashes = (app: string, a: Setting.Any, b: Setting.Any) => {
     return "are one name, or a value and its table";
   }
 
-  if (field(a.name) === field(b.name)) {
+  // The window is read by its setting name and never as a field of the program's values, so only the program's own fields can clash.
+  if (a !== debounce && b !== debounce && field(a.name) === field(b.name)) {
     return `are read as one field, ${field(a.name)}`;
   }
 
   return variable(app, a.name) === variable(app, b.name) ? `share ${variable(app, a.name)}` : undefined;
 };
 
-// SAFETY: `start` fills one field of `values` for each setting, named by `field`, with that setting's value, and one
-// origin for each, named by the setting's name. `Values` and `Origins` are those same keys, written as types.
+// SAFETY: `start` fills one field of `values` for each setting the program declared, named by `field`, with that
+// setting's value, and one origin for each setting read, named by the setting's name, the quiet window included for a
+// group with a live setting. `Values` and `Origins` are those same keys, written as types.
 const typed = <R extends ReadonlyArray<Setting.Any>>(started: Resolved): Started<R> => ({
   values: started.values as Values<R>,
   origins: Effect.map(started.origins, (origins) => origins as Origins<R>),
@@ -228,8 +230,8 @@ export const make = <const App extends string, const R extends ReadonlyArray<Set
 export const flags = <App extends string, R extends ReadonlyArray<Setting.Any>>(
   group: SettingGroup<App, R>,
 ): Flags<R> =>
-  // SAFETY: `build` gives one key for each setting that is not file-only, named by the setting, which is `Flags`
-  // written as a type.
+  // SAFETY: `build` gives one key for each setting that is not file-only, named by the setting, and the quiet window's
+  // for a group with a live setting, which is `Flags` written as a type.
   build(watched(group.settings)) as Flags<R>;
 
 /**

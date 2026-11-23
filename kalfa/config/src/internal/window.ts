@@ -19,3 +19,10 @@ export const debounce = Setting.make("config.watch.debounce", Length).pipe(
 /** The settings a group is read with: its own, and the quiet window when one of them is live. */
 export const watched = (settings: ReadonlyArray<Setting.Any>): ReadonlyArray<Setting.Any> =>
   settings.some((setting) => setting.live) ? [...settings, debounce] : settings;
+
+/** The settings a group of `R` is read with: its own, and the quiet window when one of them is live. A group whose names are not literal types is taken as it is. */
+export type Watched<R extends ReadonlyArray<Setting.Any>> = string extends R[number]["name"]
+  ? R
+  : true extends R[number]["live"]
+    ? readonly [...R, typeof debounce]
+    : R;

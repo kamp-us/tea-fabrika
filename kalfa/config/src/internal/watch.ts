@@ -1,7 +1,18 @@
 /**
  * The watch of one configuration file: a tick each time the file may have changed, after it has been quiet for the window. It watches the file's folder and never the file itself, because an editor that saves by a rename leaves a watch on the file's own path following the old file. A folder that is missing is waited for by watching its parent.
  */
-import { Deferred, Effect, FileSystem, Option, Path, type PlatformError, Queue, Stream, type Duration } from "effect";
+import {
+  Deferred,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  type PlatformError,
+  Queue,
+  Ref,
+  Stream,
+  type Duration,
+} from "effect";
 import type { Place } from "./place.ts";
 
 /**
@@ -25,10 +36,14 @@ export const ticks = (
       const file = path.basename(place.path);
       const own = path.basename(folder);
 
-      /** After each quiet window of a watch of `dir`, whether the folder is there. Only the named events count. The watch's own installing counts at once, with no window: it is a first look. */
-      const quiet = (dir: string, names: ReadonlyArray<string>): Stream.Stream<boolean, PlatformError.PlatformError> =>
+      /** After each quiet window of a watch of `dir`, whether the folder is there and this watch can still be trusted. Only the named events count; a window with an event of a `stale` name says the folder itself came or went, so a watch made before it follows the old folder. The watch's own installing counts at once, with no window: it is a first look. */
+      const quiet = (
+        dir: string,
+        names: ReadonlyArray<string>,
+        stale: ReadonlyArray<string>,
+      ): Stream.Stream<boolean, PlatformError.PlatformError> =>
         Stream.unwrap(
-          Effect.map(Deferred.make<void>(), (installed) =>
+          Effect.map(Effect.all([Deferred.make<void>(), Ref.make(false)], { concurrency: 1 }), ([installed, moved]) =>
             Stream.merge(
               fs
                 .watch(dir, {
@@ -39,10 +54,17 @@ export const ticks = (
                 })
                 .pipe(
                   Stream.filter((event) => names.includes(path.basename(event.path))),
+                  Stream.tap((event) =>
+                    stale.includes(path.basename(event.path)) ? Ref.set(moved, true) : Effect.void,
+                  ),
                   Stream.debounce(window),
                 ),
               Stream.fromEffect(Deferred.await(installed)),
-            ).pipe(Stream.mapEffect(() => fs.exists(folder))),
+            ).pipe(
+              Stream.mapEffect(() =>
+                Effect.zipWith(fs.exists(folder), Ref.getAndSet(moved, false), (there, changed) => there && !changed),
+              ),
+            ),
           ),
         );
 
@@ -54,8 +76,12 @@ export const ticks = (
       const lost = (error: PlatformError.PlatformError): Effect.Effect<Option.Option<boolean>> =>
         Effect.succeed(error.reason._tag === "NotFound" ? Option.some(false) : Option.none());
 
-      // The folder is there: each quiet window is a tick, and the folder going away moves the watch to its parent.
-      const inFolder: Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> = quiet(folder, [file, own]).pipe(
+      // The folder is there: each quiet window is a tick. The folder going away, or going and coming back as a new one, moves the watch to its parent, which finds it again and watches it afresh.
+      const inFolder: Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> = quiet(
+        folder,
+        [file, own],
+        [own],
+      ).pipe(
         Stream.tap(() => Queue.offer(queue, undefined)),
         Stream.takeUntil((there) => !there),
         Stream.runLast,
@@ -64,9 +90,11 @@ export const ticks = (
       );
 
       // The folder is missing: wait for its parent to say it came back, then watch it.
-      const inParent: Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> = quiet(path.dirname(folder), [
-        own,
-      ]).pipe(
+      const inParent: Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> = quiet(
+        path.dirname(folder),
+        [own],
+        [],
+      ).pipe(
         Stream.filter((there) => there),
         Stream.runHead,
         Effect.catch(() => Effect.succeed(Option.none<boolean>())),
