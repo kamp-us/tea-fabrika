@@ -26,6 +26,7 @@
   ],
   "exports": {
     ".": "./src/GitHub.ts",
+    "./test": "./src/TestGitHub.ts",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -33,6 +34,10 @@
       ".": {
         "types": "./dist/GitHub.d.ts",
         "default": "./dist/GitHub.js"
+      },
+      "./test": {
+        "types": "./dist/TestGitHub.d.ts",
+        "default": "./dist/TestGitHub.js"
       },
       "./package.json": "./package.json"
     }
