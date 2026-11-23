@@ -1,0 +1,570 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git --no-replace-objects --git-dir=<bare repository> fast-import --date-format=raw --quiet --export-marks=<marks>, one commit per row on refs/seed/tmp, a root commit after `reset refs/seed/tmp`, then the id of each mark read from the marks file",
+  "rows": [
+    {
+      "note": "a root commit with a plain name",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "first\n",
+      "id": "74939013608679fcd98b84d1095bb8de117151e9"
+    },
+    {
+      "note": "an empty name",
+      "parents": [],
+      "author": {
+        "name": "",
+        "email": "e@example.test",
+        "at": {
+          "seconds": 1,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "",
+        "email": "e@example.test",
+        "at": {
+          "seconds": 2,
+          "offset": "+0000"
+        }
+      },
+      "message": "empty name\n",
+      "id": "8146d158bb3bb9960241d8f53728d1490e22ae84"
+    },
+    {
+      "note": "a name with a space at its start",
+      "parents": [],
+      "author": {
+        "name": " Jo",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 3,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": " Jo",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 3,
+          "offset": "+0000"
+        }
+      },
+      "message": "leading space\n",
+      "id": "e5103f739a116b6be1bf146ea41a8862493d28be"
+    },
+    {
+      "note": "a name with a space at its end, so two spaces stand before the angle bracket",
+      "parents": [],
+      "author": {
+        "name": "Jo ",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 4,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Jo ",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 4,
+          "offset": "+0000"
+        }
+      },
+      "message": "trailing space\n",
+      "id": "49f24c21632bcf0a4df93075b4ba7ff4c2bcfa34"
+    },
+    {
+      "note": "a name with a tab inside",
+      "parents": [],
+      "author": {
+        "name": "Jo\tBo",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 5,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Jo\tBo",
+        "email": "j@example.test",
+        "at": {
+          "seconds": 5,
+          "offset": "+0000"
+        }
+      },
+      "message": "tab\n",
+      "id": "53f53c7de737d4679c0ef15596360ae56476a5d0"
+    },
+    {
+      "note": "an empty email",
+      "parents": [],
+      "author": {
+        "name": "No Mail",
+        "email": "",
+        "at": {
+          "seconds": 6,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "No Mail",
+        "email": "",
+        "at": {
+          "seconds": 6,
+          "offset": "+0000"
+        }
+      },
+      "message": "empty email\n",
+      "id": "ea2c8a97b9d9d7cde8fe185eeb93927c5335e8a0"
+    },
+    {
+      "note": "an email with a space",
+      "parents": [],
+      "author": {
+        "name": "Sp Mail",
+        "email": "a b@example.test",
+        "at": {
+          "seconds": 7,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Sp Mail",
+        "email": "a b@example.test",
+        "at": {
+          "seconds": 7,
+          "offset": "+0000"
+        }
+      },
+      "message": "email space\n",
+      "id": "9d076ae5f3dfbe8b85990f807dd480c45ec64ca7"
+    },
+    {
+      "note": "the offset -0000, which is not +0000",
+      "parents": [],
+      "author": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 8,
+          "offset": "-0000"
+        }
+      },
+      "committer": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 8,
+          "offset": "-0000"
+        }
+      },
+      "message": "minus zero\n",
+      "id": "88f4f19d37679fb346cbe0818152c9de749f73cc"
+    },
+    {
+      "note": "the offset +0530",
+      "parents": [],
+      "author": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 9,
+          "offset": "+0530"
+        }
+      },
+      "committer": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 9,
+          "offset": "+0530"
+        }
+      },
+      "message": "half hour\n",
+      "id": "d301c78827b1ecc997d809c7d3e3248b2778d761"
+    },
+    {
+      "note": "the offset -1200 and +1400",
+      "parents": [],
+      "author": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 10,
+          "offset": "-1200"
+        }
+      },
+      "committer": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 10,
+          "offset": "+1400"
+        }
+      },
+      "message": "far offsets\n",
+      "id": "9c87c0f800c7331d2a34d4ed1b62e6153c3ed28d"
+    },
+    {
+      "note": "seconds past 2^32",
+      "parents": [],
+      "author": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 4294967297,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 5000000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "far future\n",
+      "id": "063eadf7622dd6fbc6d6013e74212a52a22fea6d"
+    },
+    {
+      "note": "seconds 0",
+      "parents": [],
+      "author": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 0,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 0,
+          "offset": "+0000"
+        }
+      },
+      "message": "epoch\n",
+      "id": "28307fff5900dc0188e14303cbd23abe722797c2"
+    },
+    {
+      "note": "an empty message",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "",
+      "id": "641bb478e356f357ab19fb351ce9d3d1ad49766f"
+    },
+    {
+      "note": "a message with no trailing newline",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "no newline",
+      "id": "03be37b8b98c571a365478b6175625bd2c799db3"
+    },
+    {
+      "note": "a message with several trailing newlines",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "many\n\n\n",
+      "id": "84776f4162b00db5d88dd23da9e069bf00831fc9"
+    },
+    {
+      "note": "a message with leading blank lines",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "\n\nafter blanks\n",
+      "id": "9517fdc8d8ca89eda5837e922e560e2c34fca3bb"
+    },
+    {
+      "note": "a message with CRLF and a lone CR",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "one\r\ntwo\rthree\n",
+      "id": "503cf563a501061f823096a9f96a1161c5a9880b"
+    },
+    {
+      "note": "a message with a NUL",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "before\u0000after\n",
+      "id": "a149e84e7a1489c01576bdab8d53f69261fd8965"
+    },
+    {
+      "note": "a message with characters past U+024F, inside and outside the Basic Multilingual Plane",
+      "parents": [],
+      "author": {
+        "name": "设 😀",
+        "email": "u@example.test",
+        "at": {
+          "seconds": 11,
+          "offset": "+0800"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "设 ｚ 😀\n",
+      "id": "9c31d44f00f0bcd7ae0396231d1c08ce49b7467d"
+    },
+    {
+      "note": "a message whose lines look like headers",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "parent 0000000000000000000000000000000000000000\ngpgsig x\n\nbody\n",
+      "id": "f032a5adba5f09d6d34448b44ca34e6d29415571"
+    },
+    {
+      "note": "a message with a tab and a long line",
+      "parents": [],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "tab\there xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n",
+      "id": "a9d52d0fdaf6121e1dfa52d50e3d1d65b0487efc"
+    },
+    {
+      "note": "a merge of row 1 and row 2, in that order",
+      "parents": [
+        "74939013608679fcd98b84d1095bb8de117151e9",
+        "8146d158bb3bb9960241d8f53728d1490e22ae84"
+      ],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "merge\n",
+      "id": "476d671aeaf7bd6847a2381b0464734218ad00c1"
+    },
+    {
+      "note": "a merge of row 2 and row 1, in the other order",
+      "parents": [
+        "8146d158bb3bb9960241d8f53728d1490e22ae84",
+        "74939013608679fcd98b84d1095bb8de117151e9"
+      ],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "merge\n",
+      "id": "7697f71a02606d40648d2b6dfb4fb95a2a5dcaf3"
+    },
+    {
+      "note": "an octopus merge of rows 3, 1 and 2, in that order",
+      "parents": [
+        "e5103f739a116b6be1bf146ea41a8862493d28be",
+        "74939013608679fcd98b84d1095bb8de117151e9",
+        "8146d158bb3bb9960241d8f53728d1490e22ae84"
+      ],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "merge\n",
+      "id": "4fc0c242b3ff3233538f49057efd0167a90762ba"
+    },
+    {
+      "note": "an octopus merge of rows 1, 3 and 2, in that order",
+      "parents": [
+        "74939013608679fcd98b84d1095bb8de117151e9",
+        "e5103f739a116b6be1bf146ea41a8862493d28be",
+        "8146d158bb3bb9960241d8f53728d1490e22ae84"
+      ],
+      "author": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "committer": {
+        "name": "Ada Lovelace",
+        "email": "ada@example.test",
+        "at": {
+          "seconds": 1700000000,
+          "offset": "+0000"
+        }
+      },
+      "message": "merge\n",
+      "id": "5352db834d9291029fb3c4da6c61727c1ca78eb5"
+    }
+  ]
+}

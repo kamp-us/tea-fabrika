@@ -1,0 +1,141 @@
+// A stand-in for the process spawner: it answers each git command from a script, records every command
+// with its environment, and counts how many child scopes have ended, so a law can see a child was ended
+// without a real signal.
+import { Duration, Effect, Layer, Option, PlatformError, Predicate, Ref, Sink, Stream } from "effect";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import type { Command } from "effect/process/ChildProcess";
+
+/** One git command as the stand-in saw it. `verb` is the plumbing command, after the global options. */
+export interface Call {
+  readonly args: ReadonlyArray<string>;
+  readonly verb: string;
+  readonly rest: ReadonlyArray<string>;
+  readonly extendEnv: boolean | undefined;
+  /** How long the command's scope waits after the first signal before it kills the child outright, if it says. */
+  readonly forceKillAfter: Duration.Duration | undefined;
+  readonly env: Readonly<Record<string, string>>;
+}
+
+/**
+ * What a command does: exit with a code and output (stderr may come in several chunks), never exit, never exit and
+ * ignore the first signal, or fail to start.
+ *
+ * A child that ignores the first signal ends only when its scope kills it outright, which the scope does after the
+ * command's `forceKillAfter` and never without one, as Effect's Node spawner does.
+ */
+export type Reply =
+  | { readonly code: number; readonly stdout?: string; readonly stderr?: string | ReadonlyArray<string> }
+  | "hang"
+  | "hang, ignores the first signal"
+  | "cannot start";
+
+interface StandIn {
+  readonly layer: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>;
+  readonly calls: Effect.Effect<ReadonlyArray<Call>>;
+  /** How many children are dead: their scope has ended and, for a child that ignores a signal, it was killed. */
+  readonly ended: Effect.Effect<number>;
+}
+
+const encoder = new TextEncoder();
+
+const split = (args: ReadonlyArray<string>): Pick<Call, "verb" | "rest"> => {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i] ?? "";
+
+    if (arg === "-c") {
+      i += 1;
+    } else if (!arg.startsWith("-")) {
+      return { verb: arg, rest: args.slice(i + 1) };
+    }
+  }
+
+  return { verb: "", rest: [] };
+};
+
+const commandFrom = (command: Command): Call | undefined => {
+  if (!ChildProcess.isStandardCommand(command)) {
+    return undefined;
+  }
+
+  const args = command.args.map((word) => (Predicate.isString(word) ? word : "<redacted>"));
+  const env: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(command.options.env ?? {})) {
+    if (value !== undefined) {
+      env[key] = Predicate.isString(value) ? value : "<redacted>";
+    }
+  }
+
+  const forceKillAfter =
+    command.options.forceKillAfter === undefined
+      ? undefined
+      : Option.getOrUndefined(Duration.fromInput(command.options.forceKillAfter));
+
+  return { args, ...split(args), extendEnv: command.options.extendEnv, forceKillAfter, env };
+};
+
+/** A spawner that answers from `script`, which sees every command and says what it does. */
+export const standIn = (script: (call: Call) => Reply): Effect.Effect<StandIn> =>
+  Effect.gen(function* () {
+    const calls = yield* Ref.make<ReadonlyArray<Call>>([]);
+    const ended = yield* Ref.make(0);
+
+    const spawn: ChildProcessSpawner.ChildProcessSpawner["Service"]["spawn"] = (command) =>
+      Effect.gen(function* () {
+        const call = commandFrom(command);
+
+        if (call === undefined) {
+          return yield* Effect.die("the stand-in runs standard commands only");
+        }
+
+        yield* Ref.update(calls, (all) => [...all, call]);
+        const reply = script(call);
+
+        yield* Effect.addFinalizer(() =>
+          reply === "hang, ignores the first signal"
+            ? Effect.andThen(
+                call.forceKillAfter === undefined ? Effect.never : Effect.sleep(call.forceKillAfter),
+                Ref.update(ended, (n) => n + 1),
+              )
+            : Ref.update(ended, (n) => n + 1),
+        );
+
+        if (reply === "cannot start") {
+          return yield* PlatformError.badArgument({
+            module: "ChildProcess",
+            method: "spawn",
+            description: "the stand-in cannot start",
+          });
+        }
+
+        const stuck = reply === "hang" || reply === "hang, ignores the first signal";
+
+        const chunks = (text: string | ReadonlyArray<string> | undefined) =>
+          Stream.fromIterable(Predicate.isString(text) ? [text] : (text ?? [""])).pipe(
+            Stream.map((chunk) => encoder.encode(chunk)),
+          );
+
+        const out = stuck ? Stream.never : chunks(reply.stdout);
+        const err = stuck ? Stream.never : chunks(reply.stderr);
+
+        return ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: stuck ? Effect.never : Effect.succeed(ChildProcessSpawner.ExitCode(reply.code)),
+          isRunning: Effect.succeed(stuck),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: out,
+          stderr: err,
+          all: stuck ? Stream.never : Stream.merge(out, err),
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        });
+      });
+
+    return {
+      layer: Layer.succeed(ChildProcessSpawner.ChildProcessSpawner)(ChildProcessSpawner.make(spawn)),
+      calls: Ref.get(calls),
+      ended: Ref.get(ended),
+    };
+  });

@@ -9,6 +9,15 @@ and invents none. It knows nothing of a host such as GitHub.
 A store of commits and the refs that point at them.
 _Avoid_: project, codebase
 
+**Bare repository**:
+A repository with no working copy: only its commits and refs. Every call here runs on one.
+_Avoid_: server repo, mirror
+
+**Shallow repository**:
+A repository that holds some commits without their parents. A call that reads history in one fails with history too
+short, never a guess.
+_Avoid_: partial clone, truncated repo
+
 **Remote**:
 Another repository this one fetches from and pushes to, known by a name such as origin or by its URL. A host is one
 kind of remote.
@@ -27,6 +36,19 @@ _Avoid_: snapshot, folder, working copy
 The name git gives a commit from its content, also called its sha.
 _Avoid_: revision, version number
 
+**Author**:
+Who wrote a commit's change, with when. It stays when a rebase or a squash makes a new commit.
+_Avoid_: by, creator, owner
+
+**Committer**:
+Who made the commit object, with when. Commits this package makes take it from the settings.
+_Avoid_: by, pusher, merger
+
+**Signature**:
+A name, an email and a time with its offset, as git writes a commit's author and its committer. Not a cryptographic
+signature.
+_Avoid_: identity, person, ident, user
+
 **Ref**:
 A name that points at one commit, written in full, such as `refs/heads/main`. It may sit outside the branches.
 _Avoid_: pointer, label
@@ -42,6 +64,18 @@ _Avoid_: head (the Ledger's), current commit, tip
 **Base**:
 The commit a branch's own commits sit on.
 _Avoid_: parent branch, target
+
+**Walk**:
+The commits some commits reach and others do not, oldest first.
+_Avoid_: log, history, range, list
+
+**Ancestor**:
+A commit another commit reaches through its parents. A commit is its own ancestor.
+_Avoid_: parent (a direct one only), predecessor
+
+**Merge base**:
+A best common ancestor of two commits. Two commits can have more than one, or none.
+_Avoid_: fork point, common ancestor, base (a branch's own)
 
 **Fetch**:
 Getting a remote's commits and refs without moving any of this repository's own branches.
