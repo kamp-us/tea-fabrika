@@ -1,4 +1,4 @@
-Approved by the lead agent, builds issues 1749, 1806, 1841, 0063, 0089; body 962a50b29cee
+Approved by the lead agent, builds issues 1749, 1806, 1841, 0063, 0089; body f317dfd34840
 Plancheck-Version: 3
 
 # Plan: live settings, where a running program sees a file change without a restart (ticket 1841)
@@ -482,3 +482,29 @@ Node's documented watch behavior already says.
 3. **The ticket's word "edit" now means something else in this context.** Ticket 1841 says "a refused edit"; 1843
    makes **Edit** one change to one setting through `SettingGroup.edit`. This plan says "a change to a file". The lead
    may reword the ticket's two lines.
+
+## Amendment 1 (2026-11-22): the quiet window is a setting
+
+The owner's standing rule: every limit is a flag or a config value, never fixed in code. The plan made the quiet
+window a `Context.Reference` that only code can change, so it breaks that rule. The lead's call:
+
+- **The window is a restart setting the package declares, `config.watch.debounce`.** Its schema is
+  `Schema.DurationFromString` (text such as `"100 millis"`, as decision 0089 says), default `"100 millis"`, with a
+  description. It is not file-only, so a flag (`--config.watch.debounce`), a variable (`<APP>_CONFIG_WATCH_DEBOUNCE`)
+  and both files can set it, by the usual precedence.
+- **Every group that has a live setting gets it.** `SettingGroup.make` adds it to such a group, so `--help` lists it
+  and `origins` names where it came from. A group with no live setting does not get it, since nothing there waits. A
+  group that declares its own `config.watch.debounce` is refused at `make`, as any duplicate name is.
+- **It is read once, at the start.** It is a restart setting, so the watcher never reads its own window from the files
+  it watches while running; a change to it logs the usual restart line (V6).
+- **`SettingGroup.Debounce` is dropped.** Laws set the window as a person would, through the in-memory flags or
+  environment, with `TestClock` moving time.
+- **New laws.** V17: for a generated window given by flag, variable, repo file or user file, the follower waits that
+  long (a burst inside it is read once, a change after it is read on its own) and `origins` names the source. Plant:
+  read the default whatever the sources say: V17 red. V18: a group with a live setting lists `config.watch.debounce`
+  among its flags with its description, a group with none does not, and a group that declares the name itself throws
+  at `make`. Plant: add it to every group: V18 red. TL3 drops its `Debounce` clause.
+
+About 15 more product lines in `SettingGroup.ts` and `internal/start.ts`. 80% sure. The doubt: a setting the package
+adds to an app's group is new; the fallback, if review finds it surprising, is an option on `SettingGroup.make`
+naming the window's default, still read as a setting.
