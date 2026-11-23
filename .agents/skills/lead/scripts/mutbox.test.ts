@@ -786,30 +786,36 @@ describe("mutbox, the run against a stand-in docker", () => {
   // Q18's edge, through the real script and the stand-in docker: the host's own `CI`, when set and not
   // empty, is the one variable that reaches the container, and no other variable of the host does.
   // Plants: always pass `CI=true`; read the marker from another name; pass the host's whole environment.
-  it("Q18: the script forwards the host's CI when it is set and not empty, and no other host variable", () => {
-    const value = fc.oneof(fc.constant(undefined), fc.constant(""), fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/));
-
-    const others = fc.dictionary(fc.stringMatching(/^HOSTVAR_[A-Z]{3,8}$/), fc.stringMatching(/^[a-z0-9]{1,10}$/), {
-      maxKeys: 6,
-    });
-
-    fc.assert(
-      fc.property(value, others, (ci, rest) => {
-        const got = run({ env: { ...rest, ...(ci === undefined ? {} : { CI: ci }) } });
-        expect(got.code, got.text).toBe(0);
-        const call = got.calls.find((c) => c.startsWith("run "))!;
-        const envs = [...call.matchAll(/--env (\S+)/g)].map((m) => m[1]);
-
-        expect(envs).toEqual([
-          "T=483",
-          `BUILD=${got.build}`,
-          "RELATED=src/a.test.ts",
-          ...(ci === undefined || ci === "" ? [] : [`CI=${ci}`]),
-        ]);
-      }),
-      { seed: 483, numRuns: 20 },
-    );
+  // Each run is a real script run on a stand-in docker, 0.6 s, so the 20 runs took 12 s here and 32 s of CI's 60 s limit as one law. The runs fall in three
+  // shapes of the host's CI, so it is three laws, one for each (7, 6 and 7 runs: the 20 runs the one law drew, a third each), and each is a third of the work.
+  const others = fc.dictionary(fc.stringMatching(/^HOSTVAR_[A-Z]{3,8}$/), fc.stringMatching(/^[a-z0-9]{1,10}$/), {
+    maxKeys: 6,
   });
+
+  for (const [shape, value, numRuns] of [
+    ["unset", fc.constant(undefined), 7],
+    ["empty", fc.constant(""), 6],
+    ["set", fc.stringMatching(/^[A-Za-z0-9._-]{1,12}$/), 7],
+  ] as const) {
+    it(`Q18: the script forwards the host's CI when it is set and not empty, and no other host variable, CI ${shape}`, () => {
+      fc.assert(
+        fc.property(value, others, (ci, rest) => {
+          const got = run({ env: { ...rest, ...(ci === undefined ? {} : { CI: ci }) } });
+          expect(got.code, got.text).toBe(0);
+          const call = got.calls.find((c) => c.startsWith("run "))!;
+          const envs = [...call.matchAll(/--env (\S+)/g)].map((m) => m[1]);
+
+          expect(envs).toEqual([
+            "T=483",
+            `BUILD=${got.build}`,
+            "RELATED=src/a.test.ts",
+            ...(ci === undefined || ci === "" ? [] : [`CI=${ci}`]),
+          ]);
+        }),
+        { seed: 483, numRuns },
+      );
+    });
+  }
 
   // Plant: run the sample on the host when docker is missing.
   it("with Docker missing, stopped or on another platform the step is stuck and nothing runs", () => {

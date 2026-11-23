@@ -323,6 +323,9 @@ Decided by the owner on 2026-11-08; this section follows it.
   agent of a fix round. The agent
   that hands work along fetches, reads the report, and runs what a Codex box cannot: e2e runs and
   screenshots.
+- **The test writer and the builder never run at the same time in one worktree.** A plant or a run
+  by one can overwrite the other's uncommitted files. The builder starts when the tests commit is
+  pushed, and a fix agent has the worktree to itself.
 - Plan every row as soon as its tier opens, and start each test writer when its plan is approved.
   Tests do not wait for the code under them; only builds wait in line.
 

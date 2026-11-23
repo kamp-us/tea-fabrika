@@ -59,9 +59,11 @@ this skill for the law. The reviewer reads that law on its recheck.
    - **A plant is run once, not kept.** Break the product code to prove each new law fails, run the
      law, record the plant and its result, then undo the plant. Commit no plant test. A plant
      may break any product file its law covers, whoever owns that file in the plan: it is never
-     committed, so it needs no row in the plan's Files table and no question to the lead. Save a
-     copy, break one thing, run the one law, restore by copy, and see `git status --short` show no
-     product file before you commit. A plant that was not run or not recorded counts as not run,
+     committed, so it needs no row in the plan's Files table and no question to the lead. **Run
+     the plant in a scratch copy of the tree** in your scratch folder (`cp -cR` clones it fast on
+     macOS), so the shared worktree keeps every product file as the builder left it: break one
+     thing there, run the one law, and delete the copy. See `git status --short` in the worktree
+     show no product file before you commit. A plant that was not run or not recorded counts as not run,
      and its law is not done. An old plant test may go, since it is not a law; removing or
      narrowing a law still waits on the owner. A lint rule's own
      planted lines (`oxlint-plugins/plants.test.ts`, `oxlint-plugins/plant.ts`) are its
@@ -104,7 +106,16 @@ this skill for the law. The reviewer reads that law on its recheck.
 5. **If the plan is wrong or cannot be built** somewhere, do not paper over it: write the law the
    plan's intent needs, and name the gap with file and line. Where the plan and the code disagree on
    a name or a line, the code wins: say so.
-6. **Commit, push and report** by the standing rules below.
+6. **Time each law at full depth.** CI runs every leg at `FABRIKA_TEST_DEPTH=full`, where a
+   generated law runs its full case count, so a law that is quick at fast depth can time out only
+   there. Run each law file you add or change once:
+   `FABRIKA_TEST_DEPTH=full nice -n 19 pnpm exec vitest run --maxWorkers=1 --reporter=verbose --reporter=./.github/ci/slow-test-reporter.ts <one file>`.
+   Verbose prints each law's time, and the reporter fails the run and names any law that used more
+   than its share of the test timeout (`FABRIKA_SLOW_TEST_SHARE` sets the share).
+   Bound a slow law's generated inputs (size, run counts, record length) until it passes, run its
+   plants again, and put each law's time in your report. A file the laptop refuses (an
+   `.integration.` file) is named "not run here".
+7. **Commit, push and report** by the standing rules below.
 
 ## New and changed laws
 
@@ -182,7 +193,7 @@ These hold in every tests round, so the brief does not repeat them.
   committed text.
 - **Report** for a reader who saw none of the work, the answer first: every planned law written,
   yes or no. Then each law's exact title, file and how it is red now (the failure's first line);
-  each plant and its result; what the build must export; any gap in the plan; anything that could
+  each plant and its result; each law's full-depth time; what the build must export; any gap in the plan; anything that could
   not run here and why; each check's result; and the new head. When the plan has a
   `## Generators` section, add a reach table: one row per class id, the law that reaches it, and
   that id's plant seen red. An id with no red plant leaves its law not done. End with one line:

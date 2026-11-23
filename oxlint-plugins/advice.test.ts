@@ -20,6 +20,7 @@ import { Array as Arr, pipe, Match, Predicate, Record as Rec } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -206,6 +207,9 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
+  // The linked `node_modules` is the repo's own, thousands of folders: with no `.gitignore` a whole run (no path) walks all of them, which took 6 of
+  // the 7 s of each such run. The real repo has the line too.
+  writeFileSync(join(at, ".gitignore"), "node_modules\n");
 
   for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
@@ -935,9 +939,12 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
         writeFileSync(join(at, file), SAMPLE);
       }
 
+      // The rule alone, from the copied config (one-rule.test-support.ts): the other rules' work over the planted tree was most of this law's time.
+      const only = oneRuleConfig(at, "eslint/no-restricted-properties", false);
+
       const ran = spawnSync(
         OXLINT,
-        [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--no-ignore", "--format=json", "next"],
+        [`--config=${only}`, "--disable-nested-config", "--no-ignore", "--format=json", "next"],
         { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28, timeout: 150_000 },
       );
 
@@ -974,11 +981,14 @@ describe("Reflect ban L4 each tracked code file of next/ ends with the setting t
       const inside = (dir: string, top: string) => dir === top || (!directOnly(top) && dir.startsWith(`${top}/`));
       const files = Arr.filter(tracked, (file) => Arr.some(tops, (top) => inside(dirname(file), top)));
 
-      const real = spawnSync(
-        OXLINT,
-        [`--config=${join(ROOT, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
-        { cwd: ROOT, encoding: "utf8", maxBuffer: 2 ** 28, timeout: 100_000 },
-      );
+      const realOnly = oneRuleConfig(ROOT, "eslint/no-restricted-properties", false);
+
+      const real = spawnSync(OXLINT, [`--config=${realOnly}`, "--disable-nested-config", "--format=json", ...files], {
+        cwd: ROOT,
+        encoding: "utf8",
+        maxBuffer: 2 ** 28,
+        timeout: 100_000,
+      });
 
       const fires = pipe(
         Arr.fromIterable(endings(JSON.parse(real.stdout))),

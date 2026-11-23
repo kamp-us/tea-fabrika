@@ -714,7 +714,14 @@ const Cell = Schema.Struct({
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
 
-const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
+// Q12's first law runs a cell per tape entry, each a quarter of them a crash whose restart backoff is waited out in real time (settle polls the
+// live clock for the alarm), about 75 ms a cell: a tape of 10 cells took 25 s of CI's 60 s limit across 40 runs. A drawn tape stops at 4 cells and
+// the pinned run takes 10.
+const Narrow = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(4));
+
+const WIDE_TAPE = Array.from({ length: 10 }, (_, i) => ({ pick: i, amount: (i * 37) % 251, reopen: i % 2 === 0 }));
+
+const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
 
 const accepted = { _tag: "ok", result: { _tag: "accepted" } };
 
@@ -728,133 +735,136 @@ const cost = (entries: ReadonlyArray<Parameters<typeof encodedBytes>[0]>) => ({
 });
 
 describe("P34c live wiring, both object stores", () => {
+  const charged = (tape: typeof Tape.Type) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const w = yield* world(QuotaRunnerTest.defaults);
+        const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
+        const told = new Map<string, number>(NAMES.map((name) => [name, 0]));
+        const crashes = new Map<string, number>(NAMES.map((name) => [name, 0]));
+
+        for (const name of NAMES) {
+          expect(yield* w.view(name)).toMatchObject({ count: 0 });
+        }
+
+        for (const [n, c] of tape.entries()) {
+          const name = required(NAMES[c.pick % NAMES.length]);
+          const program = programFor(name);
+          const other = required(PROGRAMS.find((id) => id !== program));
+          // A name is crashed at most twice, so the supervisor's own restart limit is never the subject.
+          const moves = ["inc", "tell", "ask", ...(required(crashes.get(name)) < 2 ? ["throw"] : [])];
+          const move = required(moves[c.amount % moves.length]);
+          const before = yield* w.accounts;
+          const head = yield* w.head;
+
+          if (move === "throw") {
+            const old = yield* w.pid(name);
+            yield* Effect.exit(w.input(name, `throw:${n}`, Msg.cases.throw.make({})));
+            crashes.set(name, required(crashes.get(name)) + 1);
+            yield* w.settle(Effect.map(w.pid(name), (current) => current !== old));
+            const after = yield* w.accounts;
+            const fresh = cost(yield* w.entries(head));
+            expect(fresh.writes).toBeGreaterThan(0);
+            // A throwing input never reaches the inbox, so no reader acks it, and the brain pays
+            // for the recovery.
+            expect(yield* w.acks(head)).toEqual([]);
+            expect(after.program).toEqual(before.program);
+            const paid = required(after.recovery[name]).total;
+            const owed = required(before.recovery[name]).total;
+            expect({ writes: paid.writes - owed.writes, bytes: paid.bytes - owed.bytes }).toEqual(fresh);
+            expect(required(after.local[name]).recovery.total.writes).toBeGreaterThan(
+              required(before.local[name]).recovery.total.writes,
+            );
+
+            for (const bystander of NAMES.filter((registered) => registered !== name)) {
+              expect(after.recovery[bystander]).toEqual(before.recovery[bystander]);
+              expect(after.local[bystander]).toEqual(before.local[bystander]);
+            }
+          } else {
+            const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
+            const stepped = move === "tell" ? [name, peer] : [name];
+
+            const m = Match.value(move).pipe(
+              Match.when("tell", () => Msg.cases.tell.make({ to: peer })),
+              Match.when("ask", () => Msg.cases.ask.make({})),
+              Match.orElse(() => Msg.cases.inc.make({ text: Str.repeat(c.amount % 64)("é😀") })),
+            );
+
+            expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
+
+            if (move === "tell") {
+              told.set(name, required(told.get(name)) + 1);
+              counted.set(peer, required(counted.get(peer)) + 1);
+            } else if (move === "inc") {
+              counted.set(name, required(counted.get(name)) + 1);
+            }
+
+            yield* w.settle(
+              Effect.gen(function* () {
+                const sender = yield* w.view(name);
+                const receiver = yield* w.view(peer);
+
+                // A hands Cmd is done here once its task request points the hands key at it.
+                const requested =
+                  move !== "ask" || (yield* w.entries(head)).some((entry) => entry.stream === targetStream(w.handsKey));
+
+                return (
+                  requested &&
+                  sender.told === required(told.get(name)) &&
+                  sender.count === required(counted.get(name)) &&
+                  receiver.count === required(counted.get(peer))
+                );
+              }),
+            );
+            const after = yield* w.accounts;
+            const fresh = cost(yield* w.entries(head));
+            // Each reader that stepped a message acked it, and the ack moves no account: the
+            // program's charge below is the other entries alone, and every other account is as
+            // it was. Plant: answer the runner's ack through a manager that speaks as the
+            // reader's process, so the ack is charged as the program's own write.
+            expect(new Set(yield* w.acks(head))).toEqual(new Set(stepped));
+            // The message, its step, a Send's receipt, the mailed message and its step, the answer
+            // message and its step, a hands task's request and its pointer for the hands key: all
+            // of it is the work of the program that took the input.
+            const paid = required(after.program[program]);
+            const owed = required(before.program[program]);
+            expect({ writes: paid.writes - owed.writes, bytes: paid.bytes - owed.bytes }).toEqual(fresh);
+            expect(paid.ahead).toEqual(none);
+            expect(after.program[other]).toEqual(before.program[other]);
+            // Ordinary work never spends reserved room, in either store.
+            expect(after.recovery).toEqual(before.recovery);
+
+            for (const registered of NAMES) {
+              const local = required(after.local[registered]);
+              const old = required(before.local[registered]);
+              expect(local.recovery).toEqual(old.recovery);
+              expect(local.fault).toBeNull();
+
+              if (stepped.includes(registered)) {
+                expect(local.program.writes).toBeGreaterThan(old.program.writes);
+              } else {
+                expect(local).toEqual(old);
+              }
+            }
+          }
+
+          if (c.reopen) {
+            const saved = yield* w.accounts;
+            yield* w.reopen;
+            expect(yield* w.accounts).toEqual(saved);
+          }
+        }
+      }),
+    );
+
   it.effect.prop(
     "Q12 every entry a live call commits is charged to the account of its cause, and each step to its name's own store",
-    { tape: Tape },
-    ({ tape }) =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const w = yield* world(QuotaRunnerTest.defaults);
-          const counted = new Map<string, number>(NAMES.map((name) => [name, 0]));
-          const told = new Map<string, number>(NAMES.map((name) => [name, 0]));
-          const crashes = new Map<string, number>(NAMES.map((name) => [name, 0]));
-
-          for (const name of NAMES) {
-            expect(yield* w.view(name)).toMatchObject({ count: 0 });
-          }
-
-          for (const [n, c] of tape.entries()) {
-            const name = required(NAMES[c.pick % NAMES.length]);
-            const program = programFor(name);
-            const other = required(PROGRAMS.find((id) => id !== program));
-            // A name is crashed at most twice, so the supervisor's own restart limit is never the subject.
-            const moves = ["inc", "tell", "ask", ...(required(crashes.get(name)) < 2 ? ["throw"] : [])];
-            const move = required(moves[c.amount % moves.length]);
-            const before = yield* w.accounts;
-            const head = yield* w.head;
-
-            if (move === "throw") {
-              const old = yield* w.pid(name);
-              yield* Effect.exit(w.input(name, `throw:${n}`, Msg.cases.throw.make({})));
-              crashes.set(name, required(crashes.get(name)) + 1);
-              yield* w.settle(Effect.map(w.pid(name), (current) => current !== old));
-              const after = yield* w.accounts;
-              const fresh = cost(yield* w.entries(head));
-              expect(fresh.writes).toBeGreaterThan(0);
-              // A throwing input never reaches the inbox, so no reader acks it, and the brain pays
-              // for the recovery.
-              expect(yield* w.acks(head)).toEqual([]);
-              expect(after.program).toEqual(before.program);
-              const paid = required(after.recovery[name]).total;
-              const owed = required(before.recovery[name]).total;
-              expect({ writes: paid.writes - owed.writes, bytes: paid.bytes - owed.bytes }).toEqual(fresh);
-              expect(required(after.local[name]).recovery.total.writes).toBeGreaterThan(
-                required(before.local[name]).recovery.total.writes,
-              );
-
-              for (const bystander of NAMES.filter((registered) => registered !== name)) {
-                expect(after.recovery[bystander]).toEqual(before.recovery[bystander]);
-                expect(after.local[bystander]).toEqual(before.local[bystander]);
-              }
-            } else {
-              const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
-              const stepped = move === "tell" ? [name, peer] : [name];
-
-              const m = Match.value(move).pipe(
-                Match.when("tell", () => Msg.cases.tell.make({ to: peer })),
-                Match.when("ask", () => Msg.cases.ask.make({})),
-                Match.orElse(() => Msg.cases.inc.make({ text: Str.repeat(c.amount % 64)("é😀") })),
-              );
-
-              expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
-
-              if (move === "tell") {
-                told.set(name, required(told.get(name)) + 1);
-                counted.set(peer, required(counted.get(peer)) + 1);
-              } else if (move === "inc") {
-                counted.set(name, required(counted.get(name)) + 1);
-              }
-
-              yield* w.settle(
-                Effect.gen(function* () {
-                  const sender = yield* w.view(name);
-                  const receiver = yield* w.view(peer);
-
-                  // A hands Cmd is done here once its task request points the hands key at it.
-                  const requested =
-                    move !== "ask" ||
-                    (yield* w.entries(head)).some((entry) => entry.stream === targetStream(w.handsKey));
-
-                  return (
-                    requested &&
-                    sender.told === required(told.get(name)) &&
-                    sender.count === required(counted.get(name)) &&
-                    receiver.count === required(counted.get(peer))
-                  );
-                }),
-              );
-              const after = yield* w.accounts;
-              const fresh = cost(yield* w.entries(head));
-              // Each reader that stepped a message acked it, and the ack moves no account: the
-              // program's charge below is the other entries alone, and every other account is as
-              // it was. Plant: answer the runner's ack through a manager that speaks as the
-              // reader's process, so the ack is charged as the program's own write.
-              expect(new Set(yield* w.acks(head))).toEqual(new Set(stepped));
-              // The message, its step, a Send's receipt, the mailed message and its step, the answer
-              // message and its step, a hands task's request and its pointer for the hands key: all
-              // of it is the work of the program that took the input.
-              const paid = required(after.program[program]);
-              const owed = required(before.program[program]);
-              expect({ writes: paid.writes - owed.writes, bytes: paid.bytes - owed.bytes }).toEqual(fresh);
-              expect(paid.ahead).toEqual(none);
-              expect(after.program[other]).toEqual(before.program[other]);
-              // Ordinary work never spends reserved room, in either store.
-              expect(after.recovery).toEqual(before.recovery);
-
-              for (const registered of NAMES) {
-                const local = required(after.local[registered]);
-                const old = required(before.local[registered]);
-                expect(local.recovery).toEqual(old.recovery);
-                expect(local.fault).toBeNull();
-
-                if (stepped.includes(registered)) {
-                  expect(local.program.writes).toBeGreaterThan(old.program.writes);
-                } else {
-                  expect(local).toEqual(old);
-                }
-              }
-            }
-
-            if (c.reopen) {
-              const saved = yield* w.accounts;
-              yield* w.reopen;
-              expect(yield* w.accounts).toEqual(saved);
-            }
-          }
-        }),
-      ),
+    { tape: Narrow },
+    ({ tape }) => charged(tape),
     options,
   );
+
+  it.effect("pinned: Q12 charges a tape of 10 cells", () => charged(WIDE_TAPE));
 
   it.effect.prop(
     "Q12 at the exact cap the door gives the typed quota answer and saves nothing, while the other program stays writable",

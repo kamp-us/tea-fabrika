@@ -78,25 +78,32 @@ describe("saved view membership, next/", () => {
     { arbitrary: { seed: 119120, runs: 200 } },
   );
 
-  // Only the fixed fill is shared. Each run keeps the original generated walk,
-  // including colliding fresh ids, then drains that walked state through every size.
-  let bounded: typeof Model.Type | undefined;
+  // Only the fixed fill is shared. Each run keeps the original generated walk, including colliding fresh ids; the churn law checks every step
+  // and the drain law drains that walked state through every size.
+  const opened = Array.from({ length: 1026 }, (_, i) => ({ client: `client-${i}`, at: i, position: i }));
+  let filled: typeof Model.Type | undefined;
+
+  // 1,026 clients opened in turn: the state at the bound of 1,024, made once for both laws.
+  const atTheBound = () => {
+    if (filled === undefined) {
+      let [state] = watchers.init(null, {});
+
+      for (const watch of opened) {
+        [state] = applyCell(watchers, state, { ...Tag.cases.open.make({}), watch });
+      }
+
+      filled = state;
+    }
+
+    return filled;
+  };
 
   it.prop(
     "W3: churn at the bound refreshes order and evicts the oldest without tombstones",
     [Walk],
     ([walk]) => {
-      if (bounded === undefined) {
-        let [state] = watchers.init(null, {});
-        const opened = Array.from({ length: 1026 }, (_, i) => ({ client: `client-${i}`, at: i, position: i }));
-
-        for (const watch of opened) {
-          [state] = applyCell(watchers, state, { ...Tag.cases.open.make({}), watch });
-        }
-
-        expect(state).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
-        bounded = state;
-      }
+      const bounded = atTheBound();
+      expect(bounded).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
 
       let [state] = watchers.init(bounded, {});
       let expected = [...clients(bounded)];
@@ -118,13 +125,37 @@ describe("saved view membership, next/", () => {
         expect(new Set(Arr.map(clients(state), (c) => c.client)).size).toBe(clients(state).length);
         expect(clients(state).length).toBeLessThanOrEqual(1024);
       }
-
-      for (const c of [...clients(state)]) {
-        [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client: c.client });
-      }
-
-      expect(state).toEqual(Model.cases.empty.make({}));
     },
     { arbitrary: { seed: 119120, runs: 100 } },
   );
+
+  // The drain of W3, a law of its own. Each `end` of a full state checks the whole new state against its Schema, so the 1,024 ends of one run took
+  // 0.1 s, a third of the churn law's time in CI with the drain inside it. A drain does not depend on the walk, only on the names in the state,
+  // so it is four laws of 25 runs, one seed each: its 100 runs, 4 s locally for each part, and the churn keeps its 100.
+  for (const part of [0, 1, 2, 3]) {
+    it.prop(
+      `W3: a state walked at the bound drains through every size to empty, part ${part + 1}`,
+      [Walk],
+      ([walk]) => {
+        let [state] = watchers.init(atTheBound(), {});
+
+        for (const [pick, fresh] of walk) {
+          const open = clients(state);
+          const client = open.length > 0 && pick % 3 !== 0 ? nth(open, pick).client : fresh.client;
+
+          [state] =
+            pick % 3 === 2
+              ? applyCell(watchers, state, { ...Tag.cases.end.make({}), client })
+              : applyCell(watchers, state, { ...Tag.cases.open.make({}), watch: { ...fresh, client } });
+        }
+
+        for (const c of [...clients(state)]) {
+          [state] = applyCell(watchers, state, { ...Tag.cases.end.make({}), client: c.client });
+        }
+
+        expect(state).toEqual(Model.cases.empty.make({}));
+      },
+      { arbitrary: { seed: 119120 + part, runs: 25 } },
+    );
+  }
 });

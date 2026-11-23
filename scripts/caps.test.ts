@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob, resolve, relative, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { testConfig } from "../vitest.config.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -51,19 +51,78 @@ console.log(JSON.stringify({workers: value.test.maxWorkers, home: process.env.FA
   forceRerunTriggers: value.test.forceRerunTriggers, include: value.test.include}));
 `;
 
+// The probe loads the whole config in a fresh node process, so each one pays for the import: one compile
+// cache for the file keeps the second probe on from compiling it again.
+const compileCache = mkdtempSync(join(tmpdir(), "caps-compile-"));
+
+afterAll(() => {
+  rmSync(compileCache, { recursive: true, force: true });
+});
+
+const probeEnv = (args: string[], env: Record<string, string | undefined>) => ({
+  ...process.env,
+  CI: undefined,
+  TYPESAFE_API_KEY: undefined,
+  NODE_COMPILE_CACHE: process.env.NODE_V8_COVERAGE ? undefined : compileCache,
+  TEST_ARGS: JSON.stringify(args),
+  ...env,
+});
+
 const probe = (cwd: string, args: string[], env: Record<string, string | undefined> = {}) =>
   spawnSync(process.execPath, ["--input-type=module", "-e", load], {
     cwd,
     encoding: "utf8",
     timeout: 5_000,
-    env: {
-      ...process.env,
-      CI: undefined,
-      TYPESAFE_API_KEY: undefined,
-      TEST_ARGS: JSON.stringify(args),
-      ...env,
-    },
+    env: probeEnv(args, env),
   });
+
+interface Probed {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+const probeAsync = (cwd: string, args: string[], env: Record<string, string | undefined>) =>
+  new Promise<Probed>((done) => {
+    const child = spawn(process.execPath, ["--input-type=module", "-e", load], {
+      cwd,
+      timeout: 5_000,
+      env: probeEnv(args, env),
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => (stdout += chunk));
+    child.stderr.on("data", (chunk) => (stderr += chunk));
+    child.on("close", (status) => done({ status, stdout, stderr }));
+  });
+
+/** The most probes alive at once: the same cap `FABRIKA_MAX_WORKERS` puts on test workers. */
+const PARALLEL = 3;
+
+/**
+ * The probes of one law run side by side, `PARALLEL` at a time, and answer in the order they were asked.
+ * Each probe is the same process `probe` starts, so a law that waits for many reads the same answers
+ * in the time of a few.
+ */
+const probeAll = async (
+  cwd: string,
+  asked: readonly { readonly args: string[]; readonly env?: Record<string, string | undefined> }[],
+) => {
+  const answers: Probed[] = [];
+  let next = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(PARALLEL, asked.length) }, async () => {
+      while (next < asked.length) {
+        const index = next++;
+        const one = asked[index]!;
+        answers[index] = await probeAsync(cwd, one.args, one.env ?? {});
+      }
+    }),
+  );
+
+  return answers;
+};
 
 const freshHomes = (stdout: string, temp: string, inherited: string[]) => {
   const got = JSON.parse(stdout);
@@ -352,41 +411,51 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   });
 
   // R4 finding 5. CLI spellings have no domain Schema. Plant: compare a percentage as a number.
-  it("R4 enforces the cap on every maxWorkers spelling", () => {
-    fc.assert(
-      fc.property(
+  it("R4 enforces the cap on every maxWorkers spelling", async () => {
+    await fc.assert(
+      fc.asyncProperty(
         fc.record({ cap: fc.integer({ min: 1, max: 3 }), percent: fc.integer({ min: 1, max: 250 }) }),
-        ({ cap, percent }) => {
+        async ({ cap, percent }) => {
           const counts = spawnSync(process.execPath, ["-p", "require('node:os').availableParallelism()"], {
             encoding: "utf8",
           });
           const cpus = Number(counts.stdout);
           const resolved = Math.max(1, Math.min(cpus, Math.round((percent / 100) * cpus)));
 
-          for (const [value, count] of [
-            [`${percent}%`, resolved],
-            [` ${percent}.5% `, resolved],
-            ["100%", cpus],
-            ["1%", Math.max(1, Math.round(cpus / 100))],
-            [String(cap + 1), cap + 1],
-            ["1", 1],
-          ] as const) {
-            for (const args of [
+          const asked = (
+            [
+              [`${percent}%`, resolved],
+              [` ${percent}.5% `, resolved],
+              ["100%", cpus],
+              ["1%", Math.max(1, Math.round(cpus / 100))],
+              [String(cap + 1), cap + 1],
+              ["1", 1],
+            ] as const
+          ).flatMap(([value, count]) =>
+            [
               [`--maxWorkers=${value}`],
               ["--maxWorkers", value],
               [`--max-workers=${value}`],
               ["--max-workers", value],
-            ]) {
-              const ran = probe(root, ["run", ...args, "scripts/caps.test.ts"], {
-                FABRIKA_MAX_WORKERS: String(cap),
-              });
-              expect(ran.status, `${args.join(" ")} resolved to ${count} with cap ${cap}: ${ran.stderr}`).toBe(
-                count > cap ? 1 : 0,
-              );
+            ].map((args) => ({ args, count })),
+          );
 
-              if (count <= cap) {
-                expect(JSON.parse(ran.stdout).workers).toBe(count);
-              }
+          const answers = await probeAll(
+            root,
+            asked.map(({ args }) => ({
+              args: ["run", ...args, "scripts/caps.test.ts"],
+              env: { FABRIKA_MAX_WORKERS: String(cap) },
+            })),
+          );
+
+          for (const [index, { args, count }] of asked.entries()) {
+            const ran = answers[index]!;
+            expect(ran.status, `${args.join(" ")} resolved to ${count} with cap ${cap}: ${ran.stderr}`).toBe(
+              count > cap ? 1 : 0,
+            );
+
+            if (count <= cap) {
+              expect(JSON.parse(ran.stdout).workers).toBe(count);
             }
           }
         },
@@ -547,14 +616,14 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 
   // Plant: allow a force trigger to turn local --changed into a full run. This loads the real
   // config only. It never starts a broad Vitest process, even if the guard is broken.
-  it("refuses local broad runs after force triggers, names its reason and a narrow command, and leaves CI alone", () => {
-    fc.assert(
-      fc.property(
+  it("refuses local broad runs after force triggers, names its reason and a narrow command, and leaves CI alone", async () => {
+    await fc.assert(
+      fc.asyncProperty(
         fc.record({
           trigger: fc.constantFrom("pnpm-lock.yaml", "oxlint-plugins/index.ts", "fixtures/toy/input.txt"),
           form: fc.constantFrom("--changed=origin/main", "--changed", "--changed", "--changed=origin/main"),
         }),
-        ({ trigger, form }) => {
+        async ({ trigger, form }) => {
           const dir = mkdtempSync(join(tmpdir(), "caps-"));
 
           try {
@@ -575,32 +644,42 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             writeFileSync(join(dir, trigger), "changed");
             git("add", trigger);
 
-            for (const args of [["run"], ["run", form], ["run", "--changed", "origin/main"]]) {
-              const ran = probe(dir, args);
+            // The probes of one staged state run side by side: each loads the whole config in a process of its own.
+            const forms = [["run"], ["run", form], ["run", "--changed", "origin/main"]];
+
+            const answers = await probeAll(dir, [
+              ...forms.flatMap((args) => [{ args }, { args, env: { CI: "1" } }]),
+              { args: ["run", "scripts/caps.test.ts"] },
+            ]);
+
+            for (const [index, args] of forms.entries()) {
+              const ran = answers[index * 2]!;
               expect(ran.status).not.toBe(0);
               expect(ran.stderr).toContain("pnpm exec vitest run --maxWorkers=1 <test file>");
               expect(ran.stderr).toContain(
                 args.length === 1 ? "no test file was given" : `would select every test, because ${trigger}`,
               );
-              expect(probe(dir, args, { CI: "1" }).status).toBe(0);
+              expect(answers[index * 2 + 1]!.status).toBe(0);
             }
 
-            expect(probe(dir, ["run", "scripts/caps.test.ts"]).status).toBe(0);
+            expect(answers[forms.length * 2]!.status).toBe(0);
             git("restore", "--staged", "--", trigger);
             rmSync(join(dir, trigger));
 
-            // T375: source and skill changes alone must not force a broad run.
-            for (const path of ["plain.ts", ".agents/skills/lead/SKILL.md", ".claude/skills/lead/SKILL.md"]) {
+            // T375: source and skill changes alone must not force a broad run. Each path is staged, and
+            // any one of them forcing a broad run would fail the two probes that see all three.
+            const paths = ["plain.ts", ".agents/skills/lead/SKILL.md", ".claude/skills/lead/SKILL.md"];
+
+            for (const path of paths) {
               mkdirSync(dirname(join(dir, path)), { recursive: true });
               writeFileSync(join(dir, path), "changed");
               git("add", path);
+            }
 
-              for (const args of [
-                ["run", form],
-                ["run", "--changed", "origin/main"],
-              ]) {
-                expect(probe(dir, args).status, path).toBe(0);
-              }
+            const quiet = await probeAll(dir, [{ args: ["run", form] }, { args: ["run", "--changed", "origin/main"] }]);
+
+            for (const ran of quiet) {
+              expect(ran.status, `${paths.join(", ")}: ${ran.stderr}`).toBe(0);
             }
           } finally {
             rmSync(dir, { recursive: true, force: true });

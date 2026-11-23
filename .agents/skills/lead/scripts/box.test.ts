@@ -189,6 +189,50 @@ if (cmd === "codex") {
 }
 `;
 
+const ROLES = ["tests", "build", "lead", "person", "stranger"];
+
+interface RoleKey {
+  readonly secret: string;
+  readonly published: string;
+  readonly pub: string;
+}
+
+const roleKeys = new Map<string, RoleKey>();
+
+/**
+ * A role's key, made once for the file. A fixture made its own five keys with ten `ssh-keygen` runs, about a third of its time, and a law builds a fixture
+ * for each of its places: K2's 36 fixtures took 37 s of CI's 60 s limit. A fixture copies the key in, and its allowed signers hold the key's public half.
+ */
+const roleKey = (role: string): RoleKey => {
+  const known = roleKeys.get(role);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const folder = mkdtempSync(join(tmpdir(), "bx321-key-"));
+  const file = join(folder, role);
+
+  const made = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "fixture", "-f", file], {
+    encoding: "utf8",
+  });
+
+  expect(made.status, made.stderr).toBe(0);
+  const shown = spawnSync("ssh-keygen", ["-y", "-f", file], { encoding: "utf8" });
+  expect(shown.status, shown.stderr).toBe(0);
+
+  const key = {
+    secret: readFileSync(file, "utf8"),
+    published: readFileSync(`${file}.pub`, "utf8"),
+    pub: shown.stdout.trim().split(" ").slice(0, 2).join(" "),
+  };
+
+  rmSync(folder, { recursive: true, force: true });
+  roleKeys.set(role, key);
+
+  return key;
+};
+
 class Box {
   readonly dir = mkdtempSync(join(tmpdir(), "bx321-"));
   readonly main = join(this.dir, "main");
@@ -245,11 +289,13 @@ class Box {
     this.git(this.main, "init", "-q", "-b", "main", `--separate-git-dir=${join(this.dir, "main-gitdata")}`);
     const lines: string[] = [];
 
-    for (const role of ["tests", "build", "lead", "person", "stranger"]) {
+    for (const role of ROLES) {
       const key = join(this.home, ".fabrika/step-keys", role);
       mkdirSync(dirname(key), { recursive: true });
-      this.must("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "fixture", "-f", key]);
-      const pub = this.must("ssh-keygen", ["-y", "-f", key]).trim().split(" ").slice(0, 2).join(" ");
+      const made = roleKey(role);
+      writeFileSync(key, made.secret, { mode: 0o600 });
+      writeFileSync(`${key}.pub`, made.published);
+      const pub = made.pub;
 
       if (role !== "stranger") {
         lines.push(
@@ -560,69 +606,73 @@ describe("T321 K1 fetch, today's tooling", () => {
     );
   });
 
+  // Each of these laws runs a fixture and real script runs 3 times, 8 to 12 s of CI's 60 s limit a run, so one law took 24 to 34 s. The 3 runs are 3 laws of one
+  // run each (the seed moves by one for each, as the runs of one seed do), and each is a third of the work.
   // Plants: sign a native person signature or an existing valid link; reuse MAIN's index.
-  it("K1 preserves verified person signatures, existing links and a dirty MAIN checkout", () => {
-    fc.assert(
-      fc.property(word, (text) =>
-        fixture((b) => {
-          const linked = b.commit(b.work, "src/a.ts", "linked\n");
-          b.sign(b.work, "tests");
-          const note = b.git(b.work, "notes", "--ref=fabrika", "show", linked);
-          write(join(b.work, "src/a.ts"), "person\n");
-          b.git(b.work, "add", "--", "src/a.ts");
-          b.git(
-            b.work,
-            "-c",
-            "gpg.format=ssh",
-            "-c",
-            `user.signingkey=${join(b.home, ".fabrika/step-keys/person")}`,
-            "commit",
-            "-q",
-            "--gpg-sign",
-            "-m",
-            "person signed",
-          );
-          const person = b.head(b.work);
-          const control = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", person], b.work);
-          expect(control.code, control.text).toBe(0);
-          expect(control.text).toContain("exam_read");
-          b.setup({ operations: [{ path: "src/a.ts", text: `${text}\n` }] });
-          expect(b.run().code).toBe(0);
-          write(join(b.main, "src/b.ts"), "staged main edit\n");
-          b.git(b.main, "add", "--", "src/b.ts");
-          write(join(b.main, "src/old.ts"), "unstaged main edit\n");
+  for (const part of [0, 1, 2]) {
+    it(`K1 preserves verified person signatures, existing links and a dirty MAIN checkout, run ${part + 1}`, () => {
+      fc.assert(
+        fc.property(word, (text) =>
+          fixture((b) => {
+            const linked = b.commit(b.work, "src/a.ts", "linked\n");
+            b.sign(b.work, "tests");
+            const note = b.git(b.work, "notes", "--ref=fabrika", "show", linked);
+            write(join(b.work, "src/a.ts"), "person\n");
+            b.git(b.work, "add", "--", "src/a.ts");
+            b.git(
+              b.work,
+              "-c",
+              "gpg.format=ssh",
+              "-c",
+              `user.signingkey=${join(b.home, ".fabrika/step-keys/person")}`,
+              "commit",
+              "-q",
+              "--gpg-sign",
+              "-m",
+              "person signed",
+            );
+            const person = b.head(b.work);
+            const control = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", person], b.work);
+            expect(control.code, control.text).toBe(0);
+            expect(control.text).toContain("exam_read");
+            b.setup({ operations: [{ path: "src/a.ts", text: `${text}\n` }] });
+            expect(b.run().code).toBe(0);
+            write(join(b.main, "src/b.ts"), "staged main edit\n");
+            b.git(b.main, "add", "--", "src/b.ts");
+            write(join(b.main, "src/old.ts"), "unstaged main edit\n");
 
-          const snapshot = {
-            head: b.head(),
-            index: b.git(b.main, "write-tree"),
-            diff: b.git(b.main, "diff"),
-            status: b.git(b.main, "status", "--porcelain"),
-          };
+            const snapshot = {
+              head: b.head(),
+              index: b.git(b.main, "write-tree"),
+              diff: b.git(b.main, "diff"),
+              status: b.git(b.main, "status", "--porcelain"),
+            };
 
-          const got = b.fetch();
-          expect(got.code, got.text).toBe(0);
-          expect(b.git(b.main, "notes", "--ref=fabrika", "show", linked)).toBe(note);
-          expect(b.call("/usr/bin/git", ["notes", "--ref=fabrika", "show", person]).code).not.toBe(0);
-          expect(b.notes().trim().split("\n")).toHaveLength(2);
-          expect(
-            b
-              .calls()
-              .filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")
-              .map((c) => c.head),
-          ).toEqual([b.head(b.work)]);
-          expect({
-            head: b.head(),
-            index: b.git(b.main, "write-tree"),
-            diff: b.git(b.main, "diff"),
-            status: b.git(b.main, "status", "--porcelain"),
-          }).toEqual(snapshot);
-          const check = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", b.head(b.work)]);
-          expect(check.code, check.text).toBe(0);
-        }),
-      ),
-      options,
-    );
-  });
+            const got = b.fetch();
+            expect(got.code, got.text).toBe(0);
+            expect(b.git(b.main, "notes", "--ref=fabrika", "show", linked)).toBe(note);
+            expect(b.call("/usr/bin/git", ["notes", "--ref=fabrika", "show", person]).code).not.toBe(0);
+            expect(b.notes().trim().split("\n")).toHaveLength(2);
+            expect(
+              b
+                .calls()
+                .filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")
+                .map((c) => c.head),
+            ).toEqual([b.head(b.work)]);
+            expect({
+              head: b.head(),
+              index: b.git(b.main, "write-tree"),
+              diff: b.git(b.main, "diff"),
+              status: b.git(b.main, "status", "--porcelain"),
+            }).toEqual(snapshot);
+            const check = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", b.head(b.work)]);
+            expect(check.code, check.text).toBe(0);
+          }),
+        ),
+        { ...options, numRuns: 1, seed: options.seed + part },
+      );
+    });
+  }
 
   // Plant: release the shared notes lock before the signer exits, losing one branch's note.
   it("K1 overlapping fetches preserve both branches' independently verified links", async () => {
@@ -749,61 +799,63 @@ describe("T321 K1 fetch, today's tooling", () => {
   });
 
   // Plant: check only rename destinations, or sign mixed and unknown owners before refusal.
-  it("K1 checks unknown, mixed, deleted and both renamed paths before any signing", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(["unknown", "mixed", "rename", "delete", "exam"], (fault) =>
-          fixture(
-            (b) => {
-              if (fault === "exam") {
-                b.commit(b.work, "src/a.ts", "tests prerequisite\n");
-                b.sign(b.work, "tests");
-                b.git(
-                  b.main,
-                  "fetch",
-                  "-q",
-                  b.work,
-                  `${b.branch}:${b.branch}`,
-                  "refs/notes/fabrika:refs/notes/fabrika",
-                );
-              }
+  for (const part of [0, 1, 2]) {
+    it(`K1 checks unknown, mixed, deleted and both renamed paths before any signing, run ${part + 1}`, () => {
+      fc.assert(
+        fc.property(word, (text) => {
+          each(["unknown", "mixed", "rename", "delete", "exam"], (fault) =>
+            fixture(
+              (b) => {
+                if (fault === "exam") {
+                  b.commit(b.work, "src/a.ts", "tests prerequisite\n");
+                  b.sign(b.work, "tests");
+                  b.git(
+                    b.main,
+                    "fetch",
+                    "-q",
+                    b.work,
+                    `${b.branch}:${b.branch}`,
+                    "refs/notes/fabrika:refs/notes/fabrika",
+                  );
+                }
 
-              const notes = b.notes();
-              const operations: Operation[] = [{ path: "src/a.ts", text: `${text}\n` }];
-              operations.push(
-                fault === "rename"
-                  ? { path: "src/old.ts", to: "src/new.ts" }
-                  : fault === "delete"
-                    ? { path: "src/old.ts" }
-                    : {
-                        path:
-                          fault === "exam"
-                            ? ".agents/skills/lead/scripts/fixture.test.ts"
-                            : fault === "mixed"
-                              ? "src/b.ts"
-                              : "src/unknown.ts",
-                        text: "changed\n",
-                      },
-              );
-              b.setup({ batches: [operations] });
-              expect(b.run(fault === "exam" ? "build" : "tests").code).toBe(0);
-              refused(b.fetch(fault === "exam" ? "build" : "tests"), /owner|exam|path|tests|order/);
-              expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
-              expect(b.notes()).toBe(notes);
-            },
-            [
-              ["src/a.ts", fault === "exam" ? "build" : "tests"],
-              ["src/b.ts", "build"],
-              ["src/old.ts", "build"],
-              ["src/new.ts", "tests"],
-              [".agents/skills/lead/scripts/fixture.test.ts", "build"],
-            ],
-          ),
-        );
-      }),
-      options,
-    );
-  }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+                const notes = b.notes();
+                const operations: Operation[] = [{ path: "src/a.ts", text: `${text}\n` }];
+                operations.push(
+                  fault === "rename"
+                    ? { path: "src/old.ts", to: "src/new.ts" }
+                    : fault === "delete"
+                      ? { path: "src/old.ts" }
+                      : {
+                          path:
+                            fault === "exam"
+                              ? ".agents/skills/lead/scripts/fixture.test.ts"
+                              : fault === "mixed"
+                                ? "src/b.ts"
+                                : "src/unknown.ts",
+                          text: "changed\n",
+                        },
+                );
+                b.setup({ batches: [operations] });
+                expect(b.run(fault === "exam" ? "build" : "tests").code).toBe(0);
+                refused(b.fetch(fault === "exam" ? "build" : "tests"), /owner|exam|path|tests|order/);
+                expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
+                expect(b.notes()).toBe(notes);
+              },
+              [
+                ["src/a.ts", fault === "exam" ? "build" : "tests"],
+                ["src/b.ts", "build"],
+                ["src/old.ts", "build"],
+                ["src/new.ts", "tests"],
+                [".agents/skills/lead/scripts/fixture.test.ts", "build"],
+              ],
+            ),
+          );
+        }),
+        { ...options, numRuns: 1, seed: options.seed + part },
+      );
+    }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+  }
 
   // scenario: the exam is the test writer's (nobody-writes-their-own-exam.md), so fetch signs a
   // tests commit that holds an exam path the plan gives to no step, as stepcommit commits it, and
@@ -843,111 +895,115 @@ describe("T321 K1 fetch, today's tooling", () => {
   }, 180_000);
 
   // Plant: overwrite existing notes, including stale or invalid ones; concatenate a conflict.
-  it("K1 preserves stale, malformed, invalid and conflicting notes and reports their checks", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(["stale", "malformed", "invalid", "conflict"], (kind) =>
-          fixture((b) => {
-            b.setup({ operations: [{ path: "src/a.ts", text: `${text}\n` }] });
-            expect(b.run().code).toBe(0);
-            const sha = b.head(b.work);
+  for (const part of [0, 1, 2]) {
+    it(`K1 preserves stale, malformed, invalid and conflicting notes and reports their checks, run ${part + 1}`, () => {
+      fc.assert(
+        fc.property(word, (text) => {
+          each(["stale", "malformed", "invalid", "conflict"], (kind) =>
+            fixture((b) => {
+              b.setup({ operations: [{ path: "src/a.ts", text: `${text}\n` }] });
+              expect(b.run().code).toBe(0);
+              const sha = b.head(b.work);
 
-            if (kind === "malformed") {
-              b.git(b.work, "notes", "--ref=fabrika", "add", "-m", "not JSON", sha);
-            } else {
-              b.sign(b.work, "tests");
+              if (kind === "malformed") {
+                b.git(b.work, "notes", "--ref=fabrika", "add", "-m", "not JSON", sha);
+              } else {
+                b.sign(b.work, "tests");
 
-              if (kind === "invalid") {
-                const note = JSON.parse(b.git(b.work, "notes", "--ref=fabrika", "show", sha));
-                b.git(
-                  b.work,
-                  "notes",
-                  "--ref=fabrika",
-                  "add",
-                  "-f",
-                  "-m",
-                  JSON.stringify({ ...note, sig: "bad signature" }),
-                  sha,
-                );
+                if (kind === "invalid") {
+                  const note = JSON.parse(b.git(b.work, "notes", "--ref=fabrika", "show", sha));
+                  b.git(
+                    b.work,
+                    "notes",
+                    "--ref=fabrika",
+                    "add",
+                    "-f",
+                    "-m",
+                    JSON.stringify({ ...note, sig: "bad signature" }),
+                    sha,
+                  );
+                }
+
+                if (kind === "stale") {
+                  b.git(b.main, "fetch", "-q", b.work, "refs/notes/fabrika:refs/notes/fabrika");
+                  b.git(b.main, "checkout", "-q", "-b", "other");
+                  b.commit(b.main, "src/a.ts", "newer\n");
+                  b.sign(b.main, "tests");
+                  b.git(b.main, "checkout", "-q", "main");
+                  // Make the box's v1 stale with a real v2 link on the other branch.
+                  b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/newer");
+                  b.git(b.work, "notes", "--ref=fabrika", "merge", "newer");
+                }
               }
 
-              if (kind === "stale") {
-                b.git(b.main, "fetch", "-q", b.work, "refs/notes/fabrika:refs/notes/fabrika");
-                b.git(b.main, "checkout", "-q", "-b", "other");
-                b.commit(b.main, "src/a.ts", "newer\n");
-                b.sign(b.main, "tests");
-                b.git(b.main, "checkout", "-q", "main");
-                // Make the box's v1 stale with a real v2 link on the other branch.
-                b.git(b.work, "fetch", "-q", b.main, "refs/notes/fabrika:refs/notes/newer");
-                b.git(b.work, "notes", "--ref=fabrika", "merge", "newer");
+              const original = b.git(b.work, "notes", "--ref=fabrika", "show", sha);
+
+              if (kind === "conflict") {
+                b.git(b.main, "fetch", "-q", b.work, `${b.branch}:refs/heads/incoming`);
+                b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "different note", sha);
               }
-            }
 
-            const original = b.git(b.work, "notes", "--ref=fabrika", "show", sha);
-
-            if (kind === "conflict") {
-              b.git(b.main, "fetch", "-q", b.work, `${b.branch}:refs/heads/incoming`);
-              b.git(b.main, "notes", "--ref=fabrika", "add", "-m", "different note", sha);
-            }
-
-            const mainNote = kind === "conflict" ? b.git(b.main, "notes", "--ref=fabrika", "show", sha) : original;
-            refused(
-              b.fetch(),
-              kind === "stale"
-                ? /stale_link/
-                : kind === "conflict"
-                  ? /conflict|note/
-                  : /unsigned_commit|invalid|malformed/,
-            );
-            expect(b.git(b.main, "notes", "--ref=fabrika", "show", sha)).toBe(mainNote);
-            expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
-          }),
-        );
-      }),
-      options,
-    );
-  }, 180_000); // measured 61 to 68 s under load in review and here; same cases and sizes
+              const mainNote = kind === "conflict" ? b.git(b.main, "notes", "--ref=fabrika", "show", sha) : original;
+              refused(
+                b.fetch(),
+                kind === "stale"
+                  ? /stale_link/
+                  : kind === "conflict"
+                    ? /conflict|note/
+                    : /unsigned_commit|invalid|malformed/,
+              );
+              expect(b.git(b.main, "notes", "--ref=fabrika", "show", sha)).toBe(mainNote);
+              expect(b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign")).toEqual([]);
+            }),
+          );
+        }),
+        { ...options, numRuns: 1, seed: options.seed + part },
+      );
+    }, 180_000); // measured 61 to 68 s under load in review and here; same cases and sizes
+  }
 
   // Plant: treat exit 2, truncated JSON or a failed check as success; hide owner asks.
-  it("K1 prints every check answer and fails closed on status or unreadable output", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(
-          [
+  for (const part of [0, 1, 2]) {
+    it(`K1 prints every check answer and fails closed on status or unreadable output, run ${part + 1}`, () => {
+      fc.assert(
+        fc.property(word, (text) => {
+          each(
             [
-              1,
-              '{"_tag":"stuck","reason":"unsigned_commit","sha":"one"}\n{"_tag":"stuck","reason":"stale_link","sha":"two"}\n',
-              false,
-            ],
-            [2, "", false],
-            [2, '{"_tag":"done"}\n', false],
-            [0, "not json\n", false],
-            [0, '{"_tag":"ask","to":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
-          ] as const,
-          ([status, output, pass]) =>
-            fixture((b) => {
-              b.setup({
-                operations: [{ path: "src/a.ts", text: `${text}\n` }],
-                check: { status, text: output },
-              });
-              expect(b.run().code).toBe(0);
-              const got = b.fetch();
-              expect(got.code, got.text).toBe(pass ? 0 : 1);
+              [
+                1,
+                '{"_tag":"stuck","reason":"unsigned_commit","sha":"one"}\n{"_tag":"stuck","reason":"stale_link","sha":"two"}\n',
+                false,
+              ],
+              [2, "", false],
+              [2, '{"_tag":"done"}\n', false],
+              [0, "not json\n", false],
+              [0, '{"_tag":"ask","to":"owner","for":"exam_read","paths":["src/a.test.ts"]}\n', true],
+            ] as const,
+            ([status, output, pass]) =>
+              fixture((b) => {
+                b.setup({
+                  operations: [{ path: "src/a.ts", text: `${text}\n` }],
+                  check: { status, text: output },
+                });
+                expect(b.run().code).toBe(0);
+                const got = b.fetch();
+                expect(got.code, got.text).toBe(pass ? 0 : 1);
 
-              if (status === 1) {
-                expect(got.text).toContain("unsigned_commit");
-                expect(got.text).toContain("stale_link");
-              }
+                if (status === 1) {
+                  expect(got.text).toContain("unsigned_commit");
+                  expect(got.text).toContain("stale_link");
+                }
 
-              if (pass) {
-                expect(got.text).toContain("exam_read");
-              }
-            }),
-        );
-      }),
-      options,
-    );
-  }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+                if (pass) {
+                  expect(got.text).toContain("exam_read");
+                }
+              }),
+          );
+        }),
+        { ...options, numRuns: 1, seed: options.seed + part },
+      );
+    }, 180_000); // about 55 s alone and over 60 s under load here; same cases and sizes
+  }
 });
 
 describe("T321 K2 box start, today's tooling", () => {
@@ -955,100 +1011,105 @@ describe("T321 K2 box start, today's tooling", () => {
   // ticket. Main and this box's branch are allowed; another branch blocks only while it is live,
   // and an older branch whose links the base already holds never does. Plant: walk from main.
   // Plant: block on an open branch whose only change is field/*.jsonl rows, or row files (each field row is its own file).
-  it("K2 refuses a shared ticket only when another live branch carries its links", () => {
-    const places = [
-      "main",
-      "this",
-      "open-pr",
-      "running-box",
-      "running-old-box",
-      "history",
-      "merged",
-      "gh-down",
-      "different-ticket",
-      "inside",
-      "field-rows",
-      "field-files",
-    ] as const;
+  // Twelve places, each a fixture, over 3 runs: 36 fixtures, 37 s of CI's 60 s limit as one law, and 30 s as two laws of six places. It is a law for each place,
+  // each with the same 3 runs: 3 fixtures, a twelfth of the work.
+  for (const from of Array.from({ length: 12 }, (_, at) => at)) {
+    it(`K2 refuses a shared ticket only when another live branch carries its links, place ${from + 1} of 12`, () => {
+      const everywhere = [
+        "main",
+        "this",
+        "open-pr",
+        "running-box",
+        "running-old-box",
+        "history",
+        "merged",
+        "gh-down",
+        "different-ticket",
+        "inside",
+        "field-rows",
+        "field-files",
+      ] as const;
 
-    const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
-    fc.assert(
-      fc.property(word, (text) => {
-        each(places, (place) =>
-          fixture((b) => {
-            b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
-            const other = !["main", "this", "inside"].includes(place);
+      const places = everywhere.slice(from, from + 1);
+      const blocks = new Set(["open-pr", "running-box", "running-old-box", "gh-down"]);
+      fc.assert(
+        fc.property(word, (text) => {
+          each(places, (place) =>
+            fixture((b) => {
+              b.git(b.main, "checkout", "-q", place === "main" ? "main" : b.branch);
+              const other = !["main", "this", "inside"].includes(place);
 
-            if (other) {
-              b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
-            }
+              if (other) {
+                b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/other");
+              }
 
-            // Lead-only field rows on an open PR are not a quest (PR 601, 2026-11-09).
-            const path =
-              place === "field-rows"
-                ? "field/runs.jsonl"
-                : place === "field-files"
-                  ? "field/runs/2026-11-11-t321-tests1.json"
-                  : "src/a.ts";
+              // Lead-only field rows on an open PR are not a quest (PR 601, 2026-11-09).
+              const path =
+                place === "field-rows"
+                  ? "field/runs.jsonl"
+                  : place === "field-files"
+                    ? "field/runs/2026-11-11-t321-tests1.json"
+                    : "src/a.ts";
 
-            const rows = place === "field-rows" || place === "field-files";
-            const sha = b.commit(b.main, path, `${text}\n`);
-            b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
+              const rows = place === "field-rows" || place === "field-files";
+              const sha = b.commit(b.main, path, `${text}\n`);
+              b.sign(b.main, rows ? "lead" : "tests", place === "different-ticket" ? "322" : "321");
 
-            if (place === "main" || place === "merged") {
-              b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
-            }
+              if (place === "main" || place === "merged") {
+                b.git(b.main, "update-ref", "refs/remotes/origin/main", sha);
+              }
 
-            // An older branch of this quest that the base already holds is history (#590).
-            if (place === "inside") {
-              b.git(b.main, "branch", "fabrikalfa/old", sha);
-            }
+              // An older branch of this quest that the base already holds is history (#590).
+              if (place === "inside") {
+                b.git(b.main, "branch", "fabrikalfa/old", sha);
+              }
 
-            b.setup({
-              openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
-                ? ["fabrikalfa/other"]
-                : ["fabrikalfa/unrelated"],
-              ...(place === "gh-down" ? { gh: "down" as const } : {}),
-            });
-
-            if (place === "running-box" || place === "running-old-box") {
-              write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
-              // A tree in BOXES/box, or one made before that layout, in BOXES.
-              mkdirSync(place === "running-box" ? boxTree(b.boxes, "two") : oldBoxTree(b.boxes, "two"), {
-                recursive: true,
+              b.setup({
+                openPrs: ["open-pr", "field-rows", "field-files"].includes(place)
+                  ? ["fabrikalfa/other"]
+                  : ["fabrikalfa/unrelated"],
+                ...(place === "gh-down" ? { gh: "down" as const } : {}),
               });
-            }
 
-            if (place === "history") {
-              // A box state left behind with no box on disk is not a running quest.
-              write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
-            }
+              if (place === "running-box" || place === "running-old-box") {
+                write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+                // A tree in BOXES/box, or one made before that layout, in BOXES.
+                mkdirSync(place === "running-box" ? boxTree(b.boxes, "two") : oldBoxTree(b.boxes, "two"), {
+                  recursive: true,
+                });
+              }
 
-            b.git(b.main, "checkout", "-q", "main");
+              if (place === "history") {
+                // A box state left behind with no box on disk is not a running quest.
+                write(join(b.boxes, "state/two.box"), "ticket: 321\nbranch: fabrikalfa/other\n");
+              }
 
-            const got =
-              place === "inside"
-                ? b.new(sha, b.branch)
-                : b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
+              b.git(b.main, "checkout", "-q", "main");
 
-            expect(got.code).not.toBeNull();
+              const got =
+                place === "inside"
+                  ? b.new(sha, b.branch)
+                  : b.new("origin/main", place === "this" ? b.branch : "fabrikalfa/new");
 
-            // A live branch is the check saying no; open PRs gh cannot read is a check that
-            // could not run, which stays stuck (ticket 428).
-            if (place === "gh-down") {
-              refused(got, /^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m);
-              expect(got.code, got.text).toBe(1);
-            } else if (blocks.has(place)) {
-              checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
-            } else {
-              expect(got.code, got.text).toBe(0);
-            }
-          }),
-        );
-      }),
-      options,
-    );
-  }, 180_000); // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
+              expect(got.code).not.toBeNull();
+
+              // A live branch is the check saying no; open PRs gh cannot read is a check that
+              // could not run, which stays stuck (ticket 428).
+              if (place === "gh-down") {
+                refused(got, /^stuck shared_ticket 321 on fabrikalfa\/other: open PRs cannot be read/m);
+                expect(got.code, got.text).toBe(1);
+              } else if (blocks.has(place)) {
+                checkRefused(got, "shared_ticket", /321 on fabrikalfa\/other/);
+              } else {
+                expect(got.code, got.text).toBe(0);
+              }
+            }),
+          );
+        }),
+        options,
+      );
+    }, 180_000);
+  } // about 51 s alone on CI, over 60 s on a busy shard (#598); same cases
 
   // Plant: walk each branch by its name again after listing it (box.sh before ticket 567). A branch
   // deleted during the scan then fails the start as "stuck base commit walk failed" with no reason,
@@ -1610,124 +1671,126 @@ describe("T321 K3 step order and rows, today's tooling", () => {
   // only the box's own rows, not the quest's where drive writes them (review boxes, 2026-11-09); read
   // from the box's base when the quest's root is saved (layers build, 2026-11-09: each step's box
   // starts at the last step's head, so its tests link sat before that box's base).
-  it("K3 gates build on a verified tests link since base and review on mutation or a recorded skip", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(
-          [
-            "absent",
-            "before-base",
-            "since-root",
-            "bad-note",
-            "tests",
-            "review-absent",
-            "mutation",
-            "skip",
-            "quest-row",
-            "quest-row-skip",
-            "quest-row-stuck",
-            "quest-row-lane-key",
-          ],
-          (kind) =>
-            fixture((b) => {
-              if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
-                const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
+  for (const part of [0, 1, 2]) {
+    it(`K3 gates build on a verified tests link since base and review on mutation or a recorded skip, run ${part + 1}`, () => {
+      fc.assert(
+        fc.property(word, (text) => {
+          each(
+            [
+              "absent",
+              "before-base",
+              "since-root",
+              "bad-note",
+              "tests",
+              "review-absent",
+              "mutation",
+              "skip",
+              "quest-row",
+              "quest-row-skip",
+              "quest-row-stuck",
+              "quest-row-lane-key",
+            ],
+            (kind) =>
+              fixture((b) => {
+                if (["before-base", "since-root", "bad-note", "tests"].includes(kind)) {
+                  const sha = b.commit(b.work, "src/a.ts", `${text}\n`);
 
-                if (kind === "bad-note") {
-                  b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
+                  if (kind === "bad-note") {
+                    b.git(b.work, "notes", "--ref=fabrika", "add", "-m", '{"step":"tests"}', sha);
+                  } else {
+                    b.sign(b.work, "tests");
+                  }
+
+                  b.git(
+                    b.main,
+                    "fetch",
+                    "-q",
+                    b.work,
+                    `${b.branch}:${b.branch}`,
+                    "refs/notes/fabrika:refs/notes/fabrika",
+                  );
+
+                  if (kind === "before-base") {
+                    b.state(sha);
+                  }
+
+                  if (kind === "since-root") {
+                    b.state(sha);
+                    appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
+                  }
+                }
+
+                if (kind === "mutation" || kind === "skip") {
+                  write(
+                    join(b.boxes, "state/one.rows.jsonl"),
+                    `${JSON.stringify({
+                      run: "mutation-321",
+                      ticket: "321",
+                      step: "mutation",
+                      role: "mutation",
+                      outcome: kind === "skip" ? "skip" : "done",
+                      why: "recorded fixture result",
+                    })}\n`,
+                  );
+                }
+
+                if (kind.startsWith("quest-row")) {
+                  // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
+                  // A box made before the rule that a lane is called a quest names its quest under `lane:`, read as well.
+                  const key = kind === "quest-row-lane-key" ? "lane" : "quest";
+                  appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
+                  write(
+                    join(b.boxes, "onequest-rows.jsonl"),
+                    `${JSON.stringify({
+                      run: "t321-mutation1",
+                      ticket: "321",
+                      role: "hand",
+                      step: "mutation",
+                      // drive writes `skip` for a mutation step that answered skip (ticket 423).
+                      outcome:
+                        { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ??
+                        "stopped",
+                      why: "drive.ts mutation fixture row",
+                    })}\n`,
+                  );
+                }
+
+                const review = [
+                  "review-absent",
+                  "mutation",
+                  "skip",
+                  "quest-row",
+                  "quest-row-skip",
+                  "quest-row-stuck",
+                  "quest-row-lane-key",
+                ].includes(kind);
+
+                const pass = [
+                  "tests",
+                  "since-root",
+                  "mutation",
+                  "skip",
+                  "quest-row",
+                  "quest-row-skip",
+                  "quest-row-lane-key",
+                ].includes(kind);
+
+                const got = b.run(review ? "review" : "build");
+                expect(got.code).not.toBeNull();
+
+                if (pass) {
+                  expect(got.code, got.text).toBe(0);
                 } else {
-                  b.sign(b.work, "tests");
+                  refused(got, /step_out_of_order|tests|mutation/);
+                  expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
                 }
-
-                b.git(
-                  b.main,
-                  "fetch",
-                  "-q",
-                  b.work,
-                  `${b.branch}:${b.branch}`,
-                  "refs/notes/fabrika:refs/notes/fabrika",
-                );
-
-                if (kind === "before-base") {
-                  b.state(sha);
-                }
-
-                if (kind === "since-root") {
-                  b.state(sha);
-                  appendFileSync(join(b.boxes, "state/one.box"), `root: ${b.base}\n`);
-                }
-              }
-
-              if (kind === "mutation" || kind === "skip") {
-                write(
-                  join(b.boxes, "state/one.rows.jsonl"),
-                  `${JSON.stringify({
-                    run: "mutation-321",
-                    ticket: "321",
-                    step: "mutation",
-                    role: "mutation",
-                    outcome: kind === "skip" ? "skip" : "done",
-                    why: "recorded fixture result",
-                  })}\n`,
-                );
-              }
-
-              if (kind.startsWith("quest-row")) {
-                // Where drive writes a step's row: BOXES/<quest>-rows.jsonl, not the box's own.
-                // A box made before the rule that a lane is called a quest names its quest under `lane:`, read as well.
-                const key = kind === "quest-row-lane-key" ? "lane" : "quest";
-                appendFileSync(join(b.boxes, "state/one.box"), `${key}: onequest\n`);
-                write(
-                  join(b.boxes, "onequest-rows.jsonl"),
-                  `${JSON.stringify({
-                    run: "t321-mutation1",
-                    ticket: "321",
-                    role: "hand",
-                    step: "mutation",
-                    // drive writes `skip` for a mutation step that answered skip (ticket 423).
-                    outcome:
-                      { "quest-row": "pass", "quest-row-skip": "skip", "quest-row-lane-key": "pass" }[kind] ??
-                      "stopped",
-                    why: "drive.ts mutation fixture row",
-                  })}\n`,
-                );
-              }
-
-              const review = [
-                "review-absent",
-                "mutation",
-                "skip",
-                "quest-row",
-                "quest-row-skip",
-                "quest-row-stuck",
-                "quest-row-lane-key",
-              ].includes(kind);
-
-              const pass = [
-                "tests",
-                "since-root",
-                "mutation",
-                "skip",
-                "quest-row",
-                "quest-row-skip",
-                "quest-row-lane-key",
-              ].includes(kind);
-
-              const got = b.run(review ? "review" : "build");
-              expect(got.code).not.toBeNull();
-
-              if (pass) {
-                expect(got.code, got.text).toBe(0);
-              } else {
-                refused(got, /step_out_of_order|tests|mutation/);
-                expect(b.calls().filter((c) => c.cmd === "codex")).toEqual([]);
-              }
-            }),
-        );
-      }),
-      options,
-    );
-  });
+              }),
+          );
+        }),
+        { ...options, numRuns: 1, seed: options.seed + part },
+      );
+    });
+  }
 
   // Plant: count dead pid files as live; omit the eighth-slot cap.
   it("K3 refuses a ninth live box, ignores dead pid files and frees finished slots", () => {

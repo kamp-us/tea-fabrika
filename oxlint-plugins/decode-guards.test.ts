@@ -164,12 +164,14 @@ const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
 // T930 L9: the planted folder has no warn line, so it is at zero and a bare JSON.parse blocks there
 // (a lint rule blocks wherever its code is clean), beside a wrong service ID, which blocks since ticket 909.
 describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a wrong service ID both block", () => {
-  it("a clean report passes, and a JSON.parse, a wrong ID or another blocking one fails", () => {
-    const seen = new Set<string>();
-    fc.assert(
-      fc.property(
-        fc.record({ parse: fc.boolean(), id: fc.boolean(), blocking: fc.boolean(), name: word }),
-        ({ parse, id, blocking, name }) => {
+  // The cases are the eight combinations of a parse, a wrong ID and another blocking fire (the ID's word is the one draw besides), and each run starts the
+  // real lint runner, 0.5 s. A law of all eight took 32 runs and 32 s in CI, four draws of each combination, so it is two laws by the parse: each keeps
+  // four draws of each of its four combinations (one pinned, three drawn), and each is half the work.
+  for (const parse of [false, true]) {
+    it(`a clean report passes, and a wrong ID or another blocking one fails, with${parse ? "" : "out"} a JSON.parse`, () => {
+      const seen = new Set<string>();
+      fc.assert(
+        fc.property(fc.record({ id: fc.boolean(), blocking: fc.boolean(), name: word }), ({ id, blocking, name }) => {
           const ran = lint({ [PROBE]: probe({ parse, id: id ? `fabrika/${name}` : null, blocking }) }, [
             "--warn=no-debugger",
           ]);
@@ -179,13 +181,22 @@ describe("T737 G3, T909 and T930 L9: a bare JSON.parse in a clean folder and a w
           expect(ran.stdout.includes(CODE)).toBe(parse);
           expect(ran.stdout.includes(ID)).toBe(id);
           expect(ran.status, ran.stdout + ran.stderr).toBe(blocks > 0 ? 1 : 0);
-          seen.add(`${parse}:${id}:${blocking}`);
+          seen.add(`${id}:${blocking}`);
+        }),
+        // The four combinations are drawn first, one each, so the coverage never rests on the seed; twelve more runs follow.
+        {
+          seed: 119120,
+          numRuns: 12,
+          examples: [false, true].flatMap((id) =>
+            [false, true].map(
+              (blocking) => [{ id, blocking, name: "word" }] as [{ id: boolean; blocking: boolean; name: string }],
+            ),
+          ),
         },
-      ),
-      { seed: 119120, numRuns: 32 },
-    );
-    expect(seen.size).toBe(8);
-  });
+      );
+      expect(seen.size).toBe(4);
+    });
+  }
 
   // Law 10 of docs/plan/effect-rules-small.md, and T930 L9. Only the real lint runner reads the
   // severity and the real config holds the rule's level, so two real runs stand where no generator can.

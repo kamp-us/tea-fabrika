@@ -20,6 +20,7 @@ import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
 import { integrationTestName } from "./integration-test-name.ts";
+import { oneRuleConfig } from "./one-rule.test-support.ts";
 import { DRIVES, type Tag } from "./starters.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -316,13 +317,17 @@ const committed = () =>
     .filter((file) => /\.[cm]?[jt]sx?$/.test(file));
 
 /** The integration-test-name fires oxlint finds, by file from the repo's top, as lines. */
-const fires = (paths: readonly string[]) => {
-  const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
-    cwd: root,
-    encoding: "utf8",
-    // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
-    maxBuffer: Infinity,
-  });
+const fires = (paths: readonly string[], config?: string) => {
+  const out = spawnSync(
+    join(root, "node_modules/.bin/oxlint"),
+    [...(config === undefined ? [] : [`--config=${config}`, "--disable-nested-config"]), "--format=json", ...paths],
+    {
+      cwd: root,
+      encoding: "utf8",
+      // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
+      maxBuffer: Infinity,
+    },
+  );
 
   if (out.error !== undefined) {
     throw out.error;
@@ -366,5 +371,12 @@ it("scenario: next/'s and kalfa/'s trees are at zero, so the rule blocks from th
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.
-  expect(Rec.fromEntries(fires(committed()))).toEqual({});
+  // The rule alone, over the whole tree, from the repo's own config (one-rule.test-support.ts): the other rules' work over 950 files was most of this law's 16 s.
+  const config = oneRuleConfig(root, "fabrika/integration-test-name");
+
+  try {
+    expect(Rec.fromEntries(fires(committed(), config))).toEqual({});
+  } finally {
+    rmSync(dirname(config), { recursive: true, force: true });
+  }
 });
