@@ -165,7 +165,7 @@ export const config = <const App extends string>(
 
   const schema = Command.make(
     "schema",
-    { file: file.pipe(Flag.withDescription("The file the schema is for"), Flag.withDefault("repo")) },
+    { file: file.pipe(Flag.withDescription("The file the schema is for: repo or user"), Flag.withDefault("repo")) },
     Effect.fn("config.schema")(function* ({ file }) {
       yield* annotate;
       yield* print(yield* Effect.sync(() => schemas.text(group, file)));
