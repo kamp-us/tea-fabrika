@@ -80,8 +80,8 @@ the `GitHub` service gives.
 - `ClientError`: GitHub answered 4xx. It holds the `status`, and a `message`, a `documentationUrl` and `errors` exactly when
   GitHub's body had them.
 - `Undecodable`: the input could not be encoded (`side` is `input`, and nothing was sent), or the answer could not be read
-  (`side` is `answer`: the SchemaError is its `cause`, and a status this client does not read has none). Its `message` holds
-  the offending value, so read it as private.
+  (`side` is `answer`: the SchemaError is its `cause`, and a status this client does not read has none). Its `message` says
+  the path and what was expected, and holds no value; the `cause` does, so read it as private.
 
 `GitHubError` has no `message` and no `cause` field, on purpose: a failed span renders only those, so nothing under `reason`
 reaches a trace.

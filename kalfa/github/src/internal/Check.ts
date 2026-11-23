@@ -214,13 +214,12 @@ type BodilessPart<R extends RouteName> = [Bodiless<R>] extends [never]
     : { readonly bodiless: readonly [Bodiless<R>, ...Array<Bodiless<R>>] };
 
 /** What a caller may pass to `route` after the route text, each part by the description's rules. */
-type Given<R extends RouteName, S extends Schema.Constraint, Q extends Fields, P extends Schema.Constraint> = QueryPart<
-  R,
-  Q
-> &
-  PayloadPart<R, P> &
-  SuccessPart<R, S> &
-  BodilessPart<R>;
+type Declaration<
+  R extends RouteName,
+  S extends Schema.Constraint,
+  Q extends Fields,
+  P extends Schema.Constraint,
+> = QueryPart<R, Q> & PayloadPart<R, P> & SuccessPart<R, S> & BodilessPart<R>;
 
 type Needs<R extends RouteName> =
   HasRequired<QueryParams<R>> extends true
@@ -235,7 +234,7 @@ type Needs<R extends RouteName> =
 
 /** The arguments of `route` after the route text: present exactly when the description requires a part. */
 export type Options<R extends RouteName, S extends Schema.Constraint, Q extends Fields, P extends Schema.Constraint> =
-  Needs<R> extends true ? [options: Given<R, S, Q, P>] : [options?: Given<R, S, Q, P>];
+  Needs<R> extends true ? [options: Declaration<R, S, Q, P>] : [options?: Declaration<R, S, Q, P>];
 
 type Absent<K extends string> = { readonly [P in K]?: never };
 
@@ -259,7 +258,7 @@ export type Input<R extends RouteName, Q extends Schema.Constraint, P extends Sc
   PayloadIn<R, P>;
 
 /** What `call` gives: `void` with no success declared, the decoded success, or an `Option` of it beside a body-less 2xx. */
-export type Answered<R extends RouteName, S extends Schema.Constraint> = [S] extends [never]
+export type Returned<R extends RouteName, S extends Schema.Constraint> = [S] extends [never]
   ? void
   : [Bodiless<R>] extends [never]
     ? S["Type"]
