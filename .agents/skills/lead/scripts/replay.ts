@@ -7,23 +7,30 @@
 // changed check on the real ones.
 //
 //   nice -n 15 node .agents/skills/lead/scripts/replay.ts <pr> [--merged <n>]
-//   nice -n 15 node .agents/skills/lead/scripts/replay.ts --head <ref> [--base <ref>] [--merged <n>]
+//   nice -n 15 node .agents/skills/lead/scripts/replay.ts --head <ref> [--base <ref>] [--merged <n>] [--check <id>]...
 //
 // `<pr>` names the pull request that changes a check. `--head` names a commit instead, for a change that
 // has no pull request yet or one that merged already; `--base` is where the change starts (default
-// origin/main). The checks the change touches come from `git diff <base>...<head>`:
+// origin/main). The checks the change touches:
 //
 //   land check     land.ts, pr/*.ts, leakgrep.sh      replayed for real: git and GitHub are read as they are
-//   the rest       stepcommit.sh, survivors.ts, the oxlint plugins, the vitest reporters, the CI gate
-//                  scripts                            listed as "not replayed", each with its reason
+//   oxlint plugins oxlint-plugins/*, .oxlintrc.json    replayed: each old pull request's changed files, at its
+//                                                      merge commit, linted by this version and by the base's
+//   survivor scope survivors.ts (scope, cap), scope.ts replayed: `pick` on each pull request's changed files
+//   the rest       stepcommit.sh, the vitest reporters, the CI gate scripts, the survivor gate's exit rules
+//                                                      listed as "not replayed", each with its reason
 //
-// A change that touches none of them prints that and exits 0.
+// A change that touches none of them prints that and exits 0. `--check <id>` (one of land, oxlint, survivors, stepcommit,
+// reporters, gates; repeat it for several) replays only those of the touched checks. With a pull request, the checks it touches come from
+// `git diff <base>...<pr head>`; with `--head`, from `git diff <base> <head>`, what the head's tree changes in the
+// base's, so a commit that main already holds can be compared with main's newer check.
 //
 // What a replay does, one pull request at a time, under `nice -n 15`, with no CI run and no test run:
 //   1. makes two scratch worktrees, the change's head and the base (`<base>`, origin/main unless told),
-//      links this repo's node_modules into each, and removes both when it ends;
+//      links this repo's node_modules into each, and removes both when it ends; a lint replay makes one more,
+//      at the old pull request, for the length of that run;
 //   2. takes the last `--merged` pull requests that landed on main (default 20, read from main's own
-//      history) and every open one, the pull request being replayed excepted;
+//      history, each at its merge commit) and every open one at its head, the pull request being replayed excepted;
 //   3. runs the head's version of the check on each; only a pull request it refuses gets the base's version
 //      too, so a refusal main also gives is told from a new one.
 // The land check runs two ways, since `land.ts check` stops at its first refusal and a refusal that hides
@@ -39,15 +46,15 @@
 // was open then, a note signed on another machine), since it reads the repo as it stands today; every refusal
 // of a merged pull request is read with that in mind. And what the "not replayed" lines name.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Console, Effect, Exit, FileSystem, Option, Path, Ref, Schema, Scope } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { run } from "./pr/command.ts";
 import { repoFromUrl } from "./pr/PullRequestsGh.ts";
 
 // ---------------------------------------------------------------- the checks a change can touch
 
-/** How a kind of check is replayed: `land` is a real replay; `none` gives the reason it is not one. */
-export const Replay = Schema.TaggedUnion({ land: {}, none: { reason: Schema.String } });
+/** How a kind of check is replayed: `land`, `oxlint` and `scope` are real replays; `none` gives the reason it is not one. */
+export const Replay = Schema.TaggedUnion({ land: {}, oxlint: {}, scope: {}, none: { reason: Schema.String } });
 
 export type Replay = typeof Replay.Type;
 
@@ -57,6 +64,8 @@ export type Kind = {
   readonly label: string;
   readonly matches: (path: string) => boolean;
   readonly replay: Replay;
+  /** What a replay of this kind still cannot see, listed as "not replayed" whenever the kind is replayed. */
+  readonly gap?: string;
 };
 
 const isLaw = (path: string) => /\.(test|test-support|integration\.test)\.[cm]?[jt]s$/.test(path);
@@ -92,9 +101,8 @@ export const KINDS: ReadonlyArray<Kind> = [
     matches: (p) =>
       !isLaw(p) &&
       (/^\.agents\/skills\/mutation\/scripts\/(survivors|scope|sample)\.ts$/.test(p) || p === `${LEAD}mutbox.ts`),
-    replay: notReplayed(
-      "it runs Stryker in a Docker box on one change and CI saves no survivor result, so replaying it is a mutation run per pull request",
-    ),
+    replay: Replay.cases.scope.make({}),
+    gap: "the survivor gate's exit rules (a mutant that lived, a file no law loads) need a mutation run's results; CI keeps no mutbox artifact, and the 61 mutbox.json files in the boxes folder are one-off runs of other changes, so only its file scope and cap are replayed",
   },
   {
     id: "oxlint",
@@ -104,16 +112,15 @@ export const KINDS: ReadonlyArray<Kind> = [
       (p === ".oxlintrc.json" ||
         (/^oxlint-plugins\/[^/]+\.(ts|mjs)$/.test(p) && !p.endsWith("-support.ts")) ||
         /^oxlint-plugins\/css\//.test(p)),
-    replay: notReplayed(
-      "a lint run needs each pull request's whole tree checked out and linted, and CI saves no lint result to read instead",
-    ),
+    replay: Replay.cases.oxlint.make({}),
+    gap: "only `oxlint-plugins/lint.ts` on the files each pull request changed, as it stood at that pull request; not the whole-repo lint (ledger pruning, dead code, layers, stylelint)",
   },
   {
     id: "reporters",
     label: "the vitest reporters",
     matches: (p) => !isLaw(p) && (/^\.github\/ci\/[a-z0-9-]*reporter\.ts$/.test(p) || p === "vitest.hostrun.ts"),
     replay: notReplayed(
-      "a reporter reads a live run, each test with the time limit it ran under; the vitest JSON that CI saves holds no such limit, and replaying needs a test run",
+      "a reporter reads a live run, each test with the time limit it ran under. CI saves per-file seconds (`timings-*`) and, for a pull request's related tests, the vitest JSON (`results-related-*`, 7 days): per-test durations but no limit, which the slow-test reporter judges against. One small upload would make it replayable: the reporter writes its `Timed` rows (file, name, ms, limit) to a JSON file and the test legs upload it, as they upload `timings-*`",
     ),
   },
   {
@@ -142,8 +149,17 @@ export type Refusal = { readonly pr: number; readonly check: string; readonly re
 /** What one replay of one version on one pull request gave: its refusals, and what it could not read. */
 export type Outcome = { readonly refusals: ReadonlyArray<Refusal>; readonly unreadable: ReadonlyArray<string> };
 
-/** A pull request to replay against. */
-export type Target = { readonly number: number; readonly oid: string; readonly state: "OPEN" | "MERGED" };
+/**
+ * A pull request to replay against: its head, the tree to read it in (the merge commit of a merged one, the head
+ * of an open one) and the files it changed.
+ */
+export type Target = {
+  readonly number: number;
+  readonly oid: string;
+  readonly state: "OPEN" | "MERGED";
+  readonly tree: string;
+  readonly files: ReadonlyArray<string>;
+};
 
 type Version = "head" | "base";
 
@@ -184,6 +200,10 @@ export const replayAll = Effect.fn("replay.replayAll")(function* (a: {
       continue;
     }
 
+    if (kind.gap !== undefined) {
+      gaps.push(`${kind.label}: ${kind.gap}`);
+    }
+
     for (const target of a.targets) {
       const head = yield* a.probe(kind, "head", target);
       gaps.push(...head.unreadable.map((cause) => `${kind.label}, pr ${target.number}: ${cause}`));
@@ -205,14 +225,24 @@ const oneLine = (text: string, most = 400) => {
   return flat.length > most ? `${flat.slice(0, most)}...` : flat;
 };
 
-/** The lines to print and the exit code: 1 only when a refusal is new. */
+/**
+ * The lines to print and the exit code: 1 only when a refusal is new. A new refusal is one line each; the refusals the
+ * base gives too are one line for each pull request and check, with their count and the first.
+ */
 export const report = (a: Replayed & { readonly targets: number }): { lines: ReadonlyArray<string>; code: 0 | 1 } => {
   const fresh = a.found.filter((f) => f.fresh).length;
+  const same = new Map<string, Array<Found>>();
+
+  for (const f of a.found.filter((g) => !g.fresh)) {
+    same.set(`${f.pr}\u0000${f.check}`, [...(same.get(`${f.pr}\u0000${f.check}`) ?? []), f]);
+  }
 
   return {
     lines: [
-      ...a.found.map(
-        (f) => `refused: pr ${f.pr} [${f.check}] ${f.fresh ? "new" : "also on main"}: ${oneLine(f.reason)}`,
+      ...a.found.filter((f) => f.fresh).map((f) => `refused: pr ${f.pr} [${f.check}] new: ${oneLine(f.reason)}`),
+      ...[...same.values()].map(
+        ([first, ...rest]) =>
+          `refused: pr ${first?.pr} [${first?.check}] also on main: ${rest.length + 1} refusal(s), the first: ${oneLine(first?.reason ?? "")}`,
       ),
       ...a.notReplayed.map((reason) => `not replayed: ${oneLine(reason)}`),
       `replay: ${fresh} new refusal(s), ${a.found.length - fresh} also on main, over ${a.targets} pull request(s)`,
@@ -302,34 +332,118 @@ const View = Schema.fromJsonString(
 
 const Listed = Schema.fromJsonString(Schema.Array(Schema.Struct({ number: Schema.Int, headRefOid: Sha })));
 
-/** The pull request numbers in main's first-parent history, newest first: a squash merge ends its subject in `(#<n>)`. */
-export const mergedNumbers = (subjects: ReadonlyArray<string>, most: number): ReadonlyArray<number> => {
-  const seen = new Set<number>();
+/** A pull request that landed on main, and the squash commit it landed as. */
+export type Landed = { readonly number: number; readonly commit: string };
 
-  for (const subject of subjects) {
-    const n = /\(#(\d+)\)\s*$/.exec(subject)?.[1];
+/**
+ * The pull requests in main's first-parent history, newest first, each once, from `<sha> <subject>` lines: a squash
+ * merge ends its subject in `(#<n>)`.
+ */
+export const merges = (lines: ReadonlyArray<string>, most: number): ReadonlyArray<Landed> => {
+  const seen = new Map<number, string>();
 
-    if (n !== undefined) {
-      seen.add(Number(n));
+  for (const line of lines) {
+    const [commit = "", ...subject] = line.split(" ");
+    const n = /\(#(\d+)\)\s*$/.exec(subject.join(" "))?.[1];
+
+    if (n !== undefined && !seen.has(Number(n))) {
+      seen.set(Number(n), commit);
     }
   }
 
-  return [...seen].slice(0, most);
+  return [...seen].slice(0, most).map(([number, commit]) => ({ number, commit }));
+};
+
+/** The files a lint run takes: source files of a language oxlint reads, that the pull request's tree still holds. */
+export const lintable = (files: ReadonlyArray<string>, tree: ReadonlySet<string>): ReadonlyArray<string> =>
+  files.filter((f) => /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(f) && tree.has(f));
+
+/** The most files one lint run takes, so a pull request that changed a thousand does not hold the laptop. */
+export const LINT_FILES = 150;
+
+/**
+ * What `oxlint-plugins/lint.ts <files>` said, from its exit code and output: each line it blocks on is a refusal of the
+ * pull request (a line of advice is not, since the lint passes it), and a failure with no such line is unread.
+ */
+export const readLint = (pr: number, code: number, stdout: string, stderr: string): Outcome => {
+  const blocking = stdout
+    .split("\n")
+    .filter((line) => /^\S+:\d+:\d+ /.test(line) && !line.includes(" advice, "))
+    .map((line) => line.trim());
+
+  if (blocking.length > 0) {
+    return { refusals: blocking.map((reason) => ({ pr, check: "oxlint plugins", reason })), unreadable: [] };
+  }
+
+  return code === 0
+    ? { refusals: [], unreadable: [] }
+    : unread(`lint.ts exited ${code} and named no line: ${oneLine(stderr || stdout, 160)}`);
+};
+
+/** The cap a survivors.ts holds for the files one run takes: its `MUTATE_FILES` default, or none when it holds none. */
+export const capFrom = (source: string): number | null => {
+  const found = /"MUTATE_FILES"\)\.pipe\(\s*Config\.withDefault\((\d+)\)/.exec(source)?.[1];
+
+  return found === undefined ? null : Number(found);
+};
+
+/** What the scope driver prints: its one JSON line. */
+const Scoped = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ absent: Schema.Literal(true) }),
+    Schema.Struct({ files: Schema.Int }),
+    Schema.Struct({ refused: Schema.String }),
+  ]),
+);
+
+/**
+ * The JavaScript that runs one version's own `pick` (the files the survivor gate mutates) on one pull request's changed
+ * files and prints one JSON line. Text for `node --input-type=module -e`, in the version's worktree; its input comes on
+ * stdin as JSON `{ changed, tree, cap }`.
+ */
+export const scopeDriver = (survivorsTs: string): string =>
+  [
+    `import * as survivors from ${JSON.stringify(`file://${survivorsTs}`)};`,
+    'import { readFileSync } from "node:fs";',
+    'import { Result } from "effect";',
+    'if (typeof survivors.pick !== "function") {',
+    "  console.log(JSON.stringify({ absent: true }));",
+    "} else {",
+    '  const ask = JSON.parse(readFileSync(0, "utf8"));',
+    "  const picked = survivors.pick({ changed: ask.changed, named: null, tree: new Set(ask.tree), cap: ask.cap });",
+    "  console.log(JSON.stringify(Result.isFailure(picked) ? { refused: picked.failure.detail } : { files: picked.success.length }));",
+    "}",
+  ].join("\n");
+
+/** What the scope driver said: a refusal of `pick` is the pull request's, and a driver that failed is unread. */
+export const readScope = (pr: number, code: number, stdout: string, stderr: string): Outcome => {
+  const read = Schema.decodeUnknownOption(Scoped)(stdout.trimEnd().split("\n").at(-1) ?? "");
+
+  if (code !== 0 || Option.isNone(read)) {
+    return unread(`the survivor scope check did not answer (exit ${code}): ${oneLine(stderr || stdout, 160)}`);
+  }
+
+  return "refused" in read.value
+    ? { refusals: [{ pr, check: "survivor scope", reason: read.value.refused }], unreadable: [] }
+    : { refusals: [], unreadable: [] };
 };
 
 type Tools = { readonly main: string; readonly repo: string; readonly modules: string };
 
-const worktree = Effect.fn("replay.worktree")(function* (tools: Tools, base: string, name: string, ref: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const dir = `${base}/${name}`;
+const worktree = Effect.fn("replay.worktree")(function* (
+  world: Pick<World, "tools" | "fs" | "scratch">,
+  name: string,
+  ref: string,
+) {
+  const dir = `${world.scratch}/${name}`;
 
   yield* Effect.acquireRelease(
-    must(`no worktree of ${ref}`, tools.main, "git", ["worktree", "add", "-q", "--detach", dir, ref]),
-    () => run("git", ["worktree", "remove", "--force", dir], tools.main).pipe(Effect.ignore),
+    must(`no worktree of ${ref}`, world.tools.main, "git", ["worktree", "add", "-q", "--detach", dir, ref]),
+    () => run("git", ["worktree", "remove", "--force", dir], world.tools.main).pipe(Effect.ignore),
   );
 
-  yield* fs
-    .symlink(tools.modules, `${dir}/node_modules`)
+  yield* world.fs
+    .symlink(world.tools.modules, `${dir}/node_modules`)
     .pipe(Effect.mapError(failed(`node_modules cannot be linked into ${dir}`)));
 
   return dir;
@@ -396,19 +510,24 @@ const merge = (a: Outcome, b: Outcome): Outcome => ({
 
 const unread = (reason: string): Outcome => ({ refusals: [], unreadable: [reason] });
 
-/**
- * One version of the land check on one pull request, run for real in that version's worktree: `land.ts check <pr>`
- * as the lead runs it, and apart from it the signed-commit check, since `check` stops at its first refusal and a
- * refusal that hides another would hide the one under test.
- */
-const probeFor = (trees: Readonly<Record<Version, string>>): Probe =>
-  Effect.fnUntraced(function* (kind: Kind, version: Version, target: Target) {
-    const tree = trees[version];
+/** The folders a replay works in: this repo's main checkout and node_modules, the scratch folder, and the commits to compare. */
+type Held = { readonly pr: number; readonly dir: string; readonly scope: Scope.Closeable } | null;
 
-    if (Replay.guards.none(kind.replay)) {
-      return { refusals: [], unreadable: [] } satisfies Outcome;
-    }
+type World = {
+  readonly tools: Tools;
+  readonly fs: FileSystem.FileSystem;
+  readonly scratch: string;
+  readonly trees: Readonly<Record<Version, string>>;
+  readonly commits: Readonly<Record<Version, string>>;
+  readonly pluginModules: string;
+  readonly cap: number;
+  /** The lint's worktree of the pull request it last ran on, kept for the base's run on the same one. */
+  readonly held: Ref.Ref<Held>;
+};
 
+const land = (world: World, version: Version, target: Target) =>
+  Effect.gen(function* () {
+    const tree = world.trees[version];
     const landTs = `${tree}/${LEAD}land.ts`;
 
     const asLead = yield* run(
@@ -432,20 +551,131 @@ const probeFor = (trees: Readonly<Record<Version, string>>): Probe =>
     return merge(asLead, own);
   });
 
+/** The files a pull request's tree holds. */
+const treeFiles = Effect.fnUntraced(function* (world: World, tree: string) {
+  return new Set(
+    (yield* must("a tree does not read", world.tools.main, "git", ["ls-tree", "-r", "--name-only", tree])).split("\n"),
+  );
+});
+
+/**
+ * The worktree of one pull request's tree, with the plugin modules linked in: the one the last lint run made when it
+ * was for this same pull request (the base's run follows the head's), else a new one, the old one closed.
+ */
+const lintTree = (world: World, target: Target) =>
+  Effect.gen(function* () {
+    const held = yield* Ref.get(world.held);
+
+    if (held !== null && held.pr === target.number) {
+      return held.dir;
+    }
+
+    if (held !== null) {
+      yield* Scope.close(held.scope, Exit.void);
+      yield* Ref.set(world.held, null);
+    }
+
+    const scope = yield* Scope.make();
+
+    const dir = yield* worktree(world, `lint-${target.number}`, target.tree).pipe(
+      Effect.provideService(Scope.Scope, scope),
+    );
+
+    yield* world.fs
+      .symlink(world.pluginModules, `${dir}/oxlint-plugins/node_modules`)
+      .pipe(Effect.mapError(failed("oxlint-plugins/node_modules cannot be linked")));
+
+    yield* Ref.set(world.held, { pr: target.number, dir, scope });
+
+    return dir;
+  });
+
+/**
+ * One version of the oxlint plugins on the files one pull request changed, in a worktree of that pull request's own
+ * tree with this version's `oxlint-plugins/` and `.oxlintrc.json` laid over it.
+ */
+const lint = (world: World, version: Version, target: Target) =>
+  Effect.gen(function* () {
+    const files = lintable(target.files, yield* treeFiles(world, target.tree));
+    const taken = files.slice(0, LINT_FILES);
+
+    if (taken.length === 0) {
+      return { refusals: [], unreadable: [] } satisfies Outcome;
+    }
+
+    const dir = yield* lintTree(world, target);
+
+    yield* must("the plugins could not be laid over the tree", dir, "sh", [
+      "-c",
+      'find oxlint-plugins -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + && rm -f .oxlintrc.json && git -C "$0" archive "$1" oxlint-plugins .oxlintrc.json | tar -x -f -',
+      world.tools.main,
+      world.commits[version],
+    ]);
+
+    const ran = yield* run("nice", ["-n", "15", process.execPath, "oxlint-plugins/lint.ts", ...taken], dir).pipe(
+      Effect.mapError(failed("lint.ts could not start")),
+    );
+
+    const read = readLint(target.number, ran.code, ran.out, ran.err);
+
+    return files.length > taken.length
+      ? {
+          ...read,
+          unreadable: [...read.unreadable, `${files.length} files changed; the first ${taken.length} were linted`],
+        }
+      : read;
+  });
+
+/** One version of the survivor gate's file scope and cap on the files one pull request changed. */
+const scope = (world: World, version: Version, target: Target) =>
+  Effect.gen(function* () {
+    const survivorsTs = `${world.trees[version]}/.agents/skills/mutation/scripts/survivors.ts`;
+    const source = yield* world.fs.readFileString(survivorsTs).pipe(Effect.orElseSucceed(() => ""));
+    const cap = capFrom(source) ?? world.cap;
+    const tree = yield* treeFiles(world, target.tree);
+
+    const ran = yield* run(
+      "nice",
+      ["-n", "15", process.execPath, "--input-type=module", "-e", scopeDriver(survivorsTs)],
+      world.trees[version],
+      { stdin: JSON.stringify({ changed: target.files, tree: [...tree], cap }) },
+    ).pipe(Effect.mapError(failed("the survivor scope check could not start")));
+
+    return readScope(target.number, ran.code, ran.out, ran.err);
+  });
+
+/** The real replay: each kind's own check, one version, one pull request. A failure to run it is unread, never a pass. */
+const probeFor =
+  (world: World): Probe =>
+  (kind, version, target) =>
+    Replay.match(kind.replay, {
+      land: () => land(world, version, target),
+      oxlint: () => lint(world, version, target),
+      scope: () => scope(world, version, target),
+      none: () => Effect.succeed({ refusals: [], unreadable: [] } satisfies Outcome),
+    }).pipe(
+      Effect.catch((e) => Effect.succeed(unread(e instanceof ReplayFailed ? e.reason : "the check could not run"))),
+    );
+
 /** The pull requests to replay against: the last `merged` that landed, then every open one. */
 const pullRequests = Effect.fn("replay.targets")(function* (tools: Tools, merged: number, except: number | undefined) {
-  const subjects = (yield* must("main's history does not read", tools.main, "git", [
+  const lines = (yield* must("main's history does not read", tools.main, "git", [
     "log",
     "origin/main",
     "--first-parent",
     "-n",
     String(merged * 5 + 20),
-    "--format=%s",
+    "--format=%H %s",
   ])).split("\n");
+
+  const changed = (from: string, to: string) =>
+    must("a change does not read", tools.main, "git", ["diff", "--name-only", from, to]).pipe(
+      Effect.map((out) => out.split("\n").filter((p) => p !== "")),
+    );
 
   const landed: Array<Target> = [];
 
-  for (const number of mergedNumbers(subjects, merged)) {
+  for (const { number, commit } of merges(lines, merged)) {
     const view = Schema.decodeUnknownOption(View)(
       yield* must(`pr ${number} does not read`, tools.main, "gh", [
         "pr",
@@ -459,7 +689,13 @@ const pullRequests = Effect.fn("replay.targets")(function* (tools: Tools, merged
     );
 
     if (Option.isSome(view) && view.value.state === "MERGED") {
-      landed.push({ number, oid: view.value.headRefOid, state: "MERGED" });
+      landed.push({
+        number,
+        oid: view.value.headRefOid,
+        state: "MERGED",
+        tree: commit,
+        files: yield* changed(`${commit}^`, commit),
+      });
     }
   }
 
@@ -482,9 +718,33 @@ const pullRequests = Effect.fn("replay.targets")(function* (tools: Tools, merged
     return yield* ReplayFailed.make({ reason: "the open pull request list is not the shape gh gives" });
   }
 
-  return [...landed, ...open.value.map((p): Target => ({ number: p.number, oid: p.headRefOid, state: "OPEN" }))].filter(
-    (t) => t.number !== except,
-  );
+  const opened: Array<Target> = [];
+
+  for (const p of open.value.filter((o) => o.number !== except)) {
+    yield* must(`pr ${p.number}'s head could not be fetched`, tools.main, "git", [
+      "fetch",
+      "-q",
+      "--no-write-fetch-head",
+      "origin",
+      p.headRefOid,
+    ]);
+
+    const from = yield* must("a merge base does not read", tools.main, "git", [
+      "merge-base",
+      "origin/main",
+      p.headRefOid,
+    ]);
+
+    opened.push({
+      number: p.number,
+      oid: p.headRefOid,
+      state: "OPEN",
+      tree: p.headRefOid,
+      files: yield* changed(from, p.headRefOid),
+    });
+  }
+
+  return [...landed.filter((t) => t.number !== except), ...opened];
 });
 
 type Ask = {
@@ -492,6 +752,7 @@ type Ask = {
   readonly head: Option.Option<string>;
   readonly base: Option.Option<string>;
   readonly merged: number;
+  readonly only: ReadonlyArray<string>;
 };
 
 const replay = Effect.fn("replay.run")(function* (ask: Ask) {
@@ -514,7 +775,13 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
   }
 
   const tools: Tools = { main, repo, modules: path.resolve(here, "../../../../node_modules") };
-  yield* must("origin/main could not be fetched", main, "git", ["fetch", "-q", "origin", "main"]);
+  yield* must("origin/main could not be fetched", main, "git", [
+    "fetch",
+    "-q",
+    "--no-write-fetch-head",
+    "origin",
+    "main",
+  ]);
 
   const base = yield* must("the base does not read", main, "git", [
     "rev-parse",
@@ -543,6 +810,7 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
         yield* must(`pr ${pr}'s head could not be fetched`, main, "git", [
           "fetch",
           "-q",
+          "--no-write-fetch-head",
           "origin",
           read.value.headRefOid,
         ]);
@@ -556,11 +824,23 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
       }),
   });
 
-  const touched = (yield* must("the change does not read", main, "git", ["diff", "--name-only", `${base}...${head}`]))
+  // A pull request's own change is what it adds to main (three dots); a bare commit is compared as it is (two).
+  const range = Option.isSome(ask.pr) ? [`${base}...${head}`] : [base, head];
+
+  const touched = (yield* must("the change does not read", main, "git", ["diff", "--name-only", ...range]))
     .split("\n")
     .filter((p) => p !== "");
 
-  const kinds = changedChecks(touched);
+  const unknown = ask.only.filter((id) => !KINDS.some((k) => k.id === id));
+
+  if (unknown.length > 0) {
+    return yield* ReplayFailed.make({
+      reason: `no such check to replay: ${unknown.join(", ")}; the ids are ${KINDS.map((k) => k.id).join(", ")}`,
+    });
+  }
+
+  const touchedKinds = changedChecks(touched);
+  const kinds = ask.only.length === 0 ? touchedKinds : touchedKinds.filter((k) => ask.only.includes(k.id));
 
   if (kinds.length === 0) {
     yield* Console.log(nothingChanged);
@@ -575,12 +855,25 @@ const replay = Effect.fn("replay.run")(function* (ask: Ask) {
       .makeTempDirectoryScoped({ prefix: "replay-" })
       .pipe(Effect.mapError(failed("no scratch folder")));
 
-    const trees = {
-      head: yield* worktree(tools, scratch, "head", head),
-      base: yield* worktree(tools, scratch, "base", base),
+    const room = { tools, fs, scratch };
+
+    const world: World = {
+      ...room,
+      trees: { head: yield* worktree(room, "head", head), base: yield* worktree(room, "base", base) },
+      commits: { head, base },
+      pluginModules: path.resolve(here, "../../../../oxlint-plugins/node_modules"),
+      cap: 8,
+      held: yield* Ref.make<Held>(null),
     };
 
-    return yield* replayAll({ kinds, targets, probe: probeFor(trees) });
+    // The lint's last worktree is removed with the two others.
+    yield* Effect.addFinalizer(() =>
+      Ref.get(world.held).pipe(
+        Effect.flatMap((held) => (held === null ? Effect.void : Scope.close(held.scope, Exit.void))),
+      ),
+    );
+
+    return yield* replayAll({ kinds, targets, probe: probeFor(world) });
   }).pipe(Effect.scoped);
 
   const said = report({ ...replayed, targets: targets.length });
@@ -601,6 +894,7 @@ const command = Command.make(
     head: Flag.String("head").pipe(Flag.optional),
     base: Flag.String("base").pipe(Flag.optional),
     merged: Flag.Int("merged").pipe(Flag.withDefault(20)),
+    only: Flag.String("check").pipe(Flag.atLeast(0)),
   },
   (ask) =>
     replay(ask).pipe(

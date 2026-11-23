@@ -106,6 +106,10 @@ type World = {
   readonly unsignedCommit?: boolean;
   /** The branch holds commits as `stepcommit.sh` makes them (its bot identity), with no note: a fix round's, and a `--commit-only` lead commit's, with files and with none. */
   readonly toolCommits?: boolean;
+  /** The checkout's FETCH_HEAD holds what another session's fetch left there, which a run must neither read nor write. */
+  readonly strangerFetch?: boolean;
+  /** This many more copies of `command` run in the same checkout at the same moment, before the one this helper answers for. */
+  readonly alongside?: number;
 };
 
 const land = (world: World) => {
@@ -263,6 +267,27 @@ const land = (world: World) => {
       git(quest, ...bot, "commit", "-q", "--allow-empty", "-m", "T652 lead: begin the slice");
     }
 
+    const strangerFetch = `${"0".repeat(40)}\t\tbranch 'other' of elsewhere\n`;
+
+    if (world.strangerFetch) {
+      writeFileSync(join(quest, ".git/FETCH_HEAD"), strangerFetch);
+    }
+
+    const alongside = world.alongside ?? 0;
+
+    if (alongside > 0) {
+      spawnSync(
+        "sh",
+        [
+          "-c",
+          `for i in $(seq ${alongside}); do ("$0" "$1" ${(world.command ?? []).join(" ")} >"${dir}/side$i.out" 2>"${dir}/side$i.err"; echo $? >"${dir}/side$i.code") & done; wait`,
+          process.execPath,
+          script,
+        ],
+        { cwd: quest, env, timeout: 60_000 },
+      );
+    }
+
     const before = [git(quest, "rev-parse", "HEAD"), git(quest, "rev-parse", "refs/notes/fabrika")];
     const ran = script_(...(world.command ?? ["run", "t652f", "652"]));
     expect(ran.error).toBeUndefined();
@@ -279,6 +304,14 @@ const land = (world: World) => {
       parents: git(quest, "rev-list", "--parents", "-n", "1", "HEAD").split(" ").length - 1,
       subject: git(quest, "log", "-1", "--format=%s"),
       status: git(quest, "status", "--porcelain"),
+      // What a run left of the stranger's FETCH_HEAD, and of any ref it made.
+      strangerKept: !world.strangerFetch || readFileSync(join(quest, ".git/FETCH_HEAD"), "utf8") === strangerFetch,
+      refsLeft: git(quest, "for-each-ref", "refs/land-fetch"),
+      // The copies that ran beside it: each one's exit code and what it said.
+      beside: Array.from({ length: alongside }, (_, i) => ({
+        code: readFileSync(join(dir, `side${i + 1}.code`), "utf8").trim(),
+        err: readFileSync(join(dir, `side${i + 1}.err`), "utf8"),
+      })),
       lead: lead[1],
       // The quest's own lead commit carries a note once the run is over.
       leadNoted:
@@ -556,6 +589,25 @@ describe("land.ts, today's tooling", () => {
     expect(mixed.err).toContain("1 commit(s) since main are not signed or made by stepcommit.sh:");
     expect(mixed.err).toContain(" open the slice");
     expect(mixed.err).not.toContain("T652");
+  }, 120_000);
+
+  // Plants: fetch into FETCH_HEAD and read it back (the flake: a fetch by another session at once swapped it, and `check` refused "the fetched main is not a commit"), or leave the ref the fetch made.
+  it("scenario: `land.ts check` neither reads nor writes FETCH_HEAD, and leaves no ref behind", () => {
+    const got = land({ ...fine, behind: true, strangerFetch: true, command: ["check", "77"] });
+    expect(got.code, got.err).toBe(0);
+    expect(got.strangerKept).toBe(true);
+    expect(got.refsLeft).toBe("");
+  }, 120_000);
+
+  // Plant: fetch main into one shared ref or FETCH_HEAD, so copies that run at once swap each other's fetch.
+  it("scenario: twelve `land.ts check` runs in one checkout at the same moment all pass", () => {
+    const got = land({ ...fine, alongside: 12, command: ["check", "77"] });
+    expect(got.code, got.err).toBe(0);
+    expect(
+      got.beside.map((b) => b.code),
+      got.beside.map((b) => b.err).join("\n"),
+    ).toEqual(Array.from({ length: 12 }, () => "0"));
+    expect(got.refsLeft).toBe("");
   }, 120_000);
 
   // Plant: let a wait for a good admin merge end in a refusal, as the command did after the merge.

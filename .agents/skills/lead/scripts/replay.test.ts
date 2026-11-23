@@ -5,15 +5,21 @@ import {
   changedChecks,
   KINDS,
   type Kind,
-  mergedNumbers,
+  LINT_FILES,
+  lintable,
+  merges,
   type Outcome,
   type Probe,
   type Refusal,
+  capFrom,
   readCheck,
+  readLint,
+  readScope,
   readSigned,
   Replay,
   replayAll,
   report,
+  scopeDriver,
   signedDriver,
   signedRefusal,
   type Target,
@@ -65,7 +71,13 @@ const checkPaths = [
 
 const landPath = fc.constantFrom(...checkPaths.filter(([, id]) => id === "land").map(([p]) => p));
 
-const target = (number: number): Target => ({ number, oid: "a".repeat(40), state: "OPEN" });
+const target = (number: number): Target => ({
+  number,
+  oid: "a".repeat(40),
+  state: "OPEN",
+  tree: "b".repeat(40),
+  files: [],
+});
 
 const targets = fc
   .uniqueArray(fc.integer({ min: 1, max: 9999 }), { minLength: 1, maxLength: 5 })
@@ -205,6 +217,18 @@ describe("the verdict", () => {
       ),
     ));
 
+  it("the refusals the base gives too are one line for each pull request and check, with their count", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 9999 }), fc.integer({ min: 1, max: 40 }), word, (pr, count, check) => {
+        const found = Array.from({ length: count }, (_, i) => ({ pr, check, reason: `reason ${i}`, fresh: false }));
+        const said = report({ found, notReplayed: [], targets: 1 });
+        const lines = said.lines.filter((l) => l.startsWith("refused:"));
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toContain(`${count} refusal(s)`);
+        expect(said.code).toBe(0);
+      }),
+    ));
+
   it("one line for each refusal naming its pull request, its check and its reason", () =>
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 9999 }), word, reasons, (pr, check, reason) => {
@@ -267,13 +291,23 @@ describe("a check that cannot be replayed", () => {
       ),
     ));
 
-  it("every kind either is replayed or gives a reason it is not", () =>
+  it("every kind that is not replayed gives its reason", () =>
     fc.assert(
       fc.property(fc.constantFrom(...KINDS), (kind) => {
-        expect(
-          Replay.guards.land(kind.replay) || (Replay.guards.none(kind.replay) && kind.replay.reason.length > 20),
-        ).toBe(true);
+        expect(!Replay.guards.none(kind.replay) || kind.replay.reason.length > 20).toBe(true);
       }),
+    ));
+
+  it("a kind replayed in part lists what it cannot see, once, whatever the pull requests", () =>
+    fc.assert(
+      fc.asyncProperty(fc.constantFrom(...KINDS.filter((k) => k.gap !== undefined)), targets, (kind, ts) =>
+        ran(
+          Effect.gen(function* () {
+            const replayed = yield* replayAll({ kinds: [kind], targets: ts, probe: probing(new Map()).probe });
+            expect(replayed.notReplayed.filter((line) => line === `${kind.label}: ${kind.gap}`)).toHaveLength(1);
+          }),
+        ),
+      ),
     ));
 
   it("a pull request a replayed check could not read is listed by number, not dropped", () =>
@@ -405,23 +439,140 @@ describe("signedRefusal", () => {
     ));
 });
 
-describe("mergedNumbers", () => {
-  it("takes the pull request numbers of the squash subjects, newest first, each once, at most `most`", () =>
+describe("merges", () => {
+  const sha = fc.stringMatching(/^[0-9a-f]{40}$/);
+
+  it("takes the pull requests of the squash subjects with their commits, newest first, each once, at most `most`", () =>
     fc.assert(
       fc.property(
         fc.array(
-          fc.oneof(
-            fc.integer({ min: 1, max: 99999 }).map((n) => `A change (#${n})`),
-            word,
+          fc.tuple(
+            sha,
+            fc.oneof(
+              fc.integer({ min: 1, max: 12 }).map((n) => `A change (#${n})`),
+              word,
+            ),
           ),
         ),
         fc.integer({ min: 1, max: 30 }),
-        (subjects, most) => {
-          const numbers = mergedNumbers(subjects, most);
-          const all = subjects.flatMap((s) => /\(#(\d+)\)$/.exec(s)?.[1] ?? []).map(Number);
-          const first = [...new Set(all)];
-          expect(numbers).toEqual(first.slice(0, most));
+        (rows, most) => {
+          const got = merges(
+            rows.map(([commit, subject]) => `${commit} ${subject}`),
+            most,
+          );
+
+          const all = rows.flatMap(([commit, subject]) => {
+            const n = /\(#(\d+)\)$/.exec(subject)?.[1];
+
+            return n === undefined ? [] : [{ number: Number(n), commit }];
+          });
+
+          const first = all.filter((row, i) => all.findIndex((other) => other.number === row.number) === i);
+          expect(got).toEqual(first.slice(0, most));
         },
       ),
     ));
+});
+
+describe("lintable", () => {
+  it("takes the changed source files the pull request's tree still holds, and no other", () =>
+    fc.assert(
+      fc.property(
+        fc.array(fc.tuple(word, fc.constantFrom("ts", "tsx", "mjs", "md", "json", "yaml"), fc.boolean())),
+        (rows) => {
+          const files = rows.map(([name, ext]) => `src/${name}.${ext}`);
+          const tree = new Set(rows.flatMap(([name, ext, held]) => (held ? [`src/${name}.${ext}`] : [])));
+          const got = lintable(files, tree);
+
+          for (const file of got) {
+            expect(tree.has(file)).toBe(true);
+            expect(/\.(ts|tsx|mjs)$/.test(file)).toBe(true);
+          }
+
+          expect(got.length).toBe(files.filter((f) => tree.has(f) && /\.(ts|tsx|mjs)$/.test(f)).length);
+        },
+      ),
+    ));
+
+  it("a lint run takes a bounded number of files", () => {
+    expect(LINT_FILES).toBeGreaterThan(0);
+  });
+});
+
+describe("reading the lint", () => {
+  const place = fc.tuple(word, fc.integer({ min: 1, max: 999 }), fc.integer({ min: 1, max: 99 }), word);
+
+  it("each line the lint blocks on is a refusal of the pull request, and a line of advice is none", () =>
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1 }),
+        fc.array(place, { minLength: 1 }),
+        fc.array(place),
+        (pr, blocked, advised) => {
+          const out = [
+            ...blocked.map(([file, line, col, rule]) => `${file}.ts:${line}:${col} fabrika(${rule}) a message`),
+            ...advised.map(
+              ([file, line, col, rule]) =>
+                `${file}.ts:${line}:${col} fabrika(${rule}) advice, this folder is not at zero yet: x`,
+            ),
+            "oxlint: 1 blocking, 0 advice, 0 in agents-ledger.json, 0 in next-ledger.json",
+          ].join("\n");
+
+          const read = readLint(pr, 1, out, "");
+          expect(read.refusals.length).toBe(blocked.length);
+          expect(read.refusals.every((r) => r.pr === pr && r.check === "oxlint plugins")).toBe(true);
+          expect(read.unreadable).toEqual([]);
+        },
+      ),
+    ));
+
+  it("a clean run is no refusal, and a failure that names no line is unread, never a pass", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1 }), fc.integer({ min: 1, max: 255 }), (pr, code) => {
+        expect(readLint(pr, 0, "oxlint: 0 blocking, 3 advice\n", "")).toEqual({ refusals: [], unreadable: [] });
+        const failed = readLint(pr, code, "oxlint: 0 blocking\n", "boom");
+        expect(failed.refusals).toEqual([]);
+        expect(failed.unreadable.length).toBe(1);
+      }),
+    ));
+});
+
+describe("the survivor scope", () => {
+  it("reads the cap from the MUTATE_FILES default of a survivors.ts, and none from one without it", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 500 }), (n) => {
+        expect(capFrom(`const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(Config.withDefault(${n}));`)).toBe(
+          n,
+        );
+        expect(
+          capFrom(`const FILES = Config.schema(AtLeastOne, "MUTATE_FILES").pipe(\n  Config.withDefault(${n}),\n);`),
+        ).toBe(n);
+        expect(capFrom("const FILES = 8;")).toBeNull();
+      }),
+    ));
+
+  it("a refusal of `pick` is the pull request's, an absent `pick` or a pass is none, and a driver that failed is unread", () =>
+    fc.assert(
+      fc.property(fc.integer({ min: 1 }), word, fc.integer({ min: 0, max: 20 }), (pr, detail, n) => {
+        const refused = readScope(pr, 0, `${JSON.stringify({ refused: detail })}\n`, "");
+        expect(refused.refusals).toEqual([{ pr, check: "survivor scope", reason: detail }]);
+        expect(readScope(pr, 0, `${JSON.stringify({ files: n })}\n`, "")).toEqual({ refusals: [], unreadable: [] });
+        expect(readScope(pr, 0, `${JSON.stringify({ absent: true })}\n`, "")).toEqual({ refusals: [], unreadable: [] });
+
+        for (const failed of [
+          readScope(pr, 1, "", "boom"),
+          readScope(pr, 1, JSON.stringify({ files: 1 }), ""),
+          readScope(pr, 0, "no json", ""),
+        ]) {
+          expect(failed.refusals).toEqual([]);
+          expect(failed.unreadable.length).toBe(1);
+        }
+      }),
+    ));
+
+  it("the driver imports the version's own survivors.ts and runs its `pick` on the input it is given", () => {
+    const text = scopeDriver("/tree/.agents/skills/mutation/scripts/survivors.ts");
+    expect(text).toContain(JSON.stringify("file:///tree/.agents/skills/mutation/scripts/survivors.ts"));
+    expect(text).toContain("survivors.pick(");
+  });
 });
