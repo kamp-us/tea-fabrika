@@ -1,8 +1,8 @@
 // C10: the fake `GitHubTest.layer`, answered by `GitHubTest.answer` and `GitHubTest.refuse`, run through `call` and through the
 // service's own `send`. It runs in memory: the fake is the whole of the GitHub side. The type laws are in TestGitHub.types.test.ts.
 import { assert, describe, expect, it } from "@effect/vitest";
-import { Cause, Duration, Effect, Exit, Schema } from "effect";
-import { between, CancelRun, failure, ListCheckRuns, reasonHeld, SEED } from "./GitHub.test-support.ts";
+import { Cause, Duration, Effect, Exit, Option, Schema } from "effect";
+import { between, CancelRun, Dispatch, failure, ListCheckRuns, reasonHeld, SEED } from "./GitHub.test-support.ts";
 import * as GitHub from "./GitHub.ts";
 import { CreatedIssue, EchoIssue, fakeCalls, goodTexts } from "./TestGitHub.test-support.ts";
 import * as GitHubTest from "./TestGitHub.ts";
@@ -37,7 +37,7 @@ const pollMillis = (options?: { readonly poll?: Duration.Input }) =>
   );
 
 // C10. Plant: ignore the status option (V); fail with `ClientError` 404 for a route no answer covers (W); let the last matching
-// answer win (X); fix `poll` at 30 seconds (Y); hand `f` the decoded value, not the encoded one the Request carried (Z); write
+// answer win (X); write a text for a value of `undefined` (V); fix `poll` at 30 seconds (Y); hand `f` the decoded value, not the encoded one the Request carried (Z); write
 // the text by joining strings, not with `JSON.stringify` (Z); answer a refusal with status 200; take the answer by a record
 // lookup on the route text.
 describe("C10, the fake", () => {
@@ -230,6 +230,23 @@ describe("C10, the fake", () => {
           expect(failure(missed), "W: no typed failure").toBeUndefined();
           expect(Exit.isFailure(missed) ? Cause.pretty(missed.cause) : "").toContain(ListCheckRuns.route);
         }
+
+        // (V) A status with no body: an `f` that gives `undefined` makes an empty body, exactly, and the caller reads it as none.
+        const dispatching = GitHubTest.layer([GitHubTest.answer(Dispatch, () => undefined, { status: 204 })]);
+
+        const dispatched = yield* send(
+          makeRequest(Dispatch, { params: { owner, repo, workflow_id: fake.base }, body: { ref: fake.base } }),
+        ).pipe(Effect.provide(dispatching));
+
+        expect(dispatched.status, "V: 204").toBe(204);
+        expect(dispatched.body, "V: an empty body, and nothing else").toBe("");
+
+        const dispatchedRead = yield* GitHub.call(Dispatch, {
+          params: { owner, repo, workflow_id: fake.base },
+          payload: { ref: fake.base },
+        }).pipe(Effect.provide(dispatching));
+
+        assert.deepStrictEqual(dispatchedRead, Option.none());
 
         // (Y) The poll interval is the option, in any form `Duration.Input` takes, and 30 seconds with none.
         expect(yield* pollMillis(), "Y: the default").toBe(30_000);
