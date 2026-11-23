@@ -69,6 +69,8 @@ const roundTrip = Effect.fnUntraced(function* <S extends Schema.Codec<unknown, u
 // F1's round trips over one run's variants, in parts that are laws of their own with 300 runs each: S1 over the data variants, S1 over the body
 // variants, and each other shape over the data variants. A run that is not `wide` leaves out the long fixed pieces of the pools, which every run
 // draws alike.
+type Variant = ReturnType<typeof Support.dataVariants>[number];
+
 const BODY_ONLY = ["t", "u", "v"];
 
 const dataS1 = (run: Support.Run, wide: boolean) =>
@@ -112,12 +114,12 @@ const bodiesS1 = (run: Support.Run) =>
 const SHAPES = [
   {
     name: "S2",
-    check: (run: Support.Run, variant: Support.Variant) =>
+    check: (run: Support.Run, variant: Variant) =>
       roundTrip(`S2 ${variant.group}`, Support.S2, Support.s2Data(run, variant.pools), variant.body),
   },
   {
     name: "S3 and S3 date",
-    check: (run: Support.Run, variant: Support.Variant) =>
+    check: (run: Support.Run, variant: Variant) =>
       Effect.gen(function* () {
         yield* roundTrip(`S3 ${variant.group}`, Support.S3, Support.s3Data(run, variant.pools), variant.body);
         yield* roundTrip(
@@ -130,12 +132,12 @@ const SHAPES = [
   },
   {
     name: "S4",
-    check: (run: Support.Run, variant: Support.Variant) =>
+    check: (run: Support.Run, variant: Variant) =>
       roundTrip(`S4 ${variant.group}`, Support.S4, Support.s4Data(run, variant.pools), variant.body),
   },
   {
     name: "S5",
-    check: (run: Support.Run, variant: Support.Variant) =>
+    check: (run: Support.Run, variant: Variant) =>
       roundTrip(`S5 ${variant.group}`, Support.S5, Support.s5Data(run, variant.pools), variant.body),
   },
 ];
