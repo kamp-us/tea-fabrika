@@ -38,6 +38,8 @@ export const Detail = Schema.Struct({
   body: Schema.String,
   /** The commit its base holds for it once merged; `null` until then. */
   mergeCommit: Schema.NullOr(Schema.String),
+  /** Whether it merges into its base cleanly: `CONFLICTING` when it does not, `UNKNOWN` while GitHub is still working it out. */
+  mergeable: Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
 });
 
 export type Detail = typeof Detail.Type;

@@ -3,10 +3,11 @@
 // so nothing here merges main in, waits on a check or runs one again. Today's lead tooling, run on
 // our own laptop; it is not product.
 //
-//   add      the pull request is open and into main -> leak grep on its net change, on each
-//            of its commits and on its title and description, each failing closed -> each new
-//            exported name is named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> a draft whose head has a CI run
-//            (never in the seconds after a push; with a wait, one is given time to appear) is marked ready
+//   add      the pull request is open, into main and not in conflict with main -> leak grep on its net change and on each
+//            of its commits, each failing closed -> the body checks (`body`, which `land.ts check` runs alone): the leak grep on its
+//            title and description, and each new exported name named under `## New names` (Names.ts, a new helper names the tools it searched, and a new name cites the industry's word) -> a draft whose head has a CI run
+//            (never in the seconds after a push; with a wait, one is given time to appear, and a wait ends at once with a refusal
+//            when the pull request turns to conflict with main, since GitHub starts no check on one) is marked ready
 //            (as `land.ts admin` does), which starts its real `ci-required` -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
@@ -22,6 +23,7 @@ import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
 import * as Names from "./Names.ts";
 import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
+import type { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
 
@@ -53,8 +55,34 @@ export type Ask = {
 /** The required check has not ended, or GitHub did not answer: a wait reads again. */
 class Pending extends Schema.TaggedError<Pending, { readonly brand: unique symbol }>()("Pending", {}) {}
 
-/** The required check at `oid` as it stands: read once, or again until it ends or the wait is over. */
-export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined) {
+/** The pull request now conflicts with main, so GitHub starts no check on it and a wait for one would run its whole hour. */
+export class Conflicting extends Schema.TaggedError<Conflicting, { readonly brand: unique symbol }>()("Conflicting", {
+  pr: Schema.Finite,
+}) {}
+
+/** What a refusal for a conflict says, and the commands that put main in. */
+export const conflictLine = (pr: number): string =>
+  `it conflicts with main, so no check runs on it; merge main in with \`gh pr update-branch ${pr}\` (a quest: \`land.ts run <quest> <ticket>\`), push, and queue it again`;
+
+/**
+ * Fails with `Conflicting` when GitHub now says pull request `pr` conflicts with main. A read that
+ * fails or has no answer yet counts as no conflict: it must never end a wait.
+ */
+const unlessConflicting = Effect.fn("Queue.unlessConflicting")(function* (pr: number) {
+  const prs = yield* PullRequests;
+  const found = yield* Effect.option(prs.view(pr));
+
+  if (Option.isSome(found) && found.value.mergeable === "CONFLICTING") {
+    return yield* Conflicting.make({ pr });
+  }
+});
+
+/**
+ * The required check at `oid` as it stands: read once, or again until it ends or the wait is over.
+ * Each read that finds it not ended also asks whether pull request `pr` has come to conflict with
+ * main (a wait for a check GitHub will never start ends there, with `Conflicting`).
+ */
+export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: Wait | undefined, pr: number) {
   const checks = yield* Checks;
   const read = checks.job(oid, REQUIRED);
 
@@ -74,7 +102,8 @@ export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, 
       (found) => Option.isSome(found) && found.value.status === "completed",
       () => Pending.make(),
     ),
-    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.tapError(() => unlessConflicting(pr)),
+    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)), while: (e) => e._tag !== "Conflicting" }),
     Effect.catchTag("Pending", () => Effect.sync(() => last)),
     Effect.timeoutOption(Duration.minutes(wait.minutes)),
   );
@@ -87,9 +116,10 @@ export const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, 
  * run makes within seconds. Marking a draft ready in the seconds after a push starts a second run on
  * the same commit, and GitHub then reports the required check as "expected" and will not queue the
  * pull request (2026-11-22). Read once, or with a wait again until one appears or the wait is over;
- * a read that fails counts as not started.
+ * a read that fails counts as not started. As `requiredAt`, a wait ends with `Conflicting` when
+ * pull request `pr` comes to conflict with main.
  */
-export const startedAt = Effect.fn("Queue.startedAt")(function* (oid: string, wait: Wait | undefined) {
+export const startedAt = Effect.fn("Queue.startedAt")(function* (oid: string, wait: Wait | undefined, pr: number) {
   const checks = yield* Checks;
 
   if (wait === undefined) {
@@ -101,7 +131,8 @@ export const startedAt = Effect.fn("Queue.startedAt")(function* (oid: string, wa
       (started) => started,
       () => Pending.make(),
     ),
-    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
+    Effect.tapError(() => unlessConflicting(pr)),
+    Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)), while: (e) => e._tag !== "Conflicting" }),
     Effect.catchTag("Pending", () => Effect.succeed(false)),
     Effect.timeoutOption(Duration.minutes(wait.minutes)),
   );
@@ -135,7 +166,27 @@ export const refusal = (found: Detail): string | null =>
         ? "draft, not merged; refused until it is ready for review"
         : found.base !== "main"
           ? `merges into ${found.base}, not main; refused`
-          : null;
+          : found.mergeable === "CONFLICTING"
+            ? conflictLine(found.number)
+            : null;
+
+/**
+ * The checks on a pull request's own words, which `add` runs and `land.ts check` runs alone, so a
+ * body is known good before the queue is asked: the leak grep on its title and description, then
+ * each new exported name named under `## New names`. Gives why it may not enter the queue, or
+ * `null`; a leak grep that refuses or cannot run fails it. Reads the pull request's patches and
+ * changes nothing.
+ */
+export const body = Effect.fn("Queue.body")(function* (
+  dir: string,
+  found: Pick<Detail, "number" | "title" | "body">,
+): Effect.fn.Return<string | null, LeakGrepRefused | PullRequestsError, PullRequests | Pushes> {
+  yield* Leaks.text(dir, found);
+
+  return Names.refusal(found.body, yield* (yield* PullRequests).patches(found.number));
+});
+
+const conflicted = (pr: number) => NotQueued.make({ reason: `pr ${pr}: ${conflictLine(pr)}` });
 
 export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const prs = yield* PullRequests;
@@ -153,8 +204,8 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });
   }
 
-  yield* Leaks.gate(a.dir, found);
-  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+  yield* Leaks.diff(a.dir, found);
+  const unnamed = yield* body(a.dir, found);
 
   if (unnamed !== null) {
     return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
@@ -164,7 +215,11 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   // refuses, and a read with a wait gives it time to appear and end. It waits first for the push's own run to start, so a ready
   // event never lands in the seconds after a push.
   if (marking) {
-    if (!(yield* startedAt(found.oid, a.wait))) {
+    if (
+      !(yield* startedAt(found.oid, a.wait, found.number).pipe(
+        Effect.catchTag("Conflicting", () => conflicted(found.number)),
+      ))
+    ) {
       return yield* NotQueued.make({ reason: `pr ${found.number}: ${notStarted(found.oid)}` });
     }
 
@@ -173,7 +228,10 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
 
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (a pull request whose steps passed lands on green CI and a clean leak check alone). So the
   // required check is read first, and anything but a finished success asks nothing.
-  const required = yield* requiredAt(found.oid, a.wait);
+  const required = yield* requiredAt(found.oid, a.wait, found.number).pipe(
+    Effect.catchTag("Conflicting", () => conflicted(found.number)),
+  );
+
   const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
   if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {

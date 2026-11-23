@@ -115,6 +115,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
                 title: "",
                 body: "",
                 mergeCommit: null,
+                mergeable: "MERGEABLE",
                 ...w.more.get(number),
               } satisfies Detail);
         }),

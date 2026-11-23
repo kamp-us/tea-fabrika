@@ -75,20 +75,30 @@ const side = (patch: string, mark: "+" | "-"): ReadonlyArray<string> =>
     (line: string) => exported(Str.slice(1)(line)),
   );
 
+/** A new exported name and the first code file whose `+` lines export it. */
+export type Added = { readonly name: string; readonly path: string };
+
 /**
- * The names a change exports that it did not export before, each once, in order: on a `+` line of a
- * code file and on no `-` line of any code file. A name moved between files, or an export line
- * reformatted, is not new.
+ * The names a change exports that it did not export before, each once, in order, with the file it
+ * comes from: on a `+` line of a code file and on no `-` line of any code file. A name moved between
+ * files, or an export line reformatted, is not new.
  */
-export const added = (patches: ReadonlyArray<Patch>): ReadonlyArray<string> => {
+export const addedIn = (patches: ReadonlyArray<Patch>): ReadonlyArray<Added> => {
   const code = Arr.filter(patches, (p) => isCode(p.path));
   const gone = new Set(Arr.flatMap(code, (p) => (p.patch === null ? [] : side(p.patch, "-"))));
 
-  return Arr.filter(
-    [...new Set(Arr.flatMap(code, (p) => (p.patch === null ? [] : side(p.patch, "+"))))],
-    (n) => !gone.has(n),
+  return Arr.dedupeWith(
+    Arr.flatMap(code, (p) =>
+      p.patch === null
+        ? []
+        : Arr.flatMap(side(p.patch, "+"), (name) => (gone.has(name) ? [] : [{ name, path: p.path }])),
+    ),
+    (a, b) => a.name === b.name,
   );
 };
+
+/** The names alone of `addedIn`. */
+export const added = (patches: ReadonlyArray<Patch>): ReadonlyArray<string> => Arr.map(addedIn(patches), (a) => a.name);
 
 /** The code files GitHub shows no patch for, whose names cannot be read. */
 export const unread = (patches: ReadonlyArray<Patch>): ReadonlyArray<string> =>
@@ -129,7 +139,7 @@ const says = (text: string, name: string): boolean => new RegExp(`(?<![\\w$])${e
  * section at all, since its names cannot be read.
  */
 export const refusal = (body: string, patches: ReadonlyArray<Patch>): string | null => {
-  const names = added(patches);
+  const names = addedIn(patches);
   const hidden = unread(patches);
   const said = section(body);
 
@@ -137,9 +147,12 @@ export const refusal = (body: string, patches: ReadonlyArray<Patch>): string | n
     return `GitHub shows no patch for ${Arr.join(hidden, ", ")}, so its new names cannot be read; add a ## New names section with a line for each (a new helper names the tools it searched, and a new name cites the industry's word, the pr skill)`;
   }
 
-  const missing = Arr.filter(names, (name) => said === null || !says(said, name));
+  const missing = Arr.filter(names, ({ name }) => said === null || !says(said, name));
 
   return missing.length === 0
     ? null
-    : `its diff exports new names its ## New names section does not name: ${Arr.join(missing, ", ")}; add one line each, what the industry calls it, with the source (a new helper names the tools it searched, and a new name cites the industry's word, the pr skill)`;
+    : `its diff exports new names its ## New names section does not name: ${Arr.join(
+        Arr.map(missing, ({ name, path }) => `${name} (${path})`),
+        ", ",
+      )}; add one line each, what the industry calls it, with the source (a new helper names the tools it searched, and a new name cites the industry's word, the pr skill)`;
 };

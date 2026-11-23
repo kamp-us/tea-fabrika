@@ -335,6 +335,7 @@ Read the header before you run one; this table only says what each is for.
 | `unlisted.ts` | list each branch with commits not on main and no open PR, and each that is safe to delete |
 | `land.ts ready` | a quest agent's last act: record "ready to land" |
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue, and close its tickets after the merge |
+| `land.ts check <pr>` | the body checks `queue` runs, alone: run it after the body is written and before `queue`; it changes nothing and exits 1 on any missing name or leak |
 | `sizecap.ts` | a diff's or a plan's size, as advice only; run `diff` by hand, since nothing prints it at landing |
 | `fieldrow.ts`, `clauderow.ts` | print one run row from a Codex run's events (box.sh run reads it), or from a Claude subagent's transcript |
 
@@ -542,7 +543,9 @@ visible, and never weaken the rules to hide this message.
    `disablePullRequestAutoMerge` and read again. Main takes changes only
    through that queue. For a quest that ended at `land.ts ready`, run `land.ts run <quest> <ticket>`
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
-   For any other pull request, run `land.ts queue <pr>` once its checks
+   For any other pull request, write the body with the [pr skill](../pr/SKILL.md), run `land.ts check <pr>`
+   until it exits 0 (the body checks `queue` runs, alone: it prints each new exported name missing from `## New names` with its
+   file, and changes nothing), then run `land.ts queue <pr>` once its checks
    are green; it marks a draft ready itself, once a CI run has started at its head, so give it `--wait` to
    let that run and the new `ci-required` appear. Both leak-check the change, each commit and the title and description, then add it to
    the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
@@ -569,7 +572,8 @@ visible, and never weaken the rules to hide this message.
    `--queue-every-seconds`), so run it in the background. A sev fix and a sev0's ready pull request
    never wait on the queue: the sev skill's one-at-a-time rule is theirs alone.
    A pull request the queue puts back out stays open: the
-   quest merges main or fixes the red check, pushes, and it is queued again. No pull request is in a native stack: GitHub refuses `gh pr merge` and merge when ready on a stack member
+   quest merges main or fixes the red check, pushes, and it is queued again. `land.ts queue --wait` exits 1 at once when
+   the pull request conflicts with main (GitHub starts no check on one), naming `gh pr update-branch <pr>`; merge main in, push, queue again. No pull request is in a native stack: GitHub refuses `gh pr merge` and merge when ready on a stack member
    (github/gh-stack#591), so a chain is plain pull requests. A child targets its parent's branch.
    When the parent lands, GitHub moves the child onto main, and the child is armed next with
    `land.ts arm`. Unstack an old native stack once with `gh stack unstack <number>`

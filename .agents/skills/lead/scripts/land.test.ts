@@ -39,8 +39,21 @@ case "$1 $2" in
   # A draft stays one until the call to mark it ready has been made.
   draft=false
   [ "\${LAND_DRAFT:-}" = 1 ] && ! grep -q "^gh pr ready" "$LAND_CALLS" && draft=true
-  printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"What the quest did.","mergeCommit":null}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" ;;
-"api -i") printf 'HTTP/2.0 200 OK\\n\\r\\n{"check_runs":[{"id":1,"status":"completed","conclusion":"%s","app":{"slug":"github-actions"}}]}' "\${LAND_REQUIRED:-success}" ;;
+  # \`LAND_MERGEABLE=later\` is a pull request that conflicts with main from the second read on.
+  mergeable=\${LAND_MERGEABLE:-MERGEABLE}
+  [ "$mergeable" != later ] || { [ "$(grep -c "^gh pr view" "$LAND_CALLS")" -lt 2 ] && mergeable=MERGEABLE || mergeable=CONFLICTING; }
+  printf '{"number":%s,"headRefName":"fabrikalfa/t652-fixture","headRefOid":"%s","baseRefName":"main","state":"%s","isDraft":%s,"title":"%s","body":"%s","mergeCommit":null,"mergeable":"%s"}\\n' "$3" "$head" "\${LAND_STATE:-OPEN}" "$draft" "\${LAND_TITLE:-T652 fixture: one quest}" "\${LAND_BODY:-What the quest did.}" "$mergeable" ;;
+"api graphql") echo '{"data":{"repository":{"mergeQueue":null}}}' ;;
+"api --paginate")
+  # The files the pull request changes, one JSON row each: one new export when a law names one.
+  [ -z "\${LAND_PATCH:-}" ] || printf '{"path":"src/thing.ts","patch":"@@ -0,0 +1 @@\\\\n+export const %s = 1"}\\n' "$LAND_PATCH" ;;
+"api -i")
+  # \`LAND_REQUIRED=pending\` is a check that has not ended.
+  status=completed
+  conclusion="\${LAND_REQUIRED:-success}"
+  [ "$conclusion" != pending ] || { status=in_progress; conclusion=null; }
+  [ "$conclusion" = null ] || conclusion="\\"$conclusion\\""
+  printf 'HTTP/2.0 200 OK\\n\\r\\n{"check_runs":[{"id":1,"status":"%s","conclusion":%s,"app":{"slug":"github-actions"}}]}' "$status" "$conclusion" ;;
 esac
 `;
 
@@ -69,6 +82,14 @@ type World = {
   readonly draft?: boolean;
   /** The pull request's state at GitHub; open when left out. */
   readonly state?: "OPEN" | "CLOSED";
+  /** How the pull request stands with main: `later` is clear on the first read and conflicting from the second. */
+  readonly mergeable?: "MERGEABLE" | "CONFLICTING" | "later";
+  /** `ci-required` has not ended at the pushed head. */
+  readonly pending?: boolean;
+  /** The pull request's description, with `\n` for a new line; a short line when left out. */
+  readonly body?: string;
+  /** The one new export the pull request's diff adds, in `src/thing.ts`; none when left out. */
+  readonly patch?: string;
   /** Run this command after `land.ts`, in place of `run <quest> <ticket>`; the main checkout is then the quest's tree. */
   readonly command?: ReadonlyArray<string>;
   /** The ready record names the quest `lane`, as one written before the rule that a lane is called a quest does. */
@@ -98,6 +119,9 @@ const land = (world: World) => {
       MAIN: join(dir, world.command ? "quest" : "main"),
       LAND_DRAFT: world.draft ? "1" : "",
       LAND_STATE: world.state ?? "OPEN",
+      LAND_MERGEABLE: world.mergeable ?? "MERGEABLE",
+      LAND_BODY: world.body ?? "What the quest did.",
+      LAND_PATCH: world.patch ?? "",
       BOXES: join(dir, "boxes"),
       REMOTE: join(dir, "origin"),
       GH_REPO: "owner/repo",
@@ -107,7 +131,7 @@ const land = (world: World) => {
       LAND_SIGN: world.signFails ? "1" : "0",
       LAND_OPEN: world.open ?? "",
       LAND_QUEST: join(dir, "quest"),
-      LAND_REQUIRED: world.red ? "failure" : "success",
+      LAND_REQUIRED: world.red ? "failure" : world.pending ? "pending" : "success",
       TYPESAFE_API_KEY: undefined,
     };
 
@@ -283,7 +307,7 @@ describe("land.ts, today's tooling", () => {
       expect.stringMatching(
         /^gh pr create -R owner\/repo --head fabrikalfa\/t652-fixture --title T652 fixture: one quest --body-file /,
       ),
-      "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit",
+      "gh pr view 77 -R owner/repo --json number,headRefName,headRefOid,state,isDraft,baseRefName,title,body,mergeCommit,mergeable",
       // The names check (a new helper names the tools it searched, and a new name cites the industry's word) reads the diff after the leak grep and before `ci-required`.
       "gh api --paginate repos/owner/repo/pulls/77/files --jq .[] | {path: .filename, patch: (.patch // null)}",
       expect.stringMatching(
@@ -391,6 +415,57 @@ describe("land.ts, today's tooling", () => {
       { seed: 1942, numRuns: 12 },
     );
   }, 300_000);
+
+  // Plant: read only ci-required in the wait, so a pull request GitHub starts no check on waits out its hour.
+  it("scenario: `land.ts queue --wait` exits 1 at once when the pull request turns to conflict, naming the conflict and the command that merges main in", () => {
+    const got = land({ ...fine, pending: true, mergeable: "later", command: ["queue", "77", "--wait"] });
+    expect(got.code, got.err).toBe(1);
+    expect(got.err).toContain("land: refused at the queue check: pr 77: it conflicts with main");
+    expect(got.err).toContain("gh pr update-branch 77");
+    expect(got.calls.filter((c) => /^gh pr (ready|merge)/.test(c))).toEqual([]);
+  }, 120_000);
+
+  // Plants: run `check` on a part of the checks `queue` runs, or let it ask GitHub to change something.
+  it("property: `land.ts check` refuses the same bodies as `land.ts queue`, names each missing name with its file, and changes nothing", () => {
+    fc.assert(
+      fc.property(
+        fc.record({ named: fc.boolean(), leak: fc.boolean(), exports: fc.boolean() }),
+        ({ named, leak, exports }) => {
+          const section = named ? "\\n\\n## New names\\n\\n- `newThing`: the industry's word, with its source." : "";
+          const body = `What it does.${leak ? ` ${planted}` : ""}${section}`;
+          const world = { ...fine, body, ...(exports ? { patch: "newThing" } : {}) };
+          const checked = land({ ...world, command: ["check", "77"] });
+          const queued = land({ ...world, command: ["queue", "77"] });
+          const refused = leak || (exports && !named);
+
+          expect(checked.code, checked.err).toBe(refused ? 1 : 0);
+          expect(queued.code, queued.err).toBe(refused ? 1 : 0);
+          expect(checked.err).not.toContain(planted);
+
+          if (exports && !named && !leak) {
+            for (const said of [checked.err, queued.err]) {
+              expect(said).toContain("new names its ## New names section does not name: newThing (src/thing.ts)");
+            }
+          }
+
+          // `check` reads and asks nothing that changes: no ready, no merge, no edit.
+          expect(checked.calls.filter((c) => /^gh pr (ready|merge|edit)|-X (PATCH|POST)/.test(c))).toEqual([]);
+        },
+      ),
+      { seed: 1270, numRuns: 8 },
+    );
+  }, 300_000);
+
+  // Plant: let a wait for a good admin merge end in a refusal, as the command did after the merge.
+  it("scenario: `land.ts admin --wait` exits 0 after a good admin merge, and only a refusal exits 1", () => {
+    const merged = land({ ...fine, command: ["admin", "77", "--wait"] });
+    expect(merged.code, merged.err).toBe(0);
+    expect(merged.out).toContain("pr 77: admin-merged at ");
+    expect(merged.calls).toContain(`gh pr merge 77 -R owner/repo --squash --match-head-commit ${merged.head} --admin`);
+    const refused = land({ ...fine, red: true, command: ["admin", "77", "--wait"] });
+    expect(refused.code).toBe(1);
+    expect(refused.calls.filter((c) => c.endsWith("--admin"))).toEqual([]);
+  });
 
   it("T652 scenario: a mid-quest handover (no PR files) merges main, signs and pushes the -wip backup, then stops with no PR and nothing queued", () => {
     const got = land({ ...fine, behind: true, wip: true });
