@@ -1,4 +1,4 @@
-// T2 and T3: the calls' types and the layers' types. T5 and T6: the types of the write and merge calls and the layer that
+// T2 and T3: the calls' types and the layers' types. T7: the types of the read calls. T5 and T6: the types of the write and merge calls and the layer that
 // needs a `Digest`. Compile the exact expressions, never execute them.
 import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema, type Context, type Effect, type Layer, type Option } from "effect";
@@ -273,10 +273,48 @@ const refNotCommit = (text: string, ref: RefName) => {
   return [fromText, new Repository.RefNotCommit({ ref, points: "tag" })];
 };
 
+// Plant (T7, ticket 1935 slice 1): add `NotUtf8` to `readFile`'s errors; require `readText` of an adapter, so `Raw` has it and the
+// `@ts-expect-error` is unused; type `holds` as a string; leave `FileTooLarge` out of `readText`; give `readFile` a requirement.
+const reads = (raw: Repository.Raw, commit: CommitId, path: Path, text: string) => {
+  expectTypeOf<Repository.Repository["Service"]["readFile"]>().toEqualTypeOf<
+    (
+      commit: CommitId,
+      path: Path,
+    ) => Effect.Effect<
+      Option.Option<Uint8Array>,
+      Repository.NoSuchCommit | Repository.NotAFile | Repository.FileTooLarge | Fails,
+      never
+    >
+  >();
+  expectTypeOf<Repository.Repository["Service"]["readText"]>().toEqualTypeOf<
+    (
+      commit: CommitId,
+      path: Path,
+    ) => Effect.Effect<
+      Option.Option<string>,
+      Repository.NotUtf8 | Repository.NoSuchCommit | Repository.NotAFile | Repository.FileTooLarge | Fails,
+      never
+    >
+  >();
+  expectTypeOf<Repository.Raw["readFile"]>().toEqualTypeOf<Repository.Repository["Service"]["readFile"]>();
+  expectTypeOf<ConstructorParameters<typeof Repository.NotAFile>[0]["holds"]>().toEqualTypeOf<
+    "folder" | "link" | "submodule"
+  >();
+  expectTypeOf<ConstructorParameters<typeof Repository.FileTooLarge>[0]["path"]>().toEqualTypeOf<Path>();
+  expectTypeOf<ConstructorParameters<typeof Repository.FileTooLarge>[0]["most"]>().toEqualTypeOf<number>();
+  // @ts-expect-error `readText` is written once in `make`: an adapter has none.
+  const written = raw.readText;
+  // @ts-expect-error The path is a `Path`, never plain text.
+  const loose = (repo: Repository.Repository["Service"]) => repo.readFile(commit, text);
+
+  return [written, loose, path];
+};
+
 it("type: each call has the answer and errors the plan gives, and each layer the plan's types", () => {
   // These compile-time laws need tsc, which the lead runs after build.
   expectTypeOf(calls).toBeFunction();
   expectTypeOf(rangesAndDiffs).toBeFunction();
+  expectTypeOf(reads).toBeFunction();
   expectTypeOf(layers).toBeFunction();
   expectTypeOf(layersWithDigest).toBeFunction();
   expectTypeOf(writes).toBeFunction();

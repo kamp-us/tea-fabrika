@@ -221,3 +221,32 @@ export const processSubject: Subject = {
       return yield* seed(history, settings).pipe(Effect.provide(services));
     }),
 };
+
+/**
+ * Every key of the config that could change what a read or a write of a file prints (ticket 1935's table): how names print and
+ * match, what a file's bytes are filtered through, and the size a file is called big at. The attributes file marks every file
+ * `text eol=crlf` and runs it through a filter whose commands change the bytes, so a command that asked git to filter shows.
+ */
+export const setConfigTable = (dir: string): Effect.Effect<void, never, Needs> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    yield* fs.makeDirectory(path.join(dir, "info"), { recursive: true });
+    yield* fs.writeFileString(path.join(dir, "info", "attributes"), "* text eol=crlf filter=up\n");
+    yield* fs.writeFileString(path.join(dir, "attributes"), "* text eol=crlf filter=up\n");
+
+    for (const [key, value] of [
+      ["core.quotePath", "false"],
+      ["core.precomposeUnicode", "true"],
+      ["core.ignoreCase", "true"],
+      ["core.autocrlf", "true"],
+      ["core.eol", "crlf"],
+      ["core.safecrlf", "true"],
+      ["core.attributesFile", path.join(dir, "attributes")],
+      ["core.bigFileThreshold", "1"],
+      ["filter.up.smudge", "tr a-z A-Z"],
+      ["filter.up.clean", "tr A-Z a-z"],
+    ] as const) {
+      yield* git(dir, ["config", key, value]);
+    }
+  }).pipe(Effect.orDie);

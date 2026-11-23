@@ -9,6 +9,7 @@
 // every run, each one applied to the run's drawn value, so a missing class fails a law loudly.
 import { createHash } from "node:crypto";
 import { Arbitrary, Predicate, Result, Schema } from "effect";
+import { Path } from "./Tree.ts";
 
 // ---------------------------------------------------------------------------------------------------------
 // Pieces
@@ -515,6 +516,7 @@ export const limitsArb = Arbitrary.all({
   bytes: intBetween(1, 1_000_000_000),
   files: intBetween(1, 1_000_000_000),
   diff: intBetween(1, 1_000_000_000),
+  blob: intBetween(1, 1_000_000_000),
   time: durationTextArb,
 });
 
@@ -1062,6 +1064,374 @@ export const treeCarrier = (
   return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, classes: entries.map((e) => e.label) };
 };
 
+// ---------------------------------------------------------------------------------------------------------
+// Reads: what `readFile` and `readText` must answer (ticket 1935, slice 1)
+// ---------------------------------------------------------------------------------------------------------
+
+/** What a read at one path must answer: the file's bytes, none, or the kind of thing that is no file. */
+export type ReadModel =
+  | { readonly kind: "file"; readonly bytes: Uint8Array }
+  | { readonly kind: "none" }
+  | { readonly kind: "not-a-file"; readonly path: string; readonly holds: "folder" | "link" };
+
+type Held = "file" | "link" | "folder";
+
+// What a path holds in a set of files: the file or the link at it, a folder when a file sits below it, else nothing.
+const heldAt = (
+  files: ReadonlyArray<FileSpec>,
+  path: string,
+): { readonly kind: Held; readonly file?: FileSpec } | undefined => {
+  const found = files.find((each) => each.path === path);
+
+  if (found !== undefined) {
+    return { kind: found.mode === "120000" ? "link" : "file", file: found };
+  }
+
+  return files.some((each) => each.path.startsWith(`${path}/`)) ? { kind: "folder" } : undefined;
+};
+
+/**
+ * What `readFile` must answer for a path in the files of one commit, part by part from the top: nothing at a part, or a file above the
+ * last part, is none; a link above the last part is no file and names that part; at the last part a folder or a link is no file and
+ * names the path, and a file is the answer. A submodule is on git only.
+ */
+export const readModel = (files: ReadonlyArray<FileSpec>, path: string): ReadModel => {
+  const parts = path.split("/");
+
+  for (const [i] of parts.entries()) {
+    const prefix = parts.slice(0, i + 1).join("/");
+    const held = heldAt(files, prefix);
+    const last = i === parts.length - 1;
+
+    if (held === undefined) {
+      return { kind: "none" };
+    }
+
+    if (last) {
+      return held.kind === "file" && held.file !== undefined
+        ? { kind: "file", bytes: held.file.content }
+        : { kind: "not-a-file", path, holds: held.kind === "link" ? "link" : "folder" };
+    }
+
+    if (held.kind === "file") {
+      return { kind: "none" };
+    }
+
+    if (held.kind === "link") {
+      return { kind: "not-a-file", path: prefix, holds: "link" };
+    }
+  }
+
+  return { kind: "none" };
+};
+
+/** `readText`'s answer for bytes: the text, or `undefined` when they are not UTF-8. A BOM, a CR and a NUL are text. */
+export const textModel = (bytes: Uint8Array): string | undefined => {
+  const decoded = Result.try(() => strictUtf8.decode(bytes));
+
+  return Result.isSuccess(decoded) ? decoded.success : undefined;
+};
+
+/** The classes a read carrier reaches, in this order: each reads at least once in every run. */
+export const READ_CLASSES = [
+  ...TREE_CLASSES.filter((label) => label !== "no files").map((label) => `(a) ${label}`),
+  "(a) an empty file is Some of no bytes",
+  "(a) a file beside a name that shares its start",
+  "(b) a path no tree has",
+  "(b) a name that shares its start with a file",
+  "(b) a name that shares its end with a file",
+  "(b) a name that is the start of a file's name",
+  "(b) a path below a file",
+  "(b) a path in a folder that does not exist",
+  "(b) a commit with no files",
+  "(c) a folder at the top",
+  "(c) a folder three deep",
+  "(d) a link at the path",
+  "(d) a path below a link",
+  "(g) UTF-8 with a BOM",
+  "(g) a CR and a NUL",
+  "(g) latin-1 bytes",
+  "(g) a UTF-8 sequence cut short at the end",
+  "(g) UTF-8 text with line breaks and wide characters",
+] as const;
+
+/** One read: a commit of the history and a path, the model's answer on that commit's files, and the classes it reaches. */
+export interface ReadCase {
+  readonly label: string;
+  readonly classes: ReadonlyArray<string>;
+  readonly commit: number;
+  readonly path: string;
+  readonly expected: ReadModel;
+}
+
+export interface ReadCarrier {
+  readonly history: History;
+  readonly cases: ReadonlyArray<ReadCase>;
+}
+
+/**
+ * A history with a commit for every tree class and two more (names that share a start or an end, and text of every kind), and every
+ * read a law makes on them: each file, each folder on its way, each link and a path below it, and paths that hold nothing.
+ */
+export const readCarrier = (texture: Texture): ReadCarrier => {
+  const draw = new Draw(texture);
+  const word = draw.word();
+  const author = draw.signature(draw.int(4_000_000_000));
+  const committer = draw.signature(0);
+  const q = at(texture.parts, 4);
+  const base = treeClasses(texture);
+
+  const entries: ReadonlyArray<{
+    readonly label: string;
+    readonly classes: ReadonlyArray<string>;
+    readonly files: ReadonlyArray<FileSpec>;
+  }> = [
+    ...base.map(({ label, files }) => ({ label, classes: label === "no files" ? [] : [`(a) ${label}`], files })),
+    {
+      label: "names that share a start or an end",
+      classes: ["(a) a file beside a name that shares its start"],
+      files: [
+        file(`w${q}.b`, utf8("one")),
+        file(`w${q}-b`, utf8("two")),
+        file(`w${q}0`, utf8("three")),
+        file(`xw${q}`, utf8("four")),
+      ],
+    },
+    {
+      label: "text",
+      classes: [],
+      files: [
+        file(`g1${q}`, utf8("\uFEFFbom text\n")),
+        file(`g2${q}`, Uint8Array.of(0x61, 0x0d, 0x0a, 0x62, 0x00, 0x63, 0x0a)),
+        file(`g3${q}`, Uint8Array.of(0x63, 0xe9, 0x0a)),
+        file(`g4${q}`, Uint8Array.of(0x61, 0xe2, 0x82)),
+        file(`g5${q}`, utf8("line one\nline two \u00e9\u20ac\u{1F600}\n")),
+      ],
+    },
+  ];
+
+  const nodes = entries.map((entry, i): Node => ({
+    parents: i === 0 ? [] : [i - 1],
+    author,
+    committer: { ...committer, seconds: BASE_SECONDS + i },
+    message: word,
+    files: entry.files,
+  }));
+
+  const cases: Array<ReadCase> = [];
+
+  for (const [commit, entry] of entries.entries()) {
+    const seen = new Set<string>();
+
+    const add = (label: string, path: string, classes: ReadonlyArray<string>): void => {
+      if (seen.has(path)) {
+        return;
+      }
+
+      seen.add(path);
+      cases.push({ label, classes, commit, path, expected: readModel(entry.files, path) });
+    };
+
+    const textClasses: ReadonlyArray<readonly [string, string]> = [
+      ["g1", "(g) UTF-8 with a BOM"],
+      ["g2", "(g) a CR and a NUL"],
+      ["g3", "(g) latin-1 bytes"],
+      ["g4", "(g) a UTF-8 sequence cut short at the end"],
+      ["g5", "(g) UTF-8 text with line breaks and wide characters"],
+    ];
+
+    const textClass = (name: string): ReadonlyArray<string> =>
+      textClasses.filter(([start]) => name.startsWith(start)).map(([, label]) => label);
+
+    for (const each of entry.files) {
+      const parts = each.path.split("/");
+      const last = parts.at(-1) ?? each.path;
+      const above = parts.slice(0, -1);
+      const sibling = (name: string): string => [...above, name].join("/");
+      const link = each.mode === "120000";
+
+      add(
+        `${entry.label}: ${each.path}`,
+        each.path,
+        link
+          ? ["(d) a link at the path"]
+          : [
+              ...entry.classes,
+              ...(each.content.length === 0 ? ["(a) an empty file is Some of no bytes"] : []),
+              ...textClass(last),
+            ],
+      );
+      add(`${entry.label}: below ${each.path}`, `${each.path}/z${q}`, [
+        link ? "(d) a path below a link" : "(b) a path below a file",
+      ]);
+      add(`${entry.label}: deeper below ${each.path}`, `${each.path}/z${q}/y`, [
+        link ? "(d) a path below a link" : "(b) a path below a file",
+      ]);
+      add(`${entry.label}: start of ${each.path}`, sibling(`${last}x`), [
+        "(b) a name that shares its start with a file",
+      ]);
+      add(`${entry.label}: end of ${each.path}`, sibling(`x${last}`), ["(b) a name that shares its end with a file"]);
+
+      // The start of the name: absent, though the names that start with it are there (`a` beside `a.b`, `a-b`, `a0`).
+      const shorter = sibling(Array.from(last).slice(0, -1).join(""));
+
+      if (Array.from(last).length > 1 && Schema.is(Path)(shorter)) {
+        add(`${entry.label}: start of ${each.path}`, shorter, ["(b) a name that is the start of a file's name"]);
+      }
+
+      for (let n = 1; n < parts.length; n++) {
+        add(
+          `${entry.label}: folder ${parts.slice(0, n).join("/")}`,
+          parts.slice(0, n).join("/"),
+          [[], ["(c) a folder at the top"], [], ["(c) a folder three deep"]][Math.min(n, 3)] ?? [],
+        );
+      }
+    }
+
+    add(`${entry.label}: nothing`, `nothing${q}`, [
+      "(b) a path no tree has",
+      ...(entry.files.length === 0 ? ["(b) a commit with no files"] : []),
+    ]);
+    add(`${entry.label}: no folder`, `nofolder${q}/z/y`, ["(b) a path in a folder that does not exist"]);
+  }
+
+  return { history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] }, cases };
+};
+
+/** What the names of a sibling tree are made of, each reached in every run by `nameCarrier`. */
+export const NAME_CLASSES = [
+  "a name that starts with the asked name",
+  "a name that ends with the asked name",
+  "a name that is the start of the asked name",
+  "a name of the asked length that differs in one character",
+  "a name of the asked byte length made of other characters",
+  "an asked name that is absent and is the start of names that exist",
+] as const;
+
+const utf8Length = (text: string): number => utf8(text).length;
+
+/**
+ * Two commits of files whose names sit close to each other: for each of four asked names (two of them with a character of two or
+ * three bytes), a sibling that starts with it, one that ends with it, one that is its start, ones of its length that differ in one
+ * character, and ones of its byte length made of other characters; each at the top in the first commit and in a folder in the
+ * second. Every name holds its own bytes, so a read that takes a neighbor's file is seen. The cases are every read of a file.
+ */
+export const nameCarrier = (texture: Texture): ReadCarrier & { readonly classes: ReadonlyArray<string> } => {
+  const asked = [
+    `a${at(texture.parts, 0)}`,
+    `\u00e9${at(texture.parts, 1)}`,
+    `${at(texture.parts, 2)}\u8BBE`,
+    `\u{1F600}${at(texture.parts, 3)}`,
+  ];
+
+  const reached = new Set<string>();
+  const names = new Map<string, number>();
+
+  const take = (name: string, label?: (typeof NAME_CLASSES)[number]): void => {
+    if (Schema.is(Path)(name) && !names.has(name)) {
+      names.set(name, names.size);
+
+      if (label !== undefined) {
+        reached.add(label);
+      }
+    }
+  };
+
+  for (const name of asked) {
+    const characters = Array.from(name);
+    take(name);
+    take(`${name}0`, NAME_CLASSES[0]);
+    take(`${name}z`, NAME_CLASSES[0]);
+    take(`0${name}`, NAME_CLASSES[1]);
+    take(`z${name}`, NAME_CLASSES[1]);
+    take(characters.slice(0, -1).join(""), NAME_CLASSES[2]);
+    take(characters.slice(0, 1).join(""), NAME_CLASSES[2]);
+
+    for (const [i, character] of characters.entries()) {
+      const before = characters.slice(0, i).join("");
+      const after = characters.slice(i + 1).join("");
+
+      for (const other of ["0", "~"]) {
+        if (utf8Length(character) === 1 && character !== other) {
+          take(`${before}${other}${after}`, NAME_CLASSES[3]);
+        }
+      }
+
+      if (utf8Length(character) > 1) {
+        take(`${before}${"0".repeat(utf8Length(character))}${after}`, NAME_CLASSES[4]);
+      }
+    }
+  }
+
+  // Names that are asked and are not there, each the start of names that are: files beside it (`m.b`, `m-b`, `m0`, `mb`) and folders
+  // (`m.d/x`, `m-d/x`). A name that only starts other names is none, never a folder.
+  const absent = [`m${at(texture.parts, 5)}`, `\u00fc${at(texture.parts, 6)}`];
+
+  const beside = absent.flatMap((name) =>
+    [`${name}.b`, `${name}-b`, `${name}0`, `${name}b`, `${name}.d/x`, `${name}-d/x`].filter((each) =>
+      Schema.is(Path)(each),
+    ),
+  );
+
+  const content = (n: number): Uint8Array =>
+    Uint8Array.from({ length: 3 + (n % 5) }, (_, k) => [n & 255, n >> 8][k] ?? (n * 31 + k * 7) & 255);
+
+  const draw = new Draw(texture);
+  const word = draw.word();
+  const author = draw.signature(draw.int(4_000_000_000));
+  const committer = draw.signature(0);
+  const folder = `dir${at(texture.parts, 4)}`;
+
+  const layouts: ReadonlyArray<(name: string) => string> = [(name) => name, (name) => `${folder}/${name}`];
+
+  const nodes = layouts.map((place, i): Node => ({
+    parents: i === 0 ? [] : [i - 1],
+    author,
+    committer: { ...committer, seconds: BASE_SECONDS + i },
+    message: word,
+    files: [
+      ...[...names].map(([name, n]) => file(place(name), content(n))),
+      ...beside.map((name, i) => file(place(name), content(names.size + i))),
+    ],
+  }));
+
+  const cases = nodes.flatMap((node, commit) => [
+    ...node.files.map((each): ReadCase => ({
+      label: `names: ${each.path}`,
+      classes: [],
+      commit,
+      path: each.path,
+      expected: readModel(node.files, each.path),
+    })),
+    ...absent.map((name): ReadCase => {
+      const path = (layouts[commit] ?? ((text: string) => text))(name);
+
+      return {
+        label: `names: absent ${path}`,
+        classes: [NAME_CLASSES[5]],
+        commit,
+        path,
+        expected: readModel(node.files, path),
+      };
+    }),
+  ]);
+
+  reached.add(NAME_CLASSES[5]);
+
+  return {
+    history: { nodes, refs: refsFor(draw, nodes.length), shallow: [] },
+    cases,
+    classes: NAME_CLASSES.filter((label) => reached.has(label)),
+  };
+};
+
+/** The classes of `READ_CLASSES` that the cases of a carrier reach, in the list's order. */
+export const reachedReadClasses = (carrier: ReadCarrier): ReadonlyArray<string> => {
+  const reached = new Set(carrier.cases.flatMap((each) => each.classes));
+
+  return READ_CLASSES.filter((label) => reached.has(label));
+};
+
 /** The same history with a canary in every message, name and email, so a span that leaks one is seen. */
 export const CANARY = "canary-7f3a9c";
 
@@ -1457,7 +1827,7 @@ export const comparedBytes = (before: ReadonlyArray<FileSpec>, after: ReadonlyAr
   );
 
 /** The id git gives a blob: the sha-1 of `blob <size>`, a NUL byte and its bytes. */
-const blobId = (content: Uint8Array): string =>
+export const blobId = (content: Uint8Array): string =>
   createHash("sha1").update(`blob ${content.length}\0`).update(content).digest("hex");
 
 const strictUtf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });

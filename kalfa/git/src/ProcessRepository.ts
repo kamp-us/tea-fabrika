@@ -10,6 +10,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Commit from "./Commit.ts";
 import type { CommitId } from "./CommitId.ts";
 import { joined } from "./internal/bytes.ts";
+import * as Lookup from "./internal/lookup.ts";
 import { bytes } from "./internal/object.ts";
 import * as Parse from "./internal/parse.ts";
 import type * as Ref from "./Ref.ts";
@@ -307,6 +308,22 @@ const failed = Effect.fnUntraced(function* (
 const blobSides = (change: Parse.Change): ReadonlyArray<Parse.Side> =>
   [change.before, change.after].flatMap((side) => (side === undefined || Parse.isGitlink(side) ? [] : [side]));
 
+// What a listed entry is, as a path's rule needs it: a link is a blob with mode 120000, a submodule a commit.
+const entryKind = (entry: Parse.Listed): Lookup.Kind => {
+  if (entry.type === "tree") {
+    return "folder";
+  }
+
+  if (entry.type === "commit") {
+    return "submodule";
+  }
+
+  return entry.mode === "120000" ? "link" : "file";
+};
+
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+  a.length === b.length && a.every((octet, at) => octet === b[at]);
+
 const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Parse.Version): Repository.Raw => {
   const { limits } = settings;
 
@@ -465,6 +482,65 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
 
       return Option.some(yield* Effect.fromResult(Parse.patchId(yield* stdoutText(printed))));
     }),
+    readFile: Effect.fnUntraced(function* (commit, path) {
+      yield* known(run, [commit]);
+
+      // One folder at a time, top down, from its own listing: no path ever reaches git, so no pathspec, quoting or path config acts.
+      // The walk ends at the first part that is missing or is not a folder. A part is matched to a listed name by its bytes.
+      const parts = path.split("/");
+      const seen = new Map<string, Parse.Listed>();
+      let folder: string = commit;
+
+      for (const [at, part] of parts.entries()) {
+        const printed = yield* Effect.flatMap(run(["ls-tree", "-z", folder]), succeeded);
+        const wanted = encoder.encode(part);
+
+        const entry = (yield* Effect.fromResult(Parse.listing(printed.stdout))).find((each) =>
+          sameBytes(each.name, wanted),
+        );
+
+        if (entry === undefined) {
+          break;
+        }
+
+        seen.set(parts.slice(0, at + 1).join("/"), entry);
+
+        if (entryKind(entry) !== "folder") {
+          break;
+        }
+
+        folder = entry.id;
+      }
+
+      yield* Effect.fromResult(
+        Lookup.find(path, (so) => {
+          const entry = seen.get(so);
+
+          return entry === undefined ? undefined : entryKind(entry);
+        }),
+      );
+
+      const file = seen.get(path);
+
+      if (file === undefined) {
+        return Option.none();
+      }
+
+      const size = (yield* blobSizes(run, [file.id])).get(file.id)?.size ?? 0;
+
+      if (size > limits.blob) {
+        return yield* new Repository.FileTooLarge({ path, most: limits.blob });
+      }
+
+      const content = (yield* Effect.flatMap(run(["cat-file", "blob", file.id]), succeeded)).stdout;
+
+      // git says how many bytes the blob holds, and `cat-file blob` must print exactly that many, never fewer or more.
+      if (content.length !== size) {
+        return yield* unreadable(new Error("cat-file printed a blob of another size than it said"));
+      }
+
+      return Option.some(content);
+    }),
     diff: Effect.fnUntraced(function* (from, to) {
       const changed = yield* entries(from, to);
 
@@ -476,7 +552,7 @@ const calls = (run: Run, list: Listed, settings: Settings.Settings, version: Par
       const submodule = changed.find((each) => each.gitlink);
 
       if (submodule !== undefined) {
-        return yield* new Repository.NotAFile({ path: submodule.path });
+        return yield* new Repository.NotAFile({ path: submodule.path, holds: "submodule" });
       }
 
       yield* withinSize(changed);

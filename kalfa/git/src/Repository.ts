@@ -129,17 +129,32 @@ export class NotUtf8 extends Schema.TaggedError<NotUtf8, { readonly brand: uniqu
 }) {}
 
 /**
- * A diff holds a submodule, which has a commit and no file, so it has no lines.
+ * A path holds no file, so it has no bytes and no lines: `holds` says what it holds, a folder, a link or a submodule.
  *
  * **Details**
  *
- * `path` is the first such entry in path order, as git prints it.
+ * `readFile` names the path it was asked, or the link or submodule above it that a path would pass through. `diff` fails it for a submodule, with the path as git prints it, so `path` is plain text.
  *
  * @category errors
  */
 export class NotAFile extends Schema.TaggedError<NotAFile, { readonly brand: unique symbol }>()("NotAFile", {
   path: Schema.String,
+  holds: Schema.Literals(["folder", "link", "submodule"]),
 }) {}
+
+/**
+ * A file holds more bytes than `limits.blob`, so `readFile` does not read it.
+ *
+ * **Details**
+ *
+ * It is checked before any content is read, so a file is never cut.
+ *
+ * @category errors
+ */
+export class FileTooLarge extends Schema.TaggedError<FileTooLarge, { readonly brand: unique symbol }>()(
+  "FileTooLarge",
+  { path: Path, most: Schema.Int },
+) {}
 
 /**
  * A commit object is larger than `limits.bytes`.
@@ -288,6 +303,19 @@ type Fails = GitUnavailable | TimedOut;
 
 const isConflict = Schema.is(Conflict);
 
+// UTF-8 or nothing: a byte that is not valid is a failure, never a replacement character. A leading BOM is kept.
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+// A read's span says whether there is a file and, for one, how many bytes it holds. The file itself and its path are never an attribute.
+const found = (file: Option.Option<Uint8Array>): Effect.Effect<Option.Option<Uint8Array>> =>
+  Effect.as(
+    Effect.annotateCurrentSpan({
+      "kalfa.git.found": Option.isSome(file),
+      ...(Option.isSome(file) ? { "kalfa.git.bytes": file.value.length } : {}),
+    }),
+    file,
+  );
+
 // What a caller says to write a commit: the committer is the settings' and the clock's, never the caller's.
 type NewCommit = {
   readonly tree: TreeId;
@@ -308,6 +336,8 @@ type NewCommit = {
  * - `isAncestor` answers whether `descendant` reaches `ancestor`. A commit is its own ancestor.
  * - `patchId` answers the name of the changes from the files of `from` to the files of `to`, or none when the two hold the same files. It reads no history, so it answers in a shallow repository. It fails with `NoSuchCommit` for an id the repository lacks, then with `TooMany` (`files`) and `DiffTooLarge`, each before any content is read.
  * - `rangePatchId` answers the patch id of a branch's own changes: from the one merge base of `commit` and `upstream` to `commit`, or none when there are none. It fails with `UnclearBase` naming the merge bases when there is none or more than one, and with `HistoryTooShort` in a shallow repository, as `mergeBases` does. It is one call of the service, with one span and one time limit.
+ * - `readFile` answers the bytes of the file at `path` in the files of `commit`, kept exactly, or none when git proved no file is there. An empty file is `Some` of no bytes. It fails with `NoSuchCommit`, then `NotAFile` when the path holds a folder, a link or a submodule, or passes through a link or a submodule, then `FileTooLarge` when the file holds more than `limits.blob` bytes. It reads no history, so it answers in a shallow repository. The bytes are the caller's: a call never hands out its own copy.
+ * - `readText` is `readFile` read as UTF-8 with no replacement: a byte that is not UTF-8 fails `NotUtf8` naming the path. A BOM, a CR and a NUL byte are text and are kept. It is one call, with one span and one time limit.
  * - `diff` answers every file the files of `from` and `to` differ in, sorted by path, with the lines added and removed, or `[]` when the two hold the same files. It fails as `patchId` does, with `NotAFile` for a submodule after the files limit and `NotUtf8` for a text file whose lines are not UTF-8 after the size limit.
  *
  * - `writeCommit` writes one commit and answers it. Its committer is the settings' one, at the clock's second and offset `+0000`. It fails when the message holds a NUL byte, when the object would pass `limits.bytes`, and when the tree is no tree or a parent is no commit. It moves no ref.
@@ -344,6 +374,14 @@ export class Repository extends Context.Service<
       from: CommitId,
       to: CommitId,
     ) => Effect.Effect<Option.Option<PatchId>, NoSuchCommit | TooMany | DiffTooLarge | Fails>;
+    readonly readFile: (
+      commit: CommitId,
+      path: Path,
+    ) => Effect.Effect<Option.Option<Uint8Array>, NoSuchCommit | NotAFile | FileTooLarge | Fails>;
+    readonly readText: (
+      commit: CommitId,
+      path: Path,
+    ) => Effect.Effect<Option.Option<string>, NotUtf8 | NoSuchCommit | NotAFile | FileTooLarge | Fails>;
     readonly diff: (
       from: CommitId,
       to: CommitId,
@@ -372,18 +410,18 @@ export class Repository extends Context.Service<
 >()("@kalfa/git/Repository") {}
 
 /**
- * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, and `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`.
+ * What an adapter writes: the service's calls, except that `writeCommit` is handed the committer, which `make` sets, `rangePatchId`, which `make` writes once from `mergeBases` and `patchId`, and `readText`, which `make` writes once from `readFile`.
  *
  * @category models
  */
-export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId"> & {
+export type Raw = Omit<Repository["Service"], "writeCommit" | "rangePatchId" | "readText"> & {
   readonly writeCommit: (
     commit: NewCommit & { readonly committer: Commit.Signature },
   ) => ReturnType<Repository["Service"]["writeCommit"]>;
 };
 
 /**
- * Wraps an adapter's ten calls with a span each and the time limit, writes `rangePatchId` from two of them, and gives each commit written its committer.
+ * Wraps an adapter's eleven calls with a span each and the time limit, writes `rangePatchId` from two of them and `readText` from one, and gives each commit written its committer.
  *
  * **When to use**
  *
@@ -478,6 +516,24 @@ export const make = (raw: Raw, settings: Settings.Settings): Repository["Service
       }
 
       return patch;
+    }),
+    readFile: Effect.fn("git.readFile")(function* (commit: CommitId, path: Path) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.head.revision": commit });
+      const file = yield* limited(raw.readFile(commit, path));
+
+      return yield* found(file);
+    }),
+    readText: Effect.fn("git.readText")(function* (commit: CommitId, path: Path) {
+      yield* Effect.annotateCurrentSpan({ "vcs.ref.head.revision": commit });
+      const file = yield* found(yield* limited(raw.readFile(commit, path)));
+
+      if (Option.isNone(file)) {
+        return Option.none();
+      }
+
+      const text = yield* Effect.try({ try: () => utf8.decode(file.value), catch: () => new NotUtf8({ path }) });
+
+      return Option.some(text);
     }),
     diff: Effect.fn("git.diff")(function* (from: CommitId, to: CommitId) {
       yield* Effect.annotateCurrentSpan({ "vcs.ref.base.revision": from, "vcs.ref.head.revision": to });

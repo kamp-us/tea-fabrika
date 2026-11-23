@@ -1,0 +1,191 @@
+{
+  "git": "git version 2.40.1",
+  "command": "git ls-tree -z <tree> on a tree made with hash-object and mktree -z in a bare repository; the expectation lists each entry's mode, type, id and name bytes (base64), read by splitting each entry at its first tab",
+  "rows": [
+    {
+      "note": "an empty tree prints nothing",
+      "output": "",
+      "expect": []
+    },
+    {
+      "note": "one file: mode 100644 and type blob",
+      "output": "MTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2MwlhAA==",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "YQ=="
+        }
+      ]
+    },
+    {
+      "note": "an executable file, a link, a folder and a submodule: each mode and type git prints, with the mode as six digits",
+      "output": "MDQwMDAwIHRyZWUgMDAwYmYyNzk2MzY2ODY0MzRmZjg2MmFlY2E5M2QwOWQ5Y2ZkMTE0ZQlkaXIAMTAwNzU1IGJsb2IgNjRjNWU1ODg1YTRiMDYwMTBiM2EwYzIwZWRiNzkwMGRkMDMxMTAyNQlleGVjADEwMDY0NCBibG9iIDQzZGQ0N2VhNjkxYzkwYTVmYTc4Mjc4OTJjNzAyNDE5MTMzNTE5NjMJZmlsZQAxMjAwMDAgYmxvYiAxZDE5NzE0ZmZiYzI3MmJhMGRhNmViNDE5ZDY2MTIzYzIwNTI3MTc0CWxpbmsAMTYwMDAwIGNvbW1pdCBjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MxCXN1YgA=",
+      "expect": [
+        {
+          "mode": "040000",
+          "type": "tree",
+          "id": "000bf279636686434ff862aeca93d09d9cfd114e",
+          "name": "ZGly"
+        },
+        {
+          "mode": "100755",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "ZXhlYw=="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "ZmlsZQ=="
+        },
+        {
+          "mode": "120000",
+          "type": "blob",
+          "id": "1d19714ffbc272ba0da6eb419d66123c20527174",
+          "name": "bGluaw=="
+        },
+        {
+          "mode": "160000",
+          "type": "commit",
+          "id": "ccccccccccccccccccccccccccccccccccccccc1",
+          "name": "c3Vi"
+        }
+      ]
+    },
+    {
+      "note": "names in git's tree order: a.b, then the folder a, then a0, -b and a-b",
+      "output": "MTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2MwktYgAxMDA2NDQgYmxvYiAxZDE5NzE0ZmZiYzI3MmJhMGRhNmViNDE5ZDY2MTIzYzIwNTI3MTc0CWEtYgAxMDA2NDQgYmxvYiA0M2RkNDdlYTY5MWM5MGE1ZmE3ODI3ODkyYzcwMjQxOTEzMzUxOTYzCWEuYgAwNDAwMDAgdHJlZSAwMDBiZjI3OTYzNjY4NjQzNGZmODYyYWVjYTkzZDA5ZDljZmQxMTRlCWEAMTAwNjQ0IGJsb2IgNjRjNWU1ODg1YTRiMDYwMTBiM2EwYzIwZWRiNzkwMGRkMDMxMTAyNQlhMAA=",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "LWI="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "1d19714ffbc272ba0da6eb419d66123c20527174",
+          "name": "YS1i"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "YS5i"
+        },
+        {
+          "mode": "040000",
+          "type": "tree",
+          "id": "000bf279636686434ff862aeca93d09d9cfd114e",
+          "name": "YQ=="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "YTA="
+        }
+      ]
+    },
+    {
+      "note": "a name with a space, a tab, a line break and a backslash: names are bytes after the first tab",
+      "output": "MTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2MwlhIGIAMTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2MwliYWNrXHNsYXNoADEwMDY0NCBibG9iIDFkMTk3MTRmZmJjMjcyYmEwZGE2ZWI0MTlkNjYxMjNjMjA1MjcxNzQJbApiADEwMDY0NCBibG9iIDY0YzVlNTg4NWE0YjA2MDEwYjNhMGMyMGVkYjc5MDBkZDAzMTEwMjUJcSJ1b3RlADEwMDY0NCBibG9iIDY0YzVlNTg4NWE0YjA2MDEwYjNhMGMyMGVkYjc5MDBkZDAzMTEwMjUJdAliAA==",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "YSBi"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "YmFja1xzbGFzaA=="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "1d19714ffbc272ba0da6eb419d66123c20527174",
+          "name": "bApi"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "cSJ1b3Rl"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "dAli"
+        }
+      ]
+    },
+    {
+      "note": "a name with an accent, a name past U+FFFF and a leading dash: names print as they are, never quoted",
+      "output": "MTAwNjQ0IGJsb2IgMWQxOTcxNGZmYmMyNzJiYTBkYTZlYjQxOWQ2NjEyM2MyMDUyNzE3NAktZGFzaAAxMDA2NDQgYmxvYiA0M2RkNDdlYTY5MWM5MGE1ZmE3ODI3ODkyYzcwMjQxOTEzMzUxOTYzCcOpADEwMDY0NCBibG9iIDY0YzVlNTg4NWE0YjA2MDEwYjNhMGMyMGVkYjc5MDBkZDAzMTEwMjUJ8J+YgAA=",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "1d19714ffbc272ba0da6eb419d66123c20527174",
+          "name": "LWRhc2g="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "w6k="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "8J+YgA=="
+        }
+      ]
+    },
+    {
+      "note": "a name that is not UTF-8: the byte 0xff, and a UTF-8 sequence cut short",
+      "output": "MTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2Mwlm/wAxMDA2NDQgYmxvYiA2NGM1ZTU4ODVhNGIwNjAxMGIzYTBjMjBlZGI3OTAwZGQwMzExMDI1CWfiggAxMDA2NDQgYmxvYiAxZDE5NzE0ZmZiYzI3MmJhMGRhNmViNDE5ZDY2MTIzYzIwNTI3MTc0CW9rAA==",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "Zv8="
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "64c5e5885a4b06010b3a0c20edb7900dd0311025",
+          "name": "Z+KC"
+        },
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "1d19714ffbc272ba0da6eb419d66123c20527174",
+          "name": "b2s="
+        }
+      ]
+    },
+    {
+      "note": "a name that looks like a listing line: it holds a space, a mode and a type",
+      "output": "MTAwNjQ0IGJsb2IgNDNkZDQ3ZWE2OTFjOTBhNWZhNzgyNzg5MmM3MDI0MTkxMzM1MTk2MwkwNDAwMDAgdHJlZSAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwCXgA",
+      "expect": [
+        {
+          "mode": "100644",
+          "type": "blob",
+          "id": "43dd47ea691c90a5fa7827892c70241913351963",
+          "name": "MDQwMDAwIHRyZWUgMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMAl4"
+        }
+      ]
+    }
+  ]
+}
