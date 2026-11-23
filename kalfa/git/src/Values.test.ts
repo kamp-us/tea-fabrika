@@ -405,6 +405,13 @@ const DOT_GIT_PARTS = [
   "\u200C.git",
   ".git\uFEFF",
   "\uFEFF.git",
+  "x\\.git",
+  ".git\\x",
+  "x\\git~1",
+  "git~1\\x",
+  "x\\.GIT ",
+  ".G\u200CIT",
+  ".Gi\u202Et",
 ];
 
 // Parts the same run showed git accepts, next to the ones above.
@@ -423,6 +430,10 @@ const NEAR_PARTS = [
   ".g\u2069it",
   ".g\u2070it",
   ".g\uFEFEit",
+  "x\\.g\u200Cit",
+  "\u200C.git\\x",
+  ".git\u200C\\x",
+  "x\\git~2",
 ];
 
 const ACCEPTED_FIRST = [

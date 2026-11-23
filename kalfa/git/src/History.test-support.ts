@@ -408,6 +408,15 @@ export const DOT_GIT_FORMS: ReadonlyArray<readonly [label: string, part: string]
   ["U+200C before, a character git's HFS check ignores", "\u200C.git"],
   ["U+FEFF after, a character git's HFS check ignores", ".git\uFEFF"],
   ["U+FEFF before, a character git's HFS check ignores", "\uFEFF.git"],
+  // NTFS reads a backslash as a folder separator, so a piece between backslashes is a name of its own (checked with
+  // `git fsck --strict` on git 2.40.1).
+  [".git after a backslash", "x\\.git"],
+  [".git before a backslash", ".git\\x"],
+  ["git~1 after a backslash", "x\\git~1"],
+  ["git~1 before a backslash", "git~1\\x"],
+  [".git in capitals after a backslash, with a trailing space", "x\\.GIT "],
+  [".git in capitals with U+200C inside, a character git's HFS check ignores", ".G\u200CIT"],
+  [".git in capitals with U+202E inside, a character git's HFS check ignores", ".Gi\u202Et"],
 ];
 
 /** Parts next to those git's check refuses, which git accepts: a rule that reaches too far is seen here. */
@@ -426,6 +435,10 @@ export const NEAR_DOT_GIT: ReadonlyArray<readonly [label: string, part: string]>
   ["U+2069 inside .git, just before the ignored U+206A to U+206F", ".g\u2069it"],
   ["U+2070 inside .git, just past the ignored U+206A to U+206F", ".g\u2070it"],
   ["U+FEFE inside .git, just before the ignored U+FEFF", ".g\uFEFEit"],
+  [".git with U+200C inside after a backslash: an HFS volume has no folders to split", "x\\.g\u200Cit"],
+  ["U+200C before .git, then a backslash", "\u200C.git\\x"],
+  [".git, U+200C, then a backslash", ".git\u200C\\x"],
+  ["a backslash and git~2", "x\\git~2"],
 ];
 
 /** The names that are on JavaScript's object prototype: a store that keeps paths in a plain object loses them. */

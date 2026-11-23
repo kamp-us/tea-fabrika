@@ -368,7 +368,7 @@ it.effect.prop(
 const hex = (content: Uint8Array): string => Buffer.from(content).toString("hex");
 
 // Plant: leave out an empty file; keep the first mode seen for one blob, so a second path takes it; key `blobs` by
-// path, so two paths with one content give two blobs.
+// path, so two paths with one content give two blobs; store the caller's array, not a copy of it.
 it.effect.prop(
   "M5 a tree reads back: its paths with their modes, each path's bytes byte for byte, and one blob for equal bytes",
   { draw: treeArb },
@@ -399,6 +399,22 @@ it.effect.prop(
         const again = yield* Effect.orDie(MemoryRepository.tree(store, toFileMap(files)));
         expect(again.id, `${label}: the same files, the same tree`).toBe(id);
         expect(again.store.blobs.size, `${label}: no new blob the second time`).toBe(store.blobs.size);
+
+        // The store copies the bytes it is given: a caller that changes its array afterwards changes nothing in the store.
+        const given = files.map((file) => ({ ...file, content: Uint8Array.from(file.content) }));
+        const copied = yield* Effect.orDie(MemoryRepository.tree(MemoryRepository.empty, toFileMap(given)));
+
+        for (const file of given) {
+          file.content.fill(0xa5);
+        }
+
+        for (const file of files) {
+          const entry = copied.store.trees.get(copied.id)?.get(pathFrom(file.path));
+          expect(
+            entry === undefined ? undefined : copied.store.blobs.get(entry.blob),
+            `${label}: the bytes of ${JSON.stringify(file.path)} after the caller changed its array`,
+          ).toEqual(file.content);
+        }
       }
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
   { arbitrary: { runs: 100, seed: 119120 } },
