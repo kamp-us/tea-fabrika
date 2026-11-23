@@ -273,7 +273,7 @@ it.effect.prop(
 );
 
 // E7. Plants: encode after the edit, so a refused value still gives text, (w) red; merge onto the file's raw data without decoding it, so a file S2
-// refuses gets text, (w) red; drop the check after the edit, so the anchor case answers a text that does not read, (x) red; treat a file with no
+// refuses gets text, (w) red; drop the re-read in the check after the edit, so the anchor case answers a text that does not read, (x) red; drop the data check after it (`Equal.equals(reread, ...)`), so two anchors of one name with an alias after each answers a text that reads as other data, (x) red; treat a file with no
 // frontmatter as an empty one, (y) red; read a file that is not YAML or not data as an empty map, (y) red again, for the broken and unread files.
 it.effect.prop(
   "E7 refusals give no text: a Schema refusal is schema, a change that cannot keep other data is edit, and a bad file is what read says",

@@ -319,7 +319,7 @@ export const FORMS: Readonly<Record<string, ReadonlyArray<string>>> = {
   u: ["u:alone", "u:beside", "u:two"],
   v: ["v:one", "v:two to five", "v:every"],
   w: ["w:value", "w:file"],
-  x: ["x:alias", "x:end marker", "x:no colon"],
+  x: ["x:alias", "x:duplicate anchor", "x:nested anchor", "x:end marker", "x:no colon"],
   y: ["y:bare", "y:broken", "y:unread"],
   z: range(0, BODY_COUNT).map((i) => `z:${i}`),
 };
@@ -1269,6 +1269,55 @@ export const refusedSets = (run: Base.Run): ReadonlyArray<Refusal> => {
   const markerText = `---\n${prefix}last: 1\n...\n---\n${body}`;
   const colonText = `---\n${prefix}? lonely\n---\n${body}`;
 
+  // Two or more anchors of one name, an alias after each, and the edited key at each place. The edit of the first one leaves its alias
+  // with no anchor, which the re-read refuses. The edit of a later one leaves its alias reading the anchor before it: the frontmatter still
+  // reads, but as other data, and only the data check after the edit refuses it.
+  const anchorName = at(["x", "anc", "Z", "n1"], pick(run, 2));
+  const anchorCount = 2 + (pick(run, 3) % 2);
+
+  const anchoredAs = (i: number): string =>
+    at(
+      [`&${anchorName} ${i}`, `&${anchorName} [${i}]`, `&${anchorName} {a: ${i}}`, `&${anchorName}\n  - ${i}\n`],
+      pick(run, 4) + i,
+    );
+
+  const duplicates = Array.from({ length: anchorCount }, (_, edited) => {
+    const lines = Array.from({ length: anchorCount }, (__, i) => {
+      const anchored = anchoredAs(i + 1);
+
+      const uses = Array.from(
+        { length: 1 + ((pick(run, 5) + i) % 2) },
+        (___, use) => `use${i}${use}: *${anchorName}\n`,
+      );
+
+      return `dup${i}: ${anchored}${anchored.endsWith("\n") ? "" : "\n"}${uses.join("")}`;
+    });
+
+    const text = `---\n${prefix}${lines.join("")}---\n${body}`;
+
+    return refusal(
+      "x:duplicate anchor",
+      `${anchorCount} anchors of one name, the key of anchor ${edited + 1} set`,
+      text,
+      "edit",
+      s1(text, { [`dup${edited}`]: "changed" }),
+    );
+  });
+
+  // An earlier anchor of the name, then a key whose value holds a nested anchor of that name, then an alias: the key's edit moves the alias
+  // to the earlier anchor.
+  const nesteds = ["[&N 2]", "{k: &N 2}", "\n  - &N 2\n", "\n  k: &N 2\n"].map((nested, i) => {
+    const text = `---\n${prefix}first: &${anchorName} 1\nmid: ${nested.replaceAll("&N", `&${anchorName}`)}${nested.endsWith("\n") ? "" : "\n"}use: *${anchorName}\n---\n${body}`;
+
+    return refusal(
+      "x:nested anchor",
+      `an anchor nested in the set value, form ${i}`,
+      text,
+      "edit",
+      s1(text, { mid: "changed" }),
+    );
+  });
+
   return [
     refusal("w:value", "number at a fraction", valid, "schema", Frontmatter.set(valid, { number: 1.5 }, Base.S2)),
     refusal("w:value", "number at 0", valid, "schema", Frontmatter.set(valid, { number: 0 }, Base.S2)),
@@ -1289,6 +1338,8 @@ export const refusedSets = (run: Base.Run): ReadonlyArray<Refusal> => {
       ),
     ),
     refusal("x:alias", "an anchor that an alias uses", aliasText, "edit", s1(aliasText, { base: ["changed"] })),
+    ...duplicates,
+    ...nesteds,
     refusal("x:end marker", "a key added after the end marker", markerText, "edit", s1(markerText, { fresh: 1 })),
     refusal("x:no colon", "a key with no colon", colonText, "edit", s1(colonText, { lonely: 1 })),
     ...Base.bareFiles(run.seeds).map((bare, i) =>
