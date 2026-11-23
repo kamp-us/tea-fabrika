@@ -32,9 +32,10 @@ const catalogVersion = (): string | undefined =>
 
 const part = (...pieces: ReadonlyArray<string>): string => pieces.join("");
 
-// P1, slice 1. Plant: add the shared test package to the dev dependencies, and it is named in the failure; write a range
-// mark before the catalog's version, and the exact-version line fails.
-it("P1 scenario: the manifest has no dependencies and one peer, takes GitHub's types from the catalog, names no repo package, exports the root", () => {
+// P1, slice 1, widened in slice 3 to the `./test` export. Plant: leave `./test` out of `publishConfig.exports`, and its dist
+// pair line fails; add the shared test package to the dev dependencies, and it is named in the failure; write a range mark
+// before the catalog's version, and the exact-version line fails.
+it("P1 scenario: the manifest has no dependencies and one peer, takes GitHub's types from the catalog, names no repo package, exports the root and its test module", () => {
   // scenario: the package's own manifest, the workspace file and the README at head; no generated input says what a manifest holds.
   const found = manifest();
 
@@ -52,8 +53,18 @@ it("P1 scenario: the manifest has no dependencies and one peer, takes GitHub's t
   expect(found.dependencies, "no dependencies").toBeUndefined();
   expect(Object.keys(found.peerDependencies), "effect is the one peer").toEqual(["effect"]);
   expect(found.devDependencies["@octokit/openapi-types"], "the types come through the catalog").toBe("catalog:");
-  expect(Object.keys(found.exports).toSorted()).toEqual([".", "./package.json"]);
+  expect(Object.keys(found.exports).toSorted()).toEqual([".", "./package.json", "./test"]);
+  expect(found.exports["./test"], "the test module is its own export").toBe("./src/TestGitHub.ts");
   expect(found.publishConfig.exports["."]).toEqual({ types: "./dist/GitHub.d.ts", default: "./dist/GitHub.js" });
+  expect(found.publishConfig.exports["./test"], "and has its own dist pair").toEqual({
+    types: "./dist/TestGitHub.d.ts",
+    default: "./dist/TestGitHub.js",
+  });
+  expect(Object.keys(found.publishConfig.exports).toSorted(), "the published exports match").toEqual([
+    ".",
+    "./package.json",
+    "./test",
+  ]);
 
   const version = catalogVersion();
 
