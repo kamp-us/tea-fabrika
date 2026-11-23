@@ -218,6 +218,38 @@ snapshot holds the files as last taken, so a restart setting that changed in a f
 loading process keeps the one it started with. It is plain JSON, and it holds the app's name, so one app's snapshot
 is never read as another's. It needs the group's layer and `Digest`; the layer from files does not need `Digest`.
 
+`layerFromSnapshots(group, stream)` is the Worker's half. It starts the group on the first item of `stream`, and reads
+every later one to update the live settings. The stream is what the app's carrier gives: its items are `unknown`, since
+a carried value is only data until it is read.
+
+```ts
+import { Setting, SettingGroup } from "@kalfa/config";
+import { Effect, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
+
+const port = Setting.make("instance.port", Schema.Int).pipe(
+  Setting.withDefault(18800),
+  Setting.withDescription("The port the service listens on."),
+);
+
+const Demo = SettingGroup.make("demo", port);
+
+// The Worker: no file system and no path. `inbox` is whatever carries the loading process's snapshots.
+declare const inbox: Stream.Stream<unknown>;
+
+const settings = SettingGroup.layerFromSnapshots(Demo, inbox);
+
+const program = Effect.gen(function* () {
+  const { port } = yield* Demo; // the value the loading process read
+}).pipe(Effect.provide(settings), Effect.provide(Digest.layerWebCrypto));
+```
+
+Each item is read strictly. The first one that does not fit the group fails the layer with reason `snapshot`, and so
+does a stream that ends before its first item. A later one that does not fit is logged as a warning and the last good
+values hold. A live setting gets each new value. A restart setting that changed is logged as `<name> changed. It applies
+when <app> starts again.`, and its value and origin stay as the start gave them. A stream that ends is logged once. The
+carrier's own failures are the app's to handle: the stream cannot fail.
+
 ## Public modules
 
 Import these explicit subpaths: `App`, `Setting`, `Sources`, `Toml`, `TomlParser`, `Codec`,

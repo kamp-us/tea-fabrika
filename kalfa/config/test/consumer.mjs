@@ -12,7 +12,7 @@ import * as Snapshot from "@kalfa/config/Snapshot";
 import * as Sources from "@kalfa/config/Sources";
 import * as Toml from "@kalfa/config/Toml";
 import * as TomlParser from "@kalfa/config/TomlParser";
-import { ConfigProvider, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 
 const publicModules = {
@@ -112,6 +112,35 @@ const rooted = Effect.gen(function* () {
   ),
 );
 
+// The Worker's start: one snapshot from the loader's group, then the same group from a one-item stream of it. The second
+// run is given the digest and nothing else, so it reads no file, and it reads the same value with the same origin.
+const worker = Effect.gen(function* () {
+  const first = yield* Stream.runHead(Root.SettingGroup.snapshots(declaredGroup)).pipe(
+    Effect.map(Option.getOrThrow),
+    Effect.provide(Root.SettingGroup.layer(declaredGroup, { version: "1.2.3", repo: "/work" })),
+    Effect.provide(
+      Layer.mergeAll(
+        FileSystem.layerNoop({ readFileString: () => Effect.succeed("[service]\nport = 4100\n") }),
+        Path.layer,
+        ConfigProvider.layer(ConfigProvider.fromEnv({ env: {} })),
+      ),
+    ),
+  );
+
+  assert.equal(first.app, "demo");
+  assert.equal(first.values["service.port"], 4100);
+
+  const received = yield* Effect.gen(function* () {
+    const values = yield* declaredGroup;
+    const origins = yield* Root.SettingGroup.origins(declaredGroup);
+
+    return { port: values.port, origin: origins["service.port"] };
+  }).pipe(Effect.provide(Root.SettingGroup.layerFromSnapshots(declaredGroup, Stream.make(first))));
+
+  assert.equal(received.port, 4100);
+  assert.deepEqual(received.origin, { _tag: "file", file: ".demo/demo.toml", line: 2 });
+}).pipe(Effect.provide(Digest.layerWebCrypto));
+
 // The edit in memory, from the installed archive: one value's text changes, and the comment after it stays.
 const edited = Root.SettingGroup.edit(declaredGroup, "[service]\nport = 4100   # the port\n", "repo");
 
@@ -126,8 +155,13 @@ await Effect.runPromise(runtime);
 // edge: the same client runs the root entry's program.
 await Effect.runPromise(rooted);
 
+// edge: the same client starts a group from a stream of one snapshot.
+await Effect.runPromise(worker);
+
 for (const name of ["internal/edit", "internal/start", "internal/document", "App.test"]) {
   await assert.rejects(import(`@kalfa/config/${name}`), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
 }
 
-console.log(JSON.stringify({ runtime: "passed", imports: "passed", private: "passed", edit: "passed" }));
+console.log(
+  JSON.stringify({ runtime: "passed", imports: "passed", private: "passed", edit: "passed", worker: "passed" }),
+);
