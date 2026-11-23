@@ -84,31 +84,34 @@ it("scenario: M2 a body, not a file: a whole file gives a thematic break and a l
 
 // M3. Plants, each an exit handler in `parse`'s mdast options that keeps the typed mark in `data`: on strong and emphasis, (e) red; on lists and
 // list items, (f) red; on headings, (g) red; on code, (h) red.
-it.prop(
-  "M3 two typings give one document: the bodies differ and their documents are equal once every position is removed",
-  { run: Support.run },
-  ({ run }) => {
-    const seen = new Set<string>();
+// Each class is a law of its own with 300 runs: one law over the four took 30 s of CI's 60 s limit, so a law holds a quarter of a run's parses.
+for (const cls of Support.PAIR_CLASSES) {
+  it.prop(
+    `M3 two typings give one document, class ${cls}: the bodies differ and their documents are equal once every position is removed`,
+    { run: Support.run },
+    ({ run }) => {
+      const seen = new Set<string>();
 
-    for (const pair of Support.typedPairs(run)) {
-      const label = `${pair.cls} ${pair.name}`;
+      for (const pair of Support.typedPairs(run, cls)) {
+        const label = `${pair.cls} ${pair.name}`;
 
-      strictEqual(pair.holds, true, `${label}: the two bodies are the same`);
-      expect(pair.a, `${label}: the bodies are the same`).not.toBe(pair.b);
+        strictEqual(pair.holds, true, `${label}: the two bodies are the same`);
+        expect(pair.a, `${label}: the bodies are the same`).not.toBe(pair.b);
 
-      deepStrictEqual(
-        Support.withoutPosition(Markdown.parse(pair.a)),
-        Support.withoutPosition(Markdown.parse(pair.b)),
-        `${label}: ${short(pair.a)} against ${short(pair.b)}`,
-      );
+        deepStrictEqual(
+          Support.withoutPosition(Markdown.parse(pair.a)),
+          Support.withoutPosition(Markdown.parse(pair.b)),
+          `${label}: ${short(pair.a)} against ${short(pair.b)}`,
+        );
 
-      seen.add(pair.cls);
-    }
+        seen.add(pair.cls);
+      }
 
-    deepStrictEqual(Support.unreached(seen, Support.PAIR_REQUIRED), [], "classes never checked in this run");
-  },
-  runs(300),
-);
+      deepStrictEqual(Support.unreached(seen, [cls]), [], "classes never checked in this run");
+    },
+    runs(300),
+  );
+}
 
 // M4. Plants: turn off `codeFenced`, so the fenced `# T` is a heading, (i) red; turn off `codeIndented`, so a four-space `# T` is a heading, (j) red.
 it.prop(

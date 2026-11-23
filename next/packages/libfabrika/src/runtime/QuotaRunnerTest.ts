@@ -105,6 +105,10 @@ const History = Schema.Array(
 
 // Q19 runs a cell per tape entry, each with up to six attempts and a reopen, so a tape of 25 cells took 34 s in CI. A drawn tape stops at 8 cells
 // and the pinned run takes 25.
+// Q7 runs a cell per tape entry, each a journal read, a drain, a poison and perhaps a reopen, so a tape of 25 cells took 26 s of CI's 60 s limit in 40
+// runs. A drawn tape stops at 10 cells and the pinned run takes 25.
+const Fills = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(10));
+
 const Timers = Schema.Array(Cell).check(Schema.isMinLength(5), Schema.isMaxLength(8));
 
 const WIDE_TAPE = Array.from({ length: 25 }, (_, i) => ({ pick: i, amount: (i * 37) % 251, reopen: i % 3 === 0 }));
@@ -248,99 +252,100 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
       options,
     );
 
-    it.effect.prop(
-      "Q7 a full program still records failure, dead letter, signals, cleanup and successor checkpoint",
-      { tape: Tape },
-      ({ tape }) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            yield* TestClock.setTime(1_000);
-            const w = yield* open(defaults);
-            const name = required(names[required(tape[0]).pick % 2]);
-            yield* w.watch("beta:1", name, "inbound");
-            yield* w.watch(name, "beta:1", "outbound");
-            const initial = yield* w.program("sample/alpha");
+    const fills = (tape: typeof Tape.Type) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(1_000);
+          const w = yield* open(defaults);
+          const name = required(names[required(tape[0]).pick % 2]);
+          yield* w.watch("beta:1", name, "inbound");
+          yield* w.watch(name, "beta:1", "outbound");
+          const initial = yield* w.program("sample/alpha");
 
-            for (const [n, c] of tape.entries()) {
-              expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, Msg.cases.inc.make({}))).toHaveProperty(
-                "_tag",
-                "accepted",
-              );
-            }
+          for (const [n, c] of tape.entries()) {
+            expect(yield* w.msg(required(names[c.pick % 2]), `healthy:${n}`, Msg.cases.inc.make({}))).toHaveProperty(
+              "_tag",
+              "accepted",
+            );
+          }
 
-            const full = yield* w.program("sample/alpha");
-            expect(full.writes - initial.writes).toBe(2 * tape.length);
-            w.limits({ ...defaults, writes: full.writes });
-            let terminal = false;
+          const full = yield* w.program("sample/alpha");
+          expect(full.writes - initial.writes).toBe(2 * tape.length);
+          w.limits({ ...defaults, writes: full.writes });
+          let terminal = false;
 
-            for (const c of tape) {
-              const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
+          for (const c of tape) {
+            const saved = yield* Schema.decodeUnknownEffect(Schema.NullOr(supervision))(yield* w.journal(name));
 
-              if (saved !== null && saved.journal._tag !== "idle") {
-                yield* w.drain(name);
-              } else if (!terminal) {
-                w.cut(c.amount % 8);
-                const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
-                w.cut(null);
-                terminal =
-                  result._tag === "Success" &&
-                  Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
-              }
-
-              if (c.reopen) {
-                yield* w.reopen;
-              }
-
-              expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
-              expect((yield* w.local(name)).fault).toBeNull();
-            }
-
-            // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
-            for (let retry = 0; retry < 3 && !terminal; retry++) {
+            if (saved !== null && saved.journal._tag !== "idle") {
               yield* w.drain(name);
+            } else if (!terminal) {
+              w.cut(c.amount % 8);
               const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
+              w.cut(null);
               terminal =
                 result._tag === "Success" &&
                 Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
             }
 
-            yield* w.drain(name);
-            expect(terminal).toBe(true);
-            yield* w.restart(name, "person", true);
-            yield* w.drain(name);
+            if (c.reopen) {
+              yield* w.reopen;
+            }
+
             expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
             expect((yield* w.local(name)).fault).toBeNull();
-            expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
-            expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
-            const entries = yield* w.entries;
-            expect(Arr.some(entries, (e) => e._tag === "exited")).toBe(true);
-            expect(Arr.some(entries, (e) => e._tag === "restarted")).toBe(true);
-            expect(
-              Arr.some(
-                entries,
-                (e) =>
-                  e._tag === "send" &&
-                  e.stream === "beta:1/inbox" &&
-                  Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
-              ),
-            ).toBe(true);
-            expect(
-              Arr.some(
-                entries,
-                (e) =>
-                  e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
-              ),
-            ).toBe(true);
-            expect(Arr.some(entries, (e) => Predicate.isString(e.stream) && Str.endsWith("/dead")(e.stream))).toBe(
-              true,
-            );
-            expect(yield* w.checkpoint(name)).not.toBeNull();
-            expect(yield* w.input("beta:1", "other", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
-            yield* w.drain("beta:1");
-          }),
-        ),
+          }
+
+          // Finish the saved delivery limit after the generated cuts, then replay the accepted history.
+          for (let retry = 0; retry < 3 && !terminal; retry++) {
+            yield* w.drain(name);
+            const result = yield* Effect.result(w.msg(name, "poison", Msg.cases.throw.make({})));
+            terminal =
+              result._tag === "Success" &&
+              Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
+          }
+
+          yield* w.drain(name);
+          expect(terminal).toBe(true);
+          yield* w.restart(name, "person", true);
+          yield* w.drain(name);
+          expect((yield* w.program("sample/alpha")).writes).toBe(full.writes);
+          expect((yield* w.local(name)).fault).toBeNull();
+          expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
+          expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
+          const entries = yield* w.entries;
+          expect(Arr.some(entries, (e) => e._tag === "exited")).toBe(true);
+          expect(Arr.some(entries, (e) => e._tag === "restarted")).toBe(true);
+          expect(
+            Arr.some(
+              entries,
+              (e) =>
+                e._tag === "send" &&
+                e.stream === "beta:1/inbox" &&
+                Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
+            ),
+          ).toBe(true);
+          expect(
+            Arr.some(
+              entries,
+              (e) => e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
+            ),
+          ).toBe(true);
+          expect(Arr.some(entries, (e) => Predicate.isString(e.stream) && Str.endsWith("/dead")(e.stream))).toBe(true);
+          expect(yield* w.checkpoint(name)).not.toBeNull();
+          expect(yield* w.input("beta:1", "other", Msg.cases.inc.make({}))).toHaveProperty("_tag", "placed");
+          yield* w.drain("beta:1");
+        }),
+      );
+
+    it.effect.prop(
+      "Q7 a full program still records failure, dead letter, signals, cleanup and successor checkpoint",
+      { tape: Fills },
+      ({ tape }) => fills(tape),
       options,
     );
+
+    it.effect("pinned: Q7 fills a program with a tape of 25 cells", () => fills(WIDE_TAPE));
 
     it.effect.prop(
       "Q8 reserve exhaustion keeps saved work, faults durably, and only checked person restart resumes",

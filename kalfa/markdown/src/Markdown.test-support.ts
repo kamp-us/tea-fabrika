@@ -469,7 +469,7 @@ export interface TypedPair {
   readonly holds: boolean;
 }
 
-export const PAIR_REQUIRED: ReadonlyArray<string> = ["e", "f", "g", "h"];
+export const PAIR_CLASSES: ReadonlyArray<PairClass> = ["e", "f", "g", "h"];
 
 // The two typings of a run's pairs sit in a body of other blocks (not an indented one: two code blocks one blank line apart become one),
 // each pair between two plain paragraphs, so it is not part of a list or a paragraph above it.
@@ -579,13 +579,18 @@ const codePairs = (run: Run): ReadonlyArray<TypedPair> =>
     ];
   });
 
-/** M3's pairs: classes (e), (f), (g) and (h). */
-export const typedPairs = (run: Run): ReadonlyArray<TypedPair> => [
-  ...emphasisPairs(run),
-  ...listPairs(run),
-  ...headingPairs(run),
-  ...codePairs(run),
-];
+/** The class ids of M3's pairs, each a law of its own: a law holds one class's pairs, a quarter of a run's parses. */
+export type PairClass = "e" | "f" | "g" | "h";
+
+const PAIRS: Readonly<Record<PairClass, (run: Run) => ReadonlyArray<TypedPair>>> = {
+  e: emphasisPairs,
+  f: listPairs,
+  g: headingPairs,
+  h: codePairs,
+};
+
+/** M3's pairs of one class: (e), (f), (g) or (h). */
+export const typedPairs = (run: Run, cls: PairClass): ReadonlyArray<TypedPair> => PAIRS[cls](run);
 
 // ---------------------------------------------------------------------------------------------------------------------
 // M4: code is code
