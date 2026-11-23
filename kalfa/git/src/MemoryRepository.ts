@@ -774,6 +774,37 @@ export const layer = (
         return yield* Effect.fromResult(Result.all(files.map(fileChange)));
       });
 
+      // The checks in order, as the shared rule gives them: the commit, then each changed path, and only then is anything written.
+      const editTree = Effect.fnUntraced(function* (base: CommitId, changes: Repository.Edit) {
+        const store = yield* Cell.get(cell);
+        yield* Effect.fromResult(found(store, base));
+        yield* Effect.fromResult(Lookup.check(changes, kindAt(filesAt(store, base))));
+
+        const files = new Map(filesAt(store, base));
+        const blobs = new Map<Tree.BlobId, Uint8Array>();
+
+        for (const [path, change] of changes) {
+          if (change === "absent") {
+            files.delete(path);
+          } else {
+            const blob = Schema.decodeSync(Tree.BlobId)(yield* digest.digestHex(Digest.sha1, hashed("blob", change)));
+            files.set(path, new Tree.Entry({ mode: files.get(path)?.mode ?? "100644", blob }));
+            blobs.set(blob, change.slice());
+          }
+        }
+
+        const id = yield* entriesTree(files).pipe(Effect.provideService(Digest.Digest, digest));
+
+        // The tree and its blobs join the store as it is now, so a write that came between is kept.
+        yield* Cell.update(cell, (now) => ({
+          ...now,
+          trees: now.trees.has(id) ? now.trees : new Map(now.trees).set(id, files),
+          blobs: new Map([...now.blobs, ...blobs]),
+        }));
+
+        return id;
+      });
+
       const write = <A, E>(call: (held: Store) => Step<A, E>): Effect.Effect<A, E> =>
         Effect.flatMap(Cell.modify(cell, call), Effect.fromResult);
 
@@ -789,6 +820,7 @@ export const layer = (
             patchId,
             readFile: (commit, path) => read((held) => readFile(held, limits, commit, path)),
             diff,
+            editTree,
             writeCommit: (fields) =>
               commit(fields).pipe(
                 Effect.provideService(Digest.Digest, digest),
