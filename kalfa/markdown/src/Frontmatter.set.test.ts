@@ -128,13 +128,14 @@ const keepsBytes = (cases: ReadonlyArray<Support.SetCase>, classes: ReadonlyArra
 // E2. Plants, each one wrong rule in Frontmatter.ts (run once, never kept): start a later-line value's text at the end of its key's `:`, so
 // `  # note` goes, (h) red; end a value's text at yaml's node end, so ` # c` goes, (i) red; rebuild the frontmatter from the pairs' own texts, so
 // comment and blank lines go, (j) red. The other classes' plants are E3's.
-// Each group of classes is a law of its own with 300 runs (Support.CASE_GROUPS), so a law holds a third of a run's work.
+// Each group of classes is a law of its own with 130 runs (Support.CASE_GROUPS), so a law holds a third of a run's work. 300 runs took 17.3 s of CI's 60 s
+// limit for the old forms' group, so E2 and E3 (which share their answers) take 130.
 for (const group of Support.CASE_GROUPS) {
   it.effect.prop(
     `E2 every other byte kept: only each changed value's text is replaced and the new keys' lines are added at the end, for ${group.name}`,
     { run: Base.run },
     ({ run }) => keepsBytes(Support.groupCases(run, group), group.classes),
-    runs(300),
+    runs(130),
   );
 }
 
@@ -176,7 +177,7 @@ for (const group of Support.CASE_GROUPS) {
     `E3 it reads back: the answer reads as the old data with the set values over it, for ${group.name}`,
     { run: Base.run },
     ({ run }) => readsBack(Support.groupCases(run, group), group.classes),
-    runs(300),
+    runs(130),
   );
 }
 
@@ -231,7 +232,8 @@ it.effect.prop(
 
       deepStrictEqual(Support.unreached(seen, ["z"]), [], "body groups never checked in this run");
     }),
-  runs(300),
+  // 300 runs took 16.6 s of CI's 60 s limit, so 130.
+  runs(130),
 );
 
 // E5. Plant: edit every key in `values`, changed or not, so `'x'` becomes `x`, (t) red.

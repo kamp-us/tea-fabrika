@@ -526,85 +526,98 @@ const signalRun = (b: Box, runner: "box" | "plan" = "box") =>
 
 describe("T321 K1 fetch, today's tooling", () => {
   // Plant: keep -f in fetch. update-ref creates each bad graph without rewriting this repo.
-  it("K1 refuses amend, reset and rebase graphs without moving MAIN's branch ref", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(["amend", "reset", "rebase"], (kind) =>
-          fixture((b) => {
-            const before = b.commit(b.work, "src/a.ts", `${text}\n`);
-            b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`);
-            const tree = b.head(b.work, "HEAD^{tree}");
+  // One law ran the three kinds over 3 runs: 9 fixtures at about 4 s each in CI, 37 s of its 60 s limit. Each kind and each run is a law of
+  // its own with one fixture (the seed moves by one for each run, as the runs of one seed do), so each is a ninth of the work.
+  for (const kind of ["amend", "reset", "rebase"]) {
+    for (const part of [0, 1, 2]) {
+      it(`K1 refuses a ${kind} graph without moving MAIN's branch ref, run ${part + 1}`, () => {
+        fc.assert(
+          fc.property(word, (text) =>
+            fixture((b) => {
+              const before = b.commit(b.work, "src/a.ts", `${text}\n`);
+              b.git(b.main, "fetch", "-q", b.work, `${b.branch}:${b.branch}`);
+              const tree = b.head(b.work, "HEAD^{tree}");
 
-            const rewritten =
-              kind === "reset" ? b.base : b.git(b.work, "commit-tree", tree, "-p", b.base, "-m", kind).trim();
+              const rewritten =
+                kind === "reset" ? b.base : b.git(b.work, "commit-tree", tree, "-p", b.base, "-m", kind).trim();
 
-            b.git(b.work, "update-ref", `refs/heads/${b.branch}`, rewritten);
-            refused(b.fetch(), /rewrite|non.fast.forward|rejected/);
-            expect(b.head(b.main, b.branch)).toBe(before);
-          }),
+              b.git(b.work, "update-ref", `refs/heads/${b.branch}`, rewritten);
+              refused(b.fetch(), /rewrite|non.fast.forward|rejected/);
+              expect(b.head(b.main, b.branch)).toBe(before);
+            }),
+          ),
+          { ...options, numRuns: 1, seed: options.seed + part },
         );
-      }),
-      options,
-    );
-  });
+      });
+    }
+  }
 
+  // One law ran 3 random runs, each a fixture, a real script run and two fetches, 9.5 s of CI's 60 s limit a run: 28.6 s in all. Each run is a law of its own,
+  // and the run's size is fixed by its place, so the three together always cover one, two and three run-owned commits and both steps
+  // (the 3 runs of a seed drew them by chance).
   // Plants: sign the base or an existing link; move MAIN's HEAD to sign; use the box's signer.
-  it("K1 signs only unsigned run-owned commits oldest first; repeat fetch changes nothing", () => {
-    fc.assert(
-      fc.property(fc.array(word, { minLength: 1, maxLength: 3 }), fc.constantFrom("tests", "mutation"), (texts, step) =>
-        fixture(
-          (b) => {
-            const before = {
-              head: b.head(),
-              index: b.git(b.main, "write-tree"),
-              status: b.git(b.main, "status", "--porcelain"),
-            };
+  for (const [count, step] of [
+    [1, "tests"],
+    [2, "mutation"],
+    [3, "tests"],
+  ] as const) {
+    it(`K1 signs only unsigned run-owned commits oldest first; repeat fetch changes nothing, ${count} commits at the ${step} step`, () => {
+      fc.assert(
+        fc.property(fc.array(word, { minLength: count, maxLength: count }), (texts) =>
+          fixture(
+            (b) => {
+              const before = {
+                head: b.head(),
+                index: b.git(b.main, "write-tree"),
+                status: b.git(b.main, "status", "--porcelain"),
+              };
 
-            b.setup({
-              operations: texts.map((text, i) => ({ path: "src/a.ts", text: `${text}-${i}\n` })),
-            });
-            expect(b.run(step).code).toBe(0);
-            const commits = b.git(b.work, "rev-list", "--reverse", `${b.base}..HEAD`).trim().split("\n");
-            const fetched = b.fetch(step);
-            expect(fetched.code, fetched.text).toBe(0);
-            expect(b.head(b.main, b.branch)).toBe(b.head(b.work));
+              b.setup({
+                operations: texts.map((text, i) => ({ path: "src/a.ts", text: `${text}-${i}\n` })),
+              });
+              expect(b.run(step).code).toBe(0);
+              const commits = b.git(b.work, "rev-list", "--reverse", `${b.base}..HEAD`).trim().split("\n");
+              const fetched = b.fetch(step);
+              expect(fetched.code, fetched.text).toBe(0);
+              expect(b.head(b.main, b.branch)).toBe(b.head(b.work));
 
-            for (const [i, sha] of commits.entries()) {
-              const note = JSON.parse(b.git(b.main, "notes", "--ref=fabrika", "show", sha));
-              expect(note).toMatchObject({ step: "tests", ticket: "321", version: i + 1 });
-              expect(note.from).toBe(b.head(b.main, `${sha}^1^{tree}`));
-              expect(note.to).toBe(b.head(b.main, `${sha}^{tree}`));
-            }
+              for (const [i, sha] of commits.entries()) {
+                const note = JSON.parse(b.git(b.main, "notes", "--ref=fabrika", "show", sha));
+                expect(note).toMatchObject({ step: "tests", ticket: "321", version: i + 1 });
+                expect(note.from).toBe(b.head(b.main, `${sha}^1^{tree}`));
+                expect(note.to).toBe(b.head(b.main, `${sha}^{tree}`));
+              }
 
-            const verified = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", b.head(b.work)]);
-            expect(verified.code, verified.text).toBe(0);
-            expect(b.notes().split("\n").filter(Boolean)).toHaveLength(commits.length);
-            const notes = b.notes();
-            const repeat = b.fetch(step);
-            expect(repeat.code, repeat.text).toBe(0);
-            expect(b.notes()).toBe(notes);
-            expect(readFileSync(join(b.boxes, "state/one.box"), "utf8")).toContain(b.head(b.work));
-            expect({
-              head: b.head(),
-              index: b.git(b.main, "write-tree"),
-              status: b.git(b.main, "status", "--porcelain"),
-            }).toEqual(before);
-            const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
-            expect(signs.map((c) => c.head)).toEqual(commits);
-            expect(signs.every((c) => realpathSync(c.cwd) === realpathSync(b.main))).toBe(true);
-            const checks = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "check");
-            expect(checks).toHaveLength(2);
+              const verified = b.call(process.execPath, [signer, "check", "--base", b.base, "--head", b.head(b.work)]);
+              expect(verified.code, verified.text).toBe(0);
+              expect(b.notes().split("\n").filter(Boolean)).toHaveLength(commits.length);
+              const notes = b.notes();
+              const repeat = b.fetch(step);
+              expect(repeat.code, repeat.text).toBe(0);
+              expect(b.notes()).toBe(notes);
+              expect(readFileSync(join(b.boxes, "state/one.box"), "utf8")).toContain(b.head(b.work));
+              expect({
+                head: b.head(),
+                index: b.git(b.main, "write-tree"),
+                status: b.git(b.main, "status", "--porcelain"),
+              }).toEqual(before);
+              const signs = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "sign");
+              expect(signs.map((c) => c.head)).toEqual(commits);
+              expect(signs.every((c) => realpathSync(c.cwd) === realpathSync(b.main))).toBe(true);
+              const checks = b.calls().filter((c) => c.cmd === "pnpm" && c.args[1] === "check");
+              expect(checks).toHaveLength(2);
 
-            for (const c of checks) {
-              expect(c.args).toEqual(["commits", "check", "--base", b.base, "--head", b.head(b.work)]);
-            }
-          },
-          [["src/a.ts", "tests"]],
+              for (const c of checks) {
+                expect(c.args).toEqual(["commits", "check", "--base", b.base, "--head", b.head(b.work)]);
+              }
+            },
+            [["src/a.ts", "tests"]],
+          ),
         ),
-      ),
-      options,
-    );
-  });
+        { ...options, numRuns: 1 },
+      );
+    });
+  }
 
   // Each of these laws runs a fixture and real script runs 3 times, 8 to 12 s of CI's 60 s limit a run, so one law took 24 to 34 s. The 3 runs are 3 laws of one
   // run each (the seed moves by one for each, as the runs of one seed do), and each is a third of the work.
@@ -674,105 +687,96 @@ describe("T321 K1 fetch, today's tooling", () => {
     });
   }
 
+  // One law ran the two orders as 2 runs, two boxes and two real script runs each: 34.8 s of CI's 60 s limit. Each order is a law of its own, one run.
+  // The two fetches overlap as two real processes of one shell, started one after the other and waited for together.
   // Plant: release the shared notes lock before the signer exits, losing one branch's note.
-  it("K1 overlapping fetches preserve both branches' independently verified links", async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.boolean(), async (reverse) => {
-        const b = new Box();
+  for (const twoFirst of [false, true]) {
+    it(`K1 overlapping fetches preserve both branches' independently verified links, ${twoFirst ? "two" : "one"} first`, () => {
+      fc.assert(
+        fc.property(fc.constant(null), () =>
+          fixture((b) => {
+            const two = boxTree(b.boxes, "two"),
+              data = join(b.boxes, "two-gitdata");
 
-        try {
-          const two = boxTree(b.boxes, "two"),
-            data = join(b.boxes, "two-gitdata");
+            b.git(b.dir, "clone", "-q", `--separate-git-dir=${data}`, b.main, two);
+            b.git(two, "config", "user.name", "fixture");
+            b.git(two, "config", "user.email", "fixture@example.test");
+            b.git(two, "checkout", "-q", "-b", "fabrikalfa/two");
+            b.git(b.main, "update-ref", "refs/heads/fabrikalfa/two", b.base);
+            write(
+              join(b.boxes, "state/two.box"),
+              readFileSync(join(b.boxes, "state/one.box"), "utf8")
+                .replace("ticket: 321", "ticket: 322")
+                .replace("branch: fabrikalfa/one", "branch: fabrikalfa/two"),
+            );
+            b.setup({ operations: [{ path: "src/a.ts", text: "one\n" }] });
+            expect(b.run().code).toBe(0);
+            b.setup({ operations: [{ path: "src/a.ts", text: "two\n" }] });
+            expect(
+              b.call("sh", [
+                program,
+                "run",
+                "two",
+                join(b.dir, "prompt"),
+                join(b.dir, "answer-two"),
+                "--step",
+                "tests",
+                "--ticket",
+                "322",
+              ]).code,
+            ).toBe(0);
 
-          b.git(b.dir, "clone", "-q", `--separate-git-dir=${data}`, b.main, two);
-          b.git(two, "config", "user.name", "fixture");
-          b.git(two, "config", "user.email", "fixture@example.test");
-          b.git(two, "checkout", "-q", "-b", "fabrikalfa/two");
-          b.git(b.main, "update-ref", "refs/heads/fabrikalfa/two", b.base);
-          write(
-            join(b.boxes, "state/two.box"),
-            readFileSync(join(b.boxes, "state/one.box"), "utf8")
-              .replace("ticket: 321", "ticket: 322")
-              .replace("branch: fabrikalfa/one", "branch: fabrikalfa/two"),
-          );
-          b.setup({ operations: [{ path: "src/a.ts", text: "one\n" }] });
-          expect(b.run().code).toBe(0);
-          b.setup({ operations: [{ path: "src/a.ts", text: "two\n" }] });
-          expect(
-            b.call("sh", [
-              program,
-              "run",
-              "two",
-              join(b.dir, "prompt"),
-              join(b.dir, "answer-two"),
-              "--step",
-              "tests",
-              "--ticket",
-              "322",
-            ]).code,
-          ).toBe(0);
+            // Each fetch writes its output and its exit code beside the box; `wait` returns when both are done.
+            const overlap = b.call(
+              "sh",
+              [
+                "-c",
+                [
+                  '( sh "$PROGRAM" fetch "$1" "fabrikalfa/$1" --sign tests --ticket "$2" > "$OUT/$1.out" 2>&1; echo $? > "$OUT/$1.code" ) &',
+                  '( sh "$PROGRAM" fetch "$3" "fabrikalfa/$3" --sign tests --ticket "$4" > "$OUT/$3.out" 2>&1; echo $? > "$OUT/$3.code" ) &',
+                  "wait",
+                ].join("\n"),
+                "overlap",
+                ...(twoFirst ? ["two", "322", "one", "321"] : ["one", "321", "two", "322"]),
+              ],
+              b.main,
+              { ...b.env, T321_FETCH: "1", PROGRAM: program, OUT: b.dir },
+            );
 
-          const fetch = (name: string, ticket: string) =>
-            new Promise<{ code: number | null; text: string }>((resolve, reject) => {
-              const child = spawn(
-                "sh",
-                [program, "fetch", name, `fabrikalfa/${name}`, "--sign", "tests", "--ticket", ticket],
-                { cwd: b.main, env: { ...b.env, T321_FETCH: "1" }, timeout: 15_000 },
-              );
+            expect(overlap.code, overlap.text).toBe(0);
 
-              child.stdin.end();
-              let text = "";
-              child.stdout.on("data", (s) => {
-                text += s;
-              });
-              child.stderr.on("data", (s) => {
-                text += s;
-              });
-              child.on("error", reject);
-              child.on("close", (code) => resolve({ code, text }));
-            });
+            for (const name of ["one", "two"]) {
+              const code = readFileSync(join(b.dir, `${name}.code`), "utf8").trim();
+              expect(code, readFileSync(join(b.dir, `${name}.out`), "utf8")).toBe("0");
+            }
 
-          const order = reverse
-            ? [
-                ["two", "322"],
-                ["one", "321"],
-              ]
-            : [
-                ["one", "321"],
-                ["two", "322"],
-              ];
+            for (const name of ["one", "two"]) {
+              const check = b.call(process.execPath, [
+                signer,
+                "check",
+                "--base",
+                b.base,
+                "--head",
+                b.head(b.main, `fabrikalfa/${name}`),
+              ]);
 
-          for (const got of await Promise.all(order.map(([name, ticket]) => fetch(name!, ticket!)))) {
-            expect(got.code, got.text).toBe(0);
-          }
+              expect(check.code, check.text).toBe(0);
+            }
 
-          for (const name of ["one", "two"]) {
-            const check = b.call(process.execPath, [
-              signer,
-              "check",
-              "--base",
-              b.base,
-              "--head",
-              b.head(b.main, `fabrikalfa/${name}`),
-            ]);
+            expect(b.notes().trim().split("\n")).toHaveLength(2);
+          }),
+        ),
+        { ...options, numRuns: 1 },
+      );
+    });
+  }
 
-            expect(check.code, check.text).toBe(0);
-          }
-
-          expect(b.notes().trim().split("\n")).toHaveLength(2);
-        } finally {
-          b.close();
-        }
-      }),
-      { ...options, numRuns: 2 },
-    );
-  });
-
+  // One law ran the four faults over 3 runs: 12 fixtures, 21.4 s of CI's 60 s limit. Each fault is a law of its own with the same 3 runs.
   // Plant: trust --sign without checking the run ticket, step and bounds, or the state base.
-  it("K1 refuses a mismatched run, a commit outside its run, or a non-ancestor state base", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(["ticket", "step", "outside", "base"], (fault) =>
+  for (const fault of ["ticket", "step", "outside", "base"]) {
+    it(`K1 refuses a mismatched run, a commit outside its run, or a non-ancestor state base, ${fault}`, () => {
+      fc.assert(
+        fc.property(word, (text) =>
           fixture((b) => {
             if (fault === "outside") {
               b.commit(b.work, "src/a.ts", "outside\n");
@@ -792,11 +796,11 @@ describe("T321 K1 fetch, today's tooling", () => {
             );
             expect(b.notes()).toBe("");
           }),
-        );
-      }),
-      options,
-    );
-  });
+        ),
+        options,
+      );
+    });
+  }
 
   // Plant: check only rename destinations, or sign mixed and unknown owners before refusal.
   for (const part of [0, 1, 2]) {
@@ -1279,10 +1283,11 @@ describe("T321 K2 box start, today's tooling", () => {
   // layers and themes, 2026-11-09: a signed lead commit (a merge of main, a lockfile) was refused.
   // Plant: require main's tip, not any commit main holds. Eight of nine base_not_signed refusals on
   // 2026-11-09 were a quest's plan base, an older main, after main moved on (ticket 428).
-  it("K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts", () => {
-    fc.assert(
-      fc.property(word, (text) => {
-        each(["main", "older-main", "build", "lead", "unsigned", "tests", "forged"], (kind) =>
+  // One law ran the seven kinds over 3 runs: 21 fixtures, 19.9 s of CI's 60 s limit. Each kind is a law of its own with the same 3 runs.
+  for (const kind of ["main", "older-main", "build", "lead", "unsigned", "tests", "forged"]) {
+    it(`K2 accepts any commit origin/main holds or a verified parent build or lead head and records checked facts, ${kind}`, () => {
+      fc.assert(
+        fc.property(word, (text) =>
           fixture((b) => {
             b.git(b.main, "checkout", "-q", "-b", "fabrikalfa/parent");
             const parent = b.commit(b.main, "src/b.ts", `${text}\n`);
@@ -1331,11 +1336,11 @@ describe("T321 K2 box start, today's tooling", () => {
               checkRefused(got, "base_not_signed");
             }
           }),
-        );
-      }),
-      options,
-    );
-  });
+        ),
+        options,
+      );
+    });
+  }
 
   // Plants: skip the approval hash or hash line one too; accept a branch without the prefix.
   it("K2 rejects bad branch names, unsigned plans and byte edits anywhere in the approved body", () => {
@@ -1525,15 +1530,16 @@ describe("T321 review round 1 fixes, today's tooling", () => {
 
   // Plants: check from the box base, from the saved root, or without main's merge-base. 13 fetches
   // on quest p12 (2026-11-09) stopped after a signed lead merge of main (tickets 545, 662).
-  it("K1 scenario: a quest caught up with main by a signed lead merge passes the next step's fetch", () => {
-    each([false, true], (movedAgain) =>
+  // One law ran both cases, each a long fixture of its own: 15.4 s of CI's 60 s limit. Each case is a law of its own.
+  for (const movedAgain of [false, true]) {
+    it(`K1 scenario: a quest caught up with main by a signed lead merge passes the next step's fetch${movedAgain ? ", main moved again" : ""}`, () => {
       fixture((b) => {
         const got = afterLeadMerge(b, "signed", movedAgain);
         expect(got.code, got.text).toBe(0);
         expect(got.text).not.toMatch(/"_tag":"stuck"/);
-      }),
-    );
-  });
+      });
+    });
+  }
 
   // Plant: pass any merge commit, or any note that verifies somewhere. The law that must not get
   // weaker: a merge nobody signed, or one carrying a link made for another commit, stops fetch.

@@ -13,13 +13,25 @@ const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";
 
 describe("ledger SQL stays behind its service", () => {
-  it("refuses ledger table reads and writes outside the service, including aliases and templates", () =>
-    fc.assert(
-      fc.asyncProperty(
-        fc.constantFrom("entries", "rings"),
-        fc.constantFrom(" ", "\n", " /* checked */ "),
-        fc.boolean(),
-        async (table, space, upper) => {
+  // One law drew 20 runs from the 12 combinations of table, spacing and case, each run a planted oxlint run: 16.5 s of CI's 60 s limit. Each combination is a law of its
+  // own with one run, so all 12 are always checked (the 20 random runs could leave one out).
+  for (const [table, space, upper] of [
+    ["entries", " ", false],
+    ["entries", "\n", false],
+    ["entries", " /* checked */ ", false],
+    ["entries", " ", true],
+    ["entries", "\n", true],
+    ["entries", " /* checked */ ", true],
+    ["rings", " ", false],
+    ["rings", "\n", false],
+    ["rings", " /* checked */ ", false],
+    ["rings", " ", true],
+    ["rings", "\n", true],
+    ["rings", " /* checked */ ", true],
+  ] as const) {
+    it(`refuses ledger table reads and writes outside the service, including aliases and templates, ${table}${upper ? " upper" : ""} with ${JSON.stringify(space)}`, () =>
+      fc.assert(
+        fc.asyncProperty(fc.constant(null), async () => {
           const word = upper ? Str.toUpperCase(table) : table;
 
           const queries = [
@@ -57,8 +69,8 @@ describe("ledger SQL stays behind its service", () => {
           ]) {
             expect(findings(CODE, file)).toEqual([]);
           }
-        },
-      ),
-      { seed: 119120, numRuns: 20 },
-    ));
+        }),
+        { seed: 119120, numRuns: 1 },
+      ));
+  }
 });

@@ -354,7 +354,8 @@ export interface Driver {
   readonly counts: () => { readonly reads: number; readonly appends: number; readonly consumers: number };
 }
 
-export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
+/** `runs` is the case count of the suite's walk, which its caller sets from `runsFor`. */
+export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>, runs = 100) =>
   describe("L5 L6 instance starts, next/", () => {
     law(
       "reachable deployments and lost replies retain immutable starts and original metadata",
@@ -501,5 +502,6 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
             }
           }
         }),
+      { runs },
     );
   });

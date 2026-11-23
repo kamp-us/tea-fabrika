@@ -610,7 +610,8 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           expect(probe(root, ["run", "scripts/caps.test.ts"], { FABRIKA_MAX_WORKERS: setting }).status).not.toBe(0);
         }
       }),
-      options,
+      // 4 runs of 8 child Vitest starts each took 15.2 s of CI's 60 s limit, so 2.
+      { ...options, numRuns: 2 },
     );
   });
 

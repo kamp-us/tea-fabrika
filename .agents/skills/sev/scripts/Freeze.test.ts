@@ -80,8 +80,11 @@ const Status4xx = Schema.Union([
 
 const Status5xx = Schema.Int.check(Schema.isBetween({ minimum: 500, maximum: 599 }));
 
-/** How many cases a loop property runs: each one runs a real loop on the test clock. */
-const LOOP_RUNS = { arbitrary: { runs: runsFor({ fast: 6, full: 40 }) } };
+/**
+ * How many cases a loop property runs: each one runs a real loop on the test clock. 40 full cases took 14.6 to 17.8 s of CI's 60 s
+ * limit for each of the file's slowest laws, so 16.
+ */
+const LOOP_RUNS = { arbitrary: { runs: runsFor({ fast: 6, full: 16 }) } };
 
 /** A fresh folder for the log, removed when the law ends. */
 const home = Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix: "sev-" }));

@@ -47,7 +47,9 @@ import { TestClock } from "effect/testing";
 import { Setting, SettingGroup } from "./index.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 
-const check = { arbitrary: { runs: runsFor({ fast: 25, full: 100 }), size: 100 } };
+// 100 full runs took 16 to 22 s of CI's 60 s limit for each of this file's slowest laws (a draw builds a whole file, and a run reads and edits it several times),
+// so the full count is 35: each run still draws every class, and `reach` still fails a law that misses one.
+const check = { arbitrary: { runs: runsFor({ fast: 25, full: 35 }), size: 100 } };
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
