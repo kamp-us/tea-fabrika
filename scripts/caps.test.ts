@@ -423,7 +423,8 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
           for (const filter of [".", "test", "./", dir]) {
             const ran = probe(dir, ["run", filter]);
             expect(ran.status, `broad filter ${filter}`).toBe(1);
-            expect(ran.stderr).toContain("<narrow path>");
+            expect(ran.stderr).toContain(`'${filter}' is not one test file`);
+            expect(ran.stderr).toContain("pnpm exec vitest run --maxWorkers=1 <test file>");
           }
 
           // T375: skill paths follow imports instead of forcing every test to rerun.
@@ -546,7 +547,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
 
   // Plant: allow a force trigger to turn local --changed into a full run. This loads the real
   // config only. It never starts a broad Vitest process, even if the guard is broken.
-  it("refuses local broad runs after force triggers, names a narrow command, and leaves CI alone", () => {
+  it("refuses local broad runs after force triggers, names its reason and a narrow command, and leaves CI alone", () => {
     fc.assert(
       fc.property(
         fc.record({
@@ -577,7 +578,10 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
             for (const args of [["run"], ["run", form], ["run", "--changed", "origin/main"]]) {
               const ran = probe(dir, args);
               expect(ran.status).not.toBe(0);
-              expect(ran.stderr).toContain("pnpm exec vitest run --maxWorkers=1 <narrow path>");
+              expect(ran.stderr).toContain("pnpm exec vitest run --maxWorkers=1 <test file>");
+              expect(ran.stderr).toContain(
+                args.length === 1 ? "no test file was given" : `would select every test, because ${trigger}`,
+              );
               expect(probe(dir, args, { CI: "1" }).status).toBe(0);
             }
 

@@ -1,7 +1,7 @@
 // Forbid type-assertion footguns.
 //
 // Type assertions blind the TypeScript compiler: they assert a shape it can no
-// longer verify. We decode at boundaries with `Schema.decodeUnknown` (or type the
+// longer verify. We decode at boundaries with `Schema.decodeUnknownSync` (or type the
 // value properly) instead. This rule bans the assertion forms that fully erase
 // type information:
 //
@@ -45,7 +45,7 @@ export const noTypeAssertions: CreateRule = {
 
         if (inner.type === "TSAsExpression" && grouped(source, inner) <= 1) {
           const message = asKeyword(inner, "TSUnknownKeyword")
-            ? "Type assertions are forbidden: `as unknown as` blinds the compiler. Decode at boundaries with Schema.decodeUnknown, or type the value properly."
+            ? "Type assertions are forbidden: `as unknown as` blinds the compiler. Decode at boundaries with Schema.decodeUnknownSync, or type the value properly."
             : asKeyword(inner, "TSNeverKeyword")
               ? "Type assertions are forbidden: `as never as T` launders a value past the compiler. Construct/type the value properly instead."
               : null;
@@ -69,7 +69,7 @@ export const noTypeAssertions: CreateRule = {
         context.report({
           node,
           message:
-            "Angle-bracket type assertions (`<T>x`) are forbidden: same erasure as `x as T`. Decode at boundaries with Schema.decodeUnknown, or type the value properly.",
+            "Angle-bracket type assertions (`<T>x`) are forbidden: same erasure as `x as T`. Decode at boundaries with Schema.decodeUnknownSync, or type the value properly.",
         });
       },
     };
